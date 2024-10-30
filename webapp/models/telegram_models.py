@@ -1,0 +1,192 @@
+import datetime
+import filecmp
+import os
+import re
+
+from django.conf import settings
+from django.db import models
+
+from webapp.models import Category, Organization
+from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel
+
+
+class Channel(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES = (
+        "title",
+        "date",
+        "broadcast",
+        "verified",
+        "megagroup",
+        "restricted",
+        "signatures",
+        "min",
+        "scam",
+        "has_link",
+        "has_geo",
+        "slowmode_enabled",
+        "fake",
+        "gigagroup",
+        "access_hash",
+        "username",
+    )
+    title = models.CharField(max_length=255, blank=True)
+    about = models.TextField(blank=True)
+    telegram_location = models.TextField(blank=True)
+    username = models.CharField(max_length=255, blank=True)
+    date = models.DateTimeField(null=True)
+    participants_count = models.PositiveBigIntegerField(null=True)
+    is_interesting = models.BooleanField(default=None, null=True)
+    is_active = models.BooleanField(default=False)
+    are_messages_crawled = models.BooleanField(default=False)
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
+    broadcast = models.BooleanField(default=True)
+    verified = models.BooleanField(default=False)
+    megagroup = models.BooleanField(default=False)
+    gigagroup = models.BooleanField(default=False)
+    restricted = models.BooleanField(default=False)
+    signatures = models.BooleanField(default=False)
+    min = models.BooleanField(default=False)
+    scam = models.BooleanField(default=False)
+    has_link = models.BooleanField(default=False)
+    has_geo = models.BooleanField(default=False)
+    slowmode_enabled = models.BooleanField(default=False)
+    fake = models.BooleanField(default=False)
+    access_hash = models.BigIntegerField(null=True)
+    in_degree = models.PositiveIntegerField(null=True)
+    out_degree = models.PositiveIntegerField(null=True)
+
+    def __str__(self):
+        return self.title or str(self.telegram_id)
+
+    @property
+    def telegram_url(self):
+        return f"t.me/{self.username or self.telegram_id}"
+
+    @property
+    def profile_picture(self):
+        return self.profilepicture_set.order_by("date").last()
+
+    @property
+    def activity_period(self):
+        date_template = "%B %Y"
+        messages = self.message_set.all().order_by("date")
+        start = self.date
+        end = self.date
+        if messages.exists():
+            start = min(start, messages.first().date)
+            end = max(end, messages.last().date)
+
+        return (
+            "{} - {}".format(start.strftime(date_template), end.strftime(date_template))
+            if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+            else "{} - ".format(start.strftime(date_template))
+        )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.is_interesting = self.organization.is_interesting
+        self.in_degree = (
+            Message.objects.filter(channel__is_interesting=True, forwarded_from=self).exclude(channel=self).count()
+        )
+        self.out_degree = (
+            Message.objects.filter(channel=self, forwarded_from__is_interesting=True)
+            .exclude(forwarded_from=self)
+            .count()
+        )
+        super().save(update_fields=("is_interesting", "in_degree", "out_degree"))
+
+
+class Message(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES = (
+        "date",
+        "out",
+        "mentioned",
+        "post",
+        "from_scheduled",
+        "message",
+        "grouped_id",
+        "views",
+        "forwards",
+        "pinned",
+    )
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="message_set")
+    date = models.DateTimeField(null=True)
+    out = models.BooleanField(default=False)
+    mentioned = models.BooleanField(default=False)
+    post = models.BooleanField(default=False)
+    from_scheduled = models.BooleanField(default=False, null=True)
+    message = models.TextField(blank=True)
+    forwarded_from = models.ForeignKey(
+        Channel, on_delete=models.SET_NULL, null=True, related_name="forwarded_message_set"
+    )
+    forwarded_from_private = models.PositiveBigIntegerField(null=True)
+    references = models.ManyToManyField(Channel, related_name="reference_message_set")
+    missing_references = models.TextField(blank=True)
+    grouped_id = models.BigIntegerField(null=True)
+    views = models.PositiveBigIntegerField(null=True)
+    forwards = models.PositiveBigIntegerField(null=True)
+    pinned = models.BooleanField(null=True, default=False)
+    has_been_pinned = models.BooleanField(default=False)
+    webpage_url = models.URLField(max_length=255, default="", blank=True)
+    webpage_type = models.CharField(max_length=255, default="", blank=True)
+
+    def __str__(self):
+        return "{} [{}]".format(self.channel.title, self.date or self.telegram_id)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.pinned:
+            self.has_been_pinned = True
+            super().save(update_fields=("has_been_pinned",))
+
+    @classmethod
+    def _args_for_from_telegram_object(cls, telegram_object):
+        return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
+
+    def get_telegram_references(self):
+        refs = []
+        for url in re.findall("t.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message)):
+            refs.append(url[5:])
+
+        return refs
+
+    @property
+    def message_picture(self):
+        return self.messagepicture_set.order_by("date").last()
+
+    @property
+    def telegram_url(self):
+        return f"{self.channel.telegram_url}/{self.telegram_id}"
+
+
+class ProfilePicture(TelegramBasePictureModel):
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
+
+    @property
+    def media_path(self):
+        return f"channels/{self.channel.username}/profile/"
+
+    def channel_media_path(self, filename):
+        return self.media_path + filename.split("/")[-1]
+
+    def is_already_downloaded(self, old_filename, new_filename):
+        directory = settings.MEDIA_ROOT + "/" + "/".join(self.channel_media_path(new_filename).split("/")[:-1])
+        if os.path.isdir(directory):
+            for filename in os.listdir(directory):
+                absolute_filename = settings.MEDIA_ROOT + "/" + self.media_path + filename
+                if os.path.isfile(absolute_filename) and filecmp.cmp(old_filename, absolute_filename):
+                    return True
+
+        return False
+
+
+class MessagePicture(TelegramBasePictureModel):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+
+    @property
+    def media_path(self):
+        return f"channels/{self.message.channel.username}/message/"
+
+    def channel_media_path(self, filename):
+        return f"{self.media_path}{self.message.telegram_id}.{filename.split('.')[-1]}"

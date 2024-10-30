@@ -1,0 +1,13 @@
+syntax: glob
+*.orig
+*.pyc
+*.ini
+*.err
+*.log
+*.cfg
+*~
+*.pdf
+*.aux
+media/*
+static/*
+.env
