@@ -49,7 +49,7 @@ class Command(BaseCommand):
                 data[u.telegram_id] = {
                     "group": u.organization,
                     "type": u.organization_type,
-                    "is_interesting": u.is_interesting,
+                    "is_interesting": u.organization.is_interesting,
                 }
             outputfile.write(json.dumps(data))
 
@@ -58,12 +58,12 @@ class Command(BaseCommand):
         edge_header = "edgedef>node1 VARCHAR, node2 VARCHAR, directed BOOLEAN, weight DOUBLE\n"
         filename = "tm_export_all_fr.gdf"
         node_list = []
-        for u in Channel.objects.filter(is_interesting=True, date__lt=date_limit):
+        for u in Channel.objects.filter(organization__is_interesting=True, date__lt=date_limit):
             node_list.append(u)
 
         edge_list = []
-        for u in Channel.objects.filter(is_interesting=True, date__lt=date_limit):
-            for w in Channel.objects.filter(is_interesting=True, date__lt=date_limit).exclude(id=u.id):
+        for u in Channel.objects.filter(organization__is_interesting=True, date__lt=date_limit):
+            for w in Channel.objects.filter(organization__is_interesting=True, date__lt=date_limit).exclude(id=u.id):
                 relation_messages = (
                     0
                     if not w.message_set.filter(date__lt=date_limit).count()

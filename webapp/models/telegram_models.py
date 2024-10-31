@@ -35,7 +35,6 @@ class Channel(TelegramBaseModel):
     username = models.CharField(max_length=255, blank=True)
     date = models.DateTimeField(null=True)
     participants_count = models.PositiveBigIntegerField(null=True)
-    is_interesting = models.BooleanField(default=None, null=True)
     is_active = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True)
@@ -78,23 +77,24 @@ class Channel(TelegramBaseModel):
             end = max(end, messages.last().date)
 
         return (
-            "{} - {}".format(start.strftime(date_template), end.strftime(date_template))
+            f"{start.strftime(date_template)} - {end.strftime(date_template)}"
             if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
-            else "{} - ".format(start.strftime(date_template))
+            else f"{start.strftime(date_template)} - "
         )
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        self.is_interesting = self.organization.is_interesting
         self.in_degree = (
-            Message.objects.filter(channel__is_interesting=True, forwarded_from=self).exclude(channel=self).count()
+            Message.objects.filter(channel__organization__is_interesting=True, forwarded_from=self)
+            .exclude(channel=self)
+            .count()
         )
         self.out_degree = (
-            Message.objects.filter(channel=self, forwarded_from__is_interesting=True)
+            Message.objects.filter(channel=self, forwarded_from__organization__is_interesting=True)
             .exclude(forwarded_from=self)
             .count()
         )
-        super().save(update_fields=("is_interesting", "in_degree", "out_degree"))
+        super().save(update_fields=["in_degree", "out_degree"])
 
 
 class Message(TelegramBaseModel):
@@ -132,7 +132,7 @@ class Message(TelegramBaseModel):
     webpage_type = models.CharField(max_length=255, default="", blank=True)
 
     def __str__(self):
-        return "{} [{}]".format(self.channel.title, self.date or self.telegram_id)
+        return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

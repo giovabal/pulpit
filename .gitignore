@@ -11,3 +11,4 @@ syntax: glob
 media/*
 static/*
 .env
+*.sqlite3

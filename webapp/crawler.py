@@ -16,7 +16,7 @@ class TelegramCrawler:
     client = None
     last_call = None
     wait_time = 1  # in seconds
-    skippable_references = ("joinchat",)
+    skippable_references = ["joinchat"]
 
     def __init__(self, client):
         self.client = client
@@ -52,7 +52,7 @@ class TelegramCrawler:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
             return
 
-        print("[{}]".format(channel.id), channel)
+        print(f"[{channel.id}]", channel)
 
         self.get_profile_picture(telegram_channel)
 
@@ -85,7 +85,7 @@ class TelegramCrawler:
         message_count += c
         channel.are_messages_crawled = True
         channel.save()
-        print("  * {} messaggi".format(message_count))
+        print(f"  * {message_count} messaggi")
 
     def get_profile_picture(self, telegram_channel):
         for telegram_picture in self.client.get_profile_photos(telegram_channel):
@@ -189,7 +189,7 @@ class TelegramCrawler:
         message.save()
 
     def clean_leftovers(self):
-        for file_path in glob.glob("{}/photo_*.jpg".format(settings.BASE_DIR)):
+        for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
             try:
                 os.remove(file_path)
             except Exception:

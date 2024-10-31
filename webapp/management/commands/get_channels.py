@@ -23,11 +23,13 @@ class Command(BaseCommand):
             crawler = TelegramCrawler(client)
             with open("username_seeds.txt") as f:
                 for seed in f.readlines():
-                    crawler.get_channel("t.me/{}".format(seed.strip()))
+                    crawler.get_channel(f"t.me/{seed.strip()}")
 
             if not file_only:
                 for channel in (
-                    Channel.objects.filter(is_interesting=True, is_lost=False).order_by("-id").iterator(chunk_size=10)
+                    Channel.objects.filter(organization__is_interesting=True, is_active=True)
+                    .order_by("-id")
+                    .iterator(chunk_size=10)
                 ):
                     crawler.get_channel(channel.telegram_id)
 
