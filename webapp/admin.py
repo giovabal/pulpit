@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Category, Channel, Message, Organization
+from .models import Category, Channel, Message, Organization, SearchTerm
 
 
 @admin.register(Channel)
@@ -59,13 +59,18 @@ class MessageAdmin(admin.ModelAdmin):
         return format_html(f"<img width='60' src='{src}'>")
 
 
+@admin.register(SearchTerm)
+class SearchTermAdmin(admin.ModelAdmin):
+    list_display = ("word", "last_check")
+
+
 @admin.register(Category)
-class Category(admin.ModelAdmin):
+class CategoryAdmin(admin.ModelAdmin):
     list_display = ("name", "color")
     list_editable = ["color"]
 
 
 @admin.register(Organization)
-class Organization(admin.ModelAdmin):
+class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("name", "color")
     list_editable = ["color"]

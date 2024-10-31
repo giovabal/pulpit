@@ -8,7 +8,7 @@ from django.db.models import Q
 
 from .models import Channel, Message, MessagePicture, ProfilePicture
 
-from telethon import errors
+from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
 
 
@@ -187,6 +187,19 @@ class TelegramCrawler:
             message.missing_references = "|" + "|".join(missing_references)
 
         message.save()
+
+    def search_channel(self, q, limit=1000):
+        self.wait()
+        result = self.client(functions.contacts.SearchRequest(q=q, limit=limit))
+        for channel in result.results:
+            if (
+                hasattr(channel, "channel_id")
+                and Channel.objects.filter(telegram_id=channel.channel_id).first() is None
+            ):
+                new_telegram_channel = self.client.get_entity(channel.channel_id)
+                Channel.from_telegram_object(new_telegram_channel, force_update=True)
+
+        return len(list(result.results))
 
     def clean_leftovers(self):
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
