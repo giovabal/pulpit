@@ -1,10 +1,11 @@
 import glob
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 from time import sleep
 
 from django.conf import settings
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import Channel, Message, MessagePicture, ProfilePicture
 
@@ -20,13 +21,13 @@ class TelegramCrawler:
 
     def __init__(self, client):
         self.client = client
-        self.last_call = datetime.now() - timedelta(seconds=self.wait_time)
+        self.last_call = timezone.now() - timedelta(seconds=self.wait_time)
 
     def wait(self):
-        w = self.wait_time - (datetime.now() - self.last_call).seconds
+        w = self.wait_time - (timezone.now() - self.last_call).seconds
         if w > 0:
             sleep(w)
-        self.last_call = datetime.now()
+        self.last_call = timezone.now()
 
     def set_more_channel_details(self, channel, telegram_channel):
         channel_full_info = self.client(GetFullChannelRequest(channel=telegram_channel))

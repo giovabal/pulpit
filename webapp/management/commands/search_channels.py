@@ -1,7 +1,6 @@
-from datetime import datetime
-
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from webapp.crawler import TelegramCrawler
 from webapp.models import SearchTerm
@@ -21,5 +20,5 @@ class Command(BaseCommand):
             for term in SearchTerm.objects.all().order_by("last_check")[:15]:
                 word = term.word
                 print(word, crawler.search_channel(word))
-                term.last_check = datetime.now()
+                term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])

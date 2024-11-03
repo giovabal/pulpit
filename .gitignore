@@ -12,3 +12,4 @@ media/*
 static/*
 .env
 *.sqlite3
+*.session
