@@ -22,13 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config("SECRET_KEY")
+SECRET_KEY = config("SECRET_KEY", cast=str)
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv())
 
 
 # Application definition
@@ -82,7 +82,7 @@ WSGI_APPLICATION = "webapp_engine.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / config("DB_NAME"),
+        "NAME": BASE_DIR / config("DB_NAME", cast=str),
     }
 }
 
@@ -109,8 +109,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "Europe/Berlin"
+LANGUAGE_CODE = config("LANGUAGE_CODE", default="en-us", cast=str)
+TIME_ZONE = config("TIME_ZONE", default="UTC", cast=str)
 USE_I18N = True
 USE_TZ = True
 
@@ -126,6 +126,9 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-TELEGRAM_API_ID = config("TELEGRAM_API_ID")
-TELEGRAM_API_HASH = config("TELEGRAM_API_HASH")
-TELEGRAM_PHONE_NUMBER = config("TELEGRAM_PHONE_NUMBER")
+TELEGRAM_API_ID = config("TELEGRAM_API_ID", cast=str)
+TELEGRAM_API_HASH = config("TELEGRAM_API_HASH", cast=str)
+TELEGRAM_PHONE_NUMBER = config("TELEGRAM_PHONE_NUMBER", cast=str)
+TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL = config("TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL", default=100, cast=int)
+TELEGRAM_CRAWLER_DOWNLOAD_IMAGES = config("TELEGRAM_CRAWLER_DOWNLOAD_IMAGES", default=False, cast=bool)
+TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = config("TELEGRAM_CRAWLER_DOWNLOAD_VIDEO", default=False, cast=bool)
