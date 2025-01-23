@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from .models import Channel, Message, MessagePicture, ProfilePicture
 
+from asgiref.sync import sync_to_async
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
 
@@ -191,16 +192,21 @@ class TelegramCrawler:
 
     def search_channel(self, q, limit=1000):
         self.wait()
-        result = self.client(functions.contacts.SearchRequest(q=q, limit=limit))
-        for channel in result.results:
-            if (
-                hasattr(channel, "channel_id")
-                and Channel.objects.filter(telegram_id=channel.channel_id).first() is None
-            ):
-                new_telegram_channel = self.client.get_entity(channel.channel_id)
-                Channel.from_telegram_object(new_telegram_channel, force_update=True)
 
-        return len(list(result.results))
+        async def _do(q, limit):
+            results_count = 0
+            result = await self.client(functions.contacts.SearchRequest(q=q, limit=limit))
+            for channel in result.chats:
+                if hasattr(channel, "channel_id"):
+                    results_count += 1
+                    already_exists = await sync_to_async(
+                        Channel.objects.filter(telegram_id=channel.channel_id).exists
+                    )()
+                    if not already_exists:
+                        await sync_to_async(Channel.from_telegram_object)(channel, force_update=True)
+            return results_count
+
+        self.client.loop.run_until_complete(_do(q, limit))
 
     def clean_leftovers(self):
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
