@@ -36,6 +36,7 @@ class Channel(TelegramBaseModel):
     date = models.DateTimeField(null=True)
     participants_count = models.PositiveBigIntegerField(null=True)
     is_active = models.BooleanField(default=False)
+    is_lost = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, blank=True, null=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, blank=True, null=True)

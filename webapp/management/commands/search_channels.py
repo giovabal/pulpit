@@ -18,7 +18,6 @@ class Command(BaseCommand):
         ) as client:
             crawler = TelegramCrawler(client)
             for term in SearchTerm.objects.all().order_by("last_check")[:15]:
-                word = term.word
-                print(word, crawler.search_channel(word))
+                crawler.search_channel(term.word)
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])

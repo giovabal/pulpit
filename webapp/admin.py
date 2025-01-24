@@ -11,7 +11,6 @@ class ChannelAdmin(admin.ModelAdmin):
     list_display = (
         "__str__",
         "thumb",
-        "is_active",
         "in_degree",
         "out_degree",
         "participants_count",
@@ -22,7 +21,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "category",
     )
     list_editable = ("organization", "category")
-    list_filter = ("organization__is_interesting", "is_active", "broadcast", "organization")
+    list_filter = ("organization__is_interesting", "broadcast", "organization")
     search_fields = ["username", "title"]
 
     @admin.display(description="Msg")
