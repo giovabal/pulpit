@@ -43,11 +43,14 @@ class TelegramCrawler:
 
         try:
             telegram_channel = self.client.get_entity(seed)
-            return (Channel.from_telegram_object(telegram_channel, force_update=True), telegram_channel) if telegram_channel else (None, None)
+            return (
+                (Channel.from_telegram_object(telegram_channel, force_update=True), telegram_channel)
+                if telegram_channel
+                else (None, None)
+            )
         except errors.rpcerrorlist.ChannelPrivateError:
             print("Seed non disponibile: ", seed)
             return None, None
-
 
     def get_channel(self, seed):
         channel, telegram_channel = self.get_basic_channel(seed)

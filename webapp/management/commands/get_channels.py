@@ -17,9 +17,7 @@ class Command(BaseCommand):
         ) as client:
             crawler = TelegramCrawler(client)
             for channel in (
-                Channel.objects.filter(organization__is_interesting=True)
-                .order_by("-id")
-                .iterator(chunk_size=10)
+                Channel.objects.filter(organization__is_interesting=True).order_by("-id").iterator(chunk_size=10)
             ):
                 crawler.get_channel(channel.telegram_id)
 

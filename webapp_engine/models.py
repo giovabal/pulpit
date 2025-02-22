@@ -60,13 +60,12 @@ class TelegramBasePictureModel(TelegramBaseModel):
         if not filename:
             return obj
 
-        old_filename = str(settings.BASE_DIR) + "/" + filename
-        new_filename = settings.MEDIA_ROOT + "/" + obj.channel_media_path(filename)
+        old_filename = os.path.join(settings.BASE_DIR, filename)
+        new_filename = os.path.join(settings.MEDIA_ROOT, obj.channel_media_path(filename))
         if not os.path.exists(new_filename):
-            try:
-                os.makedirs("/".join(new_filename.split("/")[:-1]))
-            except FileExistsError:
-                pass
+            newdir_chunks = os.path.split(new_filename)[:-1]
+            newdir = os.path.join(*newdir_chunks)
+            os.makedirs(newdir, exist_ok=True)
 
         if obj.is_already_downloaded(old_filename, new_filename):
             os.remove(old_filename)

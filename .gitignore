@@ -9,6 +9,7 @@ syntax: glob
 *.pdf
 *.aux
 media/*
+channels/*
 static/*
 .env
 *.sqlite3

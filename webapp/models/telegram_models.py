@@ -84,6 +84,7 @@ class Channel(TelegramBaseModel):
         )
 
     def save(self, *args, **kwargs):
+        self.username = self.username or ""
         super().save(*args, **kwargs)
         self.in_degree = (
             Message.objects.filter(channel__organization__is_interesting=True, forwarded_from=self)
@@ -136,6 +137,7 @@ class Message(TelegramBaseModel):
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args, **kwargs):
+        self.message = self.message or ""
         super().save(*args, **kwargs)
         if self.pinned:
             self.has_been_pinned = True
@@ -158,7 +160,7 @@ class Message(TelegramBaseModel):
 
     @property
     def telegram_url(self):
-        return f"{self.channel.telegram_url}/{self.telegram_id}"
+        return os.path.join(self.channel.telegram_url, self.telegram_id)
 
 
 class ProfilePicture(TelegramBasePictureModel):
@@ -166,16 +168,18 @@ class ProfilePicture(TelegramBasePictureModel):
 
     @property
     def media_path(self):
-        return f"channels/{self.channel.username}/profile/"
+        return os.path.join("channels", self.channel.username, "profile")
 
     def channel_media_path(self, filename):
-        return self.media_path + filename.split("/")[-1]
+        base_dir = [self.media_path] + list(os.path.split(filename))[-1]
+        return os.path.join(*base_dir)
 
     def is_already_downloaded(self, old_filename, new_filename):
-        directory = settings.MEDIA_ROOT + "/" + "/".join(self.channel_media_path(new_filename).split("/")[:-1])
+        base_dir = [settings.MEDIA_ROOT] + list(os.path.split(self.channel_media_path(new_filename)))[:-1]
+        directory = os.path.join(*base_dir)
         if os.path.isdir(directory):
             for filename in os.listdir(directory):
-                absolute_filename = settings.MEDIA_ROOT + "/" + self.media_path + filename
+                absolute_filename = os.path.join(settings.MEDIA_ROOT, self.media_path, filename)
                 if os.path.isfile(absolute_filename) and filecmp.cmp(old_filename, absolute_filename):
                     return True
 
@@ -187,7 +191,7 @@ class MessagePicture(TelegramBasePictureModel):
 
     @property
     def media_path(self):
-        return f"channels/{self.message.channel.username}/message/"
+        return os.path.join("channels", self.message.channel.username, "message")
 
     def channel_media_path(self, filename):
-        return f"{self.media_path}{self.message.telegram_id}.{filename.split('.')[-1]}"
+        return os.path.join(self.media_path, f"{self.message.telegram_id}.{filename.split('.')[-1]}")
