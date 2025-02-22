@@ -5,7 +5,7 @@ from django.utils import timezone
 from webapp.crawler import TelegramCrawler
 from webapp.models import SearchTerm
 
-from telethon import TelegramClient
+from telethon.sync import TelegramClient
 
 
 class Command(BaseCommand):

@@ -9,7 +9,6 @@ from django.utils import timezone
 
 from .models import Channel, Message, MessagePicture, ProfilePicture
 
-from asgiref.sync import sync_to_async
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
 
@@ -42,15 +41,12 @@ class TelegramCrawler:
         self.wait()
         telegram_channel = None
 
-        async def _do():
-            try:
-                telegram_channel = await self.client.get_entity(seed)
-                return (await sync_to_async(Channel.from_telegram_object)(telegram_channel, force_update=True), telegram_channel) if telegram_channel else (None, None)
-            except errors.rpcerrorlist.ChannelPrivateError:
-                print("Seed non disponibile: ", seed)
-                return None, None
-
-        self.client.loop.run_until_complete(_do())
+        try:
+            telegram_channel = self.client.get_entity(seed)
+            return (Channel.from_telegram_object(telegram_channel, force_update=True), telegram_channel) if telegram_channel else (None, None)
+        except errors.rpcerrorlist.ChannelPrivateError:
+            print("Seed non disponibile: ", seed)
+            return None, None
 
 
     def get_channel(self, seed):
@@ -198,17 +194,15 @@ class TelegramCrawler:
     def search_channel(self, q, limit=1000):
         self.wait()
 
-        async def _do(q, limit):
+        def _do(q, limit):
             results_count = 0
-            result = await self.client(functions.contacts.SearchRequest(q=q, limit=limit))
+            result = self.client(functions.contacts.SearchRequest(q=q, limit=limit))
             for channel in result.chats:
                 if hasattr(channel, "id"):
                     results_count += 1
-                    already_exists = await sync_to_async(
-                        Channel.objects.filter(telegram_id=channel.id).exists
-                    )()
+                    already_exists = Channel.objects.filter(telegram_id=channel.id).exists()
                     if not already_exists:
-                        await sync_to_async(Channel.from_telegram_object)(channel, force_update=True)
+                        Channel.from_telegram_object(channel, force_update=True)
             return results_count
 
         self.client.loop.run_until_complete(_do(q, limit))

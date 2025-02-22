@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from webapp.crawler import TelegramCrawler
 from webapp.models import Channel
 
-from telethon import TelegramClient
+from telethon.sync import TelegramClient
 
 
 class Command(BaseCommand):
