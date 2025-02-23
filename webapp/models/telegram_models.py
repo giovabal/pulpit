@@ -1,5 +1,4 @@
 import datetime
-import filecmp
 import os
 import re
 
@@ -160,38 +159,18 @@ class Message(TelegramBaseModel):
 
     @property
     def telegram_url(self):
-        return os.path.join(self.channel.telegram_url, self.telegram_id)
+        return os.path.join(self.channel.telegram_url, str(self.telegram_id))
 
 
 class ProfilePicture(TelegramBasePictureModel):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
 
-    @property
-    def media_path(self):
-        return os.path.join("channels", self.channel.username, "profile")
-
-    def channel_media_path(self, filename):
-        base_dir = [self.media_path] + list(os.path.split(filename))[-1]
-        return os.path.join(*base_dir)
-
-    def is_already_downloaded(self, old_filename, new_filename):
-        base_dir = [settings.MEDIA_ROOT] + list(os.path.split(self.channel_media_path(new_filename)))[:-1]
-        directory = os.path.join(*base_dir)
-        if os.path.isdir(directory):
-            for filename in os.listdir(directory):
-                absolute_filename = os.path.join(settings.MEDIA_ROOT, self.media_path, filename)
-                if os.path.isfile(absolute_filename) and filecmp.cmp(old_filename, absolute_filename):
-                    return True
-
-        return False
+    def get_media_path(self):
+        return os.path.join(settings.MEDIA_ROOT, "channels", self.channel.username, "profile")
 
 
 class MessagePicture(TelegramBasePictureModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
 
-    @property
-    def media_path(self):
-        return os.path.join("channels", self.message.channel.username, "message")
-
-    def channel_media_path(self, filename):
-        return os.path.join(self.media_path, f"{self.message.telegram_id}.{filename.split('.')[-1]}")
+    def get_media_path(self):
+        return os.path.join(settings.MEDIA_ROOT, "channels", self.message.channel.username, "message")

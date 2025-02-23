@@ -49,7 +49,7 @@ class TelegramCrawler:
                 else (None, None)
             )
         except errors.rpcerrorlist.ChannelPrivateError:
-            print("Seed non disponibile: ", seed)
+            print("Not available seed: ", seed)
             return None, None
 
     def get_channel(self, seed):
@@ -91,7 +91,7 @@ class TelegramCrawler:
         message_count += c
         channel.are_messages_crawled = True
         channel.save()
-        print(f"  * {message_count} messaggi")
+        print(f"  * {message_count} messagges")
 
     def get_profile_picture(self, telegram_channel):
         for telegram_picture in self.client.get_profile_photos(telegram_channel):

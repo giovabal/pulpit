@@ -1,7 +1,4 @@
-import filecmp
-import os
-
-from django.conf import settings
+from django.core.files import File
 from django.db import models
 
 
@@ -39,38 +36,28 @@ class TelegramBaseModel(BaseModel):
         return obj
 
 
+def _telegram_picture_upload_to_function(instance, filename):
+    return instance.get_media_path()
+
+
 class TelegramBasePictureModel(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES = ("date",)
-    picture = models.ImageField(upload_to="", max_length=255)
+    picture = models.ImageField(upload_to=_telegram_picture_upload_to_function, max_length=255)
     date = models.DateTimeField(null=True)
 
     class Meta:
         abstract = True
 
-    def channel_media_path(self, filename):
-        raise NotImplementedError("define `self.channel_media_path()`")
-
-    def is_already_downloaded(self, old_filename, new_filename):
-        return os.path.isfile(new_filename) and filecmp.cmp(old_filename, new_filename)
+    def get_media_path(self):
+        raise NotImplementedError("define `self.get_media_path()`")
 
     @classmethod
     def from_telegram_object(cls, telegram_object, force_update=False, defaults=None):
         obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults or {})
         filename = defaults.get("picture", None)
-        if not filename:
-            return obj
+        if filename:
+            with open(filename, "rb") as f:
+                obj.picture = File(f)
+                obj.save(update_fields=("picture",))  # inside 'with', before the file is closed
 
-        old_filename = os.path.join(settings.BASE_DIR, filename)
-        new_filename = os.path.join(settings.MEDIA_ROOT, obj.channel_media_path(filename))
-        if not os.path.exists(new_filename):
-            newdir_chunks = os.path.split(new_filename)[:-1]
-            newdir = os.path.join(*newdir_chunks)
-            os.makedirs(newdir, exist_ok=True)
-
-        if obj.is_already_downloaded(old_filename, new_filename):
-            os.remove(old_filename)
-            return obj
-
-        os.rename(old_filename, new_filename)
-        obj.picture = new_filename
-        obj.save(update_fields=("picture",))
+        return obj
