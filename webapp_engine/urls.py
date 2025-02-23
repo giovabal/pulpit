@@ -18,6 +18,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+
+class AccessUser:
+    has_module_perms = has_perm = __getattr__ = lambda s, *args, **kwargs: True
+
+
+# no login required
+admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
+
 urlpatterns = [
     path("admin/", admin.site.urls),
 ]
