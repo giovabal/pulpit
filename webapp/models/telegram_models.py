@@ -4,6 +4,7 @@ import re
 
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 
 from webapp.models import Category, Organization
 from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel
@@ -57,6 +58,9 @@ class Channel(TelegramBaseModel):
 
     def __str__(self):
         return self.title or str(self.telegram_id)
+
+    def get_absolute_url(self):
+        return reverse("channel-detail", kwargs={"pk": self.pk})
 
     @property
     def telegram_url(self):

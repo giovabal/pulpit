@@ -1,0 +1,18 @@
+{% load static %}
+<div class="d-flex flex-column align-items-stretch flex-shrink-0 bg-body-tertiary" style="width: 380px;">
+  <a href="/" class="d-flex align-items-center flex-shrink-0 p-3 link-body-emphasis text-decoration-none border-bottom">
+    <svg class="bi pe-none me-2" width="30" height="24"><use xlink:href="#bootstrap"></use></svg>
+    <span class="fs-5 fw-semibold">Channel list</span>
+  </a>
+  <div class="list-group list-group-flush border-bottom scrollarea">
+    {% for channel in channel_list %}
+    <a href="{{ channel.get_absolute_url }}" class="list-group-item list-group-item-action py-3 lh-sm{% if selected_channel == channel %} active{% endif %}" aria-current="true">
+      <div class="d-flex w-100 align-items-center justify-content-between">
+        <strong class="mb-1">{{ channel.title }}</strong>
+        <small class="text-end align-top" style="font-size: 80%; color: {{ channel.organization.color }};">{{ channel.organization }}</small>
+      </div>
+      <div class="col-10 mb-1 small">{{ channel.message_set.all.count }} messages</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>

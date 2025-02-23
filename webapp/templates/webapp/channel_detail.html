@@ -1,0 +1,21 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+{% block content %}
+{% for post in message_list %}
+<div class="card my-1 ms-2" style="width: 50rem;">
+  <div class="card-header">
+    <h5 class="card-title small text-danger" style="font-variant: small-caps;">{{ post.channel.title }}</h5>
+    <h6 class="card-subtitle mb-2 text-body-secondary">subtitle</h6>
+  </div>
+  {% for picture in post.messagepicture_set.all %}
+  <img src="{{ picture.url }}" class="card-img-top">
+  {% endfor %}
+  <div class="card-body">
+    <p class="card-text">{{ post.message|linebreaks|urlize }}</p>
+    <span class="card-link small">{{ post.views|default:"0" }} views</a>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock content %}
