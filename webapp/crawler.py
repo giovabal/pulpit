@@ -101,6 +101,8 @@ class TelegramCrawler:
                 force_update=True,
                 defaults={"channel": Channel.objects.get(telegram_id=telegram_channel.id), "picture": picture_filename},
             )
+            if os.path.exists(picture_filename):
+                os.remove(picture_filename)
 
     def get_message_picture(self, telegram_message):
         if not hasattr(telegram_message.media, "photo"):
@@ -118,6 +120,8 @@ class TelegramCrawler:
                     "picture": picture_filename,
                 },
             )
+            if os.path.exists(picture_filename):
+                os.remove(picture_filename)
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             print(e)
             print(telegram_message.__dict__)
@@ -196,19 +200,15 @@ class TelegramCrawler:
 
     def search_channel(self, q, limit=1000):
         self.wait()
-
-        def _do(q, limit):
-            results_count = 0
-            result = self.client(functions.contacts.SearchRequest(q=q, limit=limit))
-            for channel in result.chats:
-                if hasattr(channel, "id"):
-                    results_count += 1
-                    already_exists = Channel.objects.filter(telegram_id=channel.id).exists()
-                    if not already_exists:
-                        Channel.from_telegram_object(channel, force_update=True)
-            return results_count
-
-        self.client.loop.run_until_complete(_do(q, limit))
+        results_count = 0
+        result = self.client(functions.contacts.SearchRequest(q=q, limit=limit))
+        for channel in result.chats:
+            if hasattr(channel, "id"):
+                results_count += 1
+                already_exists = Channel.objects.filter(telegram_id=channel.id).exists()
+                if not already_exists:
+                    Channel.from_telegram_object(channel, force_update=True)
+        return results_count
 
     def clean_leftovers(self):
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):

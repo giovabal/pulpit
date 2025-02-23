@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
 
@@ -34,7 +33,7 @@ class ChannelAdmin(admin.ModelAdmin):
 
     @admin.display(description="Img")
     def thumb(self, obj):
-        src = obj.profile_picture.picture.url.replace(settings.MEDIA_ROOT, "") if obj.profile_picture else ""
+        src = obj.profile_picture.picture.url if obj.profile_picture else ""
         return format_html(f"<img width='60' src='{src}'>")
 
 
@@ -54,7 +53,7 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Img")
     def thumb(self, obj):
-        src = obj.message_picture.picture.url.replace(settings.MEDIA_ROOT, "") if obj.message_picture else ""
+        src = obj.message_picture.picture.url if obj.message_picture else ""
         return format_html(f"<img width='60' src='{src}'>")
 
 

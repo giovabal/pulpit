@@ -165,12 +165,26 @@ class Message(TelegramBaseModel):
 class ProfilePicture(TelegramBasePictureModel):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
 
-    def get_media_path(self):
-        return os.path.join(settings.MEDIA_ROOT, "channels", self.channel.username, "profile")
+    def get_media_path(self, instance, filename):
+        extension = filename.split(".")[-1]
+        return os.path.join(
+            settings.MEDIA_ROOT_DIRNAME,
+            "channels",
+            self.channel.username,
+            "profile",
+            f"{self.channel.telegram_id}.{extension}",
+        )
 
 
 class MessagePicture(TelegramBasePictureModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
 
-    def get_media_path(self):
-        return os.path.join(settings.MEDIA_ROOT, "channels", self.message.channel.username, "message")
+    def get_media_path(self, instance, filename):
+        extension = filename.split(".")[-1]
+        return os.path.join(
+            settings.MEDIA_ROOT_DIRNAME,
+            "channels",
+            self.message.channel.username,
+            "message",
+            f"{self.message.telegram_id}.{extension}",
+        )
