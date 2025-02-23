@@ -64,7 +64,7 @@ class Channel(TelegramBaseModel):
 
     @property
     def telegram_url(self):
-        return f"t.me/{self.username or self.telegram_id}"
+        return f"https://t.me/{self.username or self.telegram_id}"
 
     @property
     def profile_picture(self):
@@ -163,7 +163,7 @@ class Message(TelegramBaseModel):
 
     @property
     def telegram_url(self):
-        return os.path.join(self.channel.telegram_url, str(self.telegram_id))
+        return f"{self.channel.telegram_url}/{self.telegram_id}"
 
 
 class ProfilePicture(TelegramBasePictureModel):

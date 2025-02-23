@@ -1,0 +1,29 @@
+{% if page_obj.paginator.num_pages > 1 or force_pagination %}
+<nav class="border-top">
+  <p class="very-small text-muted text-center mb-1 mt-3">{{ page_obj.start_index }}-{{ page_obj.end_index }} di {{ page_obj.paginator.count }}</p>
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if page_obj.has_previous %}
+    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.previous_page_number }}{{ original_query }}{{ original_fragment }}"><i class="bi bi-chevron-left"></i></a></li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+    {% endif %}
+
+    {% for num in page_obj.elided_page_range %}
+    {% if num == page_obj.number %}
+    <li class="page-item active"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}">{{ num }}</a></li>
+    {% elif not num %}
+    <li class="page-item disabled"><span class="page-link">...</span></li>
+    {% else %}
+    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}">{{ num }}</a></li>
+    {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.next_page_number }}{{ original_query }}{{ original_fragment }}"><i class="bi bi-chevron-right"></i></a></li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+

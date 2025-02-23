@@ -14,22 +14,24 @@ class ChannelDetailView(BaseMixin, ListView):
     template_name = "webapp/channel_detail.html"
     model = Message
     paginator_class = DiggPaginator
-    paginate_by = 100
-    paginate_orphans = 20
-    page_kwarg = "pagina"
+    paginate_by = 50
+    paginate_orphans = 15
+    page_kwarg = "page"
 
     def get(self, request, *args, **kwargs):
         self.selected_channel = Channel.objects.get(pk=kwargs.get("pk"))
         return super().get(request, *args, **kwargs)
+
+    def get_queryset(self, *args, **kwargs):
+        qs = super().get_queryset(*args, **kwargs)
+        return qs.filter(channel=self.selected_channel).order_by("date")
 
     def get_context_data(self, *args, **kwargs):
         context_data = super().get_context_data(*args, **kwargs)
         context_data.update(
             {
                 "selected_channel": self.selected_channel,
-                "message_list": Message.objects.filter(channel=self.selected_channel).order_by("date"),
             }
         )
-        print(context_data)
 
         return context_data

@@ -1,6 +1,10 @@
 from django.core.files import File
 from django.db import models
 
+from webapp.utils import is_color_dark
+
+from colorfield.fields import ColorField
+
 
 class BaseModel(models.Model):
     _created = models.DateTimeField(auto_now_add=True)
@@ -8,6 +12,21 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+    @property
+    def updated(self):
+        return self._updated
+
+
+class BaseColorModel(BaseModel):
+    color = ColorField(default="#FF0000")
+
+    class Meta:
+        abstract = True
+
+    @property
+    def is_color_dark(self):
+        return is_color_dark(self.color)
 
 
 class TelegramBaseModel(BaseModel):

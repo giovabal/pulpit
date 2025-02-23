@@ -2,20 +2,44 @@
 {% load static %}
 
 {% block content %}
-{% for post in message_list %}
-<div class="card my-1 ms-2" style="width: 50rem;">
+<div class="card mt-1 mb-3 ms-2" style="width: 50rem;">
   <div class="card-header">
-    <h5 class="card-title small text-danger" style="font-variant: small-caps;">{{ post.channel.title }}</h5>
-    <h6 class="card-subtitle mb-2 text-body-secondary">subtitle</h6>
+    <h5 class="card-title text-danger" style="font-variant: small-caps;">{{ selected_channel.title }}</h5>
+  </div>
+  {% for picture in selected_channel.profilepicture_set.all %}
+  <img src="{{ picture.picture.url }}" class="card-img-top">
+  {% endfor %}
+  <div class="card-body">
+    <p class="card-text">{{ selected_channel.about|linebreaks|urlize }}</p>
+    <span class="small float-end" title="see on Telegram"><a href="{{ selected_channel.telegram_url }}" target="_blank" class="btn btn-secondary btn-sm"><i class="bi bi-telegram"></i></a></span>
+    <span class="small d-block">{{ selected_channel.participants_count|default:"0" }} users</span>
+    <span class="small d-block">updated on {{ selected_channel.updated }}</span>
+  </div>
+</div>
+{% include "webapp/pagination.html" %}
+<hr>
+{% for post in page_obj %}
+<div class="card my-1 ms-2" style="width: 50rem;">
+  <div class="card-header py-2">
+    {% if post.pinned %}
+    <span class="small float-end" title="is pinned"><i class="bi bi-pin-fill"></i></span>
+    {% elif post.has_been_pinned %}
+    <span class="small float-end text-muted" title="has been pinned"><i class="bi bi-pin-angle"></i></span>
+    {% endif %}
+    {% if post.forwarded_from %}
+    <h6 class="card-subtitle mb-2 text-body-secondary small">forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a></h6>
+    {% endif %}
   </div>
   {% for picture in post.messagepicture_set.all %}
-  <img src="{{ picture.url }}" class="card-img-top">
+  <img src="{{ picture.picture.url }}" class="card-img-top">
   {% endfor %}
   <div class="card-body">
     <p class="card-text">{{ post.message|linebreaks|urlize }}</p>
-    <span class="card-link small">{{ post.views|default:"0" }} views</a>
+    <span class="small float-end" title="see on Telegram"><a href="{{ post.telegram_url }}" target="_blank" class="btn btn-secondary btn-sm"><i class="bi bi-telegram"></i></a></span>
+    <span class="small d-block">{{ post.views|default:"0" }} views</span>
+    <span class="small d-block">{{ post.date }}</span>
   </div>
 </div>
 {% endfor %}
-
+{% include "webapp/pagination.html" %}
 {% endblock content %}
