@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_admin_logs",
     "colorfield",
     "django_extensions",
     "webapp",
@@ -124,6 +125,8 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+DJANGO_ADMIN_LOGS_ENABLED = False
 
 
 TELEGRAM_API_ID = config("TELEGRAM_API_ID", cast=str)

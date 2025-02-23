@@ -61,6 +61,7 @@ class MessageAdmin(admin.ModelAdmin):
 @admin.register(SearchTerm)
 class SearchTermAdmin(admin.ModelAdmin):
     list_display = ("word", "last_check")
+    fieldsets = ((None, {"fields": ("word",)}),)
 
 
 @admin.register(Category)

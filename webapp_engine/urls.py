@@ -20,10 +20,9 @@ from django.urls import path
 
 
 class AccessUser:
-    has_module_perms = has_perm = __getattr__ = lambda s, *args, **kwargs: True
+    has_module_perms = has_perm = __getattr__ = lambda s, *a, **kw: True
 
 
-# no login required
 admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
 
 urlpatterns = [
