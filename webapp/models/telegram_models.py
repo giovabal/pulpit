@@ -86,6 +86,16 @@ class Channel(TelegramBaseModel):
             else f"{start.strftime(date_template)} - "
         )
 
+    @property
+    def network_data(self):
+        return {
+            "pk": self.pk,
+            "id": self.telegram_id,
+            "name": self.title,
+            "group": self.organization.name,
+            "color": self.organization.color,
+        }
+
     def save(self, *args, **kwargs):
         self.username = self.username or ""
         super().save(*args, **kwargs)

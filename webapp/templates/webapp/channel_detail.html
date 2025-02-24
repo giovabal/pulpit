@@ -36,7 +36,7 @@
   <div class="card-body">
     <p class="card-text">{{ post.message|linebreaks|urlize }}</p>
     <span class="small float-end" title="see on Telegram"><a href="{{ post.telegram_url }}" target="_blank" class="btn btn-secondary btn-sm"><i class="bi bi-telegram"></i></a></span>
-    <span class="small d-block">{{ post.views|default:"0" }} views</span>
+    <span class="small d-block">{{ post.views|default:"0" }} views &mdash; {{ post.fowards|default:"0" }} forwards</span>
     <span class="small d-block">{{ post.date }}</span>
   </div>
 </div>
