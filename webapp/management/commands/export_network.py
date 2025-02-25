@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from webapp.models import Channel, Organization
+from webapp_engine.utils import hex_to_rgb, rgb_avg
 
 import networkx as nx
 from fa2 import ForceAtlas2
@@ -22,7 +23,7 @@ class Command(BaseCommand):
         qs = Channel.objects.filter(organization__is_interesting=True)
         for u in qs:
             channel_dict[str(u.telegram_id)] = u
-            graph.add_node(u.pk, data=u.network_data)
+            graph.add_node(str(u.pk), data=u.network_data)
 
         edge_list = []
         for u in qs:
@@ -38,11 +39,13 @@ class Command(BaseCommand):
                     / count
                 )
                 if weight > 0:
-                    edge_list.append([v.pk, u.pk, weight])
+                    color = rgb_avg(hex_to_rgb(u.organization.color), hex_to_rgb(v.organization.color))
+                    color = [str(int(c * 0.75)) for c in color]
+                    edge_list.append([str(v.pk), str(u.pk), weight, ",".join(color)])
 
-        max_weight = max([e[-1] for e in edge_list])
+        max_weight = max([e[2] for e in edge_list])
         for edge in edge_list:
-            graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0.0001))
+            graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0.0001), color=edge[3])
 
         print("\nSet spatial distribution of nodes")
         forceatlas2 = ForceAtlas2(
@@ -66,12 +69,33 @@ class Command(BaseCommand):
         print("\nCalculations on the graph")
         data = {"nodes": [], "edges": []}
         for u, d in graph.nodes(data=True):
-            data["nodes"].append(
-                {"id": u, "x": float(positions.get(d["data"]["pk"])[0]), "y": float(positions.get(d["data"]["pk"])[1])}
-            )
+            node_info = {
+                "id": u,
+                "x": float(positions.get(d["data"]["pk"])[0]),
+                "y": float(positions.get(d["data"]["pk"])[1]),
+            }
+            for k in (
+                "label",
+                "group",
+                "color",
+                "pic",
+                "url",
+                "activity_period",
+                "fans",
+                "in_deg",
+                "is_lost",
+                "messages_count",
+                "out_deg",
+            ):
+                node_info[k] = d["data"][k]
+            data["nodes"].append(node_info)
 
+        i = 0
         for u, v, d in graph.edges(data=True):
-            data["edges"].append({"source": u, "target": v, "weight": d.get("weight", 0)})
+            data["edges"].append(
+                {"source": u, "target": v, "weight": d.get("weight", 0), "color": d.get("color", ""), "id": i}
+            )
+            i += 1
 
         properties = {}
         graph_properties = []

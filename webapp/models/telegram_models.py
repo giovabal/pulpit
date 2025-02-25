@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from webapp.models import Organization
 from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel
+from webapp_engine.utils import hex_to_rgb
 
 
 class Channel(TelegramBaseModel):
@@ -88,13 +89,19 @@ class Channel(TelegramBaseModel):
     @property
     def network_data(self):
         return {
-            "pk": self.pk,
+            "pk": str(self.pk),
             "id": self.telegram_id,
-            "name": self.title,
+            "label": self.title,
             "group": self.organization.name,
-            "color": self.organization.color,
-            "pic": self.profile_picture.picture if self.profile_picture else "",
+            "color": ",".join(map(str, hex_to_rgb(self.organization.color))),
+            "pic": self.profile_picture.picture.url if self.profile_picture else "",
             "url": self.telegram_url,
+            "activity_period": self.activity_period,
+            "fans": self.participants_count,
+            "in_deg": self.in_degree,
+            "is_lost": self.is_lost,
+            "messages_count": self.message_set.count(),
+            "out_deg": self.out_degree,
         }
 
     def save(self, *args, **kwargs):
