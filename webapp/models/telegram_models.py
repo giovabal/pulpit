@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
-from webapp.models import Category, Organization
+from webapp.models import Organization
 from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel
 
 
@@ -39,7 +39,6 @@ class Channel(TelegramBaseModel):
     is_lost = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, blank=True, null=True)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, blank=True, null=True)
     broadcast = models.BooleanField(default=True)
     verified = models.BooleanField(default=False)
     megagroup = models.BooleanField(default=False)
@@ -94,6 +93,8 @@ class Channel(TelegramBaseModel):
             "name": self.title,
             "group": self.organization.name,
             "color": self.organization.color,
+            "pic": self.profile_picture.picture if self.profile_picture else "",
+            "url": self.telegram_url,
         }
 
     def save(self, *args, **kwargs):

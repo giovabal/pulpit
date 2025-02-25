@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Category, Channel, Message, Organization, SearchTerm
+from .models import Channel, Message, Organization, SearchTerm
 
 
 @admin.register(Channel)
@@ -17,9 +17,8 @@ class ChannelAdmin(admin.ModelAdmin):
         "date",
         "telegram_url",
         "organization",
-        "category",
     )
-    list_editable = ("organization", "category")
+    list_editable = ("organization",)
     list_filter = ("organization__is_interesting", "broadcast", "organization")
     search_fields = ["username", "title"]
 
@@ -61,12 +60,6 @@ class MessageAdmin(admin.ModelAdmin):
 class SearchTermAdmin(admin.ModelAdmin):
     list_display = ("word", "last_check")
     fieldsets = ((None, {"fields": ("word",)}),)
-
-
-@admin.register(Category)
-class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "color")
-    list_editable = ["color"]
 
 
 @admin.register(Organization)
