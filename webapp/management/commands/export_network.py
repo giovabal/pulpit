@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from math import sqrt
 
@@ -42,6 +43,10 @@ class Command(BaseCommand):
                     color = rgb_avg(hex_to_rgb(u.organization.color), hex_to_rgb(v.organization.color))
                     color = [str(int(c * 0.75)) for c in color]
                     edge_list.append([str(v.pk), str(u.pk), weight, ",".join(color)])
+
+        if not edge_list:
+            print("\n[ERROR] There are no relationships between channels, interrupting elaboration")
+            exit()
 
         max_weight = max([e[2] for e in edge_list])
         for edge in edge_list:
@@ -163,11 +168,24 @@ class Command(BaseCommand):
                     data["nodes"][isolated[index]]["x"] = max_x - i * d
                     data["nodes"][isolated[index]]["y"] = max_y - j * d
 
-        output_filename = "graph/data.json"
+        print("\nGenerate map")
+        root_target = "graph"
+        try:
+            shutil.rmtree(root_target)
+            shutil.mkdir(root_target)
+        except Exception:
+            pass
+
+        try:
+            shutil.copytree("webapp_engine/map", root_target)
+        except Exception:
+            pass
+
+        print("- config files")
+        output_filename = "graph/telegram_graph/data.json"
         with open(output_filename, "w") as outputfile:
             outputfile.write(json.dumps(data))
 
-        print("\nGenerate config file")
         groups = []
         org_qs = Organization.objects.filter(is_interesting=True)
         for organization in org_qs:
@@ -181,7 +199,7 @@ class Command(BaseCommand):
             )
         groups = sorted(groups, key=lambda x: -x[1])
 
-        accessory_filename = "graph/data_accessory.json"
+        accessory_filename = "graph/telegram_graph/data_accessory.json"
         with open(accessory_filename, "w") as accessoryfile:
             accessoryfile.write(
                 json.dumps(
@@ -194,18 +212,14 @@ class Command(BaseCommand):
                 )
             )
 
-        print("\nCopy media")
-        root_target = "graph/media"
-        try:
-            shutil.rmtree(root_target)
-        except Exception:
-            pass
+        print("- media")
+        root_target = "graph/telegram_graph"
         for channel in qs:
             try:
                 if channel.username:
                     shutil.copytree(
-                        settings.MEDIA_ROOT + "/channels/{}/profile".format(channel.username),
-                        root_target + "/channels/{}/profile".format(channel.username),
+                        os.path.join(settings.MEDIA_ROOT, "channels", channel.username, "profile"),
+                        os.path.join(root_target, "channels", channel.username, "profile"),
                     )
             except Exception:
                 pass

@@ -16,7 +16,7 @@ from telethon.tl.functions.channels import GetFullChannelRequest
 class TelegramCrawler:
     client = None
     last_call = None
-    wait_time = 1  # in seconds
+    wait_time = settings.TELEGRAM_CRAWLER_GRACE_TIME  # in seconds
     skippable_references = ["joinchat"]
 
     def __init__(self, client):
@@ -105,6 +105,9 @@ class TelegramCrawler:
                 os.remove(picture_filename)
 
     def get_message_picture(self, telegram_message):
+        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES:
+            return
+
         if not hasattr(telegram_message.media, "photo"):
             return
 

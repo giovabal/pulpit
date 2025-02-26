@@ -2,7 +2,6 @@ import datetime
 import os
 import re
 
-from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
@@ -190,7 +189,6 @@ class ProfilePicture(TelegramBasePictureModel):
     def get_media_path(self, instance, filename):
         extension = filename.split(".")[-1]
         return os.path.join(
-            settings.MEDIA_ROOT_DIRNAME,
             "channels",
             self.channel.username,
             "profile",
@@ -204,7 +202,6 @@ class MessagePicture(TelegramBasePictureModel):
     def get_media_path(self, instance, filename):
         extension = filename.split(".")[-1]
         return os.path.join(
-            settings.MEDIA_ROOT_DIRNAME,
             "channels",
             self.message.channel.username,
             "message",
