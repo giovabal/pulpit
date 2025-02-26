@@ -1,0 +1,19 @@
+body {
+    font-size: 20px;
+    line-height: 1.5em;
+    letter-spacing: .016em;
+    padding: 3em 0 1em 0;
+}
+
+#map_thumbnail {
+    margin: 1.5em 0;
+    max-width: 800px;
+}
+
+table.table-ass-list img {
+    width: 100%;
+    max-width: 50px;
+}
+table.table-ass-list .separator td {
+    border-top: rgb(221, 221, 221) solid 3px;
+}

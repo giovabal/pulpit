@@ -1,0 +1,55 @@
+{
+    "type": "network",
+    "version": "1.0",
+    "data": "data.json",
+    "immutable": true,
+    "logo": {
+	"text": "",
+	"file": "",
+	"link": ""
+    },
+    "text": {
+	"title": "",
+	"more": "",
+	"intro": ""
+    },
+    "legend": {
+	"edgeLabel": "",
+	"colorLabel": "",
+	"nodeLabel": ""
+    },
+    "features": {
+	"search": true,
+	"groupSelectorAttribute": false,
+	"hoverBehavior": "dim"
+    },
+    "informationPanel": {
+	"groupByEdgeDirection": true
+    },
+    "sigma": {
+	"graphProperties": {
+	    "minEdgeSize": 0.2,
+	    "maxNodeSize": 30,
+	    "maxEdgeSize": 0.5,
+	    "minNodeSize": 1
+	},
+	"drawingProperties": {
+	    "labelThreshold": 9,
+	    "hoverFontStyle": "bold",
+	    "defaultEdgeType": "curve",
+	    "defaultLabelColor": "#fff",
+	    "defaultLabelHoverColor": "#fff",
+	    "defaultLabelSize": 16,
+	    "activeFontStyle": "bold",
+	    "fontStyle": "bold",
+	    "defaultHoverLabelBGColor": "#111",
+	    "defaultLabelBGColor": "#ddd",
+	    "batchEdgesDrawing": true,
+	    "hideEdgesOnMove": true
+	},
+	"mouseProperties": {
+	    "minRatio": 0.75,
+	    "maxRatio": 20
+	}
+    }
+}
