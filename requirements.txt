@@ -1,5 +1,4 @@
-django==4.2.19
-django-extensions==3.2.3
+django==4.2.20
 networkx==2.8.8
 telethon==1.39.0
 python-decouple==3.8
