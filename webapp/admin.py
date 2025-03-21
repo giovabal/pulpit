@@ -28,7 +28,7 @@ class ChannelAdmin(admin.ModelAdmin):
 
     @admin.display(description="Link")
     def telegram_url(self, obj):
-        return format_html(f"<a href='https://{obj.telegram_url}' target='_blank'>{obj.username}</a>")
+        return format_html(f"<a href='{obj.telegram_url}' target='_blank'>{obj.username}</a>")
 
     @admin.display(description="Img")
     def thumb(self, obj):
