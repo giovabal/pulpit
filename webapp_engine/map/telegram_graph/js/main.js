@@ -88,10 +88,10 @@ var sigma_instance = new sigma({
 sigma_instance.bind("clickNode", function (x) {
     if (x.data.node !== undefined) node = x.data.node;
     else node = x.data;
-    var key = node.url.replace("t.me/", "");
+    var key = node.url.replace("https://t.me/", "");
     $('#node_label').html(node.label);
     $('#node_url').html("@" + key);
-    $('#node_url').attr('href', 'https://' + node.url);
+    $('#node_url').attr('href', node.url);
     if (node.pic) $('#node_picture').html("<img src='" + node.pic + "' style='max-width: 60px;' />");
     else $('#node_picture').html("");
     $('#node_group').html(get_group(node));
@@ -255,7 +255,7 @@ function get_group_symbol_color(node) {
     if (['', '-', 'wiki'].indexOf(node.group) >= 0) symbol = symbol + '-o';
     var color = node.originalColor;
     if (['', '-', 'wiki'].indexOf(node.group) >= 0) color = "#ccc";
-    main_group = node.group;
+    main_group = node.group_key;
     if (main_group.indexOf('-') >= 0) main_group = main_group.substring(0, main_group.indexOf('-'));
     return [main_group, symbol, color];
 }

@@ -82,6 +82,7 @@ class Command(BaseCommand):
             for k in (
                 "label",
                 "group",
+                "group_key",
                 "color",
                 "pic",
                 "url",
@@ -129,10 +130,10 @@ class Command(BaseCommand):
             node["activity_period"] = channel.activity_period
 
         measures = [
-            ("in_deg", '"link" in ingresso'),
-            ("out_deg", '"link" in uscita'),
-            ("fans", "Numero di partecipanti"),
-            ("messages_count", "Numero di messaggi"),
+            ("in_deg", "Inbound connections"),
+            ("out_deg", "Outbound connections"),
+            ("fans", "Users"),
+            ("messages_count", "Messages"),
         ]
 
         print("- pagerank")
