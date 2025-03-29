@@ -25,6 +25,7 @@ After downloading the TNExp code, install the required dependencies:
 pip install -r requirements.txt
 ```
 Next, register your application with Telegram: [https://core.telegram.org/api/obtaining_api_id](https://core.telegram.org/api/obtaining_api_id)
+
 Follow the instructions to obtain an `api_id`.
 
 You will find a `env.example` file. Copy and rename it to `.env`, then edit this new file and fill in the `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `TELEGRAM_PHONE_NUMBER` fields.
@@ -60,3 +61,9 @@ You can either repeat this last step or proceed directly to drawing the graph wi
 python manage.py export_network
 ```
 
+When you have drawn the graph, you can see it by entering the `graph` directory and launching a web server with
+```sh
+python -m http.server 8001
+```
+
+Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/)
