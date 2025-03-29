@@ -35,6 +35,11 @@ You will find a `env.example` file. Copy and rename it to `.env`, then edit this
 
 When executing the Python commands below, remember that depending on your system, you may need to replace `python` commands with `py` or `python3`.
 
+Activate the database with:
+```sh
+python manage.py migrate
+```
+
 Activate the interface with:
 ```sh
 python manage.py runserver
