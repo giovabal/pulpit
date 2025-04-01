@@ -76,6 +76,8 @@ Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/tele
 
 ## Options
 
+Write them in your `.env` file.
+
 ### Telegram
 
 | option name | description | default value |
