@@ -71,7 +71,7 @@ When you have drawn the graph, you can see it by entering the `graph` directory 
 python -m http.server 8001
 ```
 
-Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/)
+Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/), but on some systems it could be [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/)
 
 
 ## Options
@@ -80,8 +80,8 @@ Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/tele
 
 | Option name | Meaning | default value |
 | :---------- | :------ | ------------: |
-| `TELEGRAM_API_ID` | App Id | no default value, you are required to give it a value |
-| `TELEGRAM_API_HASH` | App Hash | no default value, you are required to give it a value |
+| `TELEGRAM_API_ID` | API Id | no default value, you are required to give it a value |
+| `TELEGRAM_API_HASH` | API Hash | no default value, you are required to give it a value |
 | `TELEGRAM_PHONE_NUMBER` | Telephone number associated with Telegram | no default value, you are required to give it a value |
 | `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
@@ -92,7 +92,7 @@ Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/tele
 | :---------- | :------ | ------------: |
 | `FA2_ITERATIONS` | number of iterations | 20000 |
 
-### drawing
+### Drawing
 
 | Option name | Meaning | default value |
 | :---------- | :------ | ------------: |
