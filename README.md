@@ -78,23 +78,23 @@ Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/tele
 
 ### Telegram
 
-| Option name | Meaning | default value |
-| :---------- | :------ | ------------: |
+| option name | description | default value |
+| :---------- | :---------- | ------------: |
 | `TELEGRAM_API_ID` | API Id | no default value, you are required to give it a value |
 | `TELEGRAM_API_HASH` | API Hash | no default value, you are required to give it a value |
-| `TELEGRAM_PHONE_NUMBER` | Telephone number associated with Telegram | no default value, you are required to give it a value |
+| `TELEGRAM_PHONE_NUMBER` | telephone number associated with Telegram | no default value, you are required to give it a value |
 | `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
 
 ### ForceAtlas2
 
-| Option name | Meaning | default value |
-| :---------- | :------ | ------------: |
+| option name | description | default value |
+| :---------- | :---------- | ------------: |
 | `FA2_ITERATIONS` | number of iterations | 20000 |
 
 ### Drawing
 
-| Option name | Meaning | default value |
-| :---------- | :------ | ------------: |
+| option name | description | default value |
+| :---------- | :---------- | ------------: |
 | `DRAW_DEAD_LEAVES` | draw even uninteresting channels if they get inbound links (often considerably longer to draw) | False |
 | `DEAD_LEAVES_COLOR` | color of dead leaves, in hex format | #596a64 |
