@@ -2,6 +2,7 @@ import datetime
 import os
 import re
 
+from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
@@ -91,9 +92,11 @@ class Channel(TelegramBaseModel):
             "pk": str(self.pk),
             "id": self.telegram_id,
             "label": self.title,
-            "group": self.organization.name,
-            "group_key": self.organization.key,
-            "color": ",".join(map(str, hex_to_rgb(self.organization.color))),
+            "group": self.organization.name if self.organization else "None",
+            "group_key": self.organization.key if self.organization else "---",
+            "color": ",".join(
+                map(str, hex_to_rgb(self.organization.color if self.organization else settings.DEAD_LEAVES_COLOR))
+            ),
             "pic": self.profile_picture.picture.url[1:] if self.profile_picture else "",
             "url": self.telegram_url,
             "activity_period": self.activity_period,

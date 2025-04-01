@@ -5,6 +5,7 @@ from math import sqrt
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 
 from webapp.models import Channel, Organization
 from webapp_engine.utils import hex_to_rgb, rgb_avg
@@ -21,7 +22,10 @@ class Command(BaseCommand):
         print("Create graph")
         graph = nx.DiGraph()
         channel_dict = {}
-        qs = Channel.objects.filter(organization__is_interesting=True)
+        qs_filter = Q(organization__is_interesting=True)
+        if settings.DRAW_DEAD_LEAVES:
+            qs_filter |= Q(in_degree__gt=0)
+        qs = Channel.objects.filter(qs_filter)
         for u in qs:
             channel_dict[str(u.telegram_id)] = u
             graph.add_node(str(u.pk), data=u.network_data)
@@ -40,7 +44,10 @@ class Command(BaseCommand):
                     / count
                 )
                 if weight > 0:
-                    color = rgb_avg(hex_to_rgb(u.organization.color), hex_to_rgb(v.organization.color))
+                    color = rgb_avg(
+                        hex_to_rgb(u.organization.color if u.organization else settings.DEAD_LEAVES_COLOR),
+                        hex_to_rgb(v.organization.color if v.organization else settings.DEAD_LEAVES_COLOR),
+                    )
                     color = [str(int(c * 0.75)) for c in color]
                     edge_list.append([str(v.pk), str(u.pk), weight, ",".join(color)])
 
