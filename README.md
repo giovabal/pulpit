@@ -26,9 +26,9 @@ pip install -r requirements.txt
 ```
 Next, register your application with Telegram: [https://core.telegram.org/api/obtaining_api_id](https://core.telegram.org/api/obtaining_api_id)
 
-Follow the instructions to obtain an `api_id`.
+Follow the instructions to obtain an `api_id`. When creating a new application `Platform` should be `Web`, everything else is at your choice.
 
-You will find a `env.example` file. Copy and rename it to `.env`, then edit this new file and fill in the `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `TELEGRAM_PHONE_NUMBER` fields.
+You will find a `.env.example` file. Copy and rename it to `.env`, then edit this new file and fill in the `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `TELEGRAM_PHONE_NUMBER` fields.
 
 
 ## Operating
@@ -78,23 +78,23 @@ Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/tele
 
 ### Telegram
 
-| Option name  | Meaning          | default value              |
-| :----------- | :--------------: | -------------------------: |
-| `TELEGRAM_API_ID` | App Id | no default value, you need to give a value |
-| `TELEGRAM_API_HASH` | App Hash | no default value, you need give a value |
-| `TELEGRAM_PHONE_NUMBER` | Telephone number associated with Telegram | no default value, you need to give a value |
-| `TELEGRAM_CRAWLER_GRACE_TIME` | time, in seconds, to wait between requests | 1 |
+| Option name | Meaning | default value |
+| :---------- | :------ | ------------: |
+| `TELEGRAM_API_ID` | App Id | no default value, you are required to give it a value |
+| `TELEGRAM_API_HASH` | App Hash | no default value, you are required to give it a value |
+| `TELEGRAM_PHONE_NUMBER` | Telephone number associated with Telegram | no default value, you are required to give it a value |
+| `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
 
 ### ForceAtlas2
 
-| Option name  | Meaning          | default value              |
-| :----------- | :--------------: | -------------------------: |
+| Option name | Meaning | default value |
+| :---------- | :------ | ------------: |
 | `FA2_ITERATIONS` | number of iterations | 20000 |
 
 ### drawing
 
-| Option name  | Meaning          | default value              |
-| :----------- | :--------------: | -------------------------: |
-| `DRAW_DEAD_LEAVES` | draw even uninteresting channels if they get inbound links | False |
+| Option name | Meaning | default value |
+| :---------- | :------ | ------------: |
+| `DRAW_DEAD_LEAVES` | draw even uninteresting channels if they get inbound links (often considerably longer to draw) | False |
 | `DEAD_LEAVES_COLOR` | color of dead leaves, in hex format | #596a64 |
