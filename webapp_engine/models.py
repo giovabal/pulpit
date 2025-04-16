@@ -38,7 +38,7 @@ class TelegramBaseModel(BaseModel):
 
     @classmethod
     def _args_for_from_telegram_object(cls, telegram_object):
-        return {"telegram_id": telegram_object.id}
+        return {"telegram_id": telegram_object.id if telegram_object else None}
 
     @classmethod
     def from_telegram_object(cls, telegram_object, force_update=True, defaults=None):
