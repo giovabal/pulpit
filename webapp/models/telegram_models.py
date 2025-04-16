@@ -161,7 +161,8 @@ class Message(TelegramBaseModel):
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args, **kwargs):
-        self.message = self.message or ""
+        for field in ("message", "webpage_url", "webpage_type"):
+            setattr(self, field, getattr(self, field) or "")
         super().save(*args, **kwargs)
         if self.pinned:
             self.has_been_pinned = True
