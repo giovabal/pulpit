@@ -62,15 +62,16 @@ class Command(BaseCommand):
         print("\nSet spatial distribution of nodes")
         forceatlas2 = ForceAtlas2(
             # Behavior alternatives
-            outboundAttractionDistribution=True,  # Dissuade hubs
-            edgeWeightInfluence=1.0,
+            outbound_attraction_distribution=True,  # Dissuade hubs
+            edge_weight_influence=1.0,
+            lin_log_mode=True,  # Use LinLog mode for attraction forces.
             # Performance
-            jitterTolerance=1.0,  # Tolerance
-            barnesHutOptimize=True,
-            barnesHutTheta=1.2,
+            jitter_tolerance=1.0,  # Tolerance
+            barnes_hut_optimize=True,
+            barnes_hut_theta=1.2,
             # Tuning
-            scalingRatio=2.0,
-            strongGravityMode=False,
+            scaling_ratio=2.0,
+            strong_gravity_mode=False,
             gravity=1.0,
             # Log
             verbose=False,
