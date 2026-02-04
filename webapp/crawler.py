@@ -69,7 +69,10 @@ class TelegramCrawler:
         min_id = last_message.telegram_id if last_message is not None else 0
         message_count = 0
         c = 0
-        remaining_limit = self.messages_limit_per_channel if self.messages_limit_per_channel > 0 else None
+        if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
+            remaining_limit = None
+        else:
+            remaining_limit = self.messages_limit_per_channel
         for i, telegram_message in enumerate(
             self.client.iter_messages(telegram_channel, min_id=min_id, wait_time=self.wait_time, limit=remaining_limit),
             start=1,

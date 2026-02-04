@@ -14,6 +14,14 @@ from pathlib import Path
 
 from decouple import Csv, config
 
+
+def optional_int(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"none", ""}:
+        return None
+    return int(value)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -135,7 +143,7 @@ TELEGRAM_API_ID = config("TELEGRAM_API_ID", cast=str)
 TELEGRAM_API_HASH = config("TELEGRAM_API_HASH", cast=str)
 TELEGRAM_PHONE_NUMBER = config("TELEGRAM_PHONE_NUMBER", cast=str)
 TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL = config(
-    "TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL", default=100, cast=int
+    "TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL", default=100, cast=optional_int
 )
 TELEGRAM_CRAWLER_DOWNLOAD_IMAGES = config("TELEGRAM_CRAWLER_DOWNLOAD_IMAGES", default=False, cast=bool)
 TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = config("TELEGRAM_CRAWLER_DOWNLOAD_VIDEO", default=False, cast=bool)
