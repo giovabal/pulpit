@@ -28,12 +28,18 @@ class ChannelAdmin(admin.ModelAdmin):
 
     @admin.display(description="Link")
     def telegram_url(self, obj):
-        return format_html(f"<a href='{obj.telegram_url}' target='_blank'>{obj.username}</a>")
+        return format_html(
+            "<a href='{}' target='_blank'>{}</a>",
+            obj.telegram_url,
+            obj.username,
+        )
 
     @admin.display(description="Img")
     def thumb(self, obj):
         src = obj.profile_picture.picture.url if obj.profile_picture else ""
-        return format_html(f"<img width='60' src='{src}'>")
+        if not src:
+            return ""
+        return format_html("<img width='60' src='{}'>", src)
 
 
 @admin.register(Message)
@@ -48,12 +54,18 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Link")
     def telegram_url(self, obj):
-        return format_html(f"<a href='https://{obj.telegram_url}' target='_blank'>{obj.telegram_url}</a>")
+        return format_html(
+            "<a href='https://{}' target='_blank'>{}</a>",
+            obj.telegram_url,
+            obj.telegram_url,
+        )
 
     @admin.display(description="Img")
     def thumb(self, obj):
         src = obj.message_picture.picture.url if obj.message_picture else ""
-        return format_html(f"<img width='60' src='{src}'>")
+        if not src:
+            return ""
+        return format_html("<img width='60' src='{}'>", src)
 
 
 @admin.register(SearchTerm)
