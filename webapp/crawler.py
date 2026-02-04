@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Channel, Message, MessagePicture, ProfilePicture
+from .models import Channel, Message, MessagePicture, MessageVideo, ProfilePicture
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
@@ -17,6 +17,7 @@ class TelegramCrawler:
     client = None
     last_call = None
     wait_time = settings.TELEGRAM_CRAWLER_GRACE_TIME  # in seconds
+    messages_limit_per_channel = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
     skippable_references = ["joinchat"]
 
     def __init__(self, client):
@@ -68,13 +69,24 @@ class TelegramCrawler:
         min_id = last_message.telegram_id if last_message is not None else 0
         message_count = 0
         c = 0
+        remaining_limit = self.messages_limit_per_channel if self.messages_limit_per_channel > 0 else None
         for i, telegram_message in enumerate(
-            self.client.iter_messages(telegram_channel, min_id=min_id, wait_time=self.wait_time), start=1
+            self.client.iter_messages(
+                telegram_channel, min_id=min_id, wait_time=self.wait_time, limit=remaining_limit
+            ),
+            start=1,
         ):
             c = i
             self.get_message(channel, telegram_message)
 
         message_count += c
+        if remaining_limit is not None:
+            remaining_limit -= c
+            if remaining_limit <= 0:
+                channel.are_messages_crawled = True
+                channel.save()
+                print(f"  * {message_count} messagges")
+                return
         max_id = None
         if not channel.are_messages_crawled:
             first_message = channel.message_set.order_by("telegram_id").first()
@@ -83,7 +95,10 @@ class TelegramCrawler:
         c = 0
         if max_id is not None:
             for i, telegram_message in enumerate(
-                self.client.iter_messages(telegram_channel, max_id=max_id, wait_time=self.wait_time), start=1
+                self.client.iter_messages(
+                    telegram_channel, max_id=max_id, wait_time=self.wait_time, limit=remaining_limit
+                ),
+                start=1,
             ):
                 c = i
                 self.get_message(channel, telegram_message)
@@ -125,6 +140,38 @@ class TelegramCrawler:
             )
             if os.path.exists(picture_filename):
                 os.remove(picture_filename)
+        except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
+            print(e)
+            print(telegram_message.__dict__)
+
+    def get_message_video(self, telegram_message):
+        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO:
+            return
+
+        document = getattr(telegram_message, "document", None)
+        if not document and telegram_message.media:
+            document = getattr(telegram_message.media, "document", None)
+        if not document:
+            return
+
+        mime_type = getattr(document, "mime_type", "") or ""
+        if not mime_type.startswith("video/"):
+            return
+
+        try:
+            video_filename = self.client.download_media(telegram_message)
+            MessageVideo.from_telegram_object(
+                document,
+                force_update=True,
+                defaults={
+                    "message": Message.objects.get(
+                        channel__telegram_id=telegram_message.peer_id.channel_id, telegram_id=telegram_message.id
+                    ),
+                    "video": video_filename,
+                },
+            )
+            if os.path.exists(video_filename):
+                os.remove(video_filename)
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             print(e)
             print(telegram_message.__dict__)
@@ -188,6 +235,7 @@ class TelegramCrawler:
 
         if telegram_message.media:
             self.get_message_picture(telegram_message)
+            self.get_message_video(telegram_message)
             if hasattr(telegram_message.media, "webpage"):
                 message.webpage_url = (
                     telegram_message.media.webpage.url if hasattr(telegram_message.media.webpage, "url") else ""

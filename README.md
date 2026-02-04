@@ -87,6 +87,8 @@ Write them in your `.env` file.
 | `TELEGRAM_PHONE_NUMBER` | telephone number associated with Telegram | no default value, you are required to give it a value |
 | `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
+| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | downloading videos from messages | False |
+| `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | max messages to crawl per channel (0 disables limit) | 100 |
 
 ### ForceAtlas2
 

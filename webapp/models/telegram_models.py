@@ -2,12 +2,13 @@ import datetime
 import os
 import re
 
+from django.core.files import File
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
 from webapp.models import Organization
-from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel
+from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
 from webapp_engine.utils import hex_to_rgb
 
 
@@ -184,6 +185,10 @@ class Message(TelegramBaseModel):
         return self.messagepicture_set.order_by("date").last()
 
     @property
+    def message_video(self):
+        return self.messagevideo_set.order_by("date").last()
+
+    @property
     def telegram_url(self):
         return f"{self.channel.telegram_url}/{self.telegram_id}"
 
@@ -212,3 +217,31 @@ class MessagePicture(TelegramBasePictureModel):
             "message",
             f"{self.message.telegram_id}.{extension}",
         )
+
+
+class MessageVideo(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES = ("date",)
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    video = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    date = models.DateTimeField(null=True)
+
+    def get_media_path(self, instance, filename):
+        extension = filename.split(".")[-1]
+        return os.path.join(
+            "channels",
+            self.message.channel.username,
+            "message",
+            "video",
+            f"{self.message.telegram_id}.{extension}",
+        )
+
+    @classmethod
+    def from_telegram_object(cls, telegram_object, force_update=False, defaults=None):
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults or {})
+        filename = defaults.get("video", None)
+        if filename:
+            with open(filename, "rb") as f:
+                obj.video = File(f)
+                obj.save(update_fields=("video",))
+
+        return obj
