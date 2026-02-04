@@ -9,4 +9,4 @@ def rgb_to_hex(rgb):
 
 
 def rgb_avg(a, b):
-    return map(int, [(int(a[0]) + int(b[0])) * 0.5, (int(a[1]) + int(b[1])) * 0.5, (int(a[2]) + int(b[2])) * 0.5])
+    return tuple(int((int(a[index]) + int(b[index])) * 0.5) for index in range(3))
