@@ -136,9 +136,8 @@ def add_edges_to_graph(graph, edge_list):
 
 def compute_louvain_communities(graph):
     community_map = {}
-    community_palette = {}
     if settings.COMMUNITIES != "LOUVAIN":
-        return community_map, community_palette
+        return community_map, {}
 
     louvain_graph = graph.to_undirected()
     communities = nx.community.louvain_communities(louvain_graph, weight="weight", seed=0)
@@ -147,39 +146,26 @@ def compute_louvain_communities(graph):
         for node_id in community:
             community_map[node_id] = index
 
-    if community_map:
-        total = max(community_map.values())
-        for index in range(1, total + 1):
-            hue = (index - 1) / max(total, 1)
-            r, g, b = colorsys.hsv_to_rgb(hue, 0.65, 0.9)
-            community_palette[index] = (int(r * 255), int(g * 255), int(b * 255))
-
-    return community_map, community_palette
+    return community_map, {}
 
 
 def compute_kcore_communities(graph, k=10):
     community_map = {}
-    community_palette = {}
     if settings.COMMUNITIES != "KCORE":
-        return community_map, community_palette
+        return community_map, {}
 
     core_graph = nx.k_core(graph.to_undirected(), k=k)
     core_nodes = set(core_graph.nodes())
     for node_id in graph.nodes():
         community_map[node_id] = 1 if node_id in core_nodes else 0
 
-    community_palette = {
-        0: (160, 160, 160),
-        1: (72, 132, 255),
-    }
-    return community_map, community_palette
+    return community_map, {}
 
 
 def compute_infomap_communities(graph):
     community_map = {}
-    community_palette = {}
     if settings.COMMUNITIES != "INFOMAP":
-        return community_map, community_palette
+        return community_map, {}
 
     infomap = Infomap("--two-level --directed")
     node_ids = sorted(graph.nodes())
@@ -199,34 +185,50 @@ def compute_infomap_communities(graph):
         for node_id, module_id in module_ids.items():
             community_map[node_id] = module_map[module_id]
 
-    if community_map:
-        total = max(community_map.values())
-        for index in range(1, total + 1):
-            hue = (index - 1) / max(total, 1)
-            r, g, b = colorsys.hsv_to_rgb(hue, 0.65, 0.9)
-            community_palette[index] = (int(r * 255), int(g * 255), int(b * 255))
+    return community_map, {}
 
-    return community_map, community_palette
+
+def normalize_community_map(community_map):
+    if not community_map:
+        return {}
+    community_counts = {}
+    for community_id in community_map.values():
+        community_counts[community_id] = community_counts.get(community_id, 0) + 1
+    ordered = sorted(community_counts.items(), key=lambda item: (-item[1], item[0]))
+    remap = {community_id: index for index, (community_id, _) in enumerate(ordered, start=1)}
+    return {node_id: remap[community_id] for node_id, community_id in community_map.items()}
+
+
+def build_community_palette(community_map):
+    community_palette = {}
+    if not community_map:
+        return community_palette
+    total = max(community_map.values())
+    for index in range(1, total + 1):
+        hue = (index - 1) / max(total, 1)
+        r, g, b = colorsys.hsv_to_rgb(hue, 0.65, 0.9)
+        community_palette[index] = (int(r * 255), int(g * 255), int(b * 255))
+    return community_palette
 
 
 def compute_communities(graph):
     if settings.COMMUNITIES == "LOUVAIN":
-        return compute_louvain_communities(graph)
-    if settings.COMMUNITIES == "KCORE":
-        return compute_kcore_communities(graph)
-    if settings.COMMUNITIES == "INFOMAP":
-        return compute_infomap_communities(graph)
-    return {}, {}
+        community_map, _ = compute_louvain_communities(graph)
+    elif settings.COMMUNITIES == "KCORE":
+        community_map, _ = compute_kcore_communities(graph)
+    elif settings.COMMUNITIES == "INFOMAP":
+        community_map, _ = compute_infomap_communities(graph)
+    else:
+        return {}, {}
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map)
 
 
 def apply_community_labels(graph, channel_dict, community_map):
     if settings.COMMUNITIES not in {"LOUVAIN", "KCORE", "INFOMAP"}:
         return
     for node_id, community_id in community_map.items():
-        if settings.COMMUNITIES == "KCORE":
-            community_label = "K-core 10" if community_id == 1 else "Outside K-core 10"
-        else:
-            community_label = f"Community {community_id}"
+        community_label = f"Community {community_id}"
         node_data = graph.nodes[node_id]["data"]
         node_data["group"] = community_label
         node_data["group_key"] = str(community_id)
@@ -234,24 +236,31 @@ def apply_community_labels(graph, channel_dict, community_map):
         channel_dict[node_id]["data"]["group_key"] = str(community_id)
 
 
-def apply_palette_colors(graph, channel_dict, edge_list, community_map):
+def apply_palette_colors(graph, channel_dict, edge_list, community_map, community_palette):
     palette_map = {}
-    if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
-        return palette_map
-
     if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"}:
         group_keys = [str(key) for key in sorted(community_map.values())]
+        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
+            palette_map = colors_for_groups(sorted(set(group_keys)))
     else:
+        if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
+            return palette_map
         group_keys = [
             str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("name")
         ]
-    palette_map = colors_for_groups(sorted(set(group_keys)))
+        palette_map = colors_for_groups(sorted(set(group_keys)))
     for node_id, node_data in graph.nodes(data="data"):
         group_key = node_data.get("group_key")
-        palette_color = palette_map.get(group_key)
+        palette_color = palette_map.get(group_key) if palette_map else None
         if palette_color:
             node_data["color"] = palette_color
             channel_dict[node_id]["data"]["color"] = palette_color
+        elif community_palette and group_key:
+            community_color = community_palette.get(int(group_key))
+            if community_color:
+                rgb_color = ",".join(str(value) for value in community_color)
+                node_data["color"] = rgb_color
+                channel_dict[node_id]["data"]["color"] = rgb_color
     for edge in edge_list:
         source_color = channel_dict[edge[0]]["data"]["color"]
         target_color = channel_dict[edge[1]]["data"]["color"]
@@ -392,12 +401,14 @@ def build_group_payload(community_map, community_palette, palette_map, channel_d
         community_colors = {}
         for community_id in community_map.values():
             community_counts[community_id] = community_counts.get(community_id, 0) + 1
-        if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
-            for node_id, community_id in community_map.items():
-                community_colors.setdefault(community_id, []).append(channel_dict[node_id]["data"]["color"])
-        else:
+        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
             for community_id in community_counts:
                 palette_color = palette_map.get(str(community_id))
+                if palette_color:
+                    community_colors[community_id] = [palette_color]
+        else:
+            for community_id in community_counts:
+                palette_color = community_palette.get(community_id)
                 if palette_color:
                     community_colors[community_id] = [palette_color]
         for community_id, count in community_counts.items():
@@ -405,19 +416,10 @@ def build_group_payload(community_map, community_palette, palette_map, channel_d
                 rgb = average_color(community_colors[community_id])
             else:
                 rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
-            if settings.COMMUNITIES == "KCORE":
-                community_label = "K-core 10" if community_id == 1 else "Outside K-core 10"
-            else:
-                community_label = f"Community {community_id}"
+            community_label = f"Community {community_id}"
             groups.append((str(community_id), count, community_label, rgb_to_hex(rgb)))
         groups = sorted(groups, key=lambda x: -x[1])
-        if settings.COMMUNITIES == "KCORE":
-            main_groups = {
-                "1": "K-core 10",
-                "0": "Outside K-core 10",
-            }
-        else:
-            main_groups = {str(community_id): f"Community {community_id}" for community_id in community_counts}
+        main_groups = {str(community_id): f"Community {community_id}" for community_id in community_counts}
         return groups, main_groups
 
     org_qs = Organization.objects.filter(is_interesting=True)
@@ -461,7 +463,7 @@ class Command(BaseCommand):
         add_edges_to_graph(graph, edge_list)
         community_map, community_palette = compute_communities(graph)
         apply_community_labels(graph, channel_dict, community_map)
-        palette_map = apply_palette_colors(graph, channel_dict, edge_list, community_map)
+        palette_map = apply_palette_colors(graph, channel_dict, edge_list, community_map, community_palette)
 
         print("\nSet spatial distribution of nodes")
         positions = layout_positions(graph)
