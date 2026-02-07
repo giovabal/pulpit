@@ -8,3 +8,4 @@ lxml==6.0.2
 python-decouple==3.8
 telethon==1.42.0
 pypalettes==0.2.1
+infomap==2.8.0
