@@ -321,9 +321,10 @@ def build_graph_data(graph, positions):
 
 def apply_node_measures(graph, data, channel_dict):
     for node in data["nodes"]:
-        channel = channel_dict.get(node["id"])
-        if channel is None:
+        channel_entry = channel_dict.get(node["id"])
+        if channel_entry is None:
             continue
+        channel = channel_entry["channel"]
         node["in_deg"] = graph.in_degree(node["id"], weight="weight")
         node["out_deg"] = graph.out_degree(node["id"], weight="weight")
         node["fans"] = channel.participants_count
