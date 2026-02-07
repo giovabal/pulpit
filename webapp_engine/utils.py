@@ -5,7 +5,10 @@ def hex_to_rgb(value):
 
 
 def rgb_to_hex(rgb):
-    return "#%02x%02x%02x" % rgb
+    if isinstance(rgb, str):
+        raise TypeError("rgb_to_hex expects an RGB sequence, not a string.")
+    rgb_values = tuple(int(part) for part in rgb[:3])
+    return "#%02x%02x%02x" % rgb_values
 
 
 def rgb_avg(a, b):
