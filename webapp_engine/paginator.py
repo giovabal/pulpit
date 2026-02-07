@@ -7,7 +7,7 @@ class SoftPaginator(Paginator):
     def _ensure_int(self, num, e):
         try:
             return int(num)
-        except ValueError:
+        except (TypeError, ValueError):
             raise e from None
 
     def page(self, number, softlimit=False):
