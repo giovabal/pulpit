@@ -14,7 +14,7 @@ Windows 10 and later versions have been confirmed to be compatible with this sof
 You will need Visual Studio Tools (Community Edition), which you can download here:
 [https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&cid=2030&passive=false](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&cid=2030&passive=false)
 
-During installation, you will be asked which which tools to install. You need to select "Desktop development with C++."
+During installation, you will be asked which tools to install. You need to select "Desktop development with C++."
 
 
 # Operating TNExp

@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
 
 from webapp_engine.paginator import DiggPaginator
@@ -19,7 +20,7 @@ class ChannelDetailView(BaseMixin, ListView):
     page_kwarg = "page"
 
     def get(self, request, *args, **kwargs):
-        self.selected_channel = Channel.objects.get(pk=kwargs.get("pk"))
+        self.selected_channel = get_object_or_404(Channel, pk=kwargs.get("pk"))
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args, **kwargs):
