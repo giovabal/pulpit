@@ -8,7 +8,7 @@ from django.db import models
 from django.urls import reverse
 
 from webapp.models import Organization
-from webapp_engine.models import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
+from webapp.models.base import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
 from webapp_engine.utils import hex_to_rgb
 
 

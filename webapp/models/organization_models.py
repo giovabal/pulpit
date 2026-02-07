@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.text import slugify
 
-from webapp_engine.models import BaseColorModel
+from webapp.models.base import BaseColorModel
 
 
 class Organization(BaseColorModel):

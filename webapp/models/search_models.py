@@ -1,6 +1,6 @@
 from django.db import models
 
-from webapp_engine.models import BaseModel
+from webapp.models.base import BaseModel
 
 
 class SearchTerm(BaseModel):

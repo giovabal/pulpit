@@ -2,7 +2,7 @@
 
 from django.db import migrations, models
 
-import webapp_engine.models
+import webapp.models.base
 
 
 class Migration(migrations.Migration):
@@ -18,15 +18,11 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="messagepicture",
             name="picture",
-            field=models.ImageField(
-                max_length=255, upload_to=webapp_engine.models._telegram_picture_upload_to_function
-            ),
+            field=models.ImageField(max_length=255, upload_to=webapp.models.base._telegram_picture_upload_to_function),
         ),
         migrations.AlterField(
             model_name="profilepicture",
             name="picture",
-            field=models.ImageField(
-                max_length=255, upload_to=webapp_engine.models._telegram_picture_upload_to_function
-            ),
+            field=models.ImageField(max_length=255, upload_to=webapp.models.base._telegram_picture_upload_to_function),
         ),
     ]

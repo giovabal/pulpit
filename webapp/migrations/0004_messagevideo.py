@@ -2,7 +2,7 @@
 
 from django.db import migrations, models
 
-import webapp_engine.models
+import webapp.models.base
 
 
 class Migration(migrations.Migration):
@@ -20,9 +20,7 @@ class Migration(migrations.Migration):
                 ("telegram_id", models.BigIntegerField()),
                 (
                     "video",
-                    models.FileField(
-                        max_length=255, upload_to=webapp_engine.models._telegram_picture_upload_to_function
-                    ),
+                    models.FileField(max_length=255, upload_to=webapp.models.base._telegram_picture_upload_to_function),
                 ),
                 ("date", models.DateTimeField(null=True)),
                 ("message", models.ForeignKey(on_delete=models.deletion.CASCADE, to="webapp.message")),
