@@ -13,8 +13,8 @@ from webapp_engine.utils import hex_to_rgb, rgb_avg, rgb_to_hex
 
 import networkx as nx
 import pypalettes
-from fa2 import ForceAtlas2
 from infomap import Infomap
+from pyforceatlas2 import ForceAtlas2
 
 DEFAULT_FALLBACK_COLOR = (204, 204, 204)
 
