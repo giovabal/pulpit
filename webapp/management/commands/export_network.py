@@ -243,7 +243,7 @@ def apply_palette_colors(graph, channel_dict, edge_list, community_map):
         group_keys = [str(key) for key in sorted(community_map.values())]
     else:
         group_keys = [
-            str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("key")
+            str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("name")
         ]
     palette_map = colors_for_groups(sorted(set(group_keys)))
     for node_id, node_data in graph.nodes(data="data"):
