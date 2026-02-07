@@ -96,6 +96,13 @@ Write them in your `.env` file.
 | :---------- | :---------- | ------------: |
 | `FA2_ITERATIONS` | number of iterations | 20000 |
 
+### Communities
+
+| option name | description | default value |
+| :---------- | :---------- | ------------: |
+| `COMMUNITIES` | community detection strategy (`ORGANIZATION`, `LOUVAIN`, `KCORE`, or `INFOMAP`) | ORGANIZATION |
+| `COMMUNITIES_PALETTE` | color palette for communities (`ORGANIZATION` or any palette from https://python-graph-gallery.com/color-palette-finder/) | ORGANIZATION |
+
 ### Drawing
 
 | option name | description | default value |
