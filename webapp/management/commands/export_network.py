@@ -9,9 +9,10 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 
 from webapp.models import Channel, Organization
-from webapp_engine.utils import hex_to_rgb, rgb_avg
+from webapp_engine.utils import hex_to_rgb, rgb_avg, rgb_to_hex
 
 import networkx as nx
+import pypalettes
 from fa2 import ForceAtlas2
 
 
@@ -21,9 +22,59 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         def parse_color(value):
+            if isinstance(value, (list, tuple)):
+                return tuple(int(part) for part in value[:3])
             if isinstance(value, str) and "," in value:
                 return tuple(int(part.strip()) for part in value.split(","))
             return hex_to_rgb(value)
+
+        def palette_colors(name):
+            palette = None
+            if hasattr(pypalettes, "load_palette"):
+                palette = pypalettes.load_palette(name)
+            elif hasattr(pypalettes, "get_palette"):
+                palette = pypalettes.get_palette(name)
+            elif hasattr(pypalettes, "Palette"):
+                palette = pypalettes.Palette(name)
+            if palette is None:
+                raise ValueError(f"Palette '{name}' could not be loaded.")
+
+            colors = None
+            for attr in ("colors", "hex_colors", "palette", "hex"):
+                if hasattr(palette, attr):
+                    colors = getattr(palette, attr)
+                    break
+            if colors is None:
+                colors = palette
+            if not isinstance(colors, (list, tuple)):
+                colors = list(colors)
+            return colors
+
+        def expand_colors(colors, count):
+            if not colors:
+                return []
+            if len(colors) >= count:
+                return list(colors[:count])
+            repeats = (count + len(colors) - 1) // len(colors)
+            return (list(colors) * repeats)[:count]
+
+        def colors_for_groups(group_keys):
+            palette_values = palette_colors(settings.COMMUNITIES_PALETTE)
+            palette_values = expand_colors(palette_values, len(group_keys))
+            return {
+                group_key: ",".join(str(value) for value in parse_color(palette_color))
+                for group_key, palette_color in zip(group_keys, palette_values, strict=False)
+            }
+
+        def average_color(colors):
+            if not colors:
+                return (204, 204, 204)
+            totals = [0, 0, 0]
+            for color in colors:
+                for index, value in enumerate(parse_color(color)):
+                    totals[index] += value
+            count = len(colors)
+            return tuple(int(total / count) for total in totals)
 
         print("Create graph")
         graph = nx.DiGraph()
@@ -69,7 +120,7 @@ class Command(BaseCommand):
 
         community_map = {}
         community_palette = {}
-        if settings.COMMUNITIES == "LOUVAIN" or settings.COMMUNITIES_PALETTE == "LOUVAIN":
+        if settings.COMMUNITIES == "LOUVAIN":
             louvain_graph = graph.to_undirected()
             communities = nx.community.louvain_communities(louvain_graph, weight="weight", seed=0)
             communities = sorted(communities, key=len, reverse=True)
@@ -93,15 +144,21 @@ class Command(BaseCommand):
                 channel_dict[node_id]["data"]["group"] = community_label
                 channel_dict[node_id]["data"]["group_key"] = str(community_id)
 
-        if settings.COMMUNITIES_PALETTE == "LOUVAIN":
-            for node_id, community_id in community_map.items():
-                rgb = community_palette.get(community_id)
-                if not rgb:
-                    continue
-                rgb_string = ",".join(str(value) for value in rgb)
-                node_data = graph.nodes[node_id]["data"]
-                node_data["color"] = rgb_string
-                channel_dict[node_id]["data"]["color"] = rgb_string
+        palette_map = {}
+        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
+            if settings.COMMUNITIES == "LOUVAIN":
+                group_keys = [str(key) for key in sorted(community_map.values())]
+            else:
+                group_keys = [
+                    str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("key")
+                ]
+            palette_map = colors_for_groups(sorted(set(group_keys)))
+            for node_id, node_data in graph.nodes(data="data"):
+                group_key = node_data.get("group_key")
+                palette_color = palette_map.get(group_key)
+                if palette_color:
+                    node_data["color"] = palette_color
+                    channel_dict[node_id]["data"]["color"] = palette_color
             for edge in edge_list:
                 source_color = channel_dict[edge[0]]["data"]["color"]
                 target_color = channel_dict[edge[1]]["data"]["color"]
@@ -248,16 +305,28 @@ class Command(BaseCommand):
         groups = []
         if settings.COMMUNITIES == "LOUVAIN" and community_map:
             community_counts = {}
+            community_colors = {}
             for community_id in community_map.values():
                 community_counts[community_id] = community_counts.get(community_id, 0) + 1
+            if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
+                for node_id, community_id in community_map.items():
+                    community_colors.setdefault(community_id, []).append(channel_dict[node_id]["data"]["color"])
+            else:
+                for community_id in community_counts:
+                    palette_color = palette_map.get(str(community_id))
+                    if palette_color:
+                        community_colors[community_id] = [palette_color]
             for community_id, count in community_counts.items():
-                rgb = community_palette.get(community_id, (204, 204, 204))
+                if community_id in community_colors:
+                    rgb = average_color(community_colors[community_id])
+                else:
+                    rgb = community_palette.get(community_id, (204, 204, 204))
                 groups.append(
                     (
                         str(community_id),
                         count,
                         f"Community {community_id}",
-                        f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}",
+                        rgb_to_hex(rgb),
                     )
                 )
             groups = sorted(groups, key=lambda x: -x[1])
@@ -265,12 +334,17 @@ class Command(BaseCommand):
         else:
             org_qs = Organization.objects.filter(is_interesting=True)
             for organization in org_qs:
+                if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
+                    palette_color = palette_map.get(str(organization.key))
+                    color = rgb_to_hex(parse_color(palette_color)) if palette_color else organization.color
+                else:
+                    color = organization.color
                 groups.append(
                     (
                         organization.id,
                         organization.channel_set.count(),
                         organization.name.replace(", ", ""),
-                        organization.color,
+                        color,
                     )
                 )
             groups = sorted(groups, key=lambda x: -x[1])
