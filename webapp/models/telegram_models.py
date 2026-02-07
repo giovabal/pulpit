@@ -89,7 +89,7 @@ class Channel(TelegramBaseModel):
 
     def network_data(self, default=None):
         default = default or {}
-        return {
+        data = {
             "pk": str(self.pk),
             "id": self.telegram_id,
             "label": self.title,
@@ -106,7 +106,9 @@ class Channel(TelegramBaseModel):
             "is_lost": self.is_lost,
             "messages_count": self.message_set.count(),
             "out_deg": self.out_degree,
-        }.update(default)
+        }
+        data.update(default)
+        return data
 
     def save(self, *args, **kwargs):
         self.username = self.username or ""
