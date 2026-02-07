@@ -156,11 +156,40 @@ def compute_louvain_communities(graph):
     return community_map, community_palette
 
 
+def compute_kcore_communities(graph, k=10):
+    community_map = {}
+    community_palette = {}
+    if settings.COMMUNITIES != "KCORE":
+        return community_map, community_palette
+
+    core_graph = nx.k_core(graph.to_undirected(), k=k)
+    core_nodes = set(core_graph.nodes())
+    for node_id in graph.nodes():
+        community_map[node_id] = 1 if node_id in core_nodes else 0
+
+    community_palette = {
+        0: (160, 160, 160),
+        1: (72, 132, 255),
+    }
+    return community_map, community_palette
+
+
+def compute_communities(graph):
+    if settings.COMMUNITIES == "LOUVAIN":
+        return compute_louvain_communities(graph)
+    if settings.COMMUNITIES == "KCORE":
+        return compute_kcore_communities(graph)
+    return {}, {}
+
+
 def apply_community_labels(graph, channel_dict, community_map):
-    if settings.COMMUNITIES != "LOUVAIN":
+    if settings.COMMUNITIES not in {"LOUVAIN", "KCORE"}:
         return
     for node_id, community_id in community_map.items():
-        community_label = f"Community {community_id}"
+        if settings.COMMUNITIES == "KCORE":
+            community_label = "K-core 10" if community_id == 1 else "Outside K-core 10"
+        else:
+            community_label = f"Community {community_id}"
         node_data = graph.nodes[node_id]["data"]
         node_data["group"] = community_label
         node_data["group_key"] = str(community_id)
@@ -173,7 +202,7 @@ def apply_palette_colors(graph, channel_dict, edge_list, community_map):
     if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
         return palette_map
 
-    if settings.COMMUNITIES == "LOUVAIN":
+    if settings.COMMUNITIES in {"LOUVAIN", "KCORE"}:
         group_keys = [str(key) for key in sorted(community_map.values())]
     else:
         group_keys = [
@@ -320,7 +349,7 @@ def write_graph_files(data, accessory_payload, output_filename, accessory_filena
 
 def build_group_payload(community_map, community_palette, palette_map, channel_dict):
     groups = []
-    if settings.COMMUNITIES == "LOUVAIN" and community_map:
+    if settings.COMMUNITIES in {"LOUVAIN", "KCORE"} and community_map:
         community_counts = {}
         community_colors = {}
         for community_id in community_map.values():
@@ -338,9 +367,19 @@ def build_group_payload(community_map, community_palette, palette_map, channel_d
                 rgb = average_color(community_colors[community_id])
             else:
                 rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
-            groups.append((str(community_id), count, f"Community {community_id}", rgb_to_hex(rgb)))
+            if settings.COMMUNITIES == "KCORE":
+                community_label = "K-core 10" if community_id == 1 else "Outside K-core 10"
+            else:
+                community_label = f"Community {community_id}"
+            groups.append((str(community_id), count, community_label, rgb_to_hex(rgb)))
         groups = sorted(groups, key=lambda x: -x[1])
-        main_groups = {str(community_id): f"Community {community_id}" for community_id in community_counts}
+        if settings.COMMUNITIES == "KCORE":
+            main_groups = {
+                "1": "K-core 10",
+                "0": "Outside K-core 10",
+            }
+        else:
+            main_groups = {str(community_id): f"Community {community_id}" for community_id in community_counts}
         return groups, main_groups
 
     org_qs = Organization.objects.filter(is_interesting=True)
@@ -382,7 +421,7 @@ class Command(BaseCommand):
             exit()
 
         add_edges_to_graph(graph, edge_list)
-        community_map, community_palette = compute_louvain_communities(graph)
+        community_map, community_palette = compute_communities(graph)
         apply_community_labels(graph, channel_dict, community_map)
         palette_map = apply_palette_colors(graph, channel_dict, edge_list, community_map)
 
