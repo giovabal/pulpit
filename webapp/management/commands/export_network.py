@@ -14,6 +14,7 @@ from webapp_engine.utils import hex_to_rgb, rgb_avg, rgb_to_hex
 import networkx as nx
 import pypalettes
 from fa2 import ForceAtlas2
+from infomap import Infomap
 
 DEFAULT_FALLBACK_COLOR = (204, 204, 204)
 
@@ -174,16 +175,52 @@ def compute_kcore_communities(graph, k=10):
     return community_map, community_palette
 
 
+def compute_infomap_communities(graph):
+    community_map = {}
+    community_palette = {}
+    if settings.COMMUNITIES != "INFOMAP":
+        return community_map, community_palette
+
+    infomap = Infomap("--two-level --directed")
+    node_ids = sorted(graph.nodes())
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+    for source, target, edge_data in graph.edges(data=True):
+        weight = edge_data.get("weight", 1.0)
+        infomap.addLink(node_id_map[source], node_id_map[target], weight)
+
+    infomap.run()
+    module_ids = {}
+    for node in infomap.nodes:
+        original_id = node_ids[node.node_id]
+        module_ids[original_id] = node.module_id
+
+    if module_ids:
+        module_map = {module_id: index for index, module_id in enumerate(sorted(set(module_ids.values())), start=1)}
+        for node_id, module_id in module_ids.items():
+            community_map[node_id] = module_map[module_id]
+
+    if community_map:
+        total = max(community_map.values())
+        for index in range(1, total + 1):
+            hue = (index - 1) / max(total, 1)
+            r, g, b = colorsys.hsv_to_rgb(hue, 0.65, 0.9)
+            community_palette[index] = (int(r * 255), int(g * 255), int(b * 255))
+
+    return community_map, community_palette
+
+
 def compute_communities(graph):
     if settings.COMMUNITIES == "LOUVAIN":
         return compute_louvain_communities(graph)
     if settings.COMMUNITIES == "KCORE":
         return compute_kcore_communities(graph)
+    if settings.COMMUNITIES == "INFOMAP":
+        return compute_infomap_communities(graph)
     return {}, {}
 
 
 def apply_community_labels(graph, channel_dict, community_map):
-    if settings.COMMUNITIES not in {"LOUVAIN", "KCORE"}:
+    if settings.COMMUNITIES not in {"LOUVAIN", "KCORE", "INFOMAP"}:
         return
     for node_id, community_id in community_map.items():
         if settings.COMMUNITIES == "KCORE":
@@ -202,7 +239,7 @@ def apply_palette_colors(graph, channel_dict, edge_list, community_map):
     if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
         return palette_map
 
-    if settings.COMMUNITIES in {"LOUVAIN", "KCORE"}:
+    if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"}:
         group_keys = [str(key) for key in sorted(community_map.values())]
     else:
         group_keys = [
@@ -349,7 +386,7 @@ def write_graph_files(data, accessory_payload, output_filename, accessory_filena
 
 def build_group_payload(community_map, community_palette, palette_map, channel_dict):
     groups = []
-    if settings.COMMUNITIES in {"LOUVAIN", "KCORE"} and community_map:
+    if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"} and community_map:
         community_counts = {}
         community_colors = {}
         for community_id in community_map.values():
