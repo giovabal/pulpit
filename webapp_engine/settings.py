@@ -154,4 +154,6 @@ FA2_ITERATIONS = config("FA2_ITERATIONS", default=20000, cast=int)
 
 DRAW_DEAD_LEAVES = config("DRAW_DEAD_LEAVES", default=False, cast=bool)
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
-DRAW_COMMUNITIES = config("DRAW_COMMUNITIES", default="ORGANIZATION", cast=str)
+
+COMMUNITIES = config("COMMUNITIES", default="ORGANIZATION", cast=str)
+COMMUNITIES_PALETTE = config("COMMUNITIES_PALETTE", default="ORGANIZATION", cast=str)

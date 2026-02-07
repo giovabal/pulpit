@@ -27,33 +27,36 @@ class Command(BaseCommand):
             qs_filter |= Q(in_degree__gt=0)
         qs = Channel.objects.filter(qs_filter)
         for u in qs:
-            channel_dict[str(u.telegram_id)] = u
-            graph.add_node(str(u.pk), data=u.network_data)
+            options = {}
+            if settings.COMMUNITIES != "ORGANIZATION":
+                pass
+            if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
+                pass
+            channel_dict[str(u.telegram_id)] = {"channel": u, "data": u.network_data(options)}
+            graph.add_node(str(u.pk), data=channel_dict[str(u.telegram_id)]["data"])
 
         edge_list = []
-        draw_communities = settings.DRAW_COMMUNITIES
-        for u in qs:
-            for v in qs.exclude(id=u.id):
-                count = v.message_set.all().count()
+        for k, u in channel_dict.items():
+            for j, v in channel_dict.items():
+                if k == j:
+                    continue
+                count = v["channel"].message_set.all().count()
                 weight = (
                     0
                     if not count
                     else (
-                        v.message_set.filter(forwarded_from=u).count()
-                        + u.reference_message_set.filter(channel=v).count()
+                        v["channel"].message_set.filter(forwarded_from=u["channel"]).count()
+                        + u["channel"].reference_message_set.filter(channel=v["channel"]).count()
                     )
                     / count
                 )
                 if weight > 0:
-                    if draw_communities in {"LOUVAIN", "INFOMAP"}:
-                        # TODO: Use community-based coloring once detection is implemented.
-                        pass
                     color = rgb_avg(
-                        hex_to_rgb(u.organization.color if u.organization else settings.DEAD_LEAVES_COLOR),
-                        hex_to_rgb(v.organization.color if v.organization else settings.DEAD_LEAVES_COLOR),
+                        hex_to_rgb(u["data"]["color"] if u["channel"].organization else settings.DEAD_LEAVES_COLOR),
+                        hex_to_rgb(v["data"]["color"] if v["channel"].organization else settings.DEAD_LEAVES_COLOR),
                     )
                     color = [str(int(c * 0.75)) for c in color]
-                    edge_list.append([str(v.pk), str(u.pk), weight, ",".join(color)])
+                    edge_list.append([str(v["channel"].pk), str(u["channel"].pk), weight, ",".join(color)])
 
         if not edge_list:
             print("\n[ERROR] There are no relationships between channels, interrupting elaboration")
