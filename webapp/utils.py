@@ -13,7 +13,12 @@ def print_dict(obj):
 
 
 def hex_to_rgb(hex_color):
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    normalized = hex_color.lstrip("#")
+    length = len(normalized)
+    if length not in (3, 6):
+        raise ValueError("hex_to_rgb expects a 3 or 6 character hex value.")
+    step = length // 3
+    return tuple(int(normalized[i : i + step], 16) for i in range(0, length, step))
 
 
 def is_color_dark(hex_color):
