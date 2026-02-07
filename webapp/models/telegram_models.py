@@ -74,12 +74,23 @@ class Channel(TelegramBaseModel):
     @property
     def activity_period(self):
         date_template = "%B %Y"
-        messages = self.message_set.all().order_by("date")
+        messages = self.message_set.exclude(date__isnull=True).order_by("date")
         start = self.date
         end = self.date
         if messages.exists():
-            start = min(start, messages.first().date)
-            end = max(end, messages.last().date)
+            first_date = messages.first().date
+            last_date = messages.last().date
+            if start is None:
+                start = first_date
+            else:
+                start = min(start, first_date)
+            if end is None:
+                end = last_date
+            else:
+                end = max(end, last_date)
+
+        if start is None or end is None:
+            return "Unknown"
 
         return (
             f"{start.strftime(date_template)} - {end.strftime(date_template)}"
