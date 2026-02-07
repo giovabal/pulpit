@@ -22,9 +22,32 @@ DEFAULT_FALLBACK_COLOR = (204, 204, 204)
 def parse_color(value):
     if isinstance(value, (list, tuple)):
         return tuple(int(part) for part in value[:3])
-    if isinstance(value, str) and "," in value:
-        return tuple(int(part.strip()) for part in value.split(","))
-    return hex_to_rgb(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned.lower().startswith("rgb"):
+            channel_values = cleaned[cleaned.find("(") + 1 : cleaned.rfind(")")].split(",")
+            parsed = [float(part.strip()) for part in channel_values if part.strip()]
+            if not parsed:
+                return DEFAULT_FALLBACK_COLOR
+            if parsed and max(parsed) <= 1:
+                return tuple(int(part * 255) for part in parsed[:3])
+            return tuple(int(part) for part in parsed[:3])
+        if "," in cleaned:
+            return tuple(int(part.strip()) for part in cleaned.split(","))
+        if " " in cleaned:
+            parts = [part for part in cleaned.split(" ") if part]
+            if len(parts) >= 3 and all(part.replace(".", "", 1).isdigit() for part in parts[:3]):
+                parsed = [float(part) for part in parts[:3]]
+                if parsed and max(parsed) <= 1:
+                    return tuple(int(part * 255) for part in parsed[:3])
+                return tuple(int(part) for part in parsed[:3])
+        if cleaned.lower().startswith("0x"):
+            cleaned = cleaned[2:]
+        try:
+            return hex_to_rgb(cleaned)
+        except ValueError:
+            return DEFAULT_FALLBACK_COLOR
+    return DEFAULT_FALLBACK_COLOR
 
 
 def palette_colors(name):
