@@ -31,6 +31,7 @@ class Command(BaseCommand):
             graph.add_node(str(u.pk), data=u.network_data)
 
         edge_list = []
+        draw_communities = settings.DRAW_COMMUNITIES
         for u in qs:
             for v in qs.exclude(id=u.id):
                 count = v.message_set.all().count()
@@ -44,6 +45,9 @@ class Command(BaseCommand):
                     / count
                 )
                 if weight > 0:
+                    if draw_communities in {"LOUVAIN", "INFOMAP"}:
+                        # TODO: Use community-based coloring once detection is implemented.
+                        pass
                     color = rgb_avg(
                         hex_to_rgb(u.organization.color if u.organization else settings.DEAD_LEAVES_COLOR),
                         hex_to_rgb(v.organization.color if v.organization else settings.DEAD_LEAVES_COLOR),

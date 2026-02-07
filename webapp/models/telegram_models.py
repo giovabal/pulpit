@@ -89,15 +89,20 @@ class Channel(TelegramBaseModel):
 
     @property
     def network_data(self):
+        color = ",".join(
+            map(str, hex_to_rgb(self.organization.color if self.organization else settings.DEAD_LEAVES_COLOR))
+        )
+        if settings.DRAW_COMMUNITIES in {"LOUVAIN", "INFOMAP"}:
+            # TODO: Assign node colors based on community detection output once implemented.
+            pass
+
         return {
             "pk": str(self.pk),
             "id": self.telegram_id,
             "label": self.title,
             "group": self.organization.name if self.organization else "None",
             "group_key": self.organization.key if self.organization else "---",
-            "color": ",".join(
-                map(str, hex_to_rgb(self.organization.color if self.organization else settings.DEAD_LEAVES_COLOR))
-            ),
+            "color": color,
             "pic": self.profile_picture.picture.url[1:] if self.profile_picture else "",
             "url": self.telegram_url,
             "activity_period": self.activity_period,
