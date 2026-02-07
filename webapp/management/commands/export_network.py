@@ -239,9 +239,15 @@ def apply_community_labels(graph, channel_dict, community_map):
 def apply_palette_colors(graph, channel_dict, edge_list, community_map, community_palette):
     palette_map = {}
     if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"}:
-        group_keys = [str(key) for key in sorted(community_map.values())]
-        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
-            palette_map = colors_for_groups(sorted(set(group_keys)))
+        for node_id, node_data in graph.nodes(data="data"):
+            group_key = node_data.get("group_key")
+            if not group_key:
+                continue
+            community_color = community_palette.get(int(group_key))
+            if community_color:
+                rgb_color = ",".join(str(value) for value in community_color)
+                node_data["color"] = rgb_color
+                channel_dict[node_id]["data"]["color"] = rgb_color
     else:
         if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
             return palette_map
@@ -249,18 +255,12 @@ def apply_palette_colors(graph, channel_dict, edge_list, community_map, communit
             str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("name")
         ]
         palette_map = colors_for_groups(sorted(set(group_keys)))
-    for node_id, node_data in graph.nodes(data="data"):
-        group_key = node_data.get("group_key")
-        palette_color = palette_map.get(group_key) if palette_map else None
-        if palette_color:
-            node_data["color"] = palette_color
-            channel_dict[node_id]["data"]["color"] = palette_color
-        elif community_palette and group_key:
-            community_color = community_palette.get(int(group_key))
-            if community_color:
-                rgb_color = ",".join(str(value) for value in community_color)
-                node_data["color"] = rgb_color
-                channel_dict[node_id]["data"]["color"] = rgb_color
+        for node_id, node_data in graph.nodes(data="data"):
+            group_key = node_data.get("group_key")
+            palette_color = palette_map.get(group_key) if palette_map else None
+            if palette_color:
+                node_data["color"] = palette_color
+                channel_dict[node_id]["data"]["color"] = palette_color
     for edge in edge_list:
         source_color = channel_dict[edge[0]]["data"]["color"]
         target_color = channel_dict[edge[1]]["data"]["color"]
@@ -398,24 +398,10 @@ def build_group_payload(community_map, community_palette, palette_map, channel_d
     groups = []
     if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"} and community_map:
         community_counts = {}
-        community_colors = {}
         for community_id in community_map.values():
             community_counts[community_id] = community_counts.get(community_id, 0) + 1
-        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
-            for community_id in community_counts:
-                palette_color = palette_map.get(str(community_id))
-                if palette_color:
-                    community_colors[community_id] = [palette_color]
-        else:
-            for community_id in community_counts:
-                palette_color = community_palette.get(community_id)
-                if palette_color:
-                    community_colors[community_id] = [palette_color]
         for community_id, count in community_counts.items():
-            if community_id in community_colors:
-                rgb = average_color(community_colors[community_id])
-            else:
-                rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
+            rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
             community_label = f"Community {community_id}"
             groups.append((str(community_id), count, community_label, rgb_to_hex(rgb)))
         groups = sorted(groups, key=lambda x: -x[1])
