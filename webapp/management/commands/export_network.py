@@ -1,6 +1,6 @@
-import colorsys
 import json
 import os
+import re
 import shutil
 from math import sqrt
 
@@ -17,6 +17,7 @@ from infomap import Infomap
 from pyforceatlas2 import ForceAtlas2
 
 DEFAULT_FALLBACK_COLOR = (204, 204, 204)
+COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
 
 
 def parse_color(value):
@@ -208,6 +209,12 @@ def compute_infomap_communities(graph):
         for node_id, module_id in module_ids.items():
             community_map[node_id] = module_map[module_id]
 
+    next_community = max(community_map.values(), default=0) + 1
+    for node_id in node_ids:
+        if node_id not in community_map:
+            community_map[node_id] = next_community
+            next_community += 1
+
     return community_map, {}
 
 
@@ -226,11 +233,13 @@ def build_community_palette(community_map):
     community_palette = {}
     if not community_map:
         return community_palette
+
     total = max(community_map.values())
+    group_keys = [str(index) for index in range(1, total + 1)]
+    palette_map = colors_for_groups(group_keys)
     for index in range(1, total + 1):
-        hue = (index - 1) / max(total, 1)
-        r, g, b = colorsys.hsv_to_rgb(hue, 0.65, 0.9)
-        community_palette[index] = (int(r * 255), int(g * 255), int(b * 255))
+        palette_color = palette_map.get(str(index))
+        community_palette[index] = parse_color(palette_color) if palette_color else DEFAULT_FALLBACK_COLOR
     return community_palette
 
 
@@ -247,50 +256,54 @@ def compute_communities(graph):
     return community_map, build_community_palette(community_map)
 
 
+def algorithm_slug():
+    algorithm_name = str(settings.COMMUNITIES or "")
+    normalized = re.sub(r"[^a-z0-9]+", "-", algorithm_name.lower()).strip("-")
+    return normalized or "community"
+
+
+def community_label(community_id):
+    return f"{community_id}-{algorithm_slug()}"
+
+
 def apply_community_labels(graph, channel_dict, community_map):
-    if settings.COMMUNITIES not in {"LOUVAIN", "KCORE", "INFOMAP"}:
+    if settings.COMMUNITIES not in COMMUNITY_ALGORITHMS:
         return
     for node_id, community_id in community_map.items():
-        community_label = f"Community {community_id}"
+        detected_community = community_label(community_id)
         node_data = graph.nodes[node_id]["data"]
-        node_data["group"] = community_label
+        node_data["group"] = detected_community
         node_data["group_key"] = str(community_id)
-        channel_dict[node_id]["data"]["group"] = community_label
+        channel_dict[node_id]["data"]["group"] = detected_community
         channel_dict[node_id]["data"]["group_key"] = str(community_id)
 
 
 def apply_palette_colors(graph, channel_dict, edge_list, community_map, community_palette):
-    palette_map = {}
-    if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"}:
+    if settings.COMMUNITIES in COMMUNITY_ALGORITHMS:
         for node_id, node_data in graph.nodes(data="data"):
             group_key = node_data.get("group_key")
-            if not group_key:
-                continue
-            community_color = community_palette.get(int(group_key))
-            if community_color:
-                rgb_color = ",".join(str(value) for value in community_color)
-                node_data["color"] = rgb_color
-                channel_dict[node_id]["data"]["color"] = rgb_color
+            community_color = None
+            if group_key:
+                community_color = community_palette.get(int(group_key))
+            if community_color is None:
+                community_color = DEFAULT_FALLBACK_COLOR
+            rgb_color = ",".join(str(value) for value in community_color)
+            node_data["color"] = rgb_color
+            channel_dict[node_id]["data"]["color"] = rgb_color
     else:
-        if settings.COMMUNITIES_PALETTE == "ORGANIZATION":
-            return palette_map
-        group_keys = [
-            str(org.key) for org in Organization.objects.filter(is_interesting=True).order_by("id").only("name")
-        ]
-        palette_map = colors_for_groups(sorted(set(group_keys)))
-        for node_id, node_data in graph.nodes(data="data"):
-            group_key = node_data.get("group_key")
-            palette_color = palette_map.get(group_key) if palette_map else None
-            if palette_color:
-                node_data["color"] = palette_color
-                channel_dict[node_id]["data"]["color"] = palette_color
+        for node_id, channel_data in channel_dict.items():
+            organization = channel_data["channel"].organization
+            color = organization.color if organization else settings.DEAD_LEAVES_COLOR
+            rgb_color = ",".join(str(value) for value in hex_to_rgb(color))
+            graph.nodes[node_id]["data"]["color"] = rgb_color
+            channel_dict[node_id]["data"]["color"] = rgb_color
     for edge in edge_list:
         source_color = channel_dict[edge[0]]["data"]["color"]
         target_color = channel_dict[edge[1]]["data"]["color"]
         color = rgb_avg(parse_color(source_color), parse_color(target_color))
         color = [str(int(c * 0.75)) for c in color]
         graph.edges[edge[0], edge[1]]["color"] = ",".join(color)
-    return palette_map
+    return {}
 
 
 def layout_positions(graph):
@@ -417,28 +430,25 @@ def write_graph_files(data, accessory_payload, output_filename, accessory_filena
         accessoryfile.write(json.dumps(accessory_payload))
 
 
-def build_group_payload(community_map, community_palette, palette_map, channel_dict):
+def build_group_payload(community_map, community_palette, _palette_map, channel_dict):
     groups = []
-    if settings.COMMUNITIES in {"LOUVAIN", "KCORE", "INFOMAP"} and community_map:
+    if settings.COMMUNITIES in COMMUNITY_ALGORITHMS and community_map:
         community_counts = {}
         for community_id in community_map.values():
             community_counts[community_id] = community_counts.get(community_id, 0) + 1
         for community_id, count in community_counts.items():
             rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
-            community_label = f"Community {community_id}"
-            groups.append((str(community_id), count, community_label, rgb_to_hex(rgb)))
+            detected_community = community_label(community_id)
+            groups.append((str(community_id), count, detected_community, rgb_to_hex(rgb)))
         groups = sorted(groups, key=lambda x: -x[1])
-        main_groups = {str(community_id): f"Community {community_id}" for community_id in community_counts}
+        main_groups = {str(community_id): community_label(community_id) for community_id in community_counts}
         return groups, main_groups
 
     org_qs = Organization.objects.filter(is_interesting=True)
     for organization in org_qs:
-        if settings.COMMUNITIES_PALETTE != "ORGANIZATION":
-            palette_color = palette_map.get(str(organization.key))
-            color = rgb_to_hex(parse_color(palette_color)) if palette_color else organization.color
-        else:
-            color = organization.color
-        groups.append((organization.id, organization.channel_set.count(), organization.name.replace(", ", ""), color))
+        groups.append(
+            (organization.id, organization.channel_set.count(), organization.name.replace(", ", ""), organization.color)
+        )
     groups = sorted(groups, key=lambda x: -x[1])
     main_groups = {org.key: org.name for org in org_qs}
     return groups, main_groups
