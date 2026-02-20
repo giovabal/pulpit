@@ -5,7 +5,7 @@ import shutil
 from math import sqrt
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from webapp.models import Channel, Organization
@@ -22,7 +22,10 @@ COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
 
 def parse_color(value):
     if isinstance(value, (list, tuple)):
-        return tuple(int(part) for part in value[:3])
+        values = [float(part) for part in value[:3]]
+        if values and max(values) <= 1:
+            return tuple(int(part * 255) for part in values)
+        return tuple(int(part) for part in values)
     if isinstance(value, str):
         cleaned = value.strip()
         if cleaned.lower().startswith("rgb"):
@@ -44,6 +47,8 @@ def parse_color(value):
                 return tuple(int(part) for part in parsed[:3])
         if cleaned.lower().startswith("0x"):
             cleaned = cleaned[2:]
+        if cleaned.startswith("#"):
+            cleaned = cleaned[1:]
         try:
             return hex_to_rgb(cleaned)
         except ValueError:
@@ -101,6 +106,17 @@ def average_color(colors):
             totals[index] += value
     count = len(colors)
     return tuple(int(total / count) for total in totals)
+
+
+def validate_community_palette():
+    if settings.COMMUNITIES not in COMMUNITY_ALGORITHMS:
+        return
+    try:
+        palette_colors(settings.COMMUNITIES_PALETTE)
+    except Exception as error:
+        raise CommandError(
+            f"Palette '{settings.COMMUNITIES_PALETTE}' not found. Aborting export before calculations."
+        ) from error
 
 
 def build_graph():
@@ -471,6 +487,7 @@ class Command(BaseCommand):
     help = "write file"
 
     def handle(self, *args, **options):
+        validate_community_palette()
         print("Create graph")
         graph, channel_dict, qs = build_graph()
         edge_list = build_edge_list(channel_dict)
