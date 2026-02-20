@@ -432,7 +432,7 @@ def write_graph_files(data, accessory_payload, output_filename, accessory_filena
 
 def build_group_payload(community_map, community_palette, _palette_map, channel_dict):
     groups = []
-    if settings.COMMUNITIES in COMMUNITY_ALGORITHMS and community_map:
+    if settings.COMMUNITIES in COMMUNITY_ALGORITHMS:
         community_counts = {}
         for community_id in community_map.values():
             community_counts[community_id] = community_counts.get(community_id, 0) + 1
