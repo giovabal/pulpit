@@ -21,6 +21,21 @@ COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
 
 
 def parse_color(value):
+    if hasattr(value, "hex"):
+        return parse_color(value.hex)
+    if hasattr(value, "hex_code"):
+        return parse_color(value.hex_code)
+    if hasattr(value, "rgb"):
+        return parse_color(value.rgb)
+    if hasattr(value, "rgba"):
+        return parse_color(value.rgba)
+
+    if isinstance(value, dict):
+        rgb_keys = (("r", "g", "b"), ("red", "green", "blue"))
+        for keys in rgb_keys:
+            if all(key in value for key in keys):
+                return parse_color([value[key] for key in keys])
+
     if isinstance(value, (list, tuple)):
         values = [float(part) for part in value[:3]]
         if values and max(values) <= 1:
@@ -53,6 +68,12 @@ def parse_color(value):
             return hex_to_rgb(cleaned)
         except ValueError:
             return DEFAULT_FALLBACK_COLOR
+
+    if hasattr(value, "__iter__"):
+        try:
+            return parse_color(list(value))
+        except TypeError:
+            return DEFAULT_FALLBACK_COLOR
     return DEFAULT_FALLBACK_COLOR
 
 
@@ -68,7 +89,7 @@ def palette_colors(name):
         raise ValueError(f"Palette '{name}' could not be loaded.")
 
     colors = None
-    for attr in ("colors", "hex_colors", "palette", "hex"):
+    for attr in ("hex_colors", "hex", "palette", "colors"):
         if hasattr(palette, attr):
             colors = getattr(palette, attr)
             break
