@@ -3,7 +3,7 @@ A Telegram Network Explorer designed to produce an interactive web map.
 
 
 ## General requirements
-Python 3.8.x is required. Earlier versions may work as well.
+Python 3.12.x is required. Earlier versions may work as well.
 
 You need to have the Telegram app installed on your smartphone. Installing the desktop app on your computer is recommended.
 

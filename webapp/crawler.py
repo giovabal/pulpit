@@ -35,8 +35,7 @@ class TelegramCrawler:
         channel.participants_count = channel_full_info.full_chat.participants_count
         channel.about = channel_full_info.full_chat.about
         location = channel_full_info.full_chat.location
-        if channel.telegram_location is None and location:
-            channel.telegram_location = location
+        channel.telegram_location |= location
 
     def get_basic_channel(self, seed):
         self.wait()
@@ -86,7 +85,7 @@ class TelegramCrawler:
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
                 channel.save()
-                print(f"  * {message_count} messagges")
+                print(f"  * {message_count} messages")
                 return
         max_id = None
         if not channel.are_messages_crawled:
@@ -107,7 +106,7 @@ class TelegramCrawler:
         message_count += c
         channel.are_messages_crawled = True
         channel.save()
-        print(f"  * {message_count} messagges")
+        print(f"  * {message_count} messages")
 
     def get_profile_picture(self, telegram_channel):
         for telegram_picture in self.client.get_profile_photos(telegram_channel):

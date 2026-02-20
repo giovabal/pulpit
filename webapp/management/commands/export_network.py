@@ -195,6 +195,9 @@ def build_edge_list(channel_dict):
 
 
 def add_edges_to_graph(graph, edge_list):
+    if not edge_list:
+        return
+
     max_weight = max(edge[2] for edge in edge_list)
     for edge in edge_list:
         graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0.0001), color=edge[3])
