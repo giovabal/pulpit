@@ -64,6 +64,11 @@ def parse_color(value):
             cleaned = cleaned[2:]
         if cleaned.startswith("#"):
             cleaned = cleaned[1:]
+
+        # Accept alpha-enabled hex values from palettes (e.g. RRGGBBAA / RGBBAA style).
+        if len(cleaned) in {8, 4} and all(char in "0123456789abcdefABCDEF" for char in cleaned):
+            cleaned = cleaned[:-2] if len(cleaned) == 8 else cleaned[:-1]
+
         try:
             return hex_to_rgb(cleaned)
         except ValueError:
