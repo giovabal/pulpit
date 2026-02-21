@@ -62,7 +62,8 @@ class RelationalGraph:
                     )
                     / message_count
                 )
-                self.edge_list.append([str(target_data["channel"].pk), str(source_data["channel"].pk), weight])
+                if weight > 0:
+                    self.edge_list.append([str(target_data["channel"].pk), str(source_data["channel"].pk), weight])
 
         if not self.edge_list:
             print("\n[ERROR] There are no relationships between channels, interrupting elaboration")
@@ -70,7 +71,7 @@ class RelationalGraph:
 
         max_weight = max(edge[2] for edge in self.edge_list)
         for edge in self.edge_list:
-            self.graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0.0001))
+            self.graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0))
 
     def set_communities(self):
         self.communities, self.communities_palette = self.get_communities()

@@ -14,8 +14,8 @@ class Command(BaseCommand):
 
         print("Calculate communities")
         g.set_communities()
+        g.apply_palette_colors()
 
-        # ---
         print("\nSet spatial distribution of nodes")
         g.set_layout_positions(settings.FA2_ITERATIONS)
 
