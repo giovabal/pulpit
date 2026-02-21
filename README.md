@@ -1,6 +1,7 @@
 # TNExp
 A Telegram Network Explorer designed to produce an interactive web map.
 
+See the [changelog](CHANGELOG.md) for release history.
 
 ## General requirements
 Python 3.12.x is required. Earlier versions may work as well.
