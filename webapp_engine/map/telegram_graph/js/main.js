@@ -306,10 +306,9 @@ function build_legend(data) {
     $('#group-select').html(group_select_items.join(''));
 
     var size_select_items = [];
-    for ( i=0; i < data['measures'].length; i++ ) {
-	var l = data['measures'][i];
-	size_select_items.push('<option value="' + l[0] + '">' + l[1] + '</option>');
-    }
+    Object.keys(data['measures']).forEach(function(key) {
+        size_select_items.push('<option value="' + key + '">' + data['measures'][key] + '</option>');
+    });
     $('#size-select').html(size_select_items.join(''));
     $('#total_pages_count').html(data["total_pages_count"]);
     $('#total_interesting_pages_count').html(data["total_interesting_pages_count"]);

@@ -354,23 +354,22 @@ class RelationalGraph:
                 rgb = self.communities_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
                 detected_community = self.build_community_label(community_id)
                 self.group_data["groups"].append((str(community_id), count, detected_community, rgb_to_hex(rgb)))
-            self.group_data["groups"] = sorted(self.group_data["groups"], key=lambda x: -x[1])
             self.group_data["main_groups"] = {
                 str(community_id): self.build_community_label(community_id) for community_id in community_counts
             }
-
-        org_qs = Organization.objects.filter(is_interesting=True)
-        for organization in org_qs:
-            self.group_data["groups"].append(
-                (
-                    organization.id,
-                    organization.channel_set.count(),
-                    organization.name.replace(", ", ""),
-                    organization.color,
+        else:
+            org_qs = Organization.objects.filter(is_interesting=True)
+            for organization in org_qs:
+                self.group_data["groups"].append(
+                    (
+                        organization.id,
+                        organization.channel_set.count(),
+                        organization.name.replace(", ", ""),
+                        organization.color,
+                    )
                 )
-            )
+            self.group_data["main_groups"] = {org.key: org.name for org in org_qs}
         self.group_data["groups"] = sorted(self.group_data["groups"], key=lambda x: -x[1])
-        self.group_data["main_groups"] = {org.key: org.name for org in org_qs}
 
     def copy_channel_media(self, root_target):
         for channel in self.channel_qs:
