@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 from datetime import timedelta
 from time import sleep
@@ -11,6 +12,8 @@ from .models import Channel, Message, MessagePicture, MessageVideo, ProfilePictu
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
+
+logger = logging.getLogger(__name__)
 
 
 class TelegramCrawler:
@@ -210,7 +213,8 @@ class TelegramCrawler:
                     message.references.add(Channel.from_telegram_object(new_telegram_channel, force_update=True))
                 except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                     pass
-                except Exception:
+                except errors.RPCError as error:
+                    logger.warning("Unable to resolve message reference '%s': %s", reference, error)
                     missing_references.append(reference)
 
         if telegram_message.entities:
@@ -231,7 +235,8 @@ class TelegramCrawler:
                         message.references.add(Channel.from_telegram_object(new_telegram_channel, force_update=True))
                     except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                         pass
-                    except Exception:
+                    except errors.RPCError as error:
+                        logger.warning("Unable to resolve URL reference '%s': %s", reference, error)
                         missing_references.append(reference)
 
         if telegram_message.media:
@@ -266,8 +271,8 @@ class TelegramCrawler:
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
             try:
                 os.remove(file_path)
-            except Exception:
-                pass
+            except OSError as error:
+                logger.warning("Unable to remove leftover file '%s': %s", file_path, error)
 
     def get_missing_references(self):
         for message in Message.objects.exclude(missing_references=""):
@@ -281,8 +286,8 @@ class TelegramCrawler:
                         channel, telegram_channel = self.get_basic_channel(reference)
                     except errors.rpcerrorlist.FloodWaitError:
                         flood_error = True
-                    except Exception:
-                        pass
+                    except (ValueError, errors.RPCError) as error:
+                        logger.warning("Unable to fetch missing reference '%s': %s", reference, error)
                 if channel:
                     message.references.add(channel)
             if not flood_error:
