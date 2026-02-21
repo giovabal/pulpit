@@ -5,10 +5,10 @@ from math import sqrt
 
 from django.conf import settings
 from django.core.management.base import CommandError
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils.text import slugify
 
-from webapp.models import Channel, Organization
+from webapp.models import Channel, Message, Organization
 from webapp.utils import expand_colors, palette_colors, parse_color, rgb_avg, rgb_to_hex
 
 import networkx as nx
@@ -47,21 +47,43 @@ class RelationalGraph:
             self.graph.add_node(str(channel.pk), data=self.channel_dict[str(channel.pk)]["data"])
 
         self.edge_list = []
+        channel_ids = [int(channel_id) for channel_id in self.channel_dict]
+        messages_per_channel = {
+            item["channel_id"]: item["total"]
+            for item in Message.objects.filter(channel_id__in=channel_ids)
+            .values("channel_id")
+            .annotate(total=Count("id"))
+        }
+
+        forwarded_counts = {
+            (item["channel_id"], item["forwarded_from_id"]): item["total"]
+            for item in Message.objects.filter(channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+            .values("channel_id", "forwarded_from_id")
+            .annotate(total=Count("id"))
+        }
+
+        references_through = Message.references.through
+        reference_counts = {
+            (item["message__channel_id"], item["channel_id"]): item["total"]
+            for item in references_through.objects.filter(
+                channel_id__in=channel_ids, message__channel_id__in=channel_ids
+            )
+            .values("message__channel_id", "channel_id")
+            .annotate(total=Count("id"))
+        }
+
         for source_id, source_data in self.channel_dict.items():
             for target_id, target_data in self.channel_dict.items():
                 if source_id == target_id:
                     continue
 
-                message_count = target_data["channel"].message_set.all().count()
-                weight = (
-                    0
-                    if not message_count
-                    else (
-                        target_data["channel"].message_set.filter(forwarded_from=source_data["channel"]).count()
-                        + source_data["channel"].reference_message_set.filter(channel=target_data["channel"]).count()
-                    )
-                    / message_count
-                )
+                source_pk = source_data["channel"].pk
+                target_pk = target_data["channel"].pk
+                message_count = messages_per_channel.get(target_pk, 0)
+                forward_weight = forwarded_counts.get((target_pk, source_pk), 0)
+                reference_weight = reference_counts.get((target_pk, source_pk), 0)
+
+                weight = 0 if not message_count else (forward_weight + reference_weight) / message_count
                 if weight > 0:
                     self.edge_list.append([str(target_data["channel"].pk), str(source_data["channel"].pk), weight])
 
