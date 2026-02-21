@@ -38,7 +38,7 @@ class RelationalGraph:
             qs_filter |= Q(in_degree__gt=0)
         self.channel_qs = Channel.objects.filter(qs_filter)
 
-        self.measures_labels = {}
+        self.measures_labels = []
 
         self.graph = nx.DiGraph()
         self.channel_dict = {}
@@ -269,14 +269,12 @@ class RelationalGraph:
         self.main_component = max(nx.weakly_connected_components(self.graph), key=len)
 
     def apply_base_node_measures(self):
-        self.measures_labels.update(
-            {
-                "in_deg": "Inbound connections",
-                "out_deg": "Outbound connections",
-                "fans": "Users",
-                "messages_count": "Messages",
-            }
-        )
+        self.measures_labels += [
+            ("in_deg", "Inbound connections"),
+            ("out_deg", "Outbound connections"),
+            ("fans", "Users"),
+            ("messages_count", "Messages"),
+        ]
         for node in self.graph_data["nodes"]:
             channel_entry = self.channel_dict.get(node["id"])
             if channel_entry is None:
@@ -295,7 +293,7 @@ class RelationalGraph:
         for node in self.graph_data["nodes"]:
             if node["id"] in pagerank_values:
                 node[key] = pagerank_values[node["id"]]
-        self.measures_labels.update({key: "PageRank"})
+        self.measures_labels += [(key, "PageRank")]
 
     def reposition_isolated_nodes(self):
         max_x = 0
