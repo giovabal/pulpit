@@ -35,7 +35,8 @@ class TelegramCrawler:
         channel.participants_count = channel_full_info.full_chat.participants_count
         channel.about = channel_full_info.full_chat.about
         location = channel_full_info.full_chat.location
-        channel.telegram_location |= location
+        if not channel.telegram_location and location:
+            channel.telegram_location = location
 
     def get_basic_channel(self, seed):
         self.wait()

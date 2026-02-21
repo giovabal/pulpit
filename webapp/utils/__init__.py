@@ -1,6 +1,6 @@
 from pprint import pprint
 
-from .colors import hex_to_rgb, is_color_dark, rgb_avg, rgb_to_hex
+from .colors import *  # noqa
 
 
 def _get_dict(obj):
@@ -12,6 +12,3 @@ def _get_dict(obj):
 
 def print_dict(obj):
     pprint(_get_dict(obj))
-
-
-__all__ = ["hex_to_rgb", "is_color_dark", "rgb_avg", "rgb_to_hex", "print_dict"]
