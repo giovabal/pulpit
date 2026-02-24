@@ -213,6 +213,9 @@ class TelegramCrawler:
                     message.references.add(Channel.from_telegram_object(new_telegram_channel, force_update=True))
                 except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                     pass
+                except errors.rpcerrorlist.FloodWaitError as error:
+                    logger.warning("Unable to resolve message reference '%s': %s", reference, error)
+                    raise
                 except errors.RPCError as error:
                     logger.warning("Unable to resolve message reference '%s': %s", reference, error)
                     missing_references.append(reference)
@@ -235,6 +238,9 @@ class TelegramCrawler:
                         message.references.add(Channel.from_telegram_object(new_telegram_channel, force_update=True))
                     except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                         pass
+                    except errors.rpcerrorlist.FloodWaitError as error:
+                        logger.warning("Unable to resolve URL reference '%s': %s", reference, error)
+                        raise
                     except errors.RPCError as error:
                         logger.warning("Unable to resolve URL reference '%s': %s", reference, error)
                         missing_references.append(reference)
