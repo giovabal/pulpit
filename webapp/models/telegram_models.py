@@ -250,7 +250,8 @@ class MessageVideo(TelegramBaseModel):
 
     @classmethod
     def from_telegram_object(cls, telegram_object, force_update=False, defaults=None):
-        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults or {})
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
         filename = defaults.get("video", None)
         if filename:
             with open(filename, "rb") as f:
