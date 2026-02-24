@@ -1,25 +1,17 @@
-import asyncio
-
 from django.conf import settings
-from django.core.management.base import BaseCommand
 from django.db.models import F
 from django.utils import timezone
 
 from webapp.crawler import TelegramCrawler
+from webapp.management import AsyncBaseCommand
 from webapp.models import SearchTerm
 
 from telethon.sync import TelegramClient
 
 
-class Command(BaseCommand):
+class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
-
-    def _ensure_event_loop(self):
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
 
     def handle(self, *args, **options):
         self._ensure_event_loop()
