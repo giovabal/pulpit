@@ -69,7 +69,7 @@ class TelegramCrawler:
         channel_label = f"[{channel.id}] {channel}"
         update_status(f"{channel_label} | recupero immagine profilo")
 
-        self.get_profile_picture(telegram_channel)
+        image_count = self.get_profile_picture(telegram_channel)
 
         update_status(f"{channel_label} | recupero dettagli canale")
 
@@ -89,7 +89,7 @@ class TelegramCrawler:
             start=1,
         ):
             c = i
-            self.get_message(channel, telegram_message)
+            image_count += self.get_message(channel, telegram_message)
             update_status(f"{channel_label} | messaggi elaborati: {message_count + c}")
 
         message_count += c
@@ -98,7 +98,9 @@ class TelegramCrawler:
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
                 channel.save()
-                update_status(f"{channel_label} | completato ({message_count} messaggi)")
+                update_status(
+                    f"{channel_label} | completato ({message_count} messaggi nuovi, {image_count} immagini scaricate)"
+                )
                 return
         max_id = None
         if not channel.are_messages_crawled:
@@ -115,15 +117,18 @@ class TelegramCrawler:
                 start=1,
             ):
                 c = i
-                self.get_message(channel, telegram_message)
+                image_count += self.get_message(channel, telegram_message)
                 update_status(f"{channel_label} | messaggi elaborati: {message_count + c}")
 
         message_count += c
         channel.are_messages_crawled = True
         channel.save()
-        update_status(f"{channel_label} | completato ({message_count} messaggi)")
+        update_status(
+            f"{channel_label} | completato ({message_count} messaggi nuovi, {image_count} immagini scaricate)"
+        )
 
     def get_profile_picture(self, telegram_channel):
+        pictures_downloaded = 0
         for telegram_picture in self.client.get_profile_photos(telegram_channel):
             picture_filename = self.client.download_media(telegram_picture)
             ProfilePicture.from_telegram_object(
@@ -133,13 +138,16 @@ class TelegramCrawler:
             )
             if os.path.exists(picture_filename):
                 os.remove(picture_filename)
+            pictures_downloaded += 1
+
+        return pictures_downloaded
 
     def get_message_picture(self, telegram_message):
         if not settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES:
-            return
+            return 0
 
         if not hasattr(telegram_message.media, "photo"):
-            return
+            return 0
 
         try:
             picture_filename = self.client.download_media(telegram_message)
@@ -155,9 +163,12 @@ class TelegramCrawler:
             )
             if os.path.exists(picture_filename):
                 os.remove(picture_filename)
+            return 1
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             print(e)
             print(telegram_message.__dict__)
+
+        return 0
 
     def get_message_video(self, telegram_message):
         if not settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO:
@@ -192,6 +203,7 @@ class TelegramCrawler:
             print(telegram_message.__dict__)
 
     def get_message(self, channel, telegram_message):
+        downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
         missing_references = []
         if (
@@ -257,7 +269,7 @@ class TelegramCrawler:
                         missing_references.append(reference)
 
         if telegram_message.media:
-            self.get_message_picture(telegram_message)
+            downloaded_images += self.get_message_picture(telegram_message)
             self.get_message_video(telegram_message)
             if hasattr(telegram_message.media, "webpage"):
                 message.webpage_url = (
@@ -271,6 +283,7 @@ class TelegramCrawler:
             message.missing_references = "|" + "|".join(missing_references)
 
         message.save()
+        return downloaded_images
 
     def search_channel(self, q, limit=1000):
         self.wait()

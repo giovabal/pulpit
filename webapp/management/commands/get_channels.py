@@ -23,15 +23,28 @@ class Command(AsyncBaseCommand):
             channels = Channel.objects.filter(organization__is_interesting=True).order_by("-id")
             total_channels = channels.count()
 
-            def print_status(message):
-                self.stdout.write(f"\r{message}", ending="")
+            current_progress_channel = None
+            last_line_length = 0
+
+            def print_status(message, channel_index):
+                nonlocal current_progress_channel, last_line_length
+                if current_progress_channel != channel_index:
+                    if current_progress_channel is not None:
+                        self.stdout.write("", ending="\n")
+                    current_progress_channel = channel_index
+                    last_line_length = 0
+
+                line = f"[{channel_index}/{total_channels}] {message}"
+                padding = " " * max(0, last_line_length - len(line))
+                self.stdout.write(f"\r{line}{padding}", ending="")
                 self.stdout.flush()
+                last_line_length = len(line)
 
             for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                 try:
                     crawler.get_channel(
                         channel.telegram_id,
-                        status_callback=lambda message, idx=index: print_status(f"[{idx}/{total_channels}] {message}"),
+                        status_callback=lambda message, idx=index: print_status(message, idx),
                     )
                 except errors.FloodWaitError as error:
                     self.stdout.write("", ending="\n")
