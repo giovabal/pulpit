@@ -3,12 +3,13 @@ from django.core.management.base import BaseCommand
 
 from webapp.crawler import TelegramCrawler
 from webapp.models import Channel
+from webapp.management import AsyncBaseCommand
 
 from telethon import errors
 from telethon.sync import TelegramClient
 
 
-class Command(BaseCommand):
+class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
