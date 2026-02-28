@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.2] - To be released
+### Improvements
+- `get_channels` now has a better and more informative output.
+- Download of profile pictures is done just one time.
+- Better management of FloodWaitError in crawler.
+
+### New features
+- Stats page
+
 
 ## [0.1.1] - 2026-02-23
 ### Fixed
