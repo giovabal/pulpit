@@ -1,9 +1,8 @@
 from django.conf import settings
-from django.core.management.base import BaseCommand
 
 from webapp.crawler import TelegramCrawler
-from webapp.models import Channel
 from webapp.management import AsyncBaseCommand
+from webapp.models import Channel
 
 from telethon import errors
 from telethon.sync import TelegramClient

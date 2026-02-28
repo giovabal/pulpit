@@ -134,8 +134,7 @@ class TelegramCrawler:
                 force_update=True,
                 defaults={"channel": Channel.objects.get(telegram_id=telegram_channel.id), "picture": picture_filename},
             )
-            if os.path.exists(picture_filename):
-                os.remove(picture_filename)
+            self._cleanup_downloaded_file(picture_filename)
             pictures_downloaded += 1
 
         return pictures_downloaded
@@ -159,8 +158,7 @@ class TelegramCrawler:
                     "picture": picture_filename,
                 },
             )
-            if os.path.exists(picture_filename):
-                os.remove(picture_filename)
+            self._cleanup_downloaded_file(picture_filename)
             return 1
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             print(e)
@@ -194,11 +192,14 @@ class TelegramCrawler:
                     "video": video_filename,
                 },
             )
-            if os.path.exists(video_filename):
-                os.remove(video_filename)
+            self._cleanup_downloaded_file(video_filename)
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             print(e)
             print(telegram_message.__dict__)
+
+    def _cleanup_downloaded_file(self, filename):
+        if filename and os.path.exists(filename):
+            os.remove(filename)
 
     def get_message(self, channel, telegram_message):
         downloaded_images = 0
