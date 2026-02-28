@@ -1,7 +1,9 @@
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.generic import TemplateView
 
 from webapp.mixins import BaseMixin
@@ -16,6 +18,7 @@ class StatsPageView(BaseMixin, TemplateView):
     template_name = "stats/stats_page.html"
 
 
+@method_decorator(xframe_options_sameorigin, name="dispatch")
 class MessagesHistoryDataView(View):
     def get(self, request, *args, **kwargs):
         monthly_totals = (

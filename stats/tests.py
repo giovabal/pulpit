@@ -19,5 +19,6 @@ class StatsViewsTests(TestCase):
         response = self.client.get(reverse("messages-history-data"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN")
         self.assertContains(response, "Bokeh")
         self.assertContains(response, "Monthly total messages from interesting channels")
