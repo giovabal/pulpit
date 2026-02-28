@@ -22,15 +22,22 @@ class Command(BaseCommand):
             channels = Channel.objects.filter(organization__is_interesting=True).order_by("-id")
             total_channels = channels.count()
 
-            def print_status(message):
-                self.stdout.write(f"\r{message}", ending="")
+            current_progress_channel = None
+
+            def print_status(message, channel_index):
+                nonlocal current_progress_channel
+                if current_progress_channel != channel_index:
+                    if current_progress_channel is not None:
+                        self.stdout.write("", ending="\n")
+                    current_progress_channel = channel_index
+                self.stdout.write(f"\r[{channel_index}/{total_channels}] {message}", ending="")
                 self.stdout.flush()
 
             for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                 try:
                     crawler.get_channel(
                         channel.telegram_id,
-                        status_callback=lambda message, idx=index: print_status(f"[{idx}/{total_channels}] {message}"),
+                        status_callback=lambda message, idx=index: print_status(message, idx),
                     )
                 except errors.FloodWaitError as error:
                     self.stdout.write("", ending="\n")
