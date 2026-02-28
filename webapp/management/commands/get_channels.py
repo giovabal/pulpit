@@ -23,15 +23,21 @@ class Command(BaseCommand):
             total_channels = channels.count()
 
             current_progress_channel = None
+            last_line_length = 0
 
             def print_status(message, channel_index):
-                nonlocal current_progress_channel
+                nonlocal current_progress_channel, last_line_length
                 if current_progress_channel != channel_index:
                     if current_progress_channel is not None:
                         self.stdout.write("", ending="\n")
                     current_progress_channel = channel_index
-                self.stdout.write(f"\r[{channel_index}/{total_channels}] {message}", ending="")
+                    last_line_length = 0
+
+                line = f"[{channel_index}/{total_channels}] {message}"
+                padding = " " * max(0, last_line_length - len(line))
+                self.stdout.write(f"\r{line}{padding}", ending="")
                 self.stdout.flush()
+                last_line_length = len(line)
 
             for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                 try:
