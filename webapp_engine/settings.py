@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "django_admin_logs",
     "colorfield",
     "django_extensions",
+    "stats",
     "webapp",
 ]
 

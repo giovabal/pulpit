@@ -1,0 +1,11 @@
+{% extends "webapp/index.html" %}
+
+{% block content %}
+<h1 class="mb-3">Stats</h1>
+<iframe
+  src="{% url 'messages-history-data' %}"
+  title="Monthly messages history"
+  class="w-100 border rounded"
+  style="min-height: 560px;"
+></iframe>
+{% endblock content %}
