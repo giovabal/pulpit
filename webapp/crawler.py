@@ -56,15 +56,22 @@ class TelegramCrawler:
             print("Not available seed: ", seed)
             return None, None
 
-    def get_channel(self, seed):
+    def get_channel(self, seed, status_callback=None):
+        def update_status(message):
+            if status_callback:
+                status_callback(message)
+
         channel, telegram_channel = self.get_basic_channel(seed)
         if channel is None:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
             return
 
-        print(f"[{channel.id}]", channel)
+        channel_label = f"[{channel.id}] {channel}"
+        update_status(f"{channel_label} | recupero immagine profilo")
 
         self.get_profile_picture(telegram_channel)
+
+        update_status(f"{channel_label} | recupero dettagli canale")
 
         self.set_more_channel_details(channel, telegram_channel)
 
@@ -76,12 +83,14 @@ class TelegramCrawler:
             remaining_limit = None
         else:
             remaining_limit = self.messages_limit_per_channel
+        update_status(f"{channel_label} | download messaggi recenti")
         for i, telegram_message in enumerate(
             self.client.iter_messages(telegram_channel, min_id=min_id, wait_time=self.wait_time, limit=remaining_limit),
             start=1,
         ):
             c = i
             self.get_message(channel, telegram_message)
+            update_status(f"{channel_label} | messaggi elaborati: {message_count + c}")
 
         message_count += c
         if remaining_limit is not None:
@@ -89,7 +98,7 @@ class TelegramCrawler:
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
                 channel.save()
-                print(f"  * {message_count} messages")
+                update_status(f"{channel_label} | completato ({message_count} messaggi)")
                 return
         max_id = None
         if not channel.are_messages_crawled:
@@ -98,6 +107,7 @@ class TelegramCrawler:
 
         c = 0
         if max_id is not None:
+            update_status(f"{channel_label} | download storico")
             for i, telegram_message in enumerate(
                 self.client.iter_messages(
                     telegram_channel, max_id=max_id, wait_time=self.wait_time, limit=remaining_limit
@@ -106,11 +116,12 @@ class TelegramCrawler:
             ):
                 c = i
                 self.get_message(channel, telegram_message)
+                update_status(f"{channel_label} | messaggi elaborati: {message_count + c}")
 
         message_count += c
         channel.are_messages_crawled = True
         channel.save()
-        print(f"  * {message_count} messages")
+        update_status(f"{channel_label} | completato ({message_count} messaggi)")
 
     def get_profile_picture(self, telegram_channel):
         for telegram_picture in self.client.get_profile_photos(telegram_channel):
