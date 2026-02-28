@@ -127,12 +127,20 @@ class TelegramCrawler:
 
     def get_profile_picture(self, telegram_channel):
         pictures_downloaded = 0
+        channel = Channel.objects.get(telegram_id=telegram_channel.id)
         for telegram_picture in self.client.get_profile_photos(telegram_channel):
+            picture_exists = ProfilePicture.objects.filter(
+                telegram_id=telegram_picture.id,
+                channel=channel,
+            ).exists()
+            if picture_exists:
+                continue
+
             picture_filename = self.client.download_media(telegram_picture)
             ProfilePicture.from_telegram_object(
                 telegram_picture,
                 force_update=True,
-                defaults={"channel": Channel.objects.get(telegram_id=telegram_channel.id), "picture": picture_filename},
+                defaults={"channel": channel, "picture": picture_filename},
             )
             self._cleanup_downloaded_file(picture_filename)
             pictures_downloaded += 1
