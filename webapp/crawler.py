@@ -57,7 +57,7 @@ class TelegramCrawler:
             print("Not available seed: ", seed)
             return None, None
 
-    def get_channel(self, seed, status_callback=None):
+    def get_channel(self, seed, status_callback=None, fix_holes=False):
         def update_status(message):
             if status_callback:
                 status_callback(message)
@@ -128,9 +128,74 @@ class TelegramCrawler:
                 update_status(f"{channel_label} | messages processed: {message_count + c}")
 
         message_count += c
+        if remaining_limit is not None:
+            remaining_limit -= c
+            if remaining_limit <= 0:
+                channel.are_messages_crawled = True
+                channel.save()
+                update_status(
+                    f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
+                )
+                return
+
+        if fix_holes:
+            update_status(f"{channel_label} | checking for message holes")
+            hole_message_count, hole_image_count = self._fix_message_holes(
+                channel,
+                telegram_channel,
+                remaining_limit,
+                update_status,
+                channel_label,
+                message_count,
+            )
+            message_count += hole_message_count
+            image_count += hole_image_count
+
         channel.are_messages_crawled = True
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
+
+    def _find_missing_message_ids(self, channel):
+        ids = list(channel.message_set.order_by("telegram_id").values_list("telegram_id", flat=True))
+        if len(ids) < 2:
+            return []
+
+        holes = []
+        for previous_id, current_id in zip(ids, ids[1:], strict=False):
+            if current_id - previous_id > 1:
+                holes.extend(range(previous_id + 1, current_id))
+        return holes
+
+    def _fix_message_holes(
+        self, channel, telegram_channel, remaining_limit, update_status, channel_label, current_message_count
+    ):
+        missing_ids = self._find_missing_message_ids(channel)
+        if not missing_ids:
+            update_status(f"{channel_label} | no message holes found")
+            return 0, 0
+
+        update_status(f"{channel_label} | fixing {len(missing_ids)} missing message ids")
+        processed_messages = 0
+        downloaded_images = 0
+        if remaining_limit is not None and remaining_limit > 0:
+            missing_ids = missing_ids[:remaining_limit]
+
+        batch_size = 100
+        for offset in range(0, len(missing_ids), batch_size):
+            batch = missing_ids[offset : offset + batch_size]
+            self.wait()
+            messages = self.client.get_messages(telegram_channel, ids=batch)
+            if not isinstance(messages, list):
+                messages = [messages]
+
+            for telegram_message in messages:
+                if telegram_message is None or not hasattr(telegram_message, "peer_id"):
+                    continue
+                downloaded_images += self.get_message(channel, telegram_message)
+                processed_messages += 1
+                update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
+
+        return processed_messages, downloaded_images
 
     def get_profile_picture(self, telegram_channel):
         pictures_downloaded = 0

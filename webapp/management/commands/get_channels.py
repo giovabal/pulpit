@@ -12,8 +12,17 @@ class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--fixholes",
+            action="store_true",
+            default=False,
+            help="Check channel message ids for holes and fetch missing messages",
+        )
+
     def handle(self, *args, **options):
         self._ensure_event_loop()
+        fix_holes = options["fixholes"]
         with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
             phone=settings.TELEGRAM_PHONE_NUMBER
         ) as client:
@@ -43,6 +52,7 @@ class Command(AsyncBaseCommand):
                 try:
                     crawler.get_channel(
                         channel.telegram_id,
+                        fix_holes=fix_holes,
                         status_callback=lambda message, idx=index: print_status(message, idx),
                     )
                 except errors.FloodWaitError as error:
