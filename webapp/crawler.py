@@ -26,6 +26,7 @@ class TelegramCrawler:
     def __init__(self, client):
         self.client = client
         self.last_call = timezone.now() - timedelta(seconds=self.wait_time)
+        self.reference_resolution_paused_until = None
 
     def wait(self):
         w = self.wait_time - (timezone.now() - self.last_call).seconds
@@ -85,7 +86,13 @@ class TelegramCrawler:
             remaining_limit = self.messages_limit_per_channel
         update_status(f"{channel_label} | downloading recent messages")
         for i, telegram_message in enumerate(
-            self.client.iter_messages(telegram_channel, min_id=min_id, wait_time=self.wait_time, limit=remaining_limit),
+            self.client.iter_messages(
+                telegram_channel,
+                min_id=min_id,
+                wait_time=self.wait_time,
+                limit=remaining_limit,
+                reverse=True,
+            ),
             start=1,
         ):
             c = i
@@ -209,6 +216,16 @@ class TelegramCrawler:
         if filename and os.path.exists(filename):
             os.remove(filename)
 
+    def _is_reference_resolution_paused(self):
+        return self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until
+
+    def _pause_reference_resolution(self, error):
+        wait_seconds = max(getattr(error, "seconds", 0), 1)
+        pause_until = timezone.now() + timedelta(seconds=wait_seconds)
+        if not self.reference_resolution_paused_until or pause_until > self.reference_resolution_paused_until:
+            self.reference_resolution_paused_until = pause_until
+        return wait_seconds
+
     def get_message(self, channel, telegram_message):
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
@@ -237,6 +254,9 @@ class TelegramCrawler:
             if Channel.objects.filter(username=reference).exists():
                 message.references.add(Channel.objects.filter(username=reference).first())
             else:
+                if self._is_reference_resolution_paused():
+                    missing_references.append(reference)
+                    continue
                 try:
                     self.wait()
                     new_telegram_channel = self.client.get_entity(reference)
@@ -244,8 +264,13 @@ class TelegramCrawler:
                 except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                     pass
                 except errors.rpcerrorlist.FloodWaitError as error:
-                    logger.warning("Unable to resolve message reference '%s': %s", reference, error)
-                    raise
+                    wait_seconds = self._pause_reference_resolution(error)
+                    logger.warning(
+                        "Unable to resolve message reference '%s' due to flood wait (%ss); skipping username resolution for now",
+                        reference,
+                        wait_seconds,
+                    )
+                    missing_references.append(reference)
                 except errors.RPCError as error:
                     logger.warning("Unable to resolve message reference '%s': %s", reference, error)
                     missing_references.append(reference)
@@ -262,6 +287,9 @@ class TelegramCrawler:
                 if Channel.objects.filter(username=reference).exists():
                     message.references.add(Channel.objects.filter(username=reference).first())
                 else:
+                    if self._is_reference_resolution_paused():
+                        missing_references.append(reference)
+                        continue
                     try:
                         self.wait()
                         new_telegram_channel = self.client.get_entity(reference)
@@ -269,8 +297,13 @@ class TelegramCrawler:
                     except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
                         pass
                     except errors.rpcerrorlist.FloodWaitError as error:
-                        logger.warning("Unable to resolve URL reference '%s': %s", reference, error)
-                        raise
+                        wait_seconds = self._pause_reference_resolution(error)
+                        logger.warning(
+                            "Unable to resolve URL reference '%s' due to flood wait (%ss); skipping username resolution for now",
+                            reference,
+                            wait_seconds,
+                        )
+                        missing_references.append(reference)
                     except errors.RPCError as error:
                         logger.warning("Unable to resolve URL reference '%s': %s", reference, error)
                         missing_references.append(reference)
