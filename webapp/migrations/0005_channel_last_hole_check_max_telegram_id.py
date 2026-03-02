@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('webapp', '0004_messagevideo'),
+        ("webapp", "0004_messagevideo"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channel',
-            name='last_hole_check_max_telegram_id',
+            model_name="channel",
+            name="last_hole_check_max_telegram_id",
             field=models.PositiveBigIntegerField(null=True),
         ),
     ]
