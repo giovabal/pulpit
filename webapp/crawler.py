@@ -1,6 +1,7 @@
 import glob
 import logging
 import os
+import shutil
 from datetime import timedelta
 from time import sleep
 
@@ -27,6 +28,15 @@ class TelegramCrawler:
         self.client = client
         self.last_call = timezone.now() - timedelta(seconds=self.wait_time)
         self.reference_resolution_paused_until = None
+        self.download_temp_dir = None
+
+    def set_download_temp_dir(self, download_temp_dir):
+        self.download_temp_dir = download_temp_dir
+
+    def _download_media(self, telegram_object):
+        if self.download_temp_dir:
+            return self.client.download_media(telegram_object, file=self.download_temp_dir)
+        return self.client.download_media(telegram_object)
 
     def wait(self):
         w = self.wait_time - (timezone.now() - self.last_call).seconds
@@ -226,7 +236,7 @@ class TelegramCrawler:
             if picture_exists:
                 continue
 
-            picture_filename = self.client.download_media(telegram_picture)
+            picture_filename = self._download_media(telegram_picture)
             ProfilePicture.from_telegram_object(
                 telegram_picture,
                 force_update=True,
@@ -245,7 +255,7 @@ class TelegramCrawler:
             return 0
 
         try:
-            picture_filename = self.client.download_media(telegram_message)
+            picture_filename = self._download_media(telegram_message)
             MessagePicture.from_telegram_object(
                 telegram_message.media.photo,
                 force_update=True,
@@ -279,7 +289,7 @@ class TelegramCrawler:
             return
 
         try:
-            video_filename = self.client.download_media(telegram_message)
+            video_filename = self._download_media(telegram_message)
             MessageVideo.from_telegram_object(
                 document,
                 force_update=True,
@@ -426,6 +436,12 @@ class TelegramCrawler:
                 os.remove(file_path)
             except OSError as error:
                 logger.warning("Unable to remove leftover file '%s': %s", file_path, error)
+
+        if self.download_temp_dir and os.path.isdir(self.download_temp_dir):
+            try:
+                shutil.rmtree(self.download_temp_dir)
+            except OSError as error:
+                logger.warning("Unable to remove temporary download directory '%s': %s", self.download_temp_dir, error)
 
     def get_missing_references(self):
         for message in Message.objects.exclude(missing_references=""):
