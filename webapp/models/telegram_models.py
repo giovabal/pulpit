@@ -40,6 +40,7 @@ class Channel(TelegramBaseModel):
     is_active = models.BooleanField(default=False)
     is_lost = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
+    last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, blank=True, null=True)
     broadcast = models.BooleanField(default=True)
     verified = models.BooleanField(default=False)

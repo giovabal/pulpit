@@ -155,8 +155,11 @@ class TelegramCrawler:
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
 
-    def _find_missing_message_ids(self, channel):
-        ids = list(channel.message_set.order_by("telegram_id").values_list("telegram_id", flat=True))
+    def _find_missing_message_ids(self, channel, min_telegram_id=None):
+        messages = channel.message_set.order_by("telegram_id")
+        if min_telegram_id is not None:
+            messages = messages.filter(telegram_id__gte=min_telegram_id)
+        ids = list(messages.values_list("telegram_id", flat=True))
         if len(ids) < 2:
             return []
 
@@ -169,8 +172,12 @@ class TelegramCrawler:
     def _fix_message_holes(
         self, channel, telegram_channel, remaining_limit, update_status, channel_label, current_message_count
     ):
-        missing_ids = self._find_missing_message_ids(channel)
+        baseline_min_id = channel.last_hole_check_max_telegram_id
+        missing_ids = self._find_missing_message_ids(channel, min_telegram_id=baseline_min_id)
         if not missing_ids:
+            latest_message = channel.message_set.order_by("telegram_id").last()
+            channel.last_hole_check_max_telegram_id = latest_message.telegram_id if latest_message else None
+            channel.save(update_fields=["last_hole_check_max_telegram_id"])
             update_status(f"{channel_label} | no message holes found")
             return 0, 0
 
@@ -194,6 +201,10 @@ class TelegramCrawler:
                 downloaded_images += self.get_message(channel, telegram_message)
                 processed_messages += 1
                 update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
+
+        latest_message = channel.message_set.order_by("telegram_id").last()
+        channel.last_hole_check_max_telegram_id = latest_message.telegram_id if latest_message else None
+        channel.save(update_fields=["last_hole_check_max_telegram_id"])
 
         return processed_messages, downloaded_images
 
