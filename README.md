@@ -34,7 +34,7 @@ You will find a `.env.example` file. Copy and rename it to `.env`, then edit thi
 
 ## Operating
 
-When executing the Python commands below, remember that depending on your system, you may need to replace `python` commands with `py` or `python3`.
+When executing the Python commands below, remember that depending on your system, you may need to replace `python` with `py` or `python3`.
 
 Activate the database with:
 ```sh
@@ -72,7 +72,7 @@ When you have drawn the graph, you can see it by entering the `graph` directory 
 python -m http.server 8001
 ```
 
-Use your browser: [http://localhost:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/), but on some systems it could be [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/) or [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/)
+Use your browser to open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/). On some systems it may be available at [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/) or [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/).
 
 
 ## Options
@@ -83,9 +83,9 @@ Write them in your `.env` file.
 
 | option name | description | default value |
 | :---------- | :---------- | ------------: |
-| `TELEGRAM_API_ID` | API Id | no default value, you are required to give it a value |
-| `TELEGRAM_API_HASH` | API Hash | no default value, you are required to give it a value |
-| `TELEGRAM_PHONE_NUMBER` | telephone number associated with Telegram | no default value, you are required to give it a value |
+| `TELEGRAM_API_ID` | API ID | no default value, you are required to provide one |
+| `TELEGRAM_API_HASH` | API hash | no default value, you are required to provide one |
+| `TELEGRAM_PHONE_NUMBER` | telephone number associated with Telegram | no default value, you are required to provide one |
 | `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
 | `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | downloading videos from messages | False |
