@@ -188,7 +188,7 @@ class Message(TelegramBaseModel):
 
     def get_telegram_references(self):
         refs = []
-        for url in re.findall("t.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message)):
+        for url in re.findall(r"t\.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message)):
             refs.append(url[5:])
 
         return refs
