@@ -7,7 +7,8 @@
 - Better management of FloodWaitError in crawler.
 
 ### New features
-- Stats page
+- Stats page with month by month global channels activity.
+- `get_channels` has a new option `--fixholes` to search and fix for missing messages.
 
 
 ## [0.1.1] - 2026-02-23
