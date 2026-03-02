@@ -256,7 +256,6 @@ class MessageVideo(TelegramBaseModel):
         filename = defaults.get("video", None)
         if filename:
             with open(filename, "rb") as f:
-                obj.video = File(f)
-                obj.save(update_fields=("video",))
+                obj.video.save(os.path.basename(filename), File(f), save=True)
 
         return obj

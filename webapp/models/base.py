@@ -1,3 +1,5 @@
+import os
+
 from django.core.files import File
 from django.db import models
 
@@ -72,11 +74,11 @@ class TelegramBasePictureModel(TelegramBaseModel):
 
     @classmethod
     def from_telegram_object(cls, telegram_object, force_update=False, defaults=None):
-        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults or {})
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
         filename = defaults.get("picture", None)
         if filename:
             with open(filename, "rb") as f:
-                obj.picture = File(f)
-                obj.save(update_fields=("picture",))  # inside 'with', before the file is closed
+                obj.picture.save(os.path.basename(filename), File(f), save=True)
 
         return obj
