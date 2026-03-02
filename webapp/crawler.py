@@ -181,11 +181,14 @@ class TelegramCrawler:
             update_status(f"{channel_label} | no message holes found")
             return 0, 0
 
-        update_status(f"{channel_label} | fixing {len(missing_ids)} missing message ids")
         processed_messages = 0
         downloaded_images = 0
+        was_limited = False
         if remaining_limit is not None and remaining_limit > 0:
+            was_limited = len(missing_ids) > remaining_limit
             missing_ids = missing_ids[:remaining_limit]
+
+        update_status(f"{channel_label} | fixing {len(missing_ids)} missing message ids")
 
         batch_size = 100
         for offset in range(0, len(missing_ids), batch_size):
@@ -201,6 +204,10 @@ class TelegramCrawler:
                 downloaded_images += self.get_message(channel, telegram_message)
                 processed_messages += 1
                 update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
+
+        if was_limited:
+            update_status(f"{channel_label} | hole-fix limit reached, checkpoint unchanged")
+            return processed_messages, downloaded_images
 
         latest_message = channel.message_set.order_by("telegram_id").last()
         channel.last_hole_check_max_telegram_id = latest_message.telegram_id if latest_message else None
