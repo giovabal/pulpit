@@ -72,7 +72,7 @@ When you have drawn the graph, you can see it by entering the `graph` directory 
 python -m http.server 8001
 ```
 
-Use your browser: [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/), but on some systems it could be [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/)
+Use your browser: [http://localhost:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/), but on some systems it could be [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/) or [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/)
 
 
 ## Options
@@ -96,6 +96,12 @@ Write them in your `.env` file.
 | option name | description | default value |
 | :---------- | :---------- | ------------: |
 | `FA2_ITERATIONS` | number of iterations | 20000 |
+
+### Social Network Analysis
+
+| option name | description | default value |
+| :---------- | :---------- | ------------: |
+| `REVERSED_EDGES` | X sharing of a Y content results in a Y → X edge by default | True |
 
 ### Communities
 

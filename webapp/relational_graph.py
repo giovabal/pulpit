@@ -85,7 +85,13 @@ class RelationalGraph:
 
                 weight = 0 if not message_count else (forward_weight + reference_weight) / message_count
                 if weight > 0:
-                    self.edge_list.append([str(target_data["channel"].pk), str(source_data["channel"].pk), weight])
+                    edge = (
+                        [str(target_data["channel"].pk), str(source_data["channel"].pk)]
+                        if settings.REVERSED_EDGES
+                        else [str(source_data["channel"].pk), str(target_data["channel"].pk)]
+                    )
+                    edge.append(weight)
+                    self.edge_list.append(edge)
 
         if not self.edge_list:
             print("\n[ERROR] There are no relationships between channels, interrupting elaboration")

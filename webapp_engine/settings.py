@@ -141,6 +141,8 @@ TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, c
 
 FA2_ITERATIONS = config("FA2_ITERATIONS", default=20000, cast=int)
 
+REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
+
 DRAW_DEAD_LEAVES = config("DRAW_DEAD_LEAVES", default=False, cast=bool)
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 
