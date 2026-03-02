@@ -8,6 +8,7 @@ syntax: glob
 *~
 *.pdf
 *.aux
+tmp/
 media/*
 graph/*
 channels/*
