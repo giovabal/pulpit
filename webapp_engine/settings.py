@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     "django_extensions",
     "stats",
     "webapp",
+    "crawler",
+    "network",
 ]
 
 MIDDLEWARE = [

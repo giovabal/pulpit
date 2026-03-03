@@ -7,9 +7,10 @@ from django.core.files import File
 from django.db import models
 from django.urls import reverse
 
+from webapp.managers import ChannelManager
 from webapp.models import Organization
 from webapp.models.base import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
-from webapp_engine.utils import hex_to_rgb
+from webapp.utils.colors import hex_to_rgb
 
 
 class Channel(TelegramBaseModel):
@@ -31,6 +32,8 @@ class Channel(TelegramBaseModel):
         "access_hash",
         "username",
     )
+    objects = ChannelManager()
+
     title = models.CharField(max_length=255, blank=True)
     about = models.TextField(blank=True)
     telegram_location = models.TextField(blank=True)
