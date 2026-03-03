@@ -1,7 +1,9 @@
+import os
+import tempfile
 from datetime import timedelta
 from unittest.mock import MagicMock, call, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
@@ -390,3 +392,675 @@ class GetMissingReferencesTests(TestCase):
         msg.refresh_from_db()
         self.assertIn(ch_a, msg.references.all())
         self.assertEqual(msg.missing_references, "")
+
+
+# ---------------------------------------------------------------------------
+# TelegramAPIClient
+# ---------------------------------------------------------------------------
+
+
+class TelegramAPIClientTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.client import TelegramAPIClient
+
+        self.mock_telethon = MagicMock()
+        self.api_client = TelegramAPIClient(self.mock_telethon)
+
+    def test_client_attribute_set(self) -> None:
+        from crawler.client import TelegramAPIClient
+
+        self.assertIs(self.api_client.client, self.mock_telethon)
+
+    def test_wait_time_set_from_settings(self) -> None:
+        from django.conf import settings
+
+        self.assertEqual(self.api_client.wait_time, settings.TELEGRAM_CRAWLER_GRACE_TIME)
+
+    def test_last_call_initialised_in_the_past(self) -> None:
+        from django.utils import timezone
+
+        self.assertLess(self.api_client.last_call, timezone.now())
+
+    @patch("crawler.client.sleep")
+    def test_wait_sleeps_when_called_too_soon(self, mock_sleep: MagicMock) -> None:
+        from crawler.client import TelegramAPIClient
+        from django.utils import timezone
+
+        client = TelegramAPIClient(MagicMock())
+        # Force last_call to now so wait_time - 0 = wait_time > 0
+        client.last_call = timezone.now()
+        client.wait()
+        mock_sleep.assert_called_once()
+
+    @patch("crawler.client.sleep")
+    def test_wait_skips_sleep_when_enough_time_passed(self, mock_sleep: MagicMock) -> None:
+        from datetime import timedelta
+
+        from crawler.client import TelegramAPIClient
+        from django.utils import timezone
+
+        client = TelegramAPIClient(MagicMock())
+        # Set last_call far enough in the past
+        client.last_call = timezone.now() - timedelta(seconds=client.wait_time + 5)
+        client.wait()
+        mock_sleep.assert_not_called()
+
+    @patch("crawler.client.sleep")
+    def test_wait_updates_last_call(self, _mock_sleep: MagicMock) -> None:
+        from datetime import timedelta
+
+        from crawler.client import TelegramAPIClient
+        from django.utils import timezone
+
+        client = TelegramAPIClient(MagicMock())
+        client.last_call = timezone.now() - timedelta(seconds=client.wait_time + 5)
+        before = timezone.now()
+        client.wait()
+        self.assertGreaterEqual(client.last_call, before)
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — _cleanup_downloaded_file, _download_media
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerCleanupTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)
+
+    def test_cleanup_none_does_not_raise(self) -> None:
+        self.handler._cleanup_downloaded_file(None)  # must not raise
+
+    def test_cleanup_nonexistent_file_does_not_raise(self) -> None:
+        self.handler._cleanup_downloaded_file("/nonexistent/path/photo.jpg")
+
+    def test_cleanup_removes_existing_file(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            path = f.name
+        self.assertTrue(os.path.exists(path))
+        self.handler._cleanup_downloaded_file(path)
+        self.assertFalse(os.path.exists(path))
+
+    def test_download_media_without_temp_dir(self) -> None:
+        obj = MagicMock()
+        self.handler._download_media(obj)
+        self.api_client.client.download_media.assert_called_once_with(obj)
+
+    def test_download_media_with_temp_dir_passes_file_arg(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        handler = MediaHandler(self.api_client, download_temp_dir="/tmp/test_dl")
+        obj = MagicMock()
+        handler._download_media(obj)
+        self.api_client.client.download_media.assert_called_once_with(obj, file="/tmp/test_dl")
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_profile_picture
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerProfilePictureTests(TestCase):
+    def setUp(self) -> None:
+        import os
+
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+
+    def _make_tg_channel(self, telegram_id: int = 1) -> MagicMock:
+        tc = MagicMock()
+        tc.id = telegram_id
+        return tc
+
+    def _make_tg_picture(self, pic_id: int = 100) -> MagicMock:
+        p = MagicMock()
+        p.id = pic_id
+        p.date = None
+        return p
+
+    def test_returns_zero_when_channel_not_in_db(self) -> None:
+        tc = self._make_tg_channel(telegram_id=9999)
+        result = self.handler.download_profile_picture(tc)
+        self.assertEqual(result, 0)
+
+    def test_returns_zero_when_no_profile_photos(self) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        self.api_client.client.get_profile_photos.return_value = []
+        result = self.handler.download_profile_picture(tc)
+        self.assertEqual(result, 0)
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_downloads_and_counts_new_picture(self, mock_from_tg: MagicMock) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=100)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        self.handler._download_media = MagicMock(return_value=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_skips_already_downloaded_picture(self, mock_from_tg: MagicMock) -> None:
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        # Pre-create the ProfilePicture in DB (without a real file)
+        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="", date=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 0)
+        mock_from_tg.assert_not_called()
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_counts_multiple_new_pictures(self, mock_from_tg: MagicMock) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        pics = [self._make_tg_picture(pic_id=i) for i in range(1, 4)]
+        self.api_client.client.get_profile_photos.return_value = pics
+        self.handler._download_media = MagicMock(return_value=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 3)
+        self.assertEqual(mock_from_tg.call_count, 3)
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_message_picture
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerMessagePictureTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.message = Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _make_tg_message(self, has_photo: bool = True) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        if has_photo:
+            tm.media.photo = MagicMock()
+            tm.media.photo.id = 42
+            tm.media.photo.date = None
+        else:
+            del tm.media.photo  # hasattr returns False
+        return tm
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=False)
+    def test_returns_zero_when_download_disabled(self) -> None:
+        tm = self._make_tg_message()
+        result = self.handler.download_message_picture(tm)
+        self.assertEqual(result, 0)
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
+    def test_returns_zero_when_no_photo_attribute(self) -> None:
+        tm = self._make_tg_message(has_photo=False)
+        result = self.handler.download_message_picture(tm)
+        self.assertEqual(result, 0)
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
+    @patch("crawler.media_handler.MessagePicture.from_telegram_object")
+    def test_returns_1_on_success(self, mock_from_tg: MagicMock) -> None:
+        tm = self._make_tg_message()
+        self.handler._download_media = MagicMock(return_value=None)
+        result = self.handler.download_message_picture(tm)
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
+    def test_returns_zero_on_file_migrate_error(self) -> None:
+        from telethon.errors.rpcerrorlist import FileMigrateError
+
+        tm = self._make_tg_message()
+        err = FileMigrateError.__new__(FileMigrateError)
+        self.handler._download_media = MagicMock(side_effect=err)
+        result = self.handler.download_message_picture(tm)
+        self.assertEqual(result, 0)
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
+    def test_returns_zero_on_message_does_not_exist(self) -> None:
+        tm = self._make_tg_message()
+        tm.id = 9999  # No message with this telegram_id in DB
+        self.handler._download_media = MagicMock(return_value=None)
+        result = self.handler.download_message_picture(tm)
+        self.assertEqual(result, 0)
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_message_video
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerMessageVideoTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _make_tg_message(self, mime_type: str = "video/mp4", has_document: bool = True) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        if has_document:
+            tm.document.mime_type = mime_type
+            tm.media.document.mime_type = mime_type
+        else:
+            tm.document = None
+            tm.media.document = None
+        return tm
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=False)
+    def test_returns_when_download_disabled(self) -> None:
+        tm = self._make_tg_message()
+        # Should return None without doing anything
+        result = self.handler.download_message_video(tm)
+        self.assertIsNone(result)
+        self.api_client.client.download_media.assert_not_called()
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
+    def test_returns_when_no_document(self) -> None:
+        tm = self._make_tg_message(has_document=False)
+        tm.media = None
+        self.handler.download_message_video(tm)
+        self.api_client.client.download_media.assert_not_called()
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
+    def test_returns_when_not_video_mime_type(self) -> None:
+        tm = self._make_tg_message(mime_type="image/jpeg")
+        self.handler.download_message_video(tm)
+        self.api_client.client.download_media.assert_not_called()
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
+    @patch("crawler.media_handler.MessageVideo.from_telegram_object")
+    def test_downloads_video_with_correct_mime_type(self, mock_from_tg: MagicMock) -> None:
+        tm = self._make_tg_message(mime_type="video/mp4")
+        self.handler._download_media = MagicMock(return_value=None)
+        self.handler.download_message_video(tm)
+        mock_from_tg.assert_called_once()
+
+    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
+    def test_handles_file_migrate_error_gracefully(self) -> None:
+        from telethon.errors.rpcerrorlist import FileMigrateError
+
+        tm = self._make_tg_message()
+        err = FileMigrateError.__new__(FileMigrateError)
+        self.handler._download_media = MagicMock(side_effect=err)
+        try:
+            self.handler.download_message_video(tm)
+        except Exception:
+            self.fail("download_message_video raised an unexpected exception")
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — clean_leftovers
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerCleanLeftoversTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)
+
+    @patch("crawler.media_handler.glob.glob", return_value=[])
+    def test_no_leftover_files_no_error(self, _mock_glob: MagicMock) -> None:
+        self.handler.clean_leftovers()  # must not raise
+
+    @patch("crawler.media_handler.os.remove")
+    @patch("crawler.media_handler.glob.glob")
+    def test_removes_all_leftover_photo_files(self, mock_glob: MagicMock, mock_remove: MagicMock) -> None:
+        mock_glob.return_value = ["/base/photo_1.jpg", "/base/photo_2.jpg"]
+        self.handler.clean_leftovers()
+        self.assertEqual(mock_remove.call_count, 2)
+        mock_remove.assert_any_call("/base/photo_1.jpg")
+        mock_remove.assert_any_call("/base/photo_2.jpg")
+
+    @patch("crawler.media_handler.os.remove", side_effect=OSError("permission denied"))
+    @patch("crawler.media_handler.glob.glob")
+    def test_oserror_on_remove_is_logged_not_raised(self, mock_glob: MagicMock, _mock_remove: MagicMock) -> None:
+        mock_glob.return_value = ["/base/photo_1.jpg"]
+        try:
+            self.handler.clean_leftovers()
+        except OSError:
+            self.fail("clean_leftovers raised OSError unexpectedly")
+
+    @patch("crawler.media_handler.glob.glob", return_value=[])
+    def test_removes_temp_dir_when_present(self, _mock_glob: MagicMock) -> None:
+        from crawler.media_handler import MediaHandler
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = MediaHandler(self.api_client, download_temp_dir=tmpdir)
+            self.assertTrue(os.path.isdir(tmpdir))
+            handler.clean_leftovers()
+            self.assertFalse(os.path.isdir(tmpdir))
+
+    @patch("crawler.media_handler.glob.glob", return_value=[])
+    def test_no_temp_dir_does_not_raise(self, _mock_glob: MagicMock) -> None:
+        self.handler.clean_leftovers()  # download_temp_dir is None — must not raise
+
+
+# ---------------------------------------------------------------------------
+# ChannelCrawler — get_basic_channel
+# ---------------------------------------------------------------------------
+
+
+class ChannelCrawlerGetBasicChannelTests(TestCase):
+    def setUp(self) -> None:
+        self.api_client = _make_api_client()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+
+    def test_returns_channel_and_telegram_object_on_success(self) -> None:
+        mock_tc = _make_telegram_channel(telegram_id=5, username="testchan")
+        self.api_client.client.get_entity.return_value = mock_tc
+        channel, tc = self.crawler.get_basic_channel(5)
+        self.assertIsNotNone(channel)
+        self.assertIs(tc, mock_tc)
+        self.assertTrue(Channel.objects.filter(telegram_id=5).exists())
+
+    def test_returns_none_none_on_channel_private_error(self) -> None:
+        from telethon.errors.rpcerrorlist import ChannelPrivateError
+
+        err = ChannelPrivateError.__new__(ChannelPrivateError)
+        self.api_client.client.get_entity.side_effect = err
+        channel, tc = self.crawler.get_basic_channel(99)
+        self.assertIsNone(channel)
+        self.assertIsNone(tc)
+
+    def test_calls_api_client_wait_before_request(self) -> None:
+        mock_tc = _make_telegram_channel(telegram_id=6, username="waitchan")
+        self.api_client.client.get_entity.return_value = mock_tc
+        self.crawler.get_basic_channel(6)
+        self.api_client.wait.assert_called_once()
+
+    def test_returns_none_none_when_get_entity_returns_falsy(self) -> None:
+        self.api_client.client.get_entity.return_value = None
+        channel, tc = self.crawler.get_basic_channel(7)
+        self.assertIsNone(channel)
+        self.assertIsNone(tc)
+
+
+# ---------------------------------------------------------------------------
+# ChannelCrawler — set_more_channel_details
+# ---------------------------------------------------------------------------
+
+
+class ChannelCrawlerSetMoreDetailsTests(TestCase):
+    def setUp(self) -> None:
+        self.api_client = _make_api_client()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+
+    def _make_full_channel_response(self, participants: int = 500, about: str = "desc") -> MagicMock:
+        resp = MagicMock()
+        resp.full_chat.participants_count = participants
+        resp.full_chat.about = about
+        resp.full_chat.location = None
+        return resp
+
+    def test_sets_participants_count(self) -> None:
+        tc = MagicMock()
+        self.api_client.client.return_value = self._make_full_channel_response(participants=1234)
+        self.crawler.set_more_channel_details(self.channel, tc)
+        self.assertEqual(self.channel.participants_count, 1234)
+
+    def test_sets_about(self) -> None:
+        tc = MagicMock()
+        self.api_client.client.return_value = self._make_full_channel_response(about="Great channel")
+        self.crawler.set_more_channel_details(self.channel, tc)
+        self.assertEqual(self.channel.about, "Great channel")
+
+    def test_sets_location_when_empty(self) -> None:
+        tc = MagicMock()
+        fake_location = MagicMock()
+        resp = self._make_full_channel_response()
+        resp.full_chat.location = fake_location
+        self.api_client.client.return_value = resp
+        self.channel.telegram_location = ""
+        self.crawler.set_more_channel_details(self.channel, tc)
+        self.assertEqual(self.channel.telegram_location, fake_location)
+
+    def test_does_not_overwrite_existing_location(self) -> None:
+        tc = MagicMock()
+        resp = self._make_full_channel_response()
+        resp.full_chat.location = MagicMock()
+        self.api_client.client.return_value = resp
+        self.channel.telegram_location = "existing location"
+        self.crawler.set_more_channel_details(self.channel, tc)
+        self.assertEqual(self.channel.telegram_location, "existing location")
+
+
+# ---------------------------------------------------------------------------
+# ChannelCrawler — search_channel
+# ---------------------------------------------------------------------------
+
+
+class ChannelCrawlerSearchChannelTests(TestCase):
+    def setUp(self) -> None:
+        self.api_client = _make_api_client()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+
+    def _make_search_result(self, channels: list) -> MagicMock:
+        result = MagicMock()
+        result.chats = channels
+        return result
+
+    def test_calls_wait_before_api_call(self) -> None:
+        self.api_client.client.return_value = self._make_search_result([])
+        self.crawler.search_channel("ukraine")
+        self.api_client.wait.assert_called_once()
+
+    def test_creates_new_channels_from_results(self) -> None:
+        mock_tc = _make_telegram_channel(telegram_id=100, username="newchan")
+        self.api_client.client.return_value = self._make_search_result([mock_tc])
+        count = self.crawler.search_channel("ukraine")
+        self.assertEqual(count, 1)
+        self.assertTrue(Channel.objects.filter(telegram_id=100).exists())
+
+    def test_skips_channel_already_in_db(self) -> None:
+        Channel.objects.create(telegram_id=200, organization=self.org)
+        mock_tc = _make_telegram_channel(telegram_id=200, username="existing")
+        self.api_client.client.return_value = self._make_search_result([mock_tc])
+        initial_count = Channel.objects.count()
+        self.crawler.search_channel("test")
+        self.assertEqual(Channel.objects.count(), initial_count)
+
+    def test_skips_result_without_id_attribute(self) -> None:
+        tc_no_id = MagicMock(spec=[])  # no attributes
+        self.api_client.client.return_value = self._make_search_result([tc_no_id])
+        count = self.crawler.search_channel("test")
+        self.assertEqual(count, 0)
+
+    def test_returns_count_of_found_channels(self) -> None:
+        channels = [_make_telegram_channel(telegram_id=300 + i, username=f"chan{i}") for i in range(3)]
+        self.api_client.client.return_value = self._make_search_result(channels)
+        count = self.crawler.search_channel("batch")
+        self.assertEqual(count, 3)
+
+
+# ---------------------------------------------------------------------------
+# search_channels management command
+# ---------------------------------------------------------------------------
+
+_SEARCH_CMD = "crawler.management.commands.search_channels"
+
+
+class SearchChannelsCommandTests(TestCase):
+    def setUp(self) -> None:
+        from webapp.models import SearchTerm
+
+        self.term1 = SearchTerm.objects.create(word="ukraine")
+        self.term2 = SearchTerm.objects.create(word="russia")
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_search_channel_called_for_each_term(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from django.core.management import call_command
+
+        mock_crawler = MagicMock()
+        mock_crawler_cls.return_value = mock_crawler
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+        call_command("search_channels")
+
+        words_searched = {c.args[0] for c in mock_crawler.search_channel.call_args_list}
+        self.assertIn("ukraine", words_searched)
+        self.assertIn("russia", words_searched)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_last_check_updated_after_each_term(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from django.core.management import call_command
+
+        mock_crawler_cls.return_value = MagicMock()
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+        call_command("search_channels")
+
+        self.term1.refresh_from_db()
+        self.term2.refresh_from_db()
+        self.assertIsNotNone(self.term1.last_check)
+        self.assertIsNotNone(self.term2.last_check)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_processes_at_most_15_terms(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from webapp.models import SearchTerm
+        from django.core.management import call_command
+
+        SearchTerm.objects.all().delete()
+        for i in range(20):
+            SearchTerm.objects.create(word=f"term{i}")
+
+        mock_crawler = MagicMock()
+        mock_crawler_cls.return_value = mock_crawler
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+        call_command("search_channels")
+
+        self.assertEqual(mock_crawler.search_channel.call_count, 15)
+
+
+# ---------------------------------------------------------------------------
+# get_channels management command
+# ---------------------------------------------------------------------------
+
+_GET_CMD = "crawler.management.commands.get_channels"
+
+
+class GetChannelsCommandTests(TestCase):
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org, title="Ch1")
+        self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org, title="Ch2")
+
+    def _patch_command(self) -> tuple:
+        tc_patch = patch(f"{_GET_CMD}.TelegramClient")
+        api_patch = patch(f"{_GET_CMD}.TelegramAPIClient")
+        crawler_patch = patch(f"{_GET_CMD}.ChannelCrawler")
+        media_patch = patch(f"{_GET_CMD}.MediaHandler")
+        resolver_patch = patch(f"{_GET_CMD}.ReferenceResolver")
+        return tc_patch, api_patch, crawler_patch, media_patch, resolver_patch
+
+    def test_get_channel_called_for_each_interesting_channel(self) -> None:
+        from django.core.management import call_command
+
+        tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()
+        with tc_p as mock_tc, api_p, crawler_p as mock_crawler_cls, media_p as mock_media_cls, resolver_p:
+            mock_crawler = MagicMock()
+            mock_crawler_cls.return_value = mock_crawler
+            mock_media = MagicMock()
+            mock_media_cls.return_value = mock_media
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+            call_command("get_channels")
+
+            telegram_ids_crawled = {c.args[0] for c in mock_crawler.get_channel.call_args_list}
+            self.assertIn(self.ch1.telegram_id, telegram_ids_crawled)
+            self.assertIn(self.ch2.telegram_id, telegram_ids_crawled)
+
+    def test_get_missing_references_called_at_end(self) -> None:
+        from django.core.management import call_command
+
+        tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()
+        with tc_p as mock_tc, api_p, crawler_p as mock_crawler_cls, media_p as mock_media_cls, resolver_p:
+            mock_crawler = MagicMock()
+            mock_crawler_cls.return_value = mock_crawler
+            mock_media = MagicMock()
+            mock_media_cls.return_value = mock_media
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+            call_command("get_channels")
+
+            mock_crawler.get_missing_references.assert_called_once()
+
+    def test_flood_wait_error_during_get_channel_is_skipped(self) -> None:
+        from django.core.management import call_command
+
+        tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()
+        with tc_p as mock_tc, api_p, crawler_p as mock_crawler_cls, media_p as mock_media_cls, resolver_p:
+            flood_err = errors.FloodWaitError.__new__(errors.FloodWaitError)
+            mock_crawler = MagicMock()
+            mock_crawler.get_channel.side_effect = flood_err
+            mock_crawler_cls.return_value = mock_crawler
+            mock_media = MagicMock()
+            mock_media_cls.return_value = mock_media
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+            # Should not raise — FloodWaitError is caught and the channel is skipped
+            call_command("get_channels")
+
+    def test_clean_leftovers_called_after_crawl(self) -> None:
+        from django.core.management import call_command
+
+        tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()
+        with tc_p as mock_tc, api_p, crawler_p as mock_crawler_cls, media_p as mock_media_cls, resolver_p:
+            mock_crawler = MagicMock()
+            mock_crawler_cls.return_value = mock_crawler
+            mock_media = MagicMock()
+            mock_media_cls.return_value = mock_media
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+            call_command("get_channels")
+
+            mock_media.clean_leftovers.assert_called_once()

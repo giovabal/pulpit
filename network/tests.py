@@ -13,6 +13,7 @@ from network.community import (
     build_community_label,
     build_community_palette,
     build_group_payload,
+    detect_infomap,
     detect_kcore,
     detect_louvain,
     detect_organization,
@@ -851,3 +852,295 @@ class ComputeLayoutTests(TestCase):
         graph.add_node("solo")
         positions = compute_layout(graph, iterations=5)
         self.assertIn("solo", positions)
+
+
+# ---------------------------------------------------------------------------
+# community.py — detect_infomap
+# ---------------------------------------------------------------------------
+
+
+class DetectInfomapTests(TestCase):
+    def setUp(self) -> None:
+        # Two clear clusters connected by a weak bridge
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
+        self.graph.add_edges_from([
+            ("a", "b"), ("b", "c"), ("c", "a"),  # cluster 1
+            ("d", "e"), ("e", "f"), ("f", "d"),  # cluster 2
+            ("c", "d"),                           # bridge
+        ])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_infomap(self.graph, "SomePalette")
+        self.assertIsInstance(community_map, dict)
+        self.assertIsInstance(palette, dict)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_infomap(self.graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_infomap(self.graph, "SomePalette")
+        self.assertGreaterEqual(min(community_map.values()), 1)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_infomap(self.graph, "SomePalette")
+        for community_id in community_map.values():
+            self.assertIn(community_id, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_isolated_node_gets_own_community(self, _mock: MagicMock) -> None:
+        # Infomap requires at least one link; add an edge between two connected nodes
+        # plus an isolated node so the fallback assignment branch is exercised.
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b")
+        graph.add_node("isolated")
+        community_map, _ = detect_infomap(graph, "SomePalette")
+        self.assertIn("isolated", community_map)
+
+
+# ---------------------------------------------------------------------------
+# community.py — detect() dispatcher
+# ---------------------------------------------------------------------------
+
+
+class DetectDispatcherTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b"])
+        self.graph.add_edge("a", "b")
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org)
+        self.channel_dict = {
+            str(self.ch1.pk): {"channel": self.ch1, "data": {}},
+            str(self.ch2.pk): {"channel": self.ch2, "data": {}},
+        }
+
+    @patch("network.community.detect_louvain")
+    def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+        mock_detect.return_value = ({}, {})
+        detect("LOUVAIN", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette")
+
+    @patch("network.community.detect_kcore")
+    def test_kcore_strategy_calls_detect_kcore(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+        mock_detect.return_value = ({}, {})
+        detect("KCORE", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette")
+
+    @patch("network.community.detect_infomap")
+    def test_infomap_strategy_calls_detect_infomap(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+        mock_detect.return_value = ({}, {})
+        detect("INFOMAP", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette")
+
+    @patch("network.community.detect_organization")
+    def test_unknown_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+        mock_detect.return_value = ({}, {})
+        detect("ORGANIZATION", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.channel_dict)
+
+    @patch("network.community.detect_organization")
+    def test_empty_string_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+        mock_detect.return_value = ({}, {})
+        detect("", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# exporter.py — copy_channel_media
+# ---------------------------------------------------------------------------
+
+
+class CopyChannelMediaTests(TestCase):
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+
+    def test_channel_without_username_is_skipped(self) -> None:
+        ch = Channel.objects.create(telegram_id=1, organization=self.org, username="")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from network.exporter import copy_channel_media
+            # No error, nothing copied
+            copy_channel_media(Channel.objects.filter(pk=ch.pk), tmpdir)
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels")))
+
+    def test_missing_source_dir_is_silently_ignored(self) -> None:
+        ch = Channel.objects.create(telegram_id=2, organization=self.org, username="testchan")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from network.exporter import copy_channel_media
+            # MEDIA_ROOT/channels/testchan/profile doesn't exist → FileNotFoundError silently caught
+            copy_channel_media(Channel.objects.filter(pk=ch.pk), tmpdir)
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels", "testchan")))
+
+    def test_existing_source_dir_is_copied(self) -> None:
+        ch = Channel.objects.create(telegram_id=3, organization=self.org, username="copychan")
+        with tempfile.TemporaryDirectory() as media_root, tempfile.TemporaryDirectory() as output_root:
+            src = os.path.join(media_root, "channels", "copychan", "profile")
+            os.makedirs(src)
+            sentinel = os.path.join(src, "photo.jpg")
+            with open(sentinel, "w") as f:
+                f.write("fake image")
+            from network.exporter import copy_channel_media
+            from django.test import override_settings
+            with override_settings(MEDIA_ROOT=media_root):
+                copy_channel_media(Channel.objects.filter(pk=ch.pk), output_root)
+            dst = os.path.join(output_root, "channels", "copychan", "profile", "photo.jpg")
+            self.assertTrue(os.path.exists(dst))
+
+    def test_oserror_on_copy_is_logged_not_raised(self) -> None:
+        ch = Channel.objects.create(telegram_id=4, organization=self.org, username="errchan")
+        with tempfile.TemporaryDirectory() as media_root, tempfile.TemporaryDirectory() as output_root:
+            src = os.path.join(media_root, "channels", "errchan", "profile")
+            os.makedirs(src)
+            dst_parent = os.path.join(output_root, "channels", "errchan", "profile")
+            os.makedirs(dst_parent)  # pre-create dst so copytree raises OSError (already exists)
+            from network.exporter import copy_channel_media
+            with override_settings(MEDIA_ROOT=media_root):
+                try:
+                    copy_channel_media(Channel.objects.filter(pk=ch.pk), output_root)
+                except OSError:
+                    self.fail("copy_channel_media raised OSError unexpectedly")
+
+
+# ---------------------------------------------------------------------------
+# export_network management command
+# ---------------------------------------------------------------------------
+
+
+_EXPORT_CMD = "network.management.commands.export_network"
+
+
+def _patch_export_pipeline() -> list:
+    """Return a list of patch decorators for all export_network submodule calls."""
+    targets = [
+        f"{_EXPORT_CMD}.graph_builder.build_graph",
+        f"{_EXPORT_CMD}.community.detect",
+        f"{_EXPORT_CMD}.community.apply_to_graph",
+        f"{_EXPORT_CMD}.community.apply_edge_colors",
+        f"{_EXPORT_CMD}.community.build_group_payload",
+        f"{_EXPORT_CMD}.layout.compute_layout",
+        f"{_EXPORT_CMD}.exporter.build_graph_data",
+        f"{_EXPORT_CMD}.exporter.find_main_component",
+        f"{_EXPORT_CMD}.exporter.apply_base_node_measures",
+        f"{_EXPORT_CMD}.exporter.apply_pagerank",
+        f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes",
+        f"{_EXPORT_CMD}.exporter.ensure_graph_root",
+        f"{_EXPORT_CMD}.exporter.write_graph_files",
+        f"{_EXPORT_CMD}.exporter.copy_channel_media",
+    ]
+    # Apply in reverse so the first target becomes the first positional arg
+    decorators = [patch(t) for t in reversed(targets)]
+    return decorators
+
+
+class ExportNetworkCommandTests(TestCase):
+    def _configure_happy_path(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        mock_group_payload: MagicMock,
+    ) -> None:
+        fake_graph = nx.DiGraph()
+        fake_graph.add_node("1")
+        mock_build.return_value = (fake_graph, {"1": {}}, [["1", "2", 1.0]], MagicMock())
+        mock_detect.return_value = ({"1": 1}, {1: (255, 0, 0)})
+        mock_layout.return_value = {"1": (0.0, 0.0)}
+        mock_graph_data.return_value = {"nodes": [], "edges": []}
+        mock_main_comp.return_value = {"1"}
+        mock_measures.return_value = [("in_deg", "Inbound")]
+        mock_pagerank.return_value = [("pagerank", "PageRank")]
+        mock_group_payload.return_value = {"groups": [], "main_groups": {}}
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.community.build_group_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_raises_command_error_when_no_edges(
+        self,
+        mock_build: MagicMock,
+        *_mocks: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        mock_build.side_effect = ValueError("There are no relationships between channels.")
+        with self.assertRaises(CommandError):
+            call_command("export_network")
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.community.build_group_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_all_pipeline_steps_called(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_group_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        mock_reposition: MagicMock,
+        mock_ensure: MagicMock,
+        mock_write: MagicMock,
+        mock_copy: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build, mock_detect, mock_layout, mock_graph_data,
+            mock_main_comp, mock_measures, mock_pagerank, mock_group_payload,
+        )
+        call_command("export_network")
+
+        mock_build.assert_called_once()
+        mock_detect.assert_called_once()
+        mock_apply_to_graph.assert_called_once()
+        mock_edge_colors.assert_called_once()
+        mock_layout.assert_called_once()
+        mock_graph_data.assert_called_once()
+        mock_main_comp.assert_called_once()
+        mock_measures.assert_called_once()
+        mock_pagerank.assert_called_once()
+        mock_reposition.assert_called_once()
+        mock_ensure.assert_called_once()
+        mock_write.assert_called_once()
+        mock_copy.assert_called_once()
