@@ -21,8 +21,9 @@ def hex_to_rgb(hex_color: str) -> ColorTuple:
     length = len(normalized)
     if length not in (3, 6):
         raise ValueError("hex_to_rgb expects a 3 or 6 character hex value.")
-    step = length // 3
-    return tuple(int(normalized[i : i + step], 16) for i in range(0, length, step))
+    if length == 3:
+        normalized = "".join(c * 2 for c in normalized)
+    return tuple(int(normalized[i : i + 2], 16) for i in range(0, 6, 2))
 
 
 def rgb_to_hex(rgb: Sequence[Any]) -> str:
