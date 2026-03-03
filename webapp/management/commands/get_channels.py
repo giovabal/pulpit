@@ -26,7 +26,9 @@ class Command(AsyncBaseCommand):
     def handle(self, *args, **options):
         self._ensure_event_loop()
         fix_holes = options["fixholes"]
-        download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=settings.BASE_DIR)
+        temp_root = settings.BASE_DIR / "tmp"
+        temp_root.mkdir(exist_ok=True)
+        download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
 
         try:
             with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
@@ -70,6 +72,9 @@ class Command(AsyncBaseCommand):
                             )
                         )
                         continue
+
+                self.stdout.write(self.style.NOTICE("Retrying unresolved message references"))
+                crawler.get_missing_references()
 
                 self.stdout.write("", ending="\n")
                 crawler.clean_leftovers()
