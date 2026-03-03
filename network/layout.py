@@ -1,7 +1,8 @@
+import networkx as nx
 from pyforceatlas2 import ForceAtlas2
 
 
-def compute_layout(graph, iterations=10):
+def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:
     """Run ForceAtlas2 on *graph* and return a position dict keyed by node pk."""
     forceatlas2 = ForceAtlas2(
         outbound_attraction_distribution=True,

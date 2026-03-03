@@ -1,11 +1,12 @@
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Any, TypeAlias
 
 import pypalettes
 
-DEFAULT_FALLBACK_COLOR = (204, 204, 204)
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
-ColorTuple = tuple[int, int, int]
+ColorTuple: TypeAlias = tuple[int, int, int]
+
+DEFAULT_FALLBACK_COLOR: ColorTuple = (204, 204, 204)
+COMMUNITY_ALGORITHMS: set[str] = {"LOUVAIN", "KCORE", "INFOMAP"}
 
 
 def _normalize_rgb_sequence(value: Sequence[Any]) -> ColorTuple:

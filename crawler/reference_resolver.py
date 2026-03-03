@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from typing import Any
 
 from django.utils import timezone
 
@@ -13,21 +14,21 @@ SKIPPABLE_REFERENCES = ["joinchat"]
 
 
 class ReferenceResolver:
-    def __init__(self, api_client):
+    def __init__(self, api_client: Any) -> None:
         self.api_client = api_client
-        self.reference_resolution_paused_until = None
+        self.reference_resolution_paused_until: Any = None
 
-    def _is_paused(self):
+    def _is_paused(self) -> bool:
         return self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until
 
-    def _pause(self, error):
+    def _pause(self, error: Any) -> int:
         wait_seconds = max(getattr(error, "seconds", 0), 1)
         pause_until = timezone.now() + timedelta(seconds=wait_seconds)
         if not self.reference_resolution_paused_until or pause_until > self.reference_resolution_paused_until:
             self.reference_resolution_paused_until = pause_until
         return wait_seconds
 
-    def _resolve_one(self, reference, log_prefix=""):
+    def _resolve_one(self, reference: str, log_prefix: str = "") -> tuple[Channel | None, bool]:
         """Try to resolve a username to a Channel. Returns (channel_or_None, failed_bool)."""
         channel = Channel.objects.filter(username=reference).first()
         if channel:
@@ -60,9 +61,9 @@ class ReferenceResolver:
             )
             return None, True
 
-    def resolve_message_references(self, message, telegram_message):
+    def resolve_message_references(self, message: Message, telegram_message: Any) -> list[str]:
         """Resolve all references in a message. Returns list of unresolved reference strings."""
-        missing = []
+        missing: list[str] = []
 
         for reference in message.get_telegram_references():
             reference = reference.strip().lower()
@@ -90,7 +91,7 @@ class ReferenceResolver:
 
         return missing
 
-    def get_missing_references(self):
+    def get_missing_references(self) -> None:
         for message in Message.objects.exclude(missing_references=""):
             flood_error = False
             for reference in message.missing_references[1:].split("|"):

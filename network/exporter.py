@@ -2,18 +2,28 @@ import json
 import os
 import shutil
 from math import sqrt
+from typing import Any
 
 from django.conf import settings
+from django.db.models import QuerySet
+
+from webapp.models import Channel
 
 import networkx as nx
 
+type GraphData = dict[str, list[dict[str, Any]]]
 
-def build_graph_data(graph, channel_dict, positions):
+
+def build_graph_data(
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    positions: dict[str, tuple[float, float]],
+) -> GraphData:
     """Serialize graph nodes and edges into the output dict."""
-    graph_data = {"nodes": [], "edges": []}
+    graph_data: GraphData = {"nodes": [], "edges": []}
 
     for node_id, node_data in graph.nodes(data=True):
-        node_info = {
+        node_info: dict[str, Any] = {
             "id": node_id,
             "x": float(positions.get(node_data["data"]["pk"])[0]),
             "y": float(positions.get(node_data["data"]["pk"])[1]),
@@ -49,9 +59,11 @@ def build_graph_data(graph, channel_dict, positions):
     return graph_data
 
 
-def apply_base_node_measures(graph_data, graph, channel_dict):
+def apply_base_node_measures(
+    graph_data: GraphData, graph: nx.DiGraph, channel_dict: dict[str, Any]
+) -> list[tuple[str, str]]:
     """Populate degree, fans, message count, and activity period on each node."""
-    measures_labels = [
+    measures_labels: list[tuple[str, str]] = [
         ("in_deg", "Inbound connections"),
         ("out_deg", "Outbound connections"),
         ("fans", "Users"),
@@ -71,24 +83,24 @@ def apply_base_node_measures(graph_data, graph, channel_dict):
     return measures_labels
 
 
-def apply_pagerank(graph_data, graph):
+def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add PageRank score to each node."""
     key = "pagerank"
-    pagerank_values = nx.pagerank(graph)
+    pagerank_values: dict[str, float] = nx.pagerank(graph)
     for node in graph_data["nodes"]:
         if node["id"] in pagerank_values:
             node[key] = pagerank_values[node["id"]]
     return [(key, "PageRank")]
 
 
-def find_main_component(graph):
+def find_main_component(graph: nx.DiGraph) -> set[str]:
     return max(nx.weakly_connected_components(graph), key=len)
 
 
-def reposition_isolated_nodes(graph_data, main_component):
+def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -> None:
     """Move isolated nodes (outside the main component) into a grid near the main cluster."""
-    max_x = max_y = min_x = min_y = 0
-    isolated_nodes = []
+    max_x = max_y = min_x = min_y = 0.0
+    isolated_nodes: list[int] = []
     for index, node in enumerate(graph_data["nodes"]):
         if node["id"] in main_component:
             max_x = max(max_x, node["x"])
@@ -101,13 +113,13 @@ def reposition_isolated_nodes(graph_data, main_component):
     col = int(sqrt(len(isolated_nodes))) + 1
     for i in range(col):
         for j in range(col):
-            index = i * col + j
-            if len(isolated_nodes) > index:
-                graph_data["nodes"][isolated_nodes[index]]["x"] = max_x - i * d
-                graph_data["nodes"][isolated_nodes[index]]["y"] = max_y - j * d
+            idx = i * col + j
+            if len(isolated_nodes) > idx:
+                graph_data["nodes"][isolated_nodes[idx]]["x"] = max_x - i * d
+                graph_data["nodes"][isolated_nodes[idx]]["y"] = max_y - j * d
 
 
-def ensure_graph_root(root_target):
+def ensure_graph_root(root_target: str) -> None:
     try:
         shutil.rmtree(root_target)
         shutil.mkdir(root_target)
@@ -119,11 +131,18 @@ def ensure_graph_root(root_target):
         pass
 
 
-def write_graph_files(graph_data, group_data, measures_labels, channel_qs, output_filename, accessory_filename):
+def write_graph_files(
+    graph_data: GraphData,
+    group_data: dict[str, Any],
+    measures_labels: list[tuple[str, str]],
+    channel_qs: QuerySet[Channel],
+    output_filename: str,
+    accessory_filename: str,
+) -> None:
     with open(output_filename, "w") as outputfile:
         outputfile.write(json.dumps(graph_data))
 
-    accessory_payload = {
+    accessory_payload: dict[str, Any] = {
         "main_groups": group_data["main_groups"],
         "groups": group_data["groups"],
         "measures": measures_labels,
@@ -133,7 +152,7 @@ def write_graph_files(graph_data, group_data, measures_labels, channel_qs, outpu
         accessoryfile.write(json.dumps(accessory_payload))
 
 
-def copy_channel_media(channel_qs, root_target):
+def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
     for channel in channel_qs:
         try:
             if channel.username:

@@ -1,8 +1,13 @@
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from django.conf import settings
 from django.db.models import Q
 
+from crawler.client import TelegramAPIClient
+from crawler.media_handler import MediaHandler
+from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message
 
 from telethon import errors, functions
@@ -12,14 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 class ChannelCrawler:
-    messages_limit_per_channel = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
+    messages_limit_per_channel: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
 
-    def __init__(self, api_client, media_handler, reference_resolver):
+    def __init__(
+        self, api_client: TelegramAPIClient, media_handler: MediaHandler, reference_resolver: ReferenceResolver
+    ) -> None:
         self.api_client = api_client
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
 
-    def set_more_channel_details(self, channel, telegram_channel):
+    def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
         channel.participants_count = channel_full_info.full_chat.participants_count
         channel.about = channel_full_info.full_chat.about
@@ -27,7 +34,7 @@ class ChannelCrawler:
         if not channel.telegram_location and location:
             channel.telegram_location = location
 
-    def get_basic_channel(self, seed):
+    def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
         try:
             telegram_channel = self.api_client.client.get_entity(seed)
@@ -40,8 +47,13 @@ class ChannelCrawler:
             logger.warning("Not available seed: %s", seed)
             return None, None
 
-    def get_channel(self, seed, status_callback=None, fix_holes=False):
-        def update_status(message):
+    def get_channel(
+        self,
+        seed: int | str,
+        status_callback: Callable[[str], None] | None = None,
+        fix_holes: bool = False,
+    ) -> None:
+        def update_status(message: str) -> None:
             if status_callback:
                 status_callback(message)
 
@@ -62,7 +74,7 @@ class ChannelCrawler:
         message_count = 0
         c = 0
         if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
-            remaining_limit = None
+            remaining_limit: int | None = None
         else:
             remaining_limit = self.messages_limit_per_channel
         update_status(f"{channel_label} | downloading recent messages")
@@ -132,22 +144,28 @@ class ChannelCrawler:
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
 
-    def _find_missing_message_ids(self, channel, min_telegram_id=None):
+    def _find_missing_message_ids(self, channel: Channel, min_telegram_id: int | None = None) -> list[int]:
         messages = channel.message_set.order_by("telegram_id")
         if min_telegram_id is not None:
             messages = messages.filter(telegram_id__gte=min_telegram_id)
         ids = list(messages.values_list("telegram_id", flat=True))
         if len(ids) < 2:
             return []
-        holes = []
+        holes: list[int] = []
         for previous_id, current_id in zip(ids, ids[1:], strict=False):
             if current_id - previous_id > 1:
                 holes.extend(range(previous_id + 1, current_id))
         return holes
 
     def _fix_message_holes(
-        self, channel, telegram_channel, remaining_limit, update_status, channel_label, current_message_count
-    ):
+        self,
+        channel: Channel,
+        telegram_channel: Any,
+        remaining_limit: int | None,
+        update_status: Callable[[str], None],
+        channel_label: str,
+        current_message_count: int,
+    ) -> tuple[int, int]:
         baseline_min_id = channel.last_hole_check_max_telegram_id
         missing_ids = self._find_missing_message_ids(channel, min_telegram_id=baseline_min_id)
         if not missing_ids:
@@ -189,7 +207,7 @@ class ChannelCrawler:
         channel.save(update_fields=["last_hole_check_max_telegram_id"])
         return processed_messages, downloaded_images
 
-    def get_message(self, channel, telegram_message):
+    def get_message(self, channel: Channel, telegram_message: Any) -> int:
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
@@ -230,7 +248,7 @@ class ChannelCrawler:
         message.save()
         return downloaded_images
 
-    def search_channel(self, q, limit=1000):
+    def search_channel(self, q: str, limit: int = 1000) -> int:
         self.api_client.wait()
         results_count = 0
         result = self.api_client.client(functions.contacts.SearchRequest(q=q, limit=limit))
@@ -241,5 +259,5 @@ class ChannelCrawler:
                     Channel.from_telegram_object(channel, force_update=True)
         return results_count
 
-    def get_missing_references(self):
+    def get_missing_references(self) -> None:
         self.reference_resolver.get_missing_references()

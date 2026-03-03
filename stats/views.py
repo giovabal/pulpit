@@ -1,8 +1,9 @@
 from math import pi
+from typing import Any, ClassVar
 
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
-from django.http import HttpResponse
+from django.http import HttpRequest, HttpResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -25,15 +26,15 @@ class StatsPageView(BaseMixin, TemplateView):
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
 class TimeSeriesChartView(StatsViewMixin, View):
-    annotate_field: str
-    y_label: str
-    chart_title: str
-    tooltip_template: str
+    annotate_field: ClassVar[str]
+    y_label: ClassVar[str]
+    chart_title: ClassVar[str]
+    tooltip_template: ClassVar[str]
 
-    def get_annotation(self):
+    def get_annotation(self) -> Count:
         raise NotImplementedError
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         monthly_data = (
             Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
             .annotate(month=TruncMonth("date"))
@@ -71,7 +72,7 @@ class MessagesHistoryDataView(TimeSeriesChartView):
     chart_title = "Messages history"
     tooltip_template = "@month: @total_messages messages"
 
-    def get_annotation(self):
+    def get_annotation(self) -> Count:
         return Count("id")
 
 
@@ -81,5 +82,5 @@ class ActiveChannelsHistoryDataView(TimeSeriesChartView):
     chart_title = "Active channels history"
     tooltip_template = "@month: @total_active_channels active channels"
 
-    def get_annotation(self):
+    def get_annotation(self) -> Count:
         return Count("channel", distinct=True)

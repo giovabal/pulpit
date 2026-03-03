@@ -2,9 +2,11 @@ import glob
 import logging
 import os
 import shutil
+from typing import Any
 
 from django.conf import settings
 
+from crawler.client import TelegramAPIClient
 from webapp.models import Channel, Message, MessagePicture, MessageVideo, ProfilePicture
 
 from telethon import errors
@@ -13,20 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 class MediaHandler:
-    def __init__(self, api_client, download_temp_dir=None):
+    def __init__(self, api_client: TelegramAPIClient, download_temp_dir: str | None = None) -> None:
         self.api_client = api_client
         self.download_temp_dir = download_temp_dir
 
-    def _download_media(self, telegram_object):
+    def _download_media(self, telegram_object: Any) -> str | None:
         if self.download_temp_dir:
             return self.api_client.client.download_media(telegram_object, file=self.download_temp_dir)
         return self.api_client.client.download_media(telegram_object)
 
-    def _cleanup_downloaded_file(self, filename):
+    def _cleanup_downloaded_file(self, filename: str | None) -> None:
         if filename and os.path.exists(filename):
             os.remove(filename)
 
-    def download_profile_picture(self, telegram_channel):
+    def download_profile_picture(self, telegram_channel: Any) -> int:
         pictures_downloaded = 0
         channel = Channel.objects.get(telegram_id=telegram_channel.id)
         for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
@@ -42,7 +44,7 @@ class MediaHandler:
             pictures_downloaded += 1
         return pictures_downloaded
 
-    def download_message_picture(self, telegram_message):
+    def download_message_picture(self, telegram_message: Any) -> int:
         if not settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES:
             return 0
         if not hasattr(telegram_message.media, "photo"):
@@ -66,7 +68,7 @@ class MediaHandler:
             logger.warning("Error downloading message picture: %s\n%s", e, telegram_message.__dict__)
         return 0
 
-    def download_message_video(self, telegram_message):
+    def download_message_video(self, telegram_message: Any) -> None:
         if not settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO:
             return
         document = getattr(telegram_message, "document", None)
@@ -94,7 +96,7 @@ class MediaHandler:
         except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
             logger.warning("Error downloading message video: %s\n%s", e, telegram_message.__dict__)
 
-    def clean_leftovers(self):
+    def clean_leftovers(self) -> None:
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
             try:
                 os.remove(file_path)

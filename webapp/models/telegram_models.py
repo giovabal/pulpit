@@ -1,6 +1,7 @@
 import datetime
 import os
 import re
+from typing import Any, ClassVar, Self
 
 from django.conf import settings
 from django.core.files import File
@@ -14,7 +15,7 @@ from webapp.utils.colors import hex_to_rgb
 
 
 class Channel(TelegramBaseModel):
-    TELEGRAM_OBJECT_PROPERTIES = (
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "title",
         "date",
         "broadcast",
@@ -32,6 +33,7 @@ class Channel(TelegramBaseModel):
         "access_hash",
         "username",
     )
+
     objects = ChannelManager()
 
     title = models.CharField(max_length=255, blank=True)
@@ -61,22 +63,22 @@ class Channel(TelegramBaseModel):
     in_degree = models.PositiveIntegerField(null=True)
     out_degree = models.PositiveIntegerField(null=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title or str(self.telegram_id)
 
-    def get_absolute_url(self):
+    def get_absolute_url(self) -> str:
         return reverse("channel-detail", kwargs={"pk": self.pk})
 
     @property
-    def telegram_url(self):
+    def telegram_url(self) -> str:
         return f"https://t.me/{self.username or self.telegram_id}"
 
     @property
-    def profile_picture(self):
+    def profile_picture(self) -> "ProfilePicture | None":
         return self.profilepicture_set.order_by("date").last()
 
     @property
-    def activity_period(self):
+    def activity_period(self) -> str:
         date_template = "%B %Y"
         messages = self.message_set.exclude(date__isnull=True).order_by("date")
         start = self.date
@@ -102,9 +104,9 @@ class Channel(TelegramBaseModel):
             else f"{start.strftime(date_template)} - "
         )
 
-    def network_data(self, default=None):
+    def network_data(self, default: dict[str, Any] | None = None) -> dict[str, Any]:
         default = default or {}
-        data = {
+        data: dict[str, Any] = {
             "pk": str(self.pk),
             "id": self.telegram_id,
             "label": self.title,
@@ -125,7 +127,7 @@ class Channel(TelegramBaseModel):
         data.update(default)
         return data
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.username = self.username or ""
         super().save(*args, **kwargs)
         self.in_degree = (
@@ -142,7 +144,7 @@ class Channel(TelegramBaseModel):
 
 
 class Message(TelegramBaseModel):
-    TELEGRAM_OBJECT_PROPERTIES = (
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "date",
         "out",
         "mentioned",
@@ -175,10 +177,10 @@ class Message(TelegramBaseModel):
     webpage_url = models.URLField(max_length=255, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         for field in ("message", "webpage_url", "webpage_type"):
             setattr(self, field, getattr(self, field) or "")
         super().save(*args, **kwargs)
@@ -187,33 +189,32 @@ class Message(TelegramBaseModel):
             super().save(update_fields=("has_been_pinned",))
 
     @classmethod
-    def _args_for_from_telegram_object(cls, telegram_object):
+    def _args_for_from_telegram_object(cls, telegram_object: Any) -> dict[str, Any]:
         return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
 
-    def get_telegram_references(self):
+    def get_telegram_references(self) -> list[str]:
         refs = []
         for url in re.findall(r"t\.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message)):
             refs.append(url[5:])
-
         return refs
 
     @property
-    def message_picture(self):
+    def message_picture(self) -> "MessagePicture | None":
         return self.messagepicture_set.order_by("date").last()
 
     @property
-    def message_video(self):
+    def message_video(self) -> "MessageVideo | None":
         return self.messagevideo_set.order_by("date").last()
 
     @property
-    def telegram_url(self):
+    def telegram_url(self) -> str:
         return f"{self.channel.telegram_url}/{self.telegram_id}"
 
 
 class ProfilePicture(TelegramBasePictureModel):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
 
-    def get_media_path(self, instance, filename):
+    def get_media_path(self, instance: Any, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",
@@ -226,7 +227,7 @@ class ProfilePicture(TelegramBasePictureModel):
 class MessagePicture(TelegramBasePictureModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
 
-    def get_media_path(self, instance, filename):
+    def get_media_path(self, instance: Any, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",
@@ -237,12 +238,12 @@ class MessagePicture(TelegramBasePictureModel):
 
 
 class MessageVideo(TelegramBaseModel):
-    TELEGRAM_OBJECT_PROPERTIES = ("date",)
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
     video = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
     date = models.DateTimeField(null=True)
 
-    def get_media_path(self, instance, filename):
+    def get_media_path(self, instance: Any, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",
@@ -253,12 +254,13 @@ class MessageVideo(TelegramBaseModel):
         )
 
     @classmethod
-    def from_telegram_object(cls, telegram_object, force_update=False, defaults=None):
+    def from_telegram_object(
+        cls, telegram_object: Any, force_update: bool = False, defaults: dict[str, Any] | None = None
+    ) -> Self:
         defaults = defaults or {}
         obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
         filename = defaults.get("video", None)
         if filename:
             with open(filename, "rb") as f:
                 obj.video.save(os.path.basename(filename), File(f), save=True)
-
         return obj

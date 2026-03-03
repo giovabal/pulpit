@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 
 
 class AsyncBaseCommand(BaseCommand):
-    def _ensure_event_loop(self):
+    def _ensure_event_loop(self) -> None:
         try:
             asyncio.get_running_loop()
         except RuntimeError:

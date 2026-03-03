@@ -1,5 +1,7 @@
 import shutil
 import tempfile
+from argparse import ArgumentParser
+from typing import Any
 
 from django.conf import settings
 
@@ -18,7 +20,7 @@ class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--fixholes",
             action="store_true",
@@ -26,9 +28,9 @@ class Command(AsyncBaseCommand):
             help="Check channel message ids for holes and fetch missing messages",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         self._ensure_event_loop()
-        fix_holes = options["fixholes"]
+        fix_holes: bool = options["fixholes"]
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -45,10 +47,10 @@ class Command(AsyncBaseCommand):
                 channels = Channel.objects.interesting().order_by("-id")
                 total_channels = channels.count()
 
-                current_progress_channel = None
+                current_progress_channel: int | None = None
                 last_line_length = 0
 
-                def print_status(message, channel_index):
+                def print_status(message: str, channel_index: int) -> None:
                     nonlocal current_progress_channel, last_line_length
                     if current_progress_channel != channel_index:
                         if current_progress_channel is not None:

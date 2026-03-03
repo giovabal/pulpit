@@ -23,11 +23,11 @@ class ChannelAdmin(admin.ModelAdmin):
     search_fields = ["username", "title"]
 
     @admin.display(description="Msg")
-    def messages_count(self, obj):
+    def messages_count(self, obj: Channel) -> int:
         return obj.message_set.all().count()
 
     @admin.display(description="Link")
-    def telegram_url(self, obj):
+    def telegram_url(self, obj: Channel) -> str:
         return format_html(
             "<a href='{}' target='_blank'>{}</a>",
             obj.telegram_url,
@@ -35,7 +35,7 @@ class ChannelAdmin(admin.ModelAdmin):
         )
 
     @admin.display(description="Img")
-    def thumb(self, obj):
+    def thumb(self, obj: Channel) -> str:
         src = obj.profile_picture.picture.url if obj.profile_picture else ""
         if not src:
             return ""
@@ -49,11 +49,11 @@ class MessageAdmin(admin.ModelAdmin):
     search_fields = ["message"]
 
     @admin.display(description="Text")
-    def short_text(self, obj):
+    def short_text(self, obj: Message) -> str:
         return obj.message[:100] if obj.message else ""
 
     @admin.display(description="Link")
-    def telegram_url(self, obj):
+    def telegram_url(self, obj: Message) -> str:
         return format_html(
             "<a href='https://{}' target='_blank'>{}</a>",
             obj.telegram_url,
@@ -61,7 +61,7 @@ class MessageAdmin(admin.ModelAdmin):
         )
 
     @admin.display(description="Img")
-    def thumb(self, obj):
+    def thumb(self, obj: Message) -> str:
         src = obj.message_picture.picture.url if obj.message_picture else ""
         if not src:
             return ""
