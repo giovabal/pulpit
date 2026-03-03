@@ -6,6 +6,7 @@ from typing import Any, ClassVar, Self
 from django.conf import settings
 from django.core.files import File
 from django.db import models
+from django.db.models import Max, Min
 from django.urls import reverse
 
 from webapp.managers import ChannelManager
@@ -80,20 +81,11 @@ class Channel(TelegramBaseModel):
     @property
     def activity_period(self) -> str:
         date_template = "%B %Y"
-        messages = self.message_set.exclude(date__isnull=True).order_by("date")
-        start = self.date
-        end = self.date
-        if messages.exists():
-            first_date = messages.first().date
-            last_date = messages.last().date
-            if start is None:
-                start = first_date
-            else:
-                start = min(start, first_date)
-            if end is None:
-                end = last_date
-            else:
-                end = max(end, last_date)
+        agg = self.message_set.exclude(date__isnull=True).aggregate(min_date=Min("date"), max_date=Max("date"))
+        first_date = agg["min_date"]
+        last_date = agg["max_date"]
+        start = self.date if first_date is None else (first_date if self.date is None else min(self.date, first_date))
+        end = self.date if last_date is None else (last_date if self.date is None else max(self.date, last_date))
 
         if start is None or end is None:
             return "Unknown"
@@ -130,17 +122,19 @@ class Channel(TelegramBaseModel):
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.username = self.username or ""
         super().save(*args, **kwargs)
-        self.in_degree = (
+        in_degree = (
             Message.objects.filter(channel__organization__is_interesting=True, forwarded_from=self)
             .exclude(channel=self)
             .count()
         )
-        self.out_degree = (
+        out_degree = (
             Message.objects.filter(channel=self, forwarded_from__organization__is_interesting=True)
             .exclude(forwarded_from=self)
             .count()
         )
-        super().save(update_fields=["in_degree", "out_degree"])
+        Channel.objects.filter(pk=self.pk).update(in_degree=in_degree, out_degree=out_degree)
+        self.in_degree = in_degree
+        self.out_degree = out_degree
 
 
 class Message(TelegramBaseModel):
@@ -183,10 +177,9 @@ class Message(TelegramBaseModel):
     def save(self, *args: Any, **kwargs: Any) -> None:
         for field in ("message", "webpage_url", "webpage_type"):
             setattr(self, field, getattr(self, field) or "")
-        super().save(*args, **kwargs)
         if self.pinned:
             self.has_been_pinned = True
-            super().save(update_fields=("has_been_pinned",))
+        super().save(*args, **kwargs)
 
     @classmethod
     def _args_for_from_telegram_object(cls, telegram_object: Any) -> dict[str, Any]:

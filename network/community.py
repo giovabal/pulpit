@@ -72,9 +72,14 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
     community_map: CommunityMap = {}
     community_palette: CommunityPalette = {}
     for channel_id, item in channel_dict.items():
-        organization_id = item["channel"].organization_id
+        channel = item["channel"]
+        organization_id = channel.organization_id
+        if organization_id is None:
+            logger.warning("Channel %s has no organization; skipping community assignment", channel_id)
+            continue
         community_map[channel_id] = organization_id
-        community_palette[organization_id] = parse_color(item["channel"].organization.color)
+        if organization_id not in community_palette:
+            community_palette[organization_id] = parse_color(channel.organization.color)
     return community_map, community_palette
 
 

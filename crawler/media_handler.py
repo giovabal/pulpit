@@ -30,7 +30,10 @@ class MediaHandler:
 
     def download_profile_picture(self, telegram_channel: Any) -> int:
         pictures_downloaded = 0
-        channel = Channel.objects.get(telegram_id=telegram_channel.id)
+        channel = Channel.objects.filter(telegram_id=telegram_channel.id).first()
+        if channel is None:
+            logger.warning("Channel not found for telegram_id=%s", telegram_channel.id)
+            return 0
         for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
             if ProfilePicture.objects.filter(telegram_id=telegram_picture.id, channel=channel).exists():
                 continue
@@ -64,7 +67,7 @@ class MediaHandler:
             )
             self._cleanup_downloaded_file(picture_filename)
             return 1
-        except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
+        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
             logger.warning("Error downloading message picture: %s\n%s", e, telegram_message.__dict__)
         return 0
 
@@ -93,7 +96,7 @@ class MediaHandler:
                 },
             )
             self._cleanup_downloaded_file(video_filename)
-        except (errors.rpcerrorlist.FileMigrateError, ValueError) as e:
+        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
             logger.warning("Error downloading message video: %s\n%s", e, telegram_message.__dict__)
 
     def clean_leftovers(self) -> None:

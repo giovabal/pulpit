@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 from math import sqrt
@@ -10,6 +11,8 @@ from django.db.models import QuerySet
 from webapp.models import Channel
 
 import networkx as nx
+
+logger = logging.getLogger(__name__)
 
 type GraphData = dict[str, list[dict[str, Any]]]
 
@@ -120,15 +123,12 @@ def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -
 
 
 def ensure_graph_root(root_target: str) -> None:
+    shutil.rmtree(root_target, ignore_errors=True)
+    os.makedirs(root_target, exist_ok=True)
     try:
-        shutil.rmtree(root_target)
-        shutil.mkdir(root_target)
-    except Exception:
-        pass
-    try:
-        shutil.copytree("webapp_engine/map", root_target)
-    except Exception:
-        pass
+        shutil.copytree("webapp_engine/map", root_target, dirs_exist_ok=True)
+    except OSError as e:
+        logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
 def write_graph_files(
@@ -154,11 +154,13 @@ def write_graph_files(
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
     for channel in channel_qs:
+        if not channel.username:
+            continue
+        src = os.path.join(settings.MEDIA_ROOT, "channels", channel.username, "profile")
+        dst = os.path.join(root_target, "channels", channel.username, "profile")
         try:
-            if channel.username:
-                shutil.copytree(
-                    os.path.join(settings.MEDIA_ROOT, "channels", channel.username, "profile"),
-                    os.path.join(root_target, "channels", channel.username, "profile"),
-                )
-        except Exception:
+            shutil.copytree(src, dst)
+        except FileNotFoundError:
             pass
+        except OSError as e:
+            logger.warning("Could not copy media for channel %s: %s", channel.username, e)
