@@ -69,7 +69,10 @@ def parse_color(value: Any) -> ColorTuple:
                 return tuple(int(part * 255) for part in parsed[:3])
             return tuple(int(part) for part in parsed[:3])
         if "," in cleaned:
-            return tuple(int(part.strip()) for part in cleaned.split(","))
+            parts = [part.strip() for part in cleaned.split(",") if part.strip()]
+            if len(parts) < 3:
+                return DEFAULT_FALLBACK_COLOR
+            return _normalize_rgb_sequence(parts)
         if " " in cleaned:
             parts = [part for part in cleaned.split(" ") if part]
             if len(parts) >= 3 and all(part.replace(".", "", 1).isdigit() for part in parts[:3]):
