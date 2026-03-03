@@ -1,15 +1,19 @@
+from math import pi
+
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
-from django.views import View
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.generic import TemplateView
 
+from stats.mixins import StatsViewMixin
 from webapp.mixins import BaseMixin
 from webapp.models import Message
 
+import pandas as pd
 from bokeh.embed import file_html
+from bokeh.models import HoverTool
 from bokeh.plotting import figure
 from bokeh.resources import CDN
 
@@ -19,7 +23,7 @@ class StatsPageView(BaseMixin, TemplateView):
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
-class MessagesHistoryDataView(View):
+class MessagesHistoryDataView(StatsViewMixin):
     def get(self, request, *args, **kwargs):
         monthly_totals = (
             Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
@@ -29,20 +33,27 @@ class MessagesHistoryDataView(View):
             .order_by("month")
         )
 
-        months = [entry["month"].strftime("%Y-%m") for entry in monthly_totals]
-        totals = [entry["total_messages"] for entry in monthly_totals]
-
-        plot = figure(
-            x_range=months,
-            title="Monthly total messages from interesting channels",
-            x_axis_label="Month",
-            y_axis_label="Total messages",
-            width=1000,
-            height=450,
-            toolbar_location="above",
+        df = pd.DataFrame(
+            [
+                {"month": entry["month"].strftime("%Y-%m"), "total_messages": entry["total_messages"]}
+                for entry in monthly_totals
+            ]
         )
-        plot.vbar(x=months, top=totals, width=0.8)
-        plot.xaxis.major_label_orientation = 0.8
+
+        line_options = self.base_line_options.copy()
+        line_options.update({"width": 1, "source": df})
+        figure_options = self.base_figure_options.copy()
+        figure_options.update({"x_range": list(df.year.unique())})
+        plot = figure(
+            **figure_options,
+            y_axis_label="messages",
+        )
+        plot.line("month", "total_messages", **line_options, legend_label="messages")
+        plot.legend.location = "top_left"
+        plot.legend.click_policy = "hide"
+        plot.xaxis.major_label_orientation = -pi / 4
+        hover = plot.select({"type": HoverTool})
+        hover.tooltips = [("", "@month: @total_messages messages")]
 
         html = file_html(plot, CDN, "Messages history")
         return HttpResponse(html)
