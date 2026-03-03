@@ -4,6 +4,20 @@ from django.urls import reverse
 from webapp.models import Channel, Message, Organization
 
 
+class StatsPageViewTests(TestCase):
+    def test_stats_page_returns_200(self):
+        response = self.client.get(reverse("stats-page"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_stats_page_contains_messages_history_iframe(self):
+        response = self.client.get(reverse("stats-page"))
+        self.assertContains(response, reverse("messages-history-data"))
+
+    def test_stats_page_contains_active_channels_iframe(self):
+        response = self.client.get(reverse("stats-page"))
+        self.assertContains(response, reverse("active-channels-history-data"))
+
+
 class StatsViewsTests(TestCase):
     def test_stats_page_contains_iframe(self):
         response = self.client.get(reverse("stats-page"))
@@ -22,7 +36,7 @@ class StatsViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN")
         self.assertContains(response, "Bokeh")
-        self.assertContains(response, "Monthly total messages from interesting channels")
+        self.assertContains(response, "Messages history")
 
     def test_active_channels_history_data_renders_bokeh_html(self):
         organization = Organization.objects.create(name="Interesting Org", is_interesting=True)

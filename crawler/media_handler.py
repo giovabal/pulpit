@@ -1,0 +1,112 @@
+import glob
+import logging
+import os
+import shutil
+from typing import Any
+
+from django.conf import settings
+
+from crawler.client import TelegramAPIClient
+from webapp.models import Channel, Message, MessagePicture, MessageVideo, ProfilePicture
+
+from telethon import errors
+
+logger = logging.getLogger(__name__)
+
+
+class MediaHandler:
+    def __init__(self, api_client: TelegramAPIClient, download_temp_dir: str | None = None) -> None:
+        self.api_client = api_client
+        self.download_temp_dir = download_temp_dir
+
+    def _download_media(self, telegram_object: Any) -> str | None:
+        if self.download_temp_dir:
+            return self.api_client.client.download_media(telegram_object, file=self.download_temp_dir)
+        return self.api_client.client.download_media(telegram_object)
+
+    def _cleanup_downloaded_file(self, filename: str | None) -> None:
+        if filename and os.path.exists(filename):
+            os.remove(filename)
+
+    def download_profile_picture(self, telegram_channel: Any) -> int:
+        pictures_downloaded = 0
+        channel = Channel.objects.filter(telegram_id=telegram_channel.id).first()
+        if channel is None:
+            logger.warning("Channel not found for telegram_id=%s", telegram_channel.id)
+            return 0
+        for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
+            if ProfilePicture.objects.filter(telegram_id=telegram_picture.id, channel=channel).exists():
+                continue
+            picture_filename = self._download_media(telegram_picture)
+            ProfilePicture.from_telegram_object(
+                telegram_picture,
+                force_update=True,
+                defaults={"channel": channel, "picture": picture_filename},
+            )
+            self._cleanup_downloaded_file(picture_filename)
+            pictures_downloaded += 1
+        return pictures_downloaded
+
+    def download_message_picture(self, telegram_message: Any) -> int:
+        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES:
+            return 0
+        if not hasattr(telegram_message.media, "photo"):
+            return 0
+        try:
+            picture_filename = self._download_media(telegram_message)
+            MessagePicture.from_telegram_object(
+                telegram_message.media.photo,
+                force_update=True,
+                defaults={
+                    "message": Message.objects.get(
+                        channel__telegram_id=telegram_message.peer_id.channel_id,
+                        telegram_id=telegram_message.id,
+                    ),
+                    "picture": picture_filename,
+                },
+            )
+            self._cleanup_downloaded_file(picture_filename)
+            return 1
+        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
+            logger.warning("Error downloading message picture: %s\n%s", e, telegram_message.__dict__)
+        return 0
+
+    def download_message_video(self, telegram_message: Any) -> None:
+        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO:
+            return
+        document = getattr(telegram_message, "document", None)
+        if not document and telegram_message.media:
+            document = getattr(telegram_message.media, "document", None)
+        if not document:
+            return
+        mime_type = getattr(document, "mime_type", "") or ""
+        if not mime_type.startswith("video/"):
+            return
+        try:
+            video_filename = self._download_media(telegram_message)
+            MessageVideo.from_telegram_object(
+                document,
+                force_update=True,
+                defaults={
+                    "message": Message.objects.get(
+                        channel__telegram_id=telegram_message.peer_id.channel_id,
+                        telegram_id=telegram_message.id,
+                    ),
+                    "video": video_filename,
+                },
+            )
+            self._cleanup_downloaded_file(video_filename)
+        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
+            logger.warning("Error downloading message video: %s\n%s", e, telegram_message.__dict__)
+
+    def clean_leftovers(self) -> None:
+        for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
+            try:
+                os.remove(file_path)
+            except OSError as error:
+                logger.warning("Unable to remove leftover file '%s': %s", file_path, error)
+        if self.download_temp_dir and os.path.isdir(self.download_temp_dir):
+            try:
+                shutil.rmtree(self.download_temp_dir)
+            except OSError as error:
+                logger.warning("Unable to remove temporary download directory '%s': %s", self.download_temp_dir, error)

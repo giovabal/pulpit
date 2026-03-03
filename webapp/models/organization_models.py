@@ -8,9 +8,9 @@ class Organization(BaseColorModel):
     name = models.CharField(max_length=255)
     is_interesting = models.BooleanField(default=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     @property
-    def key(self):
+    def key(self) -> str:
         return slugify(self.name)

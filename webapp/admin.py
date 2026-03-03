@@ -1,7 +1,9 @@
 from django.contrib import admin
+from django.db.models import Count, Prefetch, QuerySet
+from django.http import HttpRequest
 from django.utils.html import format_html
 
-from .models import Channel, Message, Organization, SearchTerm
+from .models import Channel, Message, Organization, ProfilePicture, SearchTerm
 
 
 @admin.register(Channel)
@@ -22,12 +24,20 @@ class ChannelAdmin(admin.ModelAdmin):
     list_filter = ("organization__is_interesting", "broadcast", "organization")
     search_fields = ["username", "title"]
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(_messages_count=Count("message_set", distinct=True))
+            .prefetch_related(Prefetch("profilepicture_set", queryset=ProfilePicture.objects.order_by("date")))
+        )
+
     @admin.display(description="Msg")
-    def messages_count(self, obj):
-        return obj.message_set.all().count()
+    def messages_count(self, obj: Channel) -> int:
+        return obj._messages_count  # type: ignore[attr-defined]
 
     @admin.display(description="Link")
-    def telegram_url(self, obj):
+    def telegram_url(self, obj: Channel) -> str:
         return format_html(
             "<a href='{}' target='_blank'>{}</a>",
             obj.telegram_url,
@@ -35,8 +45,10 @@ class ChannelAdmin(admin.ModelAdmin):
         )
 
     @admin.display(description="Img")
-    def thumb(self, obj):
-        src = obj.profile_picture.picture.url if obj.profile_picture else ""
+    def thumb(self, obj: Channel) -> str:
+        pictures = list(obj.profilepicture_set.all())
+        pic = pictures[-1] if pictures else None
+        src = pic.picture.url if pic else ""
         if not src:
             return ""
         return format_html("<img width='60' src='{}'>", src)
@@ -49,11 +61,11 @@ class MessageAdmin(admin.ModelAdmin):
     search_fields = ["message"]
 
     @admin.display(description="Text")
-    def short_text(self, obj):
+    def short_text(self, obj: Message) -> str:
         return obj.message[:100] if obj.message else ""
 
     @admin.display(description="Link")
-    def telegram_url(self, obj):
+    def telegram_url(self, obj: Message) -> str:
         return format_html(
             "<a href='https://{}' target='_blank'>{}</a>",
             obj.telegram_url,
@@ -61,7 +73,7 @@ class MessageAdmin(admin.ModelAdmin):
         )
 
     @admin.display(description="Img")
-    def thumb(self, obj):
+    def thumb(self, obj: Message) -> str:
         src = obj.message_picture.picture.url if obj.message_picture else ""
         if not src:
             return ""

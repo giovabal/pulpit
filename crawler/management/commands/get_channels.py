@@ -1,9 +1,14 @@
 import shutil
 import tempfile
+from argparse import ArgumentParser
+from typing import Any
 
 from django.conf import settings
 
-from webapp.crawler import TelegramCrawler
+from crawler.channel_crawler import ChannelCrawler
+from crawler.client import TelegramAPIClient
+from crawler.media_handler import MediaHandler
+from crawler.reference_resolver import ReferenceResolver
 from webapp.management import AsyncBaseCommand
 from webapp.models import Channel
 
@@ -15,7 +20,7 @@ class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--fixholes",
             action="store_true",
@@ -23,9 +28,9 @@ class Command(AsyncBaseCommand):
             help="Check channel message ids for holes and fetch missing messages",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         self._ensure_event_loop()
-        fix_holes = options["fixholes"]
+        fix_holes: bool = options["fixholes"]
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -34,16 +39,18 @@ class Command(AsyncBaseCommand):
             with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
                 phone=settings.TELEGRAM_PHONE_NUMBER
             ) as client:
-                crawler = TelegramCrawler(client)
-                crawler.set_download_temp_dir(download_temp_dir)
+                api_client = TelegramAPIClient(client)
+                media_handler = MediaHandler(api_client, download_temp_dir=download_temp_dir)
+                reference_resolver = ReferenceResolver(api_client)
+                crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
 
-                channels = Channel.objects.filter(organization__is_interesting=True).order_by("-id")
+                channels = Channel.objects.interesting().order_by("-id")
                 total_channels = channels.count()
 
-                current_progress_channel = None
+                current_progress_channel: int | None = None
                 last_line_length = 0
 
-                def print_status(message, channel_index):
+                def print_status(message: str, channel_index: int) -> None:
                     nonlocal current_progress_channel, last_line_length
                     if current_progress_channel != channel_index:
                         if current_progress_channel is not None:
@@ -77,7 +84,7 @@ class Command(AsyncBaseCommand):
                 crawler.get_missing_references()
 
                 self.stdout.write("", ending="\n")
-                crawler.clean_leftovers()
+                media_handler.clean_leftovers()
         finally:
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 

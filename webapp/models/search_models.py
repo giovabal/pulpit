@@ -7,5 +7,5 @@ class SearchTerm(BaseModel):
     word = models.CharField(max_length=255)
     last_check = models.DateTimeField(blank=True, null=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.word
