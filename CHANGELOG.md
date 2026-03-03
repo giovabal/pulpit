@@ -1,8 +1,9 @@
 # Changelog
 
-## [0.2] - To be released
+## [0.2] - 2026-03-03
 ### Improvements
 - `get_channels` now has a better and more informative output.
+- `get_channels` now checks for previously unresolved citations and fix them.
 - Download of profile pictures is done just one time.
 - Better management of FloodWaitError in crawler.
 
