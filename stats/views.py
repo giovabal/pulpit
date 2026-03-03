@@ -58,3 +58,43 @@ class MessagesHistoryDataView(StatsViewMixin, View):
 
         html = file_html(plot, CDN, "Messages history")
         return HttpResponse(html)
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class ActiveChannelsHistoryDataView(StatsViewMixin, View):
+    def get(self, request, *args, **kwargs):
+        monthly_active_channels = (
+            Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_active_channels=Count("channel", distinct=True))
+            .order_by("month")
+        )
+
+        df = pd.DataFrame(
+            [
+                {
+                    "month": entry["month"].strftime("%Y-%m"),
+                    "total_active_channels": entry["total_active_channels"],
+                }
+                for entry in monthly_active_channels
+            ]
+        )
+
+        line_options = self.base_line_options.copy()
+        line_options.update({"width": 1, "source": df})
+        figure_options = self.base_figure_options.copy()
+        figure_options.update({"x_range": list(df.month.unique())})
+        plot = figure(
+            **figure_options,
+            y_axis_label="active channels",
+        )
+        plot.line("month", "total_active_channels", **line_options, legend_label="active channels")
+        plot.legend.location = "top_left"
+        plot.legend.click_policy = "hide"
+        plot.xaxis.major_label_orientation = -pi / 4
+        hover = plot.select({"type": HoverTool})
+        hover.tooltips = [("", "@month: @total_active_channels active channels")]
+
+        html = file_html(plot, CDN, "Active channels history")
+        return HttpResponse(html)
