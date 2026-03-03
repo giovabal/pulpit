@@ -14,6 +14,8 @@ import networkx as nx
 
 logger = logging.getLogger(__name__)
 
+_ISOLATED_GRID_DIVISIONS: int = 200
+
 type GraphData = dict[str, list[dict[str, Any]]]
 
 
@@ -112,7 +114,7 @@ def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -
             min_y = min(min_y, node["y"])
         else:
             isolated_nodes.append(index)
-    d = abs(max_x - min_x) / 200
+    d = abs(max_x - min_x) / _ISOLATED_GRID_DIVISIONS if max_x != min_x else 1.0
     col = int(sqrt(len(isolated_nodes))) + 1
     for i in range(col):
         for j in range(col):

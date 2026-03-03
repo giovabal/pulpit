@@ -22,7 +22,6 @@ from webapp.utils.colors import (
 )
 from webapp_engine.paginator import DiggPage, DiggPaginator, SoftPaginator
 
-
 # ─── hex_to_rgb ────────────────────────────────────────────────────────────────
 
 

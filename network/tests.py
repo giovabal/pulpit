@@ -3,7 +3,6 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import networkx as nx
 from django.test import TestCase, override_settings
 
 from network.community import (
@@ -33,6 +32,7 @@ from network.layout import compute_layout
 from webapp.models import Channel, Message, Organization
 from webapp.utils.colors import parse_color
 
+import networkx as nx
 
 # ---------------------------------------------------------------------------
 # community.py — normalize_community_map
@@ -353,7 +353,7 @@ class BuildGroupPayloadTests(TestCase):
         self.assertIn("1", result["main_groups"])
 
     def test_organization_strategy_uses_db(self) -> None:
-        org = Organization.objects.create(name="My Org", is_interesting=True)
+        Organization.objects.create(name="My Org", is_interesting=True)
         result = build_group_payload("ORGANIZATION", {}, {})
         org_names = [g[2] for g in result["groups"]]
         self.assertIn("My Org", org_names)
@@ -406,7 +406,7 @@ class BuildGraphTests(TestCase):
     def test_edge_weight_normalized_to_max_10(self) -> None:
         self._create_forward()
         graph, _, edge_list, _ = build_graph()
-        for u, v, data in graph.edges(data=True):
+        for _u, _v, data in graph.edges(data=True):
             self.assertLessEqual(data["weight"], 10.0)
             self.assertGreater(data["weight"], 0)
 
@@ -841,7 +841,7 @@ class ComputeLayoutTests(TestCase):
 
     def test_positions_are_float_tuples(self) -> None:
         positions = compute_layout(self.graph, iterations=10)
-        for node_id, pos in positions.items():
+        for _node_id, pos in positions.items():
             self.assertIsInstance(pos, tuple)
             self.assertEqual(len(pos), 2)
             self.assertIsInstance(pos[0], float)
@@ -864,11 +864,17 @@ class DetectInfomapTests(TestCase):
         # Two clear clusters connected by a weak bridge
         self.graph = nx.DiGraph()
         self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
-        self.graph.add_edges_from([
-            ("a", "b"), ("b", "c"), ("c", "a"),  # cluster 1
-            ("d", "e"), ("e", "f"), ("f", "d"),  # cluster 2
-            ("c", "d"),                           # bridge
-        ])
+        self.graph.add_edges_from(
+            [
+                ("a", "b"),
+                ("b", "c"),
+                ("c", "a"),  # cluster 1
+                ("d", "e"),
+                ("e", "f"),
+                ("f", "d"),  # cluster 2
+                ("c", "d"),  # bridge
+            ]
+        )
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
     def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
@@ -924,6 +930,7 @@ class DetectDispatcherTests(TestCase):
     @patch("network.community.detect_louvain")
     def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
         from network.community import detect
+
         mock_detect.return_value = ({}, {})
         detect("LOUVAIN", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette")
@@ -931,6 +938,7 @@ class DetectDispatcherTests(TestCase):
     @patch("network.community.detect_kcore")
     def test_kcore_strategy_calls_detect_kcore(self, mock_detect: MagicMock) -> None:
         from network.community import detect
+
         mock_detect.return_value = ({}, {})
         detect("KCORE", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette")
@@ -938,6 +946,7 @@ class DetectDispatcherTests(TestCase):
     @patch("network.community.detect_infomap")
     def test_infomap_strategy_calls_detect_infomap(self, mock_detect: MagicMock) -> None:
         from network.community import detect
+
         mock_detect.return_value = ({}, {})
         detect("INFOMAP", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette")
@@ -945,6 +954,7 @@ class DetectDispatcherTests(TestCase):
     @patch("network.community.detect_organization")
     def test_unknown_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
         from network.community import detect
+
         mock_detect.return_value = ({}, {})
         detect("ORGANIZATION", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.channel_dict)
@@ -952,6 +962,7 @@ class DetectDispatcherTests(TestCase):
     @patch("network.community.detect_organization")
     def test_empty_string_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
         from network.community import detect
+
         mock_detect.return_value = ({}, {})
         detect("", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once()
@@ -970,6 +981,7 @@ class CopyChannelMediaTests(TestCase):
         ch = Channel.objects.create(telegram_id=1, organization=self.org, username="")
         with tempfile.TemporaryDirectory() as tmpdir:
             from network.exporter import copy_channel_media
+
             # No error, nothing copied
             copy_channel_media(Channel.objects.filter(pk=ch.pk), tmpdir)
             self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels")))
@@ -978,6 +990,7 @@ class CopyChannelMediaTests(TestCase):
         ch = Channel.objects.create(telegram_id=2, organization=self.org, username="testchan")
         with tempfile.TemporaryDirectory() as tmpdir:
             from network.exporter import copy_channel_media
+
             # MEDIA_ROOT/channels/testchan/profile doesn't exist → FileNotFoundError silently caught
             copy_channel_media(Channel.objects.filter(pk=ch.pk), tmpdir)
             self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels", "testchan")))
@@ -990,8 +1003,10 @@ class CopyChannelMediaTests(TestCase):
             sentinel = os.path.join(src, "photo.jpg")
             with open(sentinel, "w") as f:
                 f.write("fake image")
-            from network.exporter import copy_channel_media
             from django.test import override_settings
+
+            from network.exporter import copy_channel_media
+
             with override_settings(MEDIA_ROOT=media_root):
                 copy_channel_media(Channel.objects.filter(pk=ch.pk), output_root)
             dst = os.path.join(output_root, "channels", "copychan", "profile", "photo.jpg")
@@ -1005,6 +1020,7 @@ class CopyChannelMediaTests(TestCase):
             dst_parent = os.path.join(output_root, "channels", "errchan", "profile")
             os.makedirs(dst_parent)  # pre-create dst so copytree raises OSError (already exists)
             from network.exporter import copy_channel_media
+
             with override_settings(MEDIA_ROOT=media_root):
                 try:
                     copy_channel_media(Channel.objects.filter(pk=ch.pk), output_root)
@@ -1126,8 +1142,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management import call_command
 
         self._configure_happy_path(
-            mock_build, mock_detect, mock_layout, mock_graph_data,
-            mock_main_comp, mock_measures, mock_pagerank, mock_group_payload,
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_group_payload,
         )
         call_command("export_network")
 

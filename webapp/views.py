@@ -29,7 +29,9 @@ class ChannelDetailView(BaseMixin, ListView):
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         qs = super().get_queryset(*args, **kwargs)
-        return qs.filter(channel=self.selected_channel).order_by("date")
+        return (
+            qs.filter(channel=self.selected_channel).prefetch_related("references", "forwarded_from").order_by("date")
+        )
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         context_data = super().get_context_data(*args, **kwargs)

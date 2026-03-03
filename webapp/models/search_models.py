@@ -4,7 +4,7 @@ from webapp.models.base import BaseModel
 
 
 class SearchTerm(BaseModel):
-    word = models.CharField(max_length=255)
+    word = models.CharField(max_length=255, unique=True)
     last_check = models.DateTimeField(blank=True, null=True)
 
     def __str__(self) -> str:

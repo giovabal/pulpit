@@ -1,9 +1,10 @@
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
 
+from crawler.client import TelegramAPIClient
 from webapp.models import Channel, Message
 
 from telethon import errors
@@ -14,9 +15,9 @@ SKIPPABLE_REFERENCES = ["joinchat"]
 
 
 class ReferenceResolver:
-    def __init__(self, api_client: Any) -> None:
+    def __init__(self, api_client: TelegramAPIClient) -> None:
         self.api_client = api_client
-        self.reference_resolution_paused_until: Any = None
+        self.reference_resolution_paused_until: datetime | None = None
 
     def _is_paused(self) -> bool:
         return self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until
@@ -106,9 +107,9 @@ class ReferenceResolver:
                     except errors.rpcerrorlist.FloodWaitError:
                         flood_error = True
                     except errors.rpcerrorlist.ChannelPrivateError:
-                        logger.warning("Missing reference '%s' is a private channel", reference)
+                        logger.info("Missing reference '%s' is a private channel", reference)
                     except (ValueError, errors.RPCError) as error:
-                        logger.warning("Unable to fetch missing reference '%s': %s", reference, error)
+                        logger.info("Unable to fetch missing reference '%s': %s", reference, error)
                 if channel:
                     message.references.add(channel)
             if not flood_error:

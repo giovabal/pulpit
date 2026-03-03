@@ -1,17 +1,16 @@
 import os
 import tempfile
 from datetime import timedelta
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
-from crawler.reference_resolver import SKIPPABLE_REFERENCES, ReferenceResolver
+from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 
 from telethon import errors
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -363,7 +362,7 @@ class GetMissingReferencesTests(TestCase):
     def test_api_call_made_for_unknown_reference(self) -> None:
         mock_tc = _make_telegram_channel(telegram_id=999, username="apichan")
         self.api_client.client.get_entity.return_value = mock_tc
-        msg = Message.objects.create(telegram_id=4, channel=self.channel, missing_references="|apichan")
+        Message.objects.create(telegram_id=4, channel=self.channel, missing_references="|apichan")
         self.resolver.get_missing_references()
         self.api_client.client.get_entity.assert_called_once_with("apichan")
 
@@ -407,8 +406,6 @@ class TelegramAPIClientTests(TestCase):
         self.api_client = TelegramAPIClient(self.mock_telethon)
 
     def test_client_attribute_set(self) -> None:
-        from crawler.client import TelegramAPIClient
-
         self.assertIs(self.api_client.client, self.mock_telethon)
 
     def test_wait_time_set_from_settings(self) -> None:
@@ -423,8 +420,9 @@ class TelegramAPIClientTests(TestCase):
 
     @patch("crawler.client.sleep")
     def test_wait_sleeps_when_called_too_soon(self, mock_sleep: MagicMock) -> None:
-        from crawler.client import TelegramAPIClient
         from django.utils import timezone
+
+        from crawler.client import TelegramAPIClient
 
         client = TelegramAPIClient(MagicMock())
         # Force last_call to now so wait_time - 0 = wait_time > 0
@@ -436,8 +434,9 @@ class TelegramAPIClientTests(TestCase):
     def test_wait_skips_sleep_when_enough_time_passed(self, mock_sleep: MagicMock) -> None:
         from datetime import timedelta
 
-        from crawler.client import TelegramAPIClient
         from django.utils import timezone
+
+        from crawler.client import TelegramAPIClient
 
         client = TelegramAPIClient(MagicMock())
         # Set last_call far enough in the past
@@ -449,8 +448,9 @@ class TelegramAPIClientTests(TestCase):
     def test_wait_updates_last_call(self, _mock_sleep: MagicMock) -> None:
         from datetime import timedelta
 
-        from crawler.client import TelegramAPIClient
         from django.utils import timezone
+
+        from crawler.client import TelegramAPIClient
 
         client = TelegramAPIClient(MagicMock())
         client.last_call = timezone.now() - timedelta(seconds=client.wait_time + 5)
@@ -505,8 +505,6 @@ class MediaHandlerCleanupTests(TestCase):
 
 class MediaHandlerProfilePictureTests(TestCase):
     def setUp(self) -> None:
-        import os
-
         from crawler.media_handler import MediaHandler
 
         self.api_client = _make_api_client()
@@ -960,8 +958,9 @@ class SearchChannelsCommandTests(TestCase):
     def test_processes_at_most_15_terms(
         self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
     ) -> None:
-        from webapp.models import SearchTerm
         from django.core.management import call_command
+
+        from webapp.models import SearchTerm
 
         SearchTerm.objects.all().delete()
         for i in range(20):

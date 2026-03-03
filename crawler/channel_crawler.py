@@ -15,6 +15,8 @@ from telethon.tl.functions.channels import GetFullChannelRequest
 
 logger = logging.getLogger(__name__)
 
+_HOLE_FETCH_BATCH_SIZE: int = 100
+
 
 class ChannelCrawler:
     messages_limit_per_channel: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
@@ -44,7 +46,7 @@ class ChannelCrawler:
                 else (None, None)
             )
         except errors.rpcerrorlist.ChannelPrivateError:
-            logger.warning("Not available seed: %s", seed)
+            logger.info("Not available seed: %s", seed)
             return None, None
 
     def get_channel(
@@ -148,13 +150,12 @@ class ChannelCrawler:
         messages = channel.message_set.order_by("telegram_id")
         if min_telegram_id is not None:
             messages = messages.filter(telegram_id__gte=min_telegram_id)
-        ids = list(messages.values_list("telegram_id", flat=True))
-        if len(ids) < 2:
-            return []
         holes: list[int] = []
-        for previous_id, current_id in zip(ids, ids[1:], strict=False):
-            if current_id - previous_id > 1:
-                holes.extend(range(previous_id + 1, current_id))
+        prev_id: int | None = None
+        for (current_id,) in messages.values_list("telegram_id").iterator():
+            if prev_id is not None and current_id - prev_id > 1:
+                holes.extend(range(prev_id + 1, current_id))
+            prev_id = current_id
         return holes
 
     def _fix_message_holes(
@@ -184,9 +185,8 @@ class ChannelCrawler:
 
         update_status(f"{channel_label} | fixing {len(missing_ids)} missing message ids")
 
-        batch_size = 100
-        for offset in range(0, len(missing_ids), batch_size):
-            batch = missing_ids[offset : offset + batch_size]
+        for offset in range(0, len(missing_ids), _HOLE_FETCH_BATCH_SIZE):
+            batch = missing_ids[offset : offset + _HOLE_FETCH_BATCH_SIZE]
             self.api_client.wait()
             messages = self.api_client.client.get_messages(telegram_channel, ids=batch)
             if not isinstance(messages, list):

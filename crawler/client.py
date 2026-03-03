@@ -16,7 +16,7 @@ class TelegramAPIClient:
         self.last_call: datetime = timezone.now() - timedelta(seconds=self.wait_time)
 
     def wait(self) -> None:
-        w = self.wait_time - (timezone.now() - self.last_call).seconds
+        w = self.wait_time - (timezone.now() - self.last_call).total_seconds()
         if w > 0:
             sleep(w)
         self.last_call = timezone.now()
