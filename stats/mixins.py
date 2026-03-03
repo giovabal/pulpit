@@ -9,7 +9,7 @@ class StatsViewMixin:
     secondary_color = RGB(*hex_to_rgb("#4f6181")).to_css()
     template_name = "stats/stats.html"
     base_figure_options = {
-        "height": 350,
+        "height": 450,
         "sizing_mode": "stretch_width",
         "tools": "hover",
         "toolbar_location": "above",

@@ -4,6 +4,7 @@ from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.generic import TemplateView
 
@@ -23,7 +24,7 @@ class StatsPageView(BaseMixin, TemplateView):
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
-class MessagesHistoryDataView(StatsViewMixin):
+class MessagesHistoryDataView(StatsViewMixin, View):
     def get(self, request, *args, **kwargs):
         monthly_totals = (
             Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
@@ -43,7 +44,7 @@ class MessagesHistoryDataView(StatsViewMixin):
         line_options = self.base_line_options.copy()
         line_options.update({"width": 1, "source": df})
         figure_options = self.base_figure_options.copy()
-        figure_options.update({"x_range": list(df.year.unique())})
+        figure_options.update({"x_range": list(df.month.unique())})
         plot = figure(
             **figure_options,
             y_axis_label="messages",
