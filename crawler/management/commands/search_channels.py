@@ -19,7 +19,6 @@ class Command(AsyncBaseCommand):
     help = "crawling Telegram groups"
 
     def handle(self, *args: Any, **options: Any) -> None:
-        self._ensure_event_loop()
         with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
             phone=settings.TELEGRAM_PHONE_NUMBER
         ) as client:

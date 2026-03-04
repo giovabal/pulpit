@@ -29,7 +29,6 @@ class Command(AsyncBaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        self._ensure_event_loop()
         fix_holes: bool = options["fixholes"]
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
