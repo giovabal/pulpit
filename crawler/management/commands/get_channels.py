@@ -88,5 +88,10 @@ class Command(AsyncBaseCommand):
         finally:
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
-        for c in Channel.objects.filter(organization__is_interesting=False):
-            c.save()
+        referenced_ids = (
+            Channel.objects.filter(organization__is_interesting=True)
+            .values_list("message_set__forwarded_from_id", flat=True)
+            .distinct()
+        )
+        for channel in Channel.objects.filter(organization__is_interesting=False, pk__in=referenced_ids):
+            channel.save()

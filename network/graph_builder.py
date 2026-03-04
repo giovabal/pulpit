@@ -77,6 +77,6 @@ def build_graph(
 
     max_weight = max(edge[2] for edge in edge_list)
     for edge in edge_list:
-        graph.add_edge(edge[0], edge[1], weight=max(10 * edge[2] / max_weight, 0))
+        graph.add_edge(edge[0], edge[1], weight=10 * edge[2] / max_weight)
 
     return graph, channel_dict, edge_list, channel_qs

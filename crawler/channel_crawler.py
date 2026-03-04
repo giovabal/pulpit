@@ -19,14 +19,13 @@ _HOLE_FETCH_BATCH_SIZE: int = 100
 
 
 class ChannelCrawler:
-    messages_limit_per_channel: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
-
     def __init__(
         self, api_client: TelegramAPIClient, media_handler: MediaHandler, reference_resolver: ReferenceResolver
     ) -> None:
         self.api_client = api_client
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
+        self.messages_limit_per_channel: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
@@ -74,29 +73,26 @@ class ChannelCrawler:
         last_message = channel.message_set.order_by("telegram_id").last()
         min_id = last_message.telegram_id if last_message is not None else 0
         message_count = 0
-        c = 0
         if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
             remaining_limit: int | None = None
         else:
             remaining_limit = self.messages_limit_per_channel
         update_status(f"{channel_label} | downloading recent messages")
-        for i, telegram_message in enumerate(
-            self.api_client.client.iter_messages(
-                telegram_channel,
-                min_id=min_id,
-                wait_time=self.api_client.wait_time,
-                limit=remaining_limit,
-                reverse=True,
-            ),
-            start=1,
+        batch_count = 0
+        for telegram_message in self.api_client.client.iter_messages(
+            telegram_channel,
+            min_id=min_id,
+            wait_time=self.api_client.wait_time,
+            limit=remaining_limit,
+            reverse=True,
         ):
-            c = i
+            batch_count += 1
             image_count += self.get_message(channel, telegram_message)
-            update_status(f"{channel_label} | messages processed: {message_count + c}")
+            update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
-        message_count += c
+        message_count += batch_count
         if remaining_limit is not None:
-            remaining_limit -= c
+            remaining_limit -= batch_count
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
                 channel.save()
@@ -110,22 +106,19 @@ class ChannelCrawler:
             first_message = channel.message_set.order_by("telegram_id").first()
             max_id = first_message.telegram_id if first_message else None
 
-        c = 0
+        batch_count = 0
         if max_id is not None:
             update_status(f"{channel_label} | downloading history")
-            for i, telegram_message in enumerate(
-                self.api_client.client.iter_messages(
-                    telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time, limit=remaining_limit
-                ),
-                start=1,
+            for telegram_message in self.api_client.client.iter_messages(
+                telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time, limit=remaining_limit
             ):
-                c = i
+                batch_count += 1
                 image_count += self.get_message(channel, telegram_message)
-                update_status(f"{channel_label} | messages processed: {message_count + c}")
+                update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
-        message_count += c
+        message_count += batch_count
         if remaining_limit is not None:
-            remaining_limit -= c
+            remaining_limit -= batch_count
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
                 channel.save()
@@ -232,7 +225,7 @@ class ChannelCrawler:
 
         missing_references = self.reference_resolver.resolve_message_references(message, telegram_message)
         if missing_references:
-            message.missing_references = "|" + "|".join(missing_references)
+            message.missing_references = "|".join(missing_references)
 
         if telegram_message.media:
             downloaded_images += self.media_handler.download_message_picture(telegram_message)

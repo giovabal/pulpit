@@ -104,16 +104,13 @@ def find_main_component(graph: nx.DiGraph) -> set[str]:
 
 def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -> None:
     """Move isolated nodes (outside the main component) into a grid near the main cluster."""
-    max_x = max_y = min_x = min_y = 0.0
-    isolated_nodes: list[int] = []
-    for index, node in enumerate(graph_data["nodes"]):
-        if node["id"] in main_component:
-            max_x = max(max_x, node["x"])
-            max_y = max(max_y, node["y"])
-            min_x = min(min_x, node["x"])
-            min_y = min(min_y, node["y"])
-        else:
-            isolated_nodes.append(index)
+    main_nodes = [node for node in graph_data["nodes"] if node["id"] in main_component]
+    isolated_nodes = [index for index, node in enumerate(graph_data["nodes"]) if node["id"] not in main_component]
+    if not main_nodes:
+        return
+    max_x = max(node["x"] for node in main_nodes)
+    min_x = min(node["x"] for node in main_nodes)
+    max_y = max(node["y"] for node in main_nodes)
     d = abs(max_x - min_x) / _ISOLATED_GRID_DIVISIONS if max_x != min_x else 1.0
     col = int(sqrt(len(isolated_nodes))) + 1
     for i in range(col):

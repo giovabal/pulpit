@@ -59,7 +59,7 @@ class TelegramBaseModel(BaseModel):
 
 
 def _telegram_picture_upload_to_function(instance: Any, filename: str) -> str:
-    return instance.get_media_path(instance, filename)
+    return instance.get_media_path(filename)
 
 
 class TelegramBasePictureModel(TelegramBaseModel):
@@ -70,7 +70,7 @@ class TelegramBasePictureModel(TelegramBaseModel):
     class Meta:
         abstract = True
 
-    def get_media_path(self, instance: Any, filename: str) -> str:
+    def get_media_path(self, filename: str) -> str:
         raise NotImplementedError("define `self.get_media_path()`")
 
     @classmethod

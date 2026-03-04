@@ -13,6 +13,11 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
             raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
+        if settings.COMMUNITIES_STRATEGY not in community.VALID_STRATEGIES:
+            raise CommandError(
+                f"Invalid COMMUNITIES_STRATEGY value: {settings.COMMUNITIES_STRATEGY!r}. "
+                f"Choose from {sorted(community.VALID_STRATEGIES)}."
+            )
 
         self.stdout.write("Create graph")
         try:
@@ -23,16 +28,19 @@ class Command(BaseCommand):
             raise CommandError(str(e)) from e
 
         self.stdout.write("Calculate communities")
-        community_map, community_palette = community.detect(
-            settings.COMMUNITIES, settings.COMMUNITIES_PALETTE, graph, channel_dict
-        )
-        community.apply_to_graph(graph, channel_dict, community_map, community_palette, settings.COMMUNITIES)
+        try:
+            community_map, community_palette = community.detect(
+                settings.COMMUNITIES_STRATEGY, settings.COMMUNITIES_PALETTE, graph, channel_dict
+            )
+        except ValueError as e:
+            raise CommandError(str(e)) from e
+        community.apply_to_graph(graph, channel_dict, community_map, community_palette, settings.COMMUNITIES_STRATEGY)
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
         self.stdout.write("\nSet spatial distribution of nodes")
         positions = layout.compute_layout(graph, settings.FA2_ITERATIONS)
 
-        xs, ys = zip(*positions.values())
+        xs, ys = zip(*positions.values(), strict=False)
         width = max(xs) - min(xs)
         height = max(ys) - min(ys)
         if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
@@ -61,7 +69,7 @@ class Command(BaseCommand):
         exporter.ensure_graph_root(root_target)
 
         self.stdout.write("- config files")
-        group_data = community.build_group_payload(settings.COMMUNITIES, community_map, community_palette)
+        group_data = community.build_group_payload(settings.COMMUNITIES_STRATEGY, community_map, community_palette)
         exporter.write_graph_files(
             graph_data,
             group_data,

@@ -94,24 +94,15 @@ class ReferenceResolver:
 
     def get_missing_references(self) -> None:
         for message in Message.objects.exclude(missing_references=""):
-            flood_error = False
-            for reference in message.missing_references[1:].split("|"):
-                if reference in SKIPPABLE_REFERENCES:
+            all_resolved = True
+            for reference in message.missing_references.split("|"):
+                if not reference or reference in SKIPPABLE_REFERENCES:
                     continue
-                channel = Channel.objects.filter(username=reference).first()
-                if not channel:
-                    try:
-                        self.api_client.wait()
-                        new_telegram_channel = self.api_client.client.get_entity(reference)
-                        channel = Channel.from_telegram_object(new_telegram_channel, force_update=True)
-                    except errors.rpcerrorlist.FloodWaitError:
-                        flood_error = True
-                    except errors.rpcerrorlist.ChannelPrivateError:
-                        logger.info("Missing reference '%s' is a private channel", reference)
-                    except (ValueError, errors.RPCError) as error:
-                        logger.info("Unable to fetch missing reference '%s': %s", reference, error)
+                channel, failed = self._resolve_one(reference)
                 if channel:
                     message.references.add(channel)
-            if not flood_error:
+                if failed:
+                    all_resolved = False
+            if all_resolved:
                 message.missing_references = ""
                 message.save()

@@ -107,7 +107,7 @@ Write them in your `.env` file.
 
 | option name | description | default value |
 | :---------- | :---------- | ------------: |
-| `COMMUNITIES` | community detection strategy (`ORGANIZATION`, `LOUVAIN`, `KCORE`, or `INFOMAP`) | ORGANIZATION |
+| `COMMUNITIES_STRATEGY` | community detection strategy (`ORGANIZATION`, `LOUVAIN`, `KCORE`, or `INFOMAP`) | ORGANIZATION |
 | `COMMUNITIES_PALETTE` | color palette for communities (`ORGANIZATION` or any palette from https://python-graph-gallery.com/color-palette-finder/) | ORGANIZATION |
 
 ### Drawing

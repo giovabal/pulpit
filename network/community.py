@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from typing import Any
 
 from django.utils.text import slugify
@@ -20,6 +21,7 @@ from infomap import Infomap
 logger = logging.getLogger(__name__)
 
 COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
+VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
 type CommunityPalette = dict[int, ColorTuple]
@@ -30,9 +32,7 @@ def build_community_label(community_id: int | str, strategy: str) -> str:
 
 
 def normalize_community_map(community_map: CommunityMap) -> CommunityMap:
-    community_counts: dict[int, int] = {}
-    for community_id in community_map.values():
-        community_counts[community_id] = community_counts.get(community_id, 0) + 1
+    community_counts = Counter(community_map.values())
     ordered = sorted(community_counts.items(), key=lambda item: (-item[1], item[0]))
     remap = {community_id: index for index, (community_id, _) in enumerate(ordered, start=1)}
     return {node_id: remap[community_id] for node_id, community_id in community_map.items()}
@@ -42,18 +42,11 @@ def build_community_palette(community_map: CommunityMap, palette_name: str) -> C
     if not community_map:
         return {}
     total = max(community_map.values())
-    group_keys = [str(index) for index in range(1, total + 1)]
-    palette_values = palette_colors(palette_name)
-    palette_values = expand_colors(palette_values, len(group_keys))
-    palette_map: dict[str, str] = {
-        group_key: ",".join(str(value) for value in parse_color(palette_color))
-        for group_key, palette_color in zip(group_keys, palette_values, strict=False)
+    colors = expand_colors(palette_colors(palette_name), total)
+    return {
+        index: parse_color(colors[index - 1]) if index <= len(colors) else DEFAULT_FALLBACK_COLOR
+        for index in range(1, total + 1)
     }
-    community_palette: CommunityPalette = {}
-    for index in range(1, total + 1):
-        palette_color = palette_map.get(str(index))
-        community_palette[index] = parse_color(palette_color) if palette_color else DEFAULT_FALLBACK_COLOR
-    return community_palette
 
 
 def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
@@ -133,7 +126,9 @@ def detect(
         return detect_kcore(graph, palette_name)
     if strategy == "INFOMAP":
         return detect_infomap(graph, palette_name)
-    return detect_organization(channel_dict)
+    if strategy == "ORGANIZATION":
+        return detect_organization(channel_dict)
+    raise ValueError(f"Unknown community strategy: {strategy!r}. Choose from {sorted(VALID_STRATEGIES)}.")
 
 
 def apply_to_graph(
@@ -144,11 +139,12 @@ def apply_to_graph(
     strategy: str,
 ) -> None:
     """Write community labels and colors back into graph node data."""
+    if strategy not in COMMUNITY_ALGORITHMS:
+        org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=set(community_map.values()))}
+
     for node_id, community_id in community_map.items():
-        detected_community = build_community_label(
-            community_id if strategy in COMMUNITY_ALGORITHMS else Organization.objects.get(pk=community_id).label,
-            strategy,
-        )
+        label = community_id if strategy in COMMUNITY_ALGORITHMS else org_names[community_id]
+        detected_community = build_community_label(label, strategy)
         graph.nodes[node_id]["data"]["group"] = detected_community
         graph.nodes[node_id]["data"]["group_key"] = str(community_id)
         channel_dict[node_id]["data"]["group"] = detected_community
@@ -180,9 +176,7 @@ def build_group_payload(
     """Build the group metadata dict for the accessory JSON file."""
     group_data: dict[str, Any] = {"groups": []}
     if strategy in COMMUNITY_ALGORITHMS:
-        community_counts: dict[int, int] = {}
-        for community_id in community_map.values():
-            community_counts[community_id] = community_counts.get(community_id, 0) + 1
+        community_counts = Counter(community_map.values())
         for community_id, count in community_counts.items():
             rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
             detected_community = build_community_label(community_id, strategy)

@@ -84,8 +84,10 @@ class Channel(TelegramBaseModel):
         agg = self.message_set.exclude(date__isnull=True).aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]
-        start = self.date if first_date is None else (first_date if self.date is None else min(self.date, first_date))
-        end = self.date if last_date is None else (last_date if self.date is None else max(self.date, last_date))
+        start_candidates = [d for d in (self.date, first_date) if d is not None]
+        end_candidates = [d for d in (self.date, last_date) if d is not None]
+        start = min(start_candidates) if start_candidates else None
+        end = max(end_candidates) if end_candidates else None
 
         if start is None or end is None:
             return "Unknown"
@@ -186,10 +188,7 @@ class Message(TelegramBaseModel):
         return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
 
     def get_telegram_references(self) -> list[str]:
-        refs = []
-        for url in re.findall(r"t\.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message)):
-            refs.append(url[5:])
-        return refs
+        return [url[5:] for url in re.findall(r"t\.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message))]
 
     @property
     def message_picture(self) -> "MessagePicture | None":
@@ -207,7 +206,7 @@ class Message(TelegramBaseModel):
 class ProfilePicture(TelegramBasePictureModel):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
 
-    def get_media_path(self, instance: Any, filename: str) -> str:
+    def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",
@@ -220,7 +219,7 @@ class ProfilePicture(TelegramBasePictureModel):
 class MessagePicture(TelegramBasePictureModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
 
-    def get_media_path(self, instance: Any, filename: str) -> str:
+    def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",
@@ -236,7 +235,7 @@ class MessageVideo(TelegramBaseModel):
     video = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
     date = models.DateTimeField(null=True)
 
-    def get_media_path(self, instance: Any, filename: str) -> str:
+    def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
         return os.path.join(
             "channels",

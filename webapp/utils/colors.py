@@ -6,7 +6,6 @@ import pypalettes
 ColorTuple: TypeAlias = tuple[int, int, int]
 
 DEFAULT_FALLBACK_COLOR: ColorTuple = (204, 204, 204)
-COMMUNITY_ALGORITHMS: set[str] = {"LOUVAIN", "KCORE", "INFOMAP"}
 
 
 def _normalize_rgb_sequence(value: Sequence[Any]) -> ColorTuple:
