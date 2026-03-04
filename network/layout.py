@@ -2,6 +2,11 @@ import networkx as nx
 from pyforceatlas2 import ForceAtlas2
 
 
+def rotate_positions(positions: dict[str, tuple[float, float]]) -> dict[str, tuple[float, float]]:
+    """Rotate all positions 90° clockwise: (x, y) → (y, -x)."""
+    return {key: (y, -x) for key, (x, y) in positions.items()}
+
+
 def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:
     """Run ForceAtlas2 on *graph* and return a position dict keyed by node pk."""
     forceatlas2 = ForceAtlas2(

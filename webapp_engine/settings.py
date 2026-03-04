@@ -150,3 +150,5 @@ DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 
 COMMUNITIES = config("COMMUNITIES", default="ORGANIZATION", cast=str)
 COMMUNITIES_PALETTE = config("COMMUNITIES_PALETTE", default="ORGANIZATION", cast=str)
+
+LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)
