@@ -1,6 +1,9 @@
 import networkx as nx
 from pyforceatlas2 import ForceAtlas2
 
+LAYOUT_HORIZONTAL = "HORIZONTAL"
+LAYOUT_VERTICAL = "VERTICAL"
+
 
 def rotate_positions(positions: dict[str, tuple[float, float]]) -> dict[str, tuple[float, float]]:
     """Rotate all positions 90° clockwise: (x, y) → (y, -x)."""

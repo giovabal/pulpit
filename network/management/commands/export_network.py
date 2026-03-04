@@ -11,6 +11,9 @@ class Command(BaseCommand):
     help = "write file"
 
     def handle(self, *args: Any, **options: Any) -> None:
+        if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
+            raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
+
         self.stdout.write("Create graph")
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
@@ -29,16 +32,14 @@ class Command(BaseCommand):
         self.stdout.write("\nSet spatial distribution of nodes")
         positions = layout.compute_layout(graph, settings.FA2_ITERATIONS)
 
-        if positions:
-            xs = [x for x, _ in positions.values()]
-            ys = [y for _, y in positions.values()]
-            width = max(xs) - min(xs)
-            height = max(ys) - min(ys)
-            if (settings.LAYOUT == "HORIZONTAL" and height > width) or (
-                settings.LAYOUT == "VERTICAL" and width > height
-            ):
-                self.stdout.write("- rotating layout 90°")
-                positions = layout.rotate_positions(positions)
+        xs, ys = zip(*positions.values())
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
+            settings.LAYOUT == layout.LAYOUT_VERTICAL and width > height
+        ):
+            self.stdout.write("- rotating layout 90°")
+            positions = layout.rotate_positions(positions)
 
         self.stdout.write("\nCalculations on the graph")
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
