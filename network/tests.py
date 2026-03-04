@@ -959,13 +959,11 @@ class DetectDispatcherTests(TestCase):
         detect("ORGANIZATION", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.channel_dict)
 
-    @patch("network.community.detect_organization")
-    def test_empty_string_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
+    def test_unknown_strategy_raises_value_error(self) -> None:
         from network.community import detect
 
-        mock_detect.return_value = ({}, {})
-        detect("", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once()
+        with self.assertRaises(ValueError, msg="Unknown community strategy"):
+            detect("", "palette", self.graph, self.channel_dict)
 
 
 # ---------------------------------------------------------------------------
