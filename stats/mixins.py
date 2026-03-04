@@ -8,20 +8,11 @@ from bokeh.colors import RGB
 
 class StatsViewMixin:
     primary_color: ClassVar[str] = RGB(*hex_to_rgb("#A45219")).to_css()
-    secondary_color: ClassVar[str] = RGB(*hex_to_rgb("#4f6181")).to_css()
-    template_name: ClassVar[str] = "stats/stats.html"
     base_figure_options: ClassVar[dict[str, Any]] = {
         "height": 450,
         "sizing_mode": "stretch_width",
         "tools": "hover",
         "toolbar_location": "above",
-    }
-    base_vbar_options: ClassVar[dict[str, Any]] = {
-        "x": "year",
-        "width": 0.9,
-        "bottom": 0,
-        "top": "amount",
-        "color": primary_color,
     }
     base_line_options: ClassVar[dict[str, Any]] = {"line_width": 4, "color": primary_color}
 
