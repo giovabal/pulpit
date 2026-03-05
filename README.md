@@ -1,118 +1,154 @@
 # TNExp
-A Telegram Network Explorer designed to produce an interactive web map.
+
+TNExp (Telegram Network Explorer) crawls Telegram channels, maps the relationships between them, and produces an interactive force-directed graph you can explore in a browser.
 
 See the [changelog](CHANGELOG.md) for release history.
 
-## General requirements
-Python 3.12.x is required. Earlier versions may work as well.
 
-You need to have the Telegram app installed on your smartphone. Installing the desktop app on your computer is recommended.
+## How it works
 
-
-## Requirements on Windows
-Windows 10 and later versions have been confirmed to be compatible with this software.
-
-You will need Visual Studio Tools (Community Edition), which you can download here:
-[https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&cid=2030&passive=false](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&cid=2030&passive=false)
-
-During installation, you will be asked which tools to install. You need to select "Desktop development with C++."
+1. You provide search terms; TNExp finds matching Telegram channels via the API.
+2. You review the results in the admin interface and group channels into **Organizations** — thematic clusters (e.g. by political leaning, country, topic).
+3. TNExp crawls the selected channels, collecting messages and resolving cross-channel references (forwards and `t.me/` links).
+4. A graph is built from those references, communities are detected and colored, a ForceAtlas2 layout is applied, and the result is exported as an interactive HTML map.
 
 
-# Operating TNExp
+## Requirements
+
+- Python 3.12 (earlier versions may work)
+- A Telegram account with the app installed on your phone
+- Telegram API credentials — register at [core.telegram.org/api/obtaining_api_id](https://core.telegram.org/api/obtaining_api_id); set **Platform** to `Web`
+
+TNExp is developed and primarily used on GNU/Linux. Windows 10+ is also supported; you will need **Visual Studio Build Tools** with the "Desktop development with C++" workload installed.
+
 
 ## Installation
-After downloading the TNExp code, install the required dependencies:
+
+```sh
+git clone <repo-url>
+cd TNExp
+sh setup.sh          # creates a virtual environment and installs dependencies
+```
+
+Or manually:
+
 ```sh
 pip install -r requirements.txt
 ```
-Next, register your application with Telegram: [https://core.telegram.org/api/obtaining_api_id](https://core.telegram.org/api/obtaining_api_id)
 
-Follow the instructions to obtain an `api_id`. When creating a new application `Platform` should be `Web`, everything else is at your choice.
+Copy the example configuration and fill in your credentials:
 
-You will find a `.env.example` file. Copy and rename it to `.env`, then edit this new file and fill in the `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `TELEGRAM_PHONE_NUMBER` fields.
+```sh
+cp env.example .env
+# edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
+```
 
 
-## Operating
+## Workflow
 
-When executing the Python commands below, remember that depending on your system, you may need to replace `python` with `py` or `python3`.
+> On some systems replace `python` with `python3` or `py`.
 
-Activate the database with:
+### 1. Initialise the database
+
 ```sh
 python manage.py migrate
 ```
 
-Activate the interface with:
+### 2. Start the admin interface
+
 ```sh
 python manage.py runserver
 ```
-Reach it on [localhost:8000](http://localhost:8000) or on [127.0.0.1:8000](http://127.0.0.1:8000)
 
+Open [http://localhost:8000/admin/](http://localhost:8000/admin/).
 
-Then, follow the link for the [admin interface](http://127.0.0.1:8000/admin/) and add a few search terms. These will be used to retrieve channels by name.
+### 3. Add search terms
 
-Search for channels using the defined terms:
+In the admin, go to **Search Terms** and add keywords. These are used to discover channels by name.
+
+### 4. Discover channels
+
 ```sh
 python manage.py search_channels
 ```
 
-Now, return to the [admin interface](http://127.0.0.1:8000/admin/) and assign an organization to the channels you want to investigate.
+Runs up to 15 pending search terms and saves the matching channels to the database.
 
-Fetch the selected channels:
+### 5. Organise channels
+
+Back in the admin, open **Channels** and assign each channel you want to analyse to an **Organization**. Mark the organization as `is_interesting = True`. Channels without an interesting organization are ignored during crawling and graph export.
+
+### 6. Crawl channels
+
 ```sh
 python manage.py get_channels
 ```
 
-You can either repeat this last step or proceed directly to drawing the graph with:
+Downloads messages for all interesting channels. Re-run at any time to fetch new messages.
+
+To also fill gaps in message history (messages that were deleted or missed on a previous run):
+
+```sh
+python manage.py get_channels --fixholes
+```
+
+### 7. Export the graph
+
 ```sh
 python manage.py export_network
 ```
 
-When you have drawn the graph, you can see it by entering the `graph` directory and launching a web server with
+Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`.
+
+### 8. View the graph
+
 ```sh
+cd graph
 python -m http.server 8001
 ```
 
-Use your browser to open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/). On some systems it may be available at [http://127.0.0.1:8001/telegram_graph/](http://127.0.0.1:8001/telegram_graph/) or [http://0.0.0.0:8001/telegram_graph/](http://0.0.0.0:8001/telegram_graph/).
+Open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/) in your browser.
 
 
-## Options
+## Configuration
 
-Write them in your `.env` file.
+All options go in `.env`. Copy `env.example` as a starting point.
 
 ### Telegram
 
-| option name | description | default value |
-| :---------- | :---------- | ------------: |
-| `TELEGRAM_API_ID` | API ID | no default value, you are required to provide one |
-| `TELEGRAM_API_HASH` | API hash | no default value, you are required to provide one |
-| `TELEGRAM_PHONE_NUMBER` | telephone number associated with Telegram | no default value, you are required to provide one |
-| `TELEGRAM_CRAWLER_GRACE_TIME` | time to wait between requests, in seconds | 1 |
-| `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | downloading images from messages | False |
-| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | downloading videos from messages | False |
-| `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | max messages to crawl per channel (None disables limit) | 100 |
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `TELEGRAM_API_ID` | API ID from Telegram | **required** |
+| `TELEGRAM_API_HASH` | API hash from Telegram | **required** |
+| `TELEGRAM_PHONE_NUMBER` | Phone number linked to your Telegram account | **required** |
+| `TELEGRAM_CRAWLER_GRACE_TIME` | Seconds to wait between API requests | `1` |
+| `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | Max messages to fetch per channel per run; set to `None` for no limit | `100` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `False` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos attached to messages | `False` |
 
-### ForceAtlas2
+### Graph layout
 
-| option name | description | default value |
-| :---------- | :---------- | ------------: |
-| `FA2_ITERATIONS` | number of iterations | 20000 |
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `FA2_ITERATIONS` | Number of ForceAtlas2 iterations | `20000` |
+| `LAYOUT` | Desired graph orientation: `HORIZONTAL` or `VERTICAL`. When the computed layout's aspect ratio does not match, the graph is automatically rotated 90°. | `HORIZONTAL` |
 
-### Social Network Analysis
+### Network analysis
 
-| option name | description | default value |
-| :---------- | :---------- | ------------: |
-| `REVERSED_EDGES` | X sharing of a Y content results in a Y → X edge by default | True |
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
 
-### Communities
+### Community detection
 
-| option name | description | default value |
-| :---------- | :---------- | ------------: |
-| `COMMUNITIES_STRATEGY` | community detection strategy (`ORGANIZATION`, `LOUVAIN`, `KCORE`, or `INFOMAP`) | ORGANIZATION |
-| `COMMUNITIES_PALETTE` | color palette for communities (`ORGANIZATION` or any palette from https://python-graph-gallery.com/color-palette-finder/) | ORGANIZATION |
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `COMMUNITIES_STRATEGY` | Algorithm used to assign nodes to communities: `ORGANIZATION` (uses admin groups), `LOUVAIN`, `KCORE`, or `INFOMAP` | `ORGANIZATION` |
+| `COMMUNITIES_PALETTE` | Color palette for communities. Use `ORGANIZATION` to take colors from the admin, or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
 
 ### Drawing
 
-| option name | description | default value |
-| :---------- | :---------- | ------------: |
-| `DRAW_DEAD_LEAVES` | draw even uninteresting channels if they get inbound links (often considerably longer to draw) | False |
-| `DEAD_LEAVES_COLOR` | color of dead leaves, in hex format | #596a64 |
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `DRAW_DEAD_LEAVES` | Include uninteresting channels that receive inbound links from interesting ones. Makes the graph more complete but significantly larger. | `False` |
+| `DEAD_LEAVES_COLOR` | Color for dead-leaf nodes, in hex format | `#596a64` |
