@@ -22,7 +22,7 @@ class ChannelAdmin(admin.ModelAdmin):
     )
     list_editable = ("organization",)
     list_filter = ("organization__is_interesting", "broadcast", "organization")
-    search_fields = ["username", "title"]
+    search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
         return (
