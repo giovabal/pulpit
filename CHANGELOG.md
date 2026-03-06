@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3] - To be announced
+### Improvements
+- Searching channels in admin now involves `about` field too.
+- With Louvain and Infomap communities isolated nodes all belongs to the same community.
+
+
 ## [0.2] - 2026-03-03
 ### Improvements
 - `get_channels` now has a better and more informative output.
