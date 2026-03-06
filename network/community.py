@@ -49,6 +49,17 @@ def build_community_palette(community_map: CommunityMap, palette_name: str) -> C
     }
 
 
+def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> CommunityMap:
+    """Assign all isolated nodes (no edges) to the same community as the first isolated node."""
+    isolated = sorted(node_id for node_id in graph.nodes() if graph.degree(node_id) == 0)
+    if len(isolated) <= 1:
+        return community_map
+    target_community = community_map[isolated[0]]
+    for node_id in isolated[1:]:
+        community_map[node_id] = target_community
+    return community_map
+
+
 def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
     community_map: CommunityMap = {}
     louvain_graph = graph.to_undirected()
@@ -57,6 +68,7 @@ def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, 
     for index, community in enumerate(communities, start=1):
         for node_id in community:
             community_map[node_id] = index
+    community_map = _merge_isolated_nodes(graph, community_map)
     community_map = normalize_community_map(community_map)
     return community_map, build_community_palette(community_map, palette_name)
 
@@ -110,7 +122,6 @@ def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, 
     for node_id in node_ids:
         if node_id not in community_map:
             community_map[node_id] = next_community
-            next_community += 1
 
     community_map = normalize_community_map(community_map)
     return community_map, build_community_palette(community_map, palette_name)
