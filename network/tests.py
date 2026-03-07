@@ -14,6 +14,7 @@ from network.community import (
     build_community_palette,
     detect_infomap,
     detect_kcore,
+    detect_kcore_natural,
     detect_louvain,
     detect_organization,
     normalize_community_map,
@@ -209,26 +210,70 @@ class DetectLouvainTests(TestCase):
 
 class DetectKcoreTests(TestCase):
     def setUp(self) -> None:
-        # Triangle a-b-c forms the 2-core; d is only connected to a (leaf)
+        # Triangle a-b-c has coreness 2; d is a leaf with coreness 1
         self.graph = nx.DiGraph()
         self.graph.add_nodes_from(["a", "b", "c", "d"])
         self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00"])
     def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_kcore(self.graph, "SomePalette", k=2)
+        community_map, _ = detect_kcore(self.graph, "SomePalette")
         self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00"])
-    def test_core_and_non_core_nodes_differ(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_kcore(self.graph, "SomePalette", k=2)
-        # a, b, c are in the 2-core; d is not → at least 2 distinct community values
+    def test_shells_produce_distinct_communities(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_kcore(self.graph, "SomePalette")
+        # a, b, c have coreness 2; d has coreness 1 → 2 distinct community values
         self.assertGreaterEqual(len(set(community_map.values())), 2)
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00"])
     def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_kcore(self.graph, "SomePalette", k=2)
+        community_map, _ = detect_kcore(self.graph, "SomePalette")
         self.assertGreaterEqual(min(community_map.values()), 1)
+
+
+# ---------------------------------------------------------------------------
+# community.py — detect_kcore_natural
+# ---------------------------------------------------------------------------
+
+
+class DetectKcoreNaturalTests(TestCase):
+    def _make_graph(self, edges: list) -> nx.DiGraph:
+        g = nx.DiGraph()
+        g.add_edges_from(edges)
+        return g
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        # Triangle (coreness 2) + leaf (coreness 1) — two distinct shells
+        graph = self._make_graph([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
+        community_map, _ = detect_kcore_natural(graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
+        graph = self._make_graph([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
+        community_map, _ = detect_kcore_natural(graph, "SomePalette")
+        self.assertGreaterEqual(min(community_map.values()), 1)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_gap_splits_into_multiple_communities(self, _mock: MagicMock) -> None:
+        # K4 clique (a,b,c,d) has coreness 3; leaf e has coreness 1 (only edge: e→a).
+        # Coreness jumps 1→3 (gap=2>1), so KCORE_NATURAL must produce ≥2 communities.
+        graph = nx.DiGraph()
+        for u, v in [("a", "b"), ("b", "a"), ("a", "c"), ("c", "a"), ("a", "d"), ("d", "a"),
+                     ("b", "c"), ("c", "b"), ("b", "d"), ("d", "b"), ("c", "d"), ("d", "c"),
+                     ("e", "a")]:
+            graph.add_edge(u, v)
+        community_map, _ = detect_kcore_natural(graph, "SomePalette")
+        self.assertGreaterEqual(len(set(community_map.values())), 2)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000"])
+    def test_single_coreness_value_gives_one_community(self, _mock: MagicMock) -> None:
+        # All nodes form a single clique → uniform coreness → one community
+        graph = self._make_graph([("a", "b"), ("b", "a"), ("a", "c"), ("c", "a"), ("b", "c"), ("c", "b")])
+        community_map, _ = detect_kcore_natural(graph, "SomePalette")
+        self.assertEqual(len(set(community_map.values())), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -952,6 +997,14 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("KCORE", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette")
+
+    @patch("network.community.detect_kcore_natural")
+    def test_kcore_natural_strategy_calls_detect_kcore_natural(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+
+        mock_detect.return_value = ({}, {})
+        detect("KCORE_NATURAL", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette")
 
     @patch("network.community.detect_infomap")

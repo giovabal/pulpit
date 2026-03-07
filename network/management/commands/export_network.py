@@ -31,6 +31,8 @@ class Command(BaseCommand):
         self.stdout.write("Calculate communities")
         strategy_results: dict[str, tuple] = {}
         for strategy in settings.COMMUNITIES_STRATEGY:
+            self.stdout.write(f"- {strategy.lower()} … ", ending="")
+            self.stdout.flush()
             try:
                 community_map, community_palette = community.detect(
                     strategy, settings.COMMUNITIES_PALETTE, graph, channel_dict
@@ -39,6 +41,8 @@ class Command(BaseCommand):
                 raise CommandError(str(e)) from e
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, strategy)
             strategy_results[strategy] = (community_map, community_palette)
+            n_communities = len(set(community_map.values()))
+            self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
         self.stdout.write("\nSet spatial distribution of nodes")

@@ -20,7 +20,7 @@ from infomap import Infomap
 
 logger = logging.getLogger(__name__)
 
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
+COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "KCORE_NATURAL", "INFOMAP"}
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
@@ -88,19 +88,44 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
     return community_map, community_palette
 
 
-def detect_kcore(graph: nx.DiGraph, palette_name: str, k: int = 10) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
-    core_graph = nx.k_core(graph.to_undirected(), k=k)
-    core_nodes = set(core_graph.nodes())
-    for node_id in graph.nodes():
-        community_map[node_id] = 1 if node_id in core_nodes else 0
+def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    coreness = nx.core_number(graph.to_undirected())
+    # Nodes with coreness 0 (isolated) are grouped together at value 1 after normalization
+    community_map: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+def detect_kcore_natural(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    coreness = nx.core_number(graph.to_undirected())
+    unique_vals = sorted(set(max(k, 1) for k in coreness.values()))
+
+    if len(unique_vals) == 1:
+        community_map: CommunityMap = {node_id: 1 for node_id in coreness}
+        return community_map, build_community_palette(community_map, palette_name)
+
+    gaps = [unique_vals[i + 1] - unique_vals[i] for i in range(len(unique_vals) - 1)]
+    # A natural gap is a missing k-shell (jump > 1 between consecutive present coreness values).
+    # If all shells are consecutive (no gaps > 1), fall back to splitting at the largest gap.
+    max_gap = max(gaps)
+    threshold = 1 if max_gap > 1 else 0
+    split_points = {unique_vals[i + 1] for i, gap in enumerate(gaps) if gap > threshold}
+
+    cluster_id = 1
+    val_to_cluster: dict[int, int] = {}
+    for val in unique_vals:
+        if val in split_points:
+            cluster_id += 1
+        val_to_cluster[val] = cluster_id
+
+    community_map = {node_id: val_to_cluster[max(k, 1)] for node_id, k in coreness.items()}
     community_map = normalize_community_map(community_map)
     return community_map, build_community_palette(community_map, palette_name)
 
 
 def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
     community_map: CommunityMap = {}
-    infomap = Infomap("--two-level --directed")
+    infomap = Infomap("--two-level --directed --silent")
     node_ids: list[str] = sorted(graph.nodes())
     node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
     for source, target, edge_data in graph.edges(data=True):
@@ -135,6 +160,8 @@ def detect(
         return detect_louvain(graph, palette_name)
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name)
+    if strategy == "KCORE_NATURAL":
+        return detect_kcore_natural(graph, palette_name)
     if strategy == "INFOMAP":
         return detect_infomap(graph, palette_name)
     if strategy == "ORGANIZATION":
