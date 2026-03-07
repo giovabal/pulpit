@@ -496,23 +496,21 @@ class ChannelActivityPeriodTests(TestCase):
 
 
 class ChannelNetworkDataTests(TestCase):
-    def test_with_organization_sets_group_fields(self) -> None:
+    def test_with_organization_sets_label(self) -> None:
         org = Organization.objects.create(name="Test Org", color="#ff0000")
         ch = Channel.objects.create(telegram_id=1, title="Chan", organization=org)
         data = ch.network_data()
         self.assertEqual(data["label"], "Chan")
-        self.assertEqual(data["group"], "Test Org")
 
-    def test_without_organization_defaults(self) -> None:
+    def test_communities_is_empty_dict_initially(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Chan")
         data = ch.network_data()
-        self.assertEqual(data["group"], "None")
-        self.assertEqual(data["group_key"], "---")
+        self.assertEqual(data["communities"], {})
 
     def test_required_keys_present(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Chan")
         data = ch.network_data()
-        for key in ("pk", "id", "label", "group", "color", "url", "activity_period", "fans"):
+        for key in ("pk", "id", "label", "communities", "color", "url", "activity_period", "fans"):
             self.assertIn(key, data, msg=f"Missing key: {key}")
 
     def test_defaults_dict_merged(self) -> None:

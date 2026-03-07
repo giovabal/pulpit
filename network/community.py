@@ -149,21 +149,20 @@ def apply_to_graph(
     community_palette: CommunityPalette,
     strategy: str,
 ) -> None:
-    """Write community labels and colors back into graph node data."""
+    """Write community label for this strategy into the communities dict on each node, and update node colors."""
+    strategy_key = strategy.lower()
     if strategy not in COMMUNITY_ALGORITHMS:
         org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=set(community_map.values()))}
 
     for node_id, community_id in community_map.items():
         label = community_id if strategy in COMMUNITY_ALGORITHMS else org_names[community_id]
         detected_community = build_community_label(label, strategy)
-        graph.nodes[node_id]["data"]["group"] = detected_community
-        graph.nodes[node_id]["data"]["group_key"] = str(community_id)
-        channel_dict[node_id]["data"]["group"] = detected_community
-        channel_dict[node_id]["data"]["group_key"] = str(community_id)
+        graph.nodes[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
+        channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
 
     for node_id, node_data in graph.nodes(data="data"):
-        group_key = node_data.get("group_key")
-        community_color: ColorTuple | None = community_palette.get(int(group_key)) if group_key else None
+        community_id = community_map.get(node_id)
+        community_color: ColorTuple | None = community_palette.get(community_id) if community_id is not None else None
         if community_color is None:
             community_color = DEFAULT_FALLBACK_COLOR
         rgb_color = ",".join(str(value) for value in community_color)
@@ -181,31 +180,38 @@ def apply_edge_colors(graph: nx.DiGraph, edge_list: list[list[str | float]], cha
         graph.edges[edge[0], edge[1]]["color"] = ",".join(color_strs)
 
 
-def build_group_payload(
-    strategy: str, community_map: CommunityMap, community_palette: CommunityPalette
+def build_communities_payload(
+    strategies: list[str],
+    results: dict[str, tuple[CommunityMap, CommunityPalette]],
 ) -> dict[str, Any]:
-    """Build the group metadata dict for the accessory JSON file."""
-    group_data: dict[str, Any] = {"groups": []}
-    if strategy in COMMUNITY_ALGORITHMS:
-        community_counts = Counter(community_map.values())
-        for community_id, count in community_counts.items():
-            rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
-            detected_community = build_community_label(community_id, strategy)
-            group_data["groups"].append((str(community_id), count, detected_community, rgb_to_hex(rgb)))
-        group_data["main_groups"] = {
-            str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
-        }
-    else:
-        org_qs = Organization.objects.filter(is_interesting=True)
-        for organization in org_qs:
-            group_data["groups"].append(
-                (
-                    organization.id,
-                    organization.channel_set.count(),
-                    organization.name.replace(", ", ""),
-                    organization.color,
+    """Build the communities metadata dict for the accessory JSON file, covering all strategies."""
+    communities_data: dict[str, Any] = {}
+    for strategy in strategies:
+        community_map, community_palette = results[strategy]
+        strategy_key = strategy.lower()
+        if strategy in COMMUNITY_ALGORITHMS:
+            community_counts = Counter(community_map.values())
+            groups = []
+            for community_id, count in community_counts.items():
+                rgb = community_palette.get(community_id, DEFAULT_FALLBACK_COLOR)
+                detected_community = build_community_label(community_id, strategy)
+                groups.append((str(community_id), count, detected_community, rgb_to_hex(rgb)))
+            main_groups = {
+                str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
+            }
+        else:
+            org_qs = Organization.objects.filter(is_interesting=True)
+            groups = []
+            for organization in org_qs:
+                groups.append(
+                    (
+                        organization.id,
+                        organization.channel_set.count(),
+                        organization.name.replace(", ", ""),
+                        organization.color,
+                    )
                 )
-            )
-        group_data["main_groups"] = {org.key: org.name for org in org_qs}
-    group_data["groups"] = sorted(group_data["groups"], key=lambda x: -x[1])
-    return group_data
+            main_groups = {org.key: org.name for org in org_qs}
+        groups = sorted(groups, key=lambda x: -x[1])
+        communities_data[strategy_key] = {"groups": groups, "main_groups": main_groups}
+    return communities_data

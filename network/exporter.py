@@ -35,8 +35,7 @@ def build_graph_data(
         }
         for key in (
             "label",
-            "group",
-            "group_key",
+            "communities",
             "color",
             "pic",
             "url",
@@ -132,7 +131,7 @@ def ensure_graph_root(root_target: str) -> None:
 
 def write_graph_files(
     graph_data: GraphData,
-    group_data: dict[str, Any],
+    communities_data: dict[str, Any],
     measures_labels: list[tuple[str, str]],
     channel_qs: QuerySet[Channel],
     output_filename: str,
@@ -142,8 +141,7 @@ def write_graph_files(
         outputfile.write(json.dumps(graph_data))
 
     accessory_payload: dict[str, Any] = {
-        "main_groups": group_data["main_groups"],
-        "groups": group_data["groups"],
+        "communities": communities_data,
         "measures": measures_labels,
         "total_pages_count": channel_qs.count(),
     }

@@ -13,9 +13,10 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
             raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
-        if settings.COMMUNITIES_STRATEGY not in community.VALID_STRATEGIES:
+        invalid_strategies = [s for s in settings.COMMUNITIES_STRATEGY if s not in community.VALID_STRATEGIES]
+        if invalid_strategies:
             raise CommandError(
-                f"Invalid COMMUNITIES_STRATEGY value: {settings.COMMUNITIES_STRATEGY!r}. "
+                f"Invalid COMMUNITIES_STRATEGY value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES)}."
             )
 
@@ -28,13 +29,16 @@ class Command(BaseCommand):
             raise CommandError(str(e)) from e
 
         self.stdout.write("Calculate communities")
-        try:
-            community_map, community_palette = community.detect(
-                settings.COMMUNITIES_STRATEGY, settings.COMMUNITIES_PALETTE, graph, channel_dict
-            )
-        except ValueError as e:
-            raise CommandError(str(e)) from e
-        community.apply_to_graph(graph, channel_dict, community_map, community_palette, settings.COMMUNITIES_STRATEGY)
+        strategy_results: dict[str, tuple] = {}
+        for strategy in settings.COMMUNITIES_STRATEGY:
+            try:
+                community_map, community_palette = community.detect(
+                    strategy, settings.COMMUNITIES_PALETTE, graph, channel_dict
+                )
+            except ValueError as e:
+                raise CommandError(str(e)) from e
+            community.apply_to_graph(graph, channel_dict, community_map, community_palette, strategy)
+            strategy_results[strategy] = (community_map, community_palette)
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
         self.stdout.write("\nSet spatial distribution of nodes")
@@ -69,10 +73,10 @@ class Command(BaseCommand):
         exporter.ensure_graph_root(root_target)
 
         self.stdout.write("- config files")
-        group_data = community.build_group_payload(settings.COMMUNITIES_STRATEGY, community_map, community_palette)
+        communities_data = community.build_communities_payload(settings.COMMUNITIES_STRATEGY, strategy_results)
         exporter.write_graph_files(
             graph_data,
-            group_data,
+            communities_data,
             measures_labels,
             channel_qs,
             output_filename="graph/telegram_graph/data.json",

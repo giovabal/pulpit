@@ -9,9 +9,9 @@ from network.community import (
     COMMUNITY_ALGORITHMS,
     apply_edge_colors,
     apply_to_graph,
+    build_communities_payload,
     build_community_label,
     build_community_palette,
-    build_group_payload,
     detect_infomap,
     detect_kcore,
     detect_louvain,
@@ -239,8 +239,8 @@ class DetectKcoreTests(TestCase):
 class ApplyToGraphTests(TestCase):
     def setUp(self) -> None:
         self.graph = nx.DiGraph()
-        self.graph.add_node("1", data={"group": "", "group_key": "", "color": ""})
-        self.graph.add_node("2", data={"group": "", "group_key": "", "color": ""})
+        self.graph.add_node("1", data={"color": ""})
+        self.graph.add_node("2", data={"color": ""})
         self.graph.add_edge("1", "2")
         self.community_map = {"1": 1, "2": 2}
         self.community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
@@ -249,10 +249,10 @@ class ApplyToGraphTests(TestCase):
             "2": {"channel": None, "data": {}},
         }
 
-    def test_sets_group_on_graph_nodes(self) -> None:
+    def test_sets_communities_on_graph_nodes(self) -> None:
         apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
         for node_id in ["1", "2"]:
-            self.assertIn("group", self.graph.nodes[node_id]["data"])
+            self.assertIn("communities", self.graph.nodes[node_id]["data"])
 
     def test_sets_color_on_graph_nodes(self) -> None:
         apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
@@ -261,19 +261,19 @@ class ApplyToGraphTests(TestCase):
             self.assertIsInstance(color, str)
             self.assertEqual(len(color.split(",")), 3)  # "r,g,b" format
 
-    def test_updates_channel_dict_with_group_and_color(self) -> None:
+    def test_updates_channel_dict_with_communities_and_color(self) -> None:
         apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
         for key in ["1", "2"]:
-            self.assertIn("group", self.channel_dict[key]["data"])
+            self.assertIn("communities", self.channel_dict[key]["data"])
             self.assertIn("color", self.channel_dict[key]["data"])
 
-    def test_louvain_group_label_includes_community_id_and_strategy(self) -> None:
+    def test_louvain_community_label_includes_community_id_and_strategy(self) -> None:
         apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
-        self.assertEqual(self.graph.nodes["1"]["data"]["group"], "1-louvain")
-        self.assertEqual(self.graph.nodes["2"]["data"]["group"], "2-louvain")
+        self.assertEqual(self.graph.nodes["1"]["data"]["communities"]["louvain"], "1-louvain")
+        self.assertEqual(self.graph.nodes["2"]["data"]["communities"]["louvain"], "2-louvain")
 
     def test_node_without_community_gets_fallback_color(self) -> None:
-        # community_map is empty → no group_key assigned → nodes use DEFAULT_FALLBACK_COLOR
+        # community_map is empty → no community assigned → nodes use DEFAULT_FALLBACK_COLOR
         apply_to_graph(self.graph, self.channel_dict, {}, self.community_palette, "LOUVAIN")
         for node_id in ["1", "2"]:
             color = self.graph.nodes[node_id]["data"]["color"]
@@ -283,9 +283,9 @@ class ApplyToGraphTests(TestCase):
     def test_algorithm_strategy_uses_integer_label(self) -> None:
         for strategy in COMMUNITY_ALGORITHMS:
             apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, strategy)
-            group = self.graph.nodes["1"]["data"]["group"]
-            # Group must contain the integer community id
-            self.assertIn("1", group)
+            community_label = self.graph.nodes["1"]["data"]["communities"][strategy.lower()]
+            # Label must contain the integer community id
+            self.assertIn("1", community_label)
 
 
 # ---------------------------------------------------------------------------
@@ -326,48 +326,60 @@ class ApplyEdgeColorsTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# community.py — build_group_payload
+# community.py — build_communities_payload
 # ---------------------------------------------------------------------------
 
 
-class BuildGroupPayloadTests(TestCase):
+class BuildCommunitiesPayloadTests(TestCase):
     def test_algorithm_strategy_builds_groups_from_community_map(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 2}
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_group_payload("LOUVAIN", community_map, community_palette)
-        self.assertIn("groups", result)
-        self.assertIn("main_groups", result)
-        self.assertEqual(len(result["groups"]), 2)
+        result = build_communities_payload(["LOUVAIN"], {"LOUVAIN": (community_map, community_palette)})
+        self.assertIn("louvain", result)
+        self.assertIn("groups", result["louvain"])
+        self.assertIn("main_groups", result["louvain"])
+        self.assertEqual(len(result["louvain"]["groups"]), 2)
 
     def test_groups_sorted_by_count_descending(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 1, "d": 2}  # community 1: 3 nodes, 2: 1 node
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_group_payload("LOUVAIN", community_map, community_palette)
-        counts = [g[1] for g in result["groups"]]
+        result = build_communities_payload(["LOUVAIN"], {"LOUVAIN": (community_map, community_palette)})
+        counts = [g[1] for g in result["louvain"]["groups"]]
         self.assertEqual(counts, sorted(counts, reverse=True))
 
     def test_algorithm_main_groups_maps_id_to_label(self) -> None:
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
-        result = build_group_payload("KCORE", community_map, community_palette)
-        self.assertIn("1", result["main_groups"])
+        result = build_communities_payload(["KCORE"], {"KCORE": (community_map, community_palette)})
+        self.assertIn("1", result["kcore"]["main_groups"])
 
     def test_organization_strategy_uses_db(self) -> None:
         Organization.objects.create(name="My Org", is_interesting=True)
-        result = build_group_payload("ORGANIZATION", {}, {})
-        org_names = [g[2] for g in result["groups"]]
+        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
+        org_names = [g[2] for g in result["organization"]["groups"]]
         self.assertIn("My Org", org_names)
 
     def test_non_interesting_orgs_excluded_from_organization_strategy(self) -> None:
         Organization.objects.create(name="Hidden Org", is_interesting=False)
-        result = build_group_payload("ORGANIZATION", {}, {})
-        org_names = [g[2] for g in result["groups"]]
+        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
+        org_names = [g[2] for g in result["organization"]["groups"]]
         self.assertNotIn("Hidden Org", org_names)
 
     def test_organization_strategy_main_groups_uses_key_and_name(self) -> None:
         org = Organization.objects.create(name="My Org", is_interesting=True)
-        result = build_group_payload("ORGANIZATION", {}, {})
-        self.assertEqual(result["main_groups"].get(org.key), org.name)
+        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
+        self.assertEqual(result["organization"]["main_groups"].get(org.key), org.name)
+
+    def test_multiple_strategies_all_included(self) -> None:
+        community_map = {"a": 1}
+        community_palette = {1: (255, 0, 0)}
+        results = {
+            "LOUVAIN": (community_map, community_palette),
+            "KCORE": (community_map, community_palette),
+        }
+        result = build_communities_payload(["LOUVAIN", "KCORE"], results)
+        self.assertIn("louvain", result)
+        self.assertIn("kcore", result)
 
 
 # ---------------------------------------------------------------------------
@@ -466,8 +478,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
     node_data_1 = {
         "pk": "1",
         "label": "Ch1",
-        "group": "g1",
-        "group_key": "1",
+        "communities": {"louvain": "1-louvain"},
         "color": "255,0,0",
         "pic": "",
         "url": "https://t.me/ch1",
@@ -481,8 +492,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
     node_data_2 = {
         "pk": "2",
         "label": "Ch2",
-        "group": "g2",
-        "group_key": "2",
+        "communities": {"louvain": "2-louvain"},
         "color": "0,0,255",
         "pic": "",
         "url": "https://t.me/ch2",
@@ -519,8 +529,7 @@ class BuildGraphDataTests(TestCase):
             "x",
             "y",
             "label",
-            "group",
-            "group_key",
+            "communities",
             "color",
             "pic",
             "url",
@@ -780,9 +789,11 @@ class WriteGraphFilesTests(TestCase):
         self.ch = Channel.objects.create(telegram_id=1, organization=org, title="Chan1")
         self.channel_qs = Channel.objects.filter(pk=self.ch.pk)
         self.graph_data = {"nodes": [{"id": "1"}], "edges": []}
-        self.group_data = {
-            "main_groups": {"g1": "Group 1"},
-            "groups": [("1", 5, "Group 1", "#FF0000")],
+        self.communities_data = {
+            "louvain": {
+                "main_groups": {"1": "1-louvain"},
+                "groups": [("1", 5, "1-louvain", "#FF0000")],
+            }
         }
         self.measures_labels = [("in_deg", "Inbound connections"), ("pagerank", "PageRank")]
 
@@ -791,7 +802,7 @@ class WriteGraphFilesTests(TestCase):
             out_file = os.path.join(tmpdir, "data.json")
             acc_file = os.path.join(tmpdir, "accessory.json")
             write_graph_files(
-                self.graph_data, self.group_data, self.measures_labels, self.channel_qs, out_file, acc_file
+                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
             )
             self.assertTrue(os.path.exists(out_file))
             with open(out_file) as f:
@@ -804,12 +815,12 @@ class WriteGraphFilesTests(TestCase):
             out_file = os.path.join(tmpdir, "data.json")
             acc_file = os.path.join(tmpdir, "accessory.json")
             write_graph_files(
-                self.graph_data, self.group_data, self.measures_labels, self.channel_qs, out_file, acc_file
+                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
             )
             self.assertTrue(os.path.exists(acc_file))
             with open(acc_file) as f:
                 acc_data = json.load(f)
-            for key in ("main_groups", "groups", "measures", "total_pages_count"):
+            for key in ("communities", "measures", "total_pages_count"):
                 self.assertIn(key, acc_data)
 
     def test_accessory_total_pages_count_matches_queryset(self) -> None:
@@ -817,7 +828,7 @@ class WriteGraphFilesTests(TestCase):
             out_file = os.path.join(tmpdir, "data.json")
             acc_file = os.path.join(tmpdir, "accessory.json")
             write_graph_files(
-                self.graph_data, self.group_data, self.measures_labels, self.channel_qs, out_file, acc_file
+                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
             )
             with open(acc_file) as f:
                 acc_data = json.load(f)
@@ -1041,7 +1052,7 @@ def _patch_export_pipeline() -> list:
         f"{_EXPORT_CMD}.community.detect",
         f"{_EXPORT_CMD}.community.apply_to_graph",
         f"{_EXPORT_CMD}.community.apply_edge_colors",
-        f"{_EXPORT_CMD}.community.build_group_payload",
+        f"{_EXPORT_CMD}.community.build_communities_payload",
         f"{_EXPORT_CMD}.layout.compute_layout",
         f"{_EXPORT_CMD}.exporter.build_graph_data",
         f"{_EXPORT_CMD}.exporter.find_main_component",
@@ -1067,7 +1078,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_main_comp: MagicMock,
         mock_measures: MagicMock,
         mock_pagerank: MagicMock,
-        mock_group_payload: MagicMock,
+        mock_communities_payload: MagicMock,
     ) -> None:
         fake_graph = nx.DiGraph()
         fake_graph.add_node("1")
@@ -1078,7 +1089,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_main_comp.return_value = {"1"}
         mock_measures.return_value = [("in_deg", "Inbound")]
         mock_pagerank.return_value = [("pagerank", "PageRank")]
-        mock_group_payload.return_value = {"groups": [], "main_groups": {}}
+        mock_communities_payload.return_value = {"organization": {"groups": [], "main_groups": {}}}
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
@@ -1089,7 +1100,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.compute_layout")
-    @patch(f"{_EXPORT_CMD}.community.build_group_payload")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
     @patch(f"{_EXPORT_CMD}.community.detect")
@@ -1115,7 +1126,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.compute_layout")
-    @patch(f"{_EXPORT_CMD}.community.build_group_payload")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
     @patch(f"{_EXPORT_CMD}.community.detect")
@@ -1126,7 +1137,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_detect: MagicMock,
         mock_apply_to_graph: MagicMock,
         mock_edge_colors: MagicMock,
-        mock_group_payload: MagicMock,
+        mock_communities_payload: MagicMock,
         mock_layout: MagicMock,
         mock_graph_data: MagicMock,
         mock_main_comp: MagicMock,
@@ -1147,7 +1158,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_main_comp,
             mock_measures,
             mock_pagerank,
-            mock_group_payload,
+            mock_communities_payload,
         )
         call_command("export_network")
 

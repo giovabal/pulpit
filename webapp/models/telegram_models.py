@@ -104,8 +104,7 @@ class Channel(TelegramBaseModel):
             "pk": str(self.pk),
             "id": self.telegram_id,
             "label": self.title,
-            "group": self.organization.name if self.organization else "None",
-            "group_key": self.organization.key if self.organization else "---",
+            "communities": {},
             "color": ",".join(
                 map(str, hex_to_rgb(self.organization.color if self.organization else settings.DEAD_LEAVES_COLOR))
             ),
