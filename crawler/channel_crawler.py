@@ -44,7 +44,7 @@ class ChannelCrawler:
                 if telegram_channel
                 else (None, None)
             )
-        except errors.rpcerrorlist.ChannelPrivateError:
+        except (errors.rpcerrorlist.ChannelPrivateError, ValueError):
             logger.info("Not available seed: %s", seed)
             return None, None
 
