@@ -215,7 +215,7 @@ function apply_strategy_colors(strategy) {
         var src = sigma_instance.graph.nodes(e.source);
         var tgt = sigma_instance.graph.nodes(e.target);
         var avg = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
-        e.originalColor = 'rgb(' + avg.join(',') + ')';
+        e.originalColor = 'rgba(' + avg.join(',') + ',0.25)';
         e.color = e.originalColor;
     });
     sigma_instance.refresh();
@@ -277,7 +277,7 @@ function get_data() {
 	        n.originalColor = n.color;
 	    });
 	    sigma_instance.graph.edges().forEach(function(e) {
-	        e.color = e.color ? "rgba(" + e.color + ",0.35)" : "rgba(72,72,72,0.35)";
+	        e.color = e.color ? "rgba(" + e.color + ",0.25)" : "rgba(72,72,72,0.25)";
 	        e.originalColor = e.color;
 	    });
 	    sigma_instance.refresh();
