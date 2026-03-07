@@ -2,7 +2,7 @@ sigma.classes.graph.addMethod('neighbors', function(nodeId) {
     var k,
 	    neighbors = {},
 	    index = this.allNeighborsIndex[nodeId] || {};
-    
+
     for (k in index)
 	    neighbors[k] = this.nodesIndex[k];
 
@@ -17,13 +17,13 @@ sigma.classes.graph.addMethod('structured_neighbors', function(nodeId) {
 	    index = this.allNeighborsIndex[nodeId] || {},
 	    in_index = this.inNeighborsIndex[nodeId] || {},
 	    out_index = this.outNeighborsIndex[nodeId] || {};
-    
+
     for (k in index) {
 	    if (k in in_index && k in out_index) mutual_neighbors[k] = this.nodesIndex[k];
 	    else if (k in in_index) in_neighbors[k] = this.nodesIndex[k];
 	    else if (k in out_index) out_neighbors[k] = this.nodesIndex[k];
     }
-    
+
     return {
 	    mutual_neighbors: mutual_neighbors,
 	    in_neighbors: in_neighbors,
@@ -35,15 +35,24 @@ sigma.classes.graph.addMethod('out_neighbors', function(nodeId) {
     var k,
 	    neighbors = {},
 	    index = this.outNeighborsIndex[nodeId] || {};
-    
+
     for (k in index)
 	    neighbors[k] = this.nodesIndex[k];
 
     return neighbors;
 });
 
-var accessory_data;
+// ---------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------
+
+var accessory_data  = null;
+var active_strategy = null;
+var community_color_maps = {};   // { strategyKey: { communityLabel: hexColor } }
 var is_graph_completely_rendered = false;
+var graph_loaded     = false;
+var accessory_loaded = false;
+
 var settings = {
     container: 'sigma-canvas',
     container_background_color: "rgba(17, 34, 51, 1)",
@@ -85,10 +94,15 @@ var sigma_instance = new sigma({
     }
 });
 
+// ---------------------------------------------------------------------------
+// Infobar node-click (registered early, fires on every click)
+// ---------------------------------------------------------------------------
+
 sigma_instance.bind("clickNode", function (x) {
+    var node;
     if (x.data.node !== undefined) node = x.data.node;
     else node = x.data;
-    var key = node.url.replace("https://t.me/", "");
+    var key = node.url ? node.url.replace("https://t.me/", "") : "";
     $('#node_label').html(node.label);
     $('#node_url').html("@" + key);
     $('#node_url').attr('href', node.url);
@@ -104,16 +118,9 @@ sigma_instance.bind("clickNode", function (x) {
     $('#node_details').hide();
     $('#node_disclaimer').hide();
     $('#node_disclaimer_wiki').hide();
-    if (node.p) $('#node_location').html('[' + node.p + ']');
-    if (node.group == '-') {
-	    $('#node_disclaimer').show();
-    } else if (node.group == 'wiki') {
-	    $('#node_disclaimer_wiki').show();
-    } else {
-	    $('#node_details').show();
-    }
+    $('#node_details').show();
 
-    neighbors = sigma_instance.graph.structured_neighbors(node.id);
+    var neighbors = sigma_instance.graph.structured_neighbors(node.id);
     var mutual_nodes = get_neighbors_list(neighbors.mutual_neighbors);
     $('#node_mutual_count').html(mutual_nodes.length);
     $('#node_mutual_list').html(mutual_nodes.join(''));
@@ -126,40 +133,162 @@ sigma_instance.bind("clickNode", function (x) {
     $('#infobar').show();
 });
 
+// ---------------------------------------------------------------------------
+// Neighbor list helpers
+// ---------------------------------------------------------------------------
+
 function get_neighbors_list(obj_list) {
     var neighbors = [];
     var nodes = [];
-    for (n in obj_list) neighbors.push(obj_list[n]);
+    for (var n in obj_list) neighbors.push(obj_list[n]);
     neighbors = neighbors.sort(node_sort);
-    for (n in neighbors) nodes.push('<li>' + get_anchor(neighbors[n]) + '</li>');
+    for (var i = 0; i < neighbors.length; i++) nodes.push('<li>' + get_anchor(neighbors[i]) + '</li>');
     return nodes;
 }
 
-function get_data() {
-    $('#loading_modal').modal('show');
-    $('#loading_message').html('Loading...<br>Please wait.');
+function node_sort(x, y) {
+    return x.label.localeCompare(y.label);
+}
 
-    $.getJSON( "data.json", function( data ) {
-	    $('#loading_message').html('Graph building.');
+function get_anchor(node) {
+    var color = node.originalColor || '#ccc';
+    var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
+    return '<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '" title="' + label + '"></i>'
+         + ' <a href="#" class="node-link" data="' + node.id + '">' + node.label + '</a>';
+}
+
+function get_group(node) {
+    var color = node.originalColor || '#ccc';
+    var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
+    return '<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '"></i> ' + label;
+}
+
+// ---------------------------------------------------------------------------
+// Color helpers
+// ---------------------------------------------------------------------------
+
+function hex_to_rgb_parts(hex) {
+    hex = hex.replace(/^#/, '');
+    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+    return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+}
+
+function rgb_str_to_parts(s) {
+    var m = s.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    return m ? [+m[1], +m[2], +m[3]] : [128, 128, 128];
+}
+
+function avg_and_darken(c1, c2, factor) {
+    return [
+        Math.round((c1[0]+c2[0])/2 * factor),
+        Math.round((c1[1]+c2[1])/2 * factor),
+        Math.round((c1[2]+c2[2])/2 * factor)
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// Community coloring
+// ---------------------------------------------------------------------------
+
+function build_community_color_maps(communities) {
+    var maps = {};
+    for (var strategy in communities) {
+        maps[strategy] = {};
+        var groups = communities[strategy].groups;
+        for (var i = 0; i < groups.length; i++) {
+            // groups[i] = [id, count, label, hexColor]
+            maps[strategy][groups[i][2]] = groups[i][3];
+        }
+    }
+    return maps;
+}
+
+function apply_strategy_colors(strategy) {
+    var colorMap = community_color_maps[strategy] || {};
+    sigma_instance.graph.nodes().forEach(function(n) {
+        var label = n.communities && n.communities[strategy];
+        var rgb = (label && colorMap[label]) ? hex_to_rgb_parts(colorMap[label]) : [204, 204, 204];
+        n.originalColor = 'rgb(' + rgb.join(',') + ')';
+        n.color = n.originalColor;
+    });
+    sigma_instance.graph.edges().forEach(function(e) {
+        var src = sigma_instance.graph.nodes(e.source);
+        var tgt = sigma_instance.graph.nodes(e.target);
+        var avg = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
+        e.originalColor = 'rgb(' + avg.join(',') + ')';
+        e.color = e.originalColor;
+    });
+    sigma_instance.refresh();
+    is_graph_completely_rendered = true;
+}
+
+function maybe_apply_initial_colors() {
+    if (graph_loaded && accessory_loaded && active_strategy) {
+        apply_strategy_colors(active_strategy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// UI builders
+// ---------------------------------------------------------------------------
+
+function build_strategy_selector(communities) {
+    var strategies = Object.keys(communities);
+    if (strategies.length <= 1) {
+        $('#community-strategy-group').hide();
+        return;
+    }
+    var items = strategies.map(function(s) {
+        return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+    });
+    $('#community-strategy-select').html(items.join(''));
+    $('#community-strategy-group').show();
+}
+
+function build_legend(strategyData) {
+    var legend_items = [];
+    var group_select_items = [];
+    group_select_items.push('<option value="" selected="selected">All nodes</option>');
+    var groups = strategyData.groups;
+    for (var i = 0; i < groups.length; i++) {
+        var l = groups[i]; // [id, count, label, hexColor]
+        legend_items.push('<li style="padding-bottom: .75em;">');
+        legend_items.push('<i class="fa fa-circle" style="color: ' + l[3] + ';"></i> ' + l[2] + ', ' + l[1] + ' channels');
+        legend_items.push('</li>');
+        group_select_items.push('<option value="' + l[2] + '">' + l[2] + '</option>');
+    }
+    $('#legend').html(legend_items.join(''));
+    $('#group-select').html(group_select_items.join(''));
+}
+
+// ---------------------------------------------------------------------------
+// Graph loading
+// ---------------------------------------------------------------------------
+
+function get_data() {
+    $.getJSON("data.json", function(data) {
+	    $('#loading_message').html('Building graph…');
 	    sigma_instance.graph.read(data);
 	    sigma_instance.graph.nodes().forEach(function(n) {
-	        n.size = n.in_deg;
-	        if (n.fans == 0) n.tac_on_fans = 0;
-	        else n.tac_on_fans = n.tac / n.fans;
+	        n.size = (n.in_deg || 0) + 1;
 	    });
 	    sigma_instance.graph.nodes().forEach(function(n) {
 	        n.color = "rgb(" + n.color + ")";
 	        n.originalColor = n.color;
-	        n.activityTemperature = n.temp;
 	    });
 	    sigma_instance.graph.edges().forEach(function(e) {
-	        e.color = "rgba(" + e.color + ",0.25)";
+	        e.color = e.color ? "rgba(" + e.color + ",0.35)" : "rgba(72,72,72,0.35)";
 	        e.originalColor = e.color;
 	    });
 	    sigma_instance.refresh();
 	    $('#loading_message').html('Done!');
-	    
+	    $('#loading_modal').modal('hide');
+
+	    graph_loaded = true;
+	    maybe_apply_initial_colors();
+
 	    sigma_instance.bind('clickNode', function(e) {
+	        var node;
 	        if (e.data.node !== undefined) node = e.data.node;
 	        else node = e.data;
 	        var nodeId = node.id,
@@ -167,17 +296,11 @@ function get_data() {
 	        toKeep[nodeId] = node;
 
 	        sigma_instance.graph.nodes().forEach(function(n) {
-		        if (toKeep[n.id])
-		            n.color = n.originalColor;
-		        else
-		            n.color = settings.fade_color;
+		        n.color = toKeep[n.id] ? n.originalColor : settings.fade_color;
 	        });
 
-	        sigma_instance.graph.edges().forEach(function(e) {
-		        if (toKeep[e.source] && toKeep[e.target])
-		            e.color = e.originalColor;
-		        else
-		            e.color = settings.fade_color;
+	        sigma_instance.graph.edges().forEach(function(e2) {
+		        e2.color = (toKeep[e2.source] && toKeep[e2.target]) ? e2.originalColor : settings.fade_color;
 	        });
 
 	        sigma_instance.refresh();
@@ -189,18 +312,19 @@ function get_data() {
 		        sigma_instance.graph.nodes().forEach(function(n) {
 		            n.color = n.originalColor;
 		        });
-		        
 		        sigma_instance.graph.edges().forEach(function(e) {
 		            e.color = e.originalColor;
 		        });
-
 		        sigma_instance.refresh();
 		        is_graph_completely_rendered = true;
 	        }
 	    });
     });
-    $('#loading_modal').modal('hide');
-};
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
 
 function Search(word, result_element) {
     var c = [],
@@ -211,7 +335,7 @@ function Search(word, result_element) {
         sigma_instance.graph.nodes().forEach(function (a) {
             g.test(a.label) && c.push(sigma_instance.graph.nodes(a.id));
 	    });
-        a = ["<b>Results: </b>", '<ul class="list-unstyled">'];
+        var a = ["<b>Results: </b>", '<ul class="list-unstyled">'];
 	    if (c.length > 0) {
 	        c.sort(node_sort);
             for (var d = 0, h = c.length; d < h; d++) a.push('<li>' + get_anchor(c[d]) + '</li>');
@@ -221,8 +345,8 @@ function Search(word, result_element) {
 	    a.push("</ul>");
 	    if (c.length > 0) {
 	        a.push("<i>");
-	        if (c.length == 1) a.push("1 canale");
-	        else a.push(c.length + " canali");
+	        if (c.length == 1) a.push("1 channel");
+	        else a.push(c.length + " channels");
 	        a.push("</i>");
 	    }
         result_element.html(a.join(""));
@@ -230,197 +354,111 @@ function Search(word, result_element) {
     result_element.show();
 }
 
-function node_sort(x, y) {
-    return x.label.localeCompare(y.label);
-}
-
-function get_anchor(node) {
-    var s = get_group_symbol_color(node);
-    main_group = s[0];
-    symbol = s[1];
-    color = s[2];
-    return '<i class="fa fa-' + symbol + '" aria-hidden="true" style="color: ' + color + '" title="' + accessory_data.main_groups[main_group] + '"></i> <a href="#" class="node-link" data="' + node.id + '">' + node.label + '</a>';
-}
-
-function get_group(node) {
-    var s = get_group_symbol_color(node);
-    main_group = s[0];
-    symbol = s[1];
-    color = s[2];
-    return '<i class="fa fa-' + symbol + '" aria-hidden="true" style="color: ' + color + '"></i> ' + accessory_data.main_groups[main_group];
-}
-
-function get_group_symbol_color(node) {
-    var symbol = "circle";
-    if (['', '-', 'wiki'].indexOf(node.group) >= 0) symbol = symbol + '-o';
-    var color = node.originalColor;
-    if (['', '-', 'wiki'].indexOf(node.group) >= 0) color = "#ccc";
-    main_group = node.group_key;
-    if (main_group.indexOf('-') >= 0) main_group = main_group.substring(0, main_group.indexOf('-'));
-    return [main_group, symbol, color];
-}
-
 function click_node(nodeId) {
     sigma_instance.dispatchEvent('clickStage');
-    n = sigma_instance.graph.nodes(nodeId);
-    sigma_instance.dispatchEvent('click', n);
-    sigma_instance.dispatchEvent('clickNode', n);
+    var n = sigma_instance.graph.nodes(nodeId);
+    if (n) sigma_instance.dispatchEvent('clickNode', { data: n });
 }
 
-function rgb_to_array(s) {
-    var a = s.split("(")[1].split(")")[0];
-    a = a.split(",");
-    var b = a.map(function(x) {
-	    return parseInt(x).toString(16);
-    });
-    return b;
-}
-
-function rgb_to_hex(s) {
-    var b = rgb_to_array(s).map(function(x) {
-	    return (x.length==1) ? "0" + x : x;
-    });
-    return "0x" + rgb_to_array(s).join("");
-}
-
-function darken_rgb(s) {
-    var a = rgb_to_array(s).map(function(x) {
-	    return (x * 0.85) | 0;
-    });
-    return "rgb(" + a.join(",") + ")";
-}
-
-function build_legend(data) {
-    var legend_items = [];
-    var group_select_items = [];
-    group_select_items.push('<option value="" selected="selected"><i class="fa fa-circle-o"></i> All the map</option>');
-    for ( i=0; i < data['groups'].length; i++ ) {
-	    var l = data['groups'][i];
-	    var local_legend_items = [];
-	    legend_items.push('<li style="padding-bottom: .75em;">');
-	    legend_items.push('<i class="fa fa-circle" style="color: ' + l[3] + ';"></i> ' + l[2] + ', ' + l[1] + ' channels');
-	    group_select_items.push('<option value="' + l[0] + '"><i class="fa fa-circle" style="color: ' + l[3] + ';"></i> ' + l[2] + '</option>');
-	    legend_items.push('</li>');
-    }
-    $('#legend').html(legend_items.join(''));
-    $('#group-select').html(group_select_items.join(''));
-
-    var size_select_items = [];
-    if (Array.isArray(data['measures'])) {
-        data['measures'].forEach(function(measure) {
-            size_select_items.push('<option value="' + measure[0] + '">' + measure[1] + '</option>');
-        });
-    } else {
-        Object.keys(data['measures']).forEach(function(key) {
-            size_select_items.push('<option value="' + key + '">' + data['measures'][key] + '</option>');
-        });
-    }
-    $('#size-select').html(size_select_items.join(''));
-    $('#total_pages_count').html(data["total_pages_count"]);
-    $('#total_interesting_pages_count').html(data["total_interesting_pages_count"]);
-}
+// ---------------------------------------------------------------------------
+// Document ready
+// ---------------------------------------------------------------------------
 
 $( document ).ready(function() {
+    $('#loading_modal').modal('show');
+    $('#loading_message').html('Loading…<br>Please wait.');
+
     get_data();
-    $.getJSON( "data_accessory.json", function( data ) {
-	    accessory_data = data; 
-	    build_legend(accessory_data);
+
+    $.getJSON("data_accessory.json", function(data) {
+	    accessory_data       = data;
+	    community_color_maps = build_community_color_maps(data.communities);
+	    var strategies        = Object.keys(data.communities);
+	    active_strategy       = strategies[0] || null;
+
+	    build_strategy_selector(data.communities);
+	    if (active_strategy) build_legend(data.communities[active_strategy]);
+
+	    var size_items = data.measures.map(function(m) {
+	        return '<option value="' + m[0] + '">' + m[1] + '</option>';
+	    });
+	    $('#size-select').html(size_items.join(''));
+	    $('#total_pages_count').html(data.total_pages_count);
+
+	    accessory_loaded = true;
+	    maybe_apply_initial_colors();
     });
-    
+
+    // Community strategy picker
+    $('#community-strategy-select').on('change', function() {
+        active_strategy = $(this).val();
+        if (accessory_data) build_legend(accessory_data.communities[active_strategy]);
+        if (graph_loaded) {
+            apply_strategy_colors(active_strategy);
+            $('#group-select').val('');
+        }
+    });
+
     $('#search_input').val('');
 
     $('#search_modal').on("shown.bs.modal", function() {
 	    $('#search_input').focus();
     });
-    
+
     $('#search').submit(function() {
         Search($('#search_input').val(), $('#results'));
         return false;
     });
-    
+
     $('.infobar-toggle').on('click', function () {
         $('#infobar').toggle();
         sigma_instance.dispatchEvent('clickStage');
     });
-    
+
     $('body').on('click', 'a.node-link', function (n) {
         var id = $(this).attr('data');
         click_node(id);
         return false;
     });
-    
+
     $('#size-select').on('change', function() {
-	    v = $( this ).val();
+	    var v = $( this ).val();
 	    sigma_instance.graph.nodes().forEach(function(n) {
-            n.size = n[v];
+            n.size = (n[v] || 0) + 1;
 	    });
 	    sigma_instance.refresh();
     });
 
     $('#group-select').on('change', function() {
-	    v = $( this ).val();
-	    if (v == "") {
+	    var v = $( this ).val();
+	    if (v === "") {
             sigma_instance.graph.nodes().forEach(function(n) {
 		        n.color = n.originalColor;
 	        });
-
             sigma_instance.graph.edges().forEach(function(e) {
 		        e.color = e.originalColor;
             });
-
             sigma_instance.refresh();
+            is_graph_completely_rendered = true;
 	        return;
 	    }
 	    var toKeep = [];
         sigma_instance.graph.nodes().forEach(function(n) {
-	        if (typeof n.group !== 'undefined') {
-		        if(n.group == v || n.group.startsWith(v + '-')) {
-		            toKeep = toKeep.concat([n.id, ]);
-		            a = sigma_instance.graph.neighbors(n.id);
-		            for (var i = 0; i < a.lenght; i++) {
-			            toKeep = toKeep.concat([a[i].id, ]);
-		            }
-		        }
-	        }
+	        var label = n.communities && active_strategy ? n.communities[active_strategy] : '';
+	        if (label === v) toKeep.push(n.id);
         });
 
         sigma_instance.graph.nodes().forEach(function(n) {
-	        if (toKeep.indexOf(n.id) >= 0)
-		        n.color = n.originalColor;
-	        else
-		        n.color = settings.fade_color;
+	        n.color = toKeep.indexOf(n.id) >= 0 ? n.originalColor : settings.fade_color;
         });
 
         sigma_instance.graph.edges().forEach(function(e) {
-	        if (toKeep.indexOf(e.source.id) >= 0 && toKeep.indexOf(e.target.id) >= 0)
-		        e.color = e.originalColor;
-	        else
-		        e.color = settings.fade_color;
+	        e.color = (toKeep.indexOf(e.source) >= 0 && toKeep.indexOf(e.target) >= 0)
+	            ? e.originalColor : settings.fade_color;
         });
 
         sigma_instance.refresh();
-    });
-
-    $('#color-select').on('change', function() {
-	    v = $( this ).val();
-	    if (v == "activity_index") {
-            sigma_instance.graph.nodes().forEach(function(n) {
-		        n.color = n.activityTemperature;
-            });
-
-            sigma_instance.graph.edges().forEach(function(e) {
-		        e.color = settings.fade_color;
-            });
-	    } else {
-            sigma_instance.graph.nodes().forEach(function(n) {
-		        n.color = n.originalColor;
-	        });
-
-            sigma_instance.graph.edges().forEach(function(e) {
-		        e.color = e.originalColor;
-            });
-	    }
-        sigma_instance.refresh();
+        is_graph_completely_rendered = false;
     });
 
     $("#zoom_in").click(function () {
