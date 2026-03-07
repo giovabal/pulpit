@@ -4,6 +4,8 @@
 ### Improvements
 - Searching channels in admin now involves `about` field too.
 - With Louvain and Infomap communities isolated nodes all belongs to the same community.
+- `KCORE` community strategy now generates more nuanced results.
+- Improved usability of the local python webserver.
 
 ### New features
 - More than one community strategy can be applied at once.
