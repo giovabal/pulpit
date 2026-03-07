@@ -11,6 +11,9 @@
 ### New features
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
 
+## Backward incompatibility
+- IE is no longer supported in graph mini-site.
+
 
 ## [0.2] - 2026-03-03
 ### Improvements
