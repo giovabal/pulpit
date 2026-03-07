@@ -5,6 +5,9 @@
 - Searching channels in admin now involves `about` field too.
 - With Louvain and Infomap communities isolated nodes all belongs to the same community.
 
+### New features
+- More than one community strategy can be applied at once.
+
 
 ## [0.2] - 2026-03-03
 ### Improvements

@@ -1163,8 +1163,8 @@ class ExportNetworkCommandTests(TestCase):
         call_command("export_network")
 
         mock_build.assert_called_once()
-        mock_detect.assert_called_once()
-        mock_apply_to_graph.assert_called_once()
+        mock_detect.assert_called()
+        mock_apply_to_graph.assert_called()
         mock_edge_colors.assert_called_once()
         mock_layout.assert_called_once()
         mock_graph_data.assert_called_once()

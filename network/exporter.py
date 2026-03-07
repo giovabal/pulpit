@@ -121,8 +121,14 @@ def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -
 
 
 def ensure_graph_root(root_target: str) -> None:
-    shutil.rmtree(root_target, ignore_errors=True)
-    os.makedirs(root_target, exist_ok=True)
+    if os.path.isdir(root_target):
+        for entry in os.scandir(root_target):
+            if entry.is_dir(follow_symlinks=False):
+                shutil.rmtree(entry.path)
+            else:
+                os.remove(entry.path)
+    else:
+        os.makedirs(root_target)
     try:
         shutil.copytree("webapp_engine/map", root_target, dirs_exist_ok=True)
     except OSError as e:

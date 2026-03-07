@@ -155,8 +155,10 @@ def apply_to_graph(
         org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=set(community_map.values()))}
 
     for node_id, community_id in community_map.items():
-        label = community_id if strategy in COMMUNITY_ALGORITHMS else org_names[community_id]
-        detected_community = build_community_label(label, strategy)
+        if strategy in COMMUNITY_ALGORITHMS:
+            detected_community = build_community_label(community_id, strategy)
+        else:
+            detected_community = org_names[community_id]
         graph.nodes[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
         channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
 
@@ -207,7 +209,7 @@ def build_communities_payload(
                     (
                         organization.id,
                         organization.channel_set.count(),
-                        organization.name.replace(", ", ""),
+                        organization.name,
                         organization.color,
                     )
                 )

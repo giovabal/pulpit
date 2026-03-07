@@ -112,6 +112,7 @@ sigma_instance.bind("clickNode", function (x) {
     $('#node_in_deg').html(node.in_deg);
     $('#node_out_deg').html(node.out_deg);
     $('#node_followers_count').html(node.fans);
+    $('#node_pagerank').html(node.pagerank ? node.pagerank.toFixed(4) : 'N/A');
     $('#node_messages_count').html(node.messages_count);
     $('#node_activity_period').html(node.activity_period);
     if (node.is_lost) $('#node_is_lost').show(); else $('#node_is_lost').hide();
@@ -158,9 +159,16 @@ function get_anchor(node) {
 }
 
 function get_group(node) {
-    var color = node.originalColor || '#ccc';
-    var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
-    return '<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '"></i> ' + label;
+    if (!node.communities || !community_color_maps) return '';
+    var parts = [];
+    for (var strategy in node.communities) {
+        var label = node.communities[strategy] || '';
+        var colorMap = community_color_maps[strategy] || {};
+        var color = (label && colorMap[label]) ? colorMap[label] : '#ccc';
+        var strategyName = strategy.charAt(0).toUpperCase() + strategy.slice(1);
+        parts.push('<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '"></i> <b>' + strategyName + ':</b> ' + label);
+    }
+    return parts.join('<br>');
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +267,28 @@ function build_legend(strategyData) {
     }
     $('#legend').html(legend_items.join(''));
     $('#group-select').html(group_select_items.join(''));
+}
+
+// ---------------------------------------------------------------------------
+// Node sizing
+// ---------------------------------------------------------------------------
+
+function apply_node_size(metric) {
+    var nodes = sigma_instance.graph.nodes();
+    if (metric === 'pagerank') {
+        var vals = nodes.map(function(n) { return n.pagerank || 0; });
+        var minV = Math.min.apply(null, vals);
+        var maxV = Math.max.apply(null, vals);
+        var range = maxV - minV || 1;
+        nodes.forEach(function(n) {
+            n.size = 0.1 + ((n.pagerank || 0) - minV) / range * 9.9;
+        });
+    } else {
+        nodes.forEach(function(n) {
+            n.size = (n[metric] || 0) + 1;
+        });
+    }
+    sigma_instance.refresh();
 }
 
 // ---------------------------------------------------------------------------
@@ -422,11 +452,7 @@ $( document ).ready(function() {
     });
 
     $('#size-select').on('change', function() {
-	    var v = $( this ).val();
-	    sigma_instance.graph.nodes().forEach(function(n) {
-            n.size = (n[v] || 0) + 1;
-	    });
-	    sigma_instance.refresh();
+	    apply_node_size($(this).val());
     });
 
     $('#group-select').on('change', function() {
