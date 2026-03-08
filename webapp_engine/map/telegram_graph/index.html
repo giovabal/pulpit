@@ -34,7 +34,11 @@
       <p class="d-none d-sm-block">Zoom</p>
     </div>
 
-    <a href="#" id="info_button" class="menu-button ms-auto" data-bs-toggle="modal" data-bs-target="#options_modal">
+    <a href="#" id="about_button" class="menu-button ms-auto" data-bs-toggle="modal" data-bs-target="#about_modal">
+      <i class="fa fa-3x fa-info-circle" aria-hidden="true"></i><p class="d-none d-sm-block">About</p>
+    </a>
+
+    <a href="#" id="options_button" class="menu-button" data-bs-toggle="modal" data-bs-target="#options_modal">
       <i class="fa fa-3x fa-cogs" aria-hidden="true"></i><p class="d-none d-sm-block">Options</p>
     </a>
 
@@ -120,6 +124,34 @@
 	    </div>
 	  </form>
 	  <div id="results" style="padding-top: 1em;"></div>
+	</div>
+	<div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+	</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="about_modal" tabindex="-1" role="dialog" aria-labelledby="about_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+	<div class="modal-header">
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h4 class="modal-title" id="about_modalLabel">About</h4>
+	</div>
+	<div class="modal-body">
+	  <p>TNExp (Telegram Network Explorer) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive force-directed network graph — designed for political and social network analysis.</p>
+	  <p><a href="https://github.com/giovabal/TNExp" target="_blank"><i class="fa fa-github" aria-hidden="true"></i> github.com/giovabal/TNExp</a></p>
+	  <hr>
+	  <p id="about_graph_stats"></p>
+	  <div id="about_measures_section" style="display:none">
+	    <h6>Network measures</h6>
+	    <dl id="about_measures"></dl>
+	  </div>
+	  <div id="about_strategies_section" style="display:none">
+	    <h6>Community strategies</h6>
+	    <dl id="about_strategies"></dl>
+	  </div>
 	</div>
 	<div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

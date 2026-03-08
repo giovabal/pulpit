@@ -174,10 +174,9 @@ function show_node_info(node) {
     if (accessory_data) {
         accessory_data.measures.forEach(function(m) {
             if (BASE_MEASURE_KEYS[m[0]]) return;
-            var title = MEASURE_TITLES[m[0]] ? ' title="' + MEASURE_TITLES[m[0]] + '"' : '';
             var val = node[m[0]];
             var formatted = (val !== undefined && val !== null) ? val.toFixed(4) : 'N/A';
-            measures_html += '<br><abbr' + title + '>' + m[1] + '</abbr>: ' + formatted;
+            measures_html += '<br><abbr>' + m[1] + '</abbr>: ' + formatted;
         });
     }
     $('#node_measures').html(measures_html);
@@ -256,8 +255,7 @@ function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);
     if (strategies.length <= 1) { $('#community-strategy-group').hide(); return; }
     var items = strategies.map(function(s) {
-        var title = STRATEGY_TITLES[s] ? ' title="' + STRATEGY_TITLES[s] + '"' : '';
-        return '<option value="' + s + '"' + title + '>' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
+        return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
     });
     $('#community-strategy-select').html(items.join(''));
     $('#community-strategy-group').show();
@@ -354,6 +352,10 @@ function get_data() {
         sigma_instance.refresh();
         $('#loading_message').html('Done!');
         if (loading_modal_bs) loading_modal_bs.hide();
+        $('#about_graph_stats').html(
+            sigma_instance.graph.nodes().length + ' channels, ' +
+            sigma_instance.graph.edges().length + ' connections'
+        );
 
         graph_loaded = true;
         maybe_apply_initial_colors();
@@ -390,11 +392,32 @@ $(document).ready(function() {
         if (active_strategy) build_legend(data.communities[active_strategy]);
 
         var size_items = data.measures.map(function(m) {
-            var title = MEASURE_TITLES[m[0]] ? ' title="' + MEASURE_TITLES[m[0]] + '"' : '';
-            return '<option value="' + m[0] + '"' + title + '>' + m[1] + '</option>';
+            return '<option value="' + m[0] + '">' + m[1] + '</option>';
         });
         $('#size-select').html(size_items.join(''));
         $('#total_pages_count').html(data.total_pages_count);
+
+        var about_measures_html = '';
+        data.measures.forEach(function(m) {
+            if (BASE_MEASURE_KEYS[m[0]]) return;
+            var desc = MEASURE_TITLES[m[0]] || '';
+            about_measures_html += '<dt>' + m[1] + '</dt><dd>' + desc + '</dd>';
+        });
+        if (about_measures_html) {
+            $('#about_measures').html(about_measures_html);
+            $('#about_measures_section').show();
+        }
+
+        var about_strategies_html = '';
+        Object.keys(data.communities).forEach(function(s) {
+            var desc = STRATEGY_TITLES[s] || '';
+            var label = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+            about_strategies_html += '<dt>' + label + '</dt><dd>' + desc + '</dd>';
+        });
+        if (about_strategies_html) {
+            $('#about_strategies').html(about_strategies_html);
+            $('#about_strategies_section').show();
+        }
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
