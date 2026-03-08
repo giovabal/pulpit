@@ -29,6 +29,8 @@ sigma.classes.graph.addMethod('structured_neighbors', function(nodeId) {
 // Measure and strategy tooltips
 // =============================================================================
 
+var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messages_count': true };
+
 var MEASURE_TITLES = {
     'in_deg':               'Total weighted inbound connections from other channels in the network.',
     'out_deg':              'Total weighted outbound connections to other channels in the network.',
@@ -168,11 +170,17 @@ function show_node_info(node) {
     $('#node_picture').html(node.pic ? "<img src='" + node.pic + "' style='max-width: 60px;' />" : '');
     $('#node_group').html(get_group(node));
     $('#node_followers_count').html(node.fans);
-    $('#node_pagerank').html(node.pagerank ? node.pagerank.toFixed(4) : 'N/A');
-    $('#node_hits_hub').html(node.hits_hub !== undefined ? node.hits_hub.toFixed(4) : 'N/A');
-    $('#node_hits_authority').html(node.hits_authority !== undefined ? node.hits_authority.toFixed(4) : 'N/A');
-    $('#node_betweenness').html(node.betweenness !== undefined ? node.betweenness.toFixed(4) : 'N/A');
-    $('#node_in_degree_centrality').html(node.in_degree_centrality !== undefined ? node.in_degree_centrality.toFixed(4) : 'N/A');
+    var measures_html = '';
+    if (accessory_data) {
+        accessory_data.measures.forEach(function(m) {
+            if (BASE_MEASURE_KEYS[m[0]]) return;
+            var title = MEASURE_TITLES[m[0]] ? ' title="' + MEASURE_TITLES[m[0]] + '"' : '';
+            var val = node[m[0]];
+            var formatted = (val !== undefined && val !== null) ? val.toFixed(4) : 'N/A';
+            measures_html += '<br><abbr' + title + '>' + m[1] + '</abbr>: ' + formatted;
+        });
+    }
+    $('#node_measures').html(measures_html);
     $('#node_messages_count').html(node.messages_count);
     $('#node_activity_period').html(node.activity_period);
     if (node.is_lost) $('#node_is_lost').show(); else $('#node_is_lost').hide();
