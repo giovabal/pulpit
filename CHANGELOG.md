@@ -11,6 +11,10 @@
 
 ### New features
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
+- Graph mini-site upgraded to Bootstrap 5.
+- HITS Hub, HITS Authority, Betweenness Centrality, and In-degree Centrality network measures added to graph export and node detail panel.
+- `NETWORK_MEASURES` option controls which measures are calculated and exported. Default is `PAGERANK`.
+- All measures and community strategies show an explanatory tooltip in the graph UI.
 
 ## Backward incompatibility
 - IE is no longer supported in graph mini-site.
