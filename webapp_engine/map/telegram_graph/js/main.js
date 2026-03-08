@@ -362,11 +362,11 @@ function get_data() {
 // =============================================================================
 
 $(document).ready(function() {
-    loading_modal_bs = new bootstrap.Modal(document.getElementById('loading_modal'));
+    var loading_el = document.getElementById('loading_modal');
+    loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
+    loading_el.addEventListener('shown.bs.modal', function() { get_data(); }, { once: true });
     loading_modal_bs.show();
     $('#loading_message').html('Loading…<br>Please wait.');
-
-    get_data();
 
     $.getJSON('data_accessory.json', function(data) {
         accessory_data       = data;
