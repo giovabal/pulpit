@@ -20,13 +20,15 @@ class Command(BaseCommand):
                 f"Choose from {sorted(community.VALID_STRATEGIES)}."
             )
 
-        self.stdout.write("Create graph")
+        self.stdout.write("Create graph … ", ending="")
+        self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
                 draw_dead_leaves=settings.DRAW_DEAD_LEAVES,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
+        self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
         self.stdout.write("Calculate communities")
         strategy_results: dict[str, tuple] = {}
@@ -45,8 +47,10 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
-        self.stdout.write("\nSet spatial distribution of nodes")
+        self.stdout.write(f"\nSet spatial distribution of nodes ({settings.FA2_ITERATIONS} FA2 iterations) … ", ending="")
+        self.stdout.flush()
         positions = layout.compute_layout(graph, settings.FA2_ITERATIONS)
+        self.stdout.write("done")
 
         xs, ys = zip(*positions.values(), strict=False)
         width = max(xs) - min(xs)
@@ -60,23 +64,33 @@ class Command(BaseCommand):
         self.stdout.write("\nCalculations on the graph")
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
 
-        self.stdout.write("- largest component")
+        self.stdout.write("- largest component … ", ending="")
+        self.stdout.flush()
         main_component = exporter.find_main_component(graph)
+        self.stdout.write(f"{len(main_component)} nodes")
 
         self.stdout.write("- degrees, activity and fans")
         measures_labels = exporter.apply_base_node_measures(graph_data, graph, channel_dict)
 
-        self.stdout.write("- pagerank")
+        self.stdout.write("- pagerank … ", ending="")
+        self.stdout.flush()
         measures_labels += exporter.apply_pagerank(graph_data, graph)
+        self.stdout.write("done")
 
-        self.stdout.write("- HITS")
+        self.stdout.write("- HITS … ", ending="")
+        self.stdout.flush()
         measures_labels += exporter.apply_hits(graph_data, graph)
+        self.stdout.write("done")
 
-        self.stdout.write("- betweenness centrality")
+        self.stdout.write("- betweenness centrality … ", ending="")
+        self.stdout.flush()
         measures_labels += exporter.apply_betweenness_centrality(graph_data, graph)
+        self.stdout.write("done")
 
-        self.stdout.write("- in-degree centrality")
+        self.stdout.write("- in-degree centrality … ", ending="")
+        self.stdout.flush()
         measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
+        self.stdout.write("done")
 
         self.stdout.write("- small components")
         exporter.reposition_isolated_nodes(graph_data, main_component)
@@ -98,3 +112,5 @@ class Command(BaseCommand):
 
         self.stdout.write("- media")
         exporter.copy_channel_media(channel_qs, "graph/telegram_graph")
+
+        self.stdout.write(self.style.SUCCESS("\nDone."))
