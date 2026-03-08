@@ -8,10 +8,10 @@
 - `KCORE` community strategy now produces finer-grained results using k-shell decomposition.
 - The local web server no longer breaks when `export_network` is re-run.
 - `export_network` produces a leaner graph mini-site with unused assets removed.
+- Graph mini-site upgraded to Bootstrap 5.
 
 ### New features
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
-- Graph mini-site upgraded to Bootstrap 5.
 - HITS Hub, HITS Authority, Betweenness Centrality, and In-degree Centrality network measures added to graph export and node detail panel.
 - `NETWORK_MEASURES` option controls which measures are calculated and exported. Default is `PAGERANK`.
 - All measures and community strategies show an explanatory tooltip in the graph UI.
