@@ -145,6 +145,10 @@ function show_node_info(node) {
     $('#node_group').html(get_group(node));
     $('#node_followers_count').html(node.fans);
     $('#node_pagerank').html(node.pagerank ? node.pagerank.toFixed(4) : 'N/A');
+    $('#node_hits_hub').html(node.hits_hub !== undefined ? node.hits_hub.toFixed(4) : 'N/A');
+    $('#node_hits_authority').html(node.hits_authority !== undefined ? node.hits_authority.toFixed(4) : 'N/A');
+    $('#node_betweenness').html(node.betweenness !== undefined ? node.betweenness.toFixed(4) : 'N/A');
+    $('#node_in_degree_centrality').html(node.in_degree_centrality !== undefined ? node.in_degree_centrality.toFixed(4) : 'N/A');
     $('#node_messages_count').html(node.messages_count);
     $('#node_activity_period').html(node.activity_period);
     if (node.is_lost) $('#node_is_lost').show(); else $('#node_is_lost').hide();
@@ -205,14 +209,10 @@ function maybe_apply_initial_colors() {
 
 function apply_node_size(metric) {
     var nodes = sigma_instance.graph.nodes();
-    if (metric === 'pagerank') {
-        var vals  = nodes.map(function(n) { return n.pagerank || 0; });
-        var minV  = Math.min.apply(null, vals);
-        var range = (Math.max.apply(null, vals) - minV) || 1;
-        nodes.forEach(function(n) { n.size = 0.1 + ((n.pagerank || 0) - minV) / range * 9.9; });
-    } else {
-        nodes.forEach(function(n) { n.size = (n[metric] || 0) + 1; });
-    }
+    var vals  = nodes.map(function(n) { return n[metric] || 0; });
+    var minV  = Math.min.apply(null, vals);
+    var range = (Math.max.apply(null, vals) - minV) || 1;
+    nodes.forEach(function(n) { n.size = 0.1 + ((n[metric] || 0) - minV) / range * 9.9; });
     sigma_instance.refresh();
 }
 
