@@ -64,7 +64,7 @@ html, body {
 }
 
 @media screen {
-    .row-offcanvas {
+    #menu_container {
         position: fixed;
         top: 10px;
         left: 20px;
@@ -91,19 +91,31 @@ html, body {
     color: #fff;
 }
 
-#infobar .panel-heading {
+#infobar .accordion-item {
+    background-color: #123;
+    border-color: #234;
+}
+
+#infobar .accordion-button {
+    background-color: #123;
+    color: #fff;
+    border-color: #234;
+}
+
+#infobar .accordion-button:not(.collapsed) {
+    background-color: #1a3a5c;
+    color: #fff;
+    box-shadow: none;
+}
+
+#infobar .accordion-button::after {
+    filter: invert(1);
+}
+
+#infobar .accordion-body {
     background-color: #123;
     border-color: #234;
     color: #fff;
-}
-
-#infobar .panel-body {
-    border-color: #234;
-}
-
-#infobar .panel {
-    background-color: #123;
-    border-color: #234;
 }
 
 .link {

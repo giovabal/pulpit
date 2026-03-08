@@ -52,6 +52,7 @@ var STRATEGY_TITLES = {
 // State
 // =============================================================================
 
+var loading_modal_bs     = null;
 var accessory_data       = null;
 var active_strategy      = null;
 var community_color_maps = {};      // { strategyKey: { communityLabel: hexColor } }
@@ -323,7 +324,7 @@ function get_data() {
         });
         sigma_instance.refresh();
         $('#loading_message').html('Done!');
-        bootstrap.Modal.getInstance(document.getElementById('loading_modal')).hide();
+        if (loading_modal_bs) loading_modal_bs.hide();
 
         graph_loaded = true;
         maybe_apply_initial_colors();
@@ -361,7 +362,8 @@ function get_data() {
 // =============================================================================
 
 $(document).ready(function() {
-    new bootstrap.Modal(document.getElementById('loading_modal')).show();
+    loading_modal_bs = new bootstrap.Modal(document.getElementById('loading_modal'));
+    loading_modal_bs.show();
     $('#loading_message').html('Loading…<br>Please wait.');
 
     get_data();
