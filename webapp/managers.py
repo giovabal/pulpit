@@ -5,7 +5,7 @@ from django.db import models
 
 class ChannelQuerySet(models.QuerySet["Channel"]):
     def interesting(self) -> ChannelQuerySet:
-        return self.filter(organization__is_interesting=True)
+        return self.filter(organization__is_interesting=True, is_user_account=False)
 
 
 class ChannelManager(models.Manager["Channel"]):

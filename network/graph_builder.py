@@ -22,7 +22,7 @@ def build_graph(
     qs_filter = Q(organization__is_interesting=True)
     if draw_dead_leaves:
         qs_filter |= Q(in_degree__gt=0)
-    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter)
+    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, is_user_account=False)
 
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
