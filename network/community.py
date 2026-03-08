@@ -90,9 +90,12 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
 
 def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
     coreness = nx.core_number(graph.to_undirected())
-    # Nodes with coreness 0 (isolated) are grouped together at value 1 after normalization
-    community_map: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
-    community_map = normalize_community_map(community_map)
+    # Nodes with coreness 0 (isolated) are grouped together at shell 1
+    raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
+    # Assign community IDs ordered from most internal (highest k-shell) to outermost
+    shells = sorted(set(raw.values()), reverse=True)
+    remap = {shell: index for index, shell in enumerate(shells, start=1)}
+    community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
     return community_map, build_community_palette(community_map, palette_name)
 
 
@@ -212,6 +215,9 @@ def build_communities_payload(
                     )
                 )
             main_groups = {org.key: org.name for org in org_qs}
-        groups = sorted(groups, key=lambda x: -x[1])
+        if strategy == "KCORE":
+            groups = sorted(groups, key=lambda x: int(x[0]))
+        else:
+            groups = sorted(groups, key=lambda x: -x[1])
         communities_data[strategy_key] = {"groups": groups, "main_groups": main_groups}
     return communities_data
