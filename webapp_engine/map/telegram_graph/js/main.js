@@ -410,7 +410,7 @@ $(document).ready(function() {
 
         var about_strategies_html = '';
         Object.keys(data.communities).forEach(function(s) {
-            var desc = STRATEGY_TITLES[s] || '';
+            var desc = STRATEGY_TITLES[s.toUpperCase()] || '';
             var label = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
             about_strategies_html += '<dt>' + label + '</dt><dd>' + desc + '</dd>';
         });
