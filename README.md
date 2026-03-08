@@ -138,12 +138,13 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
+| `NETWORK_MEASURES` | Comma-separated list of centrality measures to compute and expose in the graph: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `INDEGCENTRALITY` | `PAGERANK` |
 
 ### Community detection
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `COMMUNITIES_STRATEGY` | Algorithm used to assign nodes to communities: `ORGANIZATION` (uses admin groups), `LOUVAIN`, `KCORE`, or `INFOMAP` | `ORGANIZATION` |
+| `COMMUNITIES_STRATEGY` | Comma-separated list of community detection algorithms to apply: `ORGANIZATION` (uses admin groups), `LOUVAIN`, `KCORE`, `INFOMAP` | `ORGANIZATION` |
 | `COMMUNITIES_PALETTE` | Color palette for communities. Use `ORGANIZATION` to take colors from the admin, or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
 
 ### Drawing
