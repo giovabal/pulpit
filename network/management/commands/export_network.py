@@ -69,6 +69,15 @@ class Command(BaseCommand):
         self.stdout.write("- pagerank")
         measures_labels += exporter.apply_pagerank(graph_data, graph)
 
+        self.stdout.write("- HITS")
+        measures_labels += exporter.apply_hits(graph_data, graph)
+
+        self.stdout.write("- betweenness centrality")
+        measures_labels += exporter.apply_betweenness_centrality(graph_data, graph)
+
+        self.stdout.write("- in-degree centrality")
+        measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
+
         self.stdout.write("- small components")
         exporter.reposition_isolated_nodes(graph_data, main_component)
 

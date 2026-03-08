@@ -97,6 +97,37 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     return [(key, "PageRank")]
 
 
+def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add HITS hub and authority scores to each node."""
+    try:
+        hubs, authorities = nx.hits(graph)
+    except nx.PowerIterationFailedConvergence:
+        logger.warning("HITS failed to converge")
+        return []
+    for node in graph_data["nodes"]:
+        node["hits_hub"] = hubs.get(node["id"], 0.0)
+        node["hits_authority"] = authorities.get(node["id"], 0.0)
+    return [("hits_hub", "HITS Hub"), ("hits_authority", "HITS Authority")]
+
+
+def apply_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add betweenness centrality to each node."""
+    key = "betweenness"
+    values: dict[str, float] = nx.betweenness_centrality(graph, weight="weight")
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Betweenness Centrality")]
+
+
+def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add normalized in-degree centrality to each node."""
+    key = "in_degree_centrality"
+    values: dict[str, float] = nx.in_degree_centrality(graph)
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "In-degree Centrality")]
+
+
 def find_main_component(graph: nx.DiGraph) -> set[str]:
     return max(nx.weakly_connected_components(graph), key=len)
 
