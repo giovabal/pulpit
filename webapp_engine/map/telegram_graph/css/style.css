@@ -8,7 +8,7 @@ html, body {
     height: 100%;
     margin: 0px;
     padding: 0px;
-    font-size: 12px;
+    font-size: 14.4px;
     font-family: sans-serif;
     line-height: 1.25em;
     overflow-x: hidden;
@@ -68,6 +68,9 @@ html, body {
         position: fixed;
         top: 10px;
         left: 20px;
+        width: calc(100% - 40px);
+        display: flex;
+        align-items: flex-start;
         -webkit-transition: all .25s ease-out;
            -moz-transition: all .25s ease-out;
              -o-transition: all .25s ease-out;
