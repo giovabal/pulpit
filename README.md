@@ -4,6 +4,7 @@ TNExp (Telegram Network Explorer) crawls Telegram channels, maps the relationshi
 
 See the [changelog](CHANGELOG.md) for release history.
 
+![Example graph](webapp_engine/static/example.jpg)
 
 ## How it works
 
