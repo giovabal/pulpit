@@ -153,6 +153,11 @@ COMMUNITIES_STRATEGY = config(
     default="ORGANIZATION",
     cast=lambda v: [s.strip().upper() for s in v.split(",")],
 )
+NETWORK_MEASURES = config(
+    "NETWORK_MEASURES",
+    default="PAGERANK",
+    cast=lambda v: [s.strip().upper() for s in v.split(",")],
+)
 COMMUNITIES_PALETTE = config("COMMUNITIES_PALETTE", default="ORGANIZATION", cast=str)
 
 LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)

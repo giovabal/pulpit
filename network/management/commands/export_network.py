@@ -5,6 +5,8 @@ from django.core.management.base import BaseCommand, CommandError
 
 from network import community, exporter, graph_builder, layout
 
+VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY"}
+
 
 class Command(BaseCommand):
     args = ""
@@ -19,6 +21,13 @@ class Command(BaseCommand):
                 f"Invalid COMMUNITIES_STRATEGY value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES)}."
             )
+        invalid_measures = [m for m in settings.NETWORK_MEASURES if m not in VALID_MEASURES]
+        if invalid_measures:
+            raise CommandError(
+                f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. "
+                f"Choose from {sorted(VALID_MEASURES)}."
+            )
+        measures = set(settings.NETWORK_MEASURES)
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
@@ -72,25 +81,31 @@ class Command(BaseCommand):
         self.stdout.write("- degrees, activity and fans")
         measures_labels = exporter.apply_base_node_measures(graph_data, graph, channel_dict)
 
-        self.stdout.write("- pagerank … ", ending="")
-        self.stdout.flush()
-        measures_labels += exporter.apply_pagerank(graph_data, graph)
-        self.stdout.write("done")
+        if "PAGERANK" in measures:
+            self.stdout.write("- pagerank … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_pagerank(graph_data, graph)
+            self.stdout.write("done")
 
-        self.stdout.write("- HITS … ", ending="")
-        self.stdout.flush()
-        measures_labels += exporter.apply_hits(graph_data, graph)
-        self.stdout.write("done")
+        if measures & {"HITSHUB", "HITSAUTH"}:
+            self.stdout.write("- HITS … ", ending="")
+            self.stdout.flush()
+            hits_labels = exporter.apply_hits(graph_data, graph)
+            _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
+            measures_labels += [(k, label) for k, label in hits_labels if _hits_key_map[k] in measures]
+            self.stdout.write("done")
 
-        self.stdout.write("- betweenness centrality … ", ending="")
-        self.stdout.flush()
-        measures_labels += exporter.apply_betweenness_centrality(graph_data, graph)
-        self.stdout.write("done")
+        if "BETWEENNESS" in measures:
+            self.stdout.write("- betweenness centrality … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_betweenness_centrality(graph_data, graph)
+            self.stdout.write("done")
 
-        self.stdout.write("- in-degree centrality … ", ending="")
-        self.stdout.flush()
-        measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
-        self.stdout.write("done")
+        if "INDEGCENTRALITY" in measures:
+            self.stdout.write("- in-degree centrality … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
+            self.stdout.write("done")
 
         self.stdout.write("- small components")
         exporter.reposition_isolated_nodes(graph_data, main_component)
