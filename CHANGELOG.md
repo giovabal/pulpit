@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3] - To be announced
+## [0.3] - 2026-03-08
 ### Improvements
 - Channels that resolve to user accounts are now flagged and skipped during crawling and graph export.
 - Channel `about` field is now included in admin search.
@@ -8,15 +8,19 @@
 - `KCORE` community strategy now produces finer-grained results using k-shell decomposition.
 - The local web server no longer breaks when `export_network` is re-run.
 - `export_network` produces a leaner graph mini-site with unused assets removed.
+- `export_network` now prints step-by-step progress so you can follow what is happening.
 - Graph mini-site upgraded to Bootstrap 5.
+- Node detail panel shows only the measures that were actually computed for the current export.
 
 ### New features
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
 - HITS Hub, HITS Authority, Betweenness Centrality, and In-degree Centrality network measures added to graph export and node detail panel.
 - `NETWORK_MEASURES` option controls which measures are calculated and exported. Default is `PAGERANK`.
-- All measures and community strategies show an explanatory tooltip in the graph UI.
+- About dialog in the graph mini-site: shows a description of TNExp, a link to the GitHub repository, graph statistics, and explanatory text for all computed measures and active community strategies.
+- Labels visibility option in the graph Options panel: Always, On size (default), or Never.
+- Clicking a channel name in the connections list (inbound, outbound, or mutual) navigates to that channel's detail and highlights its network.
 
-## Backward incompatibility
+### Backward incompatibility
 - IE is no longer supported in graph mini-site.
 
 
