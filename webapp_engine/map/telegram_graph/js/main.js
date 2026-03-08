@@ -299,7 +299,7 @@ function get_data() {
         });
         sigma_instance.refresh();
         $('#loading_message').html('Done!');
-        $('#loading_modal').modal('hide');
+        bootstrap.Modal.getInstance(document.getElementById('loading_modal')).hide();
 
         graph_loaded = true;
         maybe_apply_initial_colors();
@@ -337,7 +337,7 @@ function get_data() {
 // =============================================================================
 
 $(document).ready(function() {
-    $('#loading_modal').modal('show');
+    new bootstrap.Modal(document.getElementById('loading_modal')).show();
     $('#loading_message').html('Loading…<br>Please wait.');
 
     get_data();
