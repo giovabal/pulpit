@@ -416,6 +416,12 @@ $(document).ready(function() {
 
     $('#size-select').on('change', function() { apply_node_size($(this).val()); });
 
+    $('#labels-select').on('change', function() {
+        var thresholds = { 'always': 0, 'on_size': 15, 'never': Infinity };
+        sigma_instance.settings('labelThreshold', thresholds[$(this).val()]);
+        sigma_instance.refresh();
+    });
+
     $('#group-select').on('change', function() {
         var v = $(this).val();
         if (v === '') {
