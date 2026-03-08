@@ -298,10 +298,31 @@ function search(word, result_element) {
     result_element.html(html.join('')).show();
 }
 
+function select_node(node) {
+    var toKeep = sigma_instance.graph.neighbors(node.id);
+    toKeep[node.id] = node;
+    show_node_info(node);
+    sigma_instance.graph.nodes().forEach(function(n) {
+        n.color = toKeep[n.id] ? n.originalColor : settings.fade_color;
+    });
+    sigma_instance.graph.edges().forEach(function(e) {
+        e.color = (toKeep[e.source] && toKeep[e.target]) ? e.originalColor : settings.fade_color;
+    });
+    sigma_instance.refresh();
+    is_graph_completely_rendered = false;
+}
+
+function reset_colors() {
+    sigma_instance.graph.nodes().forEach(function(n) { n.color = n.originalColor; });
+    sigma_instance.graph.edges().forEach(function(e) { e.color = e.originalColor; });
+    sigma_instance.refresh();
+    is_graph_completely_rendered = true;
+}
+
 function click_node(nodeId) {
-    sigma_instance.dispatchEvent('clickStage');
+    if (!is_graph_completely_rendered) reset_colors();
     var n = sigma_instance.graph.nodes(nodeId);
-    if (n) sigma_instance.dispatchEvent('clickNode', { data: n });
+    if (n) select_node(n);
 }
 
 // =============================================================================
@@ -330,29 +351,12 @@ function get_data() {
         maybe_apply_initial_colors();
 
         sigma_instance.bind('clickNode', function(e) {
-            var node   = e.data.node !== undefined ? e.data.node : e.data;
-            var toKeep = sigma_instance.graph.neighbors(node.id);
-            toKeep[node.id] = node;
-
-            show_node_info(node);
-
-            sigma_instance.graph.nodes().forEach(function(n) {
-                n.color = toKeep[n.id] ? n.originalColor : settings.fade_color;
-            });
-            sigma_instance.graph.edges().forEach(function(e) {
-                e.color = (toKeep[e.source] && toKeep[e.target]) ? e.originalColor : settings.fade_color;
-            });
-            sigma_instance.refresh();
-            is_graph_completely_rendered = false;
+            var node = e.data.node !== undefined ? e.data.node : e.data;
+            select_node(node);
         });
 
         sigma_instance.bind('clickStage', function() {
-            if (!is_graph_completely_rendered) {
-                sigma_instance.graph.nodes().forEach(function(n) { n.color = n.originalColor; });
-                sigma_instance.graph.edges().forEach(function(e) { e.color = e.originalColor; });
-                sigma_instance.refresh();
-                is_graph_completely_rendered = true;
-            }
+            if (!is_graph_completely_rendered) reset_colors();
         });
     });
 }
