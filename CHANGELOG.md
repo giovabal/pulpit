@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4] - To be announced
+
+
+## [0.3.1] - 2026-03-08
+### Fixed
+- `KCORE` communities are now following their natural order, starting from the innermost core.
+
+
 ## [0.3] - 2026-03-08
 ### Improvements
 - Channels that resolve to user accounts are now flagged and skipped during crawling and graph export.
