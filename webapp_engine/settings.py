@@ -151,12 +151,12 @@ DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 COMMUNITIES_STRATEGY = config(
     "COMMUNITIES_STRATEGY",
     default="ORGANIZATION",
-    cast=lambda v: [s.strip().upper() for s in v.split(",")],
+    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )
 NETWORK_MEASURES = config(
     "NETWORK_MEASURES",
     default="PAGERANK",
-    cast=lambda v: [s.strip().upper() for s in v.split(",")],
+    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )
 COMMUNITIES_PALETTE = config("COMMUNITIES_PALETTE", default="ORGANIZATION", cast=str)
 
