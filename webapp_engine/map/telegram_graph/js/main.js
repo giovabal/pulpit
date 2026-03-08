@@ -26,6 +26,29 @@ sigma.classes.graph.addMethod('structured_neighbors', function(nodeId) {
 });
 
 // =============================================================================
+// Measure and strategy tooltips
+// =============================================================================
+
+var MEASURE_TITLES = {
+    'in_deg':               'Total weighted inbound connections from other channels in the network.',
+    'out_deg':              'Total weighted outbound connections to other channels in the network.',
+    'fans':                 'Number of subscribers as reported by Telegram.',
+    'messages_count':       'Total number of messages collected from this channel.',
+    'pagerank':             'Measures global influence based on how many other influential channels forward or reference this one. Channels cited by important channels score higher.',
+    'hits_hub':             'Identifies channels that actively amplify content from authoritative sources. High-scoring hubs are aggregators and megaphones spreading information across political communities.',
+    'hits_authority':       'Identifies channels widely cited by important hubs. High-scoring authorities are trusted sources whose content is frequently forwarded or referenced by other channels.',
+    'betweenness':          'How often this channel lies on the shortest path between other channels. High betweenness indicates a broker connecting otherwise separate political communities or movements.',
+    'in_degree_centrality': 'Normalized share of all channels in the network that reference or forward this channel. Reflects how widely cited it is across the entire network, regardless of the citing channels\' importance.'
+};
+
+var STRATEGY_TITLES = {
+    'ORGANIZATION': 'Channels are grouped by their manually assigned organization. Reflects real-world political affiliation as defined by the analyst.',
+    'LOUVAIN':      'Automatic clustering based on connection density. Groups channels that heavily forward or reference each other, revealing emergent coordination clusters within or across movements.',
+    'KCORE':        'Groups channels by their k-shell decomposition level. The innermost core contains the most densely interconnected channels, forming the structural backbone of the network.',
+    'INFOMAP':      'Detects communities by simulating information flow through the network. Groups channels through which the same content tends to circulate, revealing functional echo chambers.'
+};
+
+// =============================================================================
 // State
 // =============================================================================
 
@@ -224,7 +247,8 @@ function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);
     if (strategies.length <= 1) { $('#community-strategy-group').hide(); return; }
     var items = strategies.map(function(s) {
-        return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+        var title = STRATEGY_TITLES[s] ? ' title="' + STRATEGY_TITLES[s] + '"' : '';
+        return '<option value="' + s + '"' + title + '>' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
     });
     $('#community-strategy-select').html(items.join(''));
     $('#community-strategy-group').show();
@@ -352,7 +376,8 @@ $(document).ready(function() {
         if (active_strategy) build_legend(data.communities[active_strategy]);
 
         var size_items = data.measures.map(function(m) {
-            return '<option value="' + m[0] + '">' + m[1] + '</option>';
+            var title = MEASURE_TITLES[m[0]] ? ' title="' + MEASURE_TITLES[m[0]] + '"' : '';
+            return '<option value="' + m[0] + '"' + title + '>' + m[1] + '</option>';
         });
         $('#size-select').html(size_items.join(''));
         $('#total_pages_count').html(data.total_pages_count);
