@@ -2,6 +2,7 @@
 
 ## [0.3] - To be announced
 ### Improvements
+- Channels that resolve to user accounts are now flagged and skipped during crawling and graph export.
 - Channel `about` field is now included in admin search.
 - Isolated nodes are grouped into a single community in Louvain and Infomap strategies.
 - `KCORE` community strategy now produces finer-grained results using k-shell decomposition.
