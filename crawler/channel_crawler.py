@@ -44,7 +44,7 @@ class ChannelCrawler:
                 if telegram_channel
                 else (None, None)
             )
-        except (errors.rpcerrorlist.ChannelPrivateError, ValueError):
+        except errors.rpcerrorlist.ChannelPrivateError:
             logger.info("Not available seed: %s", seed)
             return None, None
 
@@ -58,7 +58,12 @@ class ChannelCrawler:
             if status_callback:
                 status_callback(message)
 
-        channel, telegram_channel = self.get_basic_channel(seed)
+        try:
+            channel, telegram_channel = self.get_basic_channel(seed)
+        except ValueError:
+            logger.info("Seed is a user account, not a channel: %s", seed)
+            Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True)
+            return
         if channel is None:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
             return
