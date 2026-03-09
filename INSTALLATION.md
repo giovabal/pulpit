@@ -38,3 +38,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full list of options.
 ```sh
 python manage.py migrate
 ```
+
+---
+
+← [README](README.md)

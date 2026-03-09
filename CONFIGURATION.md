@@ -45,3 +45,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | :----- | :---------- | ------: |
 | `DRAW_DEAD_LEAVES` | Include channels that are not marked as interesting but are referenced by interesting ones. These appear as leaf nodes — they add context but can significantly increase the graph size. | `False` |
 | `DEAD_LEAVES_COLOR` | Color for dead-leaf nodes, in hex format | `#596a64` |
+
+---
+
+← [README](README.md)

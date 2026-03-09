@@ -63,3 +63,7 @@
 ## [0.1] - 2026-02-21
 ### Added
 - First official release of Pulpit.
+
+---
+
+← [README](README.md)

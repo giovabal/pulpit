@@ -107,3 +107,7 @@ Infomap uses **information theory** to find communities based on how a random wa
 **In practice:** Infomap is the best strategy for identifying genuine echo chambers. A group of channels where content circulates in a closed loop — forwarding each other, rarely linking outside — will be detected as a single community regardless of how the channels are superficially categorised. It reveals functional insularity rather than just topical similarity.
 
 **Example:** a cluster of regional separatist channels may look, from their content, like a loose collection of locally focused outlets. Infomap reveals that they form a tight closed loop: content produced by any one of them propagates rapidly through the others and almost never reaches the mainstream political channels in the network. They are not merely thematically similar — they are structurally isolated, constituting a self-contained information environment.
+
+---
+
+← [README](README.md)

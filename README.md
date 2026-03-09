@@ -89,7 +89,7 @@ python manage.py get_channels --fixholes
 python manage.py export_network
 ```
 
-Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`. See [ANALYSIS.md](ANALYSIS.md) for a detailed explanation of the available measures and community strategies.
+Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`.
 
 ### 7. View the graph
 
@@ -100,6 +100,10 @@ python -m http.server 8001
 
 Open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/) in your browser.
 
+
+## Analysis
+
+See [ANALYSIS.md](ANALYSIS.md) for a detailed explanation of all network measures and community detection strategies, with examples drawn from political Telegram networks.
 
 ## Configuration
 
