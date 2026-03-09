@@ -228,7 +228,7 @@ class ChannelCrawler:
                     message.forwarded_from = Channel.from_telegram_object(new_telegram_channel, force_update=True)
                 except errors.rpcerrorlist.ChannelPrivateError:
                     message.forwarded_from_private = channel_id
-                except AttributeError:
+                except (AttributeError, ValueError):
                     message.forwarded_from_private = 0
 
         missing_references = self.reference_resolver.resolve_message_references(message, telegram_message)
