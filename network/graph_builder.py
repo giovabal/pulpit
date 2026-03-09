@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Count, Q, QuerySet
 
 from webapp.models import Channel, Message
-from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
+from webapp.utils.channel_types import channel_type_filter
 
 import networkx as nx
 

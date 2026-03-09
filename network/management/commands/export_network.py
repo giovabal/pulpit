@@ -25,14 +25,12 @@ class Command(BaseCommand):
         invalid_measures = [m for m in settings.NETWORK_MEASURES if m not in VALID_MEASURES]
         if invalid_measures:
             raise CommandError(
-                f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. "
-                f"Choose from {sorted(VALID_MEASURES)}."
+                f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {sorted(VALID_MEASURES)}."
             )
         invalid_channel_types = [t for t in settings.CHANNEL_TYPES if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(
-                f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. "
-                f"Choose from {sorted(VALID_CHANNEL_TYPES)}."
+                f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
         measures = set(settings.NETWORK_MEASURES)
 
@@ -63,7 +61,9 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
-        self.stdout.write(f"\nSet spatial distribution of nodes ({settings.FA2_ITERATIONS} FA2 iterations) … ", ending="")
+        self.stdout.write(
+            f"\nSet spatial distribution of nodes ({settings.FA2_ITERATIONS} FA2 iterations) … ", ending=""
+        )
         self.stdout.flush()
         positions = layout.compute_layout(graph, settings.FA2_ITERATIONS)
         self.stdout.write("done")

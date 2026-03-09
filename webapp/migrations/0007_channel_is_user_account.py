@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('webapp', '0006_searchterm_word_unique'),
+        ("webapp", "0006_searchterm_word_unique"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channel',
-            name='is_user_account',
+            model_name="channel",
+            name="is_user_account",
             field=models.BooleanField(default=False),
         ),
     ]
