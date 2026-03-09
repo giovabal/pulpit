@@ -1,8 +1,8 @@
-# TNExp
+# Pulpit
 
 Telegram is home to thousands of political channels — news outlets, activist groups, propaganda outlets, and everything in between. They constantly reference each other: forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random; they reveal alliances, ideological clusters, and influence networks that are otherwise invisible.
 
-**TNExp** (Telegram Network Explorer) makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
+**Pulpit** (Political Undercurrents: Linkage, Propagation, Influence on Telegram) makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
 
 It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence.
 
@@ -10,9 +10,9 @@ It is designed for journalists, researchers, and analysts working on political c
 
 ### Under the hood
 
-TNExp is built around three stages:
+Pulpit is built around three stages:
 
-**1. Crawling.** TNExp uses the official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) to download messages from the channels you select. For each message it records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels appearing in the message text or as URL entities). This produces a directed, weighted graph: an edge from channel A to channel B means A regularly amplifies B's content, and its weight reflects how often, relative to A's total output.
+**1. Crawling.** Pulpit uses the official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) to download messages from the channels you select. For each message it records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels appearing in the message text or as URL entities). This produces a directed, weighted graph: an edge from channel A to channel B means A regularly amplifies B's content, and its weight reflects how often, relative to A's total output.
 
 **2. Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Several centrality measures can be computed — PageRank, HITS Hub and Authority scores, betweenness centrality, in-degree centrality — to rank channels by influence, reach, or structural importance. Community detection algorithms (Louvain, k-shell decomposition, Infomap, or your own manually defined groups) identify clusters of channels that behave as coherent ecosystems.
 
@@ -31,9 +31,9 @@ See the [changelog](CHANGELOG.md) for release history.
 
 ## How it works
 
-1. You provide search terms; TNExp finds matching Telegram channels via the API.
+1. You provide search terms; Pulpit finds matching Telegram channels via the API.
 2. You review the results in the admin interface and group channels into **Organizations** — thematic clusters (e.g. by political leaning, country, topic).
-3. TNExp crawls the selected channels, collecting messages and resolving cross-channel references (forwards and `t.me/` links).
+3. Pulpit crawls the selected channels, collecting messages and resolving cross-channel references (forwards and `t.me/` links).
 4. A graph is built from those references, communities are detected and colored, a ForceAtlas2 layout is applied, and the result is exported as an interactive HTML map.
 
 

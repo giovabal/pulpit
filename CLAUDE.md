@@ -27,7 +27,7 @@ cd graph && python -m http.server 8001
 
 ## Architecture
 
-**TNExp** crawls Telegram channels, analyzes their network relationships, and generates an interactive force-directed graph visualization.
+**Pulpit** crawls Telegram channels, analyzes their network relationships, and generates an interactive force-directed graph visualization.
 
 ### Data flow
 

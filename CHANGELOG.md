@@ -26,7 +26,7 @@
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
 - HITS Hub, HITS Authority, Betweenness Centrality, and In-degree Centrality network measures added to graph export and node detail panel.
 - `NETWORK_MEASURES` option controls which measures are calculated and exported. Default is `PAGERANK`.
-- About dialog in the graph mini-site: shows a description of TNExp, a link to the GitHub repository, graph statistics, and explanatory text for all computed measures and active community strategies.
+- About dialog in the graph mini-site: shows a description of Pulpit, a link to the GitHub repository, graph statistics, and explanatory text for all computed measures and active community strategies.
 - Labels visibility option in the graph Options panel: Always, On size (default), or Never.
 - Clicking a channel name in the connections list (inbound, outbound, or mutual) navigates to that channel's detail and highlights its network.
 
@@ -58,4 +58,4 @@
 
 ## [0.1] - 2026-02-21
 ### Added
-- First official release of TNExp.
+- First official release of Pulpit.
