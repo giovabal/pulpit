@@ -35,9 +35,14 @@ class Command(AsyncBaseCommand):
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
 
         try:
-            with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
-                phone=settings.TELEGRAM_PHONE_NUMBER
-            ) as client:
+            with TelegramClient(
+                "anon",
+                settings.TELEGRAM_API_ID,
+                settings.TELEGRAM_API_HASH,
+                connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
+                retry_delay=settings.TELEGRAM_RETRY_DELAY,
+                flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
+            ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
                 api_client = TelegramAPIClient(client)
                 media_handler = MediaHandler(api_client, download_temp_dir=download_temp_dir)
                 reference_resolver = ReferenceResolver(api_client)

@@ -19,9 +19,14 @@ class Command(AsyncBaseCommand):
     help = "crawling Telegram groups"
 
     def handle(self, *args: Any, **options: Any) -> None:
-        with TelegramClient("anon", settings.TELEGRAM_API_ID, settings.TELEGRAM_API_HASH).start(
-            phone=settings.TELEGRAM_PHONE_NUMBER
-        ) as client:
+        with TelegramClient(
+            "anon",
+            settings.TELEGRAM_API_ID,
+            settings.TELEGRAM_API_HASH,
+            connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
+            retry_delay=settings.TELEGRAM_RETRY_DELAY,
+            flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
+        ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
             api_client = TelegramAPIClient(client)
             media_handler = MediaHandler(api_client)
             reference_resolver = ReferenceResolver(api_client)

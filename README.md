@@ -126,6 +126,9 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | Max messages to fetch per channel per run. Set to `None` to fetch all messages with no limit. | `100` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `False` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos attached to messages | `False` |
+| `TELEGRAM_CONNECTION_RETRIES` | How many times Telethon retries a failed connection before giving up | `10` |
+| `TELEGRAM_RETRY_DELAY` | Seconds to wait between connection retry attempts | `5` |
+| `TELEGRAM_FLOOD_SLEEP_THRESHOLD` | Telethon automatically sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions instead | `60` |
 
 ### Graph layout
 
