@@ -195,9 +195,12 @@ class ChannelCrawler:
                 downloaded_images += self.get_message(channel, telegram_message)
                 processed_messages += 1
                 update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
+            # Save progress after each batch so an interrupted run resumes from here
+            channel.last_hole_check_max_telegram_id = batch[-1]
+            channel.save(update_fields=["last_hole_check_max_telegram_id"])
 
         if was_limited:
-            update_status(f"{channel_label} | hole-fix limit reached, checkpoint unchanged")
+            update_status(f"{channel_label} | hole-fix limit reached, checkpoint saved")
             return processed_messages, downloaded_images
 
         latest_message = channel.message_set.order_by("telegram_id").last()
