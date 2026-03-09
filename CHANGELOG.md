@@ -1,6 +1,8 @@
 # Changelog
 
 ## [0.4] - To be announced
+### Improvements
+- Improved resilience against internet connection fails during crawling.
 
 
 ## [0.3.1] - 2026-03-08
