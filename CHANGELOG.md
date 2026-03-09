@@ -3,6 +3,10 @@
 ## [0.4] - To be announced
 ### Improvements
 - Improved resilience against internet connection fails during crawling.
+- Expanded documentation.
+
+### New features
+- `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
 
 
 ## [0.3.1] - 2026-03-08
