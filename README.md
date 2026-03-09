@@ -36,6 +36,11 @@ Pulpit is built around three stages:
 4. A graph is built from those references, communities are detected and colored, a ForceAtlas2 layout is applied, and the result is exported as an interactive HTML map.
 
 
+## Analysis
+
+See [ANALYSIS.md](ANALYSIS.md) for a detailed explanation of all network measures and community detection strategies, with examples drawn from political Telegram networks.
+
+
 ## Installation
 
 See [INSTALLATION.md](INSTALLATION.md) for requirements, setup steps, and database initialisation.
@@ -100,10 +105,6 @@ python -m http.server 8001
 
 Open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/) in your browser.
 
-
-## Analysis
-
-See [ANALYSIS.md](ANALYSIS.md) for a detailed explanation of all network measures and community detection strategies, with examples drawn from political Telegram networks.
 
 ## Configuration
 
