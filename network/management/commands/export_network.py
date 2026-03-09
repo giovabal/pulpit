@@ -4,9 +4,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from network import community, exporter, graph_builder, layout
+from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
 VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY"}
-VALID_CHANNEL_TYPES = graph_builder.VALID_CHANNEL_TYPES
 
 
 class Command(BaseCommand):
