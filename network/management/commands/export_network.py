@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from network import community, exporter, graph_builder, layout
 
 VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY"}
+VALID_CHANNEL_TYPES = graph_builder.VALID_CHANNEL_TYPES
 
 
 class Command(BaseCommand):
@@ -26,6 +27,12 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. "
                 f"Choose from {sorted(VALID_MEASURES)}."
+            )
+        invalid_channel_types = [t for t in settings.CHANNEL_TYPES if t not in VALID_CHANNEL_TYPES]
+        if invalid_channel_types:
+            raise CommandError(
+                f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. "
+                f"Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
         measures = set(settings.NETWORK_MEASURES)
 

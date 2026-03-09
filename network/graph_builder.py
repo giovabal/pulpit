@@ -10,6 +10,22 @@ import networkx as nx
 
 logger = logging.getLogger(__name__)
 
+VALID_CHANNEL_TYPES = {"CHANNEL", "GROUP", "USER"}
+
+
+def _channel_type_filter() -> Q:
+    """Build a Q filter matching the channel types enabled in CHANNEL_TYPES."""
+    types = set(settings.CHANNEL_TYPES)
+    q = Q(pk__in=[])  # start empty; OR in each enabled type
+    if "CHANNEL" in types:
+        # Broadcast channels (and unknowns with all flags False)
+        q |= Q(is_user_account=False, megagroup=False, gigagroup=False)
+    if "GROUP" in types:
+        q |= Q(is_user_account=False, megagroup=True) | Q(is_user_account=False, gigagroup=True)
+    if "USER" in types:
+        q |= Q(is_user_account=True)
+    return q
+
 
 def build_graph(
     draw_dead_leaves: bool = False,
@@ -22,7 +38,7 @@ def build_graph(
     qs_filter = Q(organization__is_interesting=True)
     if draw_dead_leaves:
         qs_filter |= Q(in_degree__gt=0)
-    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, is_user_account=False)
+    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, _channel_type_filter())
 
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}

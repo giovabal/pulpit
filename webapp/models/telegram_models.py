@@ -76,6 +76,18 @@ class Channel(TelegramBaseModel):
         return f"https://t.me/{self.username or self.telegram_id}"
 
     @property
+    def channel_type(self) -> str:
+        if self.is_user_account:
+            return "user"
+        if self.gigagroup:
+            return "gigagroup"
+        if self.megagroup:
+            return "supergroup"
+        if self.broadcast:
+            return "channel"
+        return "unknown"
+
+    @property
     def profile_picture(self) -> "ProfilePicture | None":
         return self.profilepicture_set.order_by("date").last()
 

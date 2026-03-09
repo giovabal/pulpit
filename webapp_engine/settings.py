@@ -151,6 +151,11 @@ REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
 DRAW_DEAD_LEAVES = config("DRAW_DEAD_LEAVES", default=False, cast=bool)
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 
+CHANNEL_TYPES = config(
+    "CHANNEL_TYPES",
+    default="CHANNEL",
+    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
+)
 COMMUNITIES_STRATEGY = config(
     "COMMUNITIES_STRATEGY",
     default="ORGANIZATION",
