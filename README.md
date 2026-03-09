@@ -1,10 +1,11 @@
 # Pulpit
+### Political undercurrents: linkage, propagation, influence on Telegram
 
 Telegram is home to thousands of political channels — news outlets, activist groups, propaganda outlets, and everything in between. They constantly reference each other: forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random; they reveal alliances, ideological clusters, and influence networks that are otherwise invisible.
 
-**Pulpit** (Political Undercurrents: Linkage, Propagation, Influence on Telegram) makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
+**Pulpit** makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
 
-It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence.
+It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence. Pulpit is actively developed and evolving — see the [changelog](CHANGELOG.md) for what is new.
 
 ---
 
@@ -26,8 +27,6 @@ Pulpit is built around three stages:
 
 <figcaption>Example output — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette.</figcaption>
 </figure>
-
-See the [changelog](CHANGELOG.md) for release history.
 
 ## How it works
 
