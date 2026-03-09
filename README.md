@@ -89,7 +89,7 @@ python manage.py get_channels --fixholes
 python manage.py export_network
 ```
 
-Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`.
+Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`. See [ANALYSIS.md](ANALYSIS.md) for a detailed explanation of the available measures and community strategies.
 
 ### 7. View the graph
 
