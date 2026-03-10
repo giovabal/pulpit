@@ -138,7 +138,7 @@ function node_sort(x, y) {
 function get_anchor(node) {
     var color = node.originalColor || '#ccc';
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
-    return '<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '" title="' + label + '"></i>'
+    return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + label + '"></i>'
          + ' <a href="#" class="node-link" data="' + node.id + '">' + node.label + '</a>';
 }
 
@@ -150,7 +150,7 @@ function get_group(node) {
         var colorMap    = community_color_maps[strategy] || {};
         var color       = (label && colorMap[label]) ? colorMap[label] : '#ccc';
         var displayName = strategy.charAt(0).toUpperCase() + strategy.slice(1);
-        parts.push('<i class="fa fa-circle" aria-hidden="true" style="color: ' + color + '"></i>'
+        parts.push('<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '"></i>'
                  + ' <b>' + displayName + ':</b> ' + label);
     }
     return parts.join('<br>');
@@ -268,7 +268,7 @@ function build_legend(strategyData) {
         // l = [id, count, label, hexColor]
         legend_items.push(
             '<li style="padding-bottom: .75em;">'
-            + '<i class="fa fa-circle" style="color: ' + l[3] + ';"></i> ' + l[2] + ', ' + l[1] + ' channels'
+            + '<i class="bi bi-circle-fill" style="color: ' + l[3] + ';"></i> ' + l[2] + ', ' + l[1] + ' channels'
             + '</li>'
         );
         group_select_items.push('<option value="' + l[2] + '">' + l[2] + '</option>');
