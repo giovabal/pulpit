@@ -18,7 +18,18 @@ class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--amount",
+            type=int,
+            default=None,
+            help="Number of search terms to process (default: all)",
+        )
+
     def handle(self, *args: Any, **options: Any) -> None:
+        qs = SearchTerm.objects.all().order_by(F("last_check").asc(nulls_first=True))
+        if options["amount"] is not None:
+            qs = qs[: options["amount"]]
         with TelegramClient(
             "anon",
             settings.TELEGRAM_API_ID,
@@ -31,7 +42,7 @@ class Command(AsyncBaseCommand):
             media_handler = MediaHandler(api_client)
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
-            for term in SearchTerm.objects.all().order_by(F("last_check").asc(nulls_first=True))[:15]:
+            for term in qs:
                 crawler.search_channel(term.word)
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])
