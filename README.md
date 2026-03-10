@@ -65,10 +65,11 @@ In the admin, go to **Search Terms** and add keywords. These are used to discove
 ### 3. Discover channels
 
 ```sh
-python manage.py search_channels
+python manage.py search_channels           # process all pending search terms
+python manage.py search_channels --amount 15  # process at most 15 terms
 ```
 
-Runs up to 15 pending search terms and saves the matching channels to the database.
+Processes pending search terms (ordered by oldest check first) and saves the matching channels to the database. Use `--amount` to cap the number of terms processed in one run.
 
 ### 4. Organise channels
 

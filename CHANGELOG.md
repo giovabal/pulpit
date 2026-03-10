@@ -7,6 +7,7 @@
 
 ### New features
 - `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
+- `search_channels` command now accepts `--amount` to limit how many search terms are processed per run (default: all).
 
 
 ## [0.3.1] - 2026-03-08

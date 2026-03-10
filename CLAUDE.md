@@ -16,7 +16,8 @@ python manage.py migrate
 python manage.py runserver           # Web UI at localhost:8000
 
 # Crawling workflow
-python manage.py search_channels     # Find channels via search terms
+python manage.py search_channels             # Find channels via search terms (all terms)
+python manage.py search_channels --amount N  # Limit to N search terms
 python manage.py get_channels        # Crawl channels (add --fixholes to fill gaps)
 python manage.py export_network      # Generate graph JSON
 
