@@ -1,29 +1,7 @@
-// =============================================================================
-// Sigma graph extensions
-// =============================================================================
-
-sigma.classes.graph.addMethod('neighbors', function(nodeId) {
-    var k, neighbors = {}, index = this.allNeighborsIndex[nodeId] || {};
-    for (k in index) neighbors[k] = this.nodesIndex[k];
-    return neighbors;
-});
-
-sigma.classes.graph.addMethod('structured_neighbors', function(nodeId) {
-    var k,
-        mutual_neighbors = [],
-        in_neighbors     = [],
-        out_neighbors    = [],
-        index    = this.allNeighborsIndex[nodeId] || {},
-        in_index  = this.inNeighborsIndex[nodeId]  || {},
-        out_index = this.outNeighborsIndex[nodeId] || {};
-
-    for (k in index) {
-        if      (k in in_index && k in out_index) mutual_neighbors[k] = this.nodesIndex[k];
-        else if (k in in_index)                   in_neighbors[k]     = this.nodesIndex[k];
-        else if (k in out_index)                  out_neighbors[k]    = this.nodesIndex[k];
-    }
-    return { mutual_neighbors: mutual_neighbors, in_neighbors: in_neighbors, out_neighbors: out_neighbors };
-});
+import { Sigma } from 'sigma';
+import Graph from 'graphology';
+import EdgeCurveProgram from '@sigma/edge-curve';
+import { drawDiscNodeLabel } from 'sigma/rendering';
 
 // =============================================================================
 // Measure and strategy tooltips
@@ -63,45 +41,77 @@ var accessory_loaded     = false;
 var is_graph_completely_rendered = false;
 
 // =============================================================================
-// Sigma instance
+// Sigma and graph instances
+// sigma 3.x: Sigma.Sigma is the main class (UMD global is `Sigma` namespace)
+// graphology: graphology.Graph is the main class (UMD global is `graphology` namespace)
 // =============================================================================
 
-var settings = {
-    container:                'sigma-canvas',
+var app_settings = {
+    container:                  'sigma-canvas',
     container_background_color: 'rgba(17, 34, 51, 1)',
-    fade_color:               'rgba(27, 44, 61, .75)'
+    fade_color:                 'rgba(27, 44, 61, .75)'
 };
 
-$('#' + settings.container).css('background-color', settings.container_background_color);
+$('#' + app_settings.container).css('background-color', app_settings.container_background_color);
 
-var sigma_instance = new sigma({
-    renderer: { container: settings.container, type: 'canvas' },
-    settings: {
-        autoRescale:         true,
-        mouseEnabled:        true,
-        touchEnabled:        true,
-        nodesPowRatio:       1,
-        edgesPowRatio:       1,
-        defaultEdgeColor:    '#484848',
-        defaultNodeColor:    '#333',
-        defaultEdgeType:     'curve',
-        edgeColor:           'default',
-        minNodeSize:         1,
-        maxNodeSize:         10,
-        minEdgeSize:         0.2,
-        maxEdgeSize:         0.5,
-        defaultLabelSize:    12,
-        defaultLabelColor:   '#FFFFFF',
-        activeFontStyle:     'bold',
-        font:                'sans-serif',
-        defaultLabelBGColor: '#ddd',
-        zoomMin:             0.03125,
-        batchEdgesDrawing:   true,
-        hideEdgesOnMove:     true,
-        labelThreshold:      15,
-        hoverFontStyle:      'bold',
-        drawEdgeLabels:      false
+// drawDiscNodeHover hardcodes a white (#FFF) label background, clashing with our
+// white label text. This override uses a dark background instead.
+function drawDarkNodeHover(context, data, settings) {
+    var size = settings.labelSize, font = settings.labelFont, weight = settings.labelWeight;
+    context.font = weight + ' ' + size + 'px ' + font;
+    context.fillStyle = '#111';
+    context.shadowOffsetX = 0; context.shadowOffsetY = 0;
+    context.shadowBlur = 8; context.shadowColor = '#000';
+    var PADDING = 2;
+    if (typeof data.label === 'string') {
+        var textWidth = context.measureText(data.label).width,
+            boxWidth  = Math.round(textWidth + 5),
+            boxHeight = Math.round(size + 2 * PADDING),
+            radius    = Math.max(data.size, size / 2) + PADDING;
+        var angleRadian  = Math.asin(boxHeight / 2 / radius);
+        var xDeltaCoord  = Math.sqrt(Math.abs(Math.pow(radius, 2) - Math.pow(boxHeight / 2, 2)));
+        context.beginPath();
+        context.moveTo(data.x + xDeltaCoord, data.y + boxHeight / 2);
+        context.lineTo(data.x + radius + boxWidth, data.y + boxHeight / 2);
+        context.lineTo(data.x + radius + boxWidth, data.y - boxHeight / 2);
+        context.lineTo(data.x + xDeltaCoord, data.y - boxHeight / 2);
+        context.arc(data.x, data.y, radius, angleRadian, -angleRadian);
+        context.closePath();
+        context.fill();
+    } else {
+        context.beginPath();
+        context.arc(data.x, data.y, data.size + PADDING, 0, Math.PI * 2);
+        context.closePath();
+        context.fill();
     }
+    context.shadowOffsetX = 0; context.shadowOffsetY = 0; context.shadowBlur = 0;
+    drawDiscNodeLabel(context, data, settings);
+}
+
+var graph = new Graph({ type: 'directed', multi: false });
+var sigma_instance = new Sigma(graph, document.getElementById(app_settings.container), {
+    defaultEdgeColor:           '#484848',
+    defaultNodeColor:           '#333',
+    labelColor:                 { color: '#FFFFFF' },
+    labelSize:                  12,
+    labelFont:                  'sans-serif',
+    labelWeight:                'bold',
+    labelRenderedSizeThreshold: 8,
+    renderEdgeLabels:           false,
+    hideEdgesOnMove:            true,
+    minCameraRatio:             0.03125,
+    maxCameraRatio:             20,
+    defaultEdgeType:            'curved',
+    edgeProgramClasses:         { curved: EdgeCurveProgram },
+    defaultDrawNodeHover:       drawDarkNodeHover
+});
+
+// Sigma enables gl.BLEND but leaves the blend function at the WebGL default
+// (ONE, ZERO), which ignores alpha. Override it on the edge context so
+// overlapping semi-transparent edges composite correctly.
+sigma_instance.on('beforeRender', function() {
+    var gl = sigma_instance.webGLContexts && sigma_instance.webGLContexts.edges;
+    if (gl) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 });
 
 // =============================================================================
@@ -125,6 +135,25 @@ function avg_and_darken(c1, c2, factor) {
         Math.round((c1[1]+c2[1])/2 * factor),
         Math.round((c1[2]+c2[2])/2 * factor)
     ];
+}
+
+
+// =============================================================================
+// Graph helpers (replaces sigma v1 graph.addMethod extensions)
+// =============================================================================
+
+function structured_neighbors(nodeId) {
+    var in_set  = new Set(graph.inNeighbors(nodeId));
+    var out_set = new Set(graph.outNeighbors(nodeId));
+    var mutual_neighbors = [];
+    var in_neighbors     = [];
+    var out_neighbors    = [];
+    graph.neighbors(nodeId).forEach(function(k) {
+        if      (in_set.has(k) && out_set.has(k)) mutual_neighbors.push(k);
+        else if (in_set.has(k))                   in_neighbors.push(k);
+        else if (out_set.has(k))                  out_neighbors.push(k);
+    });
+    return { mutual_neighbors: mutual_neighbors, in_neighbors: in_neighbors, out_neighbors: out_neighbors };
 }
 
 // =============================================================================
@@ -156,14 +185,14 @@ function get_group(node) {
     return parts.join('<br>');
 }
 
-function get_neighbors_list(obj_list) {
-    var neighbors = [];
-    for (var n in obj_list) neighbors.push(obj_list[n]);
-    neighbors.sort(node_sort);
-    return neighbors.map(function(node) { return '<li>' + get_anchor(node) + '</li>'; });
+function get_neighbors_list(id_list) {
+    var nodes = id_list.map(function(id) { return graph.getNodeAttributes(id); });
+    nodes.sort(node_sort);
+    return nodes.map(function(node) { return '<li>' + get_anchor(node) + '</li>'; });
 }
 
-function show_node_info(node) {
+function show_node_info(nodeId) {
+    var node = graph.getNodeAttributes(nodeId);
     var key = node.url ? node.url.replace('https://t.me/', '') : '';
     $('#node_label').html(node.label);
     $('#node_url').html('@' + key).attr('href', node.url);
@@ -185,7 +214,7 @@ function show_node_info(node) {
     if (node.is_lost) $('#node_is_lost').show(); else $('#node_is_lost').hide();
     $('#node_details').show();
 
-    var nbrs    = sigma_instance.graph.structured_neighbors(node.id);
+    var nbrs    = structured_neighbors(nodeId);
     var mutual  = get_neighbors_list(nbrs.mutual_neighbors);
     var inbound = get_neighbors_list(nbrs.in_neighbors);
     var outbound= get_neighbors_list(nbrs.out_neighbors);
@@ -214,16 +243,21 @@ function build_community_color_maps(communities) {
 
 function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
-    sigma_instance.graph.nodes().forEach(function(n) {
+    graph.nodes().forEach(function(id) {
+        var n     = graph.getNodeAttributes(id);
         var label = n.communities && n.communities[strategy];
         var rgb   = (label && colorMap[label]) ? hex_to_rgb_parts(colorMap[label]) : [204, 204, 204];
-        n.color   = n.originalColor = 'rgb(' + rgb.join(',') + ')';
+        var color = 'rgb(' + rgb.join(',') + ')';
+        graph.setNodeAttribute(id, 'color', color);
+        graph.setNodeAttribute(id, 'originalColor', color);
     });
-    sigma_instance.graph.edges().forEach(function(e) {
-        var src = sigma_instance.graph.nodes(e.source);
-        var tgt = sigma_instance.graph.nodes(e.target);
-        var avg = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
-        e.color = e.originalColor = 'rgba(' + avg.join(',') + ',0.25)';
+    graph.edges().forEach(function(edgeId) {
+        var src = graph.getNodeAttributes(graph.source(edgeId));
+        var tgt = graph.getNodeAttributes(graph.target(edgeId));
+        var avg   = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
+        var color = 'rgba(' + avg.join(',') + ',0.25)';
+        graph.setEdgeAttribute(edgeId, 'color', color);
+        graph.setEdgeAttribute(edgeId, 'originalColor', color);
     });
     sigma_instance.refresh();
     is_graph_completely_rendered = true;
@@ -239,11 +273,13 @@ function maybe_apply_initial_colors() {
 // =============================================================================
 
 function apply_node_size(metric) {
-    var nodes = sigma_instance.graph.nodes();
-    var vals  = nodes.map(function(n) { return n[metric] || 0; });
+    var vals  = graph.nodes().map(function(id) { return graph.getNodeAttribute(id, metric) || 0; });
     var minV  = Math.min.apply(null, vals);
     var range = (Math.max.apply(null, vals) - minV) || 1;
-    nodes.forEach(function(n) { n.size = 0.1 + ((n[metric] || 0) - minV) / range * 9.9; });
+    graph.nodes().forEach(function(id) {
+        var val = graph.getNodeAttribute(id, metric) || 0;
+        graph.setNodeAttribute(id, 'size', 0.1 + (val - minV) / range * 9.9);
+    });
     sigma_instance.refresh();
 }
 
@@ -289,8 +325,9 @@ function search(word, result_element) {
     }
     var pattern = RegExp(word, 'i');
     var matches = [];
-    sigma_instance.graph.nodes().forEach(function(n) {
-        if (pattern.test(n.label)) matches.push(sigma_instance.graph.nodes(n.id));
+    graph.nodes().forEach(function(id) {
+        var n = graph.getNodeAttributes(id);
+        if (pattern.test(n.label)) matches.push(n);
     });
     matches.sort(node_sort);
 
@@ -304,31 +341,46 @@ function search(word, result_element) {
     result_element.html(html.join('')).show();
 }
 
-function select_node(node) {
-    var toKeep = sigma_instance.graph.neighbors(node.id);
-    toKeep[node.id] = node;
-    show_node_info(node);
-    sigma_instance.graph.nodes().forEach(function(n) {
-        n.color = toKeep[n.id] ? n.originalColor : settings.fade_color;
+// =============================================================================
+// Node selection
+// =============================================================================
+
+function select_node(nodeId) {
+    var neighbors = new Set(graph.neighbors(nodeId));
+    neighbors.add(nodeId);
+    show_node_info(nodeId);
+    graph.nodes().forEach(function(id) {
+        graph.setNodeAttribute(id, 'color',
+            neighbors.has(id)
+                ? graph.getNodeAttribute(id, 'originalColor')
+                : app_settings.fade_color);
     });
-    sigma_instance.graph.edges().forEach(function(e) {
-        e.color = (toKeep[e.source] && toKeep[e.target]) ? e.originalColor : settings.fade_color;
+    graph.edges().forEach(function(edgeId) {
+        var src = graph.source(edgeId);
+        var tgt = graph.target(edgeId);
+        graph.setEdgeAttribute(edgeId, 'color',
+            (neighbors.has(src) && neighbors.has(tgt))
+                ? graph.getEdgeAttribute(edgeId, 'originalColor')
+                : app_settings.fade_color);
     });
     sigma_instance.refresh();
     is_graph_completely_rendered = false;
 }
 
 function reset_colors() {
-    sigma_instance.graph.nodes().forEach(function(n) { n.color = n.originalColor; });
-    sigma_instance.graph.edges().forEach(function(e) { e.color = e.originalColor; });
+    graph.nodes().forEach(function(id) {
+        graph.setNodeAttribute(id, 'color', graph.getNodeAttribute(id, 'originalColor'));
+    });
+    graph.edges().forEach(function(edgeId) {
+        graph.setEdgeAttribute(edgeId, 'color', graph.getEdgeAttribute(edgeId, 'originalColor'));
+    });
     sigma_instance.refresh();
     is_graph_completely_rendered = true;
 }
 
 function click_node(nodeId) {
     if (!is_graph_completely_rendered) reset_colors();
-    var n = sigma_instance.graph.nodes(nodeId);
-    if (n) select_node(n);
+    select_node(nodeId);
 }
 
 // =============================================================================
@@ -338,34 +390,43 @@ function click_node(nodeId) {
 function get_data() {
     $.getJSON('data.json', function(data) {
         $('#loading_message').html('Building graph…');
-        sigma_instance.graph.read(data);
 
-        sigma_instance.graph.nodes().forEach(function(n) {
-            n.size          = (n.in_deg || 0) + 1;
-            n.color         = 'rgb(' + n.color + ')';
-            n.originalColor = n.color;
+        data.nodes.forEach(function(n) {
+            var rgbColor = 'rgb(' + n.color + ')';
+            graph.addNode(n.id, Object.assign({}, n, {
+                size:          (n.in_deg || 0) + 1,
+                color:         rgbColor,
+                originalColor: rgbColor
+            }));
         });
-        sigma_instance.graph.edges().forEach(function(e) {
-            e.color         = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
-            e.originalColor = e.color;
+
+        data.edges.forEach(function(e) {
+            var color = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
+            var attrs = Object.assign({}, e, { color: color, originalColor: color });
+            delete attrs.source;
+            delete attrs.target;
+            delete attrs.id;
+            try {
+                graph.addEdge(e.source, e.target, attrs);
+            } catch(err) { /* skip duplicate or invalid edges */ }
         });
+
         sigma_instance.refresh();
         $('#loading_message').html('Done!');
         if (loading_modal_bs) loading_modal_bs.hide();
         $('#about_graph_stats').html(
-            sigma_instance.graph.nodes().length + ' channels, ' +
-            sigma_instance.graph.edges().length + ' connections'
+            graph.nodes().length + ' channels, ' +
+            graph.edges().length + ' connections'
         );
 
         graph_loaded = true;
         maybe_apply_initial_colors();
 
-        sigma_instance.bind('clickNode', function(e) {
-            var node = e.data.node !== undefined ? e.data.node : e.data;
-            select_node(node);
+        sigma_instance.on('clickNode', function(event) {
+            click_node(event.node);
         });
 
-        sigma_instance.bind('clickStage', function() {
+        sigma_instance.on('clickStage', function() {
             if (!is_graph_completely_rendered) reset_colors();
         });
     });
@@ -441,7 +502,7 @@ $(document).ready(function() {
 
     $('.infobar-toggle').on('click', function() {
         $('#infobar').toggle();
-        sigma_instance.dispatchEvent('clickStage');
+        if (!is_graph_completely_rendered) reset_colors();
     });
 
     $('body').on('click', 'a.node-link', function() {
@@ -452,37 +513,54 @@ $(document).ready(function() {
     $('#size-select').on('change', function() { apply_node_size($(this).val()); });
 
     $('#labels-select').on('change', function() {
-        var thresholds = { 'always': 0, 'on_size': 15, 'never': Infinity };
-        sigma_instance.settings('labelThreshold', thresholds[$(this).val()]);
-        sigma_instance.refresh();
+        var thresholds = { 'always': 0, 'on_size': 8, 'never': Infinity };
+        sigma_instance.setSetting('labelRenderedSizeThreshold', thresholds[$(this).val()]);
     });
 
     $('#group-select').on('change', function() {
         var v = $(this).val();
         if (v === '') {
-            sigma_instance.graph.nodes().forEach(function(n) { n.color = n.originalColor; });
-            sigma_instance.graph.edges().forEach(function(e) { e.color = e.originalColor; });
+            graph.nodes().forEach(function(id) {
+                graph.setNodeAttribute(id, 'color', graph.getNodeAttribute(id, 'originalColor'));
+            });
+            graph.edges().forEach(function(edgeId) {
+                graph.setEdgeAttribute(edgeId, 'color', graph.getEdgeAttribute(edgeId, 'originalColor'));
+            });
             sigma_instance.refresh();
             is_graph_completely_rendered = true;
             return;
         }
-        var toKeep = [];
-        sigma_instance.graph.nodes().forEach(function(n) {
-            var label = (n.communities && active_strategy) ? n.communities[active_strategy] : '';
-            if (label === v) toKeep.push(n.id);
+        var toKeep = new Set();
+        graph.nodes().forEach(function(id) {
+            var communities = graph.getNodeAttribute(id, 'communities');
+            var label = (communities && active_strategy) ? communities[active_strategy] : '';
+            if (label === v) toKeep.add(id);
         });
-        sigma_instance.graph.nodes().forEach(function(n) {
-            n.color = toKeep.indexOf(n.id) >= 0 ? n.originalColor : settings.fade_color;
+        graph.nodes().forEach(function(id) {
+            graph.setNodeAttribute(id, 'color',
+                toKeep.has(id) ? graph.getNodeAttribute(id, 'originalColor') : app_settings.fade_color);
         });
-        sigma_instance.graph.edges().forEach(function(e) {
-            e.color = (toKeep.indexOf(e.source) >= 0 && toKeep.indexOf(e.target) >= 0)
-                ? e.originalColor : settings.fade_color;
+        graph.edges().forEach(function(edgeId) {
+            var src = graph.source(edgeId);
+            var tgt = graph.target(edgeId);
+            graph.setEdgeAttribute(edgeId, 'color',
+                (toKeep.has(src) && toKeep.has(tgt))
+                    ? graph.getEdgeAttribute(edgeId, 'originalColor')
+                    : app_settings.fade_color);
         });
         sigma_instance.refresh();
         is_graph_completely_rendered = false;
     });
 
-    $('#zoom_in').click(function()    { var c = sigma_instance.camera; c.goTo({ratio: c.ratio * 0.5}); });
-    $('#zoom_out').click(function()   { var c = sigma_instance.camera; c.goTo({ratio: c.ratio * 1.5}); });
-    $('#zoom_reset').click(function() { sigma_instance.camera.goTo({x: 0, y: 0, ratio: 1}); });
+    $('#zoom_in').click(function() {
+        var cam = sigma_instance.getCamera();
+        cam.setState(Object.assign({}, cam.getState(), { ratio: cam.getState().ratio * 0.5 }));
+    });
+    $('#zoom_out').click(function() {
+        var cam = sigma_instance.getCamera();
+        cam.setState(Object.assign({}, cam.getState(), { ratio: cam.getState().ratio * 1.5 }));
+    });
+    $('#zoom_reset').click(function() {
+        sigma_instance.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+    });
 });
