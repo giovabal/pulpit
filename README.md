@@ -95,7 +95,7 @@ python manage.py get_channels --fixholes
 python manage.py export_network
 ```
 
-Builds the graph, applies community detection and layout, and writes the result to `graph/telegram_graph/`.
+Builds the graph, applies community detection and layout, and writes the result to `graph/`.
 
 ### 7. View the graph
 
@@ -104,7 +104,7 @@ cd graph
 python -m http.server 8001
 ```
 
-Open [http://localhost:8001/telegram_graph/](http://localhost:8001/telegram_graph/) in your browser.
+Open [http://localhost:8001/](http://localhost:8001/) in your browser.
 
 
 ## Configuration

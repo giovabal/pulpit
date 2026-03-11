@@ -128,11 +128,11 @@ class Command(BaseCommand):
             communities_data,
             measures_labels,
             channel_qs,
-            output_filename="graph/telegram_graph/data.json",
-            accessory_filename="graph/telegram_graph/data_accessory.json",
+            output_filename="graph/data.json",
+            accessory_filename="graph/data_accessory.json",
         )
 
         self.stdout.write("- media")
-        exporter.copy_channel_media(channel_qs, "graph/telegram_graph")
+        exporter.copy_channel_media(channel_qs, "graph")
 
         self.stdout.write(self.style.SUCCESS("\nDone."))

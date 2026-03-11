@@ -23,7 +23,7 @@ python manage.py export_network      # Generate graph JSON
 
 # View graph (from repo root)
 cd graph && python -m http.server 8001
-# Open http://localhost:8001/telegram_graph/
+# Open http://localhost:8001/
 ```
 
 ## Architecture
@@ -36,7 +36,7 @@ cd graph && python -m http.server 8001
 2. `search_channels` management command finds channels via Telegram API and creates `Channel` records
 3. User assigns channels to `Organization` objects and marks them `is_interesting=True` in admin
 4. `get_channels` command uses `TelegramCrawler` to fetch messages and resolve references between channels
-5. `export_network` command uses `RelationalGraph` to build the graph, apply community detection, run ForceAtlas2 layout, and write `graph/telegram_graph/data.json`
+5. `export_network` command uses `RelationalGraph` to build the graph, apply community detection, run ForceAtlas2 layout, and write `graph/data.json`
 
 ### Key modules
 
