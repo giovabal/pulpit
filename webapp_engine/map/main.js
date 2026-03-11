@@ -278,7 +278,7 @@ function apply_node_size(metric) {
     var range = (Math.max.apply(null, vals) - minV) || 1;
     graph.nodes().forEach(function(id) {
         var val = graph.getNodeAttribute(id, metric) || 0;
-        graph.setNodeAttribute(id, 'size', 0.1 + (val - minV) / range * 9.9);
+        graph.setNodeAttribute(id, 'size', 1.5 + (val - minV) / range * 13.5);
     });
     sigma_instance.refresh();
 }
@@ -391,10 +391,13 @@ function get_data() {
     $.getJSON('data.json', function(data) {
         $('#loading_message').html('Building graph…');
 
+        var inDegVals  = data.nodes.map(function(n) { return n.in_deg || 0; });
+        var minInDeg   = Math.min.apply(null, inDegVals);
+        var inDegRange = (Math.max.apply(null, inDegVals) - minInDeg) || 1;
         data.nodes.forEach(function(n) {
             var rgbColor = 'rgb(' + n.color + ')';
             graph.addNode(n.id, Object.assign({}, n, {
-                size:          (n.in_deg || 0) + 1,
+                size:          1.5 + (( n.in_deg || 0) - minInDeg) / inDegRange * 13.5,
                 color:         rgbColor,
                 originalColor: rgbColor
             }));
