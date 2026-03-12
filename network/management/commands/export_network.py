@@ -1,3 +1,4 @@
+import datetime
 from typing import Any
 
 from django.conf import settings
@@ -23,6 +24,26 @@ class Command(BaseCommand):
             default="html",
             help='Tabular output format alongside the graph: "html" (default), "xls", "html+xls", or "none".',
         )
+        parser.add_argument(
+            "--startdate",
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="Only include messages on or after this date.",
+        )
+        parser.add_argument(
+            "--enddate",
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="Only include messages on or before this date.",
+        )
+
+    def _parse_date(self, value: str | None, flag: str) -> datetime.date | None:
+        if value is None:
+            return None
+        try:
+            return datetime.date.fromisoformat(value)
+        except ValueError:
+            raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.")
 
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
@@ -45,11 +66,16 @@ class Command(BaseCommand):
             )
         measures = set(settings.NETWORK_MEASURES)
 
+        start_date = self._parse_date(options["startdate"], "--startdate")
+        end_date = self._parse_date(options["enddate"], "--enddate")
+
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
                 draw_dead_leaves=settings.DRAW_DEAD_LEAVES,
+                start_date=start_date,
+                end_date=end_date,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
@@ -97,7 +123,9 @@ class Command(BaseCommand):
         self.stdout.write(f"{len(main_component)} nodes")
 
         self.stdout.write("- degrees, activity and fans")
-        measures_labels = exporter.apply_base_node_measures(graph_data, graph, channel_dict)
+        measures_labels = exporter.apply_base_node_measures(
+            graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+        )
 
         if "PAGERANK" in measures:
             self.stdout.write("- pagerank … ", ending="")

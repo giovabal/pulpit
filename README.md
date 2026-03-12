@@ -93,14 +93,22 @@ python manage.py get_channels --fixholes
 
 ```sh
 python manage.py export_network
-python manage.py export_network --table-format xls       # Excel only
-python manage.py export_network --table-format html+xls  # both HTML and Excel
-python manage.py export_network --table-format none       # no tabular output
+python manage.py export_network --table-format xls              # Excel only
+python manage.py export_network --table-format html+xls         # both HTML and Excel
+python manage.py export_network --table-format none              # no tabular output
+python manage.py export_network --startdate 2023-01-01           # messages from this date
+python manage.py export_network --enddate 2023-12-31             # messages up to this date
+python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31  # date range
 ```
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
 By default also writes a sortable `graph/table.html` with one row per channel and all computed measures.
-Use `--table-format` to control tabular output: `html` (default), `xls` (Excel file `graph/table.xlsx`), `html+xls` (both), or `none`.
+
+| Option | Description |
+| :----- | :---------- |
+| `--table-format` | Tabular output format: `html` (default), `xls`, `html+xls`, or `none` |
+| `--startdate YYYY-MM-DD` | Only consider messages on or after this date. Channels with no messages in the period are excluded. |
+| `--enddate YYYY-MM-DD` | Only consider messages on or before this date. Channels with no messages in the period are excluded. |
 
 ### 7. View the graph
 

@@ -68,7 +68,11 @@ def build_graph_data(
 
 
 def apply_base_node_measures(
-    graph_data: GraphData, graph: nx.DiGraph, channel_dict: dict[str, Any]
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
 ) -> list[tuple[str, str]]:
     """Populate degree, fans, message count, and activity period on each node."""
     measures_labels: list[tuple[str, str]] = [
@@ -85,7 +89,15 @@ def apply_base_node_measures(
         node["in_deg"] = graph.in_degree(node["id"], weight="weight")
         node["out_deg"] = graph.out_degree(node["id"], weight="weight")
         node["fans"] = channel.participants_count
-        node["messages_count"] = channel.message_set.count()
+        if start_date or end_date:
+            msg_qs = channel.message_set.exclude(date__isnull=True)
+            if start_date:
+                msg_qs = msg_qs.filter(date__date__gte=start_date)
+            if end_date:
+                msg_qs = msg_qs.filter(date__date__lte=end_date)
+            node["messages_count"] = msg_qs.count()
+        else:
+            node["messages_count"] = channel.message_set.count()
         node["label"] = channel.title
         start, end = channel._get_activity_bounds()
         if start is None or end is None:

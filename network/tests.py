@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import tempfile
@@ -464,6 +465,68 @@ class BuildGraphTests(TestCase):
         self._create_forward()
         _, _, _, channel_qs = build_graph()
         self.assertIn(self.ch1, channel_qs)
+        self.assertIn(self.ch2, channel_qs)
+
+    def _create_forward_on_date(self, date: datetime.datetime) -> Message:
+        msg = Message.objects.create(telegram_id=99, channel=self.ch2, forwarded_from=self.ch1, date=date)
+        self.ch1.save()
+        self.ch2.save()
+        return msg
+
+    def test_startdate_excludes_messages_before_date(self) -> None:
+        self._create_forward_on_date(datetime.datetime(2023, 1, 15, tzinfo=datetime.timezone.utc))
+        with self.assertRaises(ValueError):
+            build_graph(start_date=datetime.date(2023, 2, 1))
+
+    def test_enddate_excludes_messages_after_date(self) -> None:
+        self._create_forward_on_date(datetime.datetime(2023, 3, 1, tzinfo=datetime.timezone.utc))
+        with self.assertRaises(ValueError):
+            build_graph(end_date=datetime.date(2023, 2, 28))
+
+    def test_date_range_includes_matching_messages(self) -> None:
+        self._create_forward_on_date(datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc))
+        # ch1 needs a published message in range so it isn't removed from the graph
+        Message.objects.create(
+            telegram_id=100, channel=self.ch1, date=datetime.datetime(2023, 6, 10, tzinfo=datetime.timezone.utc)
+        )
+        graph, _, edge_list, _ = build_graph(
+            start_date=datetime.date(2023, 6, 1),
+            end_date=datetime.date(2023, 6, 30),
+        )
+        self.assertGreater(len(edge_list), 0)
+
+    def test_date_filter_removes_channels_with_no_messages_in_range(self) -> None:
+        self._create_forward_on_date(datetime.datetime(2022, 1, 1, tzinfo=datetime.timezone.utc))
+        # Add a third channel with a message in range to ensure the graph has edges
+        ch3 = Channel.objects.create(telegram_id=3, organization=self.org, title="Channel 3")
+        Message.objects.create(
+            telegram_id=100,
+            channel=ch3,
+            forwarded_from=self.ch1,
+            date=datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc),
+        )
+        # ch1 also needs a published message in range so it remains in the filtered graph
+        Message.objects.create(
+            telegram_id=101,
+            channel=self.ch1,
+            date=datetime.datetime(2023, 3, 1, tzinfo=datetime.timezone.utc),
+        )
+        self.ch1.save()
+        ch3.save()
+        _, channel_dict, _, channel_qs = build_graph(start_date=datetime.date(2023, 1, 1))
+        self.assertNotIn(str(self.ch2.pk), channel_dict)
+        self.assertNotIn(self.ch2, channel_qs)
+
+    def test_channel_qs_filtered_to_active_channels(self) -> None:
+        self._create_forward_on_date(datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc))
+        # ch1 needs a published message in range so it isn't removed from the graph
+        Message.objects.create(
+            telegram_id=100, channel=self.ch1, date=datetime.datetime(2023, 6, 10, tzinfo=datetime.timezone.utc)
+        )
+        _, _, _, channel_qs = build_graph(
+            start_date=datetime.date(2023, 6, 1),
+            end_date=datetime.date(2023, 6, 30),
+        )
         self.assertIn(self.ch2, channel_qs)
 
 
@@ -1092,6 +1155,20 @@ class ExportNetworkCommandTests(TestCase):
         mock_measures.return_value = [("in_deg", "Inbound")]
         mock_pagerank.return_value = [("pagerank", "PageRank")]
         mock_communities_payload.return_value = {"organization": {"groups": [], "main_groups": {}}}
+
+    def test_raises_command_error_on_invalid_startdate(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("export_network", startdate="not-a-date")
+
+    def test_raises_command_error_on_invalid_enddate(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("export_network", enddate="2023-13-01")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")

@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Any
 
@@ -12,8 +13,23 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 
+def _make_date_q(
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+    field: str = "date",
+) -> Q:
+    q = Q()
+    if start_date:
+        q &= Q(**{f"{field}__date__gte": start_date})
+    if end_date:
+        q &= Q(**{f"{field}__date__lte": end_date})
+    return q
+
+
 def build_graph(
     draw_dead_leaves: bool = False,
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -32,15 +48,27 @@ def build_graph(
         graph.add_node(str(channel.pk), data=channel_dict[str(channel.pk)]["data"])
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]
+    date_q = _make_date_q(start_date, end_date)
 
     messages_per_channel: dict[int, int] = {
         item["channel_id"]: item["total"]
-        for item in Message.objects.filter(channel_id__in=channel_ids).values("channel_id").annotate(total=Count("id"))
+        for item in Message.objects.filter(date_q, channel_id__in=channel_ids)
+        .values("channel_id")
+        .annotate(total=Count("id"))
     }
+
+    if start_date or end_date:
+        active_ids = set(messages_per_channel.keys())
+        inactive = [cid for cid, cdata in channel_dict.items() if cdata["channel"].pk not in active_ids]
+        for cid in inactive:
+            graph.remove_node(cid)
+            del channel_dict[cid]
+        channel_ids = [int(cid) for cid in channel_dict]
+        channel_qs = channel_qs.filter(pk__in=channel_ids)
 
     forwarded_counts: dict[tuple[int, int], int] = {
         (item["channel_id"], item["forwarded_from_id"]): item["total"]
-        for item in Message.objects.filter(channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+        for item in Message.objects.filter(date_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
         .values("channel_id", "forwarded_from_id")
         .annotate(total=Count("id"))
     }
@@ -48,7 +76,11 @@ def build_graph(
     references_through = Message.references.through
     reference_counts: dict[tuple[int, int], int] = {
         (item["message__channel_id"], item["channel_id"]): item["total"]
-        for item in references_through.objects.filter(channel_id__in=channel_ids, message__channel_id__in=channel_ids)
+        for item in references_through.objects.filter(
+            _make_date_q(start_date, end_date, field="message__date"),
+            channel_id__in=channel_ids,
+            message__channel_id__in=channel_ids,
+        )
         .values("message__channel_id", "channel_id")
         .annotate(total=Count("id"))
     }
