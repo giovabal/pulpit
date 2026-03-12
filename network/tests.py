@@ -1224,8 +1224,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management import call_command
 
         self._configure_happy_path(
-            mock_build, mock_detect, mock_layout, mock_graph_data,
-            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
         )
         call_command("export_network", table_format="none")
         mock_table_html.assert_not_called()
@@ -1269,8 +1275,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management import call_command
 
         self._configure_happy_path(
-            mock_build, mock_detect, mock_layout, mock_graph_data,
-            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
         )
         call_command("export_network", table_format="xls")
         mock_table_html.assert_not_called()
@@ -1314,8 +1326,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management import call_command
 
         self._configure_happy_path(
-            mock_build, mock_detect, mock_layout, mock_graph_data,
-            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
         )
         call_command("export_network", table_format="html+xls")
         mock_table_html.assert_called_once()

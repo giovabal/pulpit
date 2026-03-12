@@ -3,9 +3,9 @@
 ## [0.4] - To be announced
 ### New features
 - `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
-- `search_channels` command now accepts `--amount` to limit how many search terms are processed per run (default: all).
+- `search_channels` command now accepts `--amount` to limit how many search terms are processed per run.
+- `export_network` command now produces tabular output alongside the graph mini-site.
 - Project name changed from `TNExp` to `Pulpit`.
-- `export_network` command now produces tabular output alongside the graph mini-site. Use `--table-format` to choose `html` (default, sortable HTML table), `xls` (Excel file), `html+xls` (both), or `none`.
 
 ### Improvements
 - Improved resilience against internet connection fails during crawling.
