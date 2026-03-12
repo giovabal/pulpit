@@ -450,7 +450,7 @@ class ChannelActivityPeriodTests(TestCase):
         self.ch.date = datetime.datetime(2020, 3, 1, tzinfo=datetime.timezone.utc)
         self.ch.save()
         result = self.ch.activity_period
-        self.assertIn("March 2020", result)
+        self.assertIn("Mar 2020", result)
 
     def test_messages_determine_start(self) -> None:
         Message.objects.create(
@@ -459,7 +459,7 @@ class ChannelActivityPeriodTests(TestCase):
         Message.objects.create(
             telegram_id=2, channel=self.ch, date=datetime.datetime(2023, 6, 1, tzinfo=datetime.timezone.utc)
         )
-        self.assertIn("January 2023", self.ch.activity_period)
+        self.assertIn("Jan 2023", self.ch.activity_period)
 
     def test_channel_date_earlier_than_messages_used_as_start(self) -> None:
         self.ch.date = datetime.datetime(2020, 3, 1, tzinfo=datetime.timezone.utc)
@@ -467,7 +467,7 @@ class ChannelActivityPeriodTests(TestCase):
         Message.objects.create(
             telegram_id=1, channel=self.ch, date=datetime.datetime(2023, 6, 1, tzinfo=datetime.timezone.utc)
         )
-        self.assertIn("March 2020", self.ch.activity_period)
+        self.assertIn("Mar 2020", self.ch.activity_period)
 
     def test_null_dated_messages_are_ignored(self) -> None:
         Message.objects.create(telegram_id=1, channel=self.ch, date=None)
@@ -481,7 +481,7 @@ class ChannelActivityPeriodTests(TestCase):
     def test_old_end_date_shows_closed_range(self) -> None:
         old = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
         Message.objects.create(telegram_id=1, channel=self.ch, date=old)
-        self.assertIn("January 2020 - January 2020", self.ch.activity_period)
+        self.assertIn("Jan 2020 - Jan 2020", self.ch.activity_period)
 
     def test_uses_single_db_query(self) -> None:
         Message.objects.create(

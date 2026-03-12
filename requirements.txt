@@ -10,3 +10,4 @@ telethon==1.42.0
 pypalettes==0.2.1
 infomap==2.9.2
 bokeh==3.8.2
+openpyxl==3.1.5

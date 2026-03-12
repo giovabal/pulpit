@@ -32,26 +32,30 @@
     <div class="sigma-expand" id="sigma-canvas" style="background-color: #123;"></div>
   </div>
 
-  <div id="menu_container">
-    <a href="#" id="search_button" class="menu-button" data-bs-toggle="modal" data-bs-target="#search_modal">
-      <i class="bi bi-search fs-3" aria-hidden="true"></i><p class="d-none d-sm-block">Search</p>
+  <div id="menu_container" class="d-flex align-items-center">
+    <a href="#" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal">
+      <i class="bi bi-search fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Search</p>
     </a>
 
-    <div class="menu-button">
+    <div class="menu-button text-center">
       <div id="zoom_menu" class="btn-group" role="group">
-	<button type="button" class="btn btn-secondary" id="zoom_in"><i class="bi bi-zoom-in" aria-hidden="true" title="zoom in"></i></button>
-	<button type="button" class="btn btn-secondary" id="zoom_reset"><i class="bi bi-arrow-counterclockwise" aria-hidden="true" title="reset zoom"></i></button>
-	<button type="button" class="btn btn-secondary" id="zoom_out"><i class="bi bi-zoom-out" aria-hidden="true" title="zoom out"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_in"><i class="bi bi-zoom-in" aria-hidden="true" title="zoom in"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_reset"><i class="bi bi-arrow-counterclockwise" aria-hidden="true" title="reset zoom"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_out"><i class="bi bi-zoom-out" aria-hidden="true" title="zoom out"></i></button>
       </div>
-      <p class="d-none d-sm-block">Zoom</p>
+      <p class="d-none d-sm-block pt-2">Zoom</p>
     </div>
 
-    <a href="#" id="about_button" class="menu-button ms-auto" data-bs-toggle="modal" data-bs-target="#about_modal">
-      <i class="bi bi-info-circle fs-3" aria-hidden="true"></i><p class="d-none d-sm-block">About</p>
+    <a href="table.html" id="table_button" class="menu-button ms-auto text-decoration-none text-center" target="_blank" rel="noopener noreferrer">
+      <i class="bi bi-table fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Data</p>
     </a>
 
-    <a href="#" id="options_button" class="menu-button" data-bs-toggle="modal" data-bs-target="#options_modal">
-      <i class="bi bi-gear fs-3" aria-hidden="true"></i><p class="d-none d-sm-block">Options</p>
+    <a href="#" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal">
+      <i class="bi bi-info-circle fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">About</p>
+    </a>
+
+    <a href="#" id="options_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#options_modal">
+      <i class="bi bi-gear fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Options</p>
     </a>
 
   </div>

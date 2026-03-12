@@ -93,7 +93,7 @@ class Channel(TelegramBaseModel):
 
     @property
     def activity_period(self) -> str:
-        date_template = "%B %Y"
+        date_template = "%b %Y"
         agg = self.message_set.exclude(date__isnull=True).aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]

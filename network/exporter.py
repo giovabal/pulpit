@@ -1,3 +1,4 @@
+import html as _html
 import json
 import logging
 import os
@@ -11,6 +12,8 @@ from django.db.models import QuerySet
 from webapp.models import Channel
 
 import networkx as nx
+import openpyxl
+from openpyxl.styles import Font
 
 logger = logging.getLogger(__name__)
 
@@ -198,3 +201,197 @@ def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
             pass
         except OSError as e:
             logger.warning("Could not copy media for channel %s: %s", channel.username, e)
+
+
+_BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
+
+_SORT_TABLE_JS = """
+var tables = document.querySelectorAll("table.sortable"), table, thead, headers, i, j;
+for (i = 0; i < tables.length; i++) {
+    table = tables[i];
+    if (thead = table.querySelector("thead")) {
+        headers = thead.querySelectorAll("th");
+        for (j = 0; j < headers.length; j++) {
+            headers[j].innerHTML = "<a href='#'>" + headers[j].innerText + "</a>";
+        }
+        thead.addEventListener("click", sortTableFunction(table));
+    }
+}
+function sortTableFunction(table) {
+    return function(ev) {
+        if (ev.target.tagName.toLowerCase() == 'a') {
+            var header = ev.target.parentNode;
+            var currentDirection = header.getAttribute('data-sort-direction');
+            var direction = currentDirection === 'desc' ? 'asc' : 'desc';
+            var siblingHeaders = header.parentNode.children;
+            for (var i = 0; i < siblingHeaders.length; i++) {
+                if (siblingHeaders[i] !== header) siblingHeaders[i].removeAttribute('data-sort-direction');
+            }
+            header.setAttribute('data-sort-direction', direction);
+            sortRows(table, siblingIndex(header), direction);
+            ev.preventDefault();
+        }
+    };
+}
+function siblingIndex(node) {
+    var count = 0;
+    while (node = node.previousElementSibling) count++;
+    return count;
+}
+function sortRows(table, columnIndex, direction) {
+    var rows = table.querySelectorAll("tbody tr"),
+        sel  = "thead th:nth-child(" + (columnIndex + 1) + ")",
+        sel2 = "td:nth-child(" + (columnIndex + 1) + ")",
+        classList = table.querySelector(sel).classList,
+        values = [], cls = "", sortDirection = direction || "asc", allNum = true, val, index, node;
+    if (classList) {
+        if (classList.contains("date")) cls = "date";
+        else if (classList.contains("number")) cls = "number";
+    }
+    for (index = 0; index < rows.length; index++) {
+        node = rows[index].querySelector(sel2);
+        val = node.getAttribute("data-sort-value");
+        if (val === null || val === "") val = node.innerText;
+        var numericVal = parseFloat(val);
+        if (!Number.isNaN(numericVal) && isFinite(numericVal)) val = numericVal; else allNum = false;
+        values.push({ value: val, row: rows[index] });
+    }
+    if (cls == "" && allNum) cls = "number";
+    if (cls == "number") values.sort(function(a, b) { return a.value - b.value; });
+    else if (cls == "date") values.sort(function(a, b) { return Date.parse(a.value) - Date.parse(b.value); });
+    else values.sort(function(a, b) {
+        var ta = (a.value + "").toUpperCase(), tb = (b.value + "").toUpperCase();
+        return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
+    if (sortDirection === "desc") values = values.reverse();
+    for (var idx = 0; idx < values.length; idx++) table.querySelector("tbody").appendChild(values[idx].row);
+}
+"""
+
+
+def write_table_html(
+    graph_data: GraphData,
+    measures_labels: list[tuple[str, str]],
+    strategies: list[str],
+    output_filename: str,
+) -> None:
+    extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
+    nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
+
+    strategy_ths = "".join(f"<th>{_html.escape(s.capitalize())}</th>" for s in strategies)
+    extra_ths = "".join(f'<th class="number">{_html.escape(lbl)}</th>' for _, lbl in extra)
+    thead = (
+        "<thead><tr>"
+        "<th>Channel</th>"
+        '<th class="number">Users</th>'
+        '<th class="number">Messages</th>'
+        '<th class="number">Inbound</th>'
+        '<th class="number">Outbound</th>'
+        "<th>Activity</th>" + strategy_ths + extra_ths + "</tr></thead>"
+    )
+
+    def _num_cell(val: Any) -> str:
+        sv = val if val is not None else ""
+        disp = str(val) if val is not None else ""
+        return f'<td data-sort-value="{sv}">{disp}</td>'
+
+    def _float_cell(val: Any) -> str:
+        if val is None:
+            return '<td data-sort-value=""></td>'
+        disp = f"{val:.4f}" if isinstance(val, float) else str(val)
+        return f'<td data-sort-value="{val}">{disp}</td>'
+
+    rows = []
+    for node in nodes:
+        label = _html.escape(node.get("label") or node["id"])
+        url = node.get("url") or ""
+        name_cell = (
+            f'<td><a href="{url}" target="_blank" rel="noopener noreferrer">{label}</a></td>'
+            if url
+            else f"<td>{label}</td>"
+        )
+        cells = [name_cell]
+        for key in ("fans", "messages_count", "in_deg", "out_deg"):
+            cells.append(_num_cell(node.get(key)))
+        cells.append(f"<td>{_html.escape(str(node.get('activity_period') or ''))}</td>")
+        communities = node.get("communities") or {}
+        for s in strategies:
+            cells.append(f"<td>{_html.escape(str(communities.get(s, '')))}</td>")
+        for key, _ in extra:
+            cells.append(_float_cell(node.get(key)))
+        rows.append("<tr>" + "".join(cells) + "</tr>\n")
+
+    content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Channels</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <style>
+    th a {{ text-decoration: none; color: inherit; }}
+    th[data-sort-direction="asc"] a::after {{ content: " ▲"; }}
+    th[data-sort-direction="desc"] a::after {{ content: " ▼"; }}
+  </style>
+</head>
+<body>
+  <div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <h2 class="mb-0">Channels</h2>
+      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3"></i> Back to map</a>
+    </div>
+    <p class="text-muted">{len(nodes)} channels. Click column headers to sort.</p>
+    <div class="table-responsive">
+      <table class="table table-striped table-bordered table-hover table-sm sortable">
+        {thead}
+        <tbody>
+{"".join(rows)}        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>{_SORT_TABLE_JS}  </script>
+</body>
+</html>"""
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
+def write_table_xls(
+    graph_data: GraphData,
+    measures_labels: list[tuple[str, str]],
+    strategies: list[str],
+    output_filename: str,
+) -> None:
+    extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
+    nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Channels"
+
+    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound", "Activity"]
+    headers += [s.capitalize() for s in strategies]
+    headers += [lbl for _, lbl in extra]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    for node in nodes:
+        communities = node.get("communities") or {}
+        row: list[Any] = [
+            node.get("label") or node["id"],
+            node.get("url") or "",
+            node.get("fans"),
+            node.get("messages_count"),
+            node.get("in_deg"),
+            node.get("out_deg"),
+            node.get("activity_period") or "",
+        ]
+        for s in strategies:
+            row.append(communities.get(s, ""))
+        for key, _ in extra:
+            row.append(node.get(key))
+        ws.append(row)
+
+    wb.save(output_filename)

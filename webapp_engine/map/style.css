@@ -49,15 +49,12 @@ html, body {
 .menu-button:hover {
     color: #fff;
     padding: .5em 1em;
-    text-decoration: none;
-    text-align: center;
 }
 
 #loading_message,
 .menu-button p {
     color: rgba(255, 255, 255, 0.7);
     font-size: 1.1em;
-    padding-top: .5em;
 }
 
 @media screen {
@@ -66,8 +63,6 @@ html, body {
         top: 10px;
         left: 20px;
         width: calc(100% - 40px);
-        display: flex;
-        align-items: flex-start;
         transition: all .25s ease-out;
     }
 }
@@ -123,10 +118,6 @@ html, body {
     margin-top: 2px;
 }
 
-#zoom_menu button {
-    color: #fff;
-    background-color: transparent;
-}
 
 #search {
     padding: 1em .25em;

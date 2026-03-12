@@ -1061,6 +1061,8 @@ def _patch_export_pipeline() -> list:
         f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes",
         f"{_EXPORT_CMD}.exporter.ensure_graph_root",
         f"{_EXPORT_CMD}.exporter.write_graph_files",
+        f"{_EXPORT_CMD}.exporter.write_table_html",
+        f"{_EXPORT_CMD}.exporter.write_table_xls",
         f"{_EXPORT_CMD}.exporter.copy_channel_media",
     ]
     # Apply in reverse so the first target becomes the first positional arg
@@ -1092,6 +1094,8 @@ class ExportNetworkCommandTests(TestCase):
         mock_communities_payload.return_value = {"organization": {"groups": [], "main_groups": {}}}
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
@@ -1118,6 +1122,8 @@ class ExportNetworkCommandTests(TestCase):
             call_command("export_network")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
@@ -1146,6 +1152,8 @@ class ExportNetworkCommandTests(TestCase):
         mock_reposition: MagicMock,
         mock_ensure: MagicMock,
         mock_write: MagicMock,
+        mock_table_html: MagicMock,
+        mock_table_xls: MagicMock,
         mock_copy: MagicMock,
     ) -> None:
         from django.core.management import call_command
@@ -1160,7 +1168,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network")
+        call_command("export_network")  # default: --table-format html
 
         mock_build.assert_called_once()
         mock_detect.assert_called()
@@ -1174,4 +1182,141 @@ class ExportNetworkCommandTests(TestCase):
         mock_reposition.assert_called_once()
         mock_ensure.assert_called_once()
         mock_write.assert_called_once()
+        mock_table_html.assert_called_once()
+        mock_table_xls.assert_not_called()
         mock_copy.assert_called_once()
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_table_format_none_skips_both(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        mock_reposition: MagicMock,
+        mock_ensure: MagicMock,
+        mock_write: MagicMock,
+        mock_table_html: MagicMock,
+        mock_table_xls: MagicMock,
+        mock_copy: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build, mock_detect, mock_layout, mock_graph_data,
+            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+        )
+        call_command("export_network", table_format="none")
+        mock_table_html.assert_not_called()
+        mock_table_xls.assert_not_called()
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_table_format_xls_only(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        mock_reposition: MagicMock,
+        mock_ensure: MagicMock,
+        mock_write: MagicMock,
+        mock_table_html: MagicMock,
+        mock_table_xls: MagicMock,
+        mock_copy: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build, mock_detect, mock_layout, mock_graph_data,
+            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+        )
+        call_command("export_network", table_format="xls")
+        mock_table_html.assert_not_called()
+        mock_table_xls.assert_called_once()
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_table_format_html_xls_calls_both(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        mock_reposition: MagicMock,
+        mock_ensure: MagicMock,
+        mock_write: MagicMock,
+        mock_table_html: MagicMock,
+        mock_table_xls: MagicMock,
+        mock_copy: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build, mock_detect, mock_layout, mock_graph_data,
+            mock_main_comp, mock_measures, mock_pagerank, mock_communities_payload,
+        )
+        call_command("export_network", table_format="html+xls")
+        mock_table_html.assert_called_once()
+        mock_table_xls.assert_called_once()

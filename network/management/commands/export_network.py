@@ -9,9 +9,20 @@ from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY"}
 
 
+TABLE_FORMAT_CHOICES = ["none", "html", "xls", "html+xls"]
+
+
 class Command(BaseCommand):
     args = ""
     help = "write file"
+
+    def add_arguments(self, parser: Any) -> None:
+        parser.add_argument(
+            "--table-format",
+            choices=TABLE_FORMAT_CHOICES,
+            default="html",
+            help='Tabular output format alongside the graph: "html" (default), "xls", "html+xls", or "none".',
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
@@ -131,6 +142,15 @@ class Command(BaseCommand):
             output_filename="graph/data.json",
             accessory_filename="graph/data_accessory.json",
         )
+
+        table_format = options["table_format"]
+        strategies = [s.lower() for s in settings.COMMUNITIES_STRATEGY]
+        if "html" in table_format:
+            self.stdout.write("- table (html)")
+            exporter.write_table_html(graph_data, measures_labels, strategies, output_filename="graph/table.html")
+        if "xls" in table_format:
+            self.stdout.write("- table (xls)")
+            exporter.write_table_xls(graph_data, measures_labels, strategies, output_filename="graph/table.xlsx")
 
         self.stdout.write("- media")
         exporter.copy_channel_media(channel_qs, "graph")
