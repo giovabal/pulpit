@@ -971,7 +971,7 @@ class SearchChannelsCommandTests(TestCase):
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-        call_command("search_channels")
+        call_command("search_channels", amount=15)
 
         self.assertEqual(mock_crawler.search_channel.call_count, 15)
 
