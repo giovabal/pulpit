@@ -1,3 +1,4 @@
+import datetime
 import html as _html
 import json
 import logging
@@ -86,7 +87,20 @@ def apply_base_node_measures(
         node["fans"] = channel.participants_count
         node["messages_count"] = channel.message_set.count()
         node["label"] = channel.title
-        node["activity_period"] = channel.activity_period
+        start, end = channel._get_activity_bounds()
+        if start is None or end is None:
+            node["activity_period"] = "Unknown"
+            node["activity_start"] = ""
+            node["activity_end"] = ""
+        else:
+            date_template = "%b %Y"
+            node["activity_period"] = (
+                f"{start.strftime(date_template)} - {end.strftime(date_template)}"
+                if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+                else f"{start.strftime(date_template)} - "
+            )
+            node["activity_start"] = start.strftime("%Y-%m")
+            node["activity_end"] = end.strftime("%Y-%m")
     return measures_labels
 
 
@@ -276,18 +290,22 @@ def write_table_html(
     output_filename: str,
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
+    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
+    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
+    pagerank_th = f'<th class="number">{_html.escape(pagerank_col[1])}</th>' if pagerank_col else ""
+    other_extra_ths = "".join(f'<th class="number">{_html.escape(lbl)}</th>' for _, lbl in other_extra)
     strategy_ths = "".join(f"<th>{_html.escape(s.capitalize())}</th>" for s in strategies)
-    extra_ths = "".join(f'<th class="number">{_html.escape(lbl)}</th>' for _, lbl in extra)
     thead = (
         "<thead><tr>"
         "<th>Channel</th>"
         '<th class="number">Users</th>'
         '<th class="number">Messages</th>'
         '<th class="number">Inbound</th>'
-        '<th class="number">Outbound</th>'
-        "<th>Activity</th>" + strategy_ths + extra_ths + "</tr></thead>"
+        '<th class="number">Outbound</th>' + pagerank_th + other_extra_ths + strategy_ths + "<th>Activity start</th>"
+        "<th>Activity end</th>"
+        "</tr></thead>"
     )
 
     def _num_cell(val: Any) -> str:
@@ -313,12 +331,15 @@ def write_table_html(
         cells = [name_cell]
         for key in ("fans", "messages_count", "in_deg", "out_deg"):
             cells.append(_num_cell(node.get(key)))
-        cells.append(f"<td>{_html.escape(str(node.get('activity_period') or ''))}</td>")
+        if pagerank_col:
+            cells.append(_float_cell(node.get(pagerank_col[0])))
+        for key, _ in other_extra:
+            cells.append(_float_cell(node.get(key)))
         communities = node.get("communities") or {}
         for s in strategies:
             cells.append(f"<td>{_html.escape(str(communities.get(s, '')))}</td>")
-        for key, _ in extra:
-            cells.append(_float_cell(node.get(key)))
+        cells.append(f"<td>{_html.escape(node.get('activity_start') or '')}</td>")
+        cells.append(f"<td>{_html.escape(node.get('activity_end') or '')}</td>")
         rows.append("<tr>" + "".join(cells) + "</tr>\n")
 
     content = f"""<!DOCTYPE html>
@@ -364,15 +385,20 @@ def write_table_xls(
     output_filename: str,
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
+    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
+    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Channels"
 
-    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound", "Activity"]
+    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound"]
+    if pagerank_col:
+        headers.append(pagerank_col[1])
+    headers += [lbl for _, lbl in other_extra]
     headers += [s.capitalize() for s in strategies]
-    headers += [lbl for _, lbl in extra]
+    headers += ["Activity start", "Activity end"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -386,12 +412,15 @@ def write_table_xls(
             node.get("messages_count"),
             node.get("in_deg"),
             node.get("out_deg"),
-            node.get("activity_period") or "",
         ]
+        if pagerank_col:
+            row.append(node.get(pagerank_col[0]))
+        for key, _ in other_extra:
+            row.append(node.get(key))
         for s in strategies:
             row.append(communities.get(s, ""))
-        for key, _ in extra:
-            row.append(node.get(key))
+        row.append(node.get("activity_start") or "")
+        row.append(node.get("activity_end") or "")
         ws.append(row)
 
     wb.save(output_filename)

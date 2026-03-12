@@ -91,20 +91,25 @@ class Channel(TelegramBaseModel):
     def profile_picture(self) -> "ProfilePicture | None":
         return self.profilepicture_set.order_by("date").last()
 
-    @property
-    def activity_period(self) -> str:
-        date_template = "%b %Y"
+    def _get_activity_bounds(
+        self,
+    ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:
         agg = self.message_set.exclude(date__isnull=True).aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]
         start_candidates = [d for d in (self.date, first_date) if d is not None]
         end_candidates = [d for d in (self.date, last_date) if d is not None]
-        start = min(start_candidates) if start_candidates else None
-        end = max(end_candidates) if end_candidates else None
+        return (
+            min(start_candidates) if start_candidates else None,
+            max(end_candidates) if end_candidates else None,
+        )
 
+    @property
+    def activity_period(self) -> str:
+        start, end = self._get_activity_bounds()
         if start is None or end is None:
             return "Unknown"
-
+        date_template = "%b %Y"
         return (
             f"{start.strftime(date_template)} - {end.strftime(date_template)}"
             if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
