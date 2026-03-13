@@ -10,7 +10,9 @@ DEFAULT_FALLBACK_COLOR: ColorTuple = (204, 204, 204)
 
 def _normalize_rgb_sequence(value: Sequence[Any]) -> ColorTuple:
     values = [float(part) for part in value[:3]]
-    if values and max(values) <= 1:
+    if len(values) < 3:
+        return DEFAULT_FALLBACK_COLOR
+    if max(values) <= 1:
         return tuple(int(part * 255) for part in values)
     return tuple(int(part) for part in values)
 
