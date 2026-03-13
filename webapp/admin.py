@@ -28,6 +28,7 @@ class ChannelAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
+            .select_related("organization")
             .annotate(_messages_count=Count("message_set", distinct=True))
             .prefetch_related(Prefetch("profilepicture_set", queryset=ProfilePicture.objects.order_by("-date")))
         )
@@ -47,7 +48,7 @@ class ChannelAdmin(admin.ModelAdmin):
     @admin.display(description="Img")
     def thumb(self, obj: Channel) -> str:
         # profilepicture_set is prefetched ordered by date descending; first = most recent
-        pics = obj.profilepicture_set.all()
+        pics = list(obj.profilepicture_set.all())
         pic = pics[0] if pics else None
         src = pic.picture.url if pic else ""
         if not src:
