@@ -15,12 +15,14 @@ from webapp.utils.colors import (
     rgb_to_hex,
 )
 
+import igraph as ig
+import leidenalg
 import networkx as nx
 from infomap import Infomap
 
 logger = logging.getLogger(__name__)
 
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP"}
+COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN"}
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
@@ -128,6 +130,32 @@ def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, 
     return community_map, build_community_palette(community_map, palette_name)
 
 
+def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+
+    ig_graph = ig.Graph(n=len(node_ids), directed=True)
+    edges = [(node_id_map[s], node_id_map[t]) for s, t in graph.edges()]
+    weights = [graph.edges[s, t].get("weight", 1.0) for s, t in graph.edges()]
+    ig_graph.add_edges(edges)
+
+    partition = leidenalg.find_partition(
+        ig_graph,
+        leidenalg.ModularityVertexPartition,
+        weights=weights if weights else None,
+        seed=0,
+    )
+
+    for community_index, community in enumerate(partition, start=1):
+        for node_index in community:
+            community_map[node_ids[node_index]] = community_index
+
+    community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
 def detect(
     strategy: str, palette_name: str, graph: nx.DiGraph, channel_dict: dict[str, Any]
 ) -> tuple[CommunityMap, CommunityPalette]:
@@ -138,6 +166,8 @@ def detect(
         return detect_kcore(graph, palette_name)
     if strategy == "INFOMAP":
         return detect_infomap(graph, palette_name)
+    if strategy == "LEIDEN":
+        return detect_leiden(graph, palette_name)
     if strategy == "ORGANIZATION":
         return detect_organization(channel_dict)
     raise ValueError(f"Unknown community strategy: {strategy!r}. Choose from {sorted(VALID_STRATEGIES)}.")

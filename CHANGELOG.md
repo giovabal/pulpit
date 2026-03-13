@@ -2,6 +2,7 @@
 
 ## [0.4] - To be announced
 ### New features
+- New option for `COMMUNITIES_STRATEGY`: `LEIDEN`.
 - `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
 - `search_channels` command now accepts `--amount` to limit how many search terms are processed per run.
 - `export_network` command now produces tabular output alongside the graph mini-site.

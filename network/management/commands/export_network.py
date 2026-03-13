@@ -42,8 +42,8 @@ class Command(BaseCommand):
             return None
         try:
             return datetime.date.fromisoformat(value)
-        except ValueError:
-            raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.")
+        except ValueError as err:
+            raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.") from err
 
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):

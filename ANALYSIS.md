@@ -90,6 +90,16 @@ An automatic algorithm that maximises **modularity** — a measure of how much m
 
 ---
 
+### Leiden
+
+Leiden is a refinement of the Louvain algorithm that addresses one of its known weaknesses: Louvain can produce communities that are internally disconnected — where some nodes are loosely attached to a group they do not actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected internally.
+
+**In practice:** Leiden tends to produce sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. The communities it finds are not just modular — they are structurally compact. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
+
+**Example:** in a network where a mainstream news aggregator forwards content from dozens of ideologically diverse channels, Louvain may lump several distinct sub-movements into a single broad community anchored by that aggregator. Leiden's refinement step will pull apart these loosely connected sub-groups, revealing the underlying ideological clusters that the aggregator happens to span.
+
+---
+
 ### K-core (k-shell decomposition)
 
 K-core peels the network like an onion. It repeatedly removes the least-connected nodes, exposing progressively denser cores. The **innermost core** (displayed as community 1 in Pulpit) contains only channels that are all mutually connected to each other above a certain threshold — the tightest, most integrated nucleus of the network. Outer shells contain channels that are connected to the core but not tightly enough to be part of it.

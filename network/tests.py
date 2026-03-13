@@ -15,6 +15,7 @@ from network.community import (
     build_community_palette,
     detect_infomap,
     detect_kcore,
+    detect_leiden,
     detect_louvain,
     detect_organization,
     normalize_community_map,
@@ -984,6 +985,60 @@ class DetectInfomapTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# community.py — detect_leiden
+# ---------------------------------------------------------------------------
+
+
+class DetectLeidenTests(TestCase):
+    def setUp(self) -> None:
+        # Two clear clusters connected by a weak bridge
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
+        self.graph.add_edges_from(
+            [
+                ("a", "b"),
+                ("b", "c"),
+                ("c", "a"),  # cluster 1
+                ("d", "e"),
+                ("e", "f"),
+                ("f", "d"),  # cluster 2
+                ("c", "d"),  # bridge
+            ]
+        )
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_leiden(self.graph, "SomePalette")
+        self.assertIsInstance(community_map, dict)
+        self.assertIsInstance(palette, dict)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_leiden(self.graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_leiden(self.graph, "SomePalette")
+        self.assertGreaterEqual(min(community_map.values()), 1)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_leiden(self.graph, "SomePalette")
+        for community_id in community_map.values():
+            self.assertIn(community_id, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_isolated_nodes_merged_into_same_community(self, _mock: MagicMock) -> None:
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b")
+        graph.add_node("iso1")
+        graph.add_node("iso2")
+        community_map, _ = detect_leiden(graph, "SomePalette")
+        self.assertEqual(community_map["iso1"], community_map["iso2"])
+
+
+# ---------------------------------------------------------------------------
 # community.py — detect() dispatcher
 # ---------------------------------------------------------------------------
 
@@ -1023,6 +1078,14 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("INFOMAP", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette")
+
+    @patch("network.community.detect_leiden")
+    def test_leiden_strategy_calls_detect_leiden(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+
+        mock_detect.return_value = ({}, {})
+        detect("LEIDEN", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette")
 
     @patch("network.community.detect_organization")
