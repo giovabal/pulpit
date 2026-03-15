@@ -98,11 +98,14 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
-        self.stdout.write(
-            f"\nSet spatial distribution of nodes ({settings.FA2_ITERATIONS} FA2 iterations) … ", ending=""
-        )
+        self.stdout.write("\nSet spatial distribution of nodes")
+        self.stdout.write("- Kamada-Kawai … ", ending="")
         self.stdout.flush()
-        positions = layout.compute_layout(graph, settings.FA2_ITERATIONS)
+        initial_pos = layout.kamada_kawai_positions(graph)
+        self.stdout.write("done")
+        self.stdout.write(f"- ForceAtlas2 ({settings.FA2_ITERATIONS} iterations) … ", ending="")
+        self.stdout.flush()
+        positions = layout.forceatlas2_positions(graph, initial_pos, settings.FA2_ITERATIONS)
         self.stdout.write("done")
 
         xs, ys = zip(*positions.values(), strict=False)

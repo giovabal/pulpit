@@ -10,9 +10,15 @@ def rotate_positions(positions: dict[str, tuple[float, float]]) -> dict[str, tup
     return {key: (y, -x) for key, (x, y) in positions.items()}
 
 
-def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:
-    """Run ForceAtlas2 on *graph* and return a position dict keyed by node pk."""
-    initial_pos = nx.kamada_kawai_layout(graph, weight="weight")
+def kamada_kawai_positions(graph: nx.DiGraph) -> dict:
+    """Return initial node positions via Kamada-Kawai."""
+    return nx.kamada_kawai_layout(graph, weight="weight")
+
+
+def forceatlas2_positions(
+    graph: nx.DiGraph, initial_pos: dict, iterations: int = 10
+) -> dict[str, tuple[float, float]]:
+    """Run ForceAtlas2 on *graph* starting from *initial_pos*."""
     forceatlas2 = ForceAtlas2(
         outbound_attraction_distribution=True,
         edge_weight_influence=1.0,
@@ -26,3 +32,8 @@ def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[f
         verbose=False,
     )
     return forceatlas2.forceatlas2_networkx_layout(graph, pos=initial_pos, iterations=iterations)
+
+
+def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:
+    """Run Kamada-Kawai then ForceAtlas2 on *graph*; return positions keyed by node pk."""
+    return forceatlas2_positions(graph, kamada_kawai_positions(graph), iterations)
