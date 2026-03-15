@@ -157,6 +157,15 @@ def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
     return [(key, "In-degree Centrality")]
 
 
+def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add normalized out-degree centrality to each node."""
+    key = "out_degree_centrality"
+    values: dict[str, float] = nx.out_degree_centrality(graph)
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Out-degree Centrality")]
+
+
 def find_main_component(graph: nx.DiGraph) -> set[str]:
     return max(nx.weakly_connected_components(graph), key=len)
 

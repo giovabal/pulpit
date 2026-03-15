@@ -62,6 +62,16 @@ The simplest measure: the normalized fraction of all other channels in the netwo
 
 ---
 
+### Out-degree centrality
+
+The outbound counterpart to in-degree: the normalized fraction of all other channels in the network that this channel forwards or references. It measures how broadly a channel distributes its attention across the network.
+
+**In practice:** out-degree centrality answers: *which channels are the most active amplifiers?* A high score means a channel casts a wide net — pointing outward to many different sources. This can indicate a broad-spectrum aggregator, a channel trying to build alliances across ideological lines, or a node that acts as a gateway between distinct communities. Paired with in-degree, it helps distinguish pure producers (high in, low out) from pure distributors (high out, low in) from true network hubs (high on both).
+
+**Example:** a channel that runs daily roundups of posts from across the political spectrum — linking to nationalist outlets, mainstream media, and independent commentators alike — will score very high on out-degree centrality even if almost no one forwards its own content. Its influence is in the connections it maintains, not in the audience it attracts.
+
+---
+
 ## Community detection strategies
 
 A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.

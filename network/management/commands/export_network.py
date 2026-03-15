@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from network import community, exporter, graph_builder, layout
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
-VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY"}
+VALID_MEASURES = {"PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY", "OUTDEGCENTRALITY"}
 
 
 TABLE_FORMAT_CHOICES = ["none", "html", "xls", "html+xls"]
@@ -151,6 +151,12 @@ class Command(BaseCommand):
             self.stdout.write("- in-degree centrality … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
+            self.stdout.write("done")
+
+        if "OUTDEGCENTRALITY" in measures:
+            self.stdout.write("- out-degree centrality … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_out_degree_centrality(graph_data, graph)
             self.stdout.write("done")
 
         self.stdout.write("- small components")
