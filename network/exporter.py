@@ -166,6 +166,17 @@ def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> lis
     return [(key, "Out-degree Centrality")]
 
 
+def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add normalized harmonic centrality to each node."""
+    key = "harmonic_centrality"
+    n = graph.number_of_nodes()
+    norm = (n - 1) if n > 1 else 1
+    values: dict[str, float] = nx.harmonic_centrality(graph)
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0) / norm
+    return [(key, "Harmonic Centrality")]
+
+
 def find_main_component(graph: nx.DiGraph) -> set[str]:
     return max(nx.weakly_connected_components(graph), key=len)
 

@@ -72,6 +72,16 @@ The outbound counterpart to in-degree: the normalized fraction of all other chan
 
 ---
 
+### Harmonic centrality
+
+A variant of closeness centrality designed to handle disconnected graphs. For each channel, it sums the reciprocals of the shortest path lengths to every other reachable channel, then normalizes by the number of other nodes. Unreachable nodes contribute zero rather than causing the score to collapse entirely.
+
+**In practice:** harmonic centrality measures how quickly a channel can reach the rest of the network through the chain of forwards and references. A high score means the channel is structurally close to everyone else — able to receive or propagate information with few hops. Unlike betweenness, it does not require a channel to sit on the paths others use; it only asks how short those paths are from its own vantage point. It is more robust than standard closeness centrality in the sparse, partially disconnected networks typical of political Telegram ecosystems.
+
+**Example:** a mid-sized channel that sits at the junction of two dense sub-clusters — say, regional nationalist outlets and a broader pan-national movement — may not lie on many shortest paths between others (low betweenness) but can itself reach almost every channel in the network within two or three hops. Harmonic centrality surfaces exactly this kind of structurally well-positioned node, which would be invisible to betweenness-based rankings.
+
+---
+
 ## Community detection strategies
 
 A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.
