@@ -15,7 +15,6 @@ def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[f
         graph,
         max_iter=iterations,
         distributed_action=True,
-        linlog=True,
         jitter_tolerance=1.0,
         scaling_ratio=2.0,
         strong_gravity=False,
