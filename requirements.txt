@@ -1,4 +1,3 @@
-pyforceatlas2==0.0.5
 django==6.0.3
 beautifulsoup4==4.14.3
 django-admin-logs==1.5.0
