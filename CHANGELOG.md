@@ -1,12 +1,15 @@
 # Changelog
 
-## [0.4] - To be announced
+## [0.4] - 2026-03-15
 ### New features
-- New option for `COMMUNITIES_STRATEGY`: `LEIDEN`.
-- `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
-- `search_channels` command now accepts `--amount` to limit how many search terms are processed per run.
-- `export_network` command now produces tabular output alongside the graph mini-site.
 - Project name changed from `TNExp` to `Pulpit`.
+- New option for `COMMUNITIES_STRATEGY`: `LEIDEN`.
+- New option for `NETWORK_MEASURES`: `OUTDEGCENTRALITY`.
+- New option for `NETWORK_MEASURES`: `HARMONICCENTRALITY`.
+- `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
+- `search_channels` command now accepts `--amount` option to limit how many search terms are processed per run.
+- `export_network` command now accepts `--startdate` and  `--enddate` options to operate on limited time windows.
+- `export_network` command now produces tabular output alongside the graph mini-site.
 
 ### Improvements
 - Improved resilience against internet connection fails during crawling.
