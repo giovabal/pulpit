@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working rules
+
+- **Never commit or push unless explicitly asked to do so.** Make code changes, then stop. The user will ask separately when they want a commit or push.
+- Run `ruff check . --fix && ruff format .` before declaring any code change done.
+- Smoke-test changes with a quick `python -c "..."` call where practical before finishing.
+
 ## Commands
 
 ```bash
@@ -18,8 +24,8 @@ python manage.py runserver           # Web UI at localhost:8000
 # Crawling workflow
 python manage.py search_channels             # Find channels via search terms (all terms)
 python manage.py search_channels --amount N  # Limit to N search terms
-python manage.py get_channels        # Crawl channels (add --fixholes to fill gaps)
-python manage.py export_network      # Generate graph JSON
+python manage.py get_channels                # Crawl channels (add --fixholes to fill gaps)
+python manage.py export_network              # Generate graph JSON
 
 # View graph (from repo root)
 cd graph && python -m http.server 8001
@@ -36,13 +42,31 @@ cd graph && python -m http.server 8001
 2. `search_channels` management command finds channels via Telegram API and creates `Channel` records
 3. User assigns channels to `Organization` objects and marks them `is_interesting=True` in admin
 4. `get_channels` command uses `TelegramCrawler` to fetch messages and resolve references between channels
-5. `export_network` command uses `RelationalGraph` to build the graph, apply community detection, run ForceAtlas2 layout, and write `graph/data.json`
+5. `export_network` command builds the graph, applies community detection, runs the spatial layout, and writes output to `graph/`
 
 ### Key modules
 
+- **`network/layout.py`** — Spatial layout pipeline: Kamada-Kawai seeds initial positions, then `pyforceatlas2` runs ForceAtlas2. Two public functions (`kamada_kawai_positions`, `forceatlas2_positions`) plus a convenience wrapper `compute_layout`.
+- **`network/exporter.py`** — Builds `GraphData` from the NetworkX graph; applies network measures (PageRank, HITS, betweenness, in-degree, out-degree, harmonic centrality); writes `graph/data.json` and the accessory config file.
+- **`network/community.py`** — Community detection strategies: ORGANIZATION, LOUVAIN, LEIDEN, KCORE, INFOMAP.
+- **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
+- **`network/management/commands/export_network.py`** — Orchestrates the full export: validates settings, builds graph, runs community detection, runs layout, applies measures, writes output files and optional table (HTML/XLS).
 - **`webapp/crawler.py`** (`TelegramCrawler`) — Telethon-based Telegram API client. Handles rate limiting, flood-wait errors, message hole detection, and media downloads.
-- **`webapp/relational_graph.py`** (`RelationalGraph`) — Builds a NetworkX graph from channels/messages. Applies ORGANIZATION/LOUVAIN/KCORE/INFOMAP community detection, ForceAtlas2 layout, and outputs JSON for the web visualization.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` ManyToMany back to Channel), `Organization`, `SearchTerm`, and media models.
+
+### Network measures
+
+Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
+
+| Key | Description |
+| :-- | :---------- |
+| `PAGERANK` | PageRank score (default) |
+| `HITSHUB` | HITS hub score |
+| `HITSAUTH` | HITS authority score |
+| `BETWEENNESS` | Betweenness centrality |
+| `INDEGCENTRALITY` | Normalized in-degree centrality |
+| `OUTDEGCENTRALITY` | Normalized out-degree centrality |
+| `HARMONICCENTRALITY` | Normalized harmonic centrality |
 
 ### Edge construction
 
