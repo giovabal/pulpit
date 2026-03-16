@@ -177,6 +177,19 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     return [(key, "Harmonic Centrality")]
 
 
+def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add Katz centrality to each node."""
+    key = "katz_centrality"
+    try:
+        values: dict[str, float] = nx.katz_centrality(graph, weight="weight")
+    except nx.PowerIterationFailedConvergence:
+        logger.warning("Katz centrality failed to converge")
+        return []
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Katz Centrality")]
+
+
 def find_main_component(graph: nx.DiGraph) -> set[str]:
     return max(nx.weakly_connected_components(graph), key=len)
 

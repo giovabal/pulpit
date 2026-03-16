@@ -82,6 +82,16 @@ A variant of closeness centrality designed to handle disconnected graphs. For ea
 
 ---
 
+### Katz centrality
+
+Katz centrality extends the idea behind PageRank by counting not just direct connections but all paths of any length — with longer paths discounted by an attenuation factor (α). A channel scores high if it receives many connections from many channels, but also if it is reachable from the rest of the network through many indirect paths. Unlike PageRank, Katz gives every channel a baseline score regardless of whether its predecessors are influential, making it less sensitive to the sparse regions of the network.
+
+**In practice:** Katz centrality is useful for surfacing channels that are deeply embedded in the network fabric — not just the channels that receive prestige from influential forwarders, but the channels that are structurally accessible from many directions. In networks where the most influential nodes have few predecessors (top-level agenda-setters rarely cited by anyone), PageRank can undervalue channels that are heavily referenced by a large number of mid-tier nodes. Katz corrects for this.
+
+**Example:** a regional channel that receives forwards from dozens of small local outlets — none of which are individually prestigious — will rank low on PageRank but high on Katz. Katz reveals that it is a genuine reference point for a wide slice of the network, even if none of those slices carry much individual weight. It is particularly informative in distributed, horizontal networks where influence is not concentrated in a few dominant hubs.
+
+---
+
 ## Community detection strategies
 
 A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.

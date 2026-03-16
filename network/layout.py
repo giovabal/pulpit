@@ -15,9 +15,7 @@ def kamada_kawai_positions(graph: nx.DiGraph) -> dict:
     return nx.kamada_kawai_layout(graph, weight="weight")
 
 
-def forceatlas2_positions(
-    graph: nx.DiGraph, initial_pos: dict, iterations: int = 10
-) -> dict[str, tuple[float, float]]:
+def forceatlas2_positions(graph: nx.DiGraph, initial_pos: dict, iterations: int = 10) -> dict[str, tuple[float, float]]:
     """Run ForceAtlas2 on *graph* starting from *initial_pos*."""
     forceatlas2 = ForceAtlas2(
         outbound_attraction_distribution=True,

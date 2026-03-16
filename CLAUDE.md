@@ -67,6 +67,7 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Normalized harmonic centrality |
+| `KATZ` | Katz centrality |
 
 ### Edge construction
 

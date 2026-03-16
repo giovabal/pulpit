@@ -29,7 +29,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
-| `NETWORK_MEASURES` | Comma-separated list of centrality measures to compute and expose in the graph. Available values: `PAGERANK` (PageRank), `HITSHUB` (HITS Hub score), `HITSAUTH` (HITS Authority score), `BETWEENNESS` (betweenness centrality), `INDEGCENTRALITY` (in-degree centrality) | `PAGERANK` |
+| `NETWORK_MEASURES` | Comma-separated list of centrality measures to compute and expose in the graph. Available values: `PAGERANK` (PageRank), `HITSHUB` (HITS Hub score), `HITSAUTH` (HITS Authority score), `BETWEENNESS` (betweenness centrality), `INDEGCENTRALITY` (in-degree centrality), `OUTDEGCENTRALITY` (out-degree centrality), `HARMONICCENTRALITY` (harmonic centrality), `KATZ` (Katz centrality) | `PAGERANK` |
 | `CHANNEL_TYPES` | Comma-separated list of Telegram entity types to include in the graph. `CHANNEL` = broadcast channels (admin-only posting); `GROUP` = supergroups and gigagroups (group chats); `USER` = user accounts and bots identified during crawling. | `CHANNEL` |
 
 ## Community detection
