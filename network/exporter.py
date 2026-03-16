@@ -8,9 +8,9 @@ from math import sqrt
 from typing import Any
 
 from django.conf import settings
-from django.db.models import QuerySet
+from django.db.models import Count, Q, QuerySet
 
-from webapp.models import Channel
+from webapp.models import Channel, Message
 
 import networkx as nx
 import openpyxl
@@ -32,10 +32,11 @@ def build_graph_data(
     graph_data: GraphData = {"nodes": [], "edges": []}
 
     for node_id, node_data in graph.nodes(data=True):
+        pos = positions.get(node_data["data"]["pk"])
         node_info: dict[str, Any] = {
             "id": node_id,
-            "x": float(positions.get(node_data["data"]["pk"])[0]),
-            "y": float(positions.get(node_data["data"]["pk"])[1]),
+            "x": float(pos[0]),
+            "y": float(pos[1]),
         }
         for key in (
             "label",
@@ -81,6 +82,20 @@ def apply_base_node_measures(
         ("fans", "Users"),
         ("messages_count", "Messages"),
     ]
+
+    channel_pks = [
+        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
+    ]
+    msg_q = Q(channel_id__in=channel_pks)
+    if start_date:
+        msg_q &= Q(date__date__gte=start_date)
+    if end_date:
+        msg_q &= Q(date__date__lte=end_date)
+    message_counts: dict[int, int] = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+    }
+
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
         if channel_entry is None:
@@ -89,15 +104,7 @@ def apply_base_node_measures(
         node["in_deg"] = graph.in_degree(node["id"], weight="weight")
         node["out_deg"] = graph.out_degree(node["id"], weight="weight")
         node["fans"] = channel.participants_count
-        if start_date or end_date:
-            msg_qs = channel.message_set.exclude(date__isnull=True)
-            if start_date:
-                msg_qs = msg_qs.filter(date__date__gte=start_date)
-            if end_date:
-                msg_qs = msg_qs.filter(date__date__lte=end_date)
-            node["messages_count"] = msg_qs.count()
-        else:
-            node["messages_count"] = channel.message_set.count()
+        node["messages_count"] = message_counts.get(channel.pk, 0)
         node["label"] = channel.title
         start, end = channel._get_activity_bounds()
         if start is None or end is None:

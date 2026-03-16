@@ -93,7 +93,7 @@ class ReferenceResolver:
         return missing
 
     def get_missing_references(self) -> None:
-        for message in Message.objects.exclude(missing_references=""):
+        for message in Message.objects.exclude(missing_references="").iterator(chunk_size=500):
             all_resolved = True
             for reference in message.missing_references.split("|"):
                 if not reference or reference in SKIPPABLE_REFERENCES:

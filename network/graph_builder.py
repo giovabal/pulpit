@@ -85,25 +85,21 @@ def build_graph(
         .annotate(total=Count("id"))
     }
 
+    pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
     edge_list: list[list[str | float]] = []
-    for source_id, source_data in channel_dict.items():
-        for target_id, target_data in channel_dict.items():
-            if source_id == target_id:
-                continue
-            source_pk = source_data["channel"].pk
-            target_pk = target_data["channel"].pk
-            message_count = messages_per_channel.get(target_pk, 0)
-            forward_weight = forwarded_counts.get((target_pk, source_pk), 0)
-            reference_weight = reference_counts.get((target_pk, source_pk), 0)
-            weight = 0 if not message_count else (forward_weight + reference_weight) / message_count
-            if weight > 0:
-                edge: list[str | float] = (
-                    [str(target_data["channel"].pk), str(source_data["channel"].pk)]
-                    if settings.REVERSED_EDGES
-                    else [str(source_data["channel"].pk), str(target_data["channel"].pk)]
-                )
-                edge.append(weight)
-                edge_list.append(edge)
+    for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
+        if target_pk == source_pk:
+            continue
+        message_count = messages_per_channel.get(target_pk, 0)
+        forward_weight = forwarded_counts.get((target_pk, source_pk), 0)
+        reference_weight = reference_counts.get((target_pk, source_pk), 0)
+        weight = (forward_weight + reference_weight) / message_count if message_count else 0
+        if weight > 0:
+            target_str = pk_to_str[target_pk]
+            source_str = pk_to_str[source_pk]
+            edge: list[str | float] = [target_str, source_str] if settings.REVERSED_EDGES else [source_str, target_str]
+            edge.append(weight)
+            edge_list.append(edge)
 
     if not edge_list:
         raise ValueError("There are no relationships between channels.")
