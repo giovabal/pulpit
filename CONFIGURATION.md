@@ -29,14 +29,14 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
-| `NETWORK_MEASURES` | Comma-separated list of centrality measures to compute and expose in the graph. Available values: `PAGERANK` (PageRank), `HITSHUB` (HITS Hub score), `HITSAUTH` (HITS Authority score), `BETWEENNESS` (betweenness centrality), `INDEGCENTRALITY` (in-degree centrality), `OUTDEGCENTRALITY` (out-degree centrality), `HARMONICCENTRALITY` (harmonic centrality), `KATZ` (Katz centrality), `BRIDGING` or `BRIDGING(STRATEGY)` (bridging centrality — requires community detection; the strategy in parentheses sets the community basis, defaulting to `LEIDEN` when omitted; the chosen strategy must also appear in `COMMUNITIES_STRATEGY`) | `PAGERANK` |
+| `NETWORK_MEASURES` | Comma-separated list of centrality measures to compute and expose in the graph. Available values: `PAGERANK` (PageRank), `HITSHUB` (HITS Hub score), `HITSAUTH` (HITS Authority score), `BETWEENNESS` (betweenness centrality), `INDEGCENTRALITY` (in-degree centrality), `OUTDEGCENTRALITY` (out-degree centrality), `HARMONICCENTRALITY` (harmonic centrality), `KATZ` (Katz centrality), `BRIDGING` or `BRIDGING(STRATEGY)` (bridging centrality — requires community detection; the strategy in parentheses sets the community basis, defaulting to `LEIDEN` when omitted; the chosen strategy must also appear in `COMMUNITIES_STRATEGY`), `ALL` (all of the above, using `LEIDEN` as the BRIDGING community basis) | `PAGERANK` |
 | `CHANNEL_TYPES` | Comma-separated list of Telegram entity types to include in the graph. `CHANNEL` = broadcast channels (admin-only posting); `GROUP` = supergroups and gigagroups (group chats); `USER` = user accounts and bots identified during crawling. | `CHANNEL` |
 
 ## Community detection
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `COMMUNITIES_STRATEGY` | Comma-separated list of community detection algorithms to apply: `ORGANIZATION` (uses the admin-defined organizations as communities), `LOUVAIN` (Louvain modularity), `KCORE` (k-shell decomposition), `INFOMAP` (information-flow-based clustering). Multiple strategies can be selected simultaneously; the user can switch between them in the graph viewer. | `ORGANIZATION` |
+| `COMMUNITIES_STRATEGY` | Comma-separated list of community detection algorithms to apply: `ORGANIZATION` (uses the admin-defined organizations as communities), `LEIDEN` (Leiden modularity), `LOUVAIN` (Louvain modularity), `KCORE` (k-shell decomposition), `INFOMAP` (information-flow-based clustering), `ALL` (all of the above). Multiple strategies can be selected simultaneously; the user can switch between them in the graph viewer. | `ORGANIZATION` |
 | `COMMUNITIES_PALETTE` | Color palette for communities. Use `ORGANIZATION` to take colors from the admin, or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
 
 ## Drawing

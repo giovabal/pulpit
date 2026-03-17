@@ -22,6 +22,10 @@ VALID_MEASURES = {
 _BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
 _BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
 
+# Expansion targets for the ALL shortcut
+_ALL_MEASURES = [*sorted(VALID_MEASURES), "BRIDGING"]
+_ALL_STRATEGIES = ["ORGANIZATION", "LEIDEN", "LOUVAIN", "KCORE", "INFOMAP"]
+
 
 def _is_valid_measure(token: str) -> bool:
     return token in VALID_MEASURES or bool(_BRIDGING_RE.match(token))
@@ -75,17 +79,23 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
             raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
-        invalid_strategies = [s for s in settings.COMMUNITIES_STRATEGY if s not in community.VALID_STRATEGIES]
+
+        communities_strategy = (
+            _ALL_STRATEGIES if "ALL" in settings.COMMUNITIES_STRATEGY else settings.COMMUNITIES_STRATEGY
+        )
+        network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
+
+        invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
                 f"Invalid COMMUNITIES_STRATEGY value(s): {invalid_strategies!r}. "
-                f"Choose from {sorted(community.VALID_STRATEGIES)}."
+                f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
-        invalid_measures = [m for m in settings.NETWORK_MEASURES if not _is_valid_measure(m)]
+        invalid_measures = [m for m in network_measures if not _is_valid_measure(m)]
         if invalid_measures:
-            valid_display = sorted(VALID_MEASURES) + ["BRIDGING", "BRIDGING(<STRATEGY>)"]
+            valid_display = sorted(VALID_MEASURES) + ["ALL", "BRIDGING", "BRIDGING(<STRATEGY>)"]
             raise CommandError(f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {valid_display}.")
-        bridging_token = _find_bridging_token(settings.NETWORK_MEASURES)
+        bridging_token = _find_bridging_token(network_measures)
         if bridging_token is not None:
             bstrategy = _bridging_strategy(bridging_token)
             if bstrategy not in community.VALID_STRATEGIES:
@@ -93,7 +103,7 @@ class Command(BaseCommand):
                     f"Invalid strategy in {bridging_token!r}: {bstrategy!r}. "
                     f"Choose from {sorted(community.VALID_STRATEGIES)}."
                 )
-            if bstrategy not in settings.COMMUNITIES_STRATEGY:
+            if bstrategy not in communities_strategy:
                 raise CommandError(
                     f"BRIDGING community basis {bstrategy!r} is not in COMMUNITIES_STRATEGY. "
                     f"Add it or change the BRIDGING strategy."
@@ -103,7 +113,7 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        measures = set(settings.NETWORK_MEASURES)
+        measures = set(network_measures)
 
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
@@ -122,7 +132,7 @@ class Command(BaseCommand):
 
         self.stdout.write("Calculate communities")
         strategy_results: dict[str, tuple] = {}
-        for strategy in settings.COMMUNITIES_STRATEGY:
+        for strategy in communities_strategy:
             self.stdout.write(f"- {strategy.lower()} … ", ending="")
             self.stdout.flush()
             try:
@@ -228,7 +238,7 @@ class Command(BaseCommand):
         exporter.ensure_graph_root(root_target)
 
         self.stdout.write("- config files")
-        communities_data = community.build_communities_payload(settings.COMMUNITIES_STRATEGY, strategy_results)
+        communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         exporter.write_graph_files(
             graph_data,
             communities_data,
@@ -239,7 +249,7 @@ class Command(BaseCommand):
         )
 
         table_format = options["table_format"]
-        strategies = [s.lower() for s in settings.COMMUNITIES_STRATEGY]
+        strategies = [s.lower() for s in communities_strategy]
         if "html" in table_format:
             self.stdout.write("- table (html)")
             exporter.write_table_html(graph_data, measures_labels, strategies, output_filename="graph/table.html")
