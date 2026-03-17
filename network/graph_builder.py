@@ -3,9 +3,9 @@ import logging
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Prefetch, Q, QuerySet
 
-from webapp.models import Channel, Message
+from webapp.models import Channel, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 
 import networkx as nx
@@ -39,7 +39,11 @@ def build_graph(
     qs_filter = Q(organization__is_interesting=True)
     if draw_dead_leaves:
         qs_filter |= Q(in_degree__gt=0)
-    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter())
+    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter()).prefetch_related(
+        Prefetch(
+            "profilepicture_set", queryset=ProfilePicture.objects.order_by("date"), to_attr="_prefetched_profile_pics"
+        )
+    )
 
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}

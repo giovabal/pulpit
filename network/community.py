@@ -2,6 +2,7 @@ import logging
 from collections import Counter
 from typing import Any
 
+from django.db.models import Count
 from django.utils.text import slugify
 
 from webapp.models import Organization
@@ -183,7 +184,8 @@ def apply_to_graph(
     """Write community label for this strategy into the communities dict on each node, and update node colors."""
     strategy_key = strategy.lower()
     if strategy not in COMMUNITY_ALGORITHMS:
-        org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=set(community_map.values()))}
+        org_ids = set(community_map.values())
+        org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=org_ids)}
 
     for node_id, community_id in community_map.items():
         if strategy in COMMUNITY_ALGORITHMS:
@@ -233,18 +235,9 @@ def build_communities_payload(
                 str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
             }
         else:
-            org_qs = Organization.objects.filter(is_interesting=True)
-            groups = []
-            for organization in org_qs:
-                groups.append(
-                    (
-                        organization.id,
-                        organization.channel_set.count(),
-                        organization.name,
-                        organization.color,
-                    )
-                )
-            main_groups = {org.key: org.name for org in org_qs}
+            orgs = list(Organization.objects.filter(is_interesting=True).annotate(channel_count=Count("channel")))
+            groups = [(org.id, org.channel_count, org.name, org.color) for org in orgs]
+            main_groups = {org.key: org.name for org in orgs}
         if strategy == "KCORE":
             groups = sorted(groups, key=lambda x: int(x[0]))
         else:

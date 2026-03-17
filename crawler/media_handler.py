@@ -34,8 +34,9 @@ class MediaHandler:
         if channel is None:
             logger.warning("Channel not found for telegram_id=%s", telegram_channel.id)
             return 0
+        existing_picture_ids = set(ProfilePicture.objects.filter(channel=channel).values_list("telegram_id", flat=True))
         for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
-            if ProfilePicture.objects.filter(telegram_id=telegram_picture.id, channel=channel).exists():
+            if telegram_picture.id in existing_picture_ids:
                 continue
             picture_filename = self._download_media(telegram_picture)
             ProfilePicture.from_telegram_object(

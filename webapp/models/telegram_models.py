@@ -89,6 +89,9 @@ class Channel(TelegramBaseModel):
 
     @property
     def profile_picture(self) -> "ProfilePicture | None":
+        if hasattr(self, "_prefetched_profile_pics"):
+            pics = self._prefetched_profile_pics
+            return pics[-1] if pics else None
         return self.profilepicture_set.order_by("date").last()
 
     def _get_activity_bounds(
@@ -141,6 +144,9 @@ class Channel(TelegramBaseModel):
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.username = self.username or ""
         super().save(*args, **kwargs)
+
+    def refresh_degrees(self) -> None:
+        """Recompute and persist in_degree and out_degree from current message data."""
         in_degree = (
             Message.objects.filter(channel__organization__is_interesting=True, forwarded_from=self)
             .exclude(channel=self)

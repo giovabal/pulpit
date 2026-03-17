@@ -8,7 +8,7 @@ from math import sqrt
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Max, Min, Q, QuerySet
 
 from webapp.models import Channel, Message
 
@@ -95,7 +95,15 @@ def apply_base_node_measures(
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
+    activity_bounds: dict[int, dict] = {
+        item["channel_id"]: {"min_date": item["min_date"], "max_date": item["max_date"]}
+        for item in Message.objects.filter(channel_id__in=channel_pks, date__isnull=False)
+        .values("channel_id")
+        .annotate(min_date=Min("date"), max_date=Max("date"))
+    }
 
+    now = datetime.datetime.now(datetime.timezone.utc)
+    date_template = "%b %Y"
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
         if channel_entry is None:
@@ -106,16 +114,20 @@ def apply_base_node_measures(
         node["fans"] = channel.participants_count
         node["messages_count"] = message_counts.get(channel.pk, 0)
         node["label"] = channel.title
-        start, end = channel._get_activity_bounds()
+        agg = activity_bounds.get(channel.pk, {})
+        first_date, last_date = agg.get("min_date"), agg.get("max_date")
+        start_candidates = [d for d in (channel.date, first_date) if d is not None]
+        end_candidates = [d for d in (channel.date, last_date) if d is not None]
+        start = min(start_candidates) if start_candidates else None
+        end = max(end_candidates) if end_candidates else None
         if start is None or end is None:
             node["activity_period"] = "Unknown"
             node["activity_start"] = ""
             node["activity_end"] = ""
         else:
-            date_template = "%b %Y"
             node["activity_period"] = (
                 f"{start.strftime(date_template)} - {end.strftime(date_template)}"
-                if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+                if end < now - datetime.timedelta(days=30)
                 else f"{start.strftime(date_template)} - "
             )
             node["activity_start"] = start.strftime("%Y-%m")
