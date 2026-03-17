@@ -2,44 +2,74 @@
 {% load static %}
 
 {% block content %}
-<div class="card mt-1 mb-3 ms-2" style="width: 50rem;">
-  <div class="card-header">
-    <h5 class="card-title text-danger" style="font-variant: small-caps;">{{ selected_channel.title }}</h5>
+<section style="max-width: 50rem;">
+  <div class="card mt-1 mb-3">
+    <header class="card-header">
+      <h1 class="h5 card-title text-danger mb-0" style="font-variant: small-caps;">{{ selected_channel.title }}</h1>
+    </header>
+    {% for picture in selected_channel.profilepicture_set.all %}
+    <figure class="mb-0">
+      <img src="{{ picture.picture.url }}" class="card-img-top" alt="{{ selected_channel.title }} profile picture">
+    </figure>
+    {% endfor %}
+    <div class="card-body">
+      <div class="card-text mb-2">{{ selected_channel.about|linebreaks|urlize }}</div>
+      <footer class="d-flex align-items-end justify-content-between mt-2">
+        <div class="small">
+          <span class="d-block">{{ selected_channel.participants_count|default:"0" }} users</span>
+          <time class="d-block text-muted" datetime="{{ selected_channel.updated|date:'c' }}">updated on {{ selected_channel.updated }}</time>
+        </div>
+        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="See on Telegram">
+          <i class="bi bi-telegram" aria-hidden="true"></i>
+        </a>
+      </footer>
+    </div>
   </div>
-  {% for picture in selected_channel.profilepicture_set.all %}
-  <img src="{{ picture.picture.url }}" class="card-img-top">
-  {% endfor %}
-  <div class="card-body">
-    <p class="card-text">{{ selected_channel.about|linebreaks|urlize }}</p>
-    <span class="small float-end" title="see on Telegram"><a href="{{ selected_channel.telegram_url }}" target="_blank" class="btn btn-secondary btn-sm"><i class="bi bi-telegram"></i></a></span>
-    <span class="small d-block">{{ selected_channel.participants_count|default:"0" }} users</span>
-    <span class="small d-block">updated on {{ selected_channel.updated }}</span>
-  </div>
-</div>
+</section>
+
 {% include "webapp/pagination.html" %}
-<hr>
-{% for post in page_obj %}
-<div class="card my-1 ms-2" style="width: 50rem;">
-  <div class="card-header py-2">
-    {% if post.pinned %}
-    <span class="small float-end" title="is pinned"><i class="bi bi-pin-fill"></i></span>
-    {% elif post.has_been_pinned %}
-    <span class="small float-end text-muted" title="has been pinned"><i class="bi bi-pin-angle"></i></span>
-    {% endif %}
-    {% if post.forwarded_from %}
-    <h6 class="card-subtitle mb-2 text-body-secondary small">forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a></h6>
-    {% endif %}
-  </div>
-  {% for picture in post.messagepicture_set.all %}
-  <img src="{{ picture.picture.url }}" class="card-img-top">
+
+<ol class="list-unstyled mt-3" style="max-width: 50rem;">
+  {% for post in page_obj %}
+  <li>
+    <article class="card my-1">
+      <header class="card-header py-2 d-flex align-items-center justify-content-between">
+        <div>
+          {% if post.forwarded_from %}
+          <p class="card-subtitle mb-0 text-body-secondary small">
+            forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
+          </p>
+          {% endif %}
+        </div>
+        <div>
+          {% if post.pinned %}
+          <span title="is pinned"><i class="bi bi-pin-fill" aria-hidden="true"></i></span>
+          {% elif post.has_been_pinned %}
+          <span class="text-muted" title="has been pinned"><i class="bi bi-pin-angle" aria-hidden="true"></i></span>
+          {% endif %}
+        </div>
+      </header>
+      {% for picture in post.messagepicture_set.all %}
+      <figure class="mb-0">
+        <img src="{{ picture.picture.url }}" class="card-img-top" alt="Message image">
+      </figure>
+      {% endfor %}
+      <div class="card-body">
+        <div class="card-text mb-2">{{ post.message|linebreaks|urlize }}</div>
+        <footer class="d-flex align-items-end justify-content-between mt-2">
+          <div class="small text-muted">
+            <span class="d-block">{{ post.views|default:"0" }} views &mdash; {{ post.forwards|default:"0" }} forwards</span>
+            <time class="d-block" datetime="{{ post.date|date:'c' }}">{{ post.date }}</time>
+          </div>
+          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="See on Telegram">
+            <i class="bi bi-telegram" aria-hidden="true"></i>
+          </a>
+        </footer>
+      </div>
+    </article>
+  </li>
   {% endfor %}
-  <div class="card-body">
-    <p class="card-text">{{ post.message|linebreaks|urlize }}</p>
-    <span class="small float-end" title="see on Telegram"><a href="{{ post.telegram_url }}" target="_blank" class="btn btn-secondary btn-sm"><i class="bi bi-telegram"></i></a></span>
-    <span class="small d-block">{{ post.views|default:"0" }} views &mdash; {{ post.forwards|default:"0" }} forwards</span>
-    <span class="small d-block">{{ post.date }}</span>
-  </div>
-</div>
-{% endfor %}
+</ol>
+
 {% include "webapp/pagination.html" %}
 {% endblock content %}

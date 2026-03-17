@@ -8,6 +8,9 @@
 - New option for `NETWORK_MEASURES`: `ALL`.
 - New option for `COMMUNITIES_STRATEGY`: `ALL`.
 
+### Improvements
+- Performance improved in crawling and admin website.
+
 
 ## [0.4] - 2026-03-15
 ### New features

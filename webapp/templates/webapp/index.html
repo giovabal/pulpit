@@ -3,20 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>TNexp</title>
+    <title>Pulpit</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   </head>
-  
+
   <body>
-    <main class="d-flex flex-nowrap">
+    <div class="d-flex flex-nowrap min-vh-100">
       {% include "webapp/menu.html" %}
-      
-      <div class="p-4 bg-light-subtle w-100">
-	    {% block content %}
-	    {% endblock content %}
-      </div>
-    </main>
+
+      <main class="p-4 bg-light-subtle flex-grow-1">
+        {% block content %}
+        {% endblock content %}
+      </main>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
   </body>
 </html>

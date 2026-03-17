@@ -1,5 +1,5 @@
 {% if page_obj.paginator.num_pages > 1 or force_pagination %}
-<nav class="border-top">
+<nav class="border-top" aria-label="Page navigation">
   <p class="very-small text-muted text-center mb-1 mt-3">{{ page_obj.start_index }}-{{ page_obj.end_index }} di {{ page_obj.paginator.count }}</p>
   <ul class="pagination pagination-sm justify-content-center">
     {% if page_obj.has_previous %}
