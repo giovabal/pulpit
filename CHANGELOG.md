@@ -4,6 +4,9 @@
 ### New features
 - Before applying ForceAtlas2 for spatial layout, Kamada-Kawai is now used to seed initial node positions, improving reproducibility across runs.
 - New option for `NETWORK_MEASURES`: `KATZ`.
+- New option for `NETWORK_MEASURES`: `BRIDGING`.
+- New option for `NETWORK_MEASURES`: `ALL`.
+- New option for `COMMUNITIES_STRATEGY`: `ALL`.
 
 
 ## [0.4] - 2026-03-15
