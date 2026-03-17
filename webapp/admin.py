@@ -3,7 +3,7 @@ from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpRequest
 from django.utils.html import format_html
 
-from .models import Channel, Message, Organization, ProfilePicture, SearchTerm
+from .models import Channel, Message, MessagePicture, Organization, ProfilePicture, SearchTerm
 
 
 @admin.register(Channel)
@@ -47,9 +47,7 @@ class ChannelAdmin(admin.ModelAdmin):
 
     @admin.display(description="Img")
     def thumb(self, obj: Channel) -> str:
-        # profilepicture_set is prefetched ordered by date descending; first = most recent
-        pics = list(obj.profilepicture_set.all())
-        pic = pics[0] if pics else None
+        pic = next(iter(obj.profilepicture_set.all()), None)
         src = pic.picture.url if pic else ""
         if not src:
             return ""
@@ -61,6 +59,14 @@ class MessageAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     list_display = ("__str__", "thumb", "date", "telegram_url", "short_text", "forwards", "views")
     search_fields = ["message"]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Message]:
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("channel")
+            .prefetch_related(Prefetch("messagepicture_set", queryset=MessagePicture.objects.order_by("-date")))
+        )
 
     @admin.display(description="Text")
     def short_text(self, obj: Message) -> str:
@@ -76,7 +82,8 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Img")
     def thumb(self, obj: Message) -> str:
-        src = obj.message_picture.picture.url if obj.message_picture else ""
+        pic = next(iter(obj.messagepicture_set.all()), None)
+        src = pic.picture.url if pic else ""
         if not src:
             return ""
         return format_html("<img width='60' src='{}'>", src)
