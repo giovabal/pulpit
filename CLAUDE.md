@@ -68,7 +68,7 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Normalized harmonic centrality |
 | `KATZ` | Katz centrality |
-| `BRIDGING` | Bridging centrality (betweenness × neighbour-community Shannon entropy) |
+| `BRIDGING` or `BRIDGING(STRATEGY)` | Bridging centrality (betweenness × neighbour-community Shannon entropy); defaults to `LEIDEN` when no strategy is specified; the chosen strategy must also be in `COMMUNITIES_STRATEGY` |
 
 ### Edge construction
 

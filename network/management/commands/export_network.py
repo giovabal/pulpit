@@ -1,4 +1,5 @@
 import datetime
+import re
 from typing import Any
 
 from django.conf import settings
@@ -16,8 +17,24 @@ VALID_MEASURES = {
     "OUTDEGCENTRALITY",
     "HARMONICCENTRALITY",
     "KATZ",
-    "BRIDGING",
 }
+
+_BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
+_BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
+
+
+def _is_valid_measure(token: str) -> bool:
+    return token in VALID_MEASURES or bool(_BRIDGING_RE.match(token))
+
+
+def _find_bridging_token(measures: list[str]) -> str | None:
+    return next((m for m in measures if _BRIDGING_RE.match(m)), None)
+
+
+def _bridging_strategy(token: str) -> str:
+    """Return the community strategy encoded in a BRIDGING token (defaults to LEIDEN)."""
+    m = _BRIDGING_RE.match(token)
+    return (m.group(1) or _BRIDGING_DEFAULT_STRATEGY) if m else _BRIDGING_DEFAULT_STRATEGY
 
 
 TABLE_FORMAT_CHOICES = ["none", "html", "xls", "html+xls"]
@@ -64,11 +81,23 @@ class Command(BaseCommand):
                 f"Invalid COMMUNITIES_STRATEGY value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES)}."
             )
-        invalid_measures = [m for m in settings.NETWORK_MEASURES if m not in VALID_MEASURES]
+        invalid_measures = [m for m in settings.NETWORK_MEASURES if not _is_valid_measure(m)]
         if invalid_measures:
-            raise CommandError(
-                f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {sorted(VALID_MEASURES)}."
-            )
+            valid_display = sorted(VALID_MEASURES) + ["BRIDGING", "BRIDGING(<STRATEGY>)"]
+            raise CommandError(f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {valid_display}.")
+        bridging_token = _find_bridging_token(settings.NETWORK_MEASURES)
+        if bridging_token is not None:
+            bstrategy = _bridging_strategy(bridging_token)
+            if bstrategy not in community.VALID_STRATEGIES:
+                raise CommandError(
+                    f"Invalid strategy in {bridging_token!r}: {bstrategy!r}. "
+                    f"Choose from {sorted(community.VALID_STRATEGIES)}."
+                )
+            if bstrategy not in settings.COMMUNITIES_STRATEGY:
+                raise CommandError(
+                    f"BRIDGING community basis {bstrategy!r} is not in COMMUNITIES_STRATEGY. "
+                    f"Add it or change the BRIDGING strategy."
+                )
         invalid_channel_types = [t for t in settings.CHANNEL_TYPES if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(
@@ -184,8 +213,8 @@ class Command(BaseCommand):
             measures_labels += exporter.apply_katz_centrality(graph_data, graph)
             self.stdout.write("done")
 
-        if "BRIDGING" in measures:
-            strategy_key = settings.COMMUNITIES_STRATEGY[0].lower()
+        if bridging_token is not None:
+            strategy_key = _bridging_strategy(bridging_token).lower()
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
