@@ -57,11 +57,18 @@ class TimeSeriesChartView(StatsViewMixin, View):
         figure_options.update({"x_range": list(df.month.unique())})
         plot = figure(**figure_options, y_axis_label=self.y_label)
         plot.line("month", self.annotate_field, **line_options, legend_label=self.y_label)
+        plot.xaxis.major_label_orientation = -pi / 4
+        self._style_plot(plot)
         plot.legend.location = "top_left"
         plot.legend.click_policy = "hide"
-        plot.xaxis.major_label_orientation = -pi / 4
+        plot.legend.label_text_font = "Inter, system-ui, sans-serif"
+        plot.legend.label_text_font_size = "11px"
+        plot.legend.border_line_color = "#e5e7eb"
+        plot.legend.background_fill_color = "#ffffff"
         hover = plot.select({"type": HoverTool})
-        hover.tooltips = [("", self.tooltip_template)]
+        hover.tooltips = (
+            f'<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">{self.tooltip_template}</span>'
+        )
 
         html = file_html(plot, CDN, self.chart_title)
         return HttpResponse(html)
@@ -115,16 +122,21 @@ class ChannelMessagesHistoryView(StatsViewMixin, View):
 
         figure_options = self.base_figure_options.copy()
         figure_options.update({"height": 300, "x_range": list(df.month.unique())})
-        line_options = self.base_line_options.copy()
-        line_options.update({"width": 1, "source": df})
 
         plot = figure(**figure_options, y_axis_label="messages")
-        plot.line("month", "total_messages", **line_options, legend_label="messages")
-        plot.legend.location = "top_left"
-        plot.legend.click_policy = "hide"
+        plot.vbar(
+            x="month",
+            top="total_messages",
+            source=df,
+            width=0.7,
+            fill_color="#2563eb",
+            fill_alpha=0.75,
+            line_color=None,
+        )
         plot.xaxis.major_label_orientation = -pi / 4
+        self._style_plot(plot)
         hover = plot.select({"type": HoverTool})
-        hover.tooltips = [("", "@month: @total_messages messages")]
+        hover.tooltips = '<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">@month &nbsp; <strong>@total_messages</strong></span>'
 
         html = file_html(plot, CDN, f"{channel.title} – message history")
         return HttpResponse(html)

@@ -7,14 +7,11 @@
 - New option for `NETWORK_MEASURES`: `BRIDGING`.
 - New option for `NETWORK_MEASURES`: `ALL`.
 - New option for `COMMUNITIES_STRATEGY`: `ALL`.
-
-### New features
-- Per-channel message history chart, accessible via a collapsible panel on the channel detail page. The chart loads on demand (lazy).
+- Per-channel message history chart in webapp interface.
 
 ### Improvements
 - Performance improved in crawling and admin website.
-- Improved webapp templates with semantic HTML.
-- Webapp interface redesigned: cleaner layout, Inter font, light sidebar, refined cards and post list.
+- Webapp interface redesigned. More semantic HTML.
 
 
 ## [0.4] - 2026-03-15
