@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Working rules
 
-- **Never commit or push unless explicitly asked to do so.** Make code changes, then stop. The user will ask separately when they want a commit or push.
+- **NEVER run `git commit` or `git push` unless the user explicitly says so in that message.** After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Do not combine them with implementation in the same response. Wait for the user to send a separate message asking for a commit or push.
 - Run `ruff check . --fix && ruff format .` before declaring any code change done.
 - Smoke-test changes with a quick `python -c "..."` call where practical before finishing.
 
