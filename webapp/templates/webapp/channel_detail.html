@@ -2,70 +2,100 @@
 {% load static %}
 
 {% block content %}
-<section style="max-width: 50rem;">
-  <div class="card mt-1 mb-3">
-    <header class="card-header">
-      <h1 class="h5 card-title text-danger mb-0" style="font-variant: small-caps;">{{ selected_channel.title }}</h1>
-    </header>
-    {% for picture in selected_channel.profilepicture_set.all %}
-    <figure class="mb-0">
-      <img src="{{ picture.picture.url }}" class="card-img-top" alt="{{ selected_channel.title }} profile picture">
+<div class="channel-card">
+  <div class="channel-card-body">
+    {% for picture in selected_channel.profilepicture_set.all|slice:":1" %}
+    <figure class="mb-0 flex-shrink-0">
+      <img src="{{ picture.picture.url }}" class="channel-avatar" alt="{{ selected_channel.title }} avatar">
     </figure>
     {% endfor %}
-    <div class="card-body">
-      <div class="card-text mb-2">{{ selected_channel.about|linebreaks|urlize }}</div>
-      <footer class="d-flex align-items-end justify-content-between mt-2">
-        <div class="small">
-          <span class="d-block">{{ selected_channel.participants_count|default:"0" }} users</span>
-          <time class="d-block text-muted" datetime="{{ selected_channel.updated|date:'c' }}">updated on {{ selected_channel.updated }}</time>
-        </div>
-        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="See on Telegram">
+    <div class="channel-info">
+      <div class="channel-info-header">
+        <h1 class="channel-title">{{ selected_channel.title }}</h1>
+        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
         </a>
-      </footer>
+      </div>
+      <div class="channel-stats">
+        <span><i class="bi bi-people" aria-hidden="true"></i> {{ selected_channel.participants_count|default:"0" }}</span>
+        <time datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i> {{ selected_channel.updated }}</time>
+      </div>
+      {% if selected_channel.about %}
+      <div class="channel-about">{{ selected_channel.about|linebreaks|urlize }}</div>
+      {% endif %}
     </div>
   </div>
-</section>
+</div>
+
+<div class="stats-panel">
+  <button class="stats-toggle"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#channel-stats"
+          aria-expanded="false"
+          aria-controls="channel-stats">
+    <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+    Message history
+    <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
+  </button>
+  <div class="collapse" id="channel-stats"
+       data-chart-url="{% url 'channel-messages-history' pk=selected_channel.pk %}">
+    <div class="stats-panel-body">
+      <iframe class="w-100 border-0" style="height: 320px;" title="Message history" loading="lazy"></iframe>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var collapse = document.getElementById("channel-stats");
+    var iframe = collapse.querySelector("iframe");
+    var loaded = false;
+    collapse.addEventListener("show.bs.collapse", function () {
+      if (!loaded) {
+        iframe.src = collapse.dataset.chartUrl;
+        loaded = true;
+      }
+    });
+  })();
+</script>
 
 {% include "webapp/pagination.html" %}
 
-<ol class="list-unstyled mt-3" style="max-width: 50rem;">
+<ol class="post-list list-unstyled mt-2">
   {% for post in page_obj %}
   <li>
-    <article class="card my-1">
-      <header class="card-header py-2 d-flex align-items-center justify-content-between">
-        <div>
-          {% if post.forwarded_from %}
-          <p class="card-subtitle mb-0 text-body-secondary small">
-            forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
-          </p>
-          {% endif %}
-        </div>
-        <div>
-          {% if post.pinned %}
-          <span title="is pinned"><i class="bi bi-pin-fill" aria-hidden="true"></i></span>
-          {% elif post.has_been_pinned %}
-          <span class="text-muted" title="has been pinned"><i class="bi bi-pin-angle" aria-hidden="true"></i></span>
-          {% endif %}
-        </div>
-      </header>
+    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}">
+      {% if post.forwarded_from %}
+      <div class="forwarded-banner">
+        <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+        forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
+      </div>
+      {% endif %}
+      {% if post.pinned %}
+      <div class="pin-banner">
+        <i class="bi bi-pin-fill" aria-hidden="true"></i> Pinned
+      </div>
+      {% elif post.has_been_pinned %}
+      <div class="pin-banner subtle">
+        <i class="bi bi-pin-angle" aria-hidden="true"></i> Previously pinned
+      </div>
+      {% endif %}
       {% for picture in post.messagepicture_set.all %}
       <figure class="mb-0">
-        <img src="{{ picture.picture.url }}" class="card-img-top" alt="Message image">
+        <img src="{{ picture.picture.url }}" class="post-image" alt="Message image">
       </figure>
       {% endfor %}
-      <div class="card-body">
-        <div class="card-text mb-2">{{ post.message|linebreaks|urlize }}</div>
-        <footer class="d-flex align-items-end justify-content-between mt-2">
-          <div class="small text-muted">
-            <span class="d-block">{{ post.views|default:"0" }} views &mdash; {{ post.forwards|default:"0" }} forwards</span>
-            <time class="d-block" datetime="{{ post.date|date:'c' }}">{{ post.date }}</time>
-          </div>
-          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="See on Telegram">
-            <i class="bi bi-telegram" aria-hidden="true"></i>
-          </a>
-        </footer>
-      </div>
+      <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+      <footer class="post-footer">
+        <div class="post-meta">
+          <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
+          <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
+          <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+        </div>
+        <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram">
+          <i class="bi bi-telegram" aria-hidden="true"></i>
+        </a>
+      </footer>
     </article>
   </li>
   {% endfor %}

@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -11,7 +12,7 @@ from django.views.generic import TemplateView
 
 from stats.mixins import StatsViewMixin
 from webapp.mixins import BaseMixin
-from webapp.models import Message
+from webapp.models import Channel, Message
 
 import pandas as pd
 from bokeh.embed import file_html
@@ -84,3 +85,46 @@ class ActiveChannelsHistoryDataView(TimeSeriesChartView):
 
     def get_annotation(self) -> Count:
         return Count("channel", distinct=True)
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class ChannelMessagesHistoryView(StatsViewMixin, View):
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        monthly_data = (
+            Message.objects.filter(channel=channel, date__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_messages=Count("id"))
+            .order_by("month")
+        )
+
+        df = pd.DataFrame(
+            [
+                {"month": entry["month"].strftime("%Y-%m"), "total_messages": entry["total_messages"]}
+                for entry in monthly_data
+            ]
+        )
+
+        if df.empty:
+            return HttpResponse(
+                "<html><body style='font-family:sans-serif;color:#9ca3af;"
+                "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
+                "<p>No data available</p></body></html>"
+            )
+
+        figure_options = self.base_figure_options.copy()
+        figure_options.update({"height": 300, "x_range": list(df.month.unique())})
+        line_options = self.base_line_options.copy()
+        line_options.update({"width": 1, "source": df})
+
+        plot = figure(**figure_options, y_axis_label="messages")
+        plot.line("month", "total_messages", **line_options, legend_label="messages")
+        plot.legend.location = "top_left"
+        plot.legend.click_policy = "hide"
+        plot.xaxis.major_label_orientation = -pi / 4
+        hover = plot.select({"type": HoverTool})
+        hover.tooltips = [("", "@month: @total_messages messages")]
+
+        html = file_html(plot, CDN, f"{channel.title} – message history")
+        return HttpResponse(html)
