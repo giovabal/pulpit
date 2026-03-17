@@ -84,15 +84,17 @@ class Command(AsyncBaseCommand):
                         )
                         continue
 
-                self.stdout.write(self.style.NOTICE("Retrying unresolved message references"))
-                crawler.get_missing_references()
-
                 self.stdout.write("", ending="\n")
+
+                self.stdout.write(self.style.NOTICE("\nRetrying unresolved message references … "), ending="")
+                self.stdout.flush()
+                crawler.get_missing_references()
+                self.stdout.write("done")
+
                 media_handler.clean_leftovers()
         finally:
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
-        self.stdout.write("Refreshing channel degrees")
         referenced_pks = set(
             Channel.objects.filter(organization__is_interesting=True)
             .exclude(message_set__forwarded_from__isnull=True)
@@ -100,5 +102,11 @@ class Command(AsyncBaseCommand):
             .distinct()
         )
         interesting_pks = set(Channel.objects.interesting().values_list("pk", flat=True))
-        for channel in Channel.objects.filter(pk__in=interesting_pks | referenced_pks):
+        all_pks = interesting_pks | referenced_pks
+        self.stdout.write(f"\nRefreshing degrees for {len(all_pks)} channels … ", ending="")
+        self.stdout.flush()
+        for channel in Channel.objects.filter(pk__in=all_pks):
             channel.refresh_degrees()
+        self.stdout.write("done")
+
+        self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
