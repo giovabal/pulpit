@@ -93,6 +93,7 @@ class ReferenceResolver:
         return missing
 
     def get_missing_references(self) -> None:
+        resolved: list[Message] = []
         for message in Message.objects.exclude(missing_references="").iterator(chunk_size=500):
             all_resolved = True
             for reference in message.missing_references.split("|"):
@@ -105,4 +106,9 @@ class ReferenceResolver:
                     all_resolved = False
             if all_resolved:
                 message.missing_references = ""
-                message.save()
+                resolved.append(message)
+            if len(resolved) >= 500:
+                Message.objects.bulk_update(resolved, ["missing_references"])
+                resolved.clear()
+        if resolved:
+            Message.objects.bulk_update(resolved, ["missing_references"])

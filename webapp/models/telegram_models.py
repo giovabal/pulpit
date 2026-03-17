@@ -119,7 +119,9 @@ class Channel(TelegramBaseModel):
             else f"{start.strftime(date_template)} - "
         )
 
-    def network_data(self, default: dict[str, Any] | None = None) -> dict[str, Any]:
+    def network_data(
+        self, default: dict[str, Any] | None = None, skip: frozenset[str] | set[str] = frozenset()
+    ) -> dict[str, Any]:
         default = default or {}
         data: dict[str, Any] = {
             "pk": str(self.pk),
@@ -131,11 +133,11 @@ class Channel(TelegramBaseModel):
             ),
             "pic": self.profile_picture.picture.url[1:] if self.profile_picture else "",
             "url": self.telegram_url,
-            "activity_period": self.activity_period,
+            "activity_period": "" if "activity_period" in skip else self.activity_period,
             "fans": self.participants_count,
             "in_deg": self.in_degree,
             "is_lost": self.is_lost,
-            "messages_count": self.message_set.count(),
+            "messages_count": 0 if "messages_count" in skip else self.message_set.count(),
             "out_deg": self.out_degree,
         }
         data.update(default)

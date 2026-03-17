@@ -187,17 +187,17 @@ def apply_to_graph(
         org_ids = set(community_map.values())
         org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=org_ids)}
 
-    for node_id, community_id in community_map.items():
-        if strategy in COMMUNITY_ALGORITHMS:
-            detected_community = build_community_label(community_id, strategy)
-        else:
-            detected_community = org_names[community_id]
-        graph.nodes[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
-        channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
-
     for node_id, node_data in graph.nodes(data="data"):
         community_id = community_map.get(node_id)
-        community_color: ColorTuple | None = community_palette.get(community_id) if community_id is not None else None
+        if community_id is not None:
+            detected_community = (
+                build_community_label(community_id, strategy)
+                if strategy in COMMUNITY_ALGORITHMS
+                else org_names[community_id]
+            )
+            node_data.setdefault("communities", {})[strategy_key] = detected_community
+            channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
+        community_color = community_palette.get(community_id) if community_id is not None else DEFAULT_FALLBACK_COLOR
         if community_color is None:
             community_color = DEFAULT_FALLBACK_COLOR
         rgb_color = ",".join(str(value) for value in community_color)

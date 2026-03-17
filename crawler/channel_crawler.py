@@ -3,7 +3,7 @@ from collections.abc import Callable
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Max, Min, Q
 
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
@@ -75,8 +75,8 @@ class ChannelCrawler:
         update_status(f"{channel_label} | fetching channel details")
         self.set_more_channel_details(channel, telegram_channel)
 
-        last_message = channel.message_set.order_by("telegram_id").last()
-        min_id = last_message.telegram_id if last_message is not None else 0
+        id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
+        min_id = id_agg["max_id"] or 0
         message_count = 0
         if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
             remaining_limit: int | None = None
@@ -106,10 +106,7 @@ class ChannelCrawler:
                 )
                 return
 
-        max_id = None
-        if not channel.are_messages_crawled:
-            first_message = channel.message_set.order_by("telegram_id").first()
-            max_id = first_message.telegram_id if first_message else None
+        max_id = id_agg["min_id"] if not channel.are_messages_crawled else None
 
         batch_count = 0
         if max_id is not None:
@@ -168,8 +165,9 @@ class ChannelCrawler:
         baseline_min_id = channel.last_hole_check_max_telegram_id
         missing_ids = self._find_missing_message_ids(channel, min_telegram_id=baseline_min_id)
         if not missing_ids:
-            latest_message = channel.message_set.order_by("telegram_id").last()
-            channel.last_hole_check_max_telegram_id = latest_message.telegram_id if latest_message else None
+            channel.last_hole_check_max_telegram_id = channel.message_set.aggregate(Max("telegram_id"))[
+                "telegram_id__max"
+            ]
             channel.save(update_fields=["last_hole_check_max_telegram_id"])
             update_status(f"{channel_label} | no message holes found")
             return 0, 0
@@ -203,8 +201,7 @@ class ChannelCrawler:
             update_status(f"{channel_label} | hole-fix limit reached, checkpoint saved")
             return processed_messages, downloaded_images
 
-        latest_message = channel.message_set.order_by("telegram_id").last()
-        channel.last_hole_check_max_telegram_id = latest_message.telegram_id if latest_message else None
+        channel.last_hole_check_max_telegram_id = channel.message_set.aggregate(Max("telegram_id"))["telegram_id__max"]
         channel.save(update_fields=["last_hole_check_max_telegram_id"])
         return processed_messages, downloaded_images
 

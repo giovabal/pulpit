@@ -251,7 +251,7 @@ def write_graph_files(
     graph_data: GraphData,
     communities_data: dict[str, Any],
     measures_labels: list[tuple[str, str]],
-    channel_qs: QuerySet[Channel],
+    total_channels: int,
     output_filename: str,
     accessory_filename: str,
 ) -> None:
@@ -261,24 +261,22 @@ def write_graph_files(
     accessory_payload: dict[str, Any] = {
         "communities": communities_data,
         "measures": measures_labels,
-        "total_pages_count": channel_qs.count(),
+        "total_pages_count": total_channels,
     }
     with open(accessory_filename, "w") as accessoryfile:
         accessoryfile.write(json.dumps(accessory_payload))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
-    for channel in channel_qs:
-        if not channel.username:
-            continue
-        src = os.path.join(settings.MEDIA_ROOT, "channels", channel.username, "profile")
-        dst = os.path.join(root_target, "channels", channel.username, "profile")
+    for (username,) in channel_qs.filter(username__gt="").values_list("username"):
+        src = os.path.join(settings.MEDIA_ROOT, "channels", username, "profile")
+        dst = os.path.join(root_target, "channels", username, "profile")
         try:
             shutil.copytree(src, dst)
         except FileNotFoundError:
             pass
         except OSError as e:
-            logger.warning("Could not copy media for channel %s: %s", channel.username, e)
+            logger.warning("Could not copy media for channel %s: %s", username, e)
 
 
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})

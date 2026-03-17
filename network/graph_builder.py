@@ -39,16 +39,23 @@ def build_graph(
     qs_filter = Q(organization__is_interesting=True)
     if draw_dead_leaves:
         qs_filter |= Q(in_degree__gt=0)
-    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter()).prefetch_related(
-        Prefetch(
-            "profilepicture_set", queryset=ProfilePicture.objects.order_by("date"), to_attr="_prefetched_profile_pics"
+    channel_qs: QuerySet[Channel] = (
+        Channel.objects.filter(qs_filter, channel_type_filter())
+        .select_related("organization")
+        .prefetch_related(
+            Prefetch(
+                "profilepicture_set",
+                queryset=ProfilePicture.objects.order_by("date"),
+                to_attr="_prefetched_profile_pics",
+            )
         )
     )
 
+    _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
     for channel in channel_qs:
-        channel_dict[str(channel.pk)] = {"channel": channel, "data": channel.network_data()}
+        channel_dict[str(channel.pk)] = {"channel": channel, "data": channel.network_data(skip=_skip)}
         graph.add_node(str(channel.pk), data=channel_dict[str(channel.pk)]["data"])
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]

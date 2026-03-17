@@ -94,12 +94,10 @@ class Command(AsyncBaseCommand):
 
         self.stdout.write("Refreshing channel degrees")
         referenced_pks = set(
-            filter(
-                None,
-                Channel.objects.filter(organization__is_interesting=True)
-                .values_list("message_set__forwarded_from_id", flat=True)
-                .distinct(),
-            )
+            Channel.objects.filter(organization__is_interesting=True)
+            .exclude(message_set__forwarded_from__isnull=True)
+            .values_list("message_set__forwarded_from_id", flat=True)
+            .distinct()
         )
         interesting_pks = set(Channel.objects.interesting().values_list("pk", flat=True))
         for channel in Channel.objects.filter(pk__in=interesting_pks | referenced_pks):
