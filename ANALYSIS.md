@@ -92,6 +92,20 @@ Katz centrality extends the idea behind PageRank by counting not just direct con
 
 ---
 
+### Bridging centrality
+
+Bridging centrality is a composite measure that combines two independent signals: how often a channel sits on the shortest paths between other channels (betweenness), and how diverse the community membership of its immediate neighbours is (Shannon entropy). The final score is the product of the two. A channel scores high only if it is both structurally central *and* community-diverse — that is, it sits on important paths *and* those paths cross ideological or topical boundaries.
+
+The measure is based on the multi-dimensional bridging metric introduced by Ranka et al. (2024) in a study of Telegram disinformation networks, where removal of the top bridge nodes produced a 33% rise in the number of disconnected communities. The implementation in Pulpit computes betweenness centrality on the weighted graph, then for each node accumulates the edge weights to neighbours grouped by their community assignment, and derives the Shannon entropy H = −Σ p_i · ln(p_i) over those proportions. Nodes whose neighbours all belong to the same community score zero on entropy regardless of their betweenness; only channels that actively bridge distinct communities receive a non-zero bridging score.
+
+The community basis used for the entropy calculation is the first strategy listed in `COMMUNITIES_STRATEGY`. Bridging centrality is therefore most meaningful when that strategy reflects substantive groupings — either the manually defined `ORGANIZATION` communities or an algorithmically detected partition that captures real ideological structure.
+
+**In practice:** bridging centrality fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a densely connected region of the network, even if all its neighbours belong to the same ideological cluster. Bridging centrality penalises that: the entropy factor discounts intra-community connectors and elevates genuine cross-community bridges. It is particularly useful for identifying channels that actively mediate between otherwise separate ecosystems — mainstream and fringe, domestic and foreign, one political movement and another.
+
+**Example:** consider two channels with identical betweenness scores. The first connects channels that all belong to the same nationalist bloc; the second connects channels from four distinct communities — nationalist, religious conservative, mainstream right, and state media. Standard betweenness ranks them equal. Bridging centrality gives the second channel a substantially higher score, identifying it as the more strategically significant node for understanding how narratives migrate across the broader information ecosystem. In empirical studies of Telegram networks, these bridge nodes have proven to be disproportionately important: disrupting them fragments the network far more than their betweenness alone would suggest.
+
+---
+
 ## Community detection strategies
 
 A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.

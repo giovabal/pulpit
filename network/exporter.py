@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import shutil
-from math import sqrt
+from math import log, sqrt
 from typing import Any
 
 from django.conf import settings
@@ -207,6 +207,51 @@ def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     for node in graph_data["nodes"]:
         node[key] = values.get(node["id"], 0.0)
     return [(key, "Katz Centrality")]
+
+
+def apply_bridging_centrality(graph_data: GraphData, graph: nx.DiGraph, strategy_key: str) -> list[tuple[str, str]]:
+    """Add bridging centrality (betweenness × neighbor-community Shannon entropy) to each node.
+
+    For each node, the Shannon entropy is computed over the community distribution of its
+    neighbours weighted by edge strength. Nodes that connect many distinct communities score
+    high on entropy; multiplying by betweenness surfaces nodes that are both structurally
+    central and community-diverse.
+    """
+    key = "bridging_centrality"
+
+    betweenness: dict[str, float] = nx.betweenness_centrality(graph, weight="weight")
+
+    community_map: dict[str, str] = {
+        node_id: node_data["communities"][strategy_key]
+        for node_id, node_data in graph.nodes(data="data")
+        if node_data and strategy_key in (node_data.get("communities") or {})
+    }
+
+    for node in graph_data["nodes"]:
+        node_id = node["id"]
+        bt = betweenness.get(node_id, 0.0)
+
+        community_weights: dict[str, float] = {}
+        for pred in graph.predecessors(node_id):
+            w = graph.edges[pred, node_id].get("weight", 1.0)
+            c = community_map.get(pred)
+            if c is not None:
+                community_weights[c] = community_weights.get(c, 0.0) + w
+        for succ in graph.successors(node_id):
+            w = graph.edges[node_id, succ].get("weight", 1.0)
+            c = community_map.get(succ)
+            if c is not None:
+                community_weights[c] = community_weights.get(c, 0.0) + w
+
+        total = sum(community_weights.values())
+        if total == 0.0 or len(community_weights) <= 1:
+            entropy = 0.0
+        else:
+            entropy = -sum((w / total) * log(w / total) for w in community_weights.values())
+
+        node[key] = bt * entropy
+
+    return [(key, "Bridging Centrality")]
 
 
 def find_main_component(graph: nx.DiGraph) -> set[str]:

@@ -16,6 +16,7 @@ VALID_MEASURES = {
     "OUTDEGCENTRALITY",
     "HARMONICCENTRALITY",
     "KATZ",
+    "BRIDGING",
 }
 
 
@@ -181,6 +182,13 @@ class Command(BaseCommand):
             self.stdout.write("- Katz centrality … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_katz_centrality(graph_data, graph)
+            self.stdout.write("done")
+
+        if "BRIDGING" in measures:
+            strategy_key = settings.COMMUNITIES_STRATEGY[0].lower()
+            self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
             self.stdout.write("done")
 
         self.stdout.write("- small components")
