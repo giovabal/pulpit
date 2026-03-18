@@ -13,6 +13,8 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | Max messages to fetch per channel per run. Set to `None` to fetch all messages with no limit. | `100` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `False` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos attached to messages | `False` |
+
+> **Note on message statistics:** view counts, forward counts, and pinned status are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `python manage.py get_channels --refresh-messages-stats` to re-fetch and update these fields for all messages, or `--refresh-messages-stats N` to limit the refresh to the N most recent messages per channel. The `_updated` timestamp on each message is set to the time of the refresh.
 | `TELEGRAM_CONNECTION_RETRIES` | How many times Telethon retries a failed connection before giving up | `10` |
 | `TELEGRAM_RETRY_DELAY` | Seconds to wait between connection retry attempts | `5` |
 | `TELEGRAM_FLOOD_SLEEP_THRESHOLD` | Telethon automatically sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions instead | `60` |

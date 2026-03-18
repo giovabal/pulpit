@@ -4,6 +4,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Max, Min, Q
+from django.utils import timezone
 
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
@@ -260,6 +261,46 @@ class ChannelCrawler:
 
         message.save()
         return downloaded_images
+
+    def refresh_message_stats(
+        self,
+        channel: Channel,
+        telegram_channel: Any,
+        limit: int | None,
+        status_callback: Callable[[str], None] | None = None,
+    ) -> int:
+        """Re-fetch messages and update views/forwards/pinned in place.
+
+        ``limit=None`` refreshes all stored messages; a positive integer
+        restricts the refresh to the N most recent ones.
+        ``_updated`` is explicitly stamped because QuerySet.update() bypasses
+        the auto_now behaviour of that field.
+        """
+
+        def update_status(message: str) -> None:
+            if status_callback:
+                status_callback(message)
+
+        now = timezone.now()
+        updated = 0
+        for telegram_message in self.api_client.client.iter_messages(
+            telegram_channel,
+            limit=limit,
+            wait_time=self.api_client.wait_time,
+        ):
+            rows = Message.objects.filter(
+                channel=channel,
+                telegram_id=telegram_message.id,
+            ).update(
+                views=telegram_message.views,
+                forwards=telegram_message.forwards,
+                pinned=bool(telegram_message.pinned),
+                _updated=now,
+            )
+            if rows:
+                updated += 1
+            update_status(f"refreshing message stats … {updated} updated")
+        return updated
 
     def search_channel(self, q: str, limit: int = 1000) -> int:
         self.api_client.wait()

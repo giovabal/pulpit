@@ -27,9 +27,26 @@ class Command(AsyncBaseCommand):
             default=False,
             help="Check channel message ids for holes and fetch missing messages",
         )
+        parser.add_argument(
+            "--refresh-messages-stats",
+            nargs="?",
+            const=None,
+            default=0,
+            type=int,
+            metavar="N",
+            help=(
+                "After crawling each channel, re-fetch recent messages and update their views, "
+                "forwards, and pinned status in the database. "
+                "Pass N to limit the refresh to the N most recent messages per channel; "
+                "omit N to refresh all messages. "
+                "Useful because these counters change over time but are only recorded when a "
+                "message is first crawled. The flag has no effect when not provided."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         fix_holes: bool = options["fixholes"]
+        refresh_stats_limit: int | None = options["refresh_messages_stats"]  # 0 = skip, None = all, N = last N
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -75,6 +92,14 @@ class Command(AsyncBaseCommand):
                             fix_holes=fix_holes,
                             status_callback=lambda message, idx=index: print_status(message, idx),
                         )
+                        if refresh_stats_limit != 0:
+                            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+                            crawler.refresh_message_stats(
+                                channel,
+                                telegram_channel,
+                                limit=refresh_stats_limit,
+                                status_callback=lambda message, idx=index: print_status(message, idx),
+                            )
                     except errors.FloodWaitError as error:
                         self.stdout.write("", ending="\n")
                         self.stdout.write(
