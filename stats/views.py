@@ -320,6 +320,30 @@ class ChannelForwardsHistoryView(_ChannelTimeSeriesBase):
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
+class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
+    chart_title_suffix = "forwards received history"
+    annotate_field = "total_forwards_received"
+    y_label = "forwards received"
+    tooltip_template = "@month &nbsp; <strong>@total_forwards_received</strong> forwards received"
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            Message.objects.filter(
+                channel__organization__is_interesting=True,
+                forwarded_from=channel,
+                date__isnull=False,
+            )
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_forwards_received=Count("id"))
+            .order_by("month")
+        )
+        return [
+            {"month": e["month"].strftime("%Y-%m"), "total_forwards_received": e["total_forwards_received"]} for e in qs
+        ]
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
 class SubscribersHistoryDataView(StatsViewMixin, View):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         # For each interesting channel with a known participant count, find the month

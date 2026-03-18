@@ -92,6 +92,12 @@ class ChannelDetailView(BaseMixin, ListView):
                 "icon": "bi-forward",
                 "url": reverse("channel-forwards-history", kwargs={"pk": ch.pk}),
             },
+            {
+                "id": "ch-forwards-received-history",
+                "title": "Forwards received per month",
+                "icon": "bi-arrow-return-right",
+                "url": reverse("channel-forwards-received-history", kwargs={"pk": ch.pk}),
+            },
         ]
 
         context_data.update({"selected_channel": ch, "summary": summary, "panels": panels})

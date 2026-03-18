@@ -2,19 +2,24 @@
 
 ## [0.5] - To be announced
 ### New features
-- Before applying ForceAtlas2 for spatial layout, Kamada-Kawai is now used to seed initial node positions, improving reproducibility across runs.
-- New option for `NETWORK_MEASURES`: `KATZ`.
-- New option for `NETWORK_MEASURES`: `BRIDGING`.
-- New option for `NETWORK_MEASURES`: `ALL`.
-- New option for `COMMUNITY_STRATEGIES`: `ALL`.
-- Per-channel message history chart in webapp interface.
-- New `--seo` flag for `export_network`: makes the output mini-site search-engine friendly (sets `index, follow` robots tags, adds meta descriptions). Without the flag, the output actively discourages indexing.
+- Before applying ForceAtlas2 for spatial layout, Kamada-Kawai is now used to seed initial node positions, improving layout reproducibility across runs.
+- New option for `NETWORK_MEASURES`: `KATZ` (Katz centrality).
+- New option for `NETWORK_MEASURES`: `BRIDGING` (bridging centrality: betweenness × neighbour-community Shannon entropy). Accepts an optional community strategy parameter: `BRIDGING(LOUVAIN)`, `BRIDGING(LEIDEN)`, etc.
+- New option for `NETWORK_MEASURES`: `ALL` (expands to all available measures).
+- New option for `COMMUNITY_STRATEGIES`: `ALL` (runs all available detection algorithms simultaneously).
+- New `--seo` flag for `export_network`: makes the output mini-site search-engine friendly (sets `index, follow` robots tags, writes a permissive `robots.txt`). Without the flag, the output actively discourages indexing. Meta descriptions are always written regardless of this flag.
+- `get_channels` now accepts `--refresh-messages-stats` to update view counts, forward counts, and pinned status on already-crawled messages. Accepts an integer (refresh the N most recent messages per channel) or a date in `YYYY-MM-DD` format (refresh all messages from that date to the present). Omitting a value refreshes all messages.
+- Graph mini-site: social sharing section added to the About dialog, with a copyable URL and direct share buttons for major platforms.
+- Webapp channel detail page: collapsible, lazily loaded charts for message history, views, forwards sent, and forwards received per month; summary cards showing message count, total views, date range, forwards sent, and forwards received.
+- Webapp stats page: summary cards for total channels, messages collected, total subscribers, date range, and total forwards; additional charts for forwards per month, views per month, and cumulative subscribers.
+- Channel media type (photo, video, audio, document) is now recorded during crawling regardless of whether file download is enabled; undownloaded attachments are shown as placeholder frames in the channel detail view.
 
 ### Improvements
-- `COMMUNITIES_STRATEGY` renamed `COMMUNITY_STRATEGIES`.
-- Performance improved in crawling and admin website.
-- Webapp interface redesigned. More semantic HTML.
-- Graph mini-site references GitHub repository for network measures and community strategies descriptions.
+- `COMMUNITIES_STRATEGY` renamed `COMMUNITY_STRATEGIES` for grammatical consistency.
+- Channel metadata (subscriber count, about text, location) is now persisted immediately when fetched, rather than only at the end of the crawl; location is refreshed on every run.
+- `is_lost` flag is cleared automatically when a previously unreachable channel is successfully crawled again.
+- Webapp interface redesigned with a clean light theme, Inter font, semantic HTML, and refined card and sidebar components.
+- Graph mini-site About dialog now links to `ANALYSIS.md` on GitHub for measure and strategy documentation, replacing inline explanatory text.
 
 
 ## [0.4] - 2026-03-15
