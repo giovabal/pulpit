@@ -90,14 +90,14 @@ class Command(BaseCommand):
             raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
 
         communities_strategy = (
-            _ALL_STRATEGIES if "ALL" in settings.COMMUNITIES_STRATEGY else settings.COMMUNITIES_STRATEGY
+            _ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
         )
         network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
 
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
-                f"Invalid COMMUNITIES_STRATEGY value(s): {invalid_strategies!r}. "
+                f"Invalid COMMUNITY_STRATEGIES value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
         invalid_measures = [m for m in network_measures if not _is_valid_measure(m)]
@@ -114,7 +114,7 @@ class Command(BaseCommand):
                 )
             if bstrategy not in communities_strategy:
                 raise CommandError(
-                    f"BRIDGING community basis {bstrategy!r} is not in COMMUNITIES_STRATEGY. "
+                    f"BRIDGING community basis {bstrategy!r} is not in COMMUNITY_STRATEGIES. "
                     f"Add it or change the BRIDGING strategy."
                 )
         invalid_channel_types = [t for t in settings.CHANNEL_TYPES if t not in VALID_CHANNEL_TYPES]

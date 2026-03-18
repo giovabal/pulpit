@@ -6,13 +6,15 @@
 - New option for `NETWORK_MEASURES`: `KATZ`.
 - New option for `NETWORK_MEASURES`: `BRIDGING`.
 - New option for `NETWORK_MEASURES`: `ALL`.
-- New option for `COMMUNITIES_STRATEGY`: `ALL`.
+- New option for `COMMUNITY_STRATEGIES`: `ALL`.
 - Per-channel message history chart in webapp interface.
 - New `--seo` flag for `export_network`: makes the output mini-site search-engine friendly (sets `index, follow` robots tags, adds meta descriptions). Without the flag, the output actively discourages indexing.
 
 ### Improvements
+- `COMMUNITIES_STRATEGY` renamed `COMMUNITY_STRATEGIES`.
 - Performance improved in crawling and admin website.
 - Webapp interface redesigned. More semantic HTML.
+- Graph mini-site references GitHub repository for network measures and community strategies descriptions.
 
 
 ## [0.4] - 2026-03-15

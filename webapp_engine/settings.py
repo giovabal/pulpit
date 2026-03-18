@@ -156,8 +156,8 @@ CHANNEL_TYPES = config(
     default="CHANNEL",
     cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )
-COMMUNITIES_STRATEGY = config(
-    "COMMUNITIES_STRATEGY",
+COMMUNITY_STRATEGIES = config(
+    "COMMUNITY_STRATEGIES",
     default="ORGANIZATION",
     cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )

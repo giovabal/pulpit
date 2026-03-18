@@ -69,7 +69,7 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Normalized harmonic centrality |
 | `KATZ` | Katz centrality |
-| `BRIDGING` or `BRIDGING(STRATEGY)` | Bridging centrality (betweenness × neighbour-community Shannon entropy); defaults to `LEIDEN` when no strategy is specified; the chosen strategy must also be in `COMMUNITIES_STRATEGY` |
+| `BRIDGING` or `BRIDGING(STRATEGY)` | Bridging centrality (betweenness × neighbour-community Shannon entropy); defaults to `LEIDEN` when no strategy is specified; the chosen strategy must also be in `COMMUNITY_STRATEGIES` |
 | `ALL` | Expand to all measures above; `BRIDGING` uses `LEIDEN` as community basis |
 
 ### Edge construction
@@ -89,4 +89,4 @@ Edge weight = (forwards + references) / total channel messages. Direction is con
 
 All runtime options go in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional settings: `COMMUNITIES_STRATEGY` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `20000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`).
+Key optional settings: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `20000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`).
