@@ -2,7 +2,7 @@ from math import pi
 from typing import Any, ClassVar
 
 from django.db import models
-from django.db.models import Count, Sum
+from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -29,6 +29,43 @@ class StatsPageView(BaseMixin, TemplateView):
         from django.urls import reverse
 
         ctx = super().get_context_data(**kwargs)
+
+        total_channels = Channel.objects.count()
+        interesting_channels = Channel.objects.filter(organization__is_interesting=True).count()
+        total_messages = Message.objects.count()
+        total_subscribers = (
+            Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False).aggregate(
+                total=Sum("participants_count")
+            )["total"]
+            or 0
+        )
+        date_agg = Message.objects.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
+        total_forwards = Message.objects.filter(forwarded_from__isnull=False).count()
+
+        def fmt_date(d: Any) -> str:
+            return d.strftime("%b %Y") if d else "—"
+
+        ctx["summary"] = [
+            {
+                "icon": "bi-broadcast",
+                "label": "Channels",
+                "value": f"{interesting_channels:,} / {total_channels:,}",
+                "note": "interesting / total",
+            },
+            {"icon": "bi-chat-left-text", "label": "Messages collected", "value": f"{total_messages:,}"},
+            {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
+            {
+                "icon": "bi-calendar-range",
+                "label": "Date range",
+                "value": f"{fmt_date(date_agg['earliest'])} – {fmt_date(date_agg['latest'])}",
+            },
+            {
+                "icon": "bi-forward",
+                "label": "Forwards",
+                "value": f"{total_forwards:,}",
+                "note": "cross-channel amplifications",
+            },
+        ]
         ctx["panels"] = [
             {
                 "id": "messages-history",
