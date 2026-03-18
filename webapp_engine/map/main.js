@@ -9,24 +9,6 @@ import { drawDiscNodeLabel } from 'sigma/rendering';
 
 var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messages_count': true };
 
-var MEASURE_TITLES = {
-    'in_deg':               'Total weighted inbound connections from other channels in the network.',
-    'out_deg':              'Total weighted outbound connections to other channels in the network.',
-    'fans':                 'Number of subscribers as reported by Telegram.',
-    'messages_count':       'Total number of messages collected from this channel.',
-    'pagerank':             'Measures global influence based on how many other influential channels forward or reference this one. Channels cited by important channels score higher.',
-    'hits_hub':             'Identifies channels that actively amplify content from authoritative sources. High-scoring hubs are aggregators and megaphones spreading information across political communities.',
-    'hits_authority':       'Identifies channels widely cited by important hubs. High-scoring authorities are trusted sources whose content is frequently forwarded or referenced by other channels.',
-    'betweenness':          'How often this channel lies on the shortest path between other channels. High betweenness indicates a broker connecting otherwise separate political communities or movements.',
-    'in_degree_centrality': 'Normalized share of all channels in the network that reference or forward this channel. Reflects how widely cited it is across the entire network, regardless of the citing channels\' importance.'
-};
-
-var STRATEGY_TITLES = {
-    'ORGANIZATION': 'Channels are grouped by their manually assigned organization. Reflects real-world political affiliation as defined by the analyst.',
-    'LOUVAIN':      'Automatic clustering based on connection density. Groups channels that heavily forward or reference each other, revealing emergent coordination clusters within or across movements.',
-    'KCORE':        'Groups channels by their k-shell decomposition level. The innermost core contains the most densely interconnected channels, forming the structural backbone of the network.',
-    'INFOMAP':      'Detects communities by simulating information flow through the network. Groups channels through which the same content tends to circulate, revealing functional echo chambers.'
-};
 
 // =============================================================================
 // State
@@ -460,28 +442,6 @@ $(document).ready(function() {
         });
         $('#size-select').html(size_items.join(''));
         $('#total_pages_count').html(data.total_pages_count);
-
-        var about_measures_html = '';
-        data.measures.forEach(function(m) {
-            if (BASE_MEASURE_KEYS[m[0]]) return;
-            var desc = MEASURE_TITLES[m[0]] || '';
-            about_measures_html += '<dt>' + m[1] + '</dt><dd>' + desc + '</dd>';
-        });
-        if (about_measures_html) {
-            $('#about_measures').html(about_measures_html);
-            $('#about_measures_section').show();
-        }
-
-        var about_strategies_html = '';
-        Object.keys(data.communities).forEach(function(s) {
-            var desc = STRATEGY_TITLES[s.toUpperCase()] || '';
-            var label = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-            about_strategies_html += '<dt>' + label + '</dt><dd>' + desc + '</dd>';
-        });
-        if (about_strategies_html) {
-            $('#about_strategies').html(about_strategies_html);
-            $('#about_strategies_section').show();
-        }
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
