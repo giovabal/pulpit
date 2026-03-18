@@ -1,3 +1,4 @@
+import datetime
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -266,13 +267,16 @@ class ChannelCrawler:
         self,
         channel: Channel,
         telegram_channel: Any,
-        limit: int | None,
+        limit: int | None = None,
+        min_date: datetime.date | None = None,
         status_callback: Callable[[str], None] | None = None,
     ) -> int:
         """Re-fetch messages and update views/forwards/pinned in place.
 
-        ``limit=None`` refreshes all stored messages; a positive integer
-        restricts the refresh to the N most recent ones.
+        ``limit=None`` and ``min_date=None`` refreshes all stored messages.
+        ``limit=N`` restricts the refresh to the N most recent messages.
+        ``min_date`` refreshes all messages whose date is on or after that date;
+        iteration stops as soon as an older message is encountered.
         ``_updated`` is explicitly stamped because QuerySet.update() bypasses
         the auto_now behaviour of that field.
         """
@@ -282,12 +286,20 @@ class ChannelCrawler:
                 status_callback(message)
 
         now = timezone.now()
+        # Convert date to a timezone-aware datetime for comparison with message dates.
+        cutoff: datetime.datetime | None = (
+            datetime.datetime(min_date.year, min_date.month, min_date.day, tzinfo=datetime.timezone.utc)
+            if min_date is not None
+            else None
+        )
         updated = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             limit=limit,
             wait_time=self.api_client.wait_time,
         ):
+            if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
+                break
             rows = Message.objects.filter(
                 channel=channel,
                 telegram_id=telegram_message.id,

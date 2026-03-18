@@ -1,3 +1,5 @@
+import datetime
+import re
 import shutil
 import tempfile
 from argparse import ArgumentParser
@@ -15,6 +17,32 @@ from webapp.models import Channel
 from telethon import errors
 from telethon.sync import TelegramClient
 
+_REFRESH_SKIP = object()  # sentinel: flag not provided at all
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_refresh_arg(raw: Any) -> tuple[int | None, datetime.date | None]:
+    """Return (limit, min_date) from the raw --refresh-messages-stats value.
+
+    Possible inputs:
+      _REFRESH_SKIP  → flag not given            → (skip, None)
+      None           → bare flag, no value       → (None=all, None)
+      "200"          → integer string            → (200, None)
+      "2024-01-15"   → ISO date string           → (None, date(2024,1,15))
+    Raises ValueError for unrecognised strings.
+    """
+    if raw is _REFRESH_SKIP:
+        return _REFRESH_SKIP, None  # type: ignore[return-value]
+    if raw is None:
+        return None, None  # all messages, no date filter
+    raw = str(raw)
+    if _DATE_RE.match(raw):
+        return None, datetime.date.fromisoformat(raw)
+    try:
+        return int(raw), None
+    except ValueError as exc:
+        raise ValueError(f"--refresh-messages-stats: expected an integer or YYYY-MM-DD date, got {raw!r}") from exc
+
 
 class Command(AsyncBaseCommand):
     args = ""
@@ -31,22 +59,27 @@ class Command(AsyncBaseCommand):
             "--refresh-messages-stats",
             nargs="?",
             const=None,
-            default=0,
-            type=int,
-            metavar="N",
+            default=_REFRESH_SKIP,
+            metavar="N|YYYY-MM-DD",
             help=(
-                "After crawling each channel, re-fetch recent messages and update their views, "
-                "forwards, and pinned status in the database. "
-                "Pass N to limit the refresh to the N most recent messages per channel; "
-                "omit N to refresh all messages. "
-                "Useful because these counters change over time but are only recorded when a "
-                "message is first crawled. The flag has no effect when not provided."
+                "After crawling each channel, re-fetch messages and update views, forwards, "
+                "and pinned status. Accepts three forms: "
+                "omit the value to refresh all messages; "
+                "pass an integer N to refresh only the N most recent messages; "
+                "pass a date (YYYY-MM-DD) to refresh all messages from that date to the present. "
+                "The flag has no effect when not provided."
             ),
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
         fix_holes: bool = options["fixholes"]
-        refresh_stats_limit: int | None = options["refresh_messages_stats"]  # 0 = skip, None = all, N = last N
+        try:
+            refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
+        except ValueError as exc:
+            from django.core.management.base import CommandError
+
+            raise CommandError(str(exc)) from exc
+        do_refresh = refresh_limit is not _REFRESH_SKIP
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -92,12 +125,13 @@ class Command(AsyncBaseCommand):
                             fix_holes=fix_holes,
                             status_callback=lambda message, idx=index: print_status(message, idx),
                         )
-                        if refresh_stats_limit != 0:
+                        if do_refresh:
                             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
                             crawler.refresh_message_stats(
                                 channel,
                                 telegram_channel,
-                                limit=refresh_stats_limit,
+                                limit=refresh_limit,
+                                min_date=refresh_min_date,
                                 status_callback=lambda message, idx=index: print_status(message, idx),
                             )
                     except errors.FloodWaitError as error:

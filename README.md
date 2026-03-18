@@ -92,8 +92,9 @@ python manage.py get_channels --fixholes
 To refresh view counts, forward counts, and pinned status (these counters change over time but are only recorded when a message is first crawled):
 
 ```sh
-python manage.py get_channels --refresh-messages-stats      # refresh all messages
-python manage.py get_channels --refresh-messages-stats 200  # refresh only the 200 most recent per channel
+python manage.py get_channels --refresh-messages-stats               # refresh all messages
+python manage.py get_channels --refresh-messages-stats 200           # refresh only the 200 most recent per channel
+python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh all messages from that date to present
 ```
 
 ### 6. Export the graph
