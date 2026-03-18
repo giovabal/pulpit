@@ -1,6 +1,8 @@
 # Changelog
 
 ## [0.6] - To be announced
+### New features
+- New chart on the homepage and channel detail pages: **Average involvement per month** — shows the average views per message for each month, with 0 for months with no messages.
 
 ## [0.5] - 2026-03-18
 ### New features
