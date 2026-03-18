@@ -375,6 +375,22 @@
       .pagination .page-item.active .page-link { background: var(--accent); border-color: var(--accent); }
       .pagination .page-item.disabled .page-link { color: #d1d5db; }
 
+      /* ---------- Summary cards ---------- */
+      .summary-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        padding: 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+      }
+      .summary-card .sc-icon { color: var(--accent); font-size: 1.1rem; margin-bottom: .25rem; }
+      .summary-card .sc-label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+      .summary-card .sc-value { font-size: 1.35rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+      .summary-card .sc-note { font-size: .72rem; color: var(--text-muted); }
+
       /* ---------- Stats panel ---------- */
       .stats-panel { max-width: 52rem; margin-bottom: 1rem; }
 
