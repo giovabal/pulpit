@@ -32,8 +32,9 @@ class ChannelCrawler:
         channel.participants_count = channel_full_info.full_chat.participants_count
         channel.about = channel_full_info.full_chat.about
         location = channel_full_info.full_chat.location
-        if not channel.telegram_location and location:
+        if location:
             channel.telegram_location = location
+        channel.save(update_fields=["participants_count", "about", "telegram_location"])
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
@@ -100,6 +101,7 @@ class ChannelCrawler:
             remaining_limit -= batch_count
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
+                channel.is_lost = False
                 channel.save()
                 update_status(
                     f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
@@ -123,6 +125,7 @@ class ChannelCrawler:
             remaining_limit -= batch_count
             if remaining_limit <= 0:
                 channel.are_messages_crawled = True
+                channel.is_lost = False
                 channel.save()
                 update_status(
                     f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
@@ -138,6 +141,7 @@ class ChannelCrawler:
             image_count += hole_image_count
 
         channel.are_messages_crawled = True
+        channel.is_lost = False
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
 

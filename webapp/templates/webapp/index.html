@@ -106,7 +106,7 @@
         transition: background .12s, border-color .12s, color .12s;
       }
 
-      .channel-list li a:hover { background: var(--sidebar-hover); color: #fff; }
+      .channel-list li a:hover { background: var(--sidebar-hover); color: var(--sidebar-text); }
       .channel-list li a.active { background: var(--sidebar-active); border-left-color: var(--sidebar-active-border); color: var(--accent); }
 
       .ch-title {
@@ -424,6 +424,7 @@
         margin-bottom: 1rem;
       }
     </style>
+    {% block extra_styles %}{% endblock extra_styles %}
   </head>
 
   <body>

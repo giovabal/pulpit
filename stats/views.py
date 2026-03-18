@@ -1,7 +1,8 @@
 from math import pi
 from typing import Any, ClassVar
 
-from django.db.models import Count
+from django.db import models
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -23,6 +24,44 @@ from bokeh.resources import CDN
 
 class StatsPageView(BaseMixin, TemplateView):
     template_name = "stats/stats_page.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        from django.urls import reverse
+
+        ctx = super().get_context_data(**kwargs)
+        ctx["panels"] = [
+            {
+                "id": "messages-history",
+                "title": "Messages per month",
+                "icon": "bi-bar-chart-line",
+                "url": reverse("messages-history-data"),
+            },
+            {
+                "id": "active-channels-history",
+                "title": "Active channels per month",
+                "icon": "bi-broadcast",
+                "url": reverse("active-channels-history-data"),
+            },
+            {
+                "id": "forwards-history",
+                "title": "Forwards per month",
+                "icon": "bi-forward",
+                "url": reverse("forwards-history-data"),
+            },
+            {
+                "id": "views-history",
+                "title": "Views per month",
+                "icon": "bi-eye",
+                "url": reverse("views-history-data"),
+            },
+            {
+                "id": "subscribers-history",
+                "title": "Cumulative subscribers",
+                "icon": "bi-people",
+                "url": reverse("subscribers-history-data"),
+            },
+        ]
+        return ctx
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
@@ -51,20 +90,20 @@ class TimeSeriesChartView(StatsViewMixin, View):
             ]
         )
 
-        line_options = self.base_line_options.copy()
-        line_options.update({"width": 1, "source": df})
         figure_options = self.base_figure_options.copy()
         figure_options.update({"x_range": list(df.month.unique())})
         plot = figure(**figure_options, y_axis_label=self.y_label)
-        plot.line("month", self.annotate_field, **line_options, legend_label=self.y_label)
+        plot.vbar(
+            x="month",
+            top=self.annotate_field,
+            source=df,
+            width=0.7,
+            fill_color="#2563eb",
+            fill_alpha=0.75,
+            line_color=None,
+        )
         plot.xaxis.major_label_orientation = -pi / 4
         self._style_plot(plot)
-        plot.legend.location = "top_left"
-        plot.legend.click_policy = "hide"
-        plot.legend.label_text_font = "Inter, system-ui, sans-serif"
-        plot.legend.label_text_font_size = "11px"
-        plot.legend.border_line_color = "#e5e7eb"
-        plot.legend.background_fill_color = "#ffffff"
         hover = plot.select({"type": HoverTool})
         hover.tooltips = (
             f'<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">{self.tooltip_template}</span>'
@@ -92,6 +131,26 @@ class ActiveChannelsHistoryDataView(TimeSeriesChartView):
 
     def get_annotation(self) -> Count:
         return Count("channel", distinct=True)
+
+
+class ForwardsHistoryDataView(TimeSeriesChartView):
+    annotate_field = "total_forwards"
+    y_label = "forwards"
+    chart_title = "Forwards history"
+    tooltip_template = "@month: @total_forwards forwards"
+
+    def get_annotation(self) -> Count:
+        return Count("id", filter=models.Q(forwarded_from__isnull=False))
+
+
+class ViewsHistoryDataView(TimeSeriesChartView):
+    annotate_field = "total_views"
+    y_label = "views"
+    chart_title = "Views history"
+    tooltip_template = "@month: @total_views views"
+
+    def get_annotation(self) -> Sum:
+        return Sum("views", default=0)
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
@@ -139,4 +198,61 @@ class ChannelMessagesHistoryView(StatsViewMixin, View):
         hover.tooltips = '<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">@month &nbsp; <strong>@total_messages</strong></span>'
 
         html = file_html(plot, CDN, f"{channel.title} – message history")
+        return HttpResponse(html)
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class SubscribersHistoryDataView(StatsViewMixin, View):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        # For each interesting channel with a known participant count, find the month
+        # of its earliest message and treat that as its "entry month".
+        channels = (
+            Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False)
+            .annotate(first_message=models.Min("message_set__date"))
+            .filter(first_message__isnull=False)
+            .values("participants_count", "first_message")
+        )
+
+        df = pd.DataFrame(
+            [
+                {
+                    "month": entry["first_message"].strftime("%Y-%m"),
+                    "participants_count": entry["participants_count"],
+                }
+                for entry in channels
+            ]
+        )
+
+        if df.empty:
+            return HttpResponse(
+                "<html><body style='font-family:sans-serif;color:#9ca3af;"
+                "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
+                "<p>No data available</p></body></html>"
+            )
+
+        monthly = df.groupby("month")["participants_count"].sum().reset_index()
+        monthly = monthly.sort_values("month")
+        monthly["cumulative"] = monthly["participants_count"].cumsum()
+
+        figure_options = self.base_figure_options.copy()
+        figure_options.update({"x_range": list(monthly["month"])})
+        plot = figure(**figure_options, y_axis_label="total subscribers")
+        plot.vbar(
+            x="month",
+            top="cumulative",
+            source=monthly,
+            width=0.7,
+            fill_color="#2563eb",
+            fill_alpha=0.75,
+            line_color=None,
+        )
+        plot.xaxis.major_label_orientation = -pi / 4
+        self._style_plot(plot)
+        hover = plot.select({"type": HoverTool})
+        hover.tooltips = (
+            '<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">'
+            "@month &nbsp; <strong>@cumulative{0,0}</strong> subscribers</span>"
+        )
+
+        html = file_html(plot, CDN, "Cumulative subscribers history")
         return HttpResponse(html)

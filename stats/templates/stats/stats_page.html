@@ -1,17 +1,46 @@
 {% extends "webapp/index.html" %}
 
+{% block extra_styles %}
+<style>
+  .stats-page .stats-panel { max-width: none; }
+</style>
+{% endblock extra_styles %}
+
 {% block content %}
-<h1 class="mb-3">Stats</h1>
-<iframe
-  src="{% url 'messages-history-data' %}"
-  title="Monthly messages history"
-  class="w-100 border rounded"
-  style="min-height: 560px;"
-></iframe>
-<iframe
-  src="{% url 'active-channels-history-data' %}"
-  title="Monthly active channels history"
-  class="w-100 border rounded mt-4"
-  style="min-height: 560px;"
-></iframe>
+<div class="stats-page">
+<h1 class="mb-4">Stats</h1>
+
+{% with panels=panels %}
+{% for panel in panels %}
+<div class="stats-panel mb-3">
+  <button class="stats-toggle"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#panel-{{ panel.id }}"
+          aria-expanded="false"
+          aria-controls="panel-{{ panel.id }}">
+    <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
+    {{ panel.title }}
+    <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
+  </button>
+  <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
+    <div class="stats-panel-body" style="padding:0">
+      <iframe class="w-100 border-0" style="height: 480px;" title="{{ panel.title }}" loading="lazy"></iframe>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endwith %}
+
+</div>
+
+<script>
+  document.querySelectorAll('.stats-page .collapse[data-chart-url]').forEach(function (collapse) {
+    var iframe = collapse.querySelector('iframe');
+    var loaded = false;
+    collapse.addEventListener('show.bs.collapse', function () {
+      if (!loaded) { iframe.src = collapse.dataset.chartUrl; loaded = true; }
+    });
+  });
+</script>
 {% endblock content %}
