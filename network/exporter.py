@@ -292,6 +292,32 @@ def ensure_graph_root(root_target: str) -> None:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
+def apply_robots_to_graph_html(root_target: str, seo: bool) -> None:
+    """Patch the robots meta tag in the static index.html after it is copied."""
+    index_path = os.path.join(root_target, "index.html")
+    if not os.path.exists(index_path):
+        return
+    with open(index_path) as f:
+        content = f.read()
+    if seo:
+        content = content.replace(
+            '  <meta name="robots" content="noindex">',
+            '  <meta name="robots" content="index, follow">',
+        )
+    with open(index_path, "w") as f:
+        f.write(content)
+
+
+def write_robots_txt(root_target: str, seo: bool) -> None:
+    """Write a robots.txt that either allows or disallows all crawlers."""
+    if seo:
+        content = "User-agent: *\nAllow: /\n"
+    else:
+        content = "User-agent: *\nDisallow: /\n"
+    with open(os.path.join(root_target, "robots.txt"), "w") as f:
+        f.write(content)
+
+
 def write_graph_files(
     graph_data: GraphData,
     communities_data: dict[str, Any],
@@ -395,6 +421,7 @@ def write_table_html(
     measures_labels: list[tuple[str, str]],
     strategies: list[str],
     output_filename: str,
+    seo: bool = False,
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
@@ -449,12 +476,26 @@ def write_table_html(
         cells.append(f"<td>{_html.escape(node.get('activity_end') or '')}</td>")
         rows.append("<tr>" + "".join(cells) + "</tr>\n")
 
+    if seo:
+        _title = "Channel network data"
+        _robots = '<meta name="robots" content="index, follow">'
+        _description = (
+            f'<meta name="description" content="Network data for {len(nodes)} Telegram channels, '
+            'including activity metrics, inbound and outbound connections, and community assignments.">'
+        )
+    else:
+        _title = "Channels"
+        _robots = '<meta name="robots" content="noindex, nofollow">'
+        _description = ""
+
     content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Channels</title>
+  <title>{_title}</title>
+  {_robots}
+  {_description}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <style>

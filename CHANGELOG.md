@@ -8,6 +8,7 @@
 - New option for `NETWORK_MEASURES`: `ALL`.
 - New option for `COMMUNITIES_STRATEGY`: `ALL`.
 - Per-channel message history chart in webapp interface.
+- New `--seo` flag for `export_network`: makes the output mini-site search-engine friendly (sets `index, follow` robots tags, adds meta descriptions). Without the flag, the output actively discourages indexing.
 
 ### Improvements
 - Performance improved in crawling and admin website.

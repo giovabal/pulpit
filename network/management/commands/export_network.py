@@ -56,6 +56,15 @@ class Command(BaseCommand):
             help='Tabular output format alongside the graph: "html" (default), "xls", "html+xls", or "none".',
         )
         parser.add_argument(
+            "--seo",
+            action="store_true",
+            default=False,
+            help=(
+                "Optimise the output mini-site for search engine discovery: sets indexable robots tags "
+                "and adds meta descriptions. Without this flag the output actively discourages indexing."
+            ),
+        )
+        parser.add_argument(
             "--startdate",
             default=None,
             metavar="YYYY-MM-DD",
@@ -115,6 +124,7 @@ class Command(BaseCommand):
             )
         measures = set(network_measures)
 
+        seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
 
@@ -238,6 +248,8 @@ class Command(BaseCommand):
         exporter.ensure_graph_root(root_target)
 
         self.stdout.write("- config files")
+        exporter.apply_robots_to_graph_html(root_target, seo)
+        exporter.write_robots_txt(root_target, seo)
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         exporter.write_graph_files(
             graph_data,
@@ -252,7 +264,9 @@ class Command(BaseCommand):
         strategies = [s.lower() for s in communities_strategy]
         if "html" in table_format:
             self.stdout.write("- table (html)")
-            exporter.write_table_html(graph_data, measures_labels, strategies, output_filename="graph/table.html")
+            exporter.write_table_html(
+                graph_data, measures_labels, strategies, output_filename="graph/table.html", seo=seo
+            )
         if "xls" in table_format:
             self.stdout.write("- table (xls)")
             exporter.write_table_xls(graph_data, measures_labels, strategies, output_filename="graph/table.xlsx")

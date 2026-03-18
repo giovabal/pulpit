@@ -7,6 +7,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,user-scalable=no">
   <meta name="theme-color" content="#123">
+  <meta name="description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="A map for Telegram channels">
+  <meta property="og:description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="A map for Telegram channels">
+  <meta name="twitter:description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="style.css" type="text/css" media="screen">
@@ -168,6 +177,34 @@
 	    <h6>Community strategies</h6>
 	    <dl id="about_strategies"></dl>
 	  </div>
+	  <hr>
+	  <h6><i class="bi bi-share me-1" aria-hidden="true"></i>Share this map</h6>
+	  <div class="input-group mt-2 mb-3">
+	    <input id="share_url" type="text" class="form-control form-control-sm" readonly aria-label="Page URL">
+	    <button class="btn btn-outline-secondary btn-sm" id="share_copy" type="button" title="Copy to clipboard">
+	      <i class="bi bi-clipboard" aria-hidden="true"></i>
+	    </button>
+	  </div>
+	  <div class="d-flex gap-2 flex-wrap justify-content-center">
+	    <a id="share_twitter" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-dark flex-grow-1">
+	      <i class="bi bi-twitter-x" aria-hidden="true"></i> X
+	    </a>
+	    <a id="share_bluesky" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm flex-grow-1" style="background:#0085ff;color:#fff">
+	      <i class="bi bi-bluesky" aria-hidden="true"></i> Bluesky
+	    </a>
+	    <a id="share_facebook" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm flex-grow-1" style="background:#1877f2;color:#fff">
+	      <i class="bi bi-facebook" aria-hidden="true"></i> Facebook
+	    </a>
+	    <a id="share_linkedin" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm flex-grow-1" style="background:#0077b5;color:#fff">
+	      <i class="bi bi-linkedin" aria-hidden="true"></i> LinkedIn
+	    </a>
+	    <a id="share_whatsapp" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm flex-grow-1" style="background:#25d366;color:#fff">
+	      <i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp
+	    </a>
+	    <a id="share_telegram" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm flex-grow-1" style="background:#0088cc;color:#fff">
+	      <i class="bi bi-telegram" aria-hidden="true"></i> Telegram
+	    </a>
+	  </div>
 	</div>
 	<div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -217,6 +254,32 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      var modal = document.getElementById("about_modal");
+      modal.addEventListener("show.bs.modal", function () {
+        var url = window.location.href;
+        var title = encodeURIComponent(document.title);
+        var enc = encodeURIComponent(url);
+        document.getElementById("share_url").value = url;
+        document.getElementById("share_twitter").href  = "https://twitter.com/intent/tweet?url=" + enc + "&text=" + title;
+        document.getElementById("share_bluesky").href  = "https://bsky.app/intent/compose?text=" + title + "%20" + enc;
+        document.getElementById("share_facebook").href = "https://www.facebook.com/sharer/sharer.php?u=" + enc;
+        document.getElementById("share_linkedin").href = "https://www.linkedin.com/sharing/share-offsite/?url=" + enc;
+        document.getElementById("share_whatsapp").href = "https://wa.me/?text=" + title + "%20" + enc;
+        document.getElementById("share_telegram").href = "https://t.me/share/url?url=" + enc + "&text=" + title;
+      });
+      document.getElementById("share_copy").addEventListener("click", function () {
+        var btn = this;
+        navigator.clipboard.writeText(document.getElementById("share_url").value).then(function () {
+          btn.innerHTML = '<i class="bi bi-clipboard-check" aria-hidden="true"></i>';
+          setTimeout(function () {
+            btn.innerHTML = '<i class="bi bi-clipboard" aria-hidden="true"></i>';
+          }, 1500);
+        });
+      });
+    })();
+  </script>
   <script type="module" src="main.js"></script>
 </body>
 </html>
