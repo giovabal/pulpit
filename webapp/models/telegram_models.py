@@ -234,9 +234,10 @@ class ProfilePicture(TelegramBasePictureModel):
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
+        channel_dir = self.channel.username or str(self.channel.telegram_id)
         return os.path.join(
             "channels",
-            self.channel.username,
+            channel_dir,
             "profile",
             f"{self.channel.telegram_id}.{extension}",
         )
@@ -247,9 +248,10 @@ class MessagePicture(TelegramBasePictureModel):
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
+        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
         return os.path.join(
             "channels",
-            self.message.channel.username,
+            channel_dir,
             "message",
             f"{self.message.telegram_id}.{extension}",
         )
@@ -263,9 +265,10 @@ class MessageVideo(TelegramBaseModel):
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
+        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
         return os.path.join(
             "channels",
-            self.message.channel.username,
+            channel_dir,
             "message",
             "video",
             f"{self.message.telegram_id}.{extension}",

@@ -339,15 +339,16 @@ def write_graph_files(
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
-    for (username,) in channel_qs.filter(username__gt="").values_list("username"):
-        src = os.path.join(settings.MEDIA_ROOT, "channels", username, "profile")
-        dst = os.path.join(root_target, "channels", username, "profile")
+    for username, telegram_id in channel_qs.values_list("username", "telegram_id"):
+        channel_dir = username or str(telegram_id)
+        src = os.path.join(settings.MEDIA_ROOT, "channels", channel_dir, "profile")
+        dst = os.path.join(root_target, "channels", channel_dir, "profile")
         try:
             shutil.copytree(src, dst)
         except FileNotFoundError:
             pass
         except OSError as e:
-            logger.warning("Could not copy media for channel %s: %s", username, e)
+            logger.warning("Could not copy media for channel %s: %s", channel_dir, e)
 
 
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
