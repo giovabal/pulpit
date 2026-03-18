@@ -839,7 +839,7 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.api_client.client.return_value = resp
         self.channel.telegram_location = ""
         self.crawler.set_more_channel_details(self.channel, tc)
-        self.assertEqual(self.channel.telegram_location, fake_location)
+        self.assertEqual(self.channel.telegram_location, fake_location.address)
 
     def test_overwrites_existing_location(self) -> None:
         tc = MagicMock()
@@ -849,7 +849,7 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.api_client.client.return_value = resp
         self.channel.telegram_location = "existing location"
         self.crawler.set_more_channel_details(self.channel, tc)
-        self.assertEqual(self.channel.telegram_location, new_location)
+        self.assertEqual(self.channel.telegram_location, new_location.address)
 
 
 # ---------------------------------------------------------------------------
