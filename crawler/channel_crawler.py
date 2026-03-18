@@ -36,7 +36,7 @@ class ChannelCrawler:
         location = channel_full_info.full_chat.location
         if location:
             channel.telegram_location = location
-        channel.save(update_fields=["participants_count", "about", "telegram_location"])
+        channel.save(update_fields=["participants_count", "about"])
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()

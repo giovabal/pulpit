@@ -841,14 +841,15 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.crawler.set_more_channel_details(self.channel, tc)
         self.assertEqual(self.channel.telegram_location, fake_location)
 
-    def test_does_not_overwrite_existing_location(self) -> None:
+    def test_overwrites_existing_location(self) -> None:
         tc = MagicMock()
+        new_location = MagicMock()
         resp = self._make_full_channel_response()
-        resp.full_chat.location = MagicMock()
+        resp.full_chat.location = new_location
         self.api_client.client.return_value = resp
         self.channel.telegram_location = "existing location"
         self.crawler.set_more_channel_details(self.channel, tc)
-        self.assertEqual(self.channel.telegram_location, "existing location")
+        self.assertEqual(self.channel.telegram_location, new_location)
 
 
 # ---------------------------------------------------------------------------

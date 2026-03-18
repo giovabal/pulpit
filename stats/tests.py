@@ -4,28 +4,7 @@ from django.urls import reverse
 from webapp.models import Channel, Message, Organization
 
 
-class StatsPageViewTests(TestCase):
-    def test_stats_page_returns_200(self):
-        response = self.client.get(reverse("stats-page"))
-        self.assertEqual(response.status_code, 200)
-
-    def test_stats_page_contains_messages_history_iframe(self):
-        response = self.client.get(reverse("stats-page"))
-        self.assertContains(response, reverse("messages-history-data"))
-
-    def test_stats_page_contains_active_channels_iframe(self):
-        response = self.client.get(reverse("stats-page"))
-        self.assertContains(response, reverse("active-channels-history-data"))
-
-
 class StatsViewsTests(TestCase):
-    def test_stats_page_contains_iframe(self):
-        response = self.client.get(reverse("stats-page"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("messages-history-data"))
-        self.assertContains(response, reverse("active-channels-history-data"))
-
     def test_messages_history_data_renders_bokeh_html(self):
         organization = Organization.objects.create(name="Interesting Org", is_interesting=True)
         channel = Channel.objects.create(telegram_id=1, title="C1", organization=organization)

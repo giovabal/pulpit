@@ -448,7 +448,7 @@ class BuildGraphTests(TestCase):
         ch3 = Channel.objects.create(telegram_id=3, organization=None, title="Dead Leaf")
         # ch2 (interesting) forwards from ch3 → ch3 gets in_degree > 0
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=ch3)
-        ch3.save()
+        ch3.refresh_degrees()
         ch3.refresh_from_db()
         self.assertGreater(ch3.in_degree or 0, 0)
         # Create a ch1↔ch2 edge so graph is valid
@@ -1179,7 +1179,7 @@ def _patch_export_pipeline() -> list:
         f"{_EXPORT_CMD}.community.apply_to_graph",
         f"{_EXPORT_CMD}.community.apply_edge_colors",
         f"{_EXPORT_CMD}.community.build_communities_payload",
-        f"{_EXPORT_CMD}.layout.compute_layout",
+        f"{_EXPORT_CMD}.layout.forceatlas2_positions",
         f"{_EXPORT_CMD}.exporter.build_graph_data",
         f"{_EXPORT_CMD}.exporter.find_main_component",
         f"{_EXPORT_CMD}.exporter.apply_base_node_measures",
@@ -1196,6 +1196,7 @@ def _patch_export_pipeline() -> list:
     return decorators
 
 
+@override_settings(NETWORK_MEASURES=["PAGERANK"], COMMUNITY_STRATEGIES=["ORGANIZATION"])
 class ExportNetworkCommandTests(TestCase):
     def _configure_happy_path(
         self,
@@ -1243,7 +1244,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
-    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
     @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
@@ -1271,7 +1272,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
-    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
     @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
@@ -1336,7 +1337,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
-    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
     @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
@@ -1387,7 +1388,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
-    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
     @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
@@ -1438,7 +1439,7 @@ class ExportNetworkCommandTests(TestCase):
     @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
-    @patch(f"{_EXPORT_CMD}.layout.compute_layout")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
     @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
     @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
     @patch(f"{_EXPORT_CMD}.community.apply_to_graph")

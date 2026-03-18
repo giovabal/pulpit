@@ -322,7 +322,7 @@ def write_graph_files(
     graph_data: GraphData,
     communities_data: dict[str, Any],
     measures_labels: list[tuple[str, str]],
-    total_channels: int,
+    channel_qs: "QuerySet[Channel]",
     output_filename: str,
     accessory_filename: str,
 ) -> None:
@@ -332,7 +332,7 @@ def write_graph_files(
     accessory_payload: dict[str, Any] = {
         "communities": communities_data,
         "measures": measures_labels,
-        "total_pages_count": total_channels,
+        "total_pages_count": channel_qs.count(),
     }
     with open(accessory_filename, "w") as accessoryfile:
         accessoryfile.write(json.dumps(accessory_payload))

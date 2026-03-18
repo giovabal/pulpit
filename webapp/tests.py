@@ -391,13 +391,13 @@ class ChannelSaveTests(TestCase):
 
     def test_in_degree_counts_forwards_from_interesting_channels(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=self.ch1)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.in_degree, 1)
 
     def test_in_degree_excludes_self_forwards(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch1)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.in_degree, 0)
 
@@ -405,38 +405,38 @@ class ChannelSaveTests(TestCase):
         boring = Organization.objects.create(name="Boring", is_interesting=False)
         boring_ch = Channel.objects.create(telegram_id=50, organization=boring)
         Message.objects.create(telegram_id=10, channel=boring_ch, forwarded_from=self.ch1)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.in_degree, 0)
 
     def test_out_degree_counts_forwards_to_interesting_channels(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch2)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.out_degree, 1)
 
     def test_out_degree_excludes_self_forwards(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch1)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.out_degree, 0)
 
-    def test_instance_fields_synced_after_save_without_refresh(self) -> None:
+    def test_instance_fields_synced_after_refresh_degrees(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=self.ch1)
-        self.ch1.save()
+        self.ch1.refresh_degrees()
         self.assertEqual(self.ch1.in_degree, 1)
 
-    def test_second_write_uses_update_not_full_save(self) -> None:
-        """Degree recalculation must use queryset.update(), not a second super().save()."""
+    def test_refresh_degrees_uses_update_not_full_save(self) -> None:
+        """Degree recalculation must use queryset.update(), not a full model save."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
         with CaptureQueriesContext(connection) as ctx:
-            self.ch1.save()
+            self.ch1.refresh_degrees()
         sql_upper = [q["sql"].upper() for q in ctx.captured_queries]
         update_count = sum(1 for s in sql_upper if s.startswith("UPDATE"))
-        # Exactly two UPDATEs: one from super().save(), one from queryset.update()
-        self.assertEqual(update_count, 2)
+        # Exactly one UPDATE from queryset.update() — no full model save
+        self.assertEqual(update_count, 1)
 
 
 class ChannelActivityPeriodTests(TestCase):

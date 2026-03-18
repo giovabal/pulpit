@@ -255,7 +255,7 @@ class Command(BaseCommand):
             graph_data,
             communities_data,
             measures_labels,
-            len(graph_data["nodes"]),
+            channel_qs,
             output_filename="graph/data.json",
             accessory_filename="graph/data_accessory.json",
         )
