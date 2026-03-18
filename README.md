@@ -99,6 +99,7 @@ python manage.py export_network --table-format none              # no tabular ou
 python manage.py export_network --startdate 2023-01-01           # messages from this date
 python manage.py export_network --enddate 2023-12-31             # messages up to this date
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31  # date range
+python manage.py export_network --seo                            # search-engine friendly output
 ```
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
@@ -109,6 +110,7 @@ By default also writes a sortable `graph/table.html` with one row per channel an
 | `--table-format` | Tabular output format: `html` (default), `xls`, `html+xls`, or `none` |
 | `--startdate YYYY-MM-DD` | Only consider messages on or after this date. Channels with no messages in the period are excluded. |
 | `--enddate YYYY-MM-DD` | Only consider messages on or before this date. Channels with no messages in the period are excluded. |
+| `--seo` | Make the output discoverable by search engines: sets `index, follow` robots tags on `index.html` and `table.html`, adds a meta description to `table.html`, and writes an permissive `robots.txt`. Without this flag the output actively discourages indexing (`noindex, nofollow` and a `Disallow: /` `robots.txt`). |
 
 ### 7. View the graph
 
