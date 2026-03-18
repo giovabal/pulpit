@@ -125,15 +125,6 @@ class Command(AsyncBaseCommand):
                             fix_holes=fix_holes,
                             status_callback=lambda message, idx=index: print_status(message, idx),
                         )
-                        if do_refresh:
-                            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
-                            crawler.refresh_message_stats(
-                                channel,
-                                telegram_channel,
-                                limit=refresh_limit,
-                                min_date=refresh_min_date,
-                                status_callback=lambda message, idx=index: print_status(message, idx),
-                            )
                     except errors.FloodWaitError as error:
                         self.stdout.write("", ending="\n")
                         self.stdout.write(
@@ -142,6 +133,28 @@ class Command(AsyncBaseCommand):
                             )
                         )
                         continue
+                    if do_refresh:
+                        try:
+                            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+                            crawler.refresh_message_stats(
+                                channel,
+                                telegram_channel,
+                                limit=refresh_limit,
+                                min_date=refresh_min_date,
+                                status_callback=lambda message, idx=index: print_status(message, idx),
+                            )
+                        except errors.FloodWaitError as error:
+                            self.stdout.write("", ending="\n")
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Skipping refresh for channel {channel.telegram_id} due to flood wait: {error}"
+                                )
+                            )
+                        except Exception as error:
+                            self.stdout.write("", ending="\n")
+                            self.stdout.write(
+                                self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}")
+                            )
 
                 self.stdout.write("", ending="\n")
 
