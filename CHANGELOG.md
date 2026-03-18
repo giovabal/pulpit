@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.6] - To be announced
+
 ## [0.5] - 2026-03-18
 ### New features
 - Before applying ForceAtlas2 for spatial layout, Kamada-Kawai is now used to seed initial node positions, improving layout reproducibility across runs.

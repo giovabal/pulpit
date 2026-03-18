@@ -81,6 +81,12 @@ class HomeView(BaseMixin, TemplateView):
                 "icon": "bi-people",
                 "url": reverse("subscribers-history-data"),
             },
+            {
+                "id": "avg-involvement-history",
+                "title": "Average involvement per month",
+                "icon": "bi-graph-up",
+                "url": reverse("avg-involvement-history-data"),
+            },
         ]
         return ctx
 
@@ -167,6 +173,12 @@ class ChannelDetailView(BaseMixin, ListView):
                 "title": "Forwards received per month",
                 "icon": "bi-arrow-return-right",
                 "url": reverse("channel-forwards-received-history", kwargs={"pk": ch.pk}),
+            },
+            {
+                "id": "ch-avg-involvement-history",
+                "title": "Average involvement per month",
+                "icon": "bi-graph-up",
+                "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
             },
         ]
 

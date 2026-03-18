@@ -2,7 +2,7 @@ from math import pi
 from typing import Any, ClassVar
 
 from django.db import models
-from django.db.models import Count, Sum
+from django.db.models import Avg, Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -107,6 +107,16 @@ class ViewsHistoryDataView(TimeSeriesChartView):
 
     def get_annotation(self) -> Sum:
         return Sum("views", default=0)
+
+
+class AvgInvolvementHistoryDataView(TimeSeriesChartView):
+    annotate_field = "avg_involvement"
+    y_label = "avg views"
+    chart_title = "Average involvement history"
+    tooltip_template = "@month &nbsp; <strong>@avg_involvement{0,0}</strong> avg views"
+
+    def get_annotation(self) -> Avg:
+        return Avg("views", default=0)
 
 
 def _channel_month_spine(channel: Channel) -> list[str]:
@@ -295,6 +305,24 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
         return [
             {"month": e["month"].strftime("%Y-%m"), "total_forwards_received": e["total_forwards_received"]} for e in qs
         ]
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
+    chart_title_suffix = "average involvement history"
+    annotate_field = "avg_involvement"
+    y_label = "avg views"
+    tooltip_template = "@month &nbsp; <strong>@avg_involvement{0,0}</strong> avg views"
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            Message.objects.filter(channel=channel, date__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(avg_involvement=Avg("views", default=0))
+            .order_by("month")
+        )
+        return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
 
 
 @method_decorator(xframe_options_sameorigin, name="dispatch")
