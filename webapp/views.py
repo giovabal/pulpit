@@ -14,6 +14,76 @@ from .models import Channel, Message
 class HomeView(BaseMixin, TemplateView):
     template_name = "webapp/home.html"
 
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        from django.urls import reverse
+
+        ctx = super().get_context_data(**kwargs)
+
+        total_channels = Channel.objects.count()
+        interesting_channels = Channel.objects.filter(organization__is_interesting=True).count()
+        total_messages = Message.objects.count()
+        total_subscribers = (
+            Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False).aggregate(
+                total=Sum("participants_count")
+            )["total"]
+            or 0
+        )
+        date_agg = Message.objects.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
+        total_forwards = Message.objects.filter(forwarded_from__isnull=False).count()
+
+        def fmt_date(d: Any) -> str:
+            return d.strftime("%b %Y") if d else "—"
+
+        ctx["summary"] = [
+            {
+                "icon": "bi-broadcast",
+                "label": "Channels",
+                "value": f"{interesting_channels:,} / {total_channels:,}",
+                "note": "interesting / total",
+            },
+            {"icon": "bi-chat-left-text", "label": "Messages collected", "value": f"{total_messages:,}"},
+            {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
+            {
+                "icon": "bi-calendar-range",
+                "label": "Date range",
+                "value": f"{fmt_date(date_agg['earliest'])} – {fmt_date(date_agg['latest'])}",
+            },
+            {
+                "icon": "bi-forward",
+                "label": "Forwards",
+                "value": f"{total_forwards:,}",
+                "note": "cross-channel amplifications",
+            },
+        ]
+        ctx["panels"] = [
+            {
+                "id": "messages-history",
+                "title": "Messages per month",
+                "icon": "bi-bar-chart-line",
+                "url": reverse("messages-history-data"),
+            },
+            {
+                "id": "active-channels-history",
+                "title": "Active channels per month",
+                "icon": "bi-broadcast",
+                "url": reverse("active-channels-history-data"),
+            },
+            {
+                "id": "forwards-history",
+                "title": "Forwards per month",
+                "icon": "bi-forward",
+                "url": reverse("forwards-history-data"),
+            },
+            {"id": "views-history", "title": "Views per month", "icon": "bi-eye", "url": reverse("views-history-data")},
+            {
+                "id": "subscribers-history",
+                "title": "Cumulative subscribers",
+                "icon": "bi-people",
+                "url": reverse("subscribers-history-data"),
+            },
+        ]
+        return ctx
+
 
 class ChannelDetailView(BaseMixin, ListView):
     template_name = "webapp/channel_detail.html"

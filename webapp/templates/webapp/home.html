@@ -1,20 +1,97 @@
 {% extends "webapp/index.html" %}
 {% load static %}
 
+{% block extra_styles %}
+<style>
+  .home-page .stats-panel { max-width: none; }
+  .home-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+  }
+  .home-brand { display: flex; align-items: center; gap: .875rem; }
+  .home-icon {
+    width: 44px;
+    height: 44px;
+    background: #dbeafe;
+    border-radius: .625rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+</style>
+{% endblock extra_styles %}
+
 {% block content %}
-<div class="home-wrap">
-  <div class="home-icon">
-    <i class="bi bi-broadcast" aria-hidden="true"></i>
-  </div>
-  <h1 class="h4 fw-bold mb-1">Pulpit</h1>
-  <p class="text-muted mb-4" style="font-size: .9rem;">Telegram channel network explorer. Select a channel from the list to browse its messages.</p>
-  <div class="d-flex gap-2 flex-wrap">
-    <a href="/admin/" class="btn btn-sm btn-outline-secondary">
+<div class="home-page">
+
+  <div class="home-header">
+    <div class="home-brand">
+      <div class="home-icon"><i class="bi bi-broadcast" aria-hidden="true"></i></div>
+      <div>
+        <h1 class="h4 fw-bold mb-0">Pulpit</h1>
+        <p class="text-muted mb-0" style="font-size:.85rem;">Telegram channel network explorer</p>
+      </div>
+    </div>
+    <a href="/admin/" class="btn btn-sm btn-outline-secondary flex-shrink-0">
       <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
     </a>
-    <a href="/stats/" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Stats
-    </a>
   </div>
+
+  <div class="summary-grid">
+    {% for card in summary %}
+    <div class="summary-card">
+      <i class="bi {{ card.icon }} sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">{{ card.label }}</span>
+      <span class="sc-value">{{ card.value }}</span>
+      {% if card.note %}<span class="sc-note">{{ card.note }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for panel in panels %}
+  <div class="stats-panel mb-3">
+    <button class="stats-toggle"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#panel-{{ panel.id }}"
+            aria-expanded="false"
+            aria-controls="panel-{{ panel.id }}">
+      <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
+      {{ panel.title }}
+      <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
+    </button>
+    <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
+      <div class="stats-panel-body" style="padding:0">
+        <div class="stats-spinner"><div class="spinner-border text-primary" style="width:1.5rem;height:1.5rem;" role="status"><span class="visually-hidden">Loading…</span></div></div>
+        <iframe class="w-100 border-0" style="height: 480px;" title="{{ panel.title }}" loading="lazy"></iframe>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
 </div>
+
+<script>
+  document.querySelectorAll('.home-page .collapse[data-chart-url]').forEach(function (collapse) {
+    var iframe = collapse.querySelector('iframe');
+    var spinner = collapse.querySelector('.stats-spinner');
+    var loaded = false;
+    collapse.addEventListener('show.bs.collapse', function () {
+      if (!loaded) { iframe.src = collapse.dataset.chartUrl; loaded = true; }
+    });
+    iframe.addEventListener('load', function () { spinner.classList.add('hidden'); });
+  });
+</script>
 {% endblock content %}
