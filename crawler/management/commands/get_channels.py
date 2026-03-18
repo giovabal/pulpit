@@ -133,6 +133,7 @@ class Command(AsyncBaseCommand):
                             )
                         )
                         continue
+                    current_progress_channel = None
                     if do_refresh:
                         try:
                             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
