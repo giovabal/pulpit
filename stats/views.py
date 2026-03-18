@@ -31,6 +31,14 @@ class TimeSeriesChartView(StatsViewMixin, View):
         raise NotImplementedError
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        spine = _global_month_spine()
+        if not spine:
+            return HttpResponse(
+                "<html><body style='font-family:sans-serif;color:#9ca3af;"
+                "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
+                "<p>No data available</p></body></html>"
+            )
+
         monthly_data = (
             Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
             .annotate(month=TruncMonth("date"))
@@ -45,9 +53,14 @@ class TimeSeriesChartView(StatsViewMixin, View):
                 for entry in monthly_data
             ]
         )
+        df = (
+            _reindex_to_spine(df, self.annotate_field, spine)
+            if not df.empty
+            else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
+        )
 
         figure_options = self.base_figure_options.copy()
-        figure_options.update({"x_range": list(df.month.unique())})
+        figure_options.update({"x_range": spine})
         plot = figure(**figure_options, y_axis_label=self.y_label)
         plot.vbar(
             x="month",
@@ -117,6 +130,24 @@ class AvgInvolvementHistoryDataView(TimeSeriesChartView):
 
     def get_annotation(self) -> Avg:
         return Avg("views", default=0)
+
+
+def _global_month_spine() -> list[str]:
+    """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across interesting channels."""
+    agg = Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False).aggregate(
+        earliest=models.Min("date"), latest=models.Max("date")
+    )
+    if not agg["earliest"] or not agg["latest"]:
+        return []
+    return (
+        pd.period_range(
+            start=agg["earliest"].strftime("%Y-%m"),
+            end=agg["latest"].strftime("%Y-%m"),
+            freq="M",
+        )
+        .strftime("%Y-%m")
+        .tolist()
+    )
 
 
 def _channel_month_spine(channel: Channel) -> list[str]:
