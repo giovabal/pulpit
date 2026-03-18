@@ -109,6 +109,29 @@ class ViewsHistoryDataView(TimeSeriesChartView):
         return Sum("views", default=0)
 
 
+def _channel_month_spine(channel: Channel) -> list[str]:
+    """Return a sorted list of all YYYY-MM strings from the channel's first to last message."""
+    agg = Message.objects.filter(channel=channel, date__isnull=False).aggregate(
+        earliest=models.Min("date"), latest=models.Max("date")
+    )
+    if not agg["earliest"] or not agg["latest"]:
+        return []
+    return (
+        pd.period_range(
+            start=agg["earliest"].strftime("%Y-%m"),
+            end=agg["latest"].strftime("%Y-%m"),
+            freq="M",
+        )
+        .strftime("%Y-%m")
+        .tolist()
+    )
+
+
+def _reindex_to_spine(df: "pd.DataFrame", field: str, spine: list[str]) -> "pd.DataFrame":
+    """Reindex a month-indexed DataFrame to a full spine, filling missing months with 0."""
+    return df.set_index("month").reindex(spine, fill_value=0).reset_index().rename(columns={"index": "month"})
+
+
 @method_decorator(xframe_options_sameorigin, name="dispatch")
 class ChannelMessagesHistoryView(StatsViewMixin, View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
@@ -121,22 +144,28 @@ class ChannelMessagesHistoryView(StatsViewMixin, View):
             .order_by("month")
         )
 
-        df = pd.DataFrame(
-            [
-                {"month": entry["month"].strftime("%Y-%m"), "total_messages": entry["total_messages"]}
-                for entry in monthly_data
-            ]
-        )
-
-        if df.empty:
+        spine = _channel_month_spine(channel)
+        if not spine:
             return HttpResponse(
                 "<html><body style='font-family:sans-serif;color:#9ca3af;"
                 "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
                 "<p>No data available</p></body></html>"
             )
 
+        df = pd.DataFrame(
+            [
+                {"month": entry["month"].strftime("%Y-%m"), "total_messages": entry["total_messages"]}
+                for entry in monthly_data
+            ]
+        )
+        df = (
+            _reindex_to_spine(df, "total_messages", spine)
+            if not df.empty
+            else pd.DataFrame({"month": spine, "total_messages": [0] * len(spine)})
+        )
+
         figure_options = self.base_figure_options.copy()
-        figure_options.update({"height": 300, "x_range": list(df.month.unique())})
+        figure_options.update({"height": 300, "x_range": spine})
 
         plot = figure(**figure_options, y_axis_label="messages")
         plot.vbar(
@@ -170,18 +199,24 @@ class _ChannelTimeSeriesBase(StatsViewMixin, View):
 
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
         channel = get_object_or_404(Channel, pk=pk)
-        rows = self._get_monthly_data(channel)
-        df = pd.DataFrame(rows)
-
-        if df.empty:
+        spine = _channel_month_spine(channel)
+        if not spine:
             return HttpResponse(
                 "<html><body style='font-family:sans-serif;color:#9ca3af;"
                 "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
                 "<p>No data available</p></body></html>"
             )
 
+        rows = self._get_monthly_data(channel)
+        df = pd.DataFrame(rows)
+        df = (
+            _reindex_to_spine(df, self.annotate_field, spine)
+            if not df.empty
+            else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
+        )
+
         figure_options = self.base_figure_options.copy()
-        figure_options.update({"height": 300, "x_range": list(df.month.unique())})
+        figure_options.update({"height": 300, "x_range": spine})
         plot = figure(**figure_options, y_axis_label=self.y_label)
         plot.vbar(
             x="month",
