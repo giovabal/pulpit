@@ -197,12 +197,13 @@ class Message(TelegramBaseModel):
     has_been_pinned = models.BooleanField(default=False)
     webpage_url = models.URLField(max_length=255, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
+    media_type = models.CharField(max_length=32, default="", blank=True)  # "photo", "video", "document", or ""
 
     def __str__(self) -> str:
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        for field in ("message", "webpage_url", "webpage_type"):
+        for field in ("message", "webpage_url", "webpage_type", "media_type"):
             setattr(self, field, getattr(self, field) or "")
         if self.pinned:
             self.has_been_pinned = True

@@ -285,6 +285,23 @@
       .post-body p:last-child { margin-bottom: 0; }
       .post-image { max-width: 100%; display: block; }
 
+      .media-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        width: 100%;
+        max-width: 22rem;
+        height: 9rem;
+        background: var(--bg);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        color: var(--text-muted);
+        font-size: .78rem;
+      }
+      .media-placeholder i { font-size: 1.75rem; opacity: .5; }
+
       .post-footer {
         display: flex;
         align-items: center;
@@ -399,7 +416,18 @@
         background: var(--surface);
       }
 
+      .stats-panel-body { position: relative; }
       .stats-panel-body iframe { display: block; }
+      .stats-spinner {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface);
+        pointer-events: none;
+      }
+      .stats-spinner.hidden { display: none; }
 
       /* ---------- Home ---------- */
       .home-wrap {

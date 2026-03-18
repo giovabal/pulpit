@@ -41,6 +41,7 @@
   <div class="collapse" id="channel-stats"
        data-chart-url="{% url 'channel-messages-history' pk=selected_channel.pk %}">
     <div class="stats-panel-body">
+      <div class="stats-spinner"><div class="spinner-border text-primary" style="width:1.5rem;height:1.5rem;" role="status"><span class="visually-hidden">Loading…</span></div></div>
       <iframe class="w-100 border-0" style="height: 320px;" title="Message history" loading="lazy"></iframe>
     </div>
   </div>
@@ -49,6 +50,7 @@
   (function () {
     var collapse = document.getElementById("channel-stats");
     var iframe = collapse.querySelector("iframe");
+    var spinner = collapse.querySelector(".stats-spinner");
     var loaded = false;
     collapse.addEventListener("show.bs.collapse", function () {
       if (!loaded) {
@@ -56,6 +58,7 @@
         loaded = true;
       }
     });
+    iframe.addEventListener("load", function () { spinner.classList.add("hidden"); });
   })();
 </script>
 
@@ -80,11 +83,44 @@
         <i class="bi bi-pin-angle" aria-hidden="true"></i> Previously pinned
       </div>
       {% endif %}
-      {% for picture in post.messagepicture_set.all %}
-      <figure class="mb-0">
-        <img src="{{ picture.picture.url }}" class="post-image" alt="Message image">
-      </figure>
-      {% endfor %}
+      {% with pictures=post.messagepicture_set.all videos=post.messagevideo_set.all %}
+      {% if pictures %}
+        {% for picture in pictures %}
+        <figure class="mb-0">
+          <img src="{{ picture.picture.url }}" class="post-image" alt="Message image">
+        </figure>
+        {% endfor %}
+      {% elif post.media_type == "photo" %}
+      <div class="media-placeholder">
+        <i class="bi bi-image" aria-hidden="true"></i>
+        <span>Image not downloaded</span>
+      </div>
+      {% endif %}
+      {% if videos %}
+        {% for video in videos %}
+        <figure class="mb-0">
+          <video src="{{ video.video.url }}" class="post-image" controls></video>
+        </figure>
+        {% endfor %}
+      {% elif post.media_type == "video" %}
+      <div class="media-placeholder">
+        <i class="bi bi-film" aria-hidden="true"></i>
+        <span>Video not downloaded</span>
+      </div>
+      {% endif %}
+      {% if post.media_type == "audio" and not videos %}
+      <div class="media-placeholder">
+        <i class="bi bi-music-note-beamed" aria-hidden="true"></i>
+        <span>Audio not downloaded</span>
+      </div>
+      {% endif %}
+      {% if post.media_type == "document" %}
+      <div class="media-placeholder">
+        <i class="bi bi-file-earmark" aria-hidden="true"></i>
+        <span>File not downloaded</span>
+      </div>
+      {% endif %}
+      {% endwith %}
       <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
       <footer class="post-footer">
         <div class="post-meta">

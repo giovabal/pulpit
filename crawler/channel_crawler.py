@@ -239,6 +239,17 @@ class ChannelCrawler:
         if telegram_message.media:
             downloaded_images += self.media_handler.download_message_picture(telegram_message)
             self.media_handler.download_message_video(telegram_message)
+            if hasattr(telegram_message.media, "photo"):
+                message.media_type = "photo"
+            elif hasattr(telegram_message.media, "document"):
+                doc = telegram_message.media.document
+                mime_type = getattr(doc, "mime_type", "") or ""
+                if mime_type.startswith("video/"):
+                    message.media_type = "video"
+                elif mime_type.startswith("audio/"):
+                    message.media_type = "audio"
+                else:
+                    message.media_type = "document"
             if hasattr(telegram_message.media, "webpage"):
                 message.webpage_url = (
                     telegram_message.media.webpage.url if hasattr(telegram_message.media.webpage, "url") else ""
