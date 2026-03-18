@@ -15,6 +15,16 @@ urlpatterns = [
         views.ChannelMessagesHistoryView.as_view(),
         name="channel-messages-history",
     ),
+    path(
+        "data/channel/<int:pk>/views_history/",
+        views.ChannelViewsHistoryView.as_view(),
+        name="channel-views-history",
+    ),
+    path(
+        "data/channel/<int:pk>/forwards_history/",
+        views.ChannelForwardsHistoryView.as_view(),
+        name="channel-forwards-history",
+    ),
     path("data/forwards_history/", views.ForwardsHistoryDataView.as_view(), name="forwards-history-data"),
     path("data/views_history/", views.ViewsHistoryDataView.as_view(), name="views-history-data"),
     path("data/subscribers_history/", views.SubscribersHistoryDataView.as_view(), name="subscribers-history-data"),

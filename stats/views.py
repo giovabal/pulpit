@@ -238,6 +238,87 @@ class ChannelMessagesHistoryView(StatsViewMixin, View):
         return HttpResponse(html)
 
 
+class _ChannelTimeSeriesBase(StatsViewMixin, View):
+    """Base for per-channel monthly vbar charts."""
+
+    chart_title_suffix: ClassVar[str]
+    annotate_field: ClassVar[str]
+    y_label: ClassVar[str]
+    tooltip_template: ClassVar[str]
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        raise NotImplementedError
+
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        rows = self._get_monthly_data(channel)
+        df = pd.DataFrame(rows)
+
+        if df.empty:
+            return HttpResponse(
+                "<html><body style='font-family:sans-serif;color:#9ca3af;"
+                "display:flex;align-items:center;justify-content:center;height:100%;margin:0;'>"
+                "<p>No data available</p></body></html>"
+            )
+
+        figure_options = self.base_figure_options.copy()
+        figure_options.update({"height": 300, "x_range": list(df.month.unique())})
+        plot = figure(**figure_options, y_axis_label=self.y_label)
+        plot.vbar(
+            x="month",
+            top=self.annotate_field,
+            source=df,
+            width=0.7,
+            fill_color="#2563eb",
+            fill_alpha=0.75,
+            line_color=None,
+        )
+        plot.xaxis.major_label_orientation = -pi / 4
+        self._style_plot(plot)
+        hover = plot.select({"type": HoverTool})
+        hover.tooltips = (
+            f'<span style="font-family:Inter,system-ui,sans-serif;font-size:12px">{self.tooltip_template}</span>'
+        )
+        html = file_html(plot, CDN, f"{channel.title} – {self.chart_title_suffix}")
+        return HttpResponse(html)
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class ChannelViewsHistoryView(_ChannelTimeSeriesBase):
+    chart_title_suffix = "views history"
+    annotate_field = "total_views"
+    y_label = "views"
+    tooltip_template = "@month &nbsp; <strong>@total_views{0,0}</strong> views"
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            Message.objects.filter(channel=channel, date__isnull=False, views__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_views=Sum("views"))
+            .order_by("month")
+        )
+        return [{"month": e["month"].strftime("%Y-%m"), "total_views": e["total_views"]} for e in qs]
+
+
+@method_decorator(xframe_options_sameorigin, name="dispatch")
+class ChannelForwardsHistoryView(_ChannelTimeSeriesBase):
+    chart_title_suffix = "forwards sent history"
+    annotate_field = "total_forwards"
+    y_label = "forwards sent"
+    tooltip_template = "@month &nbsp; <strong>@total_forwards</strong> forwards sent"
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            Message.objects.filter(channel=channel, date__isnull=False, forwarded_from__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_forwards=Count("id"))
+            .order_by("month")
+        )
+        return [{"month": e["month"].strftime("%Y-%m"), "total_forwards": e["total_forwards"]} for e in qs]
+
+
 @method_decorator(xframe_options_sameorigin, name="dispatch")
 class SubscribersHistoryDataView(StatsViewMixin, View):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
