@@ -110,7 +110,7 @@ By default also writes a sortable `graph/table.html` with one row per channel an
 | `--table-format` | Tabular output format: `html` (default), `xls`, `html+xls`, or `none` |
 | `--startdate YYYY-MM-DD` | Only consider messages on or after this date. Channels with no messages in the period are excluded. |
 | `--enddate YYYY-MM-DD` | Only consider messages on or before this date. Channels with no messages in the period are excluded. |
-| `--seo` | Make the output discoverable by search engines: sets `index, follow` robots tags on `index.html` and `table.html`, adds a meta description to `table.html`, and writes an permissive `robots.txt`. Without this flag the output actively discourages indexing (`noindex, nofollow` and a `Disallow: /` `robots.txt`). |
+| `--seo` | Make the output discoverable by search engines: sets `index, follow` robots tags on `index.html` and `table.html`, and writes a permissive `robots.txt`. Without this flag the output actively discourages indexing (`noindex, nofollow` and a `Disallow: /` `robots.txt`). Meta descriptions are always included regardless of this flag. |
 
 ### 7. View the graph
 

@@ -476,17 +476,16 @@ def write_table_html(
         cells.append(f"<td>{_html.escape(node.get('activity_end') or '')}</td>")
         rows.append("<tr>" + "".join(cells) + "</tr>\n")
 
+    _description = (
+        f'<meta name="description" content="Network data for {len(nodes)} Telegram channels, '
+        'including activity metrics, inbound and outbound connections, and community assignments.">'
+    )
     if seo:
         _title = "Channel network data"
         _robots = '<meta name="robots" content="index, follow">'
-        _description = (
-            f'<meta name="description" content="Network data for {len(nodes)} Telegram channels, '
-            'including activity metrics, inbound and outbound connections, and community assignments.">'
-        )
     else:
         _title = "Channels"
         _robots = '<meta name="robots" content="noindex, nofollow">'
-        _description = ""
 
     content = f"""<!DOCTYPE html>
 <html lang="en">
