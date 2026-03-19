@@ -14,6 +14,7 @@ from webapp.models import Channel, Message
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.types import MessageService
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,8 @@ class ChannelCrawler:
         return processed_messages, downloaded_images
 
     def get_message(self, channel: Channel, telegram_message: Any) -> int:
+        if isinstance(telegram_message, MessageService):
+            return 0
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
@@ -300,6 +303,9 @@ class ChannelCrawler:
         ):
             if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
                 break
+            if isinstance(telegram_message, MessageService):
+                Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
+                continue
             rows = Message.objects.filter(
                 channel=channel,
                 telegram_id=telegram_message.id,

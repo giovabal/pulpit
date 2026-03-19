@@ -10,6 +10,7 @@
 ### Improvements
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
 - Tabular export files renamed: `table.html` → `channel_table.html`, `table.xlsx` → `channel_table.xlsx`.
+- Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `get_channels --refresh-messages-stats` will delete any already-stored service messages.
 
 ### Fixed
 - `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
