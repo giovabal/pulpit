@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 from collections import defaultdict
+from collections.abc import Callable
 from math import log, sqrt
 from typing import Any
 
@@ -527,7 +528,7 @@ def write_table_html(
         f.write(content)
 
 
-def write_table_xls(
+def write_table_xlsx(
     graph_data: GraphData,
     measures_labels: list[tuple[str, str]],
     strategies: list[str],
@@ -653,10 +654,71 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
     }
 
 
-def write_community_table_xls(
+type CommunityTableData = dict[str, Any]
+# Structure:
+# {
+#   "network_summary": dict,          # from _network_summary()
+#   "strategies": {
+#     strategy_key: [                 # ordered as in communities_data
+#       {"group": tuple, "node_count": int, "metrics": dict},
+#       ...
+#     ]
+#   }
+# }
+
+
+def compute_community_metrics(
     graph_data: GraphData,
     communities_data: dict[str, Any],
     graph: nx.DiGraph,
+    strategies: list[str],
+    status_callback: "Callable[[str], None] | None" = None,
+) -> CommunityTableData:
+    """Pre-compute all structural metrics needed for community table outputs.
+
+    ``status_callback`` is called with a short label after each step completes
+    so the caller can emit progress output between steps.
+    """
+    result: CommunityTableData = {"network_summary": _network_summary(graph), "strategies": {}}
+    if status_callback:
+        status_callback("network")
+    for strategy_key in strategies:
+        strategy_data = communities_data.get(strategy_key)
+        if not strategy_data:
+            if status_callback:
+                status_callback(strategy_key)
+            continue
+        label_to_nodes: dict[str, set[str]] = defaultdict(set)
+        for node in graph_data["nodes"]:
+            lbl = (node.get("communities") or {}).get(strategy_key)
+            if lbl:
+                label_to_nodes[lbl].add(node["id"])
+        rows = []
+        for group in strategy_data["groups"]:
+            _community_id, _count, label, _hex_color = group
+            nodes_set = label_to_nodes.get(str(label), set())
+            metrics = (
+                _subgraph_metrics(nodes_set, graph)
+                if nodes_set
+                else {
+                    "internal_edges": 0,
+                    "external_edges": 0,
+                    "density": 0.0,
+                    "reciprocity": 0.0,
+                    "avg_clustering": None,
+                    "avg_path_length": None,
+                    "diameter": None,
+                }
+            )
+            rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics})
+        result["strategies"][strategy_key] = rows
+        if status_callback:
+            status_callback(strategy_key)
+    return result
+
+
+def write_community_table_xlsx(
+    community_table_data: CommunityTableData,
     strategies: list[str],
     output_filename: str,
 ) -> None:
@@ -673,12 +735,12 @@ def write_community_table_xls(
         "Diameter",
     ]
 
+    summary = community_table_data["network_summary"]
     wb = openpyxl.Workbook()
 
     # Summary sheet
     ws_summary = wb.active
     ws_summary.title = "Network Summary"
-    summary = _network_summary(graph)
     ws_summary.append(["Metric", "Value"])
     for cell in ws_summary[1]:
         cell.font = Font(bold=True)
@@ -698,42 +760,22 @@ def write_community_table_xls(
 
     # One sheet per strategy
     for strategy_key in strategies:
-        strategy_data = communities_data.get(strategy_key)
-        if not strategy_data:
+        rows = community_table_data["strategies"].get(strategy_key)
+        if not rows:
             continue
-
-        label_to_nodes: dict[str, set[str]] = defaultdict(set)
-        for node in graph_data["nodes"]:
-            lbl = (node.get("communities") or {}).get(strategy_key)
-            if lbl:
-                label_to_nodes[lbl].add(node["id"])
-
         ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
         ws.append(_HEADERS)
         for cell in ws[1]:
             cell.font = Font(bold=True)
-
-        for group in strategy_data["groups"]:
-            _community_id, _count, label, hex_color = group
+        for entry in rows:
+            _community_id, _count, label, hex_color = entry["group"]
             hex_color = str(hex_color).lstrip("#")
-            nodes_set = label_to_nodes.get(str(label), set())
-            if nodes_set:
-                metrics = _subgraph_metrics(nodes_set, graph)
-            else:
-                metrics = {
-                    "internal_edges": 0,
-                    "external_edges": 0,
-                    "density": 0.0,
-                    "reciprocity": 0.0,
-                    "avg_clustering": None,
-                    "avg_path_length": None,
-                    "diameter": None,
-                }
+            metrics = entry["metrics"]
             ws.append(
                 [
                     str(label),
                     f"#{hex_color}",
-                    len(nodes_set),
+                    entry["node_count"],
                     metrics["internal_edges"],
                     metrics["external_edges"],
                     metrics["density"],
@@ -753,9 +795,7 @@ def write_community_table_xls(
 
 
 def write_community_table_html(
-    graph_data: GraphData,
-    communities_data: dict[str, Any],
-    graph: nx.DiGraph,
+    community_table_data: CommunityTableData,
     strategies: list[str],
     output_filename: str,
     seo: bool = False,
@@ -776,7 +816,7 @@ def write_community_table_html(
         return f'<td data-sort-value="{val}">{val}</td>'
 
     # Whole-network summary
-    summary = _network_summary(graph)
+    summary = community_table_data["network_summary"]
 
     def _stat_box(label: str, value: str) -> str:
         return (
@@ -825,34 +865,16 @@ def write_community_table_html(
 
     strategy_sections = []
     for strategy_key in strategies:
-        strategy_data = communities_data.get(strategy_key)
-        if not strategy_data:
+        precomputed_rows = community_table_data["strategies"].get(strategy_key)
+        if not precomputed_rows:
             continue
-        # Build label -> node IDs mapping from graph_data nodes
-        label_to_nodes: dict[str, set[str]] = defaultdict(set)
-        for node in graph_data["nodes"]:
-            lbl = (node.get("communities") or {}).get(strategy_key)
-            if lbl:
-                label_to_nodes[lbl].add(node["id"])
 
         rows = []
-        for group in strategy_data["groups"]:
-            _community_id, _count, label, hex_color = group
+        for entry in precomputed_rows:
+            _community_id, _count, label, hex_color = entry["group"]
             if not str(hex_color).startswith("#"):
                 hex_color = f"#{hex_color}"
-            nodes_set = label_to_nodes.get(str(label), set())
-            if nodes_set:
-                metrics = _subgraph_metrics(nodes_set, graph)
-            else:
-                metrics = {
-                    "internal_edges": 0,
-                    "external_edges": 0,
-                    "density": 0.0,
-                    "reciprocity": 0.0,
-                    "avg_clustering": None,
-                    "avg_path_length": None,
-                    "diameter": None,
-                }
+            metrics = entry["metrics"]
             swatch = (
                 f'<span style="display:inline-block;width:12px;height:12px;'
                 f"background:{_html.escape(str(hex_color))};border:1px solid rgba(0,0,0,.2);"
@@ -862,7 +884,7 @@ def write_community_table_html(
             rows.append(
                 "<tr>"
                 + name_cell
-                + _int_td(len(nodes_set))
+                + _int_td(entry["node_count"])
                 + _int_td(metrics["internal_edges"])
                 + _int_td(metrics["external_edges"])
                 + _metric_td(metrics["density"])

@@ -1188,7 +1188,7 @@ def _patch_export_pipeline() -> list:
         f"{_EXPORT_CMD}.exporter.ensure_graph_root",
         f"{_EXPORT_CMD}.exporter.write_graph_files",
         f"{_EXPORT_CMD}.exporter.write_table_html",
-        f"{_EXPORT_CMD}.exporter.write_table_xls",
+        f"{_EXPORT_CMD}.exporter.write_table_xlsx",
         f"{_EXPORT_CMD}.exporter.copy_channel_media",
     ]
     # Apply in reverse so the first target becomes the first positional arg
@@ -1235,7 +1235,7 @@ class ExportNetworkCommandTests(TestCase):
             call_command("export_network", enddate="2023-13-01")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
@@ -1263,7 +1263,7 @@ class ExportNetworkCommandTests(TestCase):
             call_command("export_network")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
@@ -1328,7 +1328,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_copy.assert_called_once()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
@@ -1379,7 +1379,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_table_xls.assert_not_called()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
@@ -1425,12 +1425,12 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", table_format="xls")
+        call_command("export_network", table_format="xlsx")
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xls")
+    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
@@ -1476,6 +1476,6 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", table_format="html+xls")
+        call_command("export_network", table_format="html+xlsx")
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()

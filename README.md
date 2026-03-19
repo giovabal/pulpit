@@ -118,8 +118,8 @@ By default also writes two sortable HTML tables:
 To control the tabular output format:
 
 ```sh
-python manage.py export_network --table-format xls       # Excel only
-python manage.py export_network --table-format html+xls  # both HTML and Excel
+python manage.py export_network --table-format xlsx       # Excel only
+python manage.py export_network --table-format html+xlsx  # both HTML and Excel
 python manage.py export_network --table-format none       # no tabular output
 ```
 

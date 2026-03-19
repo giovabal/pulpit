@@ -41,7 +41,7 @@ def _bridging_strategy(token: str) -> str:
     return (m.group(1) or _BRIDGING_DEFAULT_STRATEGY) if m else _BRIDGING_DEFAULT_STRATEGY
 
 
-TABLE_FORMAT_CHOICES = ["none", "html", "xls", "html+xls"]
+TABLE_FORMAT_CHOICES = ["none", "html", "xlsx", "html+xlsx"]
 
 
 class Command(BaseCommand):
@@ -53,7 +53,7 @@ class Command(BaseCommand):
             "--table-format",
             choices=TABLE_FORMAT_CHOICES,
             default="html",
-            help='Tabular output format alongside the graph: "html" (default), "xls", "html+xls", or "none".',
+            help='Tabular output format alongside the graph: "html" (default), "xlsx", "html+xlsx", or "none".',
         )
         parser.add_argument(
             "--seo",
@@ -262,6 +262,26 @@ class Command(BaseCommand):
 
         table_format = options["table_format"]
         strategies = [s.lower() for s in communities_strategy]
+        if "html" in table_format or "xlsx" in table_format:
+            self.stdout.write("- community metrics")
+            _steps = ["network"] + strategies
+            _step_iter = iter(_steps)
+            next(_step_iter)  # skip "network"; already announced below
+
+            def _on_metrics_step(label: str) -> None:
+                self.stdout.write("done")
+                next_label = next(_step_iter, None)
+                if next_label is not None:
+                    sd = communities_data.get(next_label)
+                    n = len(sd.get("groups") or []) if sd else 0
+                    self.stdout.write(f"  - {next_label} ({n} communities) … ", ending="")
+                    self.stdout.flush()
+
+            self.stdout.write("  - network … ", ending="")
+            self.stdout.flush()
+            community_table_data = exporter.compute_community_metrics(
+                graph_data, communities_data, graph, strategies, status_callback=_on_metrics_step
+            )
         if "html" in table_format:
             self.stdout.write("- table (html)")
             exporter.write_table_html(
@@ -269,16 +289,16 @@ class Command(BaseCommand):
             )
             self.stdout.write("- community table (html)")
             exporter.write_community_table_html(
-                graph_data, communities_data, graph, strategies, output_filename="graph/community_table.html", seo=seo
+                community_table_data, strategies, output_filename="graph/community_table.html", seo=seo
             )
-        if "xls" in table_format:
-            self.stdout.write("- table (xls)")
-            exporter.write_table_xls(
+        if "xlsx" in table_format:
+            self.stdout.write("- table (xlsx)")
+            exporter.write_table_xlsx(
                 graph_data, measures_labels, strategies, output_filename="graph/channel_table.xlsx"
             )
-            self.stdout.write("- community table (xls)")
-            exporter.write_community_table_xls(
-                graph_data, communities_data, graph, strategies, output_filename="graph/community_table.xlsx"
+            self.stdout.write("- community table (xlsx)")
+            exporter.write_community_table_xlsx(
+                community_table_data, strategies, output_filename="graph/community_table.xlsx"
             )
 
         self.stdout.write("- media")
