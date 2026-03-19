@@ -147,7 +147,7 @@ class Command(BaseCommand):
             self.stdout.flush()
             try:
                 community_map, community_palette = community.detect(
-                    strategy, settings.COMMUNITIES_PALETTE, graph, channel_dict
+                    strategy, settings.COMMUNITY_PALETTE, graph, channel_dict
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e

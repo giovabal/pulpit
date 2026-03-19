@@ -166,6 +166,6 @@ NETWORK_MEASURES = config(
     default="PAGERANK",
     cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )
-COMMUNITIES_PALETTE = config("COMMUNITIES_PALETTE", default="ORGANIZATION", cast=str)
+COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
 
 LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)
