@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+from collections import defaultdict
 from math import log, sqrt
 from typing import Any
 
@@ -14,7 +15,7 @@ from webapp.models import Channel, Message
 
 import networkx as nx
 import openpyxl
-from openpyxl.styles import Font
+from openpyxl.styles import Font, PatternFill
 
 logger = logging.getLogger(__name__)
 
@@ -572,3 +573,352 @@ def write_table_xls(
         ws.append(row)
 
     wb.save(output_filename)
+
+
+def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
+    """Compute structural metrics for the whole graph."""
+    n = graph.number_of_nodes()
+    e = graph.number_of_edges()
+    density = nx.density(graph)
+    try:
+        reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
+    except Exception:
+        reciprocity = None
+    try:
+        avg_clustering = nx.average_clustering(graph)
+    except Exception:
+        avg_clustering = None
+    avg_path_length = None
+    diameter = None
+    path_on_full = False
+    if n >= 2:
+        try:
+            wccs = list(nx.weakly_connected_components(graph))
+            largest_wcc = max(wccs, key=len)
+            path_on_full = len(largest_wcc) == n
+            if len(largest_wcc) >= 2:
+                ug = graph.subgraph(largest_wcc).to_undirected()
+                avg_path_length = nx.average_shortest_path_length(ug)
+                diameter = nx.diameter(ug)
+        except Exception:
+            pass
+    return {
+        "n": n,
+        "e": e,
+        "density": density,
+        "reciprocity": reciprocity,
+        "avg_clustering": avg_clustering,
+        "avg_path_length": avg_path_length,
+        "diameter": diameter,
+        "path_on_full": path_on_full,
+    }
+
+
+def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
+    """Compute structural metrics for a community defined by nodes_set."""
+    subgraph = graph.subgraph(nodes_set)
+    n = subgraph.number_of_nodes()
+    internal_edges = subgraph.number_of_edges()
+    total_deg = sum(graph.in_degree(nd) + graph.out_degree(nd) for nd in nodes_set)
+    external_edges = total_deg - 2 * internal_edges
+    density = nx.density(subgraph)
+    try:
+        reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
+    except Exception:
+        reciprocity = None
+    try:
+        avg_clustering = nx.average_clustering(subgraph)
+    except Exception:
+        avg_clustering = None
+    avg_path_length = None
+    diameter = None
+    if n >= 2:
+        try:
+            wccs = list(nx.weakly_connected_components(subgraph))
+            largest_wcc = max(wccs, key=len)
+            if len(largest_wcc) >= 2:
+                ug = subgraph.subgraph(largest_wcc).to_undirected()
+                avg_path_length = nx.average_shortest_path_length(ug)
+                diameter = nx.diameter(ug)
+        except Exception:
+            pass
+    return {
+        "internal_edges": internal_edges,
+        "external_edges": external_edges,
+        "density": density,
+        "reciprocity": reciprocity,
+        "avg_clustering": avg_clustering,
+        "avg_path_length": avg_path_length,
+        "diameter": diameter,
+    }
+
+
+def write_community_table_xls(
+    graph_data: GraphData,
+    communities_data: dict[str, Any],
+    graph: nx.DiGraph,
+    strategies: list[str],
+    output_filename: str,
+) -> None:
+    _HEADERS = [
+        "Community",
+        "Color",
+        "Nodes",
+        "Internal Edges",
+        "External Edges",
+        "Density",
+        "Reciprocity",
+        "Avg Clustering",
+        "Avg Path Length",
+        "Diameter",
+    ]
+
+    wb = openpyxl.Workbook()
+
+    # Summary sheet
+    ws_summary = wb.active
+    ws_summary.title = "Network Summary"
+    summary = _network_summary(graph)
+    ws_summary.append(["Metric", "Value"])
+    for cell in ws_summary[1]:
+        cell.font = Font(bold=True)
+    for label, value in [
+        ("Nodes", summary["n"]),
+        ("Edges", summary["e"]),
+        ("Density", summary["density"]),
+        ("Reciprocity", summary["reciprocity"]),
+        ("Avg Clustering", summary["avg_clustering"]),
+        ("Avg Path Length *", summary["avg_path_length"]),
+        ("Diameter *", summary["diameter"]),
+    ]:
+        ws_summary.append([label, value])
+    if not summary["path_on_full"]:
+        ws_summary.append([])
+        ws_summary.append(["* Computed on the largest weakly connected component (undirected)"])
+
+    # One sheet per strategy
+    for strategy_key in strategies:
+        strategy_data = communities_data.get(strategy_key)
+        if not strategy_data:
+            continue
+
+        label_to_nodes: dict[str, set[str]] = defaultdict(set)
+        for node in graph_data["nodes"]:
+            lbl = (node.get("communities") or {}).get(strategy_key)
+            if lbl:
+                label_to_nodes[lbl].add(node["id"])
+
+        ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
+        ws.append(_HEADERS)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+
+        for group in strategy_data["groups"]:
+            _community_id, _count, label, hex_color = group
+            hex_color = str(hex_color).lstrip("#")
+            nodes_set = label_to_nodes.get(str(label), set())
+            if nodes_set:
+                metrics = _subgraph_metrics(nodes_set, graph)
+            else:
+                metrics = {
+                    "internal_edges": 0,
+                    "external_edges": 0,
+                    "density": 0.0,
+                    "reciprocity": 0.0,
+                    "avg_clustering": None,
+                    "avg_path_length": None,
+                    "diameter": None,
+                }
+            ws.append(
+                [
+                    str(label),
+                    f"#{hex_color}",
+                    len(nodes_set),
+                    metrics["internal_edges"],
+                    metrics["external_edges"],
+                    metrics["density"],
+                    metrics["reciprocity"],
+                    metrics["avg_clustering"],
+                    metrics["avg_path_length"],
+                    metrics["diameter"],
+                ]
+            )
+            try:
+                fill = PatternFill(start_color=hex_color.upper(), end_color=hex_color.upper(), fill_type="solid")
+                ws.cell(row=ws.max_row, column=1).fill = fill
+            except Exception:
+                pass
+
+    wb.save(output_filename)
+
+
+def write_community_table_html(
+    graph_data: GraphData,
+    communities_data: dict[str, Any],
+    graph: nx.DiGraph,
+    strategies: list[str],
+    output_filename: str,
+    seo: bool = False,
+) -> None:
+    def _fmt(val: float | None, decimals: int = 4) -> str:
+        if val is None:
+            return "N/A"
+        return f"{val:.{decimals}f}"
+
+    def _metric_td(val: float | int | None, decimals: int = 4) -> str:
+        if val is None:
+            return '<td data-sort-value="">N/A</td>'
+        if decimals == 0:
+            return f'<td data-sort-value="{int(val)}">{int(val)}</td>'
+        return f'<td data-sort-value="{val}">{val:.{decimals}f}</td>'
+
+    def _int_td(val: int) -> str:
+        return f'<td data-sort-value="{val}">{val}</td>'
+
+    # Whole-network summary
+    summary = _network_summary(graph)
+
+    def _stat_box(label: str, value: str) -> str:
+        return (
+            f'<div class="col">'
+            f'<div class="border rounded p-2 text-center" style="min-width:140px">'
+            f'<small class="text-muted d-block">{label}</small>'
+            f"<strong>{value}</strong>"
+            f"</div></div>"
+        )
+
+    wcc_marker = " *" if not summary["path_on_full"] else ""
+    summary_boxes = [
+        _stat_box("Nodes", str(summary["n"])),
+        _stat_box("Edges", str(summary["e"])),
+        _stat_box("Density", _fmt(summary["density"])),
+        _stat_box("Reciprocity", _fmt(summary["reciprocity"])),
+        _stat_box("Avg Clustering", _fmt(summary["avg_clustering"])),
+        _stat_box(f"Avg Path Length{wcc_marker}", _fmt(summary["avg_path_length"])),
+        _stat_box(f"Diameter{wcc_marker}", str(summary["diameter"]) if summary["diameter"] is not None else "N/A"),
+    ]
+    wcc_note = (
+        '<p class="text-muted small mt-2 mb-0">* Computed on the largest weakly connected component</p>'
+        if not summary["path_on_full"]
+        else ""
+    )
+    summary_html = (
+        '<div class="card mb-4"><div class="card-body">'
+        '<h5 class="card-title mb-3">Whole network</h5>'
+        '<div class="row row-cols-auto g-2">' + "".join(summary_boxes) + f"</div>{wcc_note}</div></div>"
+    )
+
+    # Per-strategy tables
+    table_thead = (
+        "<thead><tr>"
+        "<th>Community</th>"
+        '<th class="number">Nodes</th>'
+        '<th class="number">Internal Edges</th>'
+        '<th class="number">External Edges</th>'
+        '<th class="number">Density</th>'
+        '<th class="number">Reciprocity</th>'
+        '<th class="number">Avg Clustering</th>'
+        '<th class="number">Avg Path Length</th>'
+        '<th class="number">Diameter</th>'
+        "</tr></thead>"
+    )
+
+    strategy_sections = []
+    for strategy_key in strategies:
+        strategy_data = communities_data.get(strategy_key)
+        if not strategy_data:
+            continue
+        # Build label -> node IDs mapping from graph_data nodes
+        label_to_nodes: dict[str, set[str]] = defaultdict(set)
+        for node in graph_data["nodes"]:
+            lbl = (node.get("communities") or {}).get(strategy_key)
+            if lbl:
+                label_to_nodes[lbl].add(node["id"])
+
+        rows = []
+        for group in strategy_data["groups"]:
+            _community_id, _count, label, hex_color = group
+            if not str(hex_color).startswith("#"):
+                hex_color = f"#{hex_color}"
+            nodes_set = label_to_nodes.get(str(label), set())
+            if nodes_set:
+                metrics = _subgraph_metrics(nodes_set, graph)
+            else:
+                metrics = {
+                    "internal_edges": 0,
+                    "external_edges": 0,
+                    "density": 0.0,
+                    "reciprocity": 0.0,
+                    "avg_clustering": None,
+                    "avg_path_length": None,
+                    "diameter": None,
+                }
+            swatch = (
+                f'<span style="display:inline-block;width:12px;height:12px;'
+                f"background:{_html.escape(str(hex_color))};border:1px solid rgba(0,0,0,.2);"
+                f'vertical-align:middle;border-radius:2px;margin-right:5px;"></span>'
+            )
+            name_cell = f'<td data-sort-value="{_html.escape(str(label))}">{swatch}{_html.escape(str(label))}</td>'
+            rows.append(
+                "<tr>"
+                + name_cell
+                + _int_td(len(nodes_set))
+                + _int_td(metrics["internal_edges"])
+                + _int_td(metrics["external_edges"])
+                + _metric_td(metrics["density"])
+                + _metric_td(metrics["reciprocity"])
+                + _metric_td(metrics["avg_clustering"])
+                + _metric_td(metrics["avg_path_length"])
+                + _metric_td(metrics["diameter"], decimals=0)
+                + "</tr>\n"
+            )
+
+        table = (
+            '<table class="table table-striped table-bordered table-hover table-sm sortable">'
+            + table_thead
+            + "<tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
+        )
+        strategy_sections.append(
+            f'<h3 class="mt-4 mb-3">{_html.escape(strategy_key.capitalize())}</h3>'
+            f'<p class="text-muted small">Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).</p>'
+            f'<div class="table-responsive">{table}</div>'
+        )
+
+    if seo:
+        _title = "Community statistics"
+        _robots = '<meta name="robots" content="index, follow">'
+    else:
+        _title = "Communities"
+        _robots = '<meta name="robots" content="noindex, nofollow">'
+
+    content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_title}</title>
+  {_robots}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <style>
+    th a {{ text-decoration: none; color: inherit; }}
+    th[data-sort-direction="asc"] a::after {{ content: " ▲"; }}
+    th[data-sort-direction="desc"] a::after {{ content: " ▼"; }}
+  </style>
+</head>
+<body>
+  <div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <h2 class="mb-0">Community Statistics</h2>
+      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3"></i> Back to map</a>
+    </div>
+    {summary_html}
+    {"".join(strategy_sections)}
+  </div>
+  <script>{_SORT_TABLE_JS}  </script>
+</body>
+</html>"""
+    with open(output_filename, "w") as f:
+        f.write(content)

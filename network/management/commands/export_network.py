@@ -265,11 +265,21 @@ class Command(BaseCommand):
         if "html" in table_format:
             self.stdout.write("- table (html)")
             exporter.write_table_html(
-                graph_data, measures_labels, strategies, output_filename="graph/table.html", seo=seo
+                graph_data, measures_labels, strategies, output_filename="graph/channel_table.html", seo=seo
+            )
+            self.stdout.write("- community table (html)")
+            exporter.write_community_table_html(
+                graph_data, communities_data, graph, strategies, output_filename="graph/community_table.html", seo=seo
             )
         if "xls" in table_format:
             self.stdout.write("- table (xls)")
-            exporter.write_table_xls(graph_data, measures_labels, strategies, output_filename="graph/table.xlsx")
+            exporter.write_table_xls(
+                graph_data, measures_labels, strategies, output_filename="graph/channel_table.xlsx"
+            )
+            self.stdout.write("- community table (xls)")
+            exporter.write_community_table_xls(
+                graph_data, communities_data, graph, strategies, output_filename="graph/community_table.xlsx"
+            )
 
         self.stdout.write("- media")
         exporter.copy_channel_media(channel_qs, "graph")

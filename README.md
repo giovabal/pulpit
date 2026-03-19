@@ -110,7 +110,10 @@ python manage.py export_network
 ```
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
-By default also writes a sortable `graph/table.html` with one row per channel and all computed measures.
+By default also writes two sortable HTML tables:
+
+- `graph/channel_table.html` — one row per channel with all computed measures
+- `graph/community_table.html` — one table per community detection strategy, with structural metrics per community (node count, internal/external edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter), plus a whole-network summary at the top
 
 To control the tabular output format:
 
@@ -119,6 +122,8 @@ python manage.py export_network --table-format xls       # Excel only
 python manage.py export_network --table-format html+xls  # both HTML and Excel
 python manage.py export_network --table-format none       # no tabular output
 ```
+
+The Excel output produces `graph/channel_table.xlsx` (one row per channel) and `graph/community_table.xlsx` (a Network Summary sheet plus one sheet per community detection strategy).
 
 To restrict the graph to a date range (channels with no messages in the period are excluded):
 
