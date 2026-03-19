@@ -25,6 +25,7 @@ python manage.py runserver           # Web UI at localhost:8000
 python manage.py search_channels             # Find channels via search terms (all terms)
 python manage.py search_channels --amount N  # Limit to N search terms
 python manage.py get_channels                # Crawl channels (add --fixholes to fill gaps)
+python manage.py get_channels --fromid 42    # Only crawl channels with database id <= 42
 python manage.py get_channels --refresh-messages-stats               # Also refresh views/forwards/pinned on all messages per channel
 python manage.py get_channels --refresh-messages-stats 200           # Same but only the 200 most recent per channel
 python manage.py get_channels --refresh-messages-stats 2024-01-01    # Same but only messages from that date to present

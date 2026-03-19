@@ -3,6 +3,11 @@
 ## [0.6] - To be announced
 ### New features
 - New chart on the homepage and channel detail pages: **Average involvement per month** — shows the average views per message for each month, with 0 for months with no messages.
+- `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
+
+### Fixed
+- `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
+
 
 ## [0.5] - 2026-03-18
 ### New features

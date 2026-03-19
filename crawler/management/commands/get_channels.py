@@ -56,6 +56,13 @@ class Command(AsyncBaseCommand):
             help="Check channel message ids for holes and fetch missing messages",
         )
         parser.add_argument(
+            "--fromid",
+            type=int,
+            default=None,
+            metavar="ID",
+            help="Only crawl channels whose database id is less than or equal to this value.",
+        )
+        parser.add_argument(
             "--refresh-messages-stats",
             nargs="?",
             const=None,
@@ -80,6 +87,7 @@ class Command(AsyncBaseCommand):
 
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
+        fromid: int | None = options["fromid"]
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -99,6 +107,8 @@ class Command(AsyncBaseCommand):
                 crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
 
                 channels = Channel.objects.interesting().order_by("-id")
+                if fromid is not None:
+                    channels = channels.filter(id__lte=fromid)
                 total_channels = channels.count()
 
                 current_progress_channel: int | None = None

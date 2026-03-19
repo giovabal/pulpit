@@ -89,6 +89,12 @@ To also fill gaps in message history (messages that were deleted or missed on a 
 python manage.py get_channels --fixholes
 ```
 
+To crawl only channels whose database id is less than or equal to a given value (useful to resume or target a specific subset):
+
+```sh
+python manage.py get_channels --fromid 42
+```
+
 To refresh view counts, forward counts, and pinned status (these counters change over time but are only recorded when a message is first crawled):
 
 ```sh
@@ -101,24 +107,32 @@ python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh a
 
 ```sh
 python manage.py export_network
-python manage.py export_network --table-format xls              # Excel only
-python manage.py export_network --table-format html+xls         # both HTML and Excel
-python manage.py export_network --table-format none              # no tabular output
-python manage.py export_network --startdate 2023-01-01           # messages from this date
-python manage.py export_network --enddate 2023-12-31             # messages up to this date
-python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31  # date range
-python manage.py export_network --seo                            # search-engine friendly output
 ```
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
 By default also writes a sortable `graph/table.html` with one row per channel and all computed measures.
 
-| Option | Description |
-| :----- | :---------- |
-| `--table-format` | Tabular output format: `html` (default), `xls`, `html+xls`, or `none` |
-| `--startdate YYYY-MM-DD` | Only consider messages on or after this date. Channels with no messages in the period are excluded. |
-| `--enddate YYYY-MM-DD` | Only consider messages on or before this date. Channels with no messages in the period are excluded. |
-| `--seo` | Make the output discoverable by search engines: sets `index, follow` robots tags on `index.html` and `table.html`, and writes a permissive `robots.txt`. Without this flag the output actively discourages indexing (`noindex, nofollow` and a `Disallow: /` `robots.txt`). Meta descriptions are always included regardless of this flag. |
+To control the tabular output format:
+
+```sh
+python manage.py export_network --table-format xls       # Excel only
+python manage.py export_network --table-format html+xls  # both HTML and Excel
+python manage.py export_network --table-format none       # no tabular output
+```
+
+To restrict the graph to a date range (channels with no messages in the period are excluded):
+
+```sh
+python manage.py export_network --startdate 2023-01-01                            # messages from this date
+python manage.py export_network --enddate 2023-12-31                              # messages up to this date
+python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31       # date range
+```
+
+To make the output discoverable by search engines (sets `index, follow` robots tags and writes a permissive `robots.txt`; without this flag the output actively discourages indexing):
+
+```sh
+python manage.py export_network --seo
+```
 
 ### 7. View the graph
 
