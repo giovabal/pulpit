@@ -151,6 +151,9 @@
           <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
         </div>
+        <a href="{% url 'admin:webapp_message_change' post.pk %}" class="tg-link" title="Edit in admin">
+          <i class="bi bi-pencil" aria-hidden="true"></i>
+        </a>
         <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
         </a>
