@@ -128,6 +128,14 @@ class Command(AsyncBaseCommand):
                     self.stdout.flush()
                     last_line_length = len(line)
 
+                def print_indented(message: str, indent: str) -> None:
+                    nonlocal last_line_length
+                    line = f"{indent}{message}"
+                    padding = " " * max(0, last_line_length - len(line))
+                    self.stdout.write(f"\r{line}{padding}", ending="")
+                    self.stdout.flush()
+                    last_line_length = len(line)
+
                 for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                     try:
                         crawler.get_channel(
@@ -143,16 +151,19 @@ class Command(AsyncBaseCommand):
                             )
                         )
                         continue
+                    self.stdout.write("", ending="\n")
+                    last_line_length = 0
                     current_progress_channel = None
                     if do_refresh:
                         try:
                             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+                            refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
                             crawler.refresh_message_stats(
                                 channel,
                                 telegram_channel,
                                 limit=refresh_limit,
                                 min_date=refresh_min_date,
-                                status_callback=lambda message, idx=index: print_status(message, idx),
+                                status_callback=lambda message, ind=refresh_indent: print_indented(message, ind),
                             )
                         except errors.FloodWaitError as error:
                             self.stdout.write("", ending="\n")

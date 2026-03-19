@@ -72,7 +72,7 @@ class ChannelCrawler:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
             return
 
-        channel_label = f"[{channel.id}] {channel}"
+        channel_label = f"[id={channel.id}] {channel}"
         update_status(f"{channel_label} | fetching profile pictures")
         image_count = self.media_handler.download_profile_picture(telegram_channel)
 
