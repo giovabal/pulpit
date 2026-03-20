@@ -47,11 +47,19 @@ html, body {
 .menu-button:focus,
 .menu-button:hover {
     color: rgba(255,255,255,0.75);
-    padding: .5em 0.9em;
+    padding: .6em 1.1em;
 }
 
 .menu-button:hover {
     color: #fff;
+}
+
+.menu-button:hover p {
+    color: rgba(255,255,255,0.75);
+}
+
+#menu_container .bi {
+    font-size: 1.4rem;
 }
 
 #loading_message,
@@ -67,10 +75,10 @@ html, body {
     background: none;
     border: none;
     color: rgba(255,255,255,0.65);
-    padding: 0.2em 0.3em;
+    padding: 0.2em 0.4em;
     cursor: pointer;
     line-height: 1;
-    font-size: 1rem;
+    font-size: 1.1rem;
 }
 
 .menu-icon-btn:hover,
