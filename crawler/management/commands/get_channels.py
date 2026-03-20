@@ -176,6 +176,13 @@ class Command(AsyncBaseCommand):
                                     f"Skipping refresh for channel {channel.telegram_id} due to flood wait: {error}"
                                 )
                             )
+                        except errors.rpcerrorlist.ChannelPrivateError:
+                            self.stdout.write("", ending="\n")
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
+                                )
+                            )
                         except Exception as error:
                             self.stdout.write("", ending="\n")
                             self.stdout.write(
