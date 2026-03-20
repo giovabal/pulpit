@@ -57,7 +57,9 @@ class ChannelCrawler:
         seed: int | str,
         status_callback: Callable[[str], None] | None = None,
         fix_holes: bool = False,
-    ) -> None:
+    ) -> int:
+        """Crawl a channel and return the pre-crawl max telegram_id (0 if none existed)."""
+
         def update_status(message: str) -> None:
             if status_callback:
                 status_callback(message)
@@ -67,10 +69,10 @@ class ChannelCrawler:
         except ValueError:
             logger.info("Seed is a user account, not a channel: %s", seed)
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True)
-            return
+            return 0
         if channel is None:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
-            return
+            return 0
 
         channel_label = f"[id={channel.id}] {channel}"
         update_status(f"{channel_label} | fetching profile pictures")
@@ -109,7 +111,7 @@ class ChannelCrawler:
                 update_status(
                     f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
                 )
-                return
+                return min_id
 
         max_id = id_agg["min_id"] if not channel.are_messages_crawled else None
 
@@ -147,6 +149,7 @@ class ChannelCrawler:
         channel.is_lost = False
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
+        return min_id
 
     def _find_missing_message_ids(self, channel: Channel, min_telegram_id: int | None = None) -> list[int]:
         messages = channel.message_set.order_by("telegram_id")
@@ -272,6 +275,7 @@ class ChannelCrawler:
         telegram_channel: Any,
         limit: int | None = None,
         min_date: datetime.date | None = None,
+        max_telegram_id: int | None = None,
         status_callback: Callable[[str], None] | None = None,
     ) -> int:
         """Re-fetch messages and update views/forwards/pinned in place.
@@ -280,6 +284,8 @@ class ChannelCrawler:
         ``limit=N`` restricts the refresh to the N most recent messages.
         ``min_date`` refreshes all messages whose date is on or after that date;
         iteration stops as soon as an older message is encountered.
+        ``max_telegram_id``, when set, skips messages whose telegram id is above
+        this value — used to exclude messages freshly stored in the same crawl run.
         ``_updated`` is explicitly stamped because QuerySet.update() bypasses
         the auto_now behaviour of that field.
         """
@@ -301,6 +307,8 @@ class ChannelCrawler:
             limit=limit,
             wait_time=self.api_client.wait_time,
         ):
+            if max_telegram_id is not None and telegram_message.id > max_telegram_id:
+                continue
             if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
                 break
             if isinstance(telegram_message, MessageService):

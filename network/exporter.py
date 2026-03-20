@@ -12,6 +12,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Count, Max, Min, Q, QuerySet
+from django.template.loader import render_to_string
 
 from webapp.models import Channel, Message
 
@@ -364,73 +365,38 @@ def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
 
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
-_SORT_TABLE_JS = """
-var tables = document.querySelectorAll("table.sortable"), table, thead, headers, i, j;
-for (i = 0; i < tables.length; i++) {
-    table = tables[i];
-    if (thead = table.querySelector("thead")) {
-        headers = thead.querySelectorAll("th");
-        for (j = 0; j < headers.length; j++) {
-            headers[j].setAttribute('aria-sort', 'none');
-            headers[j].innerHTML = "<a href='#'>" + headers[j].innerText + "</a>";
-        }
-        thead.addEventListener("click", sortTableFunction(table));
+
+def _heatmap_bg(val: float | int | None, col_min: float, col_max: float) -> str:
+    """Subtle blue heatmap cell background: white (min) → #dceaf9 (max)."""
+    if val is None or col_min >= col_max:
+        return ""
+    ratio = (val - col_min) / (col_max - col_min)
+    r = round(255 - ratio * 35)
+    g = round(255 - ratio * 21)
+    b = round(255 - ratio * 6)
+    return f"background-color:rgb({r},{g},{b})"
+
+
+def _num_cell_dict(val: Any, key: str, hm_ranges: dict[str, tuple[float, float]]) -> dict:
+    bg = _heatmap_bg(val, *hm_ranges[key]) if key in hm_ranges else ""
+    return {
+        "display": str(val) if val is not None else "",
+        "css_class": "number",
+        "sort_value": str(val) if val is not None else "",
+        "style": bg,
+        "link": "",
     }
-}
-function sortTableFunction(table) {
-    return function(ev) {
-        if (ev.target.tagName.toLowerCase() == 'a') {
-            var header = ev.target.parentNode;
-            var currentDirection = header.getAttribute('data-sort-direction');
-            var direction = currentDirection === 'desc' ? 'asc' : 'desc';
-            var siblingHeaders = header.parentNode.children;
-            for (var i = 0; i < siblingHeaders.length; i++) {
-                if (siblingHeaders[i] !== header) {
-                    siblingHeaders[i].removeAttribute('data-sort-direction');
-                    siblingHeaders[i].setAttribute('aria-sort', 'none');
-                }
-            }
-            header.setAttribute('data-sort-direction', direction);
-            header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
-            sortRows(table, siblingIndex(header), direction);
-            ev.preventDefault();
-        }
-    };
-}
-function siblingIndex(node) {
-    var count = 0;
-    while (node = node.previousElementSibling) count++;
-    return count;
-}
-function sortRows(table, columnIndex, direction) {
-    var rows = table.querySelectorAll("tbody tr"),
-        sel  = "thead th:nth-child(" + (columnIndex + 1) + ")",
-        sel2 = "td:nth-child(" + (columnIndex + 1) + ")",
-        classList = table.querySelector(sel).classList,
-        values = [], cls = "", sortDirection = direction || "asc", allNum = true, val, index, node;
-    if (classList) {
-        if (classList.contains("date")) cls = "date";
-        else if (classList.contains("number")) cls = "number";
+
+
+def _float_cell_dict(val: Any, key: str, hm_ranges: dict[str, tuple[float, float]]) -> dict:
+    bg = _heatmap_bg(val, *hm_ranges[key]) if key in hm_ranges else ""
+    return {
+        "display": f"{val:.4f}" if val is not None else "",
+        "css_class": "number",
+        "sort_value": str(val) if val is not None else "",
+        "style": bg,
+        "link": "",
     }
-    for (index = 0; index < rows.length; index++) {
-        node = rows[index].querySelector(sel2);
-        val = node.getAttribute("data-sort-value");
-        if (val === null || val === "") val = node.innerText;
-        var numericVal = parseFloat(val);
-        if (!Number.isNaN(numericVal) && isFinite(numericVal)) val = numericVal; else allNum = false;
-        values.push({ value: val, row: rows[index] });
-    }
-    if (cls == "" && allNum) cls = "number";
-    if (cls == "number") values.sort(function(a, b) { return a.value - b.value; });
-    else if (cls == "date") values.sort(function(a, b) { return Date.parse(a.value) - Date.parse(b.value); });
-    else values.sort(function(a, b) {
-        var ta = (a.value + "").toUpperCase(), tb = (b.value + "").toUpperCase();
-        return ta < tb ? -1 : ta > tb ? 1 : 0;
-    });
-    if (sortDirection === "desc") values = values.reverse();
-    for (var idx = 0; idx < values.length; idx++) table.querySelector("tbody").appendChild(values[idx].row);
-}
-"""
 
 
 def write_table_html(
@@ -446,103 +412,71 @@ def write_table_html(
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
-    pagerank_th = f'<th scope="col" class="number">{_html.escape(pagerank_col[1])}</th>' if pagerank_col else ""
-    other_extra_ths = "".join(f'<th scope="col" class="number">{_html.escape(lbl)}</th>' for _, lbl in other_extra)
-    strategy_ths = "".join(f'<th scope="col">{_html.escape(s.capitalize())}</th>' for s in strategies)
-    thead = (
-        "<thead><tr>"
-        '<th scope="col">Channel</th>'
-        '<th scope="col" class="number">Users</th>'
-        '<th scope="col" class="number">Messages</th>'
-        '<th scope="col" class="number">Inbound</th>'
-        '<th scope="col" class="number">Outbound</th>'
-        + pagerank_th
-        + other_extra_ths
-        + strategy_ths
-        + '<th scope="col">Activity start</th>'
-        '<th scope="col">Activity end</th>'
-        "</tr></thead>"
-    )
+    headers = [
+        {"label": "Channel", "css_class": ""},
+        {"label": "Users", "css_class": "number"},
+        {"label": "Messages", "css_class": "number"},
+        {"label": "Inbound", "css_class": "number"},
+        {"label": "Outbound", "css_class": "number"},
+    ]
+    if pagerank_col:
+        headers.append({"label": pagerank_col[1], "css_class": "number"})
+    headers += [{"label": lbl, "css_class": "number"} for _, lbl in other_extra]
+    headers += [{"label": s.capitalize(), "css_class": ""} for s in strategies]
+    headers += [{"label": "Activity start", "css_class": ""}, {"label": "Activity end", "css_class": ""}]
 
-    def _num_cell(val: Any) -> str:
-        sv = val if val is not None else ""
-        disp = str(val) if val is not None else ""
-        return f'<td data-sort-value="{sv}">{disp}</td>'
-
-    def _float_cell(val: Any) -> str:
-        if val is None:
-            return '<td data-sort-value=""></td>'
-        disp = f"{val:.4f}" if isinstance(val, float) else str(val)
-        return f'<td data-sort-value="{val}">{disp}</td>'
+    _hm_int_keys = ["fans", "messages_count", "in_deg", "out_deg"]
+    _hm_float_keys = ([pagerank_col[0]] if pagerank_col else []) + [k for k, _ in other_extra]
+    hm_ranges: dict[str, tuple[float, float]] = {}
+    for _k in _hm_int_keys + _hm_float_keys:
+        _vals = [v for node in nodes if (v := node.get(_k)) is not None]
+        if _vals:
+            hm_ranges[_k] = (min(_vals), max(_vals))
 
     rows = []
     for node in nodes:
-        label = _html.escape(node.get("label") or node["id"])
+        label = node.get("label") or node["id"]
         url = node.get("url") or ""
-        name_cell = (
-            f'<td><a href="{url}" target="_blank" rel="noopener noreferrer">{label}</a></td>'
-            if url
-            else f"<td>{label}</td>"
-        )
-        cells = [name_cell]
+        row: list[dict] = [{"display": label, "css_class": "", "sort_value": "", "style": "", "link": url}]
         for key in ("fans", "messages_count", "in_deg", "out_deg"):
-            cells.append(_num_cell(node.get(key)))
+            row.append(_num_cell_dict(node.get(key), key, hm_ranges))
         if pagerank_col:
-            cells.append(_float_cell(node.get(pagerank_col[0])))
+            row.append(_float_cell_dict(node.get(pagerank_col[0]), pagerank_col[0], hm_ranges))
         for key, _ in other_extra:
-            cells.append(_float_cell(node.get(key)))
+            row.append(_float_cell_dict(node.get(key), key, hm_ranges))
         communities = node.get("communities") or {}
         for s in strategies:
-            cells.append(f"<td>{_html.escape(str(communities.get(s, '')))}</td>")
-        cells.append(f"<td>{_html.escape(node.get('activity_start') or '')}</td>")
-        cells.append(f"<td>{_html.escape(node.get('activity_end') or '')}</td>")
-        rows.append("<tr>" + "".join(cells) + "</tr>\n")
+            row.append(
+                {"display": str(communities.get(s, "")), "css_class": "", "sort_value": "", "style": "", "link": ""}
+            )
+        row.append(
+            {"display": node.get("activity_start") or "", "css_class": "", "sort_value": "", "style": "", "link": ""}
+        )
+        row.append(
+            {"display": node.get("activity_end") or "", "css_class": "", "sort_value": "", "style": "", "link": ""}
+        )
+        rows.append(row)
 
-    _description = (
-        f'<meta name="description" content="Network data for {len(nodes)} Telegram channels, '
-        'including activity metrics, inbound and outbound connections, and community assignments.">'
-    )
+    n = len(nodes)
     if seo:
-        _title = f"{project_title} | Channels" if project_title else "Channel network data"
-        _robots = '<meta name="robots" content="index, follow">'
+        title = f"{project_title} | Channels" if project_title else "Channel network data"
+        robots_meta = "index, follow"
     else:
-        _title = f"{project_title} | Channels" if project_title else "Channels"
-        _robots = '<meta name="robots" content="noindex, nofollow">'
+        title = f"{project_title} | Channels" if project_title else "Channels"
+        robots_meta = "noindex, nofollow"
 
-    content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{_title}</title>
-  {_robots}
-  {_description}
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <style>
-    th a {{ text-decoration: none; color: inherit; }}
-    th[data-sort-direction="asc"] a::after {{ content: " ▲"; }}
-    th[data-sort-direction="desc"] a::after {{ content: " ▼"; }}
-  </style>
-</head>
-<body>
-  <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-start mb-2">
-      <h2 class="mb-0">Channels</h2>
-      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
-    </div>
-    <p class="text-muted">{len(nodes)} channels. Click column headers to sort.</p>
-    <div class="table-responsive">
-      <table class="table table-striped table-bordered table-hover table-sm sortable" aria-label="Channel network data">
-        {thead}
-        <tbody>
-{"".join(rows)}        </tbody>
-      </table>
-    </div>
-  </div>
-  <script>{_SORT_TABLE_JS}  </script>
-</body>
-</html>"""
+    context = {
+        "title": title,
+        "robots_meta": robots_meta,
+        "description": (
+            f"Network data for {n} Telegram channels, "
+            "including activity metrics, inbound and outbound connections, and community assignments."
+        ),
+        "n_channels": n,
+        "headers": headers,
+        "rows": rows,
+    }
+    content = render_to_string("network/channel_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
 
@@ -819,6 +753,14 @@ def write_community_table_xlsx(
     wb.save(output_filename)
 
 
+def _metric_cell_dict(val: float | int | None, decimals: int, bg: str) -> dict:
+    if val is None:
+        return {"display": "N/A", "sort_value": "", "style": bg}
+    if decimals == 0:
+        return {"display": str(int(val)), "sort_value": str(int(val)), "style": bg}
+    return {"display": f"{val:.{decimals}f}", "sort_value": str(val), "style": bg}
+
+
 def write_community_table_html(
     community_table_data: CommunityTableData,
     strategies: list[str],
@@ -827,147 +769,93 @@ def write_community_table_html(
     project_title: str = "",
 ) -> None:
     def _fmt(val: float | None, decimals: int = 4) -> str:
-        if val is None:
-            return "N/A"
-        return f"{val:.{decimals}f}"
+        return "N/A" if val is None else f"{val:.{decimals}f}"
 
-    def _metric_td(val: float | int | None, decimals: int = 4) -> str:
-        if val is None:
-            return '<td data-sort-value="">N/A</td>'
-        if decimals == 0:
-            return f'<td data-sort-value="{int(val)}">{int(val)}</td>'
-        return f'<td data-sort-value="{val}">{val:.{decimals}f}</td>'
-
-    def _int_td(val: int) -> str:
-        return f'<td data-sort-value="{val}">{val}</td>'
-
-    # Whole-network summary
     summary = community_table_data["network_summary"]
-
-    def _stat_box(label: str, value: str) -> str:
-        return (
-            f'<div class="col">'
-            f'<div class="border rounded p-2 text-center" style="min-width:140px">'
-            f'<small class="text-muted d-block">{label}</small>'
-            f"<strong>{value}</strong>"
-            f"</div></div>"
-        )
-
     wcc_marker = " *" if not summary["path_on_full"] else ""
     summary_boxes = [
-        _stat_box("Nodes", str(summary["n"])),
-        _stat_box("Edges", str(summary["e"])),
-        _stat_box("Density", _fmt(summary["density"])),
-        _stat_box("Reciprocity", _fmt(summary["reciprocity"])),
-        _stat_box("Avg Clustering", _fmt(summary["avg_clustering"])),
-        _stat_box(f"Avg Path Length{wcc_marker}", _fmt(summary["avg_path_length"])),
-        _stat_box(f"Diameter{wcc_marker}", str(summary["diameter"]) if summary["diameter"] is not None else "N/A"),
+        {"label": "Nodes", "value": str(summary["n"])},
+        {"label": "Edges", "value": str(summary["e"])},
+        {"label": "Density", "value": _fmt(summary["density"])},
+        {"label": "Reciprocity", "value": _fmt(summary["reciprocity"])},
+        {"label": "Avg Clustering", "value": _fmt(summary["avg_clustering"])},
+        {"label": f"Avg Path Length{wcc_marker}", "value": _fmt(summary["avg_path_length"])},
+        {
+            "label": f"Diameter{wcc_marker}",
+            "value": str(summary["diameter"]) if summary["diameter"] is not None else "N/A",
+        },
     ]
-    wcc_note = (
-        '<p class="text-muted small mt-2 mb-0">* Computed on the largest weakly connected component</p>'
-        if not summary["path_on_full"]
-        else ""
-    )
-    summary_html = (
-        '<div class="card mb-4"><div class="card-body">'
-        '<h5 class="card-title mb-3">Whole network</h5>'
-        '<div class="row row-cols-auto g-2">' + "".join(summary_boxes) + f"</div>{wcc_note}</div></div>"
-    )
 
-    # Per-strategy tables
-    table_thead = (
-        "<thead><tr>"
-        '<th scope="col">Community</th>'
-        '<th scope="col" class="number">Nodes</th>'
-        '<th scope="col" class="number">Internal Edges</th>'
-        '<th scope="col" class="number">External Edges</th>'
-        '<th scope="col" class="number">Density</th>'
-        '<th scope="col" class="number">Reciprocity</th>'
-        '<th scope="col" class="number">Avg Clustering</th>'
-        '<th scope="col" class="number">Avg Path Length</th>'
-        '<th scope="col" class="number">Diameter</th>'
-        "</tr></thead>"
-    )
-
-    strategy_sections = []
+    strategies_ctx = []
     for strategy_key in strategies:
         precomputed_rows = community_table_data["strategies"].get(strategy_key)
         if not precomputed_rows:
             continue
 
-        rows = []
+        _hm_cols = {
+            "node_count": [e["node_count"] for e in precomputed_rows],
+            "internal_edges": [e["metrics"]["internal_edges"] for e in precomputed_rows],
+            "external_edges": [e["metrics"]["external_edges"] for e in precomputed_rows],
+            "density": [v for e in precomputed_rows if (v := e["metrics"].get("density")) is not None],
+            "reciprocity": [v for e in precomputed_rows if (v := e["metrics"].get("reciprocity")) is not None],
+            "avg_clustering": [v for e in precomputed_rows if (v := e["metrics"].get("avg_clustering")) is not None],
+            "avg_path_length": [v for e in precomputed_rows if (v := e["metrics"].get("avg_path_length")) is not None],
+            "diameter": [v for e in precomputed_rows if (v := e["metrics"].get("diameter")) is not None],
+        }
+        hm_ranges = {col: (min(vs), max(vs)) for col, vs in _hm_cols.items() if vs}
+
+        def _hm(val: Any, col: str, _ranges: dict = hm_ranges) -> str:
+            return _heatmap_bg(val, *_ranges[col]) if col in _ranges else ""
+
+        rows_ctx = []
         for entry in precomputed_rows:
             _community_id, _count, label, hex_color = entry["group"]
             if not str(hex_color).startswith("#"):
                 hex_color = f"#{hex_color}"
-            metrics = entry["metrics"]
-            swatch = (
-                f'<span style="display:inline-block;width:12px;height:12px;'
-                f"background:{_html.escape(str(hex_color))};border:1px solid rgba(0,0,0,.2);"
-                f'vertical-align:middle;border-radius:2px;margin-right:5px;" aria-hidden="true"></span>'
-            )
-            name_cell = f'<td data-sort-value="{_html.escape(str(label))}">{swatch}{_html.escape(str(label))}</td>'
-            rows.append(
-                "<tr>"
-                + name_cell
-                + _int_td(entry["node_count"])
-                + _int_td(metrics["internal_edges"])
-                + _int_td(metrics["external_edges"])
-                + _metric_td(metrics["density"])
-                + _metric_td(metrics["reciprocity"])
-                + _metric_td(metrics["avg_clustering"])
-                + _metric_td(metrics["avg_path_length"])
-                + _metric_td(metrics["diameter"], decimals=0)
-                + "</tr>\n"
-            )
+            m = entry["metrics"]
+            nc = entry["node_count"]
+            cells = [
+                {"display": str(nc), "sort_value": str(nc), "style": _hm(nc, "node_count")},
+                {
+                    "display": str(m["internal_edges"]),
+                    "sort_value": str(m["internal_edges"]),
+                    "style": _hm(m["internal_edges"], "internal_edges"),
+                },
+                {
+                    "display": str(m["external_edges"]),
+                    "sort_value": str(m["external_edges"]),
+                    "style": _hm(m["external_edges"], "external_edges"),
+                },
+                _metric_cell_dict(m["density"], 4, _hm(m["density"], "density")),
+                _metric_cell_dict(m["reciprocity"], 4, _hm(m["reciprocity"], "reciprocity")),
+                _metric_cell_dict(m["avg_clustering"], 4, _hm(m["avg_clustering"], "avg_clustering")),
+                _metric_cell_dict(m["avg_path_length"], 4, _hm(m["avg_path_length"], "avg_path_length")),
+                _metric_cell_dict(m["diameter"], 0, _hm(m["diameter"], "diameter")),
+            ]
+            rows_ctx.append({"label": str(label), "hex_color": str(hex_color), "cells": cells})
 
-        h3_id = f"strategy-{_html.escape(strategy_key)}"
-        table = (
-            f'<table class="table table-striped table-bordered table-hover table-sm sortable" aria-labelledby="{h3_id}">'
-            + table_thead
-            + "<tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
-        )
-        strategy_sections.append(
-            f'<h3 id="{h3_id}" class="mt-4 mb-3">{_html.escape(strategy_key.capitalize())}</h3>'
-            f'<p class="text-muted small">Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).</p>'
-            f'<div class="table-responsive">{table}</div>'
+        strategies_ctx.append(
+            {
+                "label": strategy_key.capitalize(),
+                "h3_id": f"strategy-{strategy_key}",
+                "rows": rows_ctx,
+            }
         )
 
     if seo:
-        _title = f"{project_title} | Community statistics" if project_title else "Community statistics"
-        _robots = '<meta name="robots" content="index, follow">'
+        title = f"{project_title} | Community statistics" if project_title else "Community statistics"
+        robots_meta = "index, follow"
     else:
-        _title = f"{project_title} | Communities" if project_title else "Communities"
-        _robots = '<meta name="robots" content="noindex, nofollow">'
+        title = f"{project_title} | Communities" if project_title else "Communities"
+        robots_meta = "noindex, nofollow"
 
-    content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{_title}</title>
-  {_robots}
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <style>
-    th a {{ text-decoration: none; color: inherit; }}
-    th[data-sort-direction="asc"] a::after {{ content: " ▲"; }}
-    th[data-sort-direction="desc"] a::after {{ content: " ▼"; }}
-  </style>
-</head>
-<body>
-  <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-start mb-3">
-      <h2 class="mb-0">Community Statistics</h2>
-      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
-    </div>
-    {summary_html}
-    {"".join(strategy_sections)}
-  </div>
-  <script>{_SORT_TABLE_JS}  </script>
-</body>
-</html>"""
+    context = {
+        "title": title,
+        "robots_meta": robots_meta,
+        "wcc_note_visible": not summary["path_on_full"],
+        "summary_boxes": summary_boxes,
+        "strategies": strategies_ctx,
+    }
+    content = render_to_string("network/community_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)

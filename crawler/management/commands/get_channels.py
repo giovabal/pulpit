@@ -138,7 +138,7 @@ class Command(AsyncBaseCommand):
 
                 for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                     try:
-                        crawler.get_channel(
+                        pre_crawl_max_id = crawler.get_channel(
                             channel.telegram_id,
                             fix_holes=fix_holes,
                             status_callback=lambda message, idx=index: print_status(message, idx),
@@ -163,6 +163,7 @@ class Command(AsyncBaseCommand):
                                 telegram_channel,
                                 limit=refresh_limit,
                                 min_date=refresh_min_date,
+                                max_telegram_id=pre_crawl_max_id,
                                 status_callback=lambda message, ind=refresh_indent: print_indented(message, ind),
                             )
                         except errors.FloodWaitError as error:
