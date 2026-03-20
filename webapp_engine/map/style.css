@@ -46,14 +46,37 @@ html, body {
 .menu-button,
 .menu-button:focus,
 .menu-button:hover {
+    color: rgba(255,255,255,0.75);
+    padding: .5em 0.9em;
+}
+
+.menu-button:hover {
     color: #fff;
-    padding: .5em 1em;
 }
 
 #loading_message,
 .menu-button p {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.1em;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.3em;
+}
+
+.menu-icon-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.65);
+    padding: 0.2em 0.3em;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 1rem;
+}
+
+.menu-icon-btn:hover,
+.menu-icon-btn:focus {
+    color: #fff;
+    outline: none;
 }
 
 @media screen {
@@ -212,9 +235,6 @@ html, body {
     text-decoration: underline;
 }
 
-#zoom_menu {
-    margin-top: 2px;
-}
 
 
 #search {
