@@ -5,11 +5,11 @@
 - New chart on the homepage and channel detail pages: **Average involvement per month** — shows the average views per message for each month, with 0 for months with no messages.
 - `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
 - `export_network` now generates `community_table.html` and `community_table.xlsx`: a whole-network structural summary (nodes, edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter) followed by per-community metrics for each active detection strategy. The HTML table is sortable; the Excel file has a Network Summary sheet plus one sheet per strategy.
-- Graph mini-site: **Communities** button added to the menu bar, linking to `community_table.html`.
+- Graph mini-site: **Data** button in the menu bar opens a dialog linking to `channel_table.html` and `community_table.html`.
 - `PROJECT_TITLE` option allows to define a title that's shown in all output files.
 
 ### Improvements
-- Graph mini-site: improved infobar and menu bar appearance — Inter font, frosted-glass menu, metric chips for channel stats, amber accent colour, and compact accordion for connections.
+- Graph mini-site redesigned with a more elegant, academic appearance: Inter font; frosted-glass bottom menu bar; smaller icons with spaced uppercase labels; metric chips for channel stats in the detail panel; amber accent colour; compact hairline accordion for connections.
 - New `scripts/delete_unused_messages.py`: removes messages belonging to channels outside the active crawl scope; run before `VACUUM` to reclaim disk space.
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
 - Tabular export files renamed: `table.html` to `channel_table.html`, `table.xlsx` to `channel_table.xlsx`.
