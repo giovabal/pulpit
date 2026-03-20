@@ -19,6 +19,12 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 > **Note on message statistics:** view counts, forward counts, and pinned status are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` to re-fetch and update these fields: omit a value to refresh all messages, pass an integer N to refresh the N most recent messages per channel, or pass a date (`YYYY-MM-DD`) to refresh all messages from that date to the present. The `_updated` timestamp on each refreshed message is set to the time of the refresh.
 
+## Project
+
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`index.html`, `channel_table.html`, `community_table.html`) | `Pulpit project` |
+
 ## Graph layout
 
 | Option | Description | Default |

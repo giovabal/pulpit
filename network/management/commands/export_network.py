@@ -247,8 +247,10 @@ class Command(BaseCommand):
         root_target = "graph"
         exporter.ensure_graph_root(root_target)
 
+        project_title: str = settings.PROJECT_TITLE
+
         self.stdout.write("- config files")
-        exporter.apply_robots_to_graph_html(root_target, seo)
+        exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title)
         exporter.write_robots_txt(root_target, seo)
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         exporter.write_graph_files(
@@ -285,20 +287,36 @@ class Command(BaseCommand):
         if "html" in table_format:
             self.stdout.write("- table (html)")
             exporter.write_table_html(
-                graph_data, measures_labels, strategies, output_filename="graph/channel_table.html", seo=seo
+                graph_data,
+                measures_labels,
+                strategies,
+                output_filename="graph/channel_table.html",
+                seo=seo,
+                project_title=project_title,
             )
             self.stdout.write("- community table (html)")
             exporter.write_community_table_html(
-                community_table_data, strategies, output_filename="graph/community_table.html", seo=seo
+                community_table_data,
+                strategies,
+                output_filename="graph/community_table.html",
+                seo=seo,
+                project_title=project_title,
             )
         if "xlsx" in table_format:
             self.stdout.write("- table (xlsx)")
             exporter.write_table_xlsx(
-                graph_data, measures_labels, strategies, output_filename="graph/channel_table.xlsx"
+                graph_data,
+                measures_labels,
+                strategies,
+                output_filename="graph/channel_table.xlsx",
+                project_title=project_title,
             )
             self.stdout.write("- community table (xlsx)")
             exporter.write_community_table_xlsx(
-                community_table_data, strategies, output_filename="graph/community_table.xlsx"
+                community_table_data,
+                strategies,
+                output_filename="graph/community_table.xlsx",
+                project_title=project_title,
             )
 
         self.stdout.write("- media")

@@ -3,6 +3,7 @@ import html as _html
 import json
 import logging
 import os
+import re
 import shutil
 from collections import defaultdict
 from collections.abc import Callable
@@ -294,8 +295,8 @@ def ensure_graph_root(root_target: str) -> None:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
-def apply_robots_to_graph_html(root_target: str, seo: bool) -> None:
-    """Patch the robots meta tag in the static index.html after it is copied."""
+def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str = "") -> None:
+    """Patch the robots meta tag and title in the static index.html after it is copied."""
     index_path = os.path.join(root_target, "index.html")
     if not os.path.exists(index_path):
         return
@@ -305,6 +306,14 @@ def apply_robots_to_graph_html(root_target: str, seo: bool) -> None:
         content = content.replace(
             '  <meta name="robots" content="noindex">',
             '  <meta name="robots" content="index, follow">',
+        )
+    if project_title:
+        escaped = _html.escape(project_title)
+        content = re.sub(r"<title>[^<]*</title>", f"<title>{escaped}</title>", content)
+        content = re.sub(
+            r'(<h4 class="modal-title" id="about_modalLabel">)[^<]*(</h4>)',
+            rf"\g<1>{escaped}\g<2>",
+            content,
         )
     with open(index_path, "w") as f:
         f.write(content)
@@ -425,6 +434,7 @@ def write_table_html(
     strategies: list[str],
     output_filename: str,
     seo: bool = False,
+    project_title: str = "",
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
@@ -484,10 +494,10 @@ def write_table_html(
         'including activity metrics, inbound and outbound connections, and community assignments.">'
     )
     if seo:
-        _title = "Channel network data"
+        _title = f"{project_title} | Channels" if project_title else "Channel network data"
         _robots = '<meta name="robots" content="index, follow">'
     else:
-        _title = "Channels"
+        _title = f"{project_title} | Channels" if project_title else "Channels"
         _robots = '<meta name="robots" content="noindex, nofollow">'
 
     content = f"""<!DOCTYPE html>
@@ -533,6 +543,7 @@ def write_table_xlsx(
     measures_labels: list[tuple[str, str]],
     strategies: list[str],
     output_filename: str,
+    project_title: str = "",
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
@@ -540,6 +551,8 @@ def write_table_xlsx(
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
     wb = openpyxl.Workbook()
+    if project_title:
+        wb.properties.title = project_title
     ws = wb.active
     ws.title = "Channels"
 
@@ -721,6 +734,7 @@ def write_community_table_xlsx(
     community_table_data: CommunityTableData,
     strategies: list[str],
     output_filename: str,
+    project_title: str = "",
 ) -> None:
     _HEADERS = [
         "Community",
@@ -737,6 +751,8 @@ def write_community_table_xlsx(
 
     summary = community_table_data["network_summary"]
     wb = openpyxl.Workbook()
+    if project_title:
+        wb.properties.title = project_title
 
     # Summary sheet
     ws_summary = wb.active
@@ -799,6 +815,7 @@ def write_community_table_html(
     strategies: list[str],
     output_filename: str,
     seo: bool = False,
+    project_title: str = "",
 ) -> None:
     def _fmt(val: float | None, decimals: int = 4) -> str:
         if val is None:
@@ -909,10 +926,10 @@ def write_community_table_html(
         )
 
     if seo:
-        _title = "Community statistics"
+        _title = f"{project_title} | Community statistics" if project_title else "Community statistics"
         _robots = '<meta name="robots" content="index, follow">'
     else:
-        _title = "Communities"
+        _title = f"{project_title} | Communities" if project_title else "Communities"
         _robots = '<meta name="robots" content="noindex, nofollow">'
 
     content = f"""<!DOCTYPE html>
