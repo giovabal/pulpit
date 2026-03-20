@@ -23,7 +23,7 @@ from infomap import Infomap
 
 logger = logging.getLogger(__name__)
 
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN"}
+COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN", "WEAKCC", "STRONGCC"}
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
@@ -131,6 +131,26 @@ def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, 
     return community_map, build_community_palette(community_map, palette_name)
 
 
+def detect_weakcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    community_map: CommunityMap = {}
+    components = sorted(nx.weakly_connected_components(graph), key=len, reverse=True)
+    for index, component in enumerate(components, start=1):
+        for node_id in component:
+            community_map[node_id] = index
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+def detect_strongcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    community_map: CommunityMap = {}
+    components = sorted(nx.strongly_connected_components(graph), key=len, reverse=True)
+    for index, component in enumerate(components, start=1):
+        for node_id in component:
+            community_map[node_id] = index
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
 def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
     community_map: CommunityMap = {}
     node_ids: list[str] = sorted(graph.nodes())
@@ -169,6 +189,10 @@ def detect(
         return detect_infomap(graph, palette_name)
     if strategy == "LEIDEN":
         return detect_leiden(graph, palette_name)
+    if strategy == "WEAKCC":
+        return detect_weakcc(graph, palette_name)
+    if strategy == "STRONGCC":
+        return detect_strongcc(graph, palette_name)
     if strategy == "ORGANIZATION":
         return detect_organization(channel_dict)
     raise ValueError(f"Unknown community strategy: {strategy!r}. Choose from {sorted(VALID_STRATEGIES)}.")

@@ -7,9 +7,10 @@
 - `export_network` now generates `community_table.html` and `community_table.xlsx`: a whole-network structural summary (nodes, edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter) followed by per-community metrics for each active detection strategy. The HTML table is sortable; the Excel file has a Network Summary sheet plus one sheet per strategy.
 - Graph mini-site: **Data** button in the menu bar opens a dialog linking to `channel_table.html` and `community_table.html`.
 - `PROJECT_TITLE` option allows to define a title that's shown in all output files.
+- New options for `COMMUNITY_STRATEGIES`: `WEAKCC` (weakly connected components) and `STRONGCC` (strongly connected components).
 
 ### Improvements
-- Graph mini-site redesigned with a more elegant, academic appearance: Inter font; frosted-glass bottom menu bar; smaller icons with spaced uppercase labels; metric chips for channel stats in the detail panel; amber accent colour; compact hairline accordion for connections.
+- Graph mini-site redesigned.
 - New `scripts/delete_unused_messages.py`: removes messages belonging to channels outside the active crawl scope; run before `VACUUM` to reclaim disk space.
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
 - Tabular export files renamed: `table.html` to `channel_table.html`, `table.xlsx` to `channel_table.xlsx`.

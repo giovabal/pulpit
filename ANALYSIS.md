@@ -164,4 +164,24 @@ Infomap uses **information theory** to find communities based on how a random wa
 
 ---
 
+### Weakly Connected Components (WEAKCC)
+
+Two channels belong to the same weakly connected component if there is a path between them **ignoring edge direction** — that is, if you can travel from one to the other by following forwards or references in either direction.
+
+**In practice:** WEAKCC reveals the **broadest structural islands** in the network. Channels in different components have no relationship at all — they are genuinely isolated from each other. Within a single component, channels are at least indirectly linked, even if the relationship is asymmetric (A references B, but B never references A). This is the coarsest possible partition: most real-world networks collapse into one or a few large components with many small satellite islands.
+
+**Example:** a monitoring project covering two politically unrelated media ecosystems — say, domestic far-right channels and foreign-language diaspora channels — may produce a network where these two ecosystems form separate weakly connected components, with no cross-referencing links between them. WEAKCC makes this structural disconnection immediately visible.
+
+---
+
+### Strongly Connected Components (STRONGCC)
+
+Two channels belong to the same strongly connected component if there is a **directed path in both directions** between them — A can reach B and B can reach A by following the actual direction of forwards and references.
+
+**In practice:** STRONGCC reveals the **mutually reinforcing cores** of the network. A large SCC is a group of channels that all ultimately cite each other in a closed directed loop — a genuine echo chamber in the strictest sense. Channels outside the large SCC either feed into it (they are cited but do not cite back) or drain from it (they amplify but are not amplified). In most real-world networks, STRONGCC produces one or a few large components and many singleton components (isolated nodes or channels with only one-way connections).
+
+**Example:** in a disinformation campaign, the coordinating accounts may form a large SCC — they all repost each other in a deliberate cycle to create the appearance of organic consensus. Downstream amplifier channels, which forward the content but are never referenced back, form singletons or small components. STRONGCC lets you distinguish between the coordinated nucleus and the unwitting (or witting) amplifiers at the periphery.
+
+---
+
 ← [README](README.md)

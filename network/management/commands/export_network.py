@@ -24,7 +24,7 @@ _BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
 
 # Expansion targets for the ALL shortcut
 _ALL_MEASURES = [*sorted(VALID_MEASURES), "BRIDGING"]
-_ALL_STRATEGIES = ["ORGANIZATION", "LEIDEN", "LOUVAIN", "KCORE", "INFOMAP"]
+_ALL_STRATEGIES = ["ORGANIZATION", "LEIDEN", "LOUVAIN", "KCORE", "INFOMAP", "WEAKCC", "STRONGCC"]
 
 
 def _is_valid_measure(token: str) -> bool:
