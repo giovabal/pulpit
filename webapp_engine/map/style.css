@@ -221,6 +221,16 @@ html, body {
     padding: 1em .25em;
 }
 
+#results a.node-link {
+    color: #1e3a5f;
+    text-decoration: none;
+}
+
+#results a.node-link:hover {
+    color: #0d2035;
+    text-decoration: underline;
+}
+
 #search input[name=search] {
     border: 1px solid #999;
     background-color: #fff;
