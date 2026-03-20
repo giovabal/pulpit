@@ -7,7 +7,6 @@ from argparse import ArgumentParser
 from typing import Any
 
 from django.conf import settings
-from django.db import connection
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
@@ -113,11 +112,7 @@ class Command(AsyncBaseCommand):
                 channels = Channel.objects.interesting().order_by("-id")
                 if fromid is not None:
                     channels = channels.filter(id__lte=fromid)
-                # Load PKs upfront so the query cursor is closed before the loop.
-                # This allows safely closing the DB connection between channels
-                # without breaking an open iterator cursor.
-                channel_pks = list(channels.values_list("pk", flat=True))
-                total_channels = len(channel_pks)
+                total_channels = channels.count()
 
                 current_progress_channel: int | None = None
                 last_line_length = 0
@@ -144,8 +139,7 @@ class Command(AsyncBaseCommand):
                     self.stdout.flush()
                     last_line_length = len(line)
 
-                for index, channel_pk in enumerate(channel_pks, start=1):
-                    channel = Channel.objects.get(pk=channel_pk)
+                for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                     try:
                         pre_crawl_max_id = crawler.get_channel(
                             channel.telegram_id,
@@ -163,9 +157,6 @@ class Command(AsyncBaseCommand):
                     self.stdout.write("", ending="\n")
                     last_line_length = 0
                     current_progress_channel = None
-                    # Close the DB connection after each channel so SQLite does not
-                    # accumulate stale internal state across a long crawl session.
-                    connection.close()
                     if do_refresh:
                         try:
                             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
