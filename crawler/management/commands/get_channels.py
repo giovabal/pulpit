@@ -1,4 +1,5 @@
 import datetime
+import logging
 import re
 import shutil
 import tempfile
@@ -6,6 +7,7 @@ from argparse import ArgumentParser
 from typing import Any
 
 from django.conf import settings
+from django.db import connection
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
@@ -16,6 +18,8 @@ from webapp.models import Channel
 
 from telethon import errors
 from telethon.sync import TelegramClient
+
+logger = logging.getLogger(__name__)
 
 _REFRESH_SKIP = object()  # sentinel: flag not provided at all
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -154,6 +158,9 @@ class Command(AsyncBaseCommand):
                     self.stdout.write("", ending="\n")
                     last_line_length = 0
                     current_progress_channel = None
+                    # Close the DB connection after each channel so SQLite does not
+                    # accumulate stale internal state across a long crawl session.
+                    connection.close()
                     if do_refresh:
                         try:
                             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
@@ -178,6 +185,7 @@ class Command(AsyncBaseCommand):
                             self.stdout.write(
                                 self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}")
                             )
+                            logger.exception("Refresh failed for channel %s", channel.telegram_id)
 
                 self.stdout.write("", ending="\n")
 
