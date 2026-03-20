@@ -54,15 +54,9 @@
       <p class="d-none d-sm-block pt-2">Zoom</p>
     </div>
 
-    <div class="dropdown dropup menu-button text-center">
-      <a href="#" class="text-decoration-none" style="color:inherit" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="bi bi-table fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Data</p>
-      </a>
-      <ul class="dropdown-menu dropdown-menu-dark">
-        <li><a class="dropdown-item" href="channel_table.html" target="_blank" rel="noopener noreferrer">Channels</a></li>
-        <li><a class="dropdown-item" href="community_table.html" target="_blank" rel="noopener noreferrer">Communities</a></li>
-      </ul>
-    </div>
+    <a href="#" id="data_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#data_modal">
+      <i class="bi bi-table fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Data</p>
+    </a>
 
     <a href="#" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal">
       <i class="bi bi-info-circle fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">About</p>
@@ -215,6 +209,36 @@
 	      <i class="bi bi-telegram" aria-hidden="true"></i> Telegram
 	    </a>
 	  </div>
+	</div>
+	<div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+	</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="data_modal" tabindex="-1" role="dialog" aria-labelledby="data_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+	<div class="modal-header">
+          <h4 class="modal-title" id="data_modalLabel">Data exports</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+	</div>
+	<div class="modal-body">
+	  <a href="channel_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset mb-3">
+	    <i class="bi bi-table fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
+	    <div>
+	      <div class="fw-semibold">Channels</div>
+	      <div class="text-muted small">One row per channel — metrics, community assignments, and network measures.</div>
+	    </div>
+	  </a>
+	  <a href="community_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset">
+	    <i class="bi bi-diagram-3 fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
+	    <div>
+	      <div class="fw-semibold">Communities</div>
+	      <div class="text-muted small">Structural statistics per community — density, reciprocity, clustering, path length, and diameter.</div>
+	    </div>
+	  </a>
 	</div>
 	<div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
