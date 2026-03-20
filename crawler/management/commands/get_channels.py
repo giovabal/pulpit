@@ -113,7 +113,11 @@ class Command(AsyncBaseCommand):
                 channels = Channel.objects.interesting().order_by("-id")
                 if fromid is not None:
                     channels = channels.filter(id__lte=fromid)
-                total_channels = channels.count()
+                # Load PKs upfront so the query cursor is closed before the loop.
+                # This allows safely closing the DB connection between channels
+                # without breaking an open iterator cursor.
+                channel_pks = list(channels.values_list("pk", flat=True))
+                total_channels = len(channel_pks)
 
                 current_progress_channel: int | None = None
                 last_line_length = 0
@@ -140,7 +144,8 @@ class Command(AsyncBaseCommand):
                     self.stdout.flush()
                     last_line_length = len(line)
 
-                for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                for index, channel_pk in enumerate(channel_pks, start=1):
+                    channel = Channel.objects.get(pk=channel_pk)
                     try:
                         pre_crawl_max_id = crawler.get_channel(
                             channel.telegram_id,
