@@ -40,8 +40,7 @@ html, body {
 }
 
 #menu_container {
-    width: 100%;
-    padding: 0em 2em;
+    padding: 0 0.5em;
 }
 
 .menu-button,
@@ -60,9 +59,10 @@ html, body {
 @media screen {
     #menu_container {
         position: fixed;
-        top: 10px;
-        left: 20px;
-        width: calc(100% - 40px);
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: fit-content;
         transition: all .25s ease-out;
         background: rgba(8, 24, 40, 0.55);
         backdrop-filter: blur(10px);
