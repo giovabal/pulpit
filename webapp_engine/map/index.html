@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en" xmlns:og="http://opengraphprotocol.org/schema/" xmlns:fb="https://www.facebook.com/2008/fbml" itemscope itemtype="http://schema.org/Map">
+<html lang="en">
 <head>
   <meta name="robots" content="noindex">
   <title>A map for Telegram channels</title>
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,user-scalable=no">
   <meta name="theme-color" content="#123">
@@ -37,20 +36,20 @@
 </head>
 <body>
 
-  <div class="sigma-parent">
+  <main class="sigma-parent" aria-label="Network graph">
     <div class="sigma-expand" id="sigma-canvas" style="background-color: #123;"></div>
-  </div>
+  </main>
 
-  <div id="menu_container" class="d-flex align-items-center">
+  <nav id="menu_container" class="d-flex align-items-center" aria-label="Map controls">
     <a href="#" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal">
       <i class="bi bi-search fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Search</p>
     </a>
 
     <div class="menu-button text-center">
       <div id="zoom_menu" class="btn-group" role="group">
-	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_in"><i class="bi bi-zoom-in" aria-hidden="true" title="zoom in"></i></button>
-	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_reset"><i class="bi bi-arrow-counterclockwise" aria-hidden="true" title="reset zoom"></i></button>
-	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_out"><i class="bi bi-zoom-out" aria-hidden="true" title="zoom out"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_in" aria-label="Zoom in"><i class="bi bi-zoom-in" aria-hidden="true"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_reset" aria-label="Reset zoom"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+	<button type="button" class="btn btn-secondary text-white bg-transparent" id="zoom_out" aria-label="Zoom out"><i class="bi bi-zoom-out" aria-hidden="true"></i></button>
       </div>
       <p class="d-none d-sm-block pt-2">Zoom</p>
     </div>
@@ -71,11 +70,11 @@
       <i class="bi bi-gear fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Options</p>
     </a>
 
-  </div>
+  </nav>
 
-  <div id="infobar">
+  <aside id="infobar" aria-label="Channel details">
     <p id="node_picture" class="float-start" style="height: 15px"></p>
-    <p style="text-align: right; padding-right: 1.5em;"><i class="bi bi-x-lg fs-3 infobar-toggle link" aria-hidden="true"></i></p>
+    <p style="text-align: right; padding-right: 1.5em;"><button type="button" class="infobar-toggle btn btn-link p-0 text-reset" aria-label="Close"><i class="bi bi-x-lg fs-3" aria-hidden="true"></i></button></p>
     <h3 id="node_label" class="clearfix"></h3>
     <a id="node_url" href="" target="_blank"></a> <span id="node_location"></span>
     <div id="node_details">
@@ -83,7 +82,7 @@
 	<span id="node_measures"></span>
 	<br>Messages: <span id="node_messages_count"></span>
 	<br>Activity: <span id="node_activity_period"></span>
-	<br><span id="node_is_lost"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
+	<br><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
       <p id="node_group"></p>
     </div>
 
@@ -125,9 +124,9 @@
 	</div>
       </div>
     </div>
-  </div>
+  </aside>
 
-  <div class="modal fade" id="loading_modal" tabindex="-1" role="dialog" aria-labelledby="loading_modalLabel">
+  <div class="modal fade" id="loading_modal" tabindex="-1" role="dialog" aria-label="Loading">
     <div class="modal-dialog" role="document" style="text-align: center; color: white;">
       <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status"></div><p id="loading_message"></p>
       <span class="visually-hidden">please wait...</span>
@@ -138,16 +137,16 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
 	<div class="modal-header">
-          <h4 class="modal-title" id="info-modalLabel">Search</h4>
+          <h4 class="modal-title" id="search_modalLabel">Search</h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
 	  <form id="search">
 	    <div class="d-flex gap-2">
 	      <div class="input-group">
-		<input id="search_input" type="text" name="search" placeholder="search by name" class="form-control">
+		<input id="search_input" type="text" name="search" placeholder="Search by name" class="form-control" aria-label="Search by name">
 		<span class="input-group-btn">
-		  <button class="btn btn-secondary" type="submit"><i class="bi bi-search" aria-hidden="true"></i></button>
+		  <button class="btn btn-secondary" type="submit" aria-label="Search"><i class="bi bi-search" aria-hidden="true"></i></button>
 		</span>
 	      </div>
 	    </div>
@@ -178,7 +177,7 @@
 	  <h6><i class="bi bi-share me-1" aria-hidden="true"></i>Share this map</h6>
 	  <div class="input-group mt-2 mb-3">
 	    <input id="share_url" type="text" class="form-control form-control-sm" readonly aria-label="Page URL">
-	    <button class="btn btn-outline-secondary btn-sm" id="share_copy" type="button" title="Copy to clipboard">
+	    <button class="btn btn-outline-secondary btn-sm" id="share_copy" type="button" aria-label="Copy to clipboard">
 	      <i class="bi bi-clipboard" aria-hidden="true"></i>
 	    </button>
 	  </div>
@@ -210,15 +209,15 @@
     </div>
   </div>
 
-  <div class="modal fade" id="options_modal" tabindex="-1" role="dialog" aria-labelledby="info-modalLabel">
+  <div class="modal fade" id="options_modal" tabindex="-1" role="dialog" aria-labelledby="options_modalLabel">
     <div class="modal-dialog" role="document">
       <div class="modal-content">
 	<div class="modal-header">
-          <h4 class="modal-title" id="info-modalLabel">Options</h4>
+          <h4 class="modal-title" id="options_modalLabel">Options</h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
-	  <form id="search">
+	  <form id="options_form">
 	    <div class="mb-3" id="community-strategy-group" style="display:none">
 	      <label for="community-strategy-select" class="form-label">Community coloring</label>
 	      <select id="community-strategy-select" class="form-select"></select>
@@ -242,7 +241,7 @@
 	  </form>
 	  <hr>
 	  <h5>Legend</h5>
-	  <ul id="legend" class="list-unstyled"></ul>
+	  <ul id="legend" class="list-unstyled" aria-label="Community color legend"></ul>
 	</div>
 	<div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

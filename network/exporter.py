@@ -371,6 +371,7 @@ for (i = 0; i < tables.length; i++) {
     if (thead = table.querySelector("thead")) {
         headers = thead.querySelectorAll("th");
         for (j = 0; j < headers.length; j++) {
+            headers[j].setAttribute('aria-sort', 'none');
             headers[j].innerHTML = "<a href='#'>" + headers[j].innerText + "</a>";
         }
         thead.addEventListener("click", sortTableFunction(table));
@@ -384,9 +385,13 @@ function sortTableFunction(table) {
             var direction = currentDirection === 'desc' ? 'asc' : 'desc';
             var siblingHeaders = header.parentNode.children;
             for (var i = 0; i < siblingHeaders.length; i++) {
-                if (siblingHeaders[i] !== header) siblingHeaders[i].removeAttribute('data-sort-direction');
+                if (siblingHeaders[i] !== header) {
+                    siblingHeaders[i].removeAttribute('data-sort-direction');
+                    siblingHeaders[i].setAttribute('aria-sort', 'none');
+                }
             }
             header.setAttribute('data-sort-direction', direction);
+            header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
             sortRows(table, siblingIndex(header), direction);
             ev.preventDefault();
         }
@@ -441,17 +446,21 @@ def write_table_html(
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
-    pagerank_th = f'<th class="number">{_html.escape(pagerank_col[1])}</th>' if pagerank_col else ""
-    other_extra_ths = "".join(f'<th class="number">{_html.escape(lbl)}</th>' for _, lbl in other_extra)
-    strategy_ths = "".join(f"<th>{_html.escape(s.capitalize())}</th>" for s in strategies)
+    pagerank_th = f'<th scope="col" class="number">{_html.escape(pagerank_col[1])}</th>' if pagerank_col else ""
+    other_extra_ths = "".join(f'<th scope="col" class="number">{_html.escape(lbl)}</th>' for _, lbl in other_extra)
+    strategy_ths = "".join(f'<th scope="col">{_html.escape(s.capitalize())}</th>' for s in strategies)
     thead = (
         "<thead><tr>"
-        "<th>Channel</th>"
-        '<th class="number">Users</th>'
-        '<th class="number">Messages</th>'
-        '<th class="number">Inbound</th>'
-        '<th class="number">Outbound</th>' + pagerank_th + other_extra_ths + strategy_ths + "<th>Activity start</th>"
-        "<th>Activity end</th>"
+        '<th scope="col">Channel</th>'
+        '<th scope="col" class="number">Users</th>'
+        '<th scope="col" class="number">Messages</th>'
+        '<th scope="col" class="number">Inbound</th>'
+        '<th scope="col" class="number">Outbound</th>'
+        + pagerank_th
+        + other_extra_ths
+        + strategy_ths
+        + '<th scope="col">Activity start</th>'
+        '<th scope="col">Activity end</th>'
         "</tr></thead>"
     )
 
@@ -520,11 +529,11 @@ def write_table_html(
   <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-start mb-2">
       <h2 class="mb-0">Channels</h2>
-      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3"></i> Back to map</a>
+      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
     </div>
     <p class="text-muted">{len(nodes)} channels. Click column headers to sort.</p>
     <div class="table-responsive">
-      <table class="table table-striped table-bordered table-hover table-sm sortable">
+      <table class="table table-striped table-bordered table-hover table-sm sortable" aria-label="Channel network data">
         {thead}
         <tbody>
 {"".join(rows)}        </tbody>
@@ -868,15 +877,15 @@ def write_community_table_html(
     # Per-strategy tables
     table_thead = (
         "<thead><tr>"
-        "<th>Community</th>"
-        '<th class="number">Nodes</th>'
-        '<th class="number">Internal Edges</th>'
-        '<th class="number">External Edges</th>'
-        '<th class="number">Density</th>'
-        '<th class="number">Reciprocity</th>'
-        '<th class="number">Avg Clustering</th>'
-        '<th class="number">Avg Path Length</th>'
-        '<th class="number">Diameter</th>'
+        '<th scope="col">Community</th>'
+        '<th scope="col" class="number">Nodes</th>'
+        '<th scope="col" class="number">Internal Edges</th>'
+        '<th scope="col" class="number">External Edges</th>'
+        '<th scope="col" class="number">Density</th>'
+        '<th scope="col" class="number">Reciprocity</th>'
+        '<th scope="col" class="number">Avg Clustering</th>'
+        '<th scope="col" class="number">Avg Path Length</th>'
+        '<th scope="col" class="number">Diameter</th>'
         "</tr></thead>"
     )
 
@@ -895,7 +904,7 @@ def write_community_table_html(
             swatch = (
                 f'<span style="display:inline-block;width:12px;height:12px;'
                 f"background:{_html.escape(str(hex_color))};border:1px solid rgba(0,0,0,.2);"
-                f'vertical-align:middle;border-radius:2px;margin-right:5px;"></span>'
+                f'vertical-align:middle;border-radius:2px;margin-right:5px;" aria-hidden="true"></span>'
             )
             name_cell = f'<td data-sort-value="{_html.escape(str(label))}">{swatch}{_html.escape(str(label))}</td>'
             rows.append(
@@ -912,15 +921,16 @@ def write_community_table_html(
                 + "</tr>\n"
             )
 
+        h3_id = f"strategy-{_html.escape(strategy_key)}"
         table = (
-            '<table class="table table-striped table-bordered table-hover table-sm sortable">'
+            f'<table class="table table-striped table-bordered table-hover table-sm sortable" aria-labelledby="{h3_id}">'
             + table_thead
             + "<tbody>"
             + "".join(rows)
             + "</tbody></table>"
         )
         strategy_sections.append(
-            f'<h3 class="mt-4 mb-3">{_html.escape(strategy_key.capitalize())}</h3>'
+            f'<h3 id="{h3_id}" class="mt-4 mb-3">{_html.escape(strategy_key.capitalize())}</h3>'
             f'<p class="text-muted small">Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).</p>'
             f'<div class="table-responsive">{table}</div>'
         )
@@ -951,7 +961,7 @@ def write_community_table_html(
   <div class="container-fluid py-3">
     <div class="d-flex justify-content-between align-items-start mb-3">
       <h2 class="mb-0">Community Statistics</h2>
-      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3"></i> Back to map</a>
+      <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
     </div>
     {summary_html}
     {"".join(strategy_sections)}

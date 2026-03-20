@@ -3,25 +3,25 @@
   <p class="pagination-info">{{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</p>
   <ul class="pagination pagination-sm justify-content-center mb-0">
     {% if page_obj.has_previous %}
-    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.previous_page_number }}{{ original_query }}{{ original_fragment }}"><i class="bi bi-chevron-left"></i></a></li>
+    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.previous_page_number }}{{ original_query }}{{ original_fragment }}" aria-label="Previous page"><i class="bi bi-chevron-left" aria-hidden="true"></i></a></li>
     {% else %}
-    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+    <li class="page-item disabled"><span class="page-link" aria-label="Previous page" aria-disabled="true"><i class="bi bi-chevron-left" aria-hidden="true"></i></span></li>
     {% endif %}
 
     {% for num in page_obj.elided_page_range %}
     {% if num == page_obj.number %}
-    <li class="page-item active"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}">{{ num }}</a></li>
+    <li class="page-item active"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}" aria-current="page">{{ num }}</a></li>
     {% elif not num %}
-    <li class="page-item disabled"><span class="page-link">…</span></li>
+    <li class="page-item disabled"><span class="page-link" aria-hidden="true">…</span></li>
     {% else %}
     <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}">{{ num }}</a></li>
     {% endif %}
     {% endfor %}
 
     {% if page_obj.has_next %}
-    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.next_page_number }}{{ original_query }}{{ original_fragment }}"><i class="bi bi-chevron-right"></i></a></li>
+    <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ page_obj.next_page_number }}{{ original_query }}{{ original_fragment }}" aria-label="Next page"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>
     {% else %}
-    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+    <li class="page-item disabled"><span class="page-link" aria-label="Next page" aria-disabled="true"><i class="bi bi-chevron-right" aria-hidden="true"></i></span></li>
     {% endif %}
   </ul>
 </nav>

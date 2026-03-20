@@ -26,7 +26,7 @@
     <div class="channel-info">
       <div class="channel-info-header">
         <h1 class="channel-title">{{ selected_channel.title }}</h1>
-        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram">
+        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
         </a>
       </div>
@@ -110,7 +110,7 @@
       {% if pictures %}
         {% for picture in pictures %}
         <figure class="mb-0">
-          <img src="{{ picture.picture.url }}" class="post-image" alt="Message image">
+          <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ selected_channel.title }}">
         </figure>
         {% endfor %}
       {% elif post.media_type == "photo" %}
@@ -122,7 +122,7 @@
       {% if videos %}
         {% for video in videos %}
         <figure class="mb-0">
-          <video src="{{ video.video.url }}" class="post-image" controls></video>
+          <video src="{{ video.video.url }}" class="post-image" controls aria-label="Message video from {{ selected_channel.title }}"></video>
         </figure>
         {% endfor %}
       {% elif post.media_type == "video" %}
@@ -151,10 +151,10 @@
           <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
         </div>
-        <a href="{% url 'admin:webapp_message_change' post.pk %}" class="tg-link" title="Edit in admin">
+        <a href="{% url 'admin:webapp_message_change' post.pk %}" class="tg-link" title="Edit in admin" aria-label="Edit message in admin">
           <i class="bi bi-pencil" aria-hidden="true"></i>
         </a>
-        <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram">
+        <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
         </a>
       </footer>

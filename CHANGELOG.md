@@ -6,12 +6,14 @@
 - `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
 - `export_network` now generates `community_table.html` and `community_table.xlsx`: a whole-network structural summary (nodes, edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter) followed by per-community metrics for each active detection strategy. The HTML table is sortable; the Excel file has a Network Summary sheet plus one sheet per strategy.
 - Graph mini-site: **Communities** button added to the menu bar, linking to `community_table.html`.
+- `PROJECT_TITLE` option allows to define a title that's shown in all output files.
 
 ### Improvements
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
-- Tabular export files renamed: `table.html` → `channel_table.html`, `table.xlsx` → `channel_table.xlsx`.
+- Tabular export files renamed: `table.html` to `channel_table.html`, `table.xlsx` to `channel_table.xlsx`.
 - Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `get_channels --refresh-messages-stats` will delete any already-stored service messages.
 - `--table-format` option values renamed from `xls` / `html+xls` to `xlsx` / `html+xlsx` for consistency with the actual file extension.
+- Improved semantic and accessibility for all HTML output.
 
 ### Fixed
 - `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
