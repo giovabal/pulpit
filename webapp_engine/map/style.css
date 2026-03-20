@@ -201,13 +201,13 @@ html, body {
     cursor: pointer;
 }
 
-a.node-link,
-a.node-link:visited {
+#infobar a.node-link,
+#infobar a.node-link:visited {
     color: rgba(255,255,255,0.6);
     text-decoration: none;
 }
 
-a.node-link:hover {
+#infobar a.node-link:hover {
     color: rgba(255,255,255,0.9);
     text-decoration: underline;
 }
