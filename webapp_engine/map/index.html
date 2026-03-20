@@ -54,13 +54,15 @@
       <p class="d-none d-sm-block pt-2">Zoom</p>
     </div>
 
-    <a href="channel_table.html" id="table_button" class="menu-button text-decoration-none text-center" target="_blank" rel="noopener noreferrer">
-      <i class="bi bi-table fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Data</p>
-    </a>
-
-    <a href="community_table.html" id="community_table_button" class="menu-button text-decoration-none text-center" target="_blank" rel="noopener noreferrer">
-      <i class="bi bi-diagram-3 fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Communities</p>
-    </a>
+    <div class="dropdown dropup menu-button text-center">
+      <a href="#" class="text-decoration-none" style="color:inherit" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-table fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">Data</p>
+      </a>
+      <ul class="dropdown-menu dropdown-menu-dark">
+        <li><a class="dropdown-item" href="channel_table.html" target="_blank" rel="noopener noreferrer">Channels</a></li>
+        <li><a class="dropdown-item" href="community_table.html" target="_blank" rel="noopener noreferrer">Communities</a></li>
+      </ul>
+    </div>
 
     <a href="#" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal">
       <i class="bi bi-info-circle fs-3" aria-hidden="true"></i><p class="d-none d-sm-block pt-2">About</p>
