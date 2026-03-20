@@ -77,12 +77,24 @@
     <p style="text-align: right; padding-right: 1.5em;"><button type="button" class="infobar-toggle btn btn-link p-0 text-reset" aria-label="Close"><i class="bi bi-x-lg fs-3" aria-hidden="true"></i></button></p>
     <h3 id="node_label" class="clearfix"></h3>
     <a id="node_url" href="" target="_blank"></a> <span id="node_location"></span>
+    <hr class="infobar-sep">
     <div id="node_details">
-      <p>Users: <span id="node_followers_count"></span>
-	<span id="node_measures"></span>
-	<br>Messages: <span id="node_messages_count"></span>
-	<br>Activity: <span id="node_activity_period"></span>
-	<br><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
+      <div class="metric-grid">
+        <div class="metric-chip">
+          <span class="metric-label">Users</span>
+          <span class="metric-value" id="node_followers_count"></span>
+        </div>
+        <div class="metric-chip">
+          <span class="metric-label">Messages</span>
+          <span class="metric-value" id="node_messages_count"></span>
+        </div>
+        <div class="metric-chip metric-chip--full">
+          <span class="metric-label">Activity</span>
+          <span class="metric-value" id="node_activity_period"></span>
+        </div>
+      </div>
+      <div id="node_measures" class="infobar-measures"></div>
+      <p><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
       <p id="node_group"></p>
     </div>
 
