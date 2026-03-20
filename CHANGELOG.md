@@ -10,6 +10,7 @@
 
 ### Improvements
 - Graph mini-site: improved infobar and menu bar appearance — Inter font, frosted-glass menu, metric chips for channel stats, amber accent colour, and compact accordion for connections.
+- New `scripts/delete_unused_messages.py`: removes messages belonging to channels outside the active crawl scope; run before `VACUUM` to reclaim disk space.
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
 - Tabular export files renamed: `table.html` to `channel_table.html`, `table.xlsx` to `channel_table.xlsx`.
 - Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `get_channels --refresh-messages-stats` will delete any already-stored service messages.
