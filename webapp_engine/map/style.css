@@ -88,11 +88,19 @@ html, body {
     border-left: solid 1px rgba(255,255,255,0.08);
     padding: 1em 1.25em;
     color: #fff;
+    position: relative;
+}
+
+.infobar-close {
+    position: absolute;
+    top: 0.75em;
+    right: 0.75em;
+    color: rgba(255,255,255,0.6);
 }
 
 #node_picture {
-    height: 70px !important;
-    margin-right: 0.5em;
+    display: block;
+    margin-bottom: 0.4em;
 }
 
 #infobar #node_label {
@@ -100,7 +108,6 @@ html, body {
     font-weight: 700;
     letter-spacing: 0.01em;
     margin-bottom: 0.2em;
-    margin-top: 0.25em;
 }
 
 #node_url {
