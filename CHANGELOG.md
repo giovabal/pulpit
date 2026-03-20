@@ -14,6 +14,7 @@
 - Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `get_channels --refresh-messages-stats` will delete any already-stored service messages.
 - `--table-format` option values renamed from `xls` / `html+xls` to `xlsx` / `html+xlsx` for consistency with the actual file extension.
 - Improved semantic and accessibility for all HTML output.
+- Organization admin list now shows and allows inline editing of the `is_interesting` flag.
 
 ### Fixed
 - `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.

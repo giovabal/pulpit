@@ -97,5 +97,5 @@ class SearchTermAdmin(admin.ModelAdmin):
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("name", "color")
-    list_editable = ["color"]
+    list_display = ("name", "color", "is_interesting")
+    list_editable = ["color", "is_interesting"]
