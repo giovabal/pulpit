@@ -8,9 +8,10 @@
 - Graph mini-site: **Data** button in the menu bar opens a dialog linking to `channel_table.html` and `community_table.html`.
 - `PROJECT_TITLE` option allows to define a title that's shown in all output files.
 - New options for `COMMUNITY_STRATEGIES`: `WEAKCC` (weakly connected components) and `STRONGCC` (strongly connected components).
+- Sidebar channel list now has a live search input to filter channels by name.
+- New **Search messages** page (`/search/`) with full-text search across all channels and paginated results.
 
 ### Improvements
-- Sidebar channel list now has a live search input to filter channels by name.
 - Graph mini-site redesigned.
 - New `scripts/delete_unused_messages.py`: removes messages belonging to channels outside the active crawl scope; run before `VACUUM` to reclaim disk space.
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
