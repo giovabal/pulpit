@@ -26,7 +26,10 @@
 </div>
 
 {% for strategy in strategies %}
-<h3 id="{{ strategy.h3_id }}" class="mt-4 mb-3">{{ strategy.label }}</h3>
+<div class="d-flex align-items-baseline gap-3 mt-4 mb-3">
+  <h3 id="{{ strategy.h3_id }}" class="mb-0">{{ strategy.label }}</h3>
+  <span class="text-muted small">Modularity: <strong>{{ strategy.modularity }}</strong></span>
+</div>
 <p class="text-muted small">Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).</p>
 <div class="table-responsive">
   <table class="table table-hover table-sm sortable" aria-labelledby="{{ strategy.h3_id }}">

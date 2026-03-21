@@ -17,6 +17,7 @@ from django.template.loader import render_to_string
 from webapp.models import Channel, Message
 
 import networkx as nx
+import numpy as np
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 
@@ -548,15 +549,52 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
     avg_path_length = None
     diameter = None
     path_on_full = False
+    wcc_count = None
+    wcc_fraction = None
+    scc_count = None
+    scc_fraction = None
     if n >= 2:
         try:
             wccs = list(nx.weakly_connected_components(graph))
             largest_wcc = max(wccs, key=len)
             path_on_full = len(largest_wcc) == n
+            wcc_count = len(wccs)
+            wcc_fraction = len(largest_wcc) / n
             if len(largest_wcc) >= 2:
                 ug = graph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
+        except Exception:
+            pass
+        try:
+            sccs = list(nx.strongly_connected_components(graph))
+            largest_scc = max(sccs, key=len)
+            scc_count = len(sccs)
+            scc_fraction = len(largest_scc) / n
+        except Exception:
+            pass
+    assortativity: dict[str, float | None] = {
+        "in_in": None,
+        "in_out": None,
+        "out_in": None,
+        "out_out": None,
+    }
+    if e >= 2:
+        try:
+            in_deg = dict(graph.in_degree())
+            out_deg = dict(graph.out_degree())
+            src_in = np.array([in_deg[u] for u, v in graph.edges()], dtype=float)
+            src_out = np.array([out_deg[u] for u, v in graph.edges()], dtype=float)
+            tgt_in = np.array([in_deg[v] for u, v in graph.edges()], dtype=float)
+            tgt_out = np.array([out_deg[v] for u, v in graph.edges()], dtype=float)
+            for key, x, y in [
+                ("in_in", src_in, tgt_in),
+                ("in_out", src_in, tgt_out),
+                ("out_in", src_out, tgt_in),
+                ("out_out", src_out, tgt_out),
+            ]:
+                if x.std() > 0 and y.std() > 0:
+                    assortativity[key] = float(np.corrcoef(x, y)[0, 1])
         except Exception:
             pass
     return {
@@ -568,6 +606,11 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
         "avg_path_length": avg_path_length,
         "diameter": diameter,
         "path_on_full": path_on_full,
+        "wcc_count": wcc_count,
+        "wcc_fraction": wcc_fraction,
+        "scc_count": scc_count,
+        "scc_fraction": scc_fraction,
+        "assortativity": assortativity,
     }
 
 
@@ -610,10 +653,26 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
     }
 
 
+def _freeman_centralization(values: list[float]) -> float | None:
+    """Freeman (1978) graph centralization for a centrality measure.
+
+    H = Σ_i (C_max - C_i) / [(n-1) · C_max]
+
+    Returns None when the result is undefined (fewer than 2 nodes or C_max == 0).
+    """
+    n = len(values)
+    if n < 2:
+        return None
+    c_max = max(values)
+    if c_max == 0:
+        return None
+    return sum(c_max - v for v in values) / ((n - 1) * c_max)
+
+
 type CommunityTableData = dict[str, Any]
 # Structure:
 # {
-#   "network_summary": dict,          # from _network_summary()
+#   "network_summary": dict,          # from _network_summary() plus "centralizations"
 #   "strategies": {
 #     strategy_key: [                 # ordered as in communities_data
 #       {"group": tuple, "node_count": int, "metrics": dict},
@@ -628,14 +687,24 @@ def compute_community_metrics(
     communities_data: dict[str, Any],
     graph: nx.DiGraph,
     strategies: list[str],
+    measures_labels: "list[tuple[str, str]] | None" = None,
     status_callback: "Callable[[str], None] | None" = None,
 ) -> CommunityTableData:
     """Pre-compute all structural metrics needed for community table outputs.
 
+    ``measures_labels`` is the list of (node_key, display_label) pairs returned by the
+    apply_* functions; when provided, Freeman centralization is computed for each measure.
     ``status_callback`` is called with a short label after each step completes
     so the caller can emit progress output between steps.
     """
-    result: CommunityTableData = {"network_summary": _network_summary(graph), "strategies": {}}
+    network_summary = _network_summary(graph)
+    centralizations: dict[str, tuple[float | None, str]] = {}
+    if measures_labels:
+        for key, label in measures_labels:
+            values = [node[key] for node in graph_data["nodes"] if key in node]
+            centralizations[key] = (_freeman_centralization(values), label)
+    network_summary["centralizations"] = centralizations
+    result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     if status_callback:
         status_callback("network")
     for strategy_key in strategies:
@@ -667,7 +736,13 @@ def compute_community_metrics(
                 }
             )
             rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics})
-        result["strategies"][strategy_key] = rows
+        modularity = None
+        if label_to_nodes:
+            try:
+                modularity = nx.community.modularity(graph, label_to_nodes.values())
+            except Exception:
+                pass
+        result["strategies"][strategy_key] = {"modularity": modularity, "rows": rows}
         if status_callback:
             status_callback(strategy_key)
     return result
@@ -711,20 +786,45 @@ def write_community_table_xlsx(
         ("Avg Clustering", summary["avg_clustering"]),
         ("Avg Path Length *", summary["avg_path_length"]),
         ("Diameter *", summary["diameter"]),
+        ("WCC count", summary["wcc_count"]),
+        ("Largest WCC fraction", summary["wcc_fraction"]),
+        ("SCC count", summary["scc_count"]),
+        ("Largest SCC fraction", summary["scc_fraction"]),
     ]:
         ws_summary.append([label, value])
+    for assort_key, assort_label in [
+        ("in_in", "Assortativity in→in"),
+        ("in_out", "Assortativity in→out"),
+        ("out_in", "Assortativity out→in"),
+        ("out_out", "Assortativity out→out"),
+    ]:
+        ws_summary.append([assort_label, summary.get("assortativity", {}).get(assort_key)])
+    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
+        ws_summary.append([f"{c_label} Centralization", c_val])
     if not summary["path_on_full"]:
         ws_summary.append([])
         ws_summary.append(["* Computed on the largest weakly connected component (undirected)"])
 
+    # Modularity rows in Network Summary (one per strategy)
+    ws_summary.append([])
+    ws_summary.append(["Strategy", "Modularity"])
+    for cell in ws_summary[ws_summary.max_row]:
+        cell.font = Font(bold=True)
+    for strategy_key in strategies:
+        entry = community_table_data["strategies"].get(strategy_key)
+        ws_summary.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+
     # One sheet per strategy
     for strategy_key in strategies:
-        rows = community_table_data["strategies"].get(strategy_key)
-        if not rows:
+        strategy_entry = community_table_data["strategies"].get(strategy_key)
+        if not strategy_entry:
             continue
+        rows = strategy_entry["rows"]
         ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
+        ws.append(["Modularity", strategy_entry["modularity"]])
+        ws.append([])
         ws.append(_HEADERS)
-        for cell in ws[1]:
+        for cell in ws[3]:
             cell.font = Font(bold=True)
         for entry in rows:
             _community_id, _count, label, hex_color = entry["group"]
@@ -784,13 +884,46 @@ def write_community_table_html(
             "label": f"Diameter{wcc_marker}",
             "value": str(summary["diameter"]) if summary["diameter"] is not None else "N/A",
         },
+        {
+            "label": "WCC count",
+            "value": str(summary["wcc_count"]) if summary["wcc_count"] is not None else "N/A",
+        },
+        {
+            "label": "Largest WCC fraction",
+            "value": _fmt(summary["wcc_fraction"]) if summary["wcc_fraction"] is not None else "N/A",
+        },
+        {
+            "label": "SCC count",
+            "value": str(summary["scc_count"]) if summary["scc_count"] is not None else "N/A",
+        },
+        {
+            "label": "Largest SCC fraction",
+            "value": _fmt(summary["scc_fraction"]) if summary["scc_fraction"] is not None else "N/A",
+        },
     ]
+    for assort_key, assort_label in [
+        ("in_in", "Assortativity in→in"),
+        ("in_out", "Assortativity in→out"),
+        ("out_in", "Assortativity out→in"),
+        ("out_out", "Assortativity out→out"),
+    ]:
+        val = summary.get("assortativity", {}).get(assort_key)
+        summary_boxes.append({"label": assort_label, "value": _fmt(val) if val is not None else "N/A"})
+    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
+        summary_boxes.append(
+            {
+                "label": f"{c_label} Centralization",
+                "value": _fmt(c_val) if c_val is not None else "N/A",
+            }
+        )
 
     strategies_ctx = []
     for strategy_key in strategies:
-        precomputed_rows = community_table_data["strategies"].get(strategy_key)
-        if not precomputed_rows:
+        strategy_entry = community_table_data["strategies"].get(strategy_key)
+        if not strategy_entry:
             continue
+        precomputed_rows = strategy_entry["rows"]
+        strategy_modularity = strategy_entry["modularity"]
 
         _hm_cols = {
             "node_count": [e["node_count"] for e in precomputed_rows],
@@ -838,6 +971,7 @@ def write_community_table_html(
             {
                 "label": strategy_key.capitalize(),
                 "h3_id": f"strategy-{strategy_key}",
+                "modularity": _fmt(strategy_modularity) if strategy_modularity is not None else "N/A",
                 "rows": rows_ctx,
             }
         )

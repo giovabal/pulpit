@@ -106,6 +106,129 @@ The community basis for the entropy calculation is set by the strategy name in p
 
 ---
 
+## Whole-network measures
+
+Whole-network measures summarise the structure of the entire graph as a single number. They do not score individual channels; they characterise the network as a system. These values appear in the **Whole network** summary panel at the top of `community_table.html` and in the **Network Summary** sheet of `community_table.xlsx`.
+
+---
+
+### Nodes and Edges
+
+The raw count of channels (nodes) and directed connections (edges) in the graph. An edge from A to B represents that A has forwarded content from B or referenced B's username, weighted by frequency relative to A's total output. These counts depend on the `DRAW_DEAD_LEAVES` setting and any date range filters applied at export time.
+
+---
+
+### Density
+
+The fraction of all possible directed edges that actually exist. For a directed graph with *n* nodes the maximum number of edges is *n(n−1)*; density is the observed edge count divided by that maximum.
+
+**In practice:** density is low in almost all real-world networks, and political Telegram ecosystems are no exception — most channels do not directly reference most other channels. What matters is the comparative value across exports or sub-networks. A rising density over time suggests a network becoming more tightly integrated; a very low density combined with high betweenness scores for a few nodes indicates a sparse network held together by a small number of critical bridges.
+
+---
+
+### Reciprocity
+
+The fraction of edges that are mutual — if A→B exists, does B→A also exist? Computed as (number of mutual pairs) / (total number of edges).
+
+**In practice:** reciprocity measures how symmetric information exchange is in the network. A low reciprocity means the network is predominantly hierarchical: content flows from producers to distributors in one direction. A high reciprocity suggests peer-like mutual amplification — channels that all forward each other. In political networks, high reciprocity within a community often signals coordinated behaviour or tight ideological cohesion; very low reciprocity at the network level points to a clear source-amplifier hierarchy.
+
+---
+
+### Average Clustering Coefficient
+
+For each node, the clustering coefficient measures how interconnected its immediate neighbours are — do the channels that reference A also reference each other? The average is taken over all nodes. Computed using NetworkX's `average_clustering` on the directed graph.
+
+**In practice:** a high average clustering coefficient means the network is locally dense — channels tend to form tight triangles of mutual reference. This is characteristic of ideologically homogeneous clusters where everyone in a group cites everyone else. A low clustering coefficient indicates a more tree-like or hub-and-spoke structure, where channels funnel content toward central hubs without forming dense lateral connections.
+
+---
+
+### Average Path Length
+
+The mean of the shortest directed path lengths between all reachable pairs of nodes. Because the full graph is often disconnected, this is computed on the **largest weakly connected component** (treated as undirected), and the footnote in the output marks it accordingly.
+
+**In practice:** average path length is the network's "diameter in practice" — how many hops it takes, on average, for content to travel from one channel to another. Short average path lengths indicate a well-connected, small-world network where information can spread quickly; long paths suggest a fragmented ecosystem where content circulates only within isolated sub-networks.
+
+---
+
+### Diameter
+
+The longest shortest path in the network — the maximum number of hops required to get from one node to another, computed on the largest weakly connected component (undirected).
+
+**In practice:** the diameter sets an upper bound on how far a piece of content can travel. A small diameter (common in social networks) means any channel is reachable from any other within a few hops. A large diameter indicates a more linear or chain-like topology, where influence propagates slowly from one end of the network to the other.
+
+---
+
+### WCC count (Weakly Connected Components)
+
+The total number of weakly connected components in the graph — groups of channels that are connected to each other by some path ignoring edge direction, with no path to channels outside the group.
+
+**In practice:** most real-world networks have one large component and many small satellite islands. A high WCC count means the network is fragmented: many channels have no relationship at all to the main ecosystem. This is common in early-stage monitoring projects where the crawl has not yet discovered all the links, or in networks that genuinely consist of multiple unrelated ecosystems.
+
+---
+
+### Largest WCC fraction
+
+The share of all nodes that belong to the single largest weakly connected component — a number between 0 and 1.
+
+**In practice:** a value close to 1 means nearly all channels in the dataset are part of one connected ecosystem. A low value signals genuine fragmentation. This fraction is more informative than the raw WCC count because it tells you how much of the network is actually reachable from a typical node.
+
+---
+
+### SCC count (Strongly Connected Components)
+
+The total number of strongly connected components — groups where every channel can reach every other channel by following directed edges.
+
+**In practice:** in most directed networks, the SCC decomposition produces one large component (the "bow-tie core") and many singleton or small components. A high SCC count means few channels are involved in mutual directed loops. Channels outside the large SCC either feed into it (they are cited but do not cite back) or receive from it (they amplify without being amplified).
+
+---
+
+### Largest SCC fraction
+
+The share of all nodes in the largest strongly connected component.
+
+**In practice:** the largest SCC is the network's mutually reinforcing core — the set of channels that all ultimately cite each other through directed chains. A large SCC fraction indicates strong circular amplification at the heart of the network; a small fraction means influence is predominantly one-directional. Comparing this to the largest WCC fraction reveals the ratio of the network that is connected but asymmetric versus genuinely mutually reinforcing.
+
+---
+
+### Directed degree assortativity (four coefficients)
+
+Assortativity measures whether channels tend to connect to channels with similar degree. For directed graphs there are four variants, each a Pearson correlation coefficient computed over all edges:
+
+| Coefficient | Source property | Target property |
+| :---------- | :-------------- | :-------------- |
+| **in→in**   | in-degree of source | in-degree of target |
+| **in→out**  | in-degree of source | out-degree of target |
+| **out→in**  | out-degree of source | in-degree of target |
+| **out→out** | out-degree of source | out-degree of target |
+
+Values range from −1 to +1. Positive values indicate homophily (high-degree nodes connect to high-degree nodes); negative values indicate disassortativity (high-degree nodes connect to low-degree nodes); values near zero indicate no systematic degree correlation.
+
+**In practice:** most information networks are disassortative on in-degree — popular channels (high in-degree) tend to be referenced by channels that are themselves not widely referenced. This is the expected signature of a broadcast hierarchy. Strong disassortativity on out→in (high-out-degree channels point to low-in-degree targets) can indicate hub-and-spoke amplification of marginal content. Positive assortativity on out→out (active amplifiers reference other active amplifiers) may signal coordinated distribution rings. All four coefficients are reported as `N/A` when all nodes share the same degree value (zero variance).
+
+---
+
+### Freeman centralization (per measure)
+
+For each configured node-level centrality measure, Freeman centralization summarises how unequally that centrality is distributed across the network. It is computed as:
+
+> H = Σᵢ (C_max − Cᵢ) / [(n − 1) · C_max]
+
+where C_max is the highest centrality score observed, Cᵢ is each node's score, and *n* is the number of nodes. The result is between 0 and 1. A value of 1 means all centrality is concentrated in a single node (star graph); a value of 0 means all nodes share the same centrality score (perfectly egalitarian). Reported as `N/A` when fewer than two nodes are present or when C_max is zero.
+
+**In practice:** Freeman centralization transforms a node ranking into a single network-level verdict. Two networks with identical top-ranked channels can differ radically in centralization: one may have a dominant node that dwarfs all others, while the other has a gentle gradient. High PageRank centralization signals a network controlled by a small number of agenda-setting channels; low centralization indicates a more distributed information ecosystem. Centralization is computed for every measure active in `NETWORK_MEASURES`, so the output includes a separate score for PageRank centralization, betweenness centralization, and so on.
+
+---
+
+### Modularity (per strategy)
+
+Modularity measures the quality of a community partition. For a given assignment of nodes to communities, it computes the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. Values range from −0.5 to 1; values above roughly 0.3 are conventionally considered evidence of meaningful community structure.
+
+Modularity is reported separately for each active community detection strategy, displayed next to the strategy heading in `community_table.html` and in a dedicated section of the Network Summary sheet in `community_table.xlsx`.
+
+**In practice:** modularity answers *how well does this partition fit the data?* A high modularity for the Leiden partition confirms that the algorithmic communities correspond to real density structure in the graph. Comparing modularity across strategies is informative: if the Organization partition (based on your domain knowledge) has a modularity close to that of Leiden, your manual categorisation captures most of the network's structural community organisation. If Leiden's modularity is substantially higher, there is structural community organisation that your categorisation does not capture.
+
+---
+
 ## Community detection strategies
 
 A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.

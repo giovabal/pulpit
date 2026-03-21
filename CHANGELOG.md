@@ -1,10 +1,15 @@
 # Changelog
 
 ## [0.7] - To be announced
+*Widening the selection of whole-network measures.*
+
 ### New features
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
+- `community_table` whole-network summary now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), and Freeman centralization for each configured network measure. Each strategy section also shows its partition modularity.
 
 ## [0.6] - 2026-03-21
+*Tabular data for communities. Filtering out Telegram service messages.*
+
 ### New features
 - New chart on the homepage and channel detail pages: **Average involvement per month** — shows the average views per message for each month, with 0 for months with no messages.
 - `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
@@ -32,6 +37,8 @@
 
 
 ## [0.5] - 2026-03-18
+*Ability to update already-crawled messages. More reliable spatial layout.*
+
 ### New features
 - Before applying ForceAtlas2 for spatial layout, Kamada-Kawai is now used to seed initial node positions, improving layout reproducibility across runs.
 - New option for `NETWORK_MEASURES`: `KATZ` (Katz centrality).
@@ -54,6 +61,8 @@
 
 
 ## [0.4] - 2026-03-15
+*Reworking graph mini-site. Tabular output added.*
+
 ### New features
 - Project name changed from `TNExp` to `Pulpit`.
 - New option for `COMMUNITIES_STRATEGY`: `LEIDEN`.
@@ -79,6 +88,8 @@
 
 
 ## [0.3] - 2026-03-08
+*Improving network measures.*
+
 ### New features
 - Multiple community strategies can be applied simultaneously via `COMMUNITIES_STRATEGY`.
 - HITS Hub, HITS Authority, Betweenness Centrality, and In-degree Centrality network measures added to graph export and node detail panel.
@@ -103,6 +114,8 @@
 
 
 ## [0.2] - 2026-03-03
+*Optimizing crawling.*
+
 ### New features
 - Stats page showing month-by-month global channel activity.
 - `get_channels` gained a `--fixholes` option to detect and fill gaps in message history.
@@ -125,8 +138,7 @@
 
 
 ## [0.1] - 2026-02-21
-### Added
-- First official release of Pulpit.
+*First official release of Pulpit.*
 
 ---
 

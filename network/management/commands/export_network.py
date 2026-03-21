@@ -297,7 +297,12 @@ class Command(BaseCommand):
             self.stdout.write("  - network … ", ending="")
             self.stdout.flush()
             community_table_data = exporter.compute_community_metrics(
-                graph_data, communities_data, graph, strategies, status_callback=_on_metrics_step
+                graph_data,
+                communities_data,
+                graph,
+                strategies,
+                measures_labels=measures_labels,
+                status_callback=_on_metrics_step,
             )
         if "html" in table_format:
             self.stdout.write("- table (html)")
