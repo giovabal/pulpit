@@ -83,6 +83,24 @@
         letter-spacing: .01em;
       }
 
+      .sidebar-search-link {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .5rem .875rem;
+        font-size: .8rem;
+        font-weight: 500;
+        color: var(--sidebar-muted);
+        text-decoration: none;
+        border-left: 2px solid transparent;
+        border-bottom: 1px solid var(--border);
+        transition: background .12s, color .12s, border-color .12s;
+        flex-shrink: 0;
+      }
+
+      .sidebar-search-link:hover { background: var(--sidebar-hover); color: var(--sidebar-text); }
+      .sidebar-search-link.active { background: var(--sidebar-active); border-left-color: var(--sidebar-active-border); color: var(--accent); }
+
       .channel-search {
         padding: .5rem .75rem;
         border-bottom: 1px solid var(--border);

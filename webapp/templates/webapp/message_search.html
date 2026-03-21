@@ -1,0 +1,149 @@
+{% extends "webapp/index.html" %}
+
+{% block content %}
+<div class="search-header">
+  <form method="get" action="" class="search-form" role="search">
+    <div class="search-input-wrap">
+      <i class="bi bi-search search-icon" aria-hidden="true"></i>
+      <input
+        type="search"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search messages…"
+        class="search-input"
+        aria-label="Search messages"
+        autofocus
+      >
+      <button type="submit" class="search-btn">Search</button>
+    </div>
+  </form>
+  {% if query %}
+  <p class="search-summary">
+    {% if page_obj.paginator.count %}
+      {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for <strong>{{ query }}</strong>
+    {% else %}
+      No results for <strong>{{ query }}</strong>
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+{% include "webapp/pagination.html" %}
+
+<ol class="post-list list-unstyled mt-2">
+  {% for post in page_obj %}
+  <li>
+    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}">
+      <div class="search-result-channel">
+        <a href="{{ post.channel.get_absolute_url }}">
+          <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
+          {{ post.channel.title }}
+        </a>
+      </div>
+      {% if post.forwarded_from %}
+      <div class="forwarded-banner">
+        <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+        forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
+      </div>
+      {% endif %}
+      <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+      <footer class="post-footer">
+        <div class="post-meta">
+          <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
+          <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
+          <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+        </div>
+        <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
+          <i class="bi bi-telegram" aria-hidden="true"></i>
+        </a>
+      </footer>
+    </article>
+  </li>
+  {% endfor %}
+</ol>
+
+{% include "webapp/pagination.html" %}
+{% endblock content %}
+
+{% block extra_styles %}
+<style>
+  .search-header { max-width: 52rem; margin-bottom: 1.25rem; }
+
+  .search-form { margin-bottom: .75rem; }
+
+  .search-input-wrap {
+    display: flex;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: border-color .12s, box-shadow .12s;
+  }
+
+  .search-input-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+  }
+
+  .search-icon {
+    padding: 0 .625rem 0 .875rem;
+    color: var(--muted);
+    font-size: .9rem;
+    flex-shrink: 0;
+  }
+
+  .search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: .625rem 0;
+    font-size: .875rem;
+    color: var(--text);
+    min-width: 0;
+  }
+
+  .search-btn {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    padding: .625rem 1rem;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s;
+  }
+
+  .search-btn:hover { background: #1d4ed8; }
+
+  .search-summary {
+    font-size: .8rem;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .search-result-channel {
+    display: flex;
+    align-items: center;
+    gap: .375rem;
+    padding: .35rem .875rem;
+    font-size: .72rem;
+    font-weight: 500;
+    background: #f9fafb;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-result-channel a {
+    display: flex;
+    align-items: center;
+    gap: .375rem;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .search-result-channel a:hover { color: var(--text); }
+</style>
+{% endblock extra_styles %}

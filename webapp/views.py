@@ -38,8 +38,7 @@ class HomeView(BaseMixin, TemplateView):
             {
                 "icon": "bi-broadcast",
                 "label": "Channels",
-                "value": f"{interesting_channels:,} / {total_channels:,}",
-                "note": "interesting / total",
+                "value": f"{interesting_channels:,}",
             },
             {"icon": "bi-chat-left-text", "label": "Messages collected", "value": f"{total_messages:,}"},
             {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
@@ -47,6 +46,7 @@ class HomeView(BaseMixin, TemplateView):
                 "icon": "bi-calendar-range",
                 "label": "Date range",
                 "value": f"{fmt_date(date_agg['earliest'])} – {fmt_date(date_agg['latest'])}",
+                "note": "first message - last message",
             },
             {
                 "icon": "bi-forward",
@@ -89,6 +89,33 @@ class HomeView(BaseMixin, TemplateView):
             },
         ]
         return ctx
+
+
+class MessageSearchView(BaseMixin, ListView):
+    template_name = "webapp/message_search.html"
+    model = Message
+    paginator_class = DiggPaginator
+    paginate_by = 50
+    paginate_orphans = 15
+    page_kwarg = "page"
+
+    def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
+        qs = (
+            Message.objects.filter(channel__organization__is_interesting=True)
+            .select_related("channel", "channel__organization", "forwarded_from")
+            .order_by("-date")
+        )
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(message__icontains=q)
+        return qs
+
+    def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        context_data = super().get_context_data(*args, **kwargs)
+        q = self.request.GET.get("q", "").strip()
+        context_data["query"] = q
+        context_data["original_query"] = f"&q={q}" if q else ""
+        return context_data
 
 
 class ChannelDetailView(BaseMixin, ListView):

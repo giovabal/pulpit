@@ -5,4 +5,5 @@ from . import views
 urlpatterns = [
     path("", views.HomeView.as_view(), name="home"),
     path("channel/<int:pk>/", views.ChannelDetailView.as_view(), name="channel-detail"),
+    path("search/", views.MessageSearchView.as_view(), name="message-search"),
 ]

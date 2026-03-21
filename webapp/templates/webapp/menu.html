@@ -6,6 +6,10 @@
     </div>
     <span class="brand-name">Pulpit</span>
   </a>
+  <a href="{% url 'message-search' %}" class="sidebar-search-link{% if request.resolver_match.url_name == 'message-search' %} active{% endif %}">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    Search messages
+  </a>
   <div class="channel-search">
     <input type="search" id="channel-search-input" placeholder="Filter channels…" aria-label="Filter channels">
   </div>
