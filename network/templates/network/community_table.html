@@ -58,5 +58,16 @@
     </tbody>
   </table>
 </div>
+<details class="community-channels mt-2 mb-4">
+  <summary class="text-muted small">Channel list</summary>
+  {% for row in strategy.rows %}
+  {% if row.channels %}
+  <div class="community-channels-group mt-2">
+    <span class="community-channels-label"><span style="display:inline-block;width:10px;height:10px;background:{{ row.hex_color }};border:1px solid rgba(0,0,0,.2);vertical-align:middle;border-radius:2px;margin-right:4px;" aria-hidden="true"></span>{{ row.label }}</span>
+    <span class="community-channels-list">{% for ch in row.channels %}<a href="{{ ch.url }}" class="community-channel-chip">{{ ch.label }}</a>{% endfor %}</span>
+  </div>
+  {% endif %}
+  {% endfor %}
+</details>
 {% endfor %}
 {% endblock %}

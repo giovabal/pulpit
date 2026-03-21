@@ -707,6 +707,7 @@ def compute_community_metrics(
             centralizations[key] = (_freeman_centralization(values), label)
     network_summary["centralizations"] = centralizations
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
+    id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     if status_callback:
         status_callback("network")
     for strategy_key in strategies:
@@ -737,7 +738,15 @@ def compute_community_metrics(
                     "diameter": None,
                 }
             )
-            rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics})
+            channels = sorted(
+                (
+                    {"label": id_to_node[nid].get("label") or nid, "url": id_to_node[nid].get("url") or ""}
+                    for nid in nodes_set
+                    if nid in id_to_node
+                ),
+                key=lambda c: c["label"].lower(),
+            )
+            rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics, "channels": channels})
         modularity = None
         if label_to_nodes:
             try:
@@ -767,6 +776,7 @@ def write_community_table_xlsx(
         "Avg Clustering",
         "Avg Path Length",
         "Diameter",
+        "Channels",
     ]
 
     summary = community_table_data["network_summary"]
@@ -832,6 +842,7 @@ def write_community_table_xlsx(
             _community_id, _count, label, hex_color = entry["group"]
             hex_color = str(hex_color).lstrip("#")
             metrics = entry["metrics"]
+            channels_str = ", ".join(c["label"] for c in entry.get("channels", []))
             ws.append(
                 [
                     str(label),
@@ -844,6 +855,7 @@ def write_community_table_xlsx(
                     metrics["avg_clustering"],
                     metrics["avg_path_length"],
                     metrics["diameter"],
+                    channels_str,
                 ]
             )
             try:
@@ -967,7 +979,14 @@ def write_community_table_html(
                 _metric_cell_dict(m["avg_path_length"], 4, _hm(m["avg_path_length"], "avg_path_length")),
                 _metric_cell_dict(m["diameter"], 0, _hm(m["diameter"], "diameter")),
             ]
-            rows_ctx.append({"label": str(label), "hex_color": str(hex_color), "cells": cells})
+            rows_ctx.append(
+                {
+                    "label": str(label),
+                    "hex_color": str(hex_color),
+                    "cells": cells,
+                    "channels": entry.get("channels", []),
+                }
+            )
 
         strategies_ctx.append(
             {

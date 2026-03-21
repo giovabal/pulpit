@@ -53,6 +53,17 @@
     th a { text-decoration: none; color: inherit; }
     th[data-sort-direction="asc"] a::after { content: " ↑"; font-size: 0.75em; opacity: 0.6; }
     th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; opacity: 0.6; }
+    .community-channels summary { cursor: pointer; user-select: none; }
+    .community-channels summary::-webkit-details-marker { color: #999; }
+    .community-channels-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; }
+    .community-channels-label { font-size: 0.72rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+    .community-channels-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    .community-channel-chip {
+      display: inline-block; padding: 0.1rem 0.45rem; border-radius: 3px;
+      background: #f0f2f5; border: 1px solid #dde1e8;
+      font-size: 0.74rem; color: #1a1a1a; text-decoration: none; white-space: nowrap;
+    }
+    .community-channel-chip:hover { background: #e2e6ed; color: #1a1a1a; }
   </style>
 </head>
 <body>
