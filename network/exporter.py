@@ -659,14 +659,16 @@ def _freeman_centralization(values: list[float]) -> float | None:
     H = Σ_i (C_max - C_i) / [(n-1) · C_max]
 
     Returns None when the result is undefined (fewer than 2 nodes or C_max == 0).
+    None entries in values are ignored.
     """
-    n = len(values)
+    clean = [v for v in values if v is not None]
+    n = len(clean)
     if n < 2:
         return None
-    c_max = max(values)
+    c_max = max(clean)
     if c_max == 0:
         return None
-    return sum(c_max - v for v in values) / ((n - 1) * c_max)
+    return sum(c_max - v for v in clean) / ((n - 1) * c_max)
 
 
 type CommunityTableData = dict[str, Any]
