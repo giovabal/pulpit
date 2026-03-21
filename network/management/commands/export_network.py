@@ -65,6 +65,16 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--nograph",
+            action="store_true",
+            default=False,
+            help=(
+                "Skip the graph mini-site: no layout computation, no data.json, no media copy. "
+                "Only tabular output (channel_table / community_table) is produced. "
+                "Implies --table-format html+xlsx unless --table-format is set explicitly."
+            ),
+        )
+        parser.add_argument(
             "--startdate",
             default=None,
             metavar="YYYY-MM-DD",
@@ -124,6 +134,7 @@ class Command(BaseCommand):
             )
         measures = set(network_measures)
 
+        nograph = options["nograph"]
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
@@ -157,24 +168,27 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
-        self.stdout.write("\nSet spatial distribution of nodes")
-        self.stdout.write("- Kamada-Kawai … ", ending="")
-        self.stdout.flush()
-        initial_pos = layout.kamada_kawai_positions(graph)
-        self.stdout.write("done")
-        self.stdout.write(f"- ForceAtlas2 ({settings.FA2_ITERATIONS} iterations) … ", ending="")
-        self.stdout.flush()
-        positions = layout.forceatlas2_positions(graph, initial_pos, settings.FA2_ITERATIONS)
-        self.stdout.write("done")
+        if not nograph:
+            self.stdout.write("\nSet spatial distribution of nodes")
+            self.stdout.write("- Kamada-Kawai … ", ending="")
+            self.stdout.flush()
+            initial_pos = layout.kamada_kawai_positions(graph)
+            self.stdout.write("done")
+            self.stdout.write(f"- ForceAtlas2 ({settings.FA2_ITERATIONS} iterations) … ", ending="")
+            self.stdout.flush()
+            positions = layout.forceatlas2_positions(graph, initial_pos, settings.FA2_ITERATIONS)
+            self.stdout.write("done")
 
-        xs, ys = zip(*positions.values(), strict=False)
-        width = max(xs) - min(xs)
-        height = max(ys) - min(ys)
-        if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
-            settings.LAYOUT == layout.LAYOUT_VERTICAL and width > height
-        ):
-            self.stdout.write("- rotating layout 90°")
-            positions = layout.rotate_positions(positions)
+            xs, ys = zip(*positions.values(), strict=False)
+            width = max(xs) - min(xs)
+            height = max(ys) - min(ys)
+            if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
+                settings.LAYOUT == layout.LAYOUT_VERTICAL and width > height
+            ):
+                self.stdout.write("- rotating layout 90°")
+                positions = layout.rotate_positions(positions)
+        else:
+            positions = {}
 
         self.stdout.write("\nCalculations on the graph")
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
@@ -240,27 +254,28 @@ class Command(BaseCommand):
             measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
             self.stdout.write("done")
 
-        self.stdout.write("- small components")
-        exporter.reposition_isolated_nodes(graph_data, main_component)
+        if not nograph:
+            self.stdout.write("- small components")
+            exporter.reposition_isolated_nodes(graph_data, main_component)
 
-        self.stdout.write("\nGenerate map")
         root_target = "graph"
-        exporter.ensure_graph_root(root_target)
-
         project_title: str = settings.PROJECT_TITLE
-
-        self.stdout.write("- config files")
-        exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title)
-        exporter.write_robots_txt(root_target, seo)
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
-        exporter.write_graph_files(
-            graph_data,
-            communities_data,
-            measures_labels,
-            channel_qs,
-            output_filename="graph/data.json",
-            accessory_filename="graph/data_accessory.json",
-        )
+
+        if not nograph:
+            self.stdout.write("\nGenerate map")
+            exporter.ensure_graph_root(root_target)
+            self.stdout.write("- config files")
+            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title)
+            exporter.write_robots_txt(root_target, seo)
+            exporter.write_graph_files(
+                graph_data,
+                communities_data,
+                measures_labels,
+                channel_qs,
+                output_filename="graph/data.json",
+                accessory_filename="graph/data_accessory.json",
+            )
 
         table_format = options["table_format"]
         strategies = [s.lower() for s in communities_strategy]
@@ -319,7 +334,8 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
 
-        self.stdout.write("- media")
-        exporter.copy_channel_media(channel_qs, "graph")
+        if not nograph:
+            self.stdout.write("- media")
+            exporter.copy_channel_media(channel_qs, "graph")
 
         self.stdout.write(self.style.SUCCESS("\nDone."))

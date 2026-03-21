@@ -1,6 +1,8 @@
 # Changelog
 
 ## [0.7] - To be announced
+### New features
+- `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
 
 ## [0.6] - 2026-03-21
 ### New features

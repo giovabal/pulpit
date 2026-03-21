@@ -31,6 +31,7 @@ python manage.py get_channels --refresh-messages-stats 200           # Same but 
 python manage.py get_channels --refresh-messages-stats 2024-01-01    # Same but only messages from that date to present
 python manage.py export_network              # Generate graph JSON
 python manage.py export_network --seo        # Same but mini-site is search-engine friendly
+python manage.py export_network --nograph    # Skip graph mini-site; only produce channel_table / community_table
 
 # View graph (from repo root)
 cd graph && python -m http.server 8001

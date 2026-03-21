@@ -39,8 +39,8 @@ def build_graph_data(
         pos = positions.get(node_data["data"]["pk"])
         node_info: dict[str, Any] = {
             "id": node_id,
-            "x": float(pos[0]),
-            "y": float(pos[1]),
+            "x": float(pos[0]) if pos is not None else 0.0,
+            "y": float(pos[1]) if pos is not None else 0.0,
         }
         for key in (
             "label",
