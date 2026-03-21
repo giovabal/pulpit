@@ -6,7 +6,10 @@
     </div>
     <span class="brand-name">Pulpit</span>
   </a>
-  <ul class="channel-list">
+  <div class="channel-search">
+    <input type="search" id="channel-search-input" placeholder="Filter channels…" aria-label="Filter channels">
+  </div>
+  <ul class="channel-list" id="channel-list">
     {% for channel in channel_list %}
     <li>
       <a href="{{ channel.get_absolute_url }}"{% if selected_channel == channel %} class="active" aria-current="page"{% endif %}>
@@ -22,4 +25,17 @@
     </li>
     {% endfor %}
   </ul>
+  <script>
+    (function () {
+      var input = document.getElementById("channel-search-input");
+      var items = document.querySelectorAll("#channel-list li");
+      input.addEventListener("input", function () {
+        var q = this.value.toLowerCase();
+        items.forEach(function (li) {
+          var name = li.querySelector(".ch-title").textContent.toLowerCase();
+          li.style.display = name.includes(q) ? "" : "none";
+        });
+      });
+    })();
+  </script>
 </nav>
