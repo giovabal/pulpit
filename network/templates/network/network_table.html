@@ -58,11 +58,12 @@
   {% endif %}
 </div>
 
-{% if bokeh_div %}
-<div class="mb-4">
-  <h5 class="mb-2">In-degree vs Out-degree centrality</h5>
-  {{ bokeh_div|safe }}
-  {{ bokeh_script|safe }}
+{% for plot in bokeh_plots %}
+<div class="mb-5">
+  <h5 class="mb-2">{{ plot.title }}</h5>
+  <p class="text-muted small mb-3">{{ plot.description }}</p>
+  {{ plot.div|safe }}
+  {{ plot.script|safe }}
 </div>
-{% endif %}
+{% endfor %}
 {% endblock %}
