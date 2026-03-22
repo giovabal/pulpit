@@ -5,8 +5,9 @@
 
 ### New features
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
-- `community_table` whole-network summary now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), and Freeman centralization for each configured network measure. Each strategy section also shows its partition modularity.
+- `network_table` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
 - `community_table.html` each strategy section now has a collapsible channel list showing all channels grouped by community. `community_table.xlsx` strategy sheets now include a Channels column.
+- Whole-network metrics are now in a dedicated `network_table.html` / `network_table.xlsx`; `community_table` contains only per-community rows.
 
 ## [0.6] - 2026-03-21
 *Tabular data for communities. Filtering out Telegram service messages.*

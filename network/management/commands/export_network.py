@@ -314,6 +314,15 @@ class Command(BaseCommand):
                 seo=seo,
                 project_title=project_title,
             )
+            self.stdout.write("- network table (html)")
+            exporter.write_network_table_html(
+                community_table_data,
+                strategies,
+                output_filename="graph/network_table.html",
+                graph_data=graph_data,
+                seo=seo,
+                project_title=project_title,
+            )
             self.stdout.write("- community table (html)")
             exporter.write_community_table_html(
                 community_table_data,
@@ -329,6 +338,13 @@ class Command(BaseCommand):
                 measures_labels,
                 strategies,
                 output_filename="graph/channel_table.xlsx",
+                project_title=project_title,
+            )
+            self.stdout.write("- network table (xlsx)")
+            exporter.write_network_table_xlsx(
+                community_table_data,
+                strategies,
+                output_filename="graph/network_table.xlsx",
                 project_title=project_title,
             )
             self.stdout.write("- community table (xlsx)")

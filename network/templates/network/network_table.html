@@ -1,0 +1,68 @@
+{% extends "network/_table_base.html" %}
+
+{% block head_extra %}{% if bokeh_resources %}{{ bokeh_resources|safe }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h2 class="mb-0">Network Statistics</h2>
+  <div class="d-flex gap-2">
+    <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
+    <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-7">
+    <h5 class="mb-2">Whole-network metrics</h5>
+    <table class="table table-sm table-hover sortable">
+      <thead>
+        <tr>
+          <th scope="col">Metric</th>
+          <th scope="col" class="number">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in summary_rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="number">{{ row.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if wcc_note_visible %}
+    <p class="text-muted small mt-1">* Computed on the largest weakly connected component (undirected)</p>
+    {% endif %}
+  </div>
+
+  {% if modularity_rows %}
+  <div class="col-lg-5">
+    <h5 class="mb-2">Modularity by strategy</h5>
+    <table class="table table-sm table-hover sortable">
+      <thead>
+        <tr>
+          <th scope="col">Strategy</th>
+          <th scope="col" class="number">Modularity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in modularity_rows %}
+        <tr>
+          <td>{{ row.strategy }}</td>
+          <td class="number">{{ row.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if bokeh_div %}
+<div class="mb-4">
+  <h5 class="mb-2">In-degree vs Out-degree centrality</h5>
+  {{ bokeh_div|safe }}
+  {{ bokeh_script|safe }}
+</div>
+{% endif %}
+{% endblock %}

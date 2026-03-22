@@ -759,6 +759,203 @@ def compute_community_metrics(
     return result
 
 
+def _network_summary_rows(summary: dict[str, Any]) -> list[list[Any]]:
+    """Return (label, value) rows for all whole-network metrics."""
+    path_marker = " *" if not summary["path_on_full"] else ""
+    rows: list[list[Any]] = [
+        ["Nodes", summary["n"]],
+        ["Edges", summary["e"]],
+        ["Density", summary["density"]],
+        ["Reciprocity", summary["reciprocity"]],
+        ["Avg Clustering", summary["avg_clustering"]],
+        [f"Avg Path Length{path_marker}", summary["avg_path_length"]],
+        [f"Diameter{path_marker}", summary["diameter"]],
+        ["WCC count", summary["wcc_count"]],
+        ["Largest WCC fraction", summary["wcc_fraction"]],
+        ["SCC count", summary["scc_count"]],
+        ["Largest SCC fraction", summary["scc_fraction"]],
+    ]
+    for assort_key, assort_label in [
+        ("in_in", "Assortativity in→in"),
+        ("in_out", "Assortativity in→out"),
+        ("out_in", "Assortativity out→in"),
+        ("out_out", "Assortativity out→out"),
+    ]:
+        rows.append([assort_label, summary.get("assortativity", {}).get(assort_key)])
+    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
+        rows.append([f"{c_label} Centralization", c_val])
+    return rows
+
+
+def _build_centrality_scatter(graph_data: "GraphData") -> "tuple[str, str, str] | None":
+    """Build a Bokeh in-degree vs out-degree centrality scatter plot.
+
+    Returns (bokeh_resources, bokeh_script, bokeh_div) with all JS inlined,
+    or None if the required measures are not present.
+    """
+    try:
+        from bokeh.embed import components
+        from bokeh.models import ColumnDataSource, HoverTool
+        from bokeh.plotting import figure
+        from bokeh.resources import INLINE
+    except ImportError:
+        return None
+
+    nodes_with_data = [
+        n
+        for n in graph_data["nodes"]
+        if n.get("in_degree_centrality") is not None and n.get("out_degree_centrality") is not None
+    ]
+    if not nodes_with_data:
+        return None
+
+    xs = [n["in_degree_centrality"] for n in nodes_with_data]
+    ys = [n["out_degree_centrality"] for n in nodes_with_data]
+    labels = [n.get("label") or n["id"] for n in nodes_with_data]
+    colors = [n.get("color") or "#2563eb" for n in nodes_with_data]
+    fans = [n.get("fans") or 0 for n in nodes_with_data]
+    msgs = [n.get("messages_count") or 0 for n in nodes_with_data]
+
+    source = ColumnDataSource({"x": xs, "y": ys, "label": labels, "color": colors, "fans": fans, "msgs": msgs})
+
+    p = figure(
+        width=700,
+        height=500,
+        tools="pan,wheel_zoom,box_zoom,reset,save",
+        x_axis_label="In-degree centrality",
+        y_axis_label="Out-degree centrality",
+        toolbar_location="above",
+    )
+    p.toolbar.logo = None
+    p.background_fill_color = "#fafafa"
+    p.grid.grid_line_color = "#e5e7eb"
+    p.axis.axis_line_color = "#9ca3af"
+    p.axis.major_tick_line_color = "#9ca3af"
+    p.axis.minor_tick_line_color = None
+    p.axis.major_label_text_font_size = "11px"
+    p.axis.axis_label_text_font_size = "12px"
+    p.axis.axis_label_text_font_style = "normal"
+
+    p.scatter(
+        "x",
+        "y",
+        source=source,
+        size=9,
+        color="color",
+        alpha=0.75,
+        line_color="white",
+        line_width=0.5,
+    )
+    p.add_tools(
+        HoverTool(
+            tooltips=[
+                ("Channel", "@label"),
+                ("In-degree centrality", "@x{0.0000}"),
+                ("Out-degree centrality", "@y{0.0000}"),
+                ("Subscribers", "@fans{0,0}"),
+                ("Messages", "@msgs{0,0}"),
+            ]
+        )
+    )
+
+    script, div = components(p)
+    resources = INLINE.render()
+    return resources, script, div
+
+
+def write_network_table_html(
+    community_table_data: CommunityTableData,
+    strategies: list[str],
+    output_filename: str,
+    graph_data: "GraphData | None" = None,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    def _fmt(val: float | None, decimals: int = 4) -> str:
+        return "N/A" if val is None else f"{val:.{decimals}f}"
+
+    summary = community_table_data["network_summary"]
+    wcc_marker = " *" if not summary["path_on_full"] else ""
+    summary_rows = []
+    for label, value in _network_summary_rows(summary):
+        if isinstance(value, float):
+            display = _fmt(value)
+        elif value is None:
+            display = "N/A"
+        else:
+            display = str(value)
+        summary_rows.append({"label": label, "value": display})
+
+    modularity_rows = []
+    for strategy_key in strategies:
+        entry = community_table_data["strategies"].get(strategy_key)
+        mod = entry["modularity"] if entry else None
+        modularity_rows.append(
+            {"strategy": strategy_key.capitalize(), "value": _fmt(mod) if mod is not None else "N/A"}
+        )
+
+    bokeh_resources = bokeh_script = bokeh_div = None
+    if graph_data is not None:
+        scatter = _build_centrality_scatter(graph_data)
+        if scatter is not None:
+            bokeh_resources, bokeh_script, bokeh_div = scatter
+
+    if seo:
+        title = f"{project_title} | Network statistics" if project_title else "Network statistics"
+        robots_meta = "index, follow"
+    else:
+        title = f"{project_title} | Network" if project_title else "Network"
+        robots_meta = "noindex, nofollow"
+
+    context = {
+        "title": title,
+        "robots_meta": robots_meta,
+        "wcc_note_visible": not summary["path_on_full"],
+        "summary_rows": summary_rows,
+        "modularity_rows": modularity_rows,
+        "wcc_marker": wcc_marker,
+        "bokeh_resources": bokeh_resources,
+        "bokeh_script": bokeh_script,
+        "bokeh_div": bokeh_div,
+    }
+    content = render_to_string("network/network_table.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
+def write_network_table_xlsx(
+    community_table_data: CommunityTableData,
+    strategies: list[str],
+    output_filename: str,
+    project_title: str = "",
+) -> None:
+    summary = community_table_data["network_summary"]
+    wb = openpyxl.Workbook()
+    if project_title:
+        wb.properties.title = project_title
+
+    ws = wb.active
+    ws.title = "Network"
+    ws.append(["Metric", "Value"])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for label, value in _network_summary_rows(summary):
+        ws.append([label, value])
+    if not summary["path_on_full"]:
+        ws.append([])
+        ws.append(["* Computed on the largest weakly connected component (undirected)"])
+
+    ws.append([])
+    ws.append(["Strategy", "Modularity"])
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True)
+    for strategy_key in strategies:
+        entry = community_table_data["strategies"].get(strategy_key)
+        ws.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+
+    wb.save(output_filename)
+
+
 def write_community_table_xlsx(
     community_table_data: CommunityTableData,
     strategies: list[str],
@@ -779,52 +976,10 @@ def write_community_table_xlsx(
         "Channels",
     ]
 
-    summary = community_table_data["network_summary"]
     wb = openpyxl.Workbook()
     if project_title:
         wb.properties.title = project_title
-
-    # Summary sheet
-    ws_summary = wb.active
-    ws_summary.title = "Network Summary"
-    ws_summary.append(["Metric", "Value"])
-    for cell in ws_summary[1]:
-        cell.font = Font(bold=True)
-    for label, value in [
-        ("Nodes", summary["n"]),
-        ("Edges", summary["e"]),
-        ("Density", summary["density"]),
-        ("Reciprocity", summary["reciprocity"]),
-        ("Avg Clustering", summary["avg_clustering"]),
-        ("Avg Path Length *", summary["avg_path_length"]),
-        ("Diameter *", summary["diameter"]),
-        ("WCC count", summary["wcc_count"]),
-        ("Largest WCC fraction", summary["wcc_fraction"]),
-        ("SCC count", summary["scc_count"]),
-        ("Largest SCC fraction", summary["scc_fraction"]),
-    ]:
-        ws_summary.append([label, value])
-    for assort_key, assort_label in [
-        ("in_in", "Assortativity in→in"),
-        ("in_out", "Assortativity in→out"),
-        ("out_in", "Assortativity out→in"),
-        ("out_out", "Assortativity out→out"),
-    ]:
-        ws_summary.append([assort_label, summary.get("assortativity", {}).get(assort_key)])
-    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
-        ws_summary.append([f"{c_label} Centralization", c_val])
-    if not summary["path_on_full"]:
-        ws_summary.append([])
-        ws_summary.append(["* Computed on the largest weakly connected component (undirected)"])
-
-    # Modularity rows in Network Summary (one per strategy)
-    ws_summary.append([])
-    ws_summary.append(["Strategy", "Modularity"])
-    for cell in ws_summary[ws_summary.max_row]:
-        cell.font = Font(bold=True)
-    for strategy_key in strategies:
-        entry = community_table_data["strategies"].get(strategy_key)
-        ws_summary.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+    wb.remove(wb.active)  # no default sheet needed
 
     # One sheet per strategy
     for strategy_key in strategies:
@@ -833,10 +988,8 @@ def write_community_table_xlsx(
             continue
         rows = strategy_entry["rows"]
         ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
-        ws.append(["Modularity", strategy_entry["modularity"]])
-        ws.append([])
         ws.append(_HEADERS)
-        for cell in ws[3]:
+        for cell in ws[1]:
             cell.font = Font(bold=True)
         for entry in rows:
             _community_id, _count, label, hex_color = entry["group"]
@@ -885,59 +1038,12 @@ def write_community_table_html(
     def _fmt(val: float | None, decimals: int = 4) -> str:
         return "N/A" if val is None else f"{val:.{decimals}f}"
 
-    summary = community_table_data["network_summary"]
-    wcc_marker = " *" if not summary["path_on_full"] else ""
-    summary_boxes = [
-        {"label": "Nodes", "value": str(summary["n"])},
-        {"label": "Edges", "value": str(summary["e"])},
-        {"label": "Density", "value": _fmt(summary["density"])},
-        {"label": "Reciprocity", "value": _fmt(summary["reciprocity"])},
-        {"label": "Avg Clustering", "value": _fmt(summary["avg_clustering"])},
-        {"label": f"Avg Path Length{wcc_marker}", "value": _fmt(summary["avg_path_length"])},
-        {
-            "label": f"Diameter{wcc_marker}",
-            "value": str(summary["diameter"]) if summary["diameter"] is not None else "N/A",
-        },
-        {
-            "label": "WCC count",
-            "value": str(summary["wcc_count"]) if summary["wcc_count"] is not None else "N/A",
-        },
-        {
-            "label": "Largest WCC fraction",
-            "value": _fmt(summary["wcc_fraction"]) if summary["wcc_fraction"] is not None else "N/A",
-        },
-        {
-            "label": "SCC count",
-            "value": str(summary["scc_count"]) if summary["scc_count"] is not None else "N/A",
-        },
-        {
-            "label": "Largest SCC fraction",
-            "value": _fmt(summary["scc_fraction"]) if summary["scc_fraction"] is not None else "N/A",
-        },
-    ]
-    for assort_key, assort_label in [
-        ("in_in", "Assortativity in→in"),
-        ("in_out", "Assortativity in→out"),
-        ("out_in", "Assortativity out→in"),
-        ("out_out", "Assortativity out→out"),
-    ]:
-        val = summary.get("assortativity", {}).get(assort_key)
-        summary_boxes.append({"label": assort_label, "value": _fmt(val) if val is not None else "N/A"})
-    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
-        summary_boxes.append(
-            {
-                "label": f"{c_label} Centralization",
-                "value": _fmt(c_val) if c_val is not None else "N/A",
-            }
-        )
-
     strategies_ctx = []
     for strategy_key in strategies:
         strategy_entry = community_table_data["strategies"].get(strategy_key)
         if not strategy_entry:
             continue
         precomputed_rows = strategy_entry["rows"]
-        strategy_modularity = strategy_entry["modularity"]
 
         _hm_cols = {
             "node_count": [e["node_count"] for e in precomputed_rows],
@@ -992,7 +1098,6 @@ def write_community_table_html(
             {
                 "label": strategy_key.capitalize(),
                 "h3_id": f"strategy-{strategy_key}",
-                "modularity": _fmt(strategy_modularity) if strategy_modularity is not None else "N/A",
                 "rows": rows_ctx,
             }
         )
@@ -1007,8 +1112,6 @@ def write_community_table_html(
     context = {
         "title": title,
         "robots_meta": robots_meta,
-        "wcc_note_visible": not summary["path_on_full"],
-        "summary_boxes": summary_boxes,
         "strategies": strategies_ctx,
     }
     content = render_to_string("network/community_table.html", context)

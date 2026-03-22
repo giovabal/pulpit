@@ -31,7 +31,7 @@ python manage.py get_channels --refresh-messages-stats 200           # Same but 
 python manage.py get_channels --refresh-messages-stats 2024-01-01    # Same but only messages from that date to present
 python manage.py export_network              # Generate graph JSON
 python manage.py export_network --seo        # Same but mini-site is search-engine friendly
-python manage.py export_network --nograph    # Skip graph mini-site; only produce channel_table / community_table
+python manage.py export_network --nograph    # Skip graph mini-site; only produce channel_table / network_table / community_table
 
 # View graph (from repo root)
 cd graph && python -m http.server 8001
@@ -53,10 +53,10 @@ cd graph && python -m http.server 8001
 ### Key modules
 
 - **`network/layout.py`** — Spatial layout pipeline: Kamada-Kawai seeds initial positions, then `pyforceatlas2` runs ForceAtlas2. Two public functions (`kamada_kawai_positions`, `forceatlas2_positions`) plus a convenience wrapper `compute_layout`.
-- **`network/exporter.py`** — Builds `GraphData` from the NetworkX graph; applies network measures (PageRank, HITS, betweenness, in-degree, out-degree, harmonic centrality); writes `graph/data.json` and the accessory config file; writes `graph/channel_table.html` / `graph/channel_table.xlsx` (one row per channel) and `graph/community_table.html` / `graph/community_table.xlsx` (structural metrics per community, one table/sheet per strategy).
+- **`network/exporter.py`** — Builds `GraphData` from the NetworkX graph; applies network measures (PageRank, HITS, betweenness, in-degree, out-degree, harmonic centrality); writes `graph/data.json` and the accessory config file; writes `graph/channel_table.html` / `graph/channel_table.xlsx` (one row per channel), `graph/network_table.html` / `graph/network_table.xlsx` (whole-network structural metrics), and `graph/community_table.html` / `graph/community_table.xlsx` (structural metrics per community, one table/sheet per strategy).
 - **`network/community.py`** — Community detection strategies: ORGANIZATION, LOUVAIN, LEIDEN, KCORE, INFOMAP, WEAKCC, STRONGCC.
 - **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
-- **`network/management/commands/export_network.py`** — Orchestrates the full export: validates settings, builds graph, runs community detection, runs layout, applies measures, writes output files and optional tables (channel_table and community_table, HTML/XLS).
+- **`network/management/commands/export_network.py`** — Orchestrates the full export: validates settings, builds graph, runs community detection, runs layout, applies measures, writes output files and optional tables (channel_table, network_table, and community_table, HTML/XLSX).
 - **`webapp/crawler.py`** (`TelegramCrawler`) — Telethon-based Telegram API client. Handles rate limiting, flood-wait errors, message hole detection, and media downloads.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` ManyToMany back to Channel), `Organization`, `SearchTerm`, and media models.
 

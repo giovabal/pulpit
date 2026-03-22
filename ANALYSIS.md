@@ -223,7 +223,7 @@ where C_max is the highest centrality score observed, Cᵢ is each node's score,
 
 Modularity measures the quality of a community partition. For a given assignment of nodes to communities, it computes the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. Values range from −0.5 to 1; values above roughly 0.3 are conventionally considered evidence of meaningful community structure.
 
-Modularity is reported separately for each active community detection strategy, displayed next to the strategy heading in `community_table.html` and in a dedicated section of the Network Summary sheet in `community_table.xlsx`.
+Modularity is reported for each active community detection strategy in `network_table.html` and `network_table.xlsx`.
 
 **In practice:** modularity answers *how well does this partition fit the data?* A high modularity for the Leiden partition confirms that the algorithmic communities correspond to real density structure in the graph. Comparing modularity across strategies is informative: if the Organization partition (based on your domain knowledge) has a modularity close to that of Leiden, your manual categorisation captures most of the network's structural community organisation. If Leiden's modularity is substantially higher, there is structural community organisation that your categorisation does not capture.
 

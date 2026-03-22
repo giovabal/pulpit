@@ -19,7 +19,6 @@ class HomeView(BaseMixin, TemplateView):
 
         ctx = super().get_context_data(**kwargs)
 
-        total_channels = Channel.objects.count()
         interesting_channels = Channel.objects.filter(organization__is_interesting=True).count()
         total_messages = Message.objects.count()
         total_subscribers = (
