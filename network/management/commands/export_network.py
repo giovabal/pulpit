@@ -311,6 +311,9 @@ class Command(BaseCommand):
                 strategies,
                 measures_labels=measures_labels,
                 status_callback=_on_metrics_step,
+                channel_qs=channel_qs,
+                start_date=start_date,
+                end_date=end_date,
             )
         if "html" in table_format:
             self.stdout.write("- table (html)")

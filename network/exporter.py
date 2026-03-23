@@ -755,6 +755,34 @@ type CommunityTableData = dict[str, Any]
 # }
 
 
+def _network_content_metrics(
+    channel_qs: QuerySet,
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
+) -> dict[str, float | None]:
+    """Compute network-wide content originality and amplification ratio from the DB."""
+    channel_pks = list(channel_qs.values_list("pk", flat=True))
+    msg_q = Q(channel_id__in=channel_pks)
+    if start_date:
+        msg_q &= Q(date__date__gte=start_date)
+    if end_date:
+        msg_q &= Q(date__date__lte=end_date)
+    total = Message.objects.filter(msg_q).count()
+    if total == 0:
+        return {"network_originality": None, "network_amplification": None}
+    forwarded_out = Message.objects.filter(msg_q & Q(forwarded_from__isnull=False)).count()
+    fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True)
+    if start_date:
+        fwd_in_q &= Q(date__date__gte=start_date)
+    if end_date:
+        fwd_in_q &= Q(date__date__lte=end_date)
+    forwards_received = Message.objects.filter(fwd_in_q).count()
+    return {
+        "network_originality": round(1 - forwarded_out / total, 4),
+        "network_amplification": round(forwards_received / total, 4),
+    }
+
+
 def compute_community_metrics(
     graph_data: GraphData,
     communities_data: dict[str, Any],
@@ -762,6 +790,9 @@ def compute_community_metrics(
     strategies: list[str],
     measures_labels: "list[tuple[str, str]] | None" = None,
     status_callback: "Callable[[str], None] | None" = None,
+    channel_qs: "QuerySet | None" = None,
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
 ) -> CommunityTableData:
     """Pre-compute all structural metrics needed for community table outputs.
 
@@ -769,6 +800,7 @@ def compute_community_metrics(
     apply_* functions; when provided, Freeman centralization is computed for each measure.
     ``status_callback`` is called with a short label after each step completes
     so the caller can emit progress output between steps.
+    ``channel_qs`` enables whole-network content originality and amplification ratio metrics.
     """
     network_summary = _network_summary(graph)
     centralizations: dict[str, tuple[float | None, str]] = {}
@@ -777,6 +809,12 @@ def compute_community_metrics(
             values = [node[key] for node in graph_data["nodes"] if key in node]
             centralizations[key] = (_freeman_centralization(values), label)
     network_summary["centralizations"] = centralizations
+    constraint_vals = [
+        node["burt_constraint"] for node in graph_data["nodes"] if node.get("burt_constraint") is not None
+    ]
+    network_summary["mean_burt_constraint"] = sum(constraint_vals) / len(constraint_vals) if constraint_vals else None
+    if channel_qs is not None:
+        network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     if status_callback:
@@ -853,6 +891,12 @@ def _network_summary_rows(summary: dict[str, Any]) -> list[list[Any]]:
         ("out_out", "Assortativity out→out"),
     ]:
         rows.append([assort_label, summary.get("assortativity", {}).get(assort_key)])
+    if summary.get("mean_burt_constraint") is not None:
+        rows.append(["Mean Burt's Constraint", summary["mean_burt_constraint"]])
+    if summary.get("network_originality") is not None:
+        rows.append(["Content Originality", summary["network_originality"]])
+    if summary.get("network_amplification") is not None:
+        rows.append(["Amplification Ratio", summary["network_amplification"]])
     for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
         rows.append([f"{c_label} Centralization", c_val])
     return rows

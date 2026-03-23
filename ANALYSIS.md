@@ -319,6 +319,30 @@ Values range from −1 to +1. Positive values indicate homophily (high-degree no
 
 ---
 
+### Mean Burt's Constraint
+
+The average Burt's constraint score across all nodes. Ranges from 0 to 1. A low mean indicates a network with many structural holes and active brokerage — channels are not tightly embedded in closed cliques and information can flow through diverse paths. A high mean indicates a network dominated by dense, redundant clusters where most channels are firmly anchored within a single community.
+
+**In practice:** mean constraint gives a single-number answer to the question *how open is this network's information architecture?* It complements density (which measures raw edge count) and clustering coefficient (which measures local triangles) by specifically characterising the brokerage structure. Two networks with identical density can have very different mean constraint values if one is organised as many loose bridges and the other as a few dense silos. Reported only when `BURTCONSTRAINT` is included in `NETWORK_MEASURES`.
+
+---
+
+### Content Originality
+
+The fraction of all messages across interesting channels that are original (not forwarded from another channel): total non-forwarded messages / total messages. Ranges from 0 to 1.
+
+**In practice:** this single number characterises the network as a production system. A value near 1.0 means the network is primarily a content-creation ecosystem; a value near 0.0 means it is primarily a redistribution and amplification machine. Tracking this over time or across different network snapshots reveals whether a political information ecosystem is becoming more or less dependent on external sources. Reported when `CONTENTORIGINALITY` is included in `NETWORK_MEASURES` or always if channel data is available.
+
+---
+
+### Amplification Ratio
+
+The total number of forwards received by interesting channels, divided by the total number of messages published by those channels. Measures how many times, on average, each published message gets re-shared somewhere else in the network.
+
+**In practice:** amplification ratio is the network's overall virality rate. A value of 0.2 means roughly one in five messages gets forwarded at least once; a value above 1.0 means the network produces more redistribution events than original publications. Combined with content originality, it reveals the two sides of information flow: how much is produced originally, and how hard each piece is pushed through the network by others. Reported when `AMPLIFICATION` is included in `NETWORK_MEASURES` or always if channel data is available.
+
+---
+
 ### Freeman centralization (per measure)
 
 For each configured node-level centrality measure, Freeman centralization summarises how unequally that centrality is distributed across the network. It is computed as:
