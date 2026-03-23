@@ -50,13 +50,13 @@ TABLE_FORMAT_CHOICES = ["none", "html", "xlsx", "html+xlsx"]
 # Dispatch table for standard measures: (settings key, progress label, exporter function)
 # HITS and BRIDGING are handled separately because they have non-standard signatures.
 _MEASURE_STEPS = [
-    ("PAGERANK", "pagerank", exporter.apply_pagerank),
-    ("BETWEENNESS", "betweenness centrality", exporter.apply_betweenness_centrality),
-    ("INDEGCENTRALITY", "in-degree centrality", exporter.apply_in_degree_centrality),
-    ("OUTDEGCENTRALITY", "out-degree centrality", exporter.apply_out_degree_centrality),
-    ("HARMONICCENTRALITY", "harmonic centrality", exporter.apply_harmonic_centrality),
-    ("KATZ", "Katz centrality", exporter.apply_katz_centrality),
-    ("BURTCONSTRAINT", "Burt's constraint", exporter.apply_burt_constraint),
+    ("PAGERANK", "pagerank", "apply_pagerank"),
+    ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),
+    ("INDEGCENTRALITY", "in-degree centrality", "apply_in_degree_centrality"),
+    ("OUTDEGCENTRALITY", "out-degree centrality", "apply_out_degree_centrality"),
+    ("HARMONICCENTRALITY", "harmonic centrality", "apply_harmonic_centrality"),
+    ("KATZ", "Katz centrality", "apply_katz_centrality"),
+    ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
 ]
 
 
@@ -243,7 +243,7 @@ class Command(BaseCommand):
             if key in measures:
                 self.stdout.write(f"- {label} … ", ending="")
                 self.stdout.flush()
-                measures_labels += fn(graph_data, graph)
+                measures_labels += (getattr(exporter, fn) if isinstance(fn, str) else fn)(graph_data, graph)
                 self.stdout.write("done")
 
         if measures & {"HITSHUB", "HITSAUTH"}:

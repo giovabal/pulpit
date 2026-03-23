@@ -852,7 +852,7 @@ class WriteGraphFilesTests(TestCase):
         org = Organization.objects.create(name="Org1", is_interesting=True, color="#FF0000")
         self.ch = Channel.objects.create(telegram_id=1, organization=org, title="Chan1")
         self.channel_qs = Channel.objects.filter(pk=self.ch.pk)
-        self.graph_data = {"nodes": [{"id": "1"}], "edges": []}
+        self.graph_data = {"nodes": [{"id": "1", "x": 0.0, "y": 0.0}], "edges": []}
         self.communities_data = {
             "louvain": {
                 "main_groups": {"1": "1-louvain"},
@@ -863,11 +863,8 @@ class WriteGraphFilesTests(TestCase):
 
     def test_writes_output_json_with_nodes_and_edges(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_file = os.path.join(tmpdir, "data.json")
-            acc_file = os.path.join(tmpdir, "accessory.json")
-            write_graph_files(
-                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
-            )
+            write_graph_files(self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, tmpdir)
+            out_file = os.path.join(tmpdir, "data", "channel_position.json")
             self.assertTrue(os.path.exists(out_file))
             with open(out_file) as f:
                 data = json.load(f)
@@ -876,25 +873,20 @@ class WriteGraphFilesTests(TestCase):
 
     def test_writes_accessory_json_with_required_structure(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_file = os.path.join(tmpdir, "data.json")
-            acc_file = os.path.join(tmpdir, "accessory.json")
-            write_graph_files(
-                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
-            )
-            self.assertTrue(os.path.exists(acc_file))
-            with open(acc_file) as f:
+            write_graph_files(self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, tmpdir)
+            channels_file = os.path.join(tmpdir, "data", "channels.json")
+            self.assertTrue(os.path.exists(channels_file))
+            with open(channels_file) as f:
                 acc_data = json.load(f)
-            for key in ("communities", "measures", "total_pages_count"):
+            for key in ("measures", "total_pages_count"):
                 self.assertIn(key, acc_data)
+            communities_file = os.path.join(tmpdir, "data", "communities.json")
+            self.assertTrue(os.path.exists(communities_file))
 
     def test_accessory_total_pages_count_matches_queryset(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_file = os.path.join(tmpdir, "data.json")
-            acc_file = os.path.join(tmpdir, "accessory.json")
-            write_graph_files(
-                self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, out_file, acc_file
-            )
-            with open(acc_file) as f:
+            write_graph_files(self.graph_data, self.communities_data, self.measures_labels, self.channel_qs, tmpdir)
+            with open(os.path.join(tmpdir, "data", "channels.json")) as f:
                 acc_data = json.load(f)
             self.assertEqual(acc_data["total_pages_count"], self.channel_qs.count())
 
