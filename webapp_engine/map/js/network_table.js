@@ -95,7 +95,7 @@ Promise.all([
     scatterSection.appendChild(controls);
 
     // Canvas — full width, fixed height
-    var canvasWrap = document.createElement("div"); canvasWrap.style.cssText = "width:100%;height:600px;position:relative;";
+    var canvasWrap = document.createElement("div"); canvasWrap.style.cssText = "width:100%;height:900px;position:relative;";
     var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas);
     scatterSection.appendChild(canvasWrap);
 
