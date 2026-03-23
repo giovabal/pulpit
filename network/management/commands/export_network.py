@@ -224,7 +224,23 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
-        for key, label, fn in _MEASURE_STEPS:
+        _orm_steps = [
+            (
+                "AMPLIFICATION",
+                "amplification factor",
+                lambda gd, g: exporter.apply_amplification_factor(
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                ),
+            ),
+            (
+                "CONTENTORIGINALITY",
+                "content originality",
+                lambda gd, g: exporter.apply_content_originality(
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                ),
+            ),
+        ]
+        for key, label, fn in [*_MEASURE_STEPS, *_orm_steps]:
             if key in measures:
                 self.stdout.write(f"- {label} … ", ending="")
                 self.stdout.flush()
@@ -244,22 +260,6 @@ class Command(BaseCommand):
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
-            self.stdout.write("done")
-
-        if "AMPLIFICATION" in measures:
-            self.stdout.write("- amplification factor … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_amplification_factor(
-                graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
-            )
-            self.stdout.write("done")
-
-        if "CONTENTORIGINALITY" in measures:
-            self.stdout.write("- content originality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_content_originality(
-                graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
-            )
             self.stdout.write("done")
 
         if not nograph:
