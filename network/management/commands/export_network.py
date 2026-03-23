@@ -268,13 +268,16 @@ class Command(BaseCommand):
             self.stdout.write("- config files")
             exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title)
             exporter.write_robots_txt(root_target, seo)
-            exporter.write_graph_files(
-                graph_data,
-                communities_data,
-                measures_labels,
-                channel_qs,
-                graph_dir="graph",
-            )
+
+        self.stdout.write("- data files")
+        exporter.write_graph_files(
+            graph_data,
+            communities_data,
+            measures_labels,
+            channel_qs,
+            graph_dir="graph",
+            include_positions=not nograph,
+        )
 
         table_format = options["table_format"]
         strategies = [s.lower() for s in communities_strategy]
@@ -307,8 +310,6 @@ class Command(BaseCommand):
             self.stdout.write("- table (html)")
             exporter.write_table_html(
                 graph_data,
-                measures_labels,
-                strategies,
                 output_filename="graph/channel_table.html",
                 seo=seo,
                 project_title=project_title,

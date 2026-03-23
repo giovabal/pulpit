@@ -9,25 +9,12 @@
   <h2 class="mb-0">Channels</h2>
   <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
 </div>
-<p class="text-muted">{{ n_channels }} channel{{ n_channels|pluralize }}. Click column headers to sort.</p>
+<p class="text-muted" id="channel-count">Loading…</p>
 <div class="table-responsive">
-  <table class="table table-hover table-sm sortable" aria-label="Channel network data">
-    <thead>
-      <tr>
-        {% for header in headers %}
-        <th scope="col"{% if header.css_class %} class="{{ header.css_class }}"{% endif %}>{{ header.label }}</th>
-        {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr>
-        {% for cell in row %}
-        <td{% if cell.css_class %} class="{{ cell.css_class }}"{% endif %}{% if cell.sort_value %} data-sort-value="{{ cell.sort_value }}"{% endif %}{% if cell.style %} style="{{ cell.style }}"{% endif %}>{% if cell.link %}<a href="{{ cell.link }}" target="_blank" rel="noopener noreferrer">{{ cell.display }}</a>{% else %}{{ cell.display }}{% endif %}</td>
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
+  <table class="table table-hover table-sm sortable" id="channel-table" aria-label="Channel network data">
+    <thead></thead>
+    <tbody></tbody>
   </table>
 </div>
+<script src="js/channel_table.js"></script>
 {% endblock %}

@@ -337,17 +337,19 @@ def write_graph_files(
     measures_labels: list[tuple[str, str]],
     channel_qs: "QuerySet[Channel]",
     graph_dir: str,
+    include_positions: bool = True,
 ) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
 
-    # channel_position.json — spatial layout + edges
-    position_payload = {
-        "nodes": [{"id": n["id"], "x": n["x"], "y": n["y"]} for n in graph_data["nodes"]],
-        "edges": graph_data["edges"],
-    }
-    with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
-        f.write(json.dumps(position_payload))
+    if include_positions:
+        # channel_position.json — spatial layout + edges
+        position_payload = {
+            "nodes": [{"id": n["id"], "x": n["x"], "y": n["y"]} for n in graph_data["nodes"]],
+            "edges": graph_data["edges"],
+        }
+        with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
+            f.write(json.dumps(position_payload))
 
     # channel_measure.json — metadata and computed measures (no positions, no communities)
     measure_keys: set[str] = {
@@ -439,63 +441,11 @@ def _float_cell_dict(val: Any, key: str, hm_ranges: dict[str, tuple[float, float
 
 def write_table_html(
     graph_data: GraphData,
-    measures_labels: list[tuple[str, str]],
-    strategies: list[str],
     output_filename: str,
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
-    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
-    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
-
-    headers = [
-        {"label": "Channel", "css_class": ""},
-        {"label": "Users", "css_class": "number"},
-        {"label": "Messages", "css_class": "number"},
-        {"label": "Inbound", "css_class": "number"},
-        {"label": "Outbound", "css_class": "number"},
-    ]
-    if pagerank_col:
-        headers.append({"label": pagerank_col[1], "css_class": "number"})
-    headers += [{"label": lbl, "css_class": "number"} for _, lbl in other_extra]
-    headers += [{"label": s.capitalize(), "css_class": ""} for s in strategies]
-    headers += [{"label": "Activity start", "css_class": ""}, {"label": "Activity end", "css_class": ""}]
-
-    _hm_int_keys = ["fans", "messages_count", "in_deg", "out_deg"]
-    _hm_float_keys = ([pagerank_col[0]] if pagerank_col else []) + [k for k, _ in other_extra]
-    hm_ranges: dict[str, tuple[float, float]] = {}
-    for _k in _hm_int_keys + _hm_float_keys:
-        _vals = [v for node in nodes if (v := node.get(_k)) is not None]
-        if _vals:
-            hm_ranges[_k] = (min(_vals), max(_vals))
-
-    rows = []
-    for node in nodes:
-        label = node.get("label") or node["id"]
-        url = node.get("url") or ""
-        row: list[dict] = [{"display": label, "css_class": "", "sort_value": "", "style": "", "link": url}]
-        for key in ("fans", "messages_count", "in_deg", "out_deg"):
-            row.append(_num_cell_dict(node.get(key), key, hm_ranges))
-        if pagerank_col:
-            row.append(_float_cell_dict(node.get(pagerank_col[0]), pagerank_col[0], hm_ranges))
-        for key, _ in other_extra:
-            row.append(_float_cell_dict(node.get(key), key, hm_ranges))
-        communities = node.get("communities") or {}
-        for s in strategies:
-            row.append(
-                {"display": str(communities.get(s, "")), "css_class": "", "sort_value": "", "style": "", "link": ""}
-            )
-        row.append(
-            {"display": node.get("activity_start") or "", "css_class": "", "sort_value": "", "style": "", "link": ""}
-        )
-        row.append(
-            {"display": node.get("activity_end") or "", "css_class": "", "sort_value": "", "style": "", "link": ""}
-        )
-        rows.append(row)
-
-    n = len(nodes)
+    n = len(graph_data["nodes"])
     if seo:
         title = f"{project_title} | Channels" if project_title else "Channel network data"
         robots_meta = "index, follow"
@@ -510,9 +460,6 @@ def write_table_html(
             f"Network data for {n} Telegram channels, "
             "including activity metrics, inbound and outbound connections, and community assignments."
         ),
-        "n_channels": n,
-        "headers": headers,
-        "rows": rows,
     }
     content = render_to_string("network/channel_table.html", context)
     with open(output_filename, "w") as f:
