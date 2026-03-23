@@ -19,6 +19,8 @@ VALID_MEASURES = {
     "KATZ",
     "BURTCONSTRAINT",
     "AMPLIFICATION",
+    "LOCALREACHING",
+    "CONTENTORIGINALITY",
 }
 
 _BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
@@ -55,6 +57,7 @@ _MEASURE_STEPS = [
     ("HARMONICCENTRALITY", "harmonic centrality", exporter.apply_harmonic_centrality),
     ("KATZ", "Katz centrality", exporter.apply_katz_centrality),
     ("BURTCONSTRAINT", "Burt's constraint", exporter.apply_burt_constraint),
+    ("LOCALREACHING", "local reaching centrality", exporter.apply_local_reaching_centrality),
 ]
 
 
@@ -247,6 +250,14 @@ class Command(BaseCommand):
             self.stdout.write("- amplification factor … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_amplification_factor(
+                graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+            )
+            self.stdout.write("done")
+
+        if "CONTENTORIGINALITY" in measures:
+            self.stdout.write("- content originality … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_content_originality(
                 graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
             )
             self.stdout.write("done")

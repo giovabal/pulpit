@@ -82,6 +82,16 @@ A variant of closeness centrality designed to handle disconnected graphs. For ea
 
 ---
 
+### Local reaching centrality
+
+Local reaching centrality measures the **fraction of the entire network that a channel can reach by following directed edges**. A score of 1.0 means the channel can reach every other channel in the network through chains of forwards and references; a score close to 0 means its content can only propagate to a tiny slice of the ecosystem. Unlike harmonic centrality, which scores how *close* a channel is to others, local reaching centrality asks simply: *how much of the network is downstream of this channel?*
+
+**In practice:** local reaching centrality is the most direct measure of a channel's potential **spread radius**. A high score means content published here can theoretically reach every corner of the network through re-sharing chains, even if many hops are required. In fragmented networks — typical of early-stage monitoring projects — most channels will have low scores, and a handful of well-connected nodes will stand out clearly. This makes it particularly useful for identifying channels whose removal would cut off large portions of the network from each other.
+
+**Example:** a mid-tier aggregator that forwards content from several separate ideological sub-clusters may score near 1.0 on local reaching centrality because it connects sub-networks that are otherwise weakly linked. Remove it, and the downstream communities lose their connection to the upstream sources. A fringe channel with only outbound links to a single closed community will score low, even if it has a large subscriber base.
+
+---
+
 ### Katz centrality
 
 Katz centrality extends the idea behind PageRank by counting not just direct connections but all paths of any length — with longer paths discounted by an attenuation factor (α). A channel scores high if it receives many connections from many channels, but also if it is reachable from the rest of the network through many indirect paths. Unlike PageRank, Katz gives every channel a baseline score regardless of whether its predecessors are influential, making it less sensitive to the sparse regions of the network.
@@ -113,6 +123,16 @@ The normalisation by message count is what makes this measure distinct from raw 
 **In practice:** amplification factor separates content producers from content amplifiers in a way that subscriber count and in-degree do not. A high amplification factor combined with a modest subscriber count signals a channel punching above its weight: it is small but its content travels. These channels are often primary sources — fringe outlets, specialist commentators, or operational channels in information campaigns — whose material enters the mainstream only because aggregators pick it up. Paired with HITS authority score, it helps distinguish structurally cited channels (high authority, formal prestige) from channels that are actually re-shared (high amplification, real-world reach).
 
 **Example:** a researcher with 3 000 subscribers publishes detailed analyses that ten mainstream aggregators routinely forward. Its amplification factor may be 4–5, meaning each post is forwarded four to five times on average. A party's official channel with 50 000 subscribers may have an amplification factor of 0.2 — widely followed, but its content mostly stays with its own audience without being redistributed. The first channel drives more narrative spread despite being far smaller.
+
+---
+
+### Content originality
+
+Content originality = **1 − (forwarded messages / total messages)**. A value of 1.0 means every message published by the channel is original content; a value of 0.0 means every message is a forward from another channel. Channels with no messages receive no score.
+
+**In practice:** content originality separates **producers** from **distributors** in the most direct way possible. High-originality channels write their own material; low-originality channels are pure relay nodes — their value is in their audience and distribution reach, not in what they create. Combined with amplification factor, it produces a two-axis characterisation of each channel's role: a channel that is high on both (original content that spreads widely) is a primary source; a channel low on both (mostly forwards that nobody re-shares) is a peripheral amplifier with limited influence in both directions.
+
+**Example:** the official channel of a political party will typically score near 1.0 — almost all posts are original statements, press releases, or commentary. A news aggregator channel will score near 0.0 — it exists to curate and forward, producing little of its own. A hybrid channel — say, a political commentator who writes daily analysis but also regularly forwards breaking news from wire channels — will score somewhere in the middle, and the exact value reveals how much of its identity is commentary versus aggregation.
 
 ---
 

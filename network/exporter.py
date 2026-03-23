@@ -201,6 +201,14 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     return [(key, "Harmonic Centrality")]
 
 
+def apply_local_reaching_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add local reaching centrality to each node (fraction of the network reachable via directed edges)."""
+    key = "local_reaching_centrality"
+    for node in graph_data["nodes"]:
+        node[key] = round(nx.local_reaching_centrality(graph, node["id"], weight="weight"), 6)
+    return [(key, "Local Reaching Centrality")]
+
+
 def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Katz centrality to each node."""
     key = "katz_centrality"
@@ -312,6 +320,45 @@ def apply_amplification_factor(
         node[key] = round(fr / mc, 4) if mc > 0 else 0.0
 
     return [(key, "Amplification Factor")]
+
+
+def apply_content_originality(
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
+) -> list[tuple[str, str]]:
+    """Add content originality (1 − forwarded_messages / total_messages) to each node. None if no messages."""
+    key = "content_originality"
+
+    channel_pks = [
+        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
+    ]
+    msg_q = Q(channel_id__in=channel_pks)
+    if start_date:
+        msg_q &= Q(date__date__gte=start_date)
+    if end_date:
+        msg_q &= Q(date__date__lte=end_date)
+    message_counts: dict[int, int] = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+    }
+    fwd_q = msg_q & Q(forwarded_from__isnull=False)
+    forwarded_counts: dict[int, int] = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.filter(fwd_q).values("channel_id").annotate(total=Count("id"))
+    }
+
+    for node in graph_data["nodes"]:
+        channel_entry = channel_dict.get(node["id"])
+        if channel_entry is None:
+            continue
+        pk = channel_entry["channel"].pk
+        mc = message_counts.get(pk, 0)
+        node[key] = round(1 - forwarded_counts.get(pk, 0) / mc, 4) if mc > 0 else None
+
+    return [(key, "Content Originality")]
 
 
 def find_main_component(graph: nx.DiGraph) -> set[str]:
