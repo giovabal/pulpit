@@ -1,11 +1,10 @@
 Promise.all([
     fetch("data/network_metrics.json").then(function(r) { return r.json(); }),
-    fetch("data/channel_measure.json").then(function(r) { return r.json(); }),
-    fetch("data/accessory.json").then(function(r) { return r.json(); }),
+    fetch("data/channels.json").then(function(r) { return r.json(); }),
 ]).then(function(results) {
-    var data = results[0], measure = results[1], accessory = results[2];
-    var nodes = measure.nodes;
-    var measures = accessory.measures || []; // [[key, label], ...]
+    var data = results[0], channels = results[1];
+    var nodes = channels.nodes;
+    var measures = channels.measures || []; // [[key, label], ...]
 
     // --- Summary table ---
     var summarySection = document.getElementById("summary-section");

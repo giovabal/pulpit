@@ -351,8 +351,8 @@ def write_graph_files(
         with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
             f.write(json.dumps(position_payload))
 
-    # channel_measure.json — metadata and computed measures (no positions, no communities)
-    measure_keys: set[str] = {
+    # channels.json — per-node metadata, computed measures, community assignments, measure labels
+    node_keys: set[str] = {
         "id",
         "label",
         "color",
@@ -367,27 +367,20 @@ def write_graph_files(
         "activity_start",
         "activity_end",
     } | {k for k, _ in measures_labels}
-    measure_payload = {
-        "nodes": [{k: n[k] for k in measure_keys if k in n} for n in graph_data["nodes"]],
-    }
-    with open(os.path.join(data_dir, "channel_measure.json"), "w") as f:
-        f.write(json.dumps(measure_payload))
-
-    # community.json — per-node community assignments + strategy group definitions
-    community_payload = {
-        "nodes": [{"id": n["id"], "communities": n.get("communities", {})} for n in graph_data["nodes"]],
-        "strategies": communities_data,
-    }
-    with open(os.path.join(data_dir, "community.json"), "w") as f:
-        f.write(json.dumps(community_payload))
-
-    # accessory.json — measures labels + pagination count (communities moved to community.json)
-    accessory_payload: dict[str, Any] = {
+    channels_payload: dict[str, Any] = {
+        "nodes": [
+            {**{k: n[k] for k in node_keys if k in n}, "communities": n.get("communities", {})}
+            for n in graph_data["nodes"]
+        ],
         "measures": measures_labels,
         "total_pages_count": channel_qs.count(),
     }
-    with open(os.path.join(data_dir, "accessory.json"), "w") as f:
-        f.write(json.dumps(accessory_payload))
+    with open(os.path.join(data_dir, "channels.json"), "w") as f:
+        f.write(json.dumps(channels_payload))
+
+    # communities.json — strategy group definitions (metrics rows added later by write_community_metrics_json)
+    with open(os.path.join(data_dir, "communities.json"), "w") as f:
+        f.write(json.dumps({"strategies": communities_data}))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
@@ -937,7 +930,10 @@ def write_community_metrics_json(
     graph_dir: str,
 ) -> None:
     data_dir = os.path.join(graph_dir, "data")
-    strategies_out: dict[str, Any] = {}
+    communities_path = os.path.join(data_dir, "communities.json")
+    with open(communities_path) as f:
+        communities_file = json.load(f)
+
     for strategy_key in strategies:
         entry = community_table_data["strategies"].get(strategy_key)
         if not entry:
@@ -957,9 +953,12 @@ def write_community_metrics_json(
                     "channels": row.get("channels", []),
                 }
             )
-        strategies_out[strategy_key] = {"rows": rows_out}
-    with open(os.path.join(data_dir, "community_metrics.json"), "w") as f:
-        f.write(json.dumps({"strategies": strategies_out}))
+        strategy_entry = communities_file["strategies"].get(strategy_key)
+        if strategy_entry is not None:
+            strategy_entry["rows"] = rows_out
+
+    with open(communities_path, "w") as f:
+        f.write(json.dumps(communities_file))
 
 
 def write_community_table_html(

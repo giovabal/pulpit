@@ -1,30 +1,18 @@
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 
-function heatmapBg(val, min, max) {
-    if (val === null || val === undefined || min >= max) return "";
-    var ratio = (val - min) / (max - min);
-    return "background-color:rgb(" + Math.round(255 - ratio * 35) + "," + Math.round(255 - ratio * 21) + "," + Math.round(255 - ratio * 6) + ")";
-}
-
 Promise.all([
-    fetch("data/accessory.json").then(function(r) { return r.json(); }),
-    fetch("data/channel_measure.json").then(function(r) { return r.json(); }),
-    fetch("data/community.json").then(function(r) { return r.json(); }),
+    fetch("data/channels.json").then(function(r) { return r.json(); }),
+    fetch("data/communities.json").then(function(r) { return r.json(); }),
 ]).then(function(results) {
-    var accessory = results[0], measure = results[1], community = results[2];
-    var nodes = measure.nodes;
-    var strategies = Object.keys(community.strategies);
-
-    // Merge community assignments into nodes
-    var commNodeMap = {};
-    community.nodes.forEach(function(n) { commNodeMap[n.id] = n.communities || {}; });
-    nodes.forEach(function(n) { n.communities = commNodeMap[n.id] || {}; });
+    var channels = results[0], communities = results[1];
+    var nodes = channels.nodes;
+    var strategies = Object.keys(communities.strategies);
 
     // Sort by in_deg descending
     nodes.sort(function(a, b) { return (b.in_deg || 0) - (a.in_deg || 0); });
 
     // Extra measures: not in BASE_KEYS; pagerank ordered first
-    var extraMeasures = (accessory.measures || []).filter(function(m) { return BASE_KEYS.indexOf(m[0]) === -1; });
+    var extraMeasures = (channels.measures || []).filter(function(m) { return BASE_KEYS.indexOf(m[0]) === -1; });
     var orderedExtra = extraMeasures.filter(function(m) { return m[0] === "pagerank"; })
         .concat(extraMeasures.filter(function(m) { return m[0] !== "pagerank"; }));
 
@@ -91,9 +79,7 @@ Promise.all([
             var val = node[m[0]];
             var range = hmRanges[m[0]];
             var bg = range ? heatmapBg(val, range[0], range[1]) : "";
-            var display = val !== null && val !== undefined ? val.toFixed(4) : "";
-            var sortVal = val !== null && val !== undefined ? String(val) : "";
-            addTd(display, "number", sortVal, bg, "");
+            addTd(fmtNum(val, 4), "number", numSortVal(val), bg, "");
         });
 
         strategies.forEach(function(s) {

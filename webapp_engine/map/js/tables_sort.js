@@ -1,3 +1,15 @@
+function heatmapBg(val, min, max) {
+    if (val === null || val === undefined || min >= max) return "";
+    var ratio = (val - min) / (max - min);
+    return "background-color:rgb(" + Math.round(255 - ratio * 35) + "," + Math.round(255 - ratio * 21) + "," + Math.round(255 - ratio * 6) + ")";
+}
+function fmtNum(val, decimals) {
+    if (val === null || val === undefined) return "N/A";
+    return decimals === 0 ? String(Math.round(val)) : val.toFixed(decimals);
+}
+function numSortVal(val) {
+    return val !== null && val !== undefined ? String(val) : "";
+}
 function initSortableTables() {
     var tables = document.querySelectorAll("table.sortable:not([data-sort-initialized])"), table, thead, headers, i, j;
     for (i = 0; i < tables.length; i++) {

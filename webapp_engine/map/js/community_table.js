@@ -1,19 +1,4 @@
-function heatmapBg(val, min, max) {
-    if (val === null || val === undefined || min >= max) return "";
-    var ratio = (val - min) / (max - min);
-    return "background-color:rgb(" + Math.round(255 - ratio * 35) + "," + Math.round(255 - ratio * 21) + "," + Math.round(255 - ratio * 6) + ")";
-}
-
-function fmtNum(val, decimals) {
-    if (val === null || val === undefined) return "N/A";
-    return decimals === 0 ? String(Math.round(val)) : val.toFixed(decimals);
-}
-
-function numSortVal(val) {
-    return val !== null && val !== undefined ? String(val) : "";
-}
-
-fetch("data/community_metrics.json").then(function(r) { return r.json(); }).then(function(data) {
+fetch("data/communities.json").then(function(r) { return r.json(); }).then(function(data) {
     var container = document.getElementById("community-tables");
     var strategies = Object.keys(data.strategies);
 

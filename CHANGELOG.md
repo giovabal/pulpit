@@ -1,17 +1,17 @@
 # Changelog
 
 ## [0.7] - To be announced
-*Widening the selection of whole-network measures.*
+*Widening the selection of whole-network measures. Comparing node measures.*
 
 ### New features
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
 - `network_table` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
 - `community_table.html` each strategy section now has a collapsible channel list showing all channels grouped by community. `community_table.xlsx` strategy sheets now include a Channels column.
 - Whole-network metrics are now in a dedicated `network_table.html` / `network_table.xlsx`; `community_table` contains only per-community rows.
-- `network_table.html` now features an interactive scatter plot where any two measures can be compared on log-log axes, with a power-law trend line, pan/zoom, and hover tooltips. The pair of measures is selected dynamically via dropdowns — no need to re-export to change the comparison.
+- `network_table.html` now features an interactive scatter plot where any two measures can be compared on log-log axes, with a power-law trend line. The pair of measures is selected dynamically via dropdowns.
 
 ### Improvements
-- Graph export data is now split into typed JSON files under `graph/data/`: `channel_measure.json` (per-node metadata and measures), `channel_position.json` (spatial layout and edges), `community.json` (community assignments and strategy definitions), `accessory.json` (measure labels), `community_metrics.json` (per-community structural metrics), `network_metrics.json` (whole-network metrics and modularity). The graph mini-site and all HTML tables read these files at load time rather than having data baked in at export time.
+- Graph export data is now split into typed JSON files under `graph/data/`: `channels.json` (per-node metadata, measures, and community assignments), `channel_position.json` (spatial layout and edges), `communities.json` (strategy definitions and per-community metrics), `network_metrics.json` (whole-network metrics and modularity). The graph mini-site and all HTML tables read these files at load time rather than having data baked in at export time.
 - All three HTML tables (`channel_table.html`, `network_table.html`, `community_table.html`) are now static shells that load and render data client-side from `graph/data/*.json`; re-exporting is no longer required to change what is displayed in the browser.
 - Graph mini-site assets reorganised into subdirectories: `graph.html` (was `index.html`), `css/graph.css`, `css/tables.css`, `js/graph.js`, `js/tables_sort.js`, `js/channel_table.js`, `js/community_table.js`, `js/network_table.js`.
 

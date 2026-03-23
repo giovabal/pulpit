@@ -17,9 +17,8 @@ var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messag
 var loading_modal_bs       = null;
 var accessory_data         = null;
 var active_strategy        = null;
-var community_color_maps   = {};      // { strategyKey: { communityLabel: hexColor } }
+var community_color_maps    = {};      // { strategyKey: { communityLabel: hexColor } }
 var community_strategy_data = {};     // { strategyKey: { groups: [...] } }
-var community_node_map     = {};      // { nodeId: { strategyKey: communityLabel } }
 var graph_loaded           = false;
 var accessory_loaded       = false;
 var is_graph_completely_rendered = false;
@@ -374,15 +373,15 @@ function click_node(nodeId) {
 function get_data() {
     $.when(
         $.getJSON('data/channel_position.json'),
-        $.getJSON('data/channel_measure.json')
-    ).done(function(pos_resp, meas_resp) {
+        $.getJSON('data/channels.json')
+    ).done(function(pos_resp, ch_resp) {
         $('#loading_message').html('Building graph…');
 
-        var pos_data  = pos_resp[0];
-        var meas_data = meas_resp[0];
+        var pos_data = pos_resp[0];
+        var ch_data  = ch_resp[0];
 
         var measure_map = {};
-        meas_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
+        ch_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
 
         var inDegVals  = pos_data.nodes.map(function(n) { return (measure_map[n.id] || {}).in_deg || 0; });
         var minInDeg   = Math.min.apply(null, inDegVals);
@@ -395,7 +394,6 @@ function get_data() {
                 id:            pos.id,
                 x:             pos.x,
                 y:             pos.y,
-                communities:   community_node_map[pos.id] || {},
                 size:          1.5 + ((m.in_deg || 0) - minInDeg) / inDegRange * 13.5,
                 color:         rgbColor,
                 originalColor: rgbColor
@@ -446,15 +444,14 @@ $(document).ready(function() {
     $('#loading_message').html('Loading…<br>Please wait.');
 
     $.when(
-        $.getJSON('data/accessory.json'),
-        $.getJSON('data/community.json')
-    ).done(function(acc_resp, comm_resp) {
-        var acc_data  = acc_resp[0];
+        $.getJSON('data/channels.json'),
+        $.getJSON('data/communities.json')
+    ).done(function(ch_resp, comm_resp) {
+        var ch_data   = ch_resp[0];
         var comm_data = comm_resp[0];
 
-        accessory_data = acc_data;
+        accessory_data = ch_data;
 
-        comm_data.nodes.forEach(function(n) { community_node_map[n.id] = n.communities; });
         community_strategy_data = comm_data.strategies;
 
         community_color_maps = build_community_color_maps(comm_data.strategies);
@@ -464,11 +461,11 @@ $(document).ready(function() {
         build_strategy_selector(comm_data.strategies);
         if (active_strategy) build_legend(comm_data.strategies[active_strategy]);
 
-        var size_items = acc_data.measures.map(function(m) {
+        var size_items = ch_data.measures.map(function(m) {
             return '<option value="' + m[0] + '">' + m[1] + '</option>';
         });
         $('#size-select').html(size_items.join(''));
-        $('#total_pages_count').html(acc_data.total_pages_count);
+        $('#total_pages_count').html(ch_data.total_pages_count);
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
