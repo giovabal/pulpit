@@ -106,6 +106,84 @@ The community basis for the entropy calculation is set by the strategy name in p
 
 ---
 
+## Community detection strategies
+
+A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.
+
+Multiple strategies can be computed simultaneously and switched between in the graph viewer.
+
+---
+
+### Organization
+
+The simplest strategy: communities are defined by the **Organizations** you have created in the admin interface. Each organization corresponds to one community, and its color comes directly from the color you assigned in the admin.
+
+**In practice:** this is the most interpretable strategy because the groupings reflect your own domain knowledge. You decide what the categories are — by political orientation, country, topic, funding source, or any other criterion. The graph then shows how your categories relate spatially: are channels from the same organization clustered together? Do organizations form tight blocs or are they interspersed?
+
+**Example:** you group channels into five organizations: far-right, mainstream right, centrist, left, and state media. The resulting map shows that far-right and mainstream right channels are adjacent and heavily cross-referenced, while state media channels form an isolated cluster with few outbound connections to the others — suggesting that official outlets are cited but do not cite back.
+
+---
+
+### Louvain
+
+An automatic algorithm that maximises **modularity** — a measure of how much more densely channels are connected within a group compared to what you would expect by chance. It requires no prior knowledge of the communities and produces no fixed number of groups: the algorithm finds however many communities best fit the data.
+
+**In practice:** Louvain is the most commonly used community detection algorithm in network analysis. It is good at finding unexpected sub-structure — communities that cut across your predefined categories, or that split a group you thought was unified.
+
+**Example:** you have grouped a set of channels under "populist right." Louvain may split them into two distinct communities: one centred on economic grievances (anti-immigration framed as a labour issue) and one centred on cultural identity (language, religion, tradition). The cross-referencing patterns reveal that these two sub-movements are more internally coherent than their shared political label suggests, and that a handful of channels act as bridges between them.
+
+---
+
+### Leiden
+
+Leiden is a refinement of the Louvain algorithm that addresses one of its known weaknesses: Louvain can produce communities that are internally disconnected — where some nodes are loosely attached to a group they do not actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected internally.
+
+**In practice:** Leiden tends to produce sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. The communities it finds are not just modular — they are structurally compact. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
+
+**Example:** in a network where a mainstream news aggregator forwards content from dozens of ideologically diverse channels, Louvain may lump several distinct sub-movements into a single broad community anchored by that aggregator. Leiden's refinement step will pull apart these loosely connected sub-groups, revealing the underlying ideological clusters that the aggregator happens to span.
+
+---
+
+### K-core (k-shell decomposition)
+
+K-core peels the network like an onion. It repeatedly removes the least-connected nodes, exposing progressively denser cores. The **innermost core** (displayed as community 1 in Pulpit) contains only channels that are all mutually connected to each other above a certain threshold — the tightest, most integrated nucleus of the network. Outer shells contain channels that are connected to the core but not tightly enough to be part of it.
+
+**In practice:** k-core is uniquely useful for identifying the **ideological engine** of a network — the small group of channels that drive the conversation and are all in dialogue with each other — as opposed to the much larger periphery that amplifies without originating. Unlike Louvain, k-core does not split the network into peer communities; it reveals hierarchy and centrality.
+
+**Example:** in a disinformation network of 300 channels, k-core decomposition may reveal an innermost core of just eight channels. These eight all forward each other regularly, share a consistent narrative frame, and are the first to publish the stories that the outer shells amplify hours later. They are the producers; the rest are distributors. The outer shells may be large and visible, but the core is where the content originates.
+
+---
+
+### Infomap
+
+Infomap uses **information theory** to find communities based on how a random walk moves through the network. Channels end up in the same community if information — modelled as a random walker following edges — tends to circulate within that group rather than escaping to the rest of the network. A community in Infomap is essentially a **trap**: once you enter it, you tend to stay.
+
+**In practice:** Infomap is the best strategy for identifying genuine echo chambers. A group of channels where content circulates in a closed loop — forwarding each other, rarely linking outside — will be detected as a single community regardless of how the channels are superficially categorised. It reveals functional insularity rather than just topical similarity.
+
+**Example:** a cluster of regional separatist channels may look, from their content, like a loose collection of locally focused outlets. Infomap reveals that they form a tight closed loop: content produced by any one of them propagates rapidly through the others and almost never reaches the mainstream political channels in the network. They are not merely thematically similar — they are structurally isolated, constituting a self-contained information environment.
+
+---
+
+### Weakly Connected Components (WEAKCC)
+
+Two channels belong to the same weakly connected component if there is a path between them **ignoring edge direction** — that is, if you can travel from one to the other by following forwards or references in either direction.
+
+**In practice:** WEAKCC reveals the **broadest structural islands** in the network. Channels in different components have no relationship at all — they are genuinely isolated from each other. Within a single component, channels are at least indirectly linked, even if the relationship is asymmetric (A references B, but B never references A). This is the coarsest possible partition: most real-world networks collapse into one or a few large components with many small satellite islands.
+
+**Example:** a monitoring project covering two politically unrelated media ecosystems — say, domestic far-right channels and foreign-language diaspora channels — may produce a network where these two ecosystems form separate weakly connected components, with no cross-referencing links between them. WEAKCC makes this structural disconnection immediately visible.
+
+---
+
+### Strongly Connected Components (STRONGCC)
+
+Two channels belong to the same strongly connected component if there is a **directed path in both directions** between them — A can reach B and B can reach A by following the actual direction of forwards and references.
+
+**In practice:** STRONGCC reveals the **mutually reinforcing cores** of the network. A large SCC is a group of channels that all ultimately cite each other in a closed directed loop — a genuine echo chamber in the strictest sense. Channels outside the large SCC either feed into it (they are cited but do not cite back) or drain from it (they amplify but are not amplified). In most real-world networks, STRONGCC produces one or a few large components and many singleton components (isolated nodes or channels with only one-way connections).
+
+**Example:** in a disinformation campaign, the coordinating accounts may form a large SCC — they all repost each other in a deliberate cycle to create the appearance of organic consensus. Downstream amplifier channels, which forward the content but are never referenced back, form singletons or small components. STRONGCC lets you distinguish between the coordinated nucleus and the unwitting (or witting) amplifiers at the periphery.
+
+---
+
 ## Whole-network measures
 
 Whole-network measures summarise the structure of the entire graph as a single number. They do not score individual channels; they characterise the network as a system. These values appear in the **Whole network** summary panel at the top of `community_table.html` and in the **Network Summary** sheet of `community_table.xlsx`.
@@ -226,84 +304,6 @@ Modularity measures the quality of a community partition. For a given assignment
 Modularity is reported for each active community detection strategy in `network_table.html` and `network_table.xlsx`.
 
 **In practice:** modularity answers *how well does this partition fit the data?* A high modularity for the Leiden partition confirms that the algorithmic communities correspond to real density structure in the graph. Comparing modularity across strategies is informative: if the Organization partition (based on your domain knowledge) has a modularity close to that of Leiden, your manual categorisation captures most of the network's structural community organisation. If Leiden's modularity is substantially higher, there is structural community organisation that your categorisation does not capture.
-
----
-
-## Community detection strategies
-
-A community detection strategy divides the network into groups (communities) of channels that are more densely connected to each other than to the rest of the network. Each strategy uses a different definition of what "connected" means, and reveals a different structural layer of the same data.
-
-Multiple strategies can be computed simultaneously and switched between in the graph viewer.
-
----
-
-### Organization
-
-The simplest strategy: communities are defined by the **Organizations** you have created in the admin interface. Each organization corresponds to one community, and its color comes directly from the color you assigned in the admin.
-
-**In practice:** this is the most interpretable strategy because the groupings reflect your own domain knowledge. You decide what the categories are — by political orientation, country, topic, funding source, or any other criterion. The graph then shows how your categories relate spatially: are channels from the same organization clustered together? Do organizations form tight blocs or are they interspersed?
-
-**Example:** you group channels into five organizations: far-right, mainstream right, centrist, left, and state media. The resulting map shows that far-right and mainstream right channels are adjacent and heavily cross-referenced, while state media channels form an isolated cluster with few outbound connections to the others — suggesting that official outlets are cited but do not cite back.
-
----
-
-### Louvain
-
-An automatic algorithm that maximises **modularity** — a measure of how much more densely channels are connected within a group compared to what you would expect by chance. It requires no prior knowledge of the communities and produces no fixed number of groups: the algorithm finds however many communities best fit the data.
-
-**In practice:** Louvain is the most commonly used community detection algorithm in network analysis. It is good at finding unexpected sub-structure — communities that cut across your predefined categories, or that split a group you thought was unified.
-
-**Example:** you have grouped a set of channels under "populist right." Louvain may split them into two distinct communities: one centred on economic grievances (anti-immigration framed as a labour issue) and one centred on cultural identity (language, religion, tradition). The cross-referencing patterns reveal that these two sub-movements are more internally coherent than their shared political label suggests, and that a handful of channels act as bridges between them.
-
----
-
-### Leiden
-
-Leiden is a refinement of the Louvain algorithm that addresses one of its known weaknesses: Louvain can produce communities that are internally disconnected — where some nodes are loosely attached to a group they do not actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected internally.
-
-**In practice:** Leiden tends to produce sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. The communities it finds are not just modular — they are structurally compact. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
-
-**Example:** in a network where a mainstream news aggregator forwards content from dozens of ideologically diverse channels, Louvain may lump several distinct sub-movements into a single broad community anchored by that aggregator. Leiden's refinement step will pull apart these loosely connected sub-groups, revealing the underlying ideological clusters that the aggregator happens to span.
-
----
-
-### K-core (k-shell decomposition)
-
-K-core peels the network like an onion. It repeatedly removes the least-connected nodes, exposing progressively denser cores. The **innermost core** (displayed as community 1 in Pulpit) contains only channels that are all mutually connected to each other above a certain threshold — the tightest, most integrated nucleus of the network. Outer shells contain channels that are connected to the core but not tightly enough to be part of it.
-
-**In practice:** k-core is uniquely useful for identifying the **ideological engine** of a network — the small group of channels that drive the conversation and are all in dialogue with each other — as opposed to the much larger periphery that amplifies without originating. Unlike Louvain, k-core does not split the network into peer communities; it reveals hierarchy and centrality.
-
-**Example:** in a disinformation network of 300 channels, k-core decomposition may reveal an innermost core of just eight channels. These eight all forward each other regularly, share a consistent narrative frame, and are the first to publish the stories that the outer shells amplify hours later. They are the producers; the rest are distributors. The outer shells may be large and visible, but the core is where the content originates.
-
----
-
-### Infomap
-
-Infomap uses **information theory** to find communities based on how a random walk moves through the network. Channels end up in the same community if information — modelled as a random walker following edges — tends to circulate within that group rather than escaping to the rest of the network. A community in Infomap is essentially a **trap**: once you enter it, you tend to stay.
-
-**In practice:** Infomap is the best strategy for identifying genuine echo chambers. A group of channels where content circulates in a closed loop — forwarding each other, rarely linking outside — will be detected as a single community regardless of how the channels are superficially categorised. It reveals functional insularity rather than just topical similarity.
-
-**Example:** a cluster of regional separatist channels may look, from their content, like a loose collection of locally focused outlets. Infomap reveals that they form a tight closed loop: content produced by any one of them propagates rapidly through the others and almost never reaches the mainstream political channels in the network. They are not merely thematically similar — they are structurally isolated, constituting a self-contained information environment.
-
----
-
-### Weakly Connected Components (WEAKCC)
-
-Two channels belong to the same weakly connected component if there is a path between them **ignoring edge direction** — that is, if you can travel from one to the other by following forwards or references in either direction.
-
-**In practice:** WEAKCC reveals the **broadest structural islands** in the network. Channels in different components have no relationship at all — they are genuinely isolated from each other. Within a single component, channels are at least indirectly linked, even if the relationship is asymmetric (A references B, but B never references A). This is the coarsest possible partition: most real-world networks collapse into one or a few large components with many small satellite islands.
-
-**Example:** a monitoring project covering two politically unrelated media ecosystems — say, domestic far-right channels and foreign-language diaspora channels — may produce a network where these two ecosystems form separate weakly connected components, with no cross-referencing links between them. WEAKCC makes this structural disconnection immediately visible.
-
----
-
-### Strongly Connected Components (STRONGCC)
-
-Two channels belong to the same strongly connected component if there is a **directed path in both directions** between them — A can reach B and B can reach A by following the actual direction of forwards and references.
-
-**In practice:** STRONGCC reveals the **mutually reinforcing cores** of the network. A large SCC is a group of channels that all ultimately cite each other in a closed directed loop — a genuine echo chamber in the strictest sense. Channels outside the large SCC either feed into it (they are cited but do not cite back) or drain from it (they amplify but are not amplified). In most real-world networks, STRONGCC produces one or a few large components and many singleton components (isolated nodes or channels with only one-way connections).
-
-**Example:** in a disinformation campaign, the coordinating accounts may form a large SCC — they all repost each other in a deliberate cycle to create the appearance of organic consensus. Downstream amplifier channels, which forward the content but are never referenced back, form singletons or small components. STRONGCC lets you distinguish between the coordinated nucleus and the unwitting (or witting) amplifiers at the periphery.
 
 ---
 

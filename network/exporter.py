@@ -389,7 +389,7 @@ def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
         src = os.path.join(settings.MEDIA_ROOT, "channels", channel_dir, "profile")
         dst = os.path.join(root_target, "channels", channel_dir, "profile")
         try:
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
         except FileNotFoundError:
             pass
         except OSError as e:
