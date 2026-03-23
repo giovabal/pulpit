@@ -1115,3 +1115,41 @@ def write_community_table_html(
     content = render_to_string("network/community_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
+
+
+def write_index_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+    include_graph: bool = False,
+    include_channel_html: bool = False,
+    include_channel_xlsx: bool = False,
+    include_network_html: bool = False,
+    include_network_xlsx: bool = False,
+    include_community_html: bool = False,
+    include_community_xlsx: bool = False,
+    strategies: list[str] | None = None,
+) -> None:
+    if seo:
+        title = project_title or "Network Analysis"
+        robots_meta = "index, follow"
+    else:
+        title = project_title or "Network Analysis"
+        robots_meta = "noindex, nofollow"
+
+    context = {
+        "title": title,
+        "robots_meta": robots_meta,
+        "project_title": project_title,
+        "include_graph": include_graph,
+        "include_channel_html": include_channel_html,
+        "include_channel_xlsx": include_channel_xlsx,
+        "include_network_html": include_network_html,
+        "include_network_xlsx": include_network_xlsx,
+        "include_community_html": include_community_html,
+        "include_community_xlsx": include_community_xlsx,
+        "strategies": [s.capitalize() for s in (strategies or [])],
+    }
+    content = render_to_string("network/index.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)

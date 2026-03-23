@@ -1,0 +1,114 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="mb-1">{{ project_title|default:"Network Analysis" }}</h2>
+    <p class="text-muted mb-0">Generated output — choose a view below</p>
+  </div>
+  <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Documentation</a>
+</div>
+
+<div class="row g-4">
+
+  {% if include_graph %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Network map</h5>
+        <p class="card-text text-muted small">Interactive force-directed graph of all channels. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.</p>
+        <a href="graph.html" class="btn btn-outline-primary btn-sm">Open map</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if include_channel_html %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <p class="card-text text-muted small">One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments for each detection strategy.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="channel_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
+          {% if include_channel_xlsx %}<a href="channel_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif include_channel_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <p class="card-text text-muted small">One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments for each detection strategy.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="channel_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if include_network_html %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <p class="card-text text-muted small">Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy, and aggregate content measures.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="network_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
+          {% if include_network_xlsx %}<a href="network_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#whole-network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif include_network_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <p class="card-text text-muted small">Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy, and aggregate content measures.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="network_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#whole-network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if include_community_html %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <p class="card-text text-muted small">Structural metrics per detected community{% if strategies %} ({{ strategies|join:", " }}){% endif %}: size, internal/external edges, density, reciprocity, clustering, path length.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="community_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
+          {% if include_community_xlsx %}<a href="community_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#community-detection-strategies" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Strategies</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif include_community_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <p class="card-text text-muted small">Structural metrics per detected community{% if strategies %} ({{ strategies|join:", " }}){% endif %}: size, internal/external edges, density, reciprocity, clustering, path length.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="community_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
+          <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#community-detection-strategies" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Strategies</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

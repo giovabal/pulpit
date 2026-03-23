@@ -1,4 +1,5 @@
 import datetime
+import os
 import re
 from typing import Any
 
@@ -364,5 +365,21 @@ class Command(BaseCommand):
         if not nograph:
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, "graph")
+
+        self.stdout.write("- index")
+        os.makedirs("graph", exist_ok=True)
+        exporter.write_index_html(
+            output_filename="graph/index.html",
+            seo=seo,
+            project_title=project_title,
+            include_graph=not nograph,
+            include_channel_html="html" in table_format,
+            include_channel_xlsx="xlsx" in table_format,
+            include_network_html="html" in table_format,
+            include_network_xlsx="xlsx" in table_format,
+            include_community_html="html" in table_format,
+            include_community_xlsx="xlsx" in table_format,
+            strategies=strategies,
+        )
 
         self.stdout.write(self.style.SUCCESS("\nDone."))
