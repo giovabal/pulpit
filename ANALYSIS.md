@@ -92,6 +92,30 @@ Katz centrality extends the idea behind PageRank by counting not just direct con
 
 ---
 
+### Burt's constraint
+
+Burt's constraint measures how much a node's contacts are themselves connected to each other. The score ranges from 0 to 1. A low score (close to 0) means the node sits at a **structural hole** — its neighbours belong to separate groups that do not interact with each other, so the node is the only bridge between them. A high score (close to 1) means the node is embedded in a dense, redundant clique where all contacts know each other and there is little to broker.
+
+The measure is local: it only examines the immediate neighbourhood of each node, not the full network topology. This makes it complementary to betweenness centrality, which is global. A channel can have low betweenness yet low constraint (a peripheral node connecting two small, otherwise unrelated groups) or high betweenness yet moderate constraint (a central hub that is also well-embedded in its own community). Isolated nodes — channels with no connections — receive no score.
+
+**In practice:** in a political channel network, low-constraint channels are the quiet brokers. They maintain ties to channels from different ideological clusters without being fully embedded in any single one. They may not lie on many shortest paths (low betweenness) but structurally they are the only link between two otherwise separate communities. Removing a low-constraint channel fractures a local connection that betweenness analysis might miss. High-constraint channels are the opposite: deeply integrated into a single community, well-supported by redundant ties, but with limited reach across the broader network.
+
+**Example:** a channel that forwards content from both a nationalist cluster and a religious conservative cluster — two communities that otherwise have little contact — will score low on constraint even if the network's major hubs don't use it as a path. It is a niche bridge, not a highway. Constraint surfaces it; betweenness might not.
+
+---
+
+### Amplification factor
+
+Amplification factor = **forwards received from other channels ÷ own message count**. It measures how much a channel's content is redistributed by others, normalised by the channel's output volume. A value of 1.0 means each published message is forwarded, on average, exactly once by other channels in the network. Values above 1.0 indicate viral reach exceeding production rate: the channel's content spreads more than it is produced. Only forwards from channels marked `is_interesting=True` are counted, keeping the measure consistent with the graph's edge definitions.
+
+The normalisation by message count is what makes this measure distinct from raw in-degree. A channel that publishes rarely but whose every post gets forwarded by dozens of others scores far higher than a prolific channel that is occasionally forwarded. It isolates *efficiency of spread* from *volume of output*.
+
+**In practice:** amplification factor separates content producers from content amplifiers in a way that subscriber count and in-degree do not. A high amplification factor combined with a modest subscriber count signals a channel punching above its weight: it is small but its content travels. These channels are often primary sources — fringe outlets, specialist commentators, or operational channels in information campaigns — whose material enters the mainstream only because aggregators pick it up. Paired with HITS authority score, it helps distinguish structurally cited channels (high authority, formal prestige) from channels that are actually re-shared (high amplification, real-world reach).
+
+**Example:** a researcher with 3 000 subscribers publishes detailed analyses that ten mainstream aggregators routinely forward. Its amplification factor may be 4–5, meaning each post is forwarded four to five times on average. A party's official channel with 50 000 subscribers may have an amplification factor of 0.2 — widely followed, but its content mostly stays with its own audience without being redistributed. The first channel drives more narrative spread despite being far smaller.
+
+---
+
 ### Bridging centrality
 
 Bridging centrality is a composite measure that combines two independent signals: how often a channel sits on the shortest paths between other channels (betweenness), and how diverse the community membership of its immediate neighbours is (Shannon entropy). The final score is the product of the two. A channel scores high only if it is both structurally central *and* community-diverse — that is, it sits on important paths *and* those paths cross ideological or topical boundaries.

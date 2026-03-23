@@ -7,7 +7,7 @@ import re
 import shutil
 from collections import defaultdict
 from collections.abc import Callable
-from math import log, sqrt
+from math import isnan, log, sqrt
 from typing import Any
 
 from django.conf import settings
@@ -257,6 +257,61 @@ def apply_bridging_centrality(graph_data: GraphData, graph: nx.DiGraph, strategy
         node[key] = bt * entropy
 
     return [(key, "Bridging Centrality")]
+
+
+def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add Burt's constraint to each node. Isolated nodes receive None (undefined)."""
+    key = "burt_constraint"
+    values: dict[str, float] = nx.constraint(graph)
+    for node in graph_data["nodes"]:
+        val = values.get(node["id"])
+        node[key] = None if (val is None or isnan(val)) else round(val, 6)
+    return [(key, "Burt's Constraint")]
+
+
+def apply_amplification_factor(
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
+) -> list[tuple[str, str]]:
+    """Add amplification factor (forwards received / own message count) to each node."""
+    key = "amplification_factor"
+
+    channel_pks = [
+        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
+    ]
+    msg_q = Q(channel_id__in=channel_pks)
+    if start_date:
+        msg_q &= Q(date__date__gte=start_date)
+    if end_date:
+        msg_q &= Q(date__date__lte=end_date)
+    message_counts: dict[int, int] = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+    }
+
+    fwd_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True)
+    if start_date:
+        fwd_q &= Q(date__date__gte=start_date)
+    if end_date:
+        fwd_q &= Q(date__date__lte=end_date)
+    forwards_received: dict[int, int] = {
+        item["forwarded_from_id"]: item["total"]
+        for item in Message.objects.filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
+    }
+
+    for node in graph_data["nodes"]:
+        channel_entry = channel_dict.get(node["id"])
+        if channel_entry is None:
+            continue
+        pk = channel_entry["channel"].pk
+        mc = message_counts.get(pk, 0)
+        fr = forwards_received.get(pk, 0)
+        node[key] = round(fr / mc, 4) if mc > 0 else 0.0
+
+    return [(key, "Amplification Factor")]
 
 
 def find_main_component(graph: nx.DiGraph) -> set[str]:

@@ -4,6 +4,7 @@
 *Widening the selection of whole-network measures. Comparing node measures.*
 
 ### New features
+- Two new node measures for political research: `BURTCONSTRAINT` (structural hole brokerage) and `AMPLIFICATION` (forwards received / own message count). Both available in `NETWORK_MEASURES` and included in `ALL`.
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
 - `network_table` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
 - `community_table.html` each strategy section now has a collapsible channel list showing all channels grouped by community. `community_table.xlsx` strategy sheets now include a Channels column.

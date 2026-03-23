@@ -75,6 +75,8 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `HARMONICCENTRALITY` | Normalized harmonic centrality |
 | `KATZ` | Katz centrality |
 | `BRIDGING` or `BRIDGING(STRATEGY)` | Bridging centrality (betweenness × neighbour-community Shannon entropy); defaults to `LEIDEN` when no strategy is specified; the chosen strategy must also be in `COMMUNITY_STRATEGIES` |
+| `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker, high = embedded in dense clique; `null` for isolated nodes |
+| `AMPLIFICATION` | Amplification factor = forwards received from interesting channels / own message count; respects `--startdate`/`--enddate` |
 | `ALL` | Expand to all measures above; `BRIDGING` uses `LEIDEN` as community basis |
 
 ### Edge construction

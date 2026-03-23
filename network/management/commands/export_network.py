@@ -17,6 +17,8 @@ VALID_MEASURES = {
     "OUTDEGCENTRALITY",
     "HARMONICCENTRALITY",
     "KATZ",
+    "BURTCONSTRAINT",
+    "AMPLIFICATION",
 }
 
 _BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
@@ -52,6 +54,7 @@ _MEASURE_STEPS = [
     ("OUTDEGCENTRALITY", "out-degree centrality", exporter.apply_out_degree_centrality),
     ("HARMONICCENTRALITY", "harmonic centrality", exporter.apply_harmonic_centrality),
     ("KATZ", "Katz centrality", exporter.apply_katz_centrality),
+    ("BURTCONSTRAINT", "Burt's constraint", exporter.apply_burt_constraint),
 ]
 
 
@@ -238,6 +241,14 @@ class Command(BaseCommand):
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
             measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
+            self.stdout.write("done")
+
+        if "AMPLIFICATION" in measures:
+            self.stdout.write("- amplification factor … ", ending="")
+            self.stdout.flush()
+            measures_labels += exporter.apply_amplification_factor(
+                graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+            )
             self.stdout.write("done")
 
         if not nograph:
