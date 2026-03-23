@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.7] - To be announced
+## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
 
 ### New features
