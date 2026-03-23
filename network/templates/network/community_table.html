@@ -8,47 +8,6 @@
     <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Back to map</a>
   </div>
 </div>
-
-{% for strategy in strategies %}
-<h3 id="{{ strategy.h3_id }}" class="mt-4 mb-3">{{ strategy.label }}</h3>
-<p class="text-muted small">Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).</p>
-<div class="table-responsive">
-  <table class="table table-hover table-sm sortable" aria-labelledby="{{ strategy.h3_id }}">
-    <thead>
-      <tr>
-        <th scope="col">Community</th>
-        <th scope="col" class="number">Nodes</th>
-        <th scope="col" class="number">Internal Edges</th>
-        <th scope="col" class="number">External Edges</th>
-        <th scope="col" class="number">Density</th>
-        <th scope="col" class="number">Reciprocity</th>
-        <th scope="col" class="number">Avg Clustering</th>
-        <th scope="col" class="number">Avg Path Length</th>
-        <th scope="col" class="number">Diameter</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in strategy.rows %}
-      <tr>
-        <td data-sort-value="{{ row.label }}"><span style="display:inline-block;width:12px;height:12px;background:{{ row.hex_color }};border:1px solid rgba(0,0,0,.2);vertical-align:middle;border-radius:2px;margin-right:5px;" aria-hidden="true"></span>{{ row.label }}</td>
-        {% for cell in row.cells %}
-        <td class="number"{% if cell.sort_value %} data-sort-value="{{ cell.sort_value }}"{% endif %}{% if cell.style %} style="{{ cell.style }}"{% endif %}>{{ cell.display }}</td>
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-<details class="community-channels mt-2 mb-4">
-  <summary class="text-muted small">Channel list</summary>
-  {% for row in strategy.rows %}
-  {% if row.channels %}
-  <div class="community-channels-group mt-2">
-    <span class="community-channels-label"><span style="display:inline-block;width:10px;height:10px;background:{{ row.hex_color }};border:1px solid rgba(0,0,0,.2);vertical-align:middle;border-radius:2px;margin-right:4px;" aria-hidden="true"></span>{{ row.label }}</span>
-    <span class="community-channels-list">{% for ch in row.channels %}<a href="{{ ch.url }}" class="community-channel-chip">{{ ch.label }}</a>{% endfor %}</span>
-  </div>
-  {% endif %}
-  {% endfor %}
-</details>
-{% endfor %}
+<div id="community-tables"></div>
+<script src="js/community_table.js"></script>
 {% endblock %}

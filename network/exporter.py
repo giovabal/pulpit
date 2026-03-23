@@ -967,19 +967,16 @@ def _build_scatter_plots(graph_data: "GraphData") -> "dict[str, Any] | None":
     return {"resources": INLINE.render(), "plots": built}
 
 
-def write_network_table_html(
+def write_network_metrics_json(
     community_table_data: CommunityTableData,
     strategies: list[str],
-    output_filename: str,
-    graph_data: "GraphData | None" = None,
-    seo: bool = False,
-    project_title: str = "",
+    graph_dir: str,
 ) -> None:
     def _fmt(val: float | None, decimals: int = 4) -> str:
         return "N/A" if val is None else f"{val:.{decimals}f}"
 
+    data_dir = os.path.join(graph_dir, "data")
     summary = community_table_data["network_summary"]
-    wcc_marker = " *" if not summary["path_on_full"] else ""
     summary_rows = []
     for label, value in _network_summary_rows(summary):
         if isinstance(value, float):
@@ -998,6 +995,22 @@ def write_network_table_html(
             {"strategy": strategy_key.capitalize(), "value": _fmt(mod) if mod is not None else "N/A"}
         )
 
+    payload = {
+        "wcc_note_visible": not summary["path_on_full"],
+        "summary_rows": summary_rows,
+        "modularity_rows": modularity_rows,
+    }
+    with open(os.path.join(data_dir, "network_metrics.json"), "w") as f:
+        f.write(json.dumps(payload))
+
+
+def write_network_table_html(
+    community_table_data: CommunityTableData,
+    output_filename: str,
+    graph_data: "GraphData | None" = None,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
     bokeh_resources = None
     bokeh_plots: list[dict[str, Any]] = []
     if graph_data is not None:
@@ -1016,10 +1029,6 @@ def write_network_table_html(
     context = {
         "title": title,
         "robots_meta": robots_meta,
-        "wcc_note_visible": not summary["path_on_full"],
-        "summary_rows": summary_rows,
-        "modularity_rows": modularity_rows,
-        "wcc_marker": wcc_marker,
         "bokeh_resources": bokeh_resources,
         "bokeh_plots": bokeh_plots,
     }
@@ -1133,80 +1142,42 @@ def _metric_cell_dict(val: float | int | None, decimals: int, bg: str) -> dict:
     return {"display": f"{val:.{decimals}f}", "sort_value": str(val), "style": bg}
 
 
-def write_community_table_html(
+def write_community_metrics_json(
     community_table_data: CommunityTableData,
     strategies: list[str],
+    graph_dir: str,
+) -> None:
+    data_dir = os.path.join(graph_dir, "data")
+    strategies_out: dict[str, Any] = {}
+    for strategy_key in strategies:
+        entry = community_table_data["strategies"].get(strategy_key)
+        if not entry:
+            continue
+        rows_out = []
+        for row in entry["rows"]:
+            _community_id, _count, label, hex_color = row["group"]
+            hex_color = str(hex_color)
+            if not hex_color.startswith("#"):
+                hex_color = f"#{hex_color}"
+            rows_out.append(
+                {
+                    "label": str(label),
+                    "hex_color": hex_color,
+                    "node_count": row["node_count"],
+                    "metrics": row["metrics"],
+                    "channels": row.get("channels", []),
+                }
+            )
+        strategies_out[strategy_key] = {"rows": rows_out}
+    with open(os.path.join(data_dir, "community_metrics.json"), "w") as f:
+        f.write(json.dumps({"strategies": strategies_out}))
+
+
+def write_community_table_html(
     output_filename: str,
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    def _fmt(val: float | None, decimals: int = 4) -> str:
-        return "N/A" if val is None else f"{val:.{decimals}f}"
-
-    strategies_ctx = []
-    for strategy_key in strategies:
-        strategy_entry = community_table_data["strategies"].get(strategy_key)
-        if not strategy_entry:
-            continue
-        precomputed_rows = strategy_entry["rows"]
-
-        _hm_cols = {
-            "node_count": [e["node_count"] for e in precomputed_rows],
-            "internal_edges": [e["metrics"]["internal_edges"] for e in precomputed_rows],
-            "external_edges": [e["metrics"]["external_edges"] for e in precomputed_rows],
-            "density": [v for e in precomputed_rows if (v := e["metrics"].get("density")) is not None],
-            "reciprocity": [v for e in precomputed_rows if (v := e["metrics"].get("reciprocity")) is not None],
-            "avg_clustering": [v for e in precomputed_rows if (v := e["metrics"].get("avg_clustering")) is not None],
-            "avg_path_length": [v for e in precomputed_rows if (v := e["metrics"].get("avg_path_length")) is not None],
-            "diameter": [v for e in precomputed_rows if (v := e["metrics"].get("diameter")) is not None],
-        }
-        hm_ranges = {col: (min(vs), max(vs)) for col, vs in _hm_cols.items() if vs}
-
-        def _hm(val: Any, col: str, _ranges: dict = hm_ranges) -> str:
-            return _heatmap_bg(val, *_ranges[col]) if col in _ranges else ""
-
-        rows_ctx = []
-        for entry in precomputed_rows:
-            _community_id, _count, label, hex_color = entry["group"]
-            if not str(hex_color).startswith("#"):
-                hex_color = f"#{hex_color}"
-            m = entry["metrics"]
-            nc = entry["node_count"]
-            cells = [
-                {"display": str(nc), "sort_value": str(nc), "style": _hm(nc, "node_count")},
-                {
-                    "display": str(m["internal_edges"]),
-                    "sort_value": str(m["internal_edges"]),
-                    "style": _hm(m["internal_edges"], "internal_edges"),
-                },
-                {
-                    "display": str(m["external_edges"]),
-                    "sort_value": str(m["external_edges"]),
-                    "style": _hm(m["external_edges"], "external_edges"),
-                },
-                _metric_cell_dict(m["density"], 4, _hm(m["density"], "density")),
-                _metric_cell_dict(m["reciprocity"], 4, _hm(m["reciprocity"], "reciprocity")),
-                _metric_cell_dict(m["avg_clustering"], 4, _hm(m["avg_clustering"], "avg_clustering")),
-                _metric_cell_dict(m["avg_path_length"], 4, _hm(m["avg_path_length"], "avg_path_length")),
-                _metric_cell_dict(m["diameter"], 0, _hm(m["diameter"], "diameter")),
-            ]
-            rows_ctx.append(
-                {
-                    "label": str(label),
-                    "hex_color": str(hex_color),
-                    "cells": cells,
-                    "channels": entry.get("channels", []),
-                }
-            )
-
-        strategies_ctx.append(
-            {
-                "label": strategy_key.capitalize(),
-                "h3_id": f"strategy-{strategy_key}",
-                "rows": rows_ctx,
-            }
-        )
-
     if seo:
         title = f"{project_title} | Community statistics" if project_title else "Community statistics"
         robots_meta = "index, follow"
@@ -1214,11 +1185,7 @@ def write_community_table_html(
         title = f"{project_title} | Communities" if project_title else "Communities"
         robots_meta = "noindex, nofollow"
 
-    context = {
-        "title": title,
-        "robots_meta": robots_meta,
-        "strategies": strategies_ctx,
-    }
+    context = {"title": title, "robots_meta": robots_meta}
     content = render_to_string("network/community_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)

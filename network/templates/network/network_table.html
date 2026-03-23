@@ -12,51 +12,10 @@
 </div>
 
 <div class="row g-4 mb-4">
-  <div class="col-lg-7">
-    <h5 class="mb-2">Whole-network metrics</h5>
-    <table class="table table-sm table-hover sortable">
-      <thead>
-        <tr>
-          <th scope="col">Metric</th>
-          <th scope="col" class="number">Value</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in summary_rows %}
-        <tr>
-          <td>{{ row.label }}</td>
-          <td class="number">{{ row.value }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% if wcc_note_visible %}
-    <p class="text-muted small mt-1">* Computed on the largest weakly connected component (undirected)</p>
-    {% endif %}
-  </div>
-
-  {% if modularity_rows %}
-  <div class="col-lg-5">
-    <h5 class="mb-2">Modularity by strategy</h5>
-    <table class="table table-sm table-hover sortable">
-      <thead>
-        <tr>
-          <th scope="col">Strategy</th>
-          <th scope="col" class="number">Modularity</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in modularity_rows %}
-        <tr>
-          <td>{{ row.strategy }}</td>
-          <td class="number">{{ row.value }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
+  <div class="col-lg-7" id="summary-section"></div>
+  <div class="col-lg-5 d-none" id="modularity-section"></div>
 </div>
+<script src="js/network_table.js"></script>
 
 {% for plot in bokeh_plots %}
 <div class="mb-5">
