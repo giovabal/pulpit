@@ -23,7 +23,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`index.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
+| `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`graph.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
 
 ## Graph layout
 

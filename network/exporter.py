@@ -298,8 +298,8 @@ def ensure_graph_root(root_target: str) -> None:
 
 
 def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str = "") -> None:
-    """Patch the robots meta tag and title in the static index.html after it is copied."""
-    index_path = os.path.join(root_target, "index.html")
+    """Patch the robots meta tag and title in the static graph.html after it is copied."""
+    index_path = os.path.join(root_target, "graph.html")
     if not os.path.exists(index_path):
         return
     with open(index_path) as f:
@@ -336,19 +336,56 @@ def write_graph_files(
     communities_data: dict[str, Any],
     measures_labels: list[tuple[str, str]],
     channel_qs: "QuerySet[Channel]",
-    output_filename: str,
-    accessory_filename: str,
+    graph_dir: str,
 ) -> None:
-    with open(output_filename, "w") as outputfile:
-        outputfile.write(json.dumps(graph_data))
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
 
+    # channel_position.json — spatial layout + edges
+    position_payload = {
+        "nodes": [{"id": n["id"], "x": n["x"], "y": n["y"]} for n in graph_data["nodes"]],
+        "edges": graph_data["edges"],
+    }
+    with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
+        f.write(json.dumps(position_payload))
+
+    # channel_measure.json — metadata and computed measures (no positions, no communities)
+    measure_keys: set[str] = {
+        "id",
+        "label",
+        "color",
+        "pic",
+        "url",
+        "activity_period",
+        "fans",
+        "in_deg",
+        "is_lost",
+        "messages_count",
+        "out_deg",
+        "activity_start",
+        "activity_end",
+    } | {k for k, _ in measures_labels}
+    measure_payload = {
+        "nodes": [{k: n[k] for k in measure_keys if k in n} for n in graph_data["nodes"]],
+    }
+    with open(os.path.join(data_dir, "channel_measure.json"), "w") as f:
+        f.write(json.dumps(measure_payload))
+
+    # community.json — per-node community assignments + strategy group definitions
+    community_payload = {
+        "nodes": [{"id": n["id"], "communities": n.get("communities", {})} for n in graph_data["nodes"]],
+        "strategies": communities_data,
+    }
+    with open(os.path.join(data_dir, "community.json"), "w") as f:
+        f.write(json.dumps(community_payload))
+
+    # accessory.json — measures labels + pagination count (communities moved to community.json)
     accessory_payload: dict[str, Any] = {
-        "communities": communities_data,
         "measures": measures_labels,
         "total_pages_count": channel_qs.count(),
     }
-    with open(accessory_filename, "w") as accessoryfile:
-        accessoryfile.write(json.dumps(accessory_payload))
+    with open(os.path.join(data_dir, "accessory.json"), "w") as f:
+        f.write(json.dumps(accessory_payload))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:

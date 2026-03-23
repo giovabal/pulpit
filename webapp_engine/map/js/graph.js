@@ -14,12 +14,14 @@ var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messag
 // State
 // =============================================================================
 
-var loading_modal_bs     = null;
-var accessory_data       = null;
-var active_strategy      = null;
-var community_color_maps = {};      // { strategyKey: { communityLabel: hexColor } }
-var graph_loaded         = false;
-var accessory_loaded     = false;
+var loading_modal_bs       = null;
+var accessory_data         = null;
+var active_strategy        = null;
+var community_color_maps   = {};      // { strategyKey: { communityLabel: hexColor } }
+var community_strategy_data = {};     // { strategyKey: { groups: [...] } }
+var community_node_map     = {};      // { nodeId: { strategyKey: communityLabel } }
+var graph_loaded           = false;
+var accessory_loaded       = false;
 var is_graph_completely_rendered = false;
 
 // =============================================================================
@@ -370,22 +372,37 @@ function click_node(nodeId) {
 // =============================================================================
 
 function get_data() {
-    $.getJSON('data.json', function(data) {
+    $.when(
+        $.getJSON('data/channel_position.json'),
+        $.getJSON('data/channel_measure.json')
+    ).done(function(pos_resp, meas_resp) {
         $('#loading_message').html('Building graph…');
 
-        var inDegVals  = data.nodes.map(function(n) { return n.in_deg || 0; });
+        var pos_data  = pos_resp[0];
+        var meas_data = meas_resp[0];
+
+        var measure_map = {};
+        meas_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
+
+        var inDegVals  = pos_data.nodes.map(function(n) { return (measure_map[n.id] || {}).in_deg || 0; });
         var minInDeg   = Math.min.apply(null, inDegVals);
         var inDegRange = (Math.max.apply(null, inDegVals) - minInDeg) || 1;
-        data.nodes.forEach(function(n) {
-            var rgbColor = 'rgb(' + n.color + ')';
-            graph.addNode(n.id, Object.assign({}, n, {
-                size:          1.5 + (( n.in_deg || 0) - minInDeg) / inDegRange * 13.5,
+
+        pos_data.nodes.forEach(function(pos) {
+            var m = measure_map[pos.id] || {};
+            var rgbColor = 'rgb(' + (m.color || '128,128,128') + ')';
+            graph.addNode(pos.id, Object.assign({}, m, {
+                id:            pos.id,
+                x:             pos.x,
+                y:             pos.y,
+                communities:   community_node_map[pos.id] || {},
+                size:          1.5 + ((m.in_deg || 0) - minInDeg) / inDegRange * 13.5,
                 color:         rgbColor,
                 originalColor: rgbColor
             }));
         });
 
-        data.edges.forEach(function(e) {
+        pos_data.edges.forEach(function(e) {
             var color = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
             var attrs = Object.assign({}, e, { color: color, originalColor: color });
             delete attrs.source;
@@ -428,20 +445,30 @@ $(document).ready(function() {
     loading_modal_bs.show();
     $('#loading_message').html('Loading…<br>Please wait.');
 
-    $.getJSON('data_accessory.json', function(data) {
-        accessory_data       = data;
-        community_color_maps = build_community_color_maps(data.communities);
-        var strategies       = Object.keys(data.communities);
+    $.when(
+        $.getJSON('data/accessory.json'),
+        $.getJSON('data/community.json')
+    ).done(function(acc_resp, comm_resp) {
+        var acc_data  = acc_resp[0];
+        var comm_data = comm_resp[0];
+
+        accessory_data = acc_data;
+
+        comm_data.nodes.forEach(function(n) { community_node_map[n.id] = n.communities; });
+        community_strategy_data = comm_data.strategies;
+
+        community_color_maps = build_community_color_maps(comm_data.strategies);
+        var strategies       = Object.keys(comm_data.strategies);
         active_strategy      = strategies[0] || null;
 
-        build_strategy_selector(data.communities);
-        if (active_strategy) build_legend(data.communities[active_strategy]);
+        build_strategy_selector(comm_data.strategies);
+        if (active_strategy) build_legend(comm_data.strategies[active_strategy]);
 
-        var size_items = data.measures.map(function(m) {
+        var size_items = acc_data.measures.map(function(m) {
             return '<option value="' + m[0] + '">' + m[1] + '</option>';
         });
         $('#size-select').html(size_items.join(''));
-        $('#total_pages_count').html(data.total_pages_count);
+        $('#total_pages_count').html(acc_data.total_pages_count);
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
@@ -449,7 +476,7 @@ $(document).ready(function() {
 
     $('#community-strategy-select').on('change', function() {
         active_strategy = $(this).val();
-        if (accessory_data) build_legend(accessory_data.communities[active_strategy]);
+        if (community_strategy_data) build_legend(community_strategy_data[active_strategy]);
         if (graph_loaded) {
             apply_strategy_colors(active_strategy);
             $('#group-select').val('');

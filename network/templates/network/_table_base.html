@@ -8,63 +8,7 @@
   {% block head_extra %}{% endblock %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <style>
-    body {
-      font-family: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
-      color: #1a1a1a;
-      background: #fff;
-      font-size: 0.9rem;
-    }
-    h2, h3, h4, h5, h6 { font-family: inherit; }
-    .table {
-      border-top: 2px solid #1a1a1a;
-      border-bottom: 2px solid #1a1a1a;
-      margin-bottom: 0;
-    }
-    .table td, .table th {
-      border: none !important;
-      border-bottom: 1px solid #ddd !important;
-      padding: 0.35rem 0.65rem;
-      vertical-align: middle;
-    }
-    .table thead th {
-      border-bottom: none !important;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      font-weight: 700;
-      white-space: nowrap;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: #fff;
-      box-shadow: inset 0 -2px 0 #1a1a1a, 0 4px 8px -2px rgba(0,0,0,0.09);
-    }
-    .table tbody tr:last-child td { border-bottom: 2px solid #1a1a1a !important; }
-    .table-hover > tbody > tr:hover > td { background-color: #eef2f7 !important; }
-    .table-responsive { max-height: 78vh; overflow-y: auto; }
-    td.number, th.number {
-      text-align: right;
-      font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: 0;
-      font-size: 0.84rem;
-    }
-    th a { text-decoration: none; color: inherit; }
-    th[data-sort-direction="asc"] a::after { content: " ↑"; font-size: 0.75em; opacity: 0.6; }
-    th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; opacity: 0.6; }
-    .community-channels summary { cursor: pointer; user-select: none; }
-    .community-channels summary::-webkit-details-marker { color: #999; }
-    .community-channels-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; }
-    .community-channels-label { font-size: 0.72rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-    .community-channels-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-    .community-channel-chip {
-      display: inline-block; padding: 0.1rem 0.45rem; border-radius: 3px;
-      background: #f0f2f5; border: 1px solid #dde1e8;
-      font-size: 0.74rem; color: #1a1a1a; text-decoration: none; white-space: nowrap;
-    }
-    .community-channel-chip:hover { background: #e2e6ed; color: #1a1a1a; }
-  </style>
+  <link rel="stylesheet" href="css/tables.css" type="text/css">
 </head>
 <body>
   <div class="container-fluid py-3">

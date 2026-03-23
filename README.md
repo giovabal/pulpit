@@ -152,7 +152,7 @@ cd graph
 python -m http.server 8001
 ```
 
-Open [http://localhost:8001/](http://localhost:8001/) in your browser.
+Open [http://localhost:8001/graph.html](http://localhost:8001/graph.html) in your browser.
 
 
 ## Configuration

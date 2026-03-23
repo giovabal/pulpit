@@ -69,7 +69,7 @@ class Command(BaseCommand):
             action="store_true",
             default=False,
             help=(
-                "Skip the graph mini-site: no layout computation, no data.json, no media copy. "
+                "Skip the graph mini-site: no layout computation, no graph.html, no media copy. "
                 "Only tabular output (channel_table / community_table) is produced. "
                 "Implies --table-format html+xlsx unless --table-format is set explicitly."
             ),
@@ -273,8 +273,7 @@ class Command(BaseCommand):
                 communities_data,
                 measures_labels,
                 channel_qs,
-                output_filename="graph/data.json",
-                accessory_filename="graph/data_accessory.json",
+                graph_dir="graph",
             )
 
         table_format = options["table_format"]
