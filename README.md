@@ -110,11 +110,13 @@ python manage.py export_network
 ```
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
-By default also writes two sortable HTML tables:
+By default also writes three sortable HTML tables:
 
 - `graph/channel_table.html` — one row per channel with all computed measures
-- `graph/network_table.html` — whole-network structural metrics (density, reciprocity, clustering, path length, WCC/SCC fractions, directed assortativity, Freeman centralization, modularity per strategy)
+- `graph/network_table.html` — whole-network structural metrics (density, reciprocity, clustering, path length, WCC/SCC fractions, directed assortativity, Freeman centralization, modularity per strategy) plus an interactive scatter plot for comparing any two measures on log-log axes
 - `graph/community_table.html` — one table per community detection strategy with structural metrics per community (node count, internal/external edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter)
+
+All HTML outputs load their data at page load time from `graph/data/*.json`; they are static files that work from any HTTP server.
 
 To control the tabular output format:
 

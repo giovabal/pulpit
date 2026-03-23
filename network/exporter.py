@@ -771,202 +771,6 @@ def _network_summary_rows(summary: dict[str, Any]) -> list[list[Any]]:
     return rows
 
 
-def _build_scatter(
-    graph_data: "GraphData",
-    x_key: str,
-    y_key: str,
-    x_label: str,
-    y_label: str,
-) -> "tuple[str, str] | None":
-    """Build a Bokeh scatter plot for any two node measures.
-
-    Returns (bokeh_script, bokeh_div), or None if the measures are absent.
-    INLINE resources are rendered separately (shared across plots).
-    """
-    try:
-        from bokeh.embed import components
-        from bokeh.models import ColumnDataSource, HoverTool
-        from bokeh.plotting import figure
-    except ImportError:
-        return None
-
-    nodes_with_data = [n for n in graph_data["nodes"] if n.get(x_key) is not None and n.get(y_key) is not None]
-    if not nodes_with_data:
-        return None
-
-    xs = [n[x_key] for n in nodes_with_data]
-    ys = [n[y_key] for n in nodes_with_data]
-    labels = [n.get("label") or n["id"] for n in nodes_with_data]
-    fans = [n.get("fans") or 0 for n in nodes_with_data]
-    msgs = [n.get("messages_count") or 0 for n in nodes_with_data]
-
-    source = ColumnDataSource({"x": xs, "y": ys, "label": labels, "fans": fans, "msgs": msgs})
-
-    p = figure(
-        width=1000,
-        height=700,
-        x_axis_type="log",
-        y_axis_type="log",
-        tools="pan,wheel_zoom,box_zoom,reset,save",
-        x_axis_label=x_label,
-        y_axis_label=y_label,
-        toolbar_location="above",
-    )
-    p.toolbar.logo = None
-    p.background_fill_color = "#fafafa"
-    p.grid.grid_line_color = "#e5e7eb"
-    p.axis.axis_line_color = "#9ca3af"
-    p.axis.major_tick_line_color = "#9ca3af"
-    p.axis.minor_tick_line_color = None
-    p.axis.major_label_text_font_size = "11px"
-    p.axis.axis_label_text_font_size = "12px"
-    p.axis.axis_label_text_font_style = "normal"
-
-    # Linear regression in log space (power-law fit in data space)
-    log_pts = [(x, y) for x, y in zip(xs, ys, strict=True) if x > 0 and y > 0]
-    if len(log_pts) >= 2:
-        log_xs = np.log([pt[0] for pt in log_pts])
-        log_ys = np.log([pt[1] for pt in log_pts])
-        slope, intercept = np.polyfit(log_xs, log_ys, 1)
-        x_min, x_max = min(x for x, _ in log_pts), max(x for x, _ in log_pts)
-        reg_xs = [x_min, x_max]
-        reg_ys = [np.exp(intercept) * x**slope for x in reg_xs]
-        p.line(reg_xs, reg_ys, line_color="#ef4444", line_width=1.5, line_dash="dashed", alpha=0.8)
-
-    p.scatter(
-        "x",
-        "y",
-        source=source,
-        size=9,
-        fill_color="#1e293b",
-        fill_alpha=0.6,
-        line_color=None,
-    )
-    p.add_tools(
-        HoverTool(
-            tooltips=[
-                ("Channel", "@label"),
-                (x_label, "@x{0.0000}"),
-                (y_label, "@y{0.0000}"),
-                ("Subscribers", "@fans{0,0}"),
-                ("Messages", "@msgs{0,0}"),
-            ]
-        )
-    )
-
-    script, div = components(p)
-    return script, div
-
-
-def _build_scatter_plots(graph_data: "GraphData") -> "dict[str, Any] | None":
-    """Build all scatter plots and return shared resources + per-plot script/div pairs."""
-    try:
-        from bokeh.resources import INLINE
-    except ImportError:
-        return None
-
-    plots = [
-        (
-            "in_degree_centrality",
-            "out_degree_centrality",
-            "In-degree centrality",
-            "Out-degree centrality",
-            "In-degree centrality counts how often a channel is cited by others; out-degree counts how often it cites others."
-            " Channels on the diagonal amplify as much as they are amplified."
-            " Top-left channels are pure sources (cited but do not cite back); bottom-right are pure amplifiers (cite many but are rarely cited)."
-            " Outliers far from the diagonal reveal asymmetric roles in the network.",
-        ),
-        (
-            "hits_hub",
-            "hits_authority",
-            "HITS Hub score",
-            "HITS Authority score",
-            "The HITS algorithm separates two complementary roles: authorities are channels whose content is worth citing,"
-            " hubs are channels that consistently point to good authorities."
-            " Top-right channels are both trusted sources and active amplifiers."
-            " Top-left are pure authorities — original voices that others reference but that do not relay much themselves."
-            " Bottom-right are pure hubs — aggregators or re-broadcasters that add little original content.",
-        ),
-        (
-            "pagerank",
-            "betweenness",
-            "PageRank",
-            "Betweenness centrality",
-            "PageRank measures prestige through recursive amplification: being cited by important channels raises your score."
-            " Betweenness centrality measures how often a channel sits on the shortest path between two others — a broker or bridge role."
-            " High PageRank with low betweenness signals an influential channel that operates within a dense cluster."
-            " High betweenness with lower PageRank reveals structural brokers: channels that connect otherwise separate parts of the network"
-            " without necessarily being the most amplified voices.",
-        ),
-        (
-            "pagerank",
-            "bridging_centrality",
-            "PageRank",
-            "Bridging centrality",
-            "Bridging centrality combines betweenness with neighbour-community diversity:"
-            " a channel scores high only if it sits between many pairs of nodes AND its neighbours belong to different communities."
-            " Comparing it to PageRank reveals whether influential channels are embedded within a single ideological cluster"
-            " or actively connect across community boundaries."
-            " High PageRank with low bridging indicates a powerful voice inside its own bubble;"
-            " high bridging with moderate PageRank points to cross-community connectors that may be strategically important despite lower overall prestige.",
-        ),
-        (
-            "betweenness",
-            "bridging_centrality",
-            "Betweenness centrality",
-            "Bridging centrality",
-            "Both measures capture broker roles, but with different definitions."
-            " Betweenness is purely topological: it counts shortest paths regardless of community structure."
-            " Bridging weights those paths by how much they cross community boundaries."
-            " Channels near the diagonal are brokers in both senses."
-            " High betweenness with low bridging reveals channels that are structural bottlenecks within a single community."
-            " High bridging with lower betweenness identifies channels that connect communities even if they are not on many shortest paths overall.",
-        ),
-        (
-            "pagerank",
-            "katz_centrality",
-            "PageRank",
-            "Katz centrality",
-            "Both PageRank and Katz centrality measure influence through the network's link structure, but with different assumptions."
-            " PageRank discounts links from highly-connected nodes: a citation from a selective source counts more than one from a prolific forwarder."
-            " Katz counts all paths with exponential decay by length, treating every incoming link equally regardless of the source's out-degree."
-            " Channels well above the diagonal benefit from sheer volume of connections (grassroots amplification);"
-            " channels below it owe their standing to endorsement by a few high-quality sources (elite endorsement).",
-        ),
-        (
-            "harmonic_centrality",
-            "in_degree_centrality",
-            "Harmonic centrality",
-            "In-degree centrality",
-            "Harmonic centrality measures how quickly a channel can be reached from every other node in the network,"
-            " capturing structural accessibility independent of direct links."
-            " In-degree simply counts direct citations."
-            " Channels high on both are well-cited and structurally central."
-            " High harmonic with low in-degree reveals channels that are well-positioned in the network topology"
-            " but receive few direct references — potential brokers whose influence operates through indirect paths."
-            " High in-degree with low harmonic indicates channels that attract many direct citations but sit in a peripheral or isolated region of the graph.",
-        ),
-    ]
-
-    built = []
-    for x_key, y_key, x_label, y_label, description in plots:
-        result = _build_scatter(graph_data, x_key, y_key, x_label, y_label)
-        if result is not None:
-            built.append(
-                {
-                    "title": f"{x_label} vs {y_label}",
-                    "description": description,
-                    "script": result[0],
-                    "div": result[1],
-                }
-            )
-
-    if not built:
-        return None
-
-    return {"resources": INLINE.render(), "plots": built}
-
-
 def write_network_metrics_json(
     community_table_data: CommunityTableData,
     strategies: list[str],
@@ -1005,20 +809,10 @@ def write_network_metrics_json(
 
 
 def write_network_table_html(
-    community_table_data: CommunityTableData,
     output_filename: str,
-    graph_data: "GraphData | None" = None,
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    bokeh_resources = None
-    bokeh_plots: list[dict[str, Any]] = []
-    if graph_data is not None:
-        scatter_data = _build_scatter_plots(graph_data)
-        if scatter_data is not None:
-            bokeh_resources = scatter_data["resources"]
-            bokeh_plots = scatter_data["plots"]
-
     if seo:
         title = f"{project_title} | Network statistics" if project_title else "Network statistics"
         robots_meta = "index, follow"
@@ -1026,12 +820,7 @@ def write_network_table_html(
         title = f"{project_title} | Network" if project_title else "Network"
         robots_meta = "noindex, nofollow"
 
-    context = {
-        "title": title,
-        "robots_meta": robots_meta,
-        "bokeh_resources": bokeh_resources,
-        "bokeh_plots": bokeh_plots,
-    }
+    context = {"title": title, "robots_meta": robots_meta}
     content = render_to_string("network/network_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)

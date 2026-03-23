@@ -1,6 +1,9 @@
 {% extends "network/_table_base.html" %}
 
-{% block head_extra %}{% if bokeh_resources %}{{ bokeh_resources|safe }}{% endif %}{% endblock %}
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-3">
@@ -15,14 +18,7 @@
   <div class="col-lg-7" id="summary-section"></div>
   <div class="col-lg-5 d-none" id="modularity-section"></div>
 </div>
+<h4 class="mt-4 mb-3">Measure comparison</h4>
+<div id="scatter-section"></div>
 <script src="js/network_table.js"></script>
-
-{% for plot in bokeh_plots %}
-<div class="mb-5">
-  <h5 class="mb-2">{{ plot.title }}</h5>
-  <p class="text-muted small mb-3">{{ plot.description }}</p>
-  {{ plot.div|safe }}
-  {{ plot.script|safe }}
-</div>
-{% endfor %}
 {% endblock %}

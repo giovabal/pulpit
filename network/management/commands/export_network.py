@@ -317,9 +317,7 @@ class Command(BaseCommand):
             self.stdout.write("- network table (html)")
             exporter.write_network_metrics_json(community_table_data, strategies, graph_dir="graph")
             exporter.write_network_table_html(
-                community_table_data,
                 output_filename="graph/network_table.html",
-                graph_data=graph_data,
                 seo=seo,
                 project_title=project_title,
             )
