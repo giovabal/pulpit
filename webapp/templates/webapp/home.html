@@ -93,7 +93,7 @@
         loaded = true;
         fetch(collapse.dataset.chartUrl)
           .then(function (r) { return r.json(); })
-          .then(function (data) { spinner.classList.add('hidden'); renderBarChart(canvas, data); });
+          .then(function (data) { spinner.classList.add('hidden'); renderChart(canvas, data); });
       }
     });
   });
