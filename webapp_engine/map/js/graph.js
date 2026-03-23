@@ -9,6 +9,8 @@ import { drawDiscNodeLabel } from 'sigma/rendering';
 
 var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messages_count': true };
 
+// Shorthand for document.getElementById
+function el(id) { return document.getElementById(id); }
 
 // =============================================================================
 // State
@@ -35,7 +37,7 @@ var app_settings = {
     fade_color:                 'rgba(27, 44, 61, .75)'
 };
 
-$('#' + app_settings.container).css('background-color', app_settings.container_background_color);
+el(app_settings.container).style.backgroundColor = app_settings.container_background_color;
 
 // drawDiscNodeHover hardcodes a white (#FFF) label background, clashing with our
 // white label text. This override uses a dark background instead.
@@ -72,7 +74,7 @@ function drawDarkNodeHover(context, data, settings) {
 }
 
 var graph = new Graph({ type: 'directed', multi: false });
-var sigma_instance = new Sigma(graph, document.getElementById(app_settings.container), {
+var sigma_instance = new Sigma(graph, el(app_settings.container), {
     defaultEdgeColor:           '#484848',
     defaultNodeColor:           '#333',
     labelColor:                 { color: '#FFFFFF' },
@@ -177,11 +179,13 @@ function get_neighbors_list(id_list) {
 function show_node_info(nodeId) {
     var node = graph.getNodeAttributes(nodeId);
     var key = node.url ? node.url.replace('https://t.me/', '') : '';
-    $('#node_label').html(node.label);
-    $('#node_url').html('@' + key).attr('href', node.url);
-    $('#node_picture').html(node.pic ? "<img src='" + node.pic + "' style='max-width: 60px;' />" : '');
-    $('#node_group').html(get_group(node));
-    $('#node_followers_count').html(node.fans);
+    el('node_label').innerHTML = node.label;
+    var urlEl = el('node_url');
+    urlEl.innerHTML = '@' + key;
+    urlEl.href = node.url;
+    el('node_picture').innerHTML = node.pic ? "<img src='" + node.pic + "' style='max-width: 60px;' />" : '';
+    el('node_group').innerHTML = get_group(node);
+    el('node_followers_count').innerHTML = node.fans;
     var measures_html = '';
     if (accessory_data) {
         accessory_data.measures.forEach(function(m) {
@@ -191,20 +195,20 @@ function show_node_info(nodeId) {
             measures_html += '<br><abbr>' + m[1] + '</abbr>: ' + formatted;
         });
     }
-    $('#node_measures').html(measures_html);
-    $('#node_messages_count').html(node.messages_count);
-    $('#node_activity_period').html(node.activity_period);
-    if (node.is_lost) $('#node_is_lost').show(); else $('#node_is_lost').hide();
-    $('#node_details').show();
+    el('node_measures').innerHTML = measures_html;
+    el('node_messages_count').innerHTML = node.messages_count;
+    el('node_activity_period').innerHTML = node.activity_period;
+    el('node_is_lost').style.display = node.is_lost ? '' : 'none';
+    el('node_details').style.display = '';
 
     var nbrs    = structured_neighbors(nodeId);
     var mutual  = get_neighbors_list(nbrs.mutual_neighbors);
     var inbound = get_neighbors_list(nbrs.in_neighbors);
     var outbound= get_neighbors_list(nbrs.out_neighbors);
-    $('#node_mutual_count').html(mutual.length);   $('#node_mutual_list').html(mutual.join(''));
-    $('#node_in_count').html(inbound.length);      $('#node_in_list').html(inbound.join(''));
-    $('#node_out_count').html(outbound.length);    $('#node_out_list').html(outbound.join(''));
-    $('#infobar').show();
+    el('node_mutual_count').innerHTML = mutual.length;  el('node_mutual_list').innerHTML = mutual.join('');
+    el('node_in_count').innerHTML = inbound.length;     el('node_in_list').innerHTML = inbound.join('');
+    el('node_out_count').innerHTML = outbound.length;   el('node_out_list').innerHTML = outbound.join('');
+    el('infobar').style.display = '';
 }
 
 // =============================================================================
@@ -272,12 +276,12 @@ function apply_node_size(metric) {
 
 function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);
-    if (strategies.length <= 1) { $('#community-strategy-group').hide(); return; }
+    if (strategies.length <= 1) { el('community-strategy-group').style.display = 'none'; return; }
     var items = strategies.map(function(s) {
         return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
     });
-    $('#community-strategy-select').html(items.join(''));
-    $('#community-strategy-group').show();
+    el('community-strategy-select').innerHTML = items.join('');
+    el('community-strategy-group').style.display = '';
 }
 
 function build_legend(strategyData) {
@@ -292,18 +296,19 @@ function build_legend(strategyData) {
         );
         group_select_items.push('<option value="' + l[2] + '">' + l[2] + '</option>');
     });
-    $('#legend').html(legend_items.join(''));
-    $('#group-select').html(group_select_items.join(''));
+    el('legend').innerHTML = legend_items.join('');
+    el('group-select').innerHTML = group_select_items.join('');
 }
 
 // =============================================================================
 // Search
 // =============================================================================
 
-function search(word, result_element) {
-    result_element.empty();
+function search(word, result_el) {
+    result_el.innerHTML = '';
     if (word.length <= 2) {
-        result_element.html('<i>Search for terms of at least 3 characters.</i>').show();
+        result_el.innerHTML = '<i>Search for terms of at least 3 characters.</i>';
+        result_el.style.display = '';
         return;
     }
     var pattern = RegExp(word, 'i');
@@ -321,7 +326,8 @@ function search(word, result_element) {
     } else {
         html.push('<li><i>No results.</i></li></ul>');
     }
-    result_element.html(html.join('')).show();
+    result_el.innerHTML = html.join('');
+    result_el.style.display = '';
 }
 
 // =============================================================================
@@ -371,14 +377,13 @@ function click_node(nodeId) {
 // =============================================================================
 
 function get_data() {
-    $.when(
-        $.getJSON('data/channel_position.json'),
-        $.getJSON('data/channels.json')
-    ).done(function(pos_resp, ch_resp) {
-        $('#loading_message').html('Building graph…');
-
-        var pos_data = pos_resp[0];
-        var ch_data  = ch_resp[0];
+    Promise.all([
+        fetch('data/channel_position.json').then(function(r) { return r.json(); }),
+        fetch('data/channels.json').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        var pos_data = results[0];
+        var ch_data  = results[1];
+        el('loading_message').innerHTML = 'Building graph…';
 
         var measure_map = {};
         ch_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
@@ -412,12 +417,11 @@ function get_data() {
         });
 
         sigma_instance.refresh();
-        $('#loading_message').html('Done!');
+        el('loading_message').innerHTML = 'Done!';
         if (loading_modal_bs) loading_modal_bs.hide();
-        $('#about_graph_stats').html(
+        el('about_graph_stats').innerHTML =
             graph.nodes().length + ' channels, ' +
-            graph.edges().length + ' connections'
-        );
+            graph.edges().length + ' connections';
 
         graph_loaded = true;
         maybe_apply_initial_colors();
@@ -436,19 +440,19 @@ function get_data() {
 // Document ready
 // =============================================================================
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     var loading_el = document.getElementById('loading_modal');
     loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
     loading_el.addEventListener('shown.bs.modal', function() { get_data(); }, { once: true });
     loading_modal_bs.show();
-    $('#loading_message').html('Loading…<br>Please wait.');
+    el('loading_message').innerHTML = 'Loading…<br>Please wait.';
 
-    $.when(
-        $.getJSON('data/channels.json'),
-        $.getJSON('data/communities.json')
-    ).done(function(ch_resp, comm_resp) {
-        var ch_data   = ch_resp[0];
-        var comm_data = comm_resp[0];
+    Promise.all([
+        fetch('data/channels.json').then(function(r) { return r.json(); }),
+        fetch('data/communities.json').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        var ch_data   = results[0];
+        var comm_data = results[1];
 
         accessory_data = ch_data;
 
@@ -464,48 +468,53 @@ $(document).ready(function() {
         var size_items = ch_data.measures.map(function(m) {
             return '<option value="' + m[0] + '">' + m[1] + '</option>';
         });
-        $('#size-select').html(size_items.join(''));
-        $('#total_pages_count').html(ch_data.total_pages_count);
+        el('size-select').innerHTML = size_items.join('');
+        el('total_pages_count').innerHTML = ch_data.total_pages_count;
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
     });
 
-    $('#community-strategy-select').on('change', function() {
-        active_strategy = $(this).val();
+    el('community-strategy-select').addEventListener('change', function() {
+        active_strategy = this.value;
         if (community_strategy_data) build_legend(community_strategy_data[active_strategy]);
         if (graph_loaded) {
             apply_strategy_colors(active_strategy);
-            $('#group-select').val('');
+            el('group-select').value = '';
         }
     });
 
-    $('#search_input').val('');
-    $('#search_modal').on('shown.bs.modal', function() { $('#search_input').focus(); });
-    $('#search').submit(function() {
-        search($('#search_input').val(), $('#results'));
-        return false;
+    el('search_input').value = '';
+    el('search_modal').addEventListener('shown.bs.modal', function() { el('search_input').focus(); });
+    el('search').addEventListener('submit', function(e) {
+        e.preventDefault();
+        search(el('search_input').value, el('results'));
     });
 
-    $('.infobar-toggle').on('click', function() {
-        $('#infobar').toggle();
-        if (!is_graph_completely_rendered) reset_colors();
+    document.querySelectorAll('.infobar-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var infobar = el('infobar');
+            infobar.style.display = infobar.style.display === 'none' ? '' : 'none';
+            if (!is_graph_completely_rendered) reset_colors();
+        });
     });
 
-    $('body').on('click', 'a.node-link', function() {
-        click_node($(this).attr('data'));
-        return false;
+    document.addEventListener('click', function(e) {
+        var link = e.target.closest('a.node-link');
+        if (!link) return;
+        e.preventDefault();
+        click_node(link.getAttribute('data'));
     });
 
-    $('#size-select').on('change', function() { apply_node_size($(this).val()); });
+    el('size-select').addEventListener('change', function() { apply_node_size(this.value); });
 
-    $('#labels-select').on('change', function() {
+    el('labels-select').addEventListener('change', function() {
         var thresholds = { 'always': 0, 'on_size': 8, 'never': Infinity };
-        sigma_instance.setSetting('labelRenderedSizeThreshold', thresholds[$(this).val()]);
+        sigma_instance.setSetting('labelRenderedSizeThreshold', thresholds[this.value]);
     });
 
-    $('#group-select').on('change', function() {
-        var v = $(this).val();
+    el('group-select').addEventListener('change', function() {
+        var v = this.value;
         if (v === '') {
             graph.nodes().forEach(function(id) {
                 graph.setNodeAttribute(id, 'color', graph.getNodeAttribute(id, 'originalColor'));
@@ -539,15 +548,15 @@ $(document).ready(function() {
         is_graph_completely_rendered = false;
     });
 
-    $('#zoom_in').click(function() {
+    el('zoom_in').addEventListener('click', function() {
         var cam = sigma_instance.getCamera();
         cam.setState(Object.assign({}, cam.getState(), { ratio: cam.getState().ratio * 0.5 }));
     });
-    $('#zoom_out').click(function() {
+    el('zoom_out').addEventListener('click', function() {
         var cam = sigma_instance.getCamera();
         cam.setState(Object.assign({}, cam.getState(), { ratio: cam.getState().ratio * 1.5 }));
     });
-    $('#zoom_reset').click(function() {
+    el('zoom_reset').addEventListener('click', function() {
         sigma_instance.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
     });
 });

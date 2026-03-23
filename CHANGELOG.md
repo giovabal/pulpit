@@ -16,6 +16,7 @@
 - `network_table.html` now features an interactive scatter plot where any two measures can be compared on log-log axes, with a power-law trend line. The pair of measures is selected dynamically via dropdowns.
 
 ### Improvements
+- Graph mini-site no longer depends on jQuery; all DOM interactions rewritten in vanilla JS.
 - Stats charts (messages, views, forwards, subscribers, avg involvement) are now rendered client-side with Chart.js instead of Bokeh, using a filled line style better suited to time-series data. Django views return JSON; the browser draws the charts. Removes the `bokeh` dependency.
 - Graph export data is now split into typed JSON files under `graph/data/`: `channels.json` (per-node metadata, measures, and community assignments), `channel_position.json` (spatial layout and edges), `communities.json` (strategy definitions and per-community metrics), `network_metrics.json` (whole-network metrics and modularity). The graph mini-site and all HTML tables read these files at load time rather than having data baked in at export time.
 - All three HTML tables (`channel_table.html`, `network_table.html`, `community_table.html`) are now static shells that load and render data client-side from `graph/data/*.json`; the HTML files themselves never need to be regenerated — only the data files change between exports.
@@ -91,7 +92,7 @@
 - Improved resilience against internet connection fails during crawling.
 - Expanded documentation.
 - Graph mini-site has a simpler file structure.
-- Graph mini-site upgraded to Bootstrap 5.3, jQuery 4.0 and Sigma 3.0
+- Graph mini-site upgraded to Bootstrap 5.3, jQuery 4.0 and Sigma 3.0.
 - Graph mini-site moved from Font Awesome to Bootstrap Icons.
 - Graph mini-site using CDNs instead of local libraries.
 
