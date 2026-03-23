@@ -1,37 +1,6 @@
 {% extends "webapp/index.html" %}
 {% load static %}
 
-{% block extra_styles %}
-<style>
-  .home-page .stats-panel { max-width: none; }
-  .home-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.75rem;
-  }
-  .home-brand { display: flex; align-items: center; gap: .875rem; }
-  .home-icon {
-    width: 44px;
-    height: 44px;
-    background: #dbeafe;
-    border-radius: .625rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    color: var(--accent);
-    flex-shrink: 0;
-  }
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-  }
-</style>
-{% endblock extra_styles %}
 
 {% block content %}
 <div class="home-page">
@@ -41,7 +10,7 @@
       <div class="home-icon"><i class="bi bi-broadcast" aria-hidden="true"></i></div>
       <div>
         <h1 class="h4 fw-bold mb-0">Pulpit</h1>
-        <p class="text-muted mb-0" style="font-size:.85rem;">Telegram channel network explorer</p>
+        <p class="text-muted mb-0 home-tagline">Telegram channel network explorer</p>
       </div>
     </div>
     <a href="/admin/" class="btn btn-sm btn-outline-secondary flex-shrink-0">
@@ -74,8 +43,8 @@
     </button>
     <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
       <div class="stats-panel-body">
-        <div class="stats-spinner"><div class="spinner-border text-primary" style="width:1.5rem;height:1.5rem;" role="status"><span class="visually-hidden">Loading…</span></div></div>
-        <div style="height:480px;padding:.75rem 1rem .5rem"><canvas></canvas></div>
+        <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
+        <div class="chart-canvas-wrap chart-canvas-wrap--lg"><canvas></canvas></div>
       </div>
     </div>
   </div>

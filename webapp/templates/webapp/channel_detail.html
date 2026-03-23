@@ -1,19 +1,6 @@
 {% extends "webapp/index.html" %}
 {% load static %}
 
-{% block extra_styles %}
-<style>
-  .ch-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-    gap: .75rem;
-    margin-bottom: 1.25rem;
-  }
-  .stats-panel { max-width: none; }
-  .ch-summary-grid .summary-card { padding: .75rem 1rem; }
-  .ch-summary-grid .sc-value { font-size: 1.1rem; }
-</style>
-{% endblock extra_styles %}
 
 {% block content %}
 <div class="channel-card">
@@ -66,8 +53,8 @@
   </button>
   <div class="collapse" id="{{ panel.id }}" data-chart-url="{{ panel.url }}">
     <div class="stats-panel-body">
-      <div class="stats-spinner"><div class="spinner-border text-primary" style="width:1.5rem;height:1.5rem;" role="status"><span class="visually-hidden">Loading…</span></div></div>
-      <div style="height:320px;padding:.75rem 1rem .5rem"><canvas></canvas></div>
+      <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
+      <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas></canvas></div>
     </div>
   </div>
 </div>
