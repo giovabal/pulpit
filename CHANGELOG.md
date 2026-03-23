@@ -4,17 +4,21 @@
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
 
 ### New features
-- Four new node measures for political research: `BURTCONSTRAINT` (structural hole brokerage), `AMPLIFICATION` (forwards received / own message count), `LOCALREACHING` (fraction of network reachable via directed edges), and `CONTENTORIGINALITY` (1 − forwarded / total messages). All available in `NETWORK_MEASURES` and included in `ALL`.
+- Four new node measures for political research, all available in `NETWORK_MEASURES` and included in `ALL`:
+  - `BURTCONSTRAINT` — Burt's constraint (structural hole brokerage; low = cross-community broker)
+  - `AMPLIFICATION` — forwards received from other channels / own message count
+  - `LOCALREACHING` — fraction of the network reachable from this node via directed edges
+  - `CONTENTORIGINALITY` — 1 − (forwarded messages / total messages); measures how much a channel produces vs. redistributes
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
-- `network_table` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
+- `network_table.html` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
 - `community_table.html` each strategy section now has a collapsible channel list showing all channels grouped by community. `community_table.xlsx` strategy sheets now include a Channels column.
-- Whole-network metrics are now in a dedicated `network_table.html` / `network_table.xlsx`; `community_table` contains only per-community rows.
+- Whole-network metrics moved out of `community_table` into a dedicated `network_table.html` / `network_table.xlsx`; `community_table` now contains only per-community rows.
 - `network_table.html` now features an interactive scatter plot where any two measures can be compared on log-log axes, with a power-law trend line. The pair of measures is selected dynamically via dropdowns.
 
 ### Improvements
-- Stats charts (messages, views, forwards, subscribers, avg involvement) are now rendered client-side with Chart.js instead of Bokeh. Charts use filled line style instead of bars, better suited for time-series data. Django views return JSON; the browser draws the bar charts. Removes the `bokeh` dependency.
+- Stats charts (messages, views, forwards, subscribers, avg involvement) are now rendered client-side with Chart.js instead of Bokeh, using a filled line style better suited to time-series data. Django views return JSON; the browser draws the charts. Removes the `bokeh` dependency.
 - Graph export data is now split into typed JSON files under `graph/data/`: `channels.json` (per-node metadata, measures, and community assignments), `channel_position.json` (spatial layout and edges), `communities.json` (strategy definitions and per-community metrics), `network_metrics.json` (whole-network metrics and modularity). The graph mini-site and all HTML tables read these files at load time rather than having data baked in at export time.
-- All three HTML tables (`channel_table.html`, `network_table.html`, `community_table.html`) are now static shells that load and render data client-side from `graph/data/*.json`; re-exporting is no longer required to change what is displayed in the browser.
+- All three HTML tables (`channel_table.html`, `network_table.html`, `community_table.html`) are now static shells that load and render data client-side from `graph/data/*.json`; the HTML files themselves never need to be regenerated — only the data files change between exports.
 - Graph mini-site assets reorganised into subdirectories: `graph.html` (was `index.html`), `css/graph.css`, `css/tables.css`, `js/graph.js`, `js/tables_sort.js`, `js/channel_table.js`, `js/community_table.js`, `js/network_table.js`.
 
 ## [0.6] - 2026-03-21
@@ -25,7 +29,7 @@
 - `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
 - `export_network` now generates `community_table.html` and `community_table.xlsx`: a whole-network structural summary (nodes, edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter) followed by per-community metrics for each active detection strategy. The HTML table is sortable; the Excel file has a Network Summary sheet plus one sheet per strategy.
 - Graph mini-site: **Data** button in the menu bar opens a dialog linking to `channel_table.html` and `community_table.html`.
-- `PROJECT_TITLE` option allows to define a title that's shown in all output files.
+- `PROJECT_TITLE` option sets a title shown in all output files.
 - New options for `COMMUNITY_STRATEGIES`: `WEAKCC` (weakly connected components) and `STRONGCC` (strongly connected components).
 - Sidebar channel list now has a live search input to filter channels by name.
 - New **Search messages** page (`/search/`) with full-text search across all channels and paginated results.
@@ -80,14 +84,14 @@
 - New option for `NETWORK_MEASURES`: `HARMONICCENTRALITY`.
 - `CHANNEL_TYPES` option allows to define which kind of channels you want to explore.
 - `search_channels` command now accepts `--amount` option to limit how many search terms are processed per run.
-- `export_network` command now accepts `--startdate` and  `--enddate` options to operate on limited time windows.
+- `export_network` command now accepts `--startdate` and `--enddate` options to operate on limited time windows.
 - `export_network` command now produces tabular output alongside the graph mini-site.
 
 ### Improvements
 - Improved resilience against internet connection fails during crawling.
 - Expanded documentation.
 - Graph mini-site has a simpler file structure.
-- Graph mini-site upgraded to Bootstrap 5.3, JQuery 4.0 and Sigma 3.0
+- Graph mini-site upgraded to Bootstrap 5.3, jQuery 4.0 and Sigma 3.0
 - Graph mini-site moved from Font Awesome to Bootstrap Icons.
 - Graph mini-site using CDNs instead of local libraries.
 
