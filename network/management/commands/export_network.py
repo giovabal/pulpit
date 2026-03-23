@@ -43,6 +43,17 @@ def _bridging_strategy(token: str) -> str:
 
 TABLE_FORMAT_CHOICES = ["none", "html", "xlsx", "html+xlsx"]
 
+# Dispatch table for standard measures: (settings key, progress label, exporter function)
+# HITS and BRIDGING are handled separately because they have non-standard signatures.
+_MEASURE_STEPS = [
+    ("PAGERANK", "pagerank", exporter.apply_pagerank),
+    ("BETWEENNESS", "betweenness centrality", exporter.apply_betweenness_centrality),
+    ("INDEGCENTRALITY", "in-degree centrality", exporter.apply_in_degree_centrality),
+    ("OUTDEGCENTRALITY", "out-degree centrality", exporter.apply_out_degree_centrality),
+    ("HARMONICCENTRALITY", "harmonic centrality", exporter.apply_harmonic_centrality),
+    ("KATZ", "Katz centrality", exporter.apply_katz_centrality),
+]
+
 
 class Command(BaseCommand):
     args = ""
@@ -87,22 +98,10 @@ class Command(BaseCommand):
             help="Only include messages on or before this date.",
         )
 
-    def _parse_date(self, value: str | None, flag: str) -> datetime.date | None:
-        if value is None:
-            return None
-        try:
-            return datetime.date.fromisoformat(value)
-        except ValueError as err:
-            raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.") from err
-
-    def handle(self, *args: Any, **options: Any) -> None:
+    def _validate_settings(self, communities_strategy: list[str], network_measures: list[str]) -> str | None:
+        """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
         if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
             raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
-
-        communities_strategy = (
-            _ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
-        )
-        network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
 
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
@@ -132,6 +131,22 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
+        return bridging_token
+
+    def _parse_date(self, value: str | None, flag: str) -> datetime.date | None:
+        if value is None:
+            return None
+        try:
+            return datetime.date.fromisoformat(value)
+        except ValueError as err:
+            raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.") from err
+
+    def handle(self, *args: Any, **options: Any) -> None:
+        communities_strategy = (
+            _ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
+        )
+        network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
+        bridging_token = self._validate_settings(communities_strategy, network_measures)
         measures = set(network_measures)
 
         nograph = options["nograph"]
@@ -203,48 +218,19 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
-        if "PAGERANK" in measures:
-            self.stdout.write("- pagerank … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_pagerank(graph_data, graph)
-            self.stdout.write("done")
+        for key, label, fn in _MEASURE_STEPS:
+            if key in measures:
+                self.stdout.write(f"- {label} … ", ending="")
+                self.stdout.flush()
+                measures_labels += fn(graph_data, graph)
+                self.stdout.write("done")
 
         if measures & {"HITSHUB", "HITSAUTH"}:
             self.stdout.write("- HITS … ", ending="")
             self.stdout.flush()
             hits_labels = exporter.apply_hits(graph_data, graph)
             _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
-            measures_labels += [(k, label) for k, label in hits_labels if _hits_key_map[k] in measures]
-            self.stdout.write("done")
-
-        if "BETWEENNESS" in measures:
-            self.stdout.write("- betweenness centrality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_betweenness_centrality(graph_data, graph)
-            self.stdout.write("done")
-
-        if "INDEGCENTRALITY" in measures:
-            self.stdout.write("- in-degree centrality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_in_degree_centrality(graph_data, graph)
-            self.stdout.write("done")
-
-        if "OUTDEGCENTRALITY" in measures:
-            self.stdout.write("- out-degree centrality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_out_degree_centrality(graph_data, graph)
-            self.stdout.write("done")
-
-        if "HARMONICCENTRALITY" in measures:
-            self.stdout.write("- harmonic centrality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_harmonic_centrality(graph_data, graph)
-            self.stdout.write("done")
-
-        if "KATZ" in measures:
-            self.stdout.write("- Katz centrality … ", ending="")
-            self.stdout.flush()
-            measures_labels += exporter.apply_katz_centrality(graph_data, graph)
+            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in measures]
             self.stdout.write("done")
 
         if bridging_token is not None:

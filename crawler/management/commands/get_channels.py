@@ -47,6 +47,40 @@ def _parse_refresh_arg(raw: Any) -> tuple[int | None, datetime.date | None]:
         raise ValueError(f"--refresh-messages-stats: expected an integer or YYYY-MM-DD date, got {raw!r}") from exc
 
 
+class ProgressPrinter:
+    """Manages overwriting progress lines in the terminal via carriage return."""
+
+    def __init__(self, stdout: Any, total: int) -> None:
+        self._stdout = stdout
+        self._total = total
+        self._current_channel: int | None = None
+        self._line_length = 0
+
+    def status(self, message: str, channel_index: int) -> None:
+        if self._current_channel != channel_index:
+            if self._current_channel is not None:
+                self._stdout.write("", ending="\n")
+            self._current_channel = channel_index
+            self._line_length = 0
+        line = f"[{channel_index}/{self._total}] {message}"
+        padding = " " * max(0, self._line_length - len(line))
+        self._stdout.write(f"\r{line}{padding}", ending="")
+        self._stdout.flush()
+        self._line_length = len(line)
+
+    def indented(self, message: str, indent: str) -> None:
+        line = f"{indent}{message}"
+        padding = " " * max(0, self._line_length - len(line))
+        self._stdout.write(f"\r{line}{padding}", ending="")
+        self._stdout.flush()
+        self._line_length = len(line)
+
+    def newline(self) -> None:
+        self._stdout.write("", ending="\n")
+        self._line_length = 0
+        self._current_channel = None
+
+
 class Command(AsyncBaseCommand):
     args = ""
     help = "crawling Telegram groups"
@@ -81,6 +115,45 @@ class Command(AsyncBaseCommand):
             ),
         )
 
+    def _refresh_channel(
+        self,
+        channel: Channel,
+        crawler: ChannelCrawler,
+        index: int,
+        total_channels: int,
+        refresh_limit: int | None,
+        refresh_min_date: datetime.date | None,
+        pre_crawl_max_id: int,
+        printer: ProgressPrinter,
+    ) -> None:
+        try:
+            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+            refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
+            crawler.refresh_message_stats(
+                channel,
+                telegram_channel,
+                limit=refresh_limit,
+                min_date=refresh_min_date,
+                max_telegram_id=pre_crawl_max_id,
+                status_callback=lambda message, ind=refresh_indent: printer.indented(message, ind),
+            )
+        except errors.FloodWaitError as error:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id} due to flood wait: {error}")
+            )
+        except errors.rpcerrorlist.ChannelPrivateError:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
+                )
+            )
+        except Exception as error:
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
+            logger.exception("Refresh failed for channel %s", channel.telegram_id)
+
     def handle(self, *args: Any, **options: Any) -> None:
         fix_holes: bool = options["fixholes"]
         try:
@@ -113,84 +186,37 @@ class Command(AsyncBaseCommand):
                 if fromid is not None:
                     channels = channels.filter(id__lte=fromid)
                 total_channels = channels.count()
-
-                current_progress_channel: int | None = None
-                last_line_length = 0
-
-                def print_status(message: str, channel_index: int) -> None:
-                    nonlocal current_progress_channel, last_line_length
-                    if current_progress_channel != channel_index:
-                        if current_progress_channel is not None:
-                            self.stdout.write("", ending="\n")
-                        current_progress_channel = channel_index
-                        last_line_length = 0
-
-                    line = f"[{channel_index}/{total_channels}] {message}"
-                    padding = " " * max(0, last_line_length - len(line))
-                    self.stdout.write(f"\r{line}{padding}", ending="")
-                    self.stdout.flush()
-                    last_line_length = len(line)
-
-                def print_indented(message: str, indent: str) -> None:
-                    nonlocal last_line_length
-                    line = f"{indent}{message}"
-                    padding = " " * max(0, last_line_length - len(line))
-                    self.stdout.write(f"\r{line}{padding}", ending="")
-                    self.stdout.flush()
-                    last_line_length = len(line)
+                printer = ProgressPrinter(self.stdout, total_channels)
 
                 for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                     try:
                         pre_crawl_max_id = crawler.get_channel(
                             channel.telegram_id,
                             fix_holes=fix_holes,
-                            status_callback=lambda message, idx=index: print_status(message, idx),
+                            status_callback=lambda message, idx=index: printer.status(message, idx),
                         )
                     except errors.FloodWaitError as error:
-                        self.stdout.write("", ending="\n")
+                        printer.newline()
                         self.stdout.write(
                             self.style.WARNING(
                                 f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
                             )
                         )
                         continue
-                    self.stdout.write("", ending="\n")
-                    last_line_length = 0
-                    current_progress_channel = None
+                    printer.newline()
                     if do_refresh:
-                        try:
-                            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
-                            refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
-                            crawler.refresh_message_stats(
-                                channel,
-                                telegram_channel,
-                                limit=refresh_limit,
-                                min_date=refresh_min_date,
-                                max_telegram_id=pre_crawl_max_id,
-                                status_callback=lambda message, ind=refresh_indent: print_indented(message, ind),
-                            )
-                        except errors.FloodWaitError as error:
-                            self.stdout.write("", ending="\n")
-                            self.stdout.write(
-                                self.style.WARNING(
-                                    f"Skipping refresh for channel {channel.telegram_id} due to flood wait: {error}"
-                                )
-                            )
-                        except errors.rpcerrorlist.ChannelPrivateError:
-                            self.stdout.write("", ending="\n")
-                            self.stdout.write(
-                                self.style.WARNING(
-                                    f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
-                                )
-                            )
-                        except Exception as error:
-                            self.stdout.write("", ending="\n")
-                            self.stdout.write(
-                                self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}")
-                            )
-                            logger.exception("Refresh failed for channel %s", channel.telegram_id)
+                        self._refresh_channel(
+                            channel,
+                            crawler,
+                            index,
+                            total_channels,
+                            refresh_limit,
+                            refresh_min_date,
+                            pre_crawl_max_id,
+                            printer,
+                        )
 
-                self.stdout.write("", ending="\n")
+                printer.newline()
 
                 self.stdout.write(self.style.NOTICE("\nRetrying unresolved message references … "), ending="")
                 self.stdout.flush()
