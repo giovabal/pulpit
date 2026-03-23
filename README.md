@@ -15,7 +15,7 @@ Pulpit is built around three stages:
 
 **1. Crawling.** Pulpit uses the official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) to download messages from the channels you select. For each message it records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels appearing in the message text or as URL entities). This produces a directed, weighted graph: an edge from channel A to channel B means A regularly amplifies B's content, and its weight reflects how often, relative to A's total output.
 
-**2. Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Several centrality measures can be computed — PageRank, HITS Hub and Authority scores, betweenness centrality, in-degree centrality, out-degree centrality, harmonic centrality, Katz centrality, bridging centrality — to rank channels by influence, reach, or structural importance. Community detection algorithms (Louvain, Leiden, k-shell decomposition, Infomap, or your own manually defined groups) identify clusters of channels that behave as coherent ecosystems.
+**2. Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Several centrality measures can be computed — PageRank, HITS Hub and Authority scores, betweenness centrality, in-degree centrality, out-degree centrality, harmonic centrality, Katz centrality, bridging centrality, Burt's constraint, content originality, and amplification — to rank channels by influence, reach, or structural importance. Community detection algorithms (Louvain, Leiden, k-shell decomposition, Infomap, or your own manually defined groups) identify clusters of channels that behave as coherent ecosystems.
 
 **3. Visualisation.** The graph is laid out using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2), a force-directed algorithm that naturally pulls tightly connected clusters together. The result is exported as a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/), with controls for searching, filtering by community, changing node size by any computed measure, and inspecting individual channels.
 
@@ -142,7 +142,7 @@ To make the output discoverable by search engines (sets `index, follow` robots t
 python manage.py export_network --seo
 ```
 
-To do not create the graph:
+To skip graph generation (tables and `index.html` are still produced):
 ```sh
 python manage.py export_network --nograph
 ```
@@ -154,7 +154,7 @@ cd graph
 python -m http.server 8001
 ```
 
-Open [http://localhost:8001/graph.html](http://localhost:8001/graph.html) in your browser.
+Open [http://localhost:8001/](http://localhost:8001/) in your browser. The landing page (`index.html`) links to the graph, tables, and downloads.
 
 
 ## Configuration
