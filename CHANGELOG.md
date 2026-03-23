@@ -13,8 +13,6 @@
 - `community_table.html` each strategy section now has a collapsible channel list showing all channels grouped by community. `community_table.xlsx` strategy sheets now include a Channels column.
 - Whole-network metrics moved out of `community_table` into a dedicated `network_table.html` / `network_table.xlsx`; `community_table` now contains only per-community rows.
 - `network_table.html` now features an interactive scatter plot where any two measures can be compared on log-log axes, with a power-law trend line. The pair of measures is selected dynamically via dropdowns.
-
-### New features
 - `export_network` now always generates `graph/index.html`: a landing page listing every available output file (map, channel table, network table, community table, XLSX downloads) with a short description of each and links to the relevant documentation sections. The page is generated regardless of `--nograph` or `--table-format`.
 
 ### Improvements

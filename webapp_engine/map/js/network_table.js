@@ -75,7 +75,7 @@ Promise.all([
     function makeSelect(id, labelText) {
         var wrap = document.createElement("div");
         var lbl = document.createElement("label"); lbl.className = "form-label mb-1 d-block fw-semibold small"; lbl.htmlFor = id; lbl.textContent = labelText;
-        var sel = document.createElement("select"); sel.className = "form-select form-select-sm"; sel.id = id; sel.style.minWidth = "200px";
+        var sel = document.createElement("select"); sel.className = "form-select form-select-sm scatter-select"; sel.id = id;
         measures.forEach(function(m) { sel.appendChild(new Option(m[1], m[0])); });
         wrap.appendChild(lbl); wrap.appendChild(sel);
         controls.appendChild(wrap);
@@ -85,17 +85,17 @@ Promise.all([
     var xSelect = makeSelect("x-axis-select", "X axis");
     var ySelect = makeSelect("y-axis-select", "Y axis");
 
-    var resetWrap = document.createElement("div"); resetWrap.style.paddingBottom = "2px";
+    var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
     var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
     resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
 
-    var countNote = document.createElement("div"); countNote.className = "text-muted small ms-auto"; countNote.style.paddingBottom = "4px";
+    var countNote = document.createElement("div"); countNote.className = "text-muted small ms-auto scatter-count-note";
     controls.appendChild(countNote);
 
     scatterSection.appendChild(controls);
 
     // Canvas — full width, fixed height
-    var canvasWrap = document.createElement("div"); canvasWrap.style.cssText = "width:100%;height:900px;position:relative;";
+    var canvasWrap = document.createElement("div"); canvasWrap.className = "scatter-canvas-wrap";
     var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas);
     scatterSection.appendChild(canvasWrap);
 

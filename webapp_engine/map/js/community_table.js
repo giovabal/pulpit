@@ -58,7 +58,8 @@ fetch("data/communities.json").then(function(r) { return r.json(); }).then(funct
             var nameTd = document.createElement("td");
             nameTd.setAttribute("data-sort-value", row.label);
             var swatch = document.createElement("span");
-            swatch.style.cssText = "display:inline-block;width:12px;height:12px;background:" + row.hex_color + ";border:1px solid rgba(0,0,0,.2);vertical-align:middle;border-radius:2px;margin-right:5px;";
+            swatch.className = "color-swatch color-swatch--lg";
+            swatch.style.background = row.hex_color;
             swatch.setAttribute("aria-hidden", "true");
             nameTd.appendChild(swatch);
             nameTd.appendChild(document.createTextNode(row.label));
@@ -106,7 +107,8 @@ fetch("data/communities.json").then(function(r) { return r.json(); }).then(funct
             var labelSpan = document.createElement("span");
             labelSpan.className = "community-channels-label";
             var labelSwatch = document.createElement("span");
-            labelSwatch.style.cssText = "display:inline-block;width:10px;height:10px;background:" + row.hex_color + ";border:1px solid rgba(0,0,0,.2);vertical-align:middle;border-radius:2px;margin-right:4px;";
+            labelSwatch.className = "color-swatch color-swatch--sm";
+            labelSwatch.style.background = row.hex_color;
             labelSwatch.setAttribute("aria-hidden", "true");
             labelSpan.appendChild(labelSwatch);
             labelSpan.appendChild(document.createTextNode(row.label));
