@@ -1,5 +1,5 @@
 import networkx as nx
-from pyforceatlas2 import ForceAtlas2
+from fa2 import ForceAtlas2
 
 LAYOUT_HORIZONTAL = "HORIZONTAL"
 LAYOUT_VERTICAL = "VERTICAL"
@@ -18,18 +18,18 @@ def kamada_kawai_positions(graph: nx.DiGraph) -> dict:
 def forceatlas2_positions(graph: nx.DiGraph, initial_pos: dict, iterations: int = 10) -> dict[str, tuple[float, float]]:
     """Run ForceAtlas2 on *graph* starting from *initial_pos*."""
     forceatlas2 = ForceAtlas2(
-        outbound_attraction_distribution=True,
-        edge_weight_influence=1.0,
-        lin_log_mode=True,
-        jitter_tolerance=1.0,
-        barnes_hut_optimize=True,
-        barnes_hut_theta=1.2,
-        scaling_ratio=2.0,
-        strong_gravity_mode=False,
+        outboundAttractionDistribution=True,
+        edgeWeightInfluence=1.0,
+        linLogMode=True,
+        jitterTolerance=1.0,
+        barnesHutOptimize=True,
+        barnesHutTheta=1.2,
+        scalingRatio=2.0,
+        strongGravityMode=False,
         gravity=1.0,
         verbose=False,
     )
-    return forceatlas2.forceatlas2_networkx_layout(graph, pos=initial_pos, iterations=iterations)
+    return forceatlas2.forceatlas2_networkx_layout(graph.to_undirected(), pos=initial_pos, iterations=iterations)
 
 
 def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:

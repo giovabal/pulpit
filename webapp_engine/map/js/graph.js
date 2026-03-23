@@ -208,7 +208,7 @@ function show_node_info(nodeId) {
     el('node_mutual_count').innerHTML = mutual.length;  el('node_mutual_list').innerHTML = mutual.join('');
     el('node_in_count').innerHTML = inbound.length;     el('node_in_list').innerHTML = inbound.join('');
     el('node_out_count').innerHTML = outbound.length;   el('node_out_list').innerHTML = outbound.join('');
-    el('infobar').style.display = '';
+    el('infobar').style.display = 'block';
 }
 
 // =============================================================================
@@ -469,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return '<option value="' + m[0] + '">' + m[1] + '</option>';
         });
         el('size-select').innerHTML = size_items.join('');
-        el('total_pages_count').innerHTML = ch_data.total_pages_count;
+        var tpc = el('total_pages_count'); if (tpc) tpc.innerHTML = ch_data.total_pages_count;
 
         accessory_loaded = true;
         maybe_apply_initial_colors();
@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.infobar-toggle').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var infobar = el('infobar');
-            infobar.style.display = infobar.style.display === 'none' ? '' : 'none';
+            infobar.style.display = infobar.style.display === 'none' ? 'block' : 'none';
             if (!is_graph_completely_rendered) reset_colors();
         });
     });
