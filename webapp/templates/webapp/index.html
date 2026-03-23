@@ -474,7 +474,6 @@
       }
 
       .stats-panel-body { position: relative; }
-      .stats-panel-body iframe { display: block; }
       .stats-spinner {
         position: absolute;
         inset: 0;
@@ -522,5 +521,39 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+      function renderBarChart(canvas, data) {
+        new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: data.labels,
+            datasets: [{ data: data.values, backgroundColor: "rgba(37,99,235,0.7)", borderRadius: 3 }],
+          },
+          options: {
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) { return data.y_label + ": " + ctx.raw.toLocaleString(); },
+                },
+              },
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#6b7280" } },
+              y: {
+                title: { display: true, text: data.y_label, font: { size: 11 }, color: "#6b7280" },
+                grid: { color: "#f0f0f0" },
+                ticks: { font: { size: 11 }, color: "#6b7280" },
+              },
+            },
+          },
+        });
+      }
+    </script>
+    {% block extra_scripts %}{% endblock extra_scripts %}
   </body>
 </html>

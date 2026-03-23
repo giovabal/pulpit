@@ -73,9 +73,9 @@
       <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
     </button>
     <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
-      <div class="stats-panel-body" style="padding:0">
+      <div class="stats-panel-body">
         <div class="stats-spinner"><div class="spinner-border text-primary" style="width:1.5rem;height:1.5rem;" role="status"><span class="visually-hidden">Loading…</span></div></div>
-        <iframe class="w-100 border-0" style="height: 480px;" title="{{ panel.title }}" loading="lazy"></iframe>
+        <div style="height:480px;padding:.75rem 1rem .5rem"><canvas></canvas></div>
       </div>
     </div>
   </div>
@@ -85,13 +85,17 @@
 
 <script>
   document.querySelectorAll('.home-page .collapse[data-chart-url]').forEach(function (collapse) {
-    var iframe = collapse.querySelector('iframe');
+    var canvas = collapse.querySelector('canvas');
     var spinner = collapse.querySelector('.stats-spinner');
     var loaded = false;
     collapse.addEventListener('show.bs.collapse', function () {
-      if (!loaded) { iframe.src = collapse.dataset.chartUrl; loaded = true; }
+      if (!loaded) {
+        loaded = true;
+        fetch(collapse.dataset.chartUrl)
+          .then(function (r) { return r.json(); })
+          .then(function (data) { spinner.classList.add('hidden'); renderBarChart(canvas, data); });
+      }
     });
-    iframe.addEventListener('load', function () { spinner.classList.add('hidden'); });
   });
 </script>
 {% endblock content %}
