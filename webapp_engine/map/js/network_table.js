@@ -12,7 +12,7 @@ Promise.all([
     var h5s = document.createElement("h5"); h5s.className = "mb-2"; h5s.textContent = "Whole-network metrics";
     summarySection.appendChild(h5s);
     var summaryTable = document.createElement("table");
-    summaryTable.className = "table table-sm table-hover sortable";
+    summaryTable.className = "table table-sm table-hover";
     var sThead = document.createElement("thead"); var sTr = document.createElement("tr");
     ["Metric", "Value"].forEach(function(label, i) {
         var th = document.createElement("th"); th.scope = "col";
