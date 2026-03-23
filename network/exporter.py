@@ -201,14 +201,6 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     return [(key, "Harmonic Centrality")]
 
 
-def apply_local_reaching_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add local reaching centrality to each node (fraction of the network reachable via directed edges)."""
-    key = "local_reaching_centrality"
-    for node in graph_data["nodes"]:
-        node[key] = round(nx.local_reaching_centrality(graph, node["id"], weight="weight"), 6)
-    return [(key, "Local Reaching Centrality")]
-
-
 def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Katz centrality to each node."""
     key = "katz_centrality"

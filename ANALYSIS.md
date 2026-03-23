@@ -82,16 +82,6 @@ A variant of closeness centrality designed to handle disconnected graphs. For ea
 
 ---
 
-### Local reaching centrality
-
-Local reaching centrality measures the **fraction of the entire network that a channel can reach by following directed edges**. A score of 1.0 means the channel can reach every other channel in the network through chains of forwards and references; a score close to 0 means its content can only propagate to a tiny slice of the ecosystem. Unlike harmonic centrality, which scores how *close* a channel is to others, local reaching centrality asks simply: *how much of the network is downstream of this channel?*
-
-**In practice:** local reaching centrality is the most direct measure of a channel's potential **spread radius**. A high score means content published here can theoretically reach every corner of the network through re-sharing chains, even if many hops are required. In fragmented networks — typical of early-stage monitoring projects — most channels will have low scores, and a handful of well-connected nodes will stand out clearly. This makes it particularly useful for identifying channels whose removal would cut off large portions of the network from each other.
-
-**Example:** a mid-tier aggregator that forwards content from several separate ideological sub-clusters may score near 1.0 on local reaching centrality because it connects sub-networks that are otherwise weakly linked. Remove it, and the downstream communities lose their connection to the upstream sources. A fringe channel with only outbound links to a single closed community will score low, even if it has a large subscriber base.
-
----
-
 ### Katz centrality
 
 Katz centrality extends the idea behind PageRank by counting not just direct connections but all paths of any length — with longer paths discounted by an attenuation factor (α). A channel scores high if it receives many connections from many channels, but also if it is reachable from the rest of the network through many indirect paths. Unlike PageRank, Katz gives every channel a baseline score regardless of whether its predecessors are influential, making it less sensitive to the sparse regions of the network.

@@ -19,7 +19,6 @@ VALID_MEASURES = {
     "KATZ",
     "BURTCONSTRAINT",
     "AMPLIFICATION",
-    "LOCALREACHING",
     "CONTENTORIGINALITY",
 }
 
@@ -57,7 +56,6 @@ _MEASURE_STEPS = [
     ("HARMONICCENTRALITY", "harmonic centrality", exporter.apply_harmonic_centrality),
     ("KATZ", "Katz centrality", exporter.apply_katz_centrality),
     ("BURTCONSTRAINT", "Burt's constraint", exporter.apply_burt_constraint),
-    ("LOCALREACHING", "local reaching centrality", exporter.apply_local_reaching_centrality),
 ]
 
 

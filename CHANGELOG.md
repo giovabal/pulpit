@@ -4,10 +4,9 @@
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
 
 ### New features
-- Four new node measures for political research, all available in `NETWORK_MEASURES` and included in `ALL`:
+- Three new node measures for political research, all available in `NETWORK_MEASURES` and included in `ALL`:
   - `BURTCONSTRAINT` — Burt's constraint (structural hole brokerage; low = cross-community broker)
   - `AMPLIFICATION` — forwards received from other channels / own message count
-  - `LOCALREACHING` — fraction of the network reachable from this node via directed edges
   - `CONTENTORIGINALITY` — 1 − (forwarded messages / total messages); measures how much a channel produces vs. redistributes
 - `export_network --nograph` skips the graph mini-site (layout computation, `data.json`, media copy) and produces only the tabular output.
 - `network_table.html` now includes WCC count, largest WCC fraction, SCC count, largest SCC fraction, the four directed degree assortativity coefficients (in→in, in→out, out→in, out→out), Freeman centralization for each configured network measure, and partition modularity per strategy.
