@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 
 // =============================================================================
 // Constants
@@ -17,6 +20,8 @@ var ZOOM_STEP          = 0.75;
 var SIZE_MIN_FRAC      = 0.00225;
 var SIZE_MAX_FRAC      = 0.01350;
 var LABEL_SIZE_FRAC    = 0.5;    // show label when size > SIZE_MIN + FRAC*(SIZE_MAX-SIZE_MIN)
+var GLOW_SCALE         = 5.0;    // glow sprite size relative to sphere radius (local space)
+var DOF_APERTURE       = 0.0015; // bokeh aperture when a node is selected
 
 var BASE_MEASURE_KEYS = { in_deg: true, out_deg: true, fans: true, messages_count: true };
 
@@ -29,6 +34,7 @@ var node_meshes      = [];   // THREE.Mesh list for raycasting
 var edge_segments    = null; // single THREE.LineSegments for all edges
 var edge_list        = [];   // [{source, target, vert_offset}] for color rebuilds
 var label_objects    = {};   // id → CSS2DObject
+var glow_objects     = {};   // id → THREE.Sprite
 
 var adj_out          = {};   // id → Set of target ids
 var adj_in           = {};   // id → Set of source ids
@@ -53,7 +59,8 @@ var g_label_threshold= 5;
 // Three.js objects
 // =============================================================================
 
-var scene, camera, renderer, label_renderer, controls;
+var scene, camera, renderer, label_renderer, controls, composer, bokeh_pass;
+var glow_texture;
 var raycaster   = new THREE.Raycaster();
 var pointer     = new THREE.Vector2();
 var sphere_geom = new THREE.SphereGeometry(1, 32, 20);
@@ -64,6 +71,20 @@ var fade_color  = new THREE.Color(FADE_COLOR_HEX);
 // =============================================================================
 
 function el(id) { return document.getElementById(id); }
+
+function make_glow_texture() {
+    var size = 128;
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    var grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0,   'rgba(255,255,255,0.55)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.12)');
+    grad.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+}
 
 function parse_color(css_rgb) {
     var parts = css_rgb.split(',').map(function(s) { return parseInt(s.trim(), 10); });
@@ -118,6 +139,13 @@ function init_three() {
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
 
+    glow_texture = make_glow_texture();
+
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    bokeh_pass = new BokehPass(scene, camera, { focus: 1000, aperture: 0.00001, maxblur: 0.012 });
+    composer.addPass(bokeh_pass);
+
     label_renderer = new CSS2DRenderer();
     label_renderer.setSize(container.clientWidth, container.clientHeight);
     label_renderer.domElement.style.position = 'absolute';
@@ -140,7 +168,7 @@ function init_three() {
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    renderer.render(scene, camera);
+    composer.render();
     label_renderer.render(scene, camera);
 }
 
@@ -149,6 +177,7 @@ function on_resize() {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
+    composer.setSize(container.clientWidth, container.clientHeight);
     label_renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
@@ -217,6 +246,16 @@ function build_graph(pos_data, ch_data) {
                    || (labels_mode === 'always');
         mesh.add(lbl);
         label_objects[pos.id] = lbl;
+
+        // Glow sprite (additive blending, inherits parent scale automatically)
+        var glow_mat = new THREE.SpriteMaterial({
+            map: glow_texture, color: color.clone(),
+            blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+        });
+        var glow = new THREE.Sprite(glow_mat);
+        glow.scale.setScalar(GLOW_SCALE);
+        mesh.add(glow);
+        glow_objects[pos.id] = glow;
 
         adj_out[pos.id] = new Set();
         adj_in[pos.id]  = new Set();
@@ -329,6 +368,8 @@ function apply_strategy_colors(strategy) {
             : new THREE.Color(0.8, 0.8, 0.8);
         node.orig_color = color.clone();
         node.mesh.material.color.copy(color);
+        var glow = glow_objects[id];
+        if (glow) { glow.material.color.copy(color); glow.visible = true; }
     });
     rebuild_edge_colors();
 }
@@ -373,6 +414,15 @@ function set_labels_visibility() {
 // Selection / highlight
 // =============================================================================
 
+function update_dof(id) {
+    if (!bokeh_pass) return;
+    if (id === null) { bokeh_pass.uniforms.aperture.value = 0.00001; return; }
+    var node = nodes_index[id];
+    if (!node) return;
+    bokeh_pass.uniforms.focus.value = camera.position.distanceTo(new THREE.Vector3(node.x, node.y, node.z));
+    bokeh_pass.uniforms.aperture.value = DOF_APERTURE;
+}
+
 function neighbors_of(id) {
     var ns = new Set([id]);
     (adj_out[id] || new Set()).forEach(function(t) { ns.add(t); });
@@ -382,9 +432,13 @@ function neighbors_of(id) {
 
 function reset_colors() {
     Object.keys(nodes_index).forEach(function(id) {
-        nodes_index[id].mesh.material.color.copy(nodes_index[id].orig_color);
+        var node = nodes_index[id];
+        node.mesh.material.color.copy(node.orig_color);
+        var glow = glow_objects[id];
+        if (glow) { glow.material.color.copy(node.orig_color); glow.visible = true; }
     });
     rebuild_edge_colors();
+    update_dof(null);
     selected_node_id = null;
     el('infobar').style.display = 'none';
 }
@@ -393,7 +447,11 @@ function select_node(id) {
     selected_node_id = id;
     var ns = neighbors_of(id);
     Object.keys(nodes_index).forEach(function(nid) {
-        nodes_index[nid].mesh.material.color.copy(ns.has(nid) ? nodes_index[nid].orig_color : fade_color);
+        var node = nodes_index[nid];
+        var neighbor = ns.has(nid);
+        node.mesh.material.color.copy(neighbor ? node.orig_color : fade_color);
+        var glow = glow_objects[nid];
+        if (glow) { glow.visible = neighbor; if (neighbor) glow.material.color.copy(node.orig_color); }
     });
     // Dim non-incident edges
     if (edge_segments) {
@@ -413,6 +471,7 @@ function select_node(id) {
         });
         edge_segments.geometry.getAttribute('color').needsUpdate = true;
     }
+    update_dof(id);
     show_node_info(id);
 }
 
@@ -604,7 +663,10 @@ function apply_group_filter(group) {
     current_group = group;
     if (!group) {
         Object.keys(nodes_index).forEach(function(id) {
-            nodes_index[id].mesh.material.color.copy(nodes_index[id].orig_color);
+            var node = nodes_index[id];
+            node.mesh.material.color.copy(node.orig_color);
+            var glow = glow_objects[id];
+            if (glow) { glow.material.color.copy(node.orig_color); glow.visible = true; }
         });
         rebuild_edge_colors();
         return;
@@ -612,7 +674,10 @@ function apply_group_filter(group) {
     Object.keys(nodes_index).forEach(function(id) {
         var node  = nodes_index[id];
         var label = (node.communities && active_strategy) ? node.communities[active_strategy] : '';
-        node.mesh.material.color.copy(label === group ? node.orig_color : fade_color);
+        var match = (label === group);
+        node.mesh.material.color.copy(match ? node.orig_color : fade_color);
+        var glow = glow_objects[id];
+        if (glow) { glow.visible = match; if (match) glow.material.color.copy(node.orig_color); }
     });
     rebuild_edge_colors();
 }
