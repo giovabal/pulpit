@@ -46,7 +46,7 @@ html, body {
 .menu-button,
 .menu-button:focus,
 .menu-button:hover {
-    color: rgba(255,255,255,0.75);
+    color: rgba(255,255,255,0.90);
     padding: .6em 1.1em;
 }
 
@@ -55,20 +55,21 @@ html, body {
 }
 
 .menu-button:hover p {
-    color: rgba(255,255,255,0.75);
+    color: rgba(255,255,255,0.90);
 }
 
 #menu_container .bi {
-    font-size: 1.8rem;
+    font-size: 2rem;
 }
 
 #loading_message,
 .menu-button p {
-    color: rgba(255,255,255,0.4);
-    font-size: 0.6rem;
+    color: rgba(255,255,255,0.65);
+    font-size: 0.65rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     margin-top: 0.3em;
+    margin-bottom: 0;
 }
 
 .menu-icon-btn {
