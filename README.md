@@ -156,14 +156,18 @@ python manage.py export_network --nograph
 
 To compare this network against another export side-by-side:
 ```sh
-python manage.py export_network --compare /path/to/other/graph/data
+python manage.py export_network --compare /path/to/other/graph
 ```
 
-`DATA_DIR` must be a `data/` directory produced by a previous `export_network` run (it contains `network_metrics.json` and `channels.json`). The command copies it to `graph/data_compare/` and generates `graph/network_compare_table.html` with:
+`PROJECT_DIR` must be the `graph/` output directory of a previous `export_network` run — the directory that contains `index.html`. The command:
 
-- a 3-column whole-network metrics table (Metric / This network / Compare network)
-- a modularity-by-strategy comparison table
-- interactive scatter plots with this network's nodes in blue and the compare network's nodes in red; axes are user-selectable, log scale, zoom/pan enabled
+1. Copies the compare network's `data/`, graph files, `*_table.html`, and `*.xlsx` into the current `graph/` directory with `_2` suffixes (`data_2/`, `graph_2.html`, `channel_table_2.html`, `network_table_2.xlsx`, etc.). Internal links inside the copied HTML files are rewritten to their `_2` equivalents so they work as a self-contained set.
+2. Generates `graph/network_compare_table.html` with:
+   - a 3-column whole-network metrics table (Metric / This network / Compare network)
+   - a modularity-by-strategy comparison table
+   - interactive scatter plots with this network's nodes in blue and the compare network's nodes in red; axes are user-selectable, log scale, zoom/pan enabled
+   - a "Normalize axes [0–1] per network" toggle that min-max scales each network's values independently, making size-dependent measures directly comparable across networks of different sizes
+3. Adds a "Compare network" section to `graph/index.html` listing all copied files and linking to the comparison page.
 
 ### 7. View the graph
 

@@ -4,8 +4,11 @@
 *3D graph and network comparison.*
 
 ### New features
-- `export_network --3d` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end.
-- `export_network --compare DATA_DIR` accepts the `data/` directory of a previous export and produces `graph/network_compare_table.html`: a side-by-side comparison of the two networks. The page shows a 3-column whole-network metrics table and a modularity-by-strategy table (Metric / This network / Compare network), plus interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. Axes are user-selectable; the plot is log-scale with zoom and pan.
+- `export_network --3d` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end. Spheres are shaded with Lambert lighting for improved depth readability.
+- `export_network --compare PROJECT_DIR` accepts the `graph/` output directory of a previous export (the one containing `index.html`) and produces a full side-by-side comparison:
+  - The compare network's `data/`, graph files, `*_table.html`, and `*.xlsx` are copied into the current `graph/` directory with `_2` suffixes (`data_2/`, `graph_2.html`, `channel_table_2.html`, etc.). Internal links inside the copied HTML files are rewritten to their `_2` equivalents.
+  - `graph/network_compare_table.html` is generated with a 3-column whole-network metrics table (Metric / This network / Compare network), a modularity-by-strategy comparison table, and interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. A "Normalize axes [0–1] per network" toggle min-max scales each network's values independently, making size-dependent measures (degree, fans, message count) directly comparable across networks of different sizes.
+  - `graph/index.html` gains a "Compare network" section listing all copied `_2` files and linking to the comparison page.
 
 
 ## [0.7] - 2026-03-23
