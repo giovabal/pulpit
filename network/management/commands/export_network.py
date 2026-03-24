@@ -113,6 +113,16 @@ class Command(BaseCommand):
             metavar="YYYY-MM-DD",
             help="Only include messages on or before this date.",
         )
+        parser.add_argument(
+            "--compare",
+            default=None,
+            metavar="DATA_DIR",
+            help=(
+                "Path to a data/ directory produced by a previous export_network run. "
+                "Copies it to graph/data_compare/ and generates graph/network_compare_table.html "
+                "with side-by-side metrics tables and overlaid scatter plots."
+            ),
+        )
 
     def _validate_settings(self, communities_strategy: list[str], network_measures: list[str]) -> str | None:
         """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
@@ -170,6 +180,11 @@ class Command(BaseCommand):
         graph_3d = options["graph_3d"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
+        compare_data_dir = options["compare"]
+        if compare_data_dir is not None:
+            compare_data_dir = os.path.abspath(compare_data_dir)
+            if not os.path.isdir(compare_data_dir):
+                raise CommandError(f"--compare: not a directory: {compare_data_dir!r}")
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
@@ -390,6 +405,15 @@ class Command(BaseCommand):
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, "graph")
 
+        if compare_data_dir is not None:
+            self.stdout.write("- network compare table (html)")
+            exporter.copy_compare_data(compare_data_dir, root_target)
+            exporter.write_network_compare_table_html(
+                output_filename=os.path.join(root_target, "network_compare_table.html"),
+                seo=seo,
+                project_title=project_title,
+            )
+
         self.stdout.write("- index")
         os.makedirs("graph", exist_ok=True)
         exporter.write_index_html(
@@ -404,6 +428,7 @@ class Command(BaseCommand):
             include_network_xlsx="xlsx" in table_format,
             include_community_html="html" in table_format,
             include_community_xlsx="xlsx" in table_format,
+            include_compare_html=compare_data_dir is not None,
             strategies=strategies,
         )
 

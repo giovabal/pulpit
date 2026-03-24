@@ -1014,6 +1014,32 @@ def write_network_table_xlsx(
     wb.save(output_filename)
 
 
+def copy_compare_data(compare_data_dir: str, graph_dir: str) -> None:
+    """Copy an external data/ directory to graph/data_compare/ for side-by-side comparison."""
+    dest = os.path.join(graph_dir, "data_compare")
+    if os.path.exists(dest):
+        shutil.rmtree(dest)
+    shutil.copytree(compare_data_dir, dest)
+
+
+def write_network_compare_table_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    if seo:
+        title = f"{project_title} | Network comparison" if project_title else "Network comparison"
+        robots_meta = "index, follow"
+    else:
+        title = f"{project_title} | Network comparison" if project_title else "Network comparison"
+        robots_meta = "noindex, nofollow"
+
+    context = {"title": title, "robots_meta": robots_meta}
+    content = render_to_string("network/network_compare_table.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
 def write_community_table_xlsx(
     community_table_data: CommunityTableData,
     strategies: list[str],
@@ -1153,6 +1179,7 @@ def write_index_html(
     include_network_xlsx: bool = False,
     include_community_html: bool = False,
     include_community_xlsx: bool = False,
+    include_compare_html: bool = False,
     strategies: list[str] | None = None,
 ) -> None:
     if seo:
@@ -1174,6 +1201,7 @@ def write_index_html(
         "include_network_xlsx": include_network_xlsx,
         "include_community_html": include_community_html,
         "include_community_xlsx": include_community_xlsx,
+        "include_compare_html": include_compare_html,
         "strategies": [s.capitalize() for s in (strategies or [])],
     }
     content = render_to_string("network/index.html", context)

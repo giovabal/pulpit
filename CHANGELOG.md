@@ -1,10 +1,11 @@
 # Changelog
 
 ## [0.8] - To be announced
-*3d graph.*
+*3D graph and network comparison.*
 
 ### New features
-- Graph mini-site can be 3D too. It has many of the feature of the 2D version.
+- `export_network --3d` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end.
+- `export_network --compare DATA_DIR` accepts the `data/` directory of a previous export and produces `graph/network_compare_table.html`: a side-by-side comparison of the two networks. The page shows a 3-column whole-network metrics table and a modularity-by-strategy table (Metric / This network / Compare network), plus interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. Axes are user-selectable; the plot is log-scale with zoom and pan.
 
 
 ## [0.7] - 2026-03-23

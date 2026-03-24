@@ -142,10 +142,28 @@ To make the output discoverable by search engines (sets `index, follow` robots t
 python manage.py export_network --seo
 ```
 
+To also generate a 3D graph alongside the 2D one:
+```sh
+python manage.py export_network --3d
+```
+
+This produces `graph/graph3d.html`, a Three.js scene where you can rotate, zoom, and pan the graph and click nodes to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end, so it is slower on large graphs.
+
 To skip graph generation (tables and `index.html` are still produced):
 ```sh
 python manage.py export_network --nograph
 ```
+
+To compare this network against another export side-by-side:
+```sh
+python manage.py export_network --compare /path/to/other/graph/data
+```
+
+`DATA_DIR` must be a `data/` directory produced by a previous `export_network` run (it contains `network_metrics.json` and `channels.json`). The command copies it to `graph/data_compare/` and generates `graph/network_compare_table.html` with:
+
+- a 3-column whole-network metrics table (Metric / This network / Compare network)
+- a modularity-by-strategy comparison table
+- interactive scatter plots with this network's nodes in blue and the compare network's nodes in red; axes are user-selectable, log scale, zoom/pan enabled
 
 ### 7. View the graph
 
