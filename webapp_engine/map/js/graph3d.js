@@ -104,8 +104,8 @@ function init_three() {
 
     // Ambient light keeps dark sides readable; directional light follows the
     // camera so shading is consistent regardless of graph orientation.
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    var cam_light = new THREE.DirectionalLight(0xffffff, 0.70);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.70));
+    var cam_light = new THREE.DirectionalLight(0xffffff, 0.85);
     cam_light.position.set(0, 0, 1);  // local space: points straight at the scene
 
     camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 1e8);
