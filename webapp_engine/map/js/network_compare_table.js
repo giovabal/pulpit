@@ -122,6 +122,12 @@ Promise.all([
     var xSelect = makeSelect("x-axis-select", "X axis");
     var ySelect = makeSelect("y-axis-select", "Y axis");
 
+    var normalizeWrap = document.createElement("div"); normalizeWrap.className = "d-flex align-items-center gap-2";
+    var normalizeChk = document.createElement("input"); normalizeChk.type = "checkbox"; normalizeChk.className = "form-check-input"; normalizeChk.id = "normalize-chk";
+    var normalizeLbl = document.createElement("label"); normalizeLbl.className = "form-check-label small fw-semibold"; normalizeLbl.htmlFor = "normalize-chk"; normalizeLbl.textContent = "Normalize axes [0–1] per network";
+    normalizeWrap.appendChild(normalizeChk); normalizeWrap.appendChild(normalizeLbl);
+    controls.appendChild(normalizeWrap);
+
     var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
     var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
     resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
@@ -142,18 +148,36 @@ Promise.all([
     if (defaultX === defaultY) defaultY = commonMeasures.find(function(m) { return m[0] !== defaultX; })[0];
     xSelect.value = defaultX; ySelect.value = defaultY;
 
-    function buildPts(nodes, xKey, yKey) {
+    function buildPts(nodes, xKey, yKey, xMin, xRange, yMin, yRange) {
         return nodes
             .filter(function(n) { return n[xKey] > 0 && n[yKey] > 0; })
-            .map(function(n) { return { x: n[xKey], y: n[yKey], label: n.label || n.id, fans: n.fans || 0, msgs: n.messages_count || 0 }; });
+            .map(function(n) {
+                var x = xRange ? (n[xKey] - xMin) / xRange : n[xKey];
+                var y = yRange ? (n[yKey] - yMin) / yRange : n[yKey];
+                return { x: x, y: y, label: n.label || n.id, fans: n.fans || 0, msgs: n.messages_count || 0,
+                         xRaw: n[xKey], yRaw: n[yKey] };
+            });
+    }
+
+    function minMax(nodes, key) {
+        var vals = nodes.map(function(n) { return n[key] || 0; });
+        var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+        return { min: mn, range: mx - mn || 1 };
     }
 
     function buildDatasets(xKey, yKey) {
-        return { ptsA: buildPts(nodesA, xKey, yKey), ptsB: buildPts(nodesB, xKey, yKey) };
+        var normalize = normalizeChk.checked;
+        var axA = normalize ? { x: minMax(nodesA, xKey), y: minMax(nodesA, yKey) } : null;
+        var axB = normalize ? { x: minMax(nodesB, xKey), y: minMax(nodesB, yKey) } : null;
+        var ptsA = buildPts(nodesA, xKey, yKey, axA && axA.x.min, axA && axA.x.range, axA && axA.y.min, axA && axA.y.range);
+        var ptsB = buildPts(nodesB, xKey, yKey, axB && axB.x.min, axB && axB.x.range, axB && axB.y.min, axB && axB.y.range);
+        return { ptsA: ptsA, ptsB: ptsB };
     }
 
     var initial = buildDatasets(xSelect.value, ySelect.value);
-    countNote.textContent = initial.ptsA.length + " + " + initial.ptsB.length + " nodes (zero values excluded from log scale)";
+    countNote.textContent = initial.ptsA.length + " + " + initial.ptsB.length + " nodes (zero values excluded)";
+
+    function scaleType() { return normalizeChk.checked ? "linear" : "logarithmic"; }
 
     var chart = new Chart(canvas, {
         type: "scatter",
@@ -168,8 +192,8 @@ Promise.all([
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { type: "logarithmic", title: { display: true, text: labelOf[xSelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
-                y: { type: "logarithmic", title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+                x: { type: scaleType(), title: { display: true, text: labelOf[xSelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+                y: { type: scaleType(), title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
             },
             plugins: {
                 legend: { display: true, position: "top" },
@@ -177,7 +201,9 @@ Promise.all([
                     callbacks: {
                         label: function(ctx) {
                             var d = ctx.raw, xLbl = chart.options.scales.x.title.text, yLbl = chart.options.scales.y.title.text;
-                            return ["Channel: " + d.label, xLbl + ": " + d.x.toFixed(4), yLbl + ": " + d.y.toFixed(4), "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
+                            var xVal = d.xRaw !== undefined ? d.xRaw.toFixed(4) : d.x.toFixed(4);
+                            var yVal = d.yRaw !== undefined ? d.yRaw.toFixed(4) : d.y.toFixed(4);
+                            return ["Channel: " + d.label, xLbl + ": " + xVal, yLbl + ": " + yVal, "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
                         },
                     },
                 },
@@ -191,14 +217,18 @@ Promise.all([
         var ds = buildDatasets(xKey, yKey);
         chart.data.datasets[0].data = ds.ptsA;
         chart.data.datasets[1].data = ds.ptsB;
+        chart.options.scales.x.type = scaleType();
+        chart.options.scales.y.type = scaleType();
         chart.options.scales.x.title.text = labelOf[xKey];
         chart.options.scales.y.title.text = labelOf[yKey];
         chart.resetZoom();
         chart.update();
-        countNote.textContent = ds.ptsA.length + " + " + ds.ptsB.length + " nodes (zero values excluded from log scale)";
+        var note = normalizeChk.checked ? " nodes (normalized to [0–1] per network)" : " nodes (zero values excluded)";
+        countNote.textContent = ds.ptsA.length + " + " + ds.ptsB.length + note;
     }
 
     xSelect.addEventListener("change", updateChart);
     ySelect.addEventListener("change", updateChart);
+    normalizeChk.addEventListener("change", updateChart);
     resetBtn.addEventListener("click", function() { chart.resetZoom(); });
 });
