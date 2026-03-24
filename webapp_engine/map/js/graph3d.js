@@ -102,8 +102,16 @@ function init_three() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(BG_COLOR);
 
+    // Ambient light keeps dark sides readable; directional light follows the
+    // camera so shading is consistent regardless of graph orientation.
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    var cam_light = new THREE.DirectionalLight(0xffffff, 0.70);
+    cam_light.position.set(0, 0, 1);  // local space: points straight at the scene
+
     camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 1e8);
     camera.position.z = 2000;
+    camera.add(cam_light);
+    scene.add(camera);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -183,7 +191,7 @@ function build_graph(pos_data, ch_data) {
         var size  = node_size_from_metric((m[current_size_key] || 0), minV, range);
         var color = m.color ? parse_color(m.color) : new THREE.Color(0.5, 0.5, 0.5);
 
-        var mat  = new THREE.MeshBasicMaterial({ color: color.clone() });
+        var mat  = new THREE.MeshLambertMaterial({ color: color.clone() });
         var mesh = new THREE.Mesh(sphere_geom, mat);
         mesh.position.set(pos.x, pos.y, pos.z);
         mesh.scale.setScalar(size);
