@@ -20,7 +20,7 @@ var ZOOM_STEP          = 0.75;
 var SIZE_MIN_FRAC      = 0.00225;
 var SIZE_MAX_FRAC      = 0.01350;
 var LABEL_SIZE_FRAC    = 0.5;    // show label when size > SIZE_MIN + FRAC*(SIZE_MAX-SIZE_MIN)
-var GLOW_SCALE         = 5.0;    // glow sprite size relative to sphere radius (local space)
+var GLOW_SCALE         = 2.5;    // glow sprite size relative to sphere radius (local space)
 var DOF_APERTURE       = 0.0015; // bokeh aperture when a node is selected
 
 var BASE_MEASURE_KEYS = { in_deg: true, out_deg: true, fans: true, messages_count: true };
@@ -78,8 +78,8 @@ function make_glow_texture() {
     canvas.width = canvas.height = size;
     var ctx = canvas.getContext('2d');
     var grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0,   'rgba(255,255,255,0.55)');
-    grad.addColorStop(0.4, 'rgba(255,255,255,0.12)');
+    grad.addColorStop(0,   'rgba(255,255,255,0.18)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.04)');
     grad.addColorStop(1,   'rgba(255,255,255,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
