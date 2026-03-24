@@ -1,8 +1,8 @@
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 
 Promise.all([
-    fetch("data/channels.json").then(function(r) { return r.json(); }),
-    fetch("data/communities.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"channels.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }),
 ]).then(function(results) {
     var channels = results[0], communities = results[1];
     var nodes = channels.nodes;

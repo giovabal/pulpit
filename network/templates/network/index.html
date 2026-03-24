@@ -106,7 +106,6 @@
         <div class="d-flex gap-2 flex-wrap">
           <a href="network_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
           {% if include_network_xlsx %}<a href="network_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
-          {% if include_compare_html %}<a href="network_compare_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrows-angle-contract" aria-hidden="true"></i> Compare</a>{% endif %}
           <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#whole-network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures</a>
         </div>
       </div>
@@ -128,4 +127,97 @@
   {% endif %}
 
 </div>
+
+{% if include_compare_html or compare_files %}
+<hr class="my-4">
+<h5 class="mb-3 text-muted">Compare network</h5>
+<div class="row g-4">
+
+  {% if "graph_2.html" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Network map</h5>
+        <p class="card-text text-muted small">Force-directed graph of the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="graph_2.html" class="btn btn-outline-primary btn-sm">Open map</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if "graph3d_2.html" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h5>
+        <p class="card-text text-muted small">3D force-directed graph of the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="graph3d_2.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <p class="card-text text-muted small">Per-channel metrics for the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if "channel_table_2.html" in compare_files %}<a href="channel_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
+          {% if "channel_table_2.xlsx" in compare_files %}<a href="channel_table_2.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if "network_table_2.html" in compare_files or "network_table_2.xlsx" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <p class="card-text text-muted small">Whole-network structural metrics for the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if "network_table_2.html" in compare_files %}<a href="network_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
+          {% if "network_table_2.xlsx" in compare_files %}<a href="network_table_2.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if "community_table_2.html" in compare_files or "community_table_2.xlsx" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <p class="card-text text-muted small">Per-community metrics for the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if "community_table_2.html" in compare_files %}<a href="community_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
+          {% if "community_table_2.xlsx" in compare_files %}<a href="community_table_2.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if include_compare_html %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100 border-primary">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-arrows-angle-contract text-primary me-2" aria-hidden="true"></i>Side-by-side comparison</h5>
+        <p class="card-text text-muted small">Metrics tables and scatter plots with both networks overlaid.</p>
+        <a href="network_compare_table.html" class="btn btn-primary btn-sm">Open comparison</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
 {% endblock %}

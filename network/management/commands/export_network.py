@@ -116,11 +116,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--compare",
             default=None,
-            metavar="DATA_DIR",
+            metavar="PROJECT_DIR",
             help=(
-                "Path to a data/ directory produced by a previous export_network run. "
-                "Copies it to graph/data_compare/ and generates graph/network_compare_table.html "
-                "with side-by-side metrics tables and overlaid scatter plots."
+                "Path to a graph/ output directory from a previous export_network run "
+                "(the directory that contains index.html). "
+                "Its data/, graph files, *_table.html and *.xlsx files are copied with _2 suffixes; "
+                "network_compare_table.html is generated with side-by-side metrics tables and scatter plots."
             ),
         )
 
@@ -185,6 +186,11 @@ class Command(BaseCommand):
             compare_data_dir = os.path.abspath(compare_data_dir)
             if not os.path.isdir(compare_data_dir):
                 raise CommandError(f"--compare: not a directory: {compare_data_dir!r}")
+            if not os.path.isfile(os.path.join(compare_data_dir, "index.html")):
+                raise CommandError(
+                    f"--compare: {compare_data_dir!r} does not look like a graph/ output directory "
+                    "(no index.html found). Point to the directory that contains index.html."
+                )
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
@@ -405,9 +411,11 @@ class Command(BaseCommand):
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, "graph")
 
+        compare_files: set[str] = set()
         if compare_data_dir is not None:
+            self.stdout.write("- compare network files")
+            compare_files = exporter.copy_compare_project(compare_data_dir, root_target)
             self.stdout.write("- network compare table (html)")
-            exporter.copy_compare_data(compare_data_dir, root_target)
             exporter.write_network_compare_table_html(
                 output_filename=os.path.join(root_target, "network_compare_table.html"),
                 seo=seo,
@@ -429,6 +437,7 @@ class Command(BaseCommand):
             include_community_html="html" in table_format,
             include_community_xlsx="xlsx" in table_format,
             include_compare_html=compare_data_dir is not None,
+            compare_files=compare_files,
             strategies=strategies,
         )
 

@@ -623,9 +623,9 @@ function apply_group_filter(group) {
 
 function get_data() {
     Promise.all([
-        fetch('data/channel_position_3d.json').then(function(r) { return r.json(); }),
-        fetch('data/channels.json').then(function(r) { return r.json(); }),
-        fetch('data/communities.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'channel_position_3d.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'communities.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         var pos_data  = results[0];
         var ch_data   = results[1];

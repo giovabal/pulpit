@@ -1,6 +1,6 @@
 Promise.all([
-    fetch("data/network_metrics.json").then(function(r) { return r.json(); }),
-    fetch("data/channels.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"network_metrics.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"channels.json").then(function(r) { return r.json(); }),
 ]).then(function(results) {
     var data = results[0], channels = results[1];
     var nodes = channels.nodes;

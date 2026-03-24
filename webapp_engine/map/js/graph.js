@@ -378,8 +378,8 @@ function click_node(nodeId) {
 
 function get_data() {
     Promise.all([
-        fetch('data/channel_position.json').then(function(r) { return r.json(); }),
-        fetch('data/channels.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'channel_position.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         var pos_data = results[0];
         var ch_data  = results[1];
@@ -448,8 +448,8 @@ document.addEventListener('DOMContentLoaded', function() {
     el('loading_message').innerHTML = 'Loading…<br>Please wait.';
 
     Promise.all([
-        fetch('data/channels.json').then(function(r) { return r.json(); }),
-        fetch('data/communities.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
+        fetch((window.DATA_DIR||'data/')+'communities.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         var ch_data   = results[0];
         var comm_data = results[1];

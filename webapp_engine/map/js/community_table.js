@@ -1,4 +1,4 @@
-fetch("data/communities.json").then(function(r) { return r.json(); }).then(function(data) {
+fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }).then(function(data) {
     var container = document.getElementById("community-tables");
     var strategies = Object.keys(data.strategies);
 

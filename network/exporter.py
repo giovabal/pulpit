@@ -1014,12 +1014,74 @@ def write_network_table_xlsx(
     wb.save(output_filename)
 
 
-def copy_compare_data(compare_data_dir: str, graph_dir: str) -> None:
-    """Copy an external data/ directory to graph/data_compare/ for side-by-side comparison."""
-    dest = os.path.join(graph_dir, "data_compare")
-    if os.path.exists(dest):
-        shutil.rmtree(dest)
-    shutil.copytree(compare_data_dir, dest)
+_COMPARE_RENAMES: dict[str, str] = {
+    "graph.html": "graph_2.html",
+    "graph3d.html": "graph3d_2.html",
+    "channel_table.html": "channel_table_2.html",
+    "network_table.html": "network_table_2.html",
+    "community_table.html": "community_table_2.html",
+    "channel_table.xlsx": "channel_table_2.xlsx",
+    "network_table.xlsx": "network_table_2.xlsx",
+    "community_table.xlsx": "community_table_2.xlsx",
+}
+
+# Ordered so that graph3d.html is replaced before graph.html (avoid partial match)
+_HTML_LINK_RENAMES: list[tuple[str, str]] = [
+    ("graph3d.html", "graph3d_2.html"),
+    ("graph.html", "graph_2.html"),
+    ("channel_table.html", "channel_table_2.html"),
+    ("network_table.html", "network_table_2.html"),
+    ("community_table.html", "community_table_2.html"),
+    ("channel_table.xlsx", "channel_table_2.xlsx"),
+    ("network_table.xlsx", "network_table_2.xlsx"),
+    ("community_table.xlsx", "community_table_2.xlsx"),
+]
+
+
+def _patch_compare_html(content: str) -> str:
+    """Patch an HTML file from the compare project: rewrite internal links and inject DATA_DIR."""
+    for old, new in _HTML_LINK_RENAMES:
+        content = content.replace(old, new)
+    injection = '<script>window.DATA_DIR = "data_2/";</script>\n'
+    for marker in ('<script src="js/', '<script type="module" src="js/'):
+        idx = content.find(marker)
+        if idx != -1:
+            content = content[:idx] + injection + content[idx:]
+            break
+    return content
+
+
+def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
+    """Copy files from a compare graph/ directory into graph/, renaming with _2 suffix.
+
+    Returns the set of destination filenames that were actually written.
+    """
+    copied: set[str] = set()
+
+    # data/ → data_2/
+    src_data = os.path.join(compare_dir, "data")
+    dst_data = os.path.join(graph_dir, "data_2")
+    if os.path.exists(dst_data):
+        shutil.rmtree(dst_data)
+    if os.path.isdir(src_data):
+        shutil.copytree(src_data, dst_data)
+        copied.add("data_2")
+
+    for src_name, dst_name in _COMPARE_RENAMES.items():
+        src = os.path.join(compare_dir, src_name)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(graph_dir, dst_name)
+        if src_name.endswith(".html"):
+            with open(src) as f:
+                content = f.read()
+            with open(dst, "w") as f:
+                f.write(_patch_compare_html(content))
+        else:
+            shutil.copy2(src, dst)
+        copied.add(dst_name)
+
+    return copied
 
 
 def write_network_compare_table_html(
@@ -1180,6 +1242,7 @@ def write_index_html(
     include_community_html: bool = False,
     include_community_xlsx: bool = False,
     include_compare_html: bool = False,
+    compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
 ) -> None:
     if seo:
@@ -1202,6 +1265,7 @@ def write_index_html(
         "include_community_html": include_community_html,
         "include_community_xlsx": include_community_xlsx,
         "include_compare_html": include_compare_html,
+        "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],
     }
     content = render_to_string("network/index.html", context)
