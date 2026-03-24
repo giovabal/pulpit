@@ -39,6 +39,7 @@ var community_strategy_data= {};
 var accessory_data         = null;
 
 var selected_node_id  = null;
+var hovered_node_id   = null;
 var current_size_key  = 'in_deg';
 var current_group     = '';
 var labels_mode       = 'on_size';
@@ -123,6 +124,7 @@ function init_three() {
 
     window.addEventListener('resize', on_resize);
     renderer.domElement.addEventListener('click', on_canvas_click);
+    renderer.domElement.addEventListener('mousemove', on_canvas_mousemove);
 
     animate();
 }
@@ -348,11 +350,8 @@ function apply_node_size(metric) {
 
 function set_labels_visibility() {
     Object.keys(label_objects).forEach(function(id) {
-        var node = nodes_index[id];
-        var lbl  = label_objects[id];
-        if (labels_mode === 'always')     { lbl.visible = true;  return; }
-        if (labels_mode === 'never')      { lbl.visible = false; return; }
-        lbl.visible = (node && node.size >= g_label_threshold);
+        var lbl = label_objects[id];
+        lbl.visible = (id === hovered_node_id) || label_visibility_for(id);
     });
 }
 
@@ -415,6 +414,36 @@ function on_canvas_click(event) {
         else select_node(hit_id);
     } else if (selected_node_id) {
         reset_colors();
+    }
+}
+
+function label_visibility_for(id) {
+    var node = nodes_index[id];
+    if (labels_mode === 'always') return true;
+    if (labels_mode === 'never')  return false;
+    return node && node.size >= g_label_threshold;
+}
+
+function on_canvas_mousemove(event) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    pointer.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
+    pointer.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    var hits = raycaster.intersectObjects(node_meshes);
+    var new_hover = hits.length > 0 ? hits[0].object.userData.id : null;
+
+    if (new_hover === hovered_node_id) return;
+
+    if (hovered_node_id !== null) {
+        var old_lbl = label_objects[hovered_node_id];
+        if (old_lbl) old_lbl.visible = label_visibility_for(hovered_node_id);
+        hovered_node_id = null;
+    }
+
+    if (new_hover !== null) {
+        var lbl = label_objects[new_hover];
+        if (lbl) lbl.visible = true;
+        hovered_node_id = new_hover;
     }
 }
 
