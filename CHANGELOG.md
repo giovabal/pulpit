@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8] - To be announced
+*3d graph.*
+
+### New features
+- Graph mini-site can be 3D too. It has many of the feature of the 2D version.
+
+
 ## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
 

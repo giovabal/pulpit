@@ -91,6 +91,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--3d",
+            action="store_true",
+            default=False,
+            dest="graph_3d",
+            help=(
+                "Also produce a 3D graph visualisation (graph3d.html). "
+                "ForceAtlas2 runs in 3D using the vectorised O(n²) back-end "
+                "(Barnes-Hut is 2D-only), so this is slower on large graphs."
+            ),
+        )
+        parser.add_argument(
             "--startdate",
             default=None,
             metavar="YYYY-MM-DD",
@@ -156,6 +167,7 @@ class Command(BaseCommand):
 
         nograph = options["nograph"]
         seo = options["seo"]
+        graph_3d = options["graph_3d"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
 
@@ -188,6 +200,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
+        positions_3d: dict | None = None
         if not nograph:
             self.stdout.write("\nSet spatial distribution of nodes")
             self.stdout.write("- Kamada-Kawai … ", ending="")
@@ -207,6 +220,16 @@ class Command(BaseCommand):
             ):
                 self.stdout.write("- rotating layout 90°")
                 positions = layout.rotate_positions(positions)
+
+            if graph_3d:
+                self.stdout.write("- Kamada-Kawai 3D … ", ending="")
+                self.stdout.flush()
+                initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
+                self.stdout.write("done")
+                self.stdout.write(f"- ForceAtlas2 3D ({settings.FA2_ITERATIONS} iterations) … ", ending="")
+                self.stdout.flush()
+                positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, settings.FA2_ITERATIONS)
+                self.stdout.write("done")
         else:
             positions = {}
 
@@ -273,7 +296,7 @@ class Command(BaseCommand):
             self.stdout.write("\nGenerate map")
             exporter.ensure_graph_root(root_target)
             self.stdout.write("- config files")
-            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title)
+            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title, include_3d=graph_3d)
             exporter.write_robots_txt(root_target, seo)
 
         self.stdout.write("- data files")
@@ -284,6 +307,7 @@ class Command(BaseCommand):
             channel_qs,
             graph_dir="graph",
             include_positions=not nograph,
+            positions_3d=positions_3d,
         )
 
         table_format = options["table_format"]
@@ -373,6 +397,7 @@ class Command(BaseCommand):
             seo=seo,
             project_title=project_title,
             include_graph=not nograph,
+            include_3d_graph=not nograph and graph_3d,
             include_channel_html="html" in table_format,
             include_channel_xlsx="xlsx" in table_format,
             include_network_html="html" in table_format,

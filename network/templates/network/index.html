@@ -9,8 +9,9 @@
   <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Documentation</a>
 </div>
 
-{% if include_graph %}
+{% if include_graph or include_3d_graph %}
 <div class="row g-4 mb-4">
+  {% if include_graph %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
@@ -20,6 +21,18 @@
       </div>
     </div>
   </div>
+  {% endif %}
+  {% if include_3d_graph %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h5>
+        <p class="card-text text-muted small">3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.</p>
+        <a href="graph3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 <hr class="mb-4">
 {% endif %}

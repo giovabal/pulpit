@@ -391,12 +391,11 @@ def ensure_graph_root(root_target: str) -> None:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
-def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str = "") -> None:
-    """Patch the robots meta tag and title in the static graph.html after it is copied."""
-    index_path = os.path.join(root_target, "graph.html")
-    if not os.path.exists(index_path):
+def _patch_html_file(path: str, seo: bool, project_title: str) -> None:
+    """Patch the robots meta tag and title in a static HTML file in-place."""
+    if not os.path.exists(path):
         return
-    with open(index_path) as f:
+    with open(path) as f:
         content = f.read()
     if seo:
         content = content.replace(
@@ -411,8 +410,15 @@ def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str =
             rf"\g<1>{escaped}\g<2>",
             content,
         )
-    with open(index_path, "w") as f:
+    with open(path, "w") as f:
         f.write(content)
+
+
+def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str = "", include_3d: bool = False) -> None:
+    """Patch the robots meta tag and title in the static graph HTML files after they are copied."""
+    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title)
+    if include_3d:
+        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title)
 
 
 def write_robots_txt(root_target: str, seo: bool) -> None:
@@ -432,6 +438,7 @@ def write_graph_files(
     channel_qs: "QuerySet[Channel]",
     graph_dir: str,
     include_positions: bool = True,
+    positions_3d: dict | None = None,
 ) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -444,6 +451,23 @@ def write_graph_files(
         }
         with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
             f.write(json.dumps(position_payload))
+
+    if positions_3d is not None:
+        # channel_position_3d.json — 3D spatial layout + edges
+        nodes_3d = []
+        for n in graph_data["nodes"]:
+            pos = positions_3d.get(n["id"])
+            nodes_3d.append(
+                {
+                    "id": n["id"],
+                    "x": float(pos[0]) if pos is not None else 0.0,
+                    "y": float(pos[1]) if pos is not None else 0.0,
+                    "z": float(pos[2]) if pos is not None else 0.0,
+                }
+            )
+        position_3d_payload = {"nodes": nodes_3d, "edges": graph_data["edges"]}
+        with open(os.path.join(data_dir, "channel_position_3d.json"), "w") as f:
+            f.write(json.dumps(position_3d_payload))
 
     # channels.json — per-node metadata, computed measures, community assignments, measure labels
     node_keys: set[str] = {
@@ -1122,6 +1146,7 @@ def write_index_html(
     seo: bool = False,
     project_title: str = "",
     include_graph: bool = False,
+    include_3d_graph: bool = False,
     include_channel_html: bool = False,
     include_channel_xlsx: bool = False,
     include_network_html: bool = False,
@@ -1142,6 +1167,7 @@ def write_index_html(
         "robots_meta": robots_meta,
         "project_title": project_title,
         "include_graph": include_graph,
+        "include_3d_graph": include_3d_graph,
         "include_channel_html": include_channel_html,
         "include_channel_xlsx": include_channel_xlsx,
         "include_network_html": include_network_html,

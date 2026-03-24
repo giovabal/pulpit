@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="robots" content="noindex">
+  <title>Pulpit project — 3D map</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#123">
+  <meta name="description" content="An interactive 3D force-directed network map of Telegram channels.">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/graph.css" type="text/css" media="screen">
+  <style>
+    #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+    .node-label {
+      color: #fff;
+      font-size: 11px;
+      font-family: sans-serif;
+      font-weight: bold;
+      pointer-events: none;
+      white-space: nowrap;
+      text-shadow: 0 0 4px #000, 0 0 4px #000;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three":                          "https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js",
+      "three/addons/":                  "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <div id="canvas-container" aria-label="3D network graph"></div>
+
+  <nav id="menu_container" class="d-flex align-items-center" aria-label="Map controls">
+    <a href="#" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal">
+      <i class="bi bi-search" aria-hidden="true"></i><p class="d-none d-sm-block">Search</p>
+    </a>
+
+    <div class="menu-button text-center">
+      <div id="zoom_menu" class="d-flex align-items-center gap-1">
+        <button type="button" class="menu-icon-btn" id="zoom_in" aria-label="Zoom in"><i class="bi bi-zoom-in" aria-hidden="true"></i></button>
+        <button type="button" class="menu-icon-btn" id="zoom_reset" aria-label="Reset zoom"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+        <button type="button" class="menu-icon-btn" id="zoom_out" aria-label="Zoom out"><i class="bi bi-zoom-out" aria-hidden="true"></i></button>
+      </div>
+      <p class="d-none d-sm-block">Zoom</p>
+    </div>
+
+    <a href="#" id="data_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#data_modal">
+      <i class="bi bi-table" aria-hidden="true"></i><p class="d-none d-sm-block">Data</p>
+    </a>
+
+    <a href="#" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal">
+      <i class="bi bi-info-circle" aria-hidden="true"></i><p class="d-none d-sm-block">About</p>
+    </a>
+
+    <a href="#" id="options_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#options_modal">
+      <i class="bi bi-gear" aria-hidden="true"></i><p class="d-none d-sm-block">Options</p>
+    </a>
+  </nav>
+
+  <aside id="infobar" aria-label="Channel details">
+    <button type="button" class="infobar-toggle btn btn-link p-0 text-reset infobar-close" aria-label="Close"><i class="bi bi-x-lg fs-3" aria-hidden="true"></i></button>
+    <p id="node_picture"></p>
+    <h3 id="node_label"></h3>
+    <a id="node_url" href="" target="_blank"></a> <span id="node_location"></span>
+    <hr class="infobar-sep">
+    <div id="node_details">
+      <div class="metric-grid">
+        <div class="metric-chip">
+          <span class="metric-label">Users</span>
+          <span class="metric-value" id="node_followers_count"></span>
+        </div>
+        <div class="metric-chip">
+          <span class="metric-label">Messages</span>
+          <span class="metric-value" id="node_messages_count"></span>
+        </div>
+        <div class="metric-chip metric-chip--full">
+          <span class="metric-label">Activity</span>
+          <span class="metric-value" id="node_activity_period"></span>
+        </div>
+      </div>
+      <div id="node_measures" class="infobar-measures"></div>
+      <p><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
+      <p id="node_group"></p>
+    </div>
+
+    <div class="accordion" id="accordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="headingOne">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+            Two ways connections: <span id="node_mutual_count"></span>
+          </button>
+        </h2>
+        <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#accordion">
+          <div class="accordion-body">
+            <ul id="node_mutual_list" class="list-unstyled"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="headingTwo">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+            Inbound connections: <span id="node_in_count"></span>
+          </button>
+        </h2>
+        <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordion">
+          <div class="accordion-body">
+            <ul id="node_in_list" class="list-unstyled"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="headingThree">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+            Outbound connections: <span id="node_out_count"></span>
+          </button>
+        </h2>
+        <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordion">
+          <div class="accordion-body">
+            <ul id="node_out_list" class="list-unstyled"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="modal fade" id="loading_modal" tabindex="-1" role="dialog" aria-label="Loading">
+    <div class="modal-dialog" role="document" style="text-align: center; color: white;">
+      <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status"></div><p id="loading_message"></p>
+      <span class="visually-hidden">please wait...</span>
+    </div>
+  </div>
+
+  <div class="modal fade" id="search_modal" tabindex="-1" role="dialog" aria-labelledby="search_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="search_modalLabel">Search</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="search">
+            <div class="d-flex gap-2">
+              <div class="input-group">
+                <input id="search_input" type="text" name="search" placeholder="Search by name" class="form-control" aria-label="Search by name">
+                <span class="input-group-btn">
+                  <button class="btn btn-secondary" type="submit" aria-label="Search"><i class="bi bi-search" aria-hidden="true"></i></button>
+                </span>
+              </div>
+            </div>
+          </form>
+          <div id="results" style="padding-top: 1em;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="data_modal" tabindex="-1" role="dialog" aria-labelledby="data_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="data_modalLabel">Data exports</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <a href="channel_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset mb-3">
+            <i class="bi bi-table fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
+            <div>
+              <div class="fw-semibold">Channels</div>
+              <div class="text-muted small">One row per channel — metrics, community assignments, and network measures.</div>
+            </div>
+          </a>
+          <a href="community_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset mb-3">
+            <i class="bi bi-diagram-3 fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
+            <div>
+              <div class="fw-semibold">Communities</div>
+              <div class="text-muted small">Structural statistics per community — density, reciprocity, clustering, path length, and diameter.</div>
+            </div>
+          </a>
+          <a href="network_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset">
+            <i class="bi bi-bar-chart fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
+            <div>
+              <div class="fw-semibold">Network</div>
+              <div class="text-muted small">Whole-network structural metrics — density, reciprocity, clustering, path length, WCC/SCC, assortativity, Freeman centralization, and modularity per strategy.</div>
+            </div>
+          </a>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="about_modal" tabindex="-1" role="dialog" aria-labelledby="about_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="about_modalLabel">Pulpit project</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Pulpit (Political Undercurrents: Linkage, Propagation, Influence on Telegram) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive force-directed network graph — designed for political and social network analysis.</p>
+          <p><a href="https://github.com/giovabal/pulpit" target="_blank"><i class="bi bi-github" aria-hidden="true"></i> github.com/giovabal/pulpit</a></p>
+          <hr>
+          <p id="about_graph_stats"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="options_modal" tabindex="-1" role="dialog" aria-labelledby="options_modalLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="options_modalLabel">Options</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="options_form">
+            <div class="mb-3" id="community-strategy-group" style="display:none">
+              <label for="community-strategy-select" class="form-label">Community coloring</label>
+              <select id="community-strategy-select" class="form-select"></select>
+            </div>
+            <div class="mb-3">
+              <label for="size-select" class="form-label">Nodes dimension</label>
+              <select id="size-select" class="form-select"></select>
+            </div>
+            <div class="mb-3">
+              <label for="group-select" class="form-label">Filter by community</label>
+              <select id="group-select" class="form-select"></select>
+            </div>
+            <div class="mb-3">
+              <label for="labels-select" class="form-label">Labels</label>
+              <select id="labels-select" class="form-select">
+                <option value="on_size" selected>On size</option>
+                <option value="always">Always</option>
+                <option value="never">Never</option>
+              </select>
+            </div>
+          </form>
+          <hr>
+          <h5>Legend</h5>
+          <ul id="legend" class="list-unstyled" aria-label="Community color legend"></ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+  <script type="module" src="js/graph3d.js"></script>
+</body>
+</html>
