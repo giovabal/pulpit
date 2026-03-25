@@ -5,6 +5,7 @@ from typing import Any
 from django.conf import settings
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 
+from network.utils import make_date_q
 from webapp.models import Channel, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 
@@ -13,19 +14,6 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
-
-
-def _make_date_q(
-    start_date: datetime.date | None,
-    end_date: datetime.date | None,
-    field: str = "date",
-) -> Q:
-    q = Q()
-    if start_date:
-        q &= Q(**{f"{field}__date__gte": start_date})
-    if end_date:
-        q &= Q(**{f"{field}__date__lte": end_date})
-    return q
 
 
 def build_graph(
@@ -61,7 +49,7 @@ def build_graph(
         graph.add_node(str(channel.pk), data=channel_dict[str(channel.pk)]["data"])
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]
-    date_q = _make_date_q(start_date, end_date)
+    date_q = make_date_q(start_date, end_date)
 
     messages_per_channel: dict[int, int] = {
         item["channel_id"]: item["total"]
@@ -90,7 +78,7 @@ def build_graph(
     reference_counts: dict[tuple[int, int], int] = {
         (item["message__channel_id"], item["channel_id"]): item["total"]
         for item in references_through.objects.filter(
-            _make_date_q(start_date, end_date, field="message__date"),
+            make_date_q(start_date, end_date, field="message__date"),
             channel_id__in=channel_ids,
             message__channel_id__in=channel_ids,
         )

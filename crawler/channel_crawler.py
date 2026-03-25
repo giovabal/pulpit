@@ -82,7 +82,7 @@ class ChannelCrawler:
         self.set_more_channel_details(channel, telegram_channel)
 
         id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
-        min_id = id_agg["max_id"] or 0
+        last_known_id = id_agg["max_id"] or 0
         message_count = 0
         if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
             remaining_limit: int | None = None
@@ -92,7 +92,7 @@ class ChannelCrawler:
         batch_count = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
-            min_id=min_id,
+            min_id=last_known_id,
             wait_time=self.api_client.wait_time,
             limit=remaining_limit,
             reverse=True,
@@ -111,7 +111,7 @@ class ChannelCrawler:
                 update_status(
                     f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
                 )
-                return min_id
+                return last_known_id
 
         max_id = id_agg["min_id"] if not channel.are_messages_crawled else None
 
@@ -135,7 +135,7 @@ class ChannelCrawler:
                 update_status(
                     f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
                 )
-                return
+                return last_known_id
 
         if fix_holes:
             update_status(f"{channel_label} | checking for message holes")
@@ -149,7 +149,7 @@ class ChannelCrawler:
         channel.is_lost = False
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
-        return min_id
+        return last_known_id
 
     def _find_missing_message_ids(self, channel: Channel, min_telegram_id: int | None = None) -> list[int]:
         messages = channel.message_set.order_by("telegram_id")

@@ -11,7 +11,8 @@ from telethon import errors
 
 logger = logging.getLogger(__name__)
 
-SKIPPABLE_REFERENCES = ["joinchat"]
+# "joinchat" is a Telegram invite-link prefix (t.me/joinchat/<code>), not a real channel username.
+SKIPPABLE_REFERENCES = {"joinchat"}
 
 
 class ReferenceResolver:

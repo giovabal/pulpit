@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db.models import Count, Max, Min, Q, QuerySet
 from django.template.loader import render_to_string
 
+from network.utils import make_date_q
 from webapp.models import Channel, Message
 
 import networkx as nx
@@ -91,11 +92,7 @@ def apply_base_node_measures(
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
     ]
-    msg_q = Q(channel_id__in=channel_pks)
-    if start_date:
-        msg_q &= Q(date__date__gte=start_date)
-    if end_date:
-        msg_q &= Q(date__date__lte=end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
@@ -282,21 +279,15 @@ def apply_amplification_factor(
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
     ]
-    msg_q = Q(channel_id__in=channel_pks)
-    if start_date:
-        msg_q &= Q(date__date__gte=start_date)
-    if end_date:
-        msg_q &= Q(date__date__lte=end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
 
-    fwd_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True)
-    if start_date:
-        fwd_q &= Q(date__date__gte=start_date)
-    if end_date:
-        fwd_q &= Q(date__date__lte=end_date)
+    fwd_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True) & make_date_q(
+        start_date, end_date
+    )
     forwards_received: dict[int, int] = {
         item["forwarded_from_id"]: item["total"]
         for item in Message.objects.filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
@@ -327,11 +318,7 @@ def apply_content_originality(
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
     ]
-    msg_q = Q(channel_id__in=channel_pks)
-    if start_date:
-        msg_q &= Q(date__date__gte=start_date)
-    if end_date:
-        msg_q &= Q(date__date__lte=end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
@@ -526,28 +513,6 @@ def _heatmap_bg(val: float | int | None, col_min: float, col_max: float) -> str:
     g = round(255 - ratio * 21)
     b = round(255 - ratio * 6)
     return f"background-color:rgb({r},{g},{b})"
-
-
-def _num_cell_dict(val: Any, key: str, hm_ranges: dict[str, tuple[float, float]]) -> dict:
-    bg = _heatmap_bg(val, *hm_ranges[key]) if key in hm_ranges else ""
-    return {
-        "display": str(val) if val is not None else "",
-        "css_class": "number",
-        "sort_value": str(val) if val is not None else "",
-        "style": bg,
-        "link": "",
-    }
-
-
-def _float_cell_dict(val: Any, key: str, hm_ranges: dict[str, tuple[float, float]]) -> dict:
-    bg = _heatmap_bg(val, *hm_ranges[key]) if key in hm_ranges else ""
-    return {
-        "display": f"{val:.4f}" if val is not None else "",
-        "css_class": "number",
-        "sort_value": str(val) if val is not None else "",
-        "style": bg,
-        "link": "",
-    }
 
 
 def write_table_html(
@@ -786,20 +751,14 @@ def _network_content_metrics(
 ) -> dict[str, float | None]:
     """Compute network-wide content originality and amplification ratio from the DB."""
     channel_pks = list(channel_qs.values_list("pk", flat=True))
-    msg_q = Q(channel_id__in=channel_pks)
-    if start_date:
-        msg_q &= Q(date__date__gte=start_date)
-    if end_date:
-        msg_q &= Q(date__date__lte=end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     total = Message.objects.filter(msg_q).count()
     if total == 0:
         return {"network_originality": None, "network_amplification": None}
     forwarded_out = Message.objects.filter(msg_q & Q(forwarded_from__isnull=False)).count()
-    fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True)
-    if start_date:
-        fwd_in_q &= Q(date__date__gte=start_date)
-    if end_date:
-        fwd_in_q &= Q(date__date__lte=end_date)
+    fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True) & make_date_q(
+        start_date, end_date
+    )
     forwards_received = Message.objects.filter(fwd_in_q).count()
     return {
         "network_originality": round(1 - forwarded_out / total, 4),

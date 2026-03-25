@@ -220,9 +220,9 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
         return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
 
 
-def _global_month_spine() -> list[str]:
-    """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across interesting channels."""
-    agg = Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False).aggregate(
+def _month_spine(q: models.Q) -> list[str]:
+    """Return a sorted list of YYYY-MM strings spanning the earliest to latest message matching q."""
+    agg = Message.objects.filter(q, date__isnull=False).aggregate(
         earliest=models.Min("date"), latest=models.Max("date")
     )
     if not agg["earliest"] or not agg["latest"]:
@@ -236,24 +236,16 @@ def _global_month_spine() -> list[str]:
         .strftime("%Y-%m")
         .tolist()
     )
+
+
+def _global_month_spine() -> list[str]:
+    """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across interesting channels."""
+    return _month_spine(models.Q(channel__organization__is_interesting=True))
 
 
 def _channel_month_spine(channel: Channel) -> list[str]:
     """Return a sorted list of all YYYY-MM strings from the channel's first to last message."""
-    agg = Message.objects.filter(channel=channel, date__isnull=False).aggregate(
-        earliest=models.Min("date"), latest=models.Max("date")
-    )
-    if not agg["earliest"] or not agg["latest"]:
-        return []
-    return (
-        pd.period_range(
-            start=agg["earliest"].strftime("%Y-%m"),
-            end=agg["latest"].strftime("%Y-%m"),
-            freq="M",
-        )
-        .strftime("%Y-%m")
-        .tolist()
-    )
+    return _month_spine(models.Q(channel=channel))
 
 
 def _reindex_to_spine(df: "pd.DataFrame", field: str, spine: list[str]) -> "pd.DataFrame":
