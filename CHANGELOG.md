@@ -13,6 +13,10 @@
   - `graph/index.html` gains a "Compare network" section listing all copied `_2` files and linking to the comparison page.
 
 
+### Improvements
+- `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
+- `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
+
 ## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
 
