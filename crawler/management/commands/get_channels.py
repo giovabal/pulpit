@@ -246,18 +246,14 @@ class Command(AsyncBaseCommand):
             )
         ) - interesting_pks
 
-        self.stdout.write(
-            self.style.NOTICE(f"\nRefreshing degrees for {len(interesting_pks)} interesting channels … "), ending=""
-        )
+        self.stdout.write(f"\nRefreshing degrees for {len(interesting_pks)} interesting channels … ", ending="")
         self.stdout.flush()
         for channel in Channel.objects.filter(pk__in=interesting_pks):
             channel.refresh_degrees()
         self.stdout.write("done")
 
         if cited_pks:
-            self.stdout.write(
-                self.style.NOTICE(f"Refreshing citation degree for {len(cited_pks)} referenced channels … "), ending=""
-            )
+            self.stdout.write(f"Refreshing citation degree for {len(cited_pks)} referenced channels … ", ending="")
             self.stdout.flush()
             for channel in Channel.objects.filter(pk__in=cited_pks):
                 channel.refresh_cited_degree()

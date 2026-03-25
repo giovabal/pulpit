@@ -45,7 +45,7 @@ class Command(AsyncBaseCommand):
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
             for term in qs:
-                self.stdout.write(self.style.NOTICE(f'Searching: "{term.word}" … '), ending="")
+                self.stdout.write(f'Searching: "{term.word}" … ', ending="")
                 self.stdout.flush()
                 found, new = crawler.search_channel(term.word)
                 self.stdout.write(f"{found} found, {new} new")
