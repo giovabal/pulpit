@@ -198,7 +198,7 @@ class Command(BaseCommand):
                     "(no index.html found). Point to the directory that contains index.html."
                 )
 
-        self.stdout.write("Create graph … ", ending="")
+        self.stdout.write(self.style.NOTICE("Create graph … "), ending="")
         self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
@@ -210,7 +210,7 @@ class Command(BaseCommand):
             raise CommandError(str(e)) from e
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
-        self.stdout.write("Calculate communities")
+        self.stdout.write(self.style.NOTICE("Calculate communities"))
         strategy_results: dict[str, tuple] = {}
         for strategy in communities_strategy:
             self.stdout.write(f"- {strategy.lower()} … ", ending="")
@@ -229,7 +229,7 @@ class Command(BaseCommand):
 
         positions_3d: dict | None = None
         if not nograph:
-            self.stdout.write("\nSet spatial distribution of nodes")
+            self.stdout.write(self.style.NOTICE("\nSet spatial distribution of nodes"))
             self.stdout.write("- Kamada-Kawai … ", ending="")
             self.stdout.flush()
             initial_pos = layout.kamada_kawai_positions(graph)
@@ -245,7 +245,7 @@ class Command(BaseCommand):
             if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
                 settings.LAYOUT == layout.LAYOUT_VERTICAL and width > height
             ):
-                self.stdout.write("- rotating layout 90°")
+                self.stdout.write(self.style.NOTICE("- rotating layout 90°"))
                 positions = layout.rotate_positions(positions)
 
             if graph_3d:
@@ -260,7 +260,7 @@ class Command(BaseCommand):
         else:
             positions = {}
 
-        self.stdout.write("\nCalculations on the graph")
+        self.stdout.write(self.style.NOTICE("\nCalculations on the graph"))
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
 
         self.stdout.write("- largest component … ", ending="")
@@ -320,7 +320,7 @@ class Command(BaseCommand):
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
 
         if not nograph:
-            self.stdout.write("\nGenerate map")
+            self.stdout.write(self.style.NOTICE("\nGenerate map"))
             exporter.ensure_graph_root(root_target)
             self.stdout.write("- config files")
             exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title, include_3d=graph_3d)

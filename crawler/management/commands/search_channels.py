@@ -30,6 +30,8 @@ class Command(AsyncBaseCommand):
         qs = SearchTerm.objects.all().order_by(F("last_check").asc(nulls_first=True))
         if options["amount"] is not None:
             qs = qs[: options["amount"]]
+        total_found = 0
+        total_new = 0
         with TelegramClient(
             "anon",
             settings.TELEGRAM_API_ID,
@@ -43,6 +45,12 @@ class Command(AsyncBaseCommand):
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
             for term in qs:
-                crawler.search_channel(term.word)
+                self.stdout.write(self.style.NOTICE(f'Searching: "{term.word}" … '), ending="")
+                self.stdout.flush()
+                found, new = crawler.search_channel(term.word)
+                self.stdout.write(f"{found} found, {new} new")
+                total_found += found
+                total_new += new
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])
+        self.stdout.write(self.style.SUCCESS(f"\nSearch complete. {total_found} channels found, {total_new} new."))

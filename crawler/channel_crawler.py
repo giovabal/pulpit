@@ -328,16 +328,19 @@ class ChannelCrawler:
             update_status(f"refreshing message stats … {updated} updated")
         return updated
 
-    def search_channel(self, q: str, limit: int = 1000) -> int:
+    def search_channel(self, q: str, limit: int = 1000) -> tuple[int, int]:
+        """Search for channels matching q. Returns (total_found, new_to_db)."""
         self.api_client.wait()
         results_count = 0
+        new_count = 0
         result = self.api_client.client(functions.contacts.SearchRequest(q=q, limit=limit))
         for channel in result.chats:
             if hasattr(channel, "id"):
                 results_count += 1
                 if not Channel.objects.filter(telegram_id=channel.id).exists():
                     Channel.from_telegram_object(channel, force_update=True)
-        return results_count
+                    new_count += 1
+        return results_count, new_count
 
     def get_missing_references(self) -> None:
         self.reference_resolver.get_missing_references()
