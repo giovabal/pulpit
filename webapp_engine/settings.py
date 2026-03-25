@@ -149,6 +149,7 @@ FA2_ITERATIONS = config("FA2_ITERATIONS", default=20000, cast=int)
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 
 REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
+EDGE_WEIGHT_STRATEGY = config("EDGE_WEIGHT_STRATEGY", default="PARTIAL_REFERENCES", cast=str)
 
 DRAW_DEAD_LEAVES = config("DRAW_DEAD_LEAVES", default=False, cast=bool)
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)

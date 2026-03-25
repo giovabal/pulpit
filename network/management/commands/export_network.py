@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from network import community, exporter, graph_builder, layout
+from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
 VALID_MEASURES = {
@@ -157,6 +158,11 @@ class Command(BaseCommand):
         if invalid_channel_types:
             raise CommandError(
                 f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
+            )
+        if settings.EDGE_WEIGHT_STRATEGY not in VALID_EDGE_WEIGHT_STRATEGIES:
+            raise CommandError(
+                f"Invalid EDGE_WEIGHT_STRATEGY value: {settings.EDGE_WEIGHT_STRATEGY!r}. "
+                f"Choose from {sorted(VALID_EDGE_WEIGHT_STRATEGIES)}."
             )
         return bridging_token
 

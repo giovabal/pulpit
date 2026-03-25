@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 
 from webapp.models import Channel, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
@@ -11,6 +11,8 @@ from webapp.utils.channel_types import channel_type_filter
 import networkx as nx
 
 logger = logging.getLogger(__name__)
+
+VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
 
 
 def _make_date_q(
@@ -96,15 +98,36 @@ def build_graph(
         .annotate(total=Count("id"))
     }
 
+    edge_weight_strategy = settings.EDGE_WEIGHT_STRATEGY
+
+    # For PARTIAL_REFERENCES: count messages per channel that are forwarded or contain citations.
+    referencing_counts: dict[int, int] = {}
+    if edge_weight_strategy == "PARTIAL_REFERENCES":
+        has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
+        referencing_counts = {
+            item["channel_id"]: item["total"]
+            for item in Message.objects.filter(date_q, channel_id__in=channel_ids)
+            .filter(Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq)))
+            .values("channel_id")
+            .annotate(total=Count("id"))
+        }
+
     pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
     edge_list: list[list[str | float]] = []
     for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
         if target_pk == source_pk:
             continue
-        message_count = messages_per_channel.get(target_pk, 0)
-        forward_weight = forwarded_counts.get((target_pk, source_pk), 0)
-        reference_weight = reference_counts.get((target_pk, source_pk), 0)
-        weight = (forward_weight + reference_weight) / message_count if message_count else 0
+        total = forwarded_counts.get((target_pk, source_pk), 0) + reference_counts.get((target_pk, source_pk), 0)
+        if edge_weight_strategy == "NONE":
+            weight = 1.0
+        elif edge_weight_strategy == "TOTAL":
+            weight = float(total)
+        elif edge_weight_strategy == "PARTIAL_MESSAGES":
+            message_count = messages_per_channel.get(target_pk, 0)
+            weight = total / message_count if message_count else 0.0
+        else:  # PARTIAL_REFERENCES (default)
+            ref_count = referencing_counts.get(target_pk, 0)
+            weight = total / ref_count if ref_count else 0.0
         if weight > 0:
             target_str = pk_to_str[target_pk]
             source_str = pk_to_str[source_pk]
