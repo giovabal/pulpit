@@ -147,6 +147,12 @@ class Channel(TelegramBaseModel):
         self.username = self.username or ""
         super().save(*args, **kwargs)
 
+    def _set_degrees(self, in_degree: int, out_degree: int) -> None:
+        """Persist in_degree/out_degree to the DB and update the in-memory instance."""
+        Channel.objects.filter(pk=self.pk).update(in_degree=in_degree, out_degree=out_degree)
+        self.in_degree = in_degree
+        self.out_degree = out_degree
+
     def refresh_degrees(self) -> None:
         """Recompute and persist in_degree and out_degree from current message data."""
         in_degree = (
@@ -159,9 +165,7 @@ class Channel(TelegramBaseModel):
             .exclude(forwarded_from=self)
             .count()
         )
-        Channel.objects.filter(pk=self.pk).update(in_degree=in_degree, out_degree=out_degree)
-        self.in_degree = in_degree
-        self.out_degree = out_degree
+        self._set_degrees(in_degree, out_degree)
 
     def refresh_cited_degree(self) -> None:
         """Recompute and persist the citation count for a non-interesting channel.
@@ -181,13 +185,9 @@ class Channel(TelegramBaseModel):
             .count()
         )
         if settings.REVERSED_EDGES:
-            Channel.objects.filter(pk=self.pk).update(in_degree=citations, out_degree=0)
-            self.in_degree = citations
-            self.out_degree = 0
+            self._set_degrees(citations, 0)
         else:
-            Channel.objects.filter(pk=self.pk).update(in_degree=0, out_degree=citations)
-            self.in_degree = 0
-            self.out_degree = citations
+            self._set_degrees(0, citations)
 
 
 class Message(TelegramBaseModel):

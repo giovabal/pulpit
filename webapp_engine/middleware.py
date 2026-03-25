@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 
 
-class AuthenticationMiddleware(object):
+class AnonymousUserMiddleware(object):
     def __init__(self, get_response):
         self.get_response = get_response
 

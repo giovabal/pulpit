@@ -600,11 +600,13 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
     density = nx.density(graph)
     try:
         reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
-    except Exception:
+    except Exception as exc:
+        logger.debug("reciprocity unavailable: %s", exc)
         reciprocity = None
     try:
         avg_clustering = nx.average_clustering(graph)
-    except Exception:
+    except Exception as exc:
+        logger.debug("avg_clustering unavailable: %s", exc)
         avg_clustering = None
     avg_path_length = None
     diameter = None
@@ -624,15 +626,15 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
                 ug = graph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("wcc/path_length/diameter unavailable: %s", exc)
         try:
             sccs = list(nx.strongly_connected_components(graph))
             largest_scc = max(sccs, key=len)
             scc_count = len(sccs)
             scc_fraction = len(largest_scc) / n
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("scc unavailable: %s", exc)
     assortativity: dict[str, float | None] = {
         "in_in": None,
         "in_out": None,
@@ -655,8 +657,8 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
             ]:
                 if x.std() > 0 and y.std() > 0:
                     assortativity[key] = float(np.corrcoef(x, y)[0, 1])
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("assortativity unavailable: %s", exc)
     return {
         "n": n,
         "e": e,
@@ -684,11 +686,13 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
     density = nx.density(subgraph)
     try:
         reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
-    except Exception:
+    except Exception as exc:
+        logger.debug("reciprocity unavailable for subgraph: %s", exc)
         reciprocity = None
     try:
         avg_clustering = nx.average_clustering(subgraph)
-    except Exception:
+    except Exception as exc:
+        logger.debug("avg_clustering unavailable for subgraph: %s", exc)
         avg_clustering = None
     avg_path_length = None
     diameter = None
@@ -700,8 +704,8 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
                 ug = subgraph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("wcc/path_length/diameter unavailable for subgraph: %s", exc)
     return {
         "internal_edges": internal_edges,
         "external_edges": external_edges,
@@ -843,8 +847,8 @@ def compute_community_metrics(
         if label_to_nodes:
             try:
                 modularity = nx.community.modularity(graph, label_to_nodes.values())
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
         result["strategies"][strategy_key] = {"modularity": modularity, "rows": rows}
         if status_callback:
             status_callback(strategy_key)

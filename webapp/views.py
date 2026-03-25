@@ -9,6 +9,7 @@ from webapp_engine.paginator import DiggPaginator
 
 from .mixins import BaseMixin
 from .models import Channel, Message
+from .utils.dates import fmt_date
 
 
 class HomeView(BaseMixin, TemplateView):
@@ -29,9 +30,6 @@ class HomeView(BaseMixin, TemplateView):
         )
         date_agg = Message.objects.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
         total_forwards = Message.objects.filter(forwarded_from__isnull=False).count()
-
-        def fmt_date(d: Any) -> str:
-            return d.strftime("%b %Y") if d else "—"
 
         ctx["summary"] = [
             {
@@ -149,9 +147,6 @@ class ChannelDetailView(BaseMixin, ListView):
             channel__organization__is_interesting=True, forwarded_from=ch
         ).count()
         date_agg = msg_qs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
-
-        def fmt_date(d: Any) -> str:
-            return d.strftime("%b %Y") if d else "—"
 
         summary = [
             {"icon": "bi-chat-left-text", "label": "Messages", "value": f"{total_messages:,}"},
