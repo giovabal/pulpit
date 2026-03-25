@@ -227,18 +227,36 @@ class Command(AsyncBaseCommand):
         finally:
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
-        referenced_pks = set(
-            Channel.objects.filter(organization__is_interesting=True)
-            .exclude(message_set__forwarded_from__isnull=True)
-            .values_list("message_set__forwarded_from_id", flat=True)
-            .distinct()
-        )
+        from webapp.models import Message
+
         interesting_pks = set(Channel.objects.interesting().values_list("pk", flat=True))
-        all_pks = interesting_pks | referenced_pks
-        self.stdout.write(f"\nRefreshing degrees for {len(all_pks)} channels … ", ending="")
+
+        # Non-interesting channels cited by interesting channels: via forwards or t.me/username references.
+        cited_pks = (
+            set(
+                Message.objects.filter(
+                    channel__organization__is_interesting=True,
+                    forwarded_from__isnull=False,
+                ).values_list("forwarded_from_id", flat=True)
+            )
+            | set(
+                Message.references.through.objects.filter(
+                    message__channel__organization__is_interesting=True,
+                ).values_list("channel_id", flat=True)
+            )
+        ) - interesting_pks
+
+        self.stdout.write(f"\nRefreshing degrees for {len(interesting_pks)} interesting channels … ", ending="")
         self.stdout.flush()
-        for channel in Channel.objects.filter(pk__in=all_pks):
+        for channel in Channel.objects.filter(pk__in=interesting_pks):
             channel.refresh_degrees()
         self.stdout.write("done")
+
+        if cited_pks:
+            self.stdout.write(f"Refreshing citation degree for {len(cited_pks)} referenced channels … ", ending="")
+            self.stdout.flush()
+            for channel in Channel.objects.filter(pk__in=cited_pks):
+                channel.refresh_cited_degree()
+            self.stdout.write("done")
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))

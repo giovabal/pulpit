@@ -6,7 +6,7 @@ from typing import Any, ClassVar, Self
 from django.conf import settings
 from django.core.files import File
 from django.db import models
-from django.db.models import Max, Min
+from django.db.models import Max, Min, Q
 from django.urls import reverse
 
 from webapp.managers import ChannelManager
@@ -162,6 +162,32 @@ class Channel(TelegramBaseModel):
         Channel.objects.filter(pk=self.pk).update(in_degree=in_degree, out_degree=out_degree)
         self.in_degree = in_degree
         self.out_degree = out_degree
+
+    def refresh_cited_degree(self) -> None:
+        """Recompute and persist the citation count for a non-interesting channel.
+
+        Counts how many messages from interesting channels cite this channel (via
+        forwards or t.me/username references) and stores the total in the field that
+        matches the graph edge direction:
+          - in_degree  when REVERSED_EDGES=True  (citations arrive as incoming edges)
+          - out_degree when REVERSED_EDGES=False (citations leave as outgoing edges)
+        The other field is set to 0.
+        """
+        citations = (
+            Message.objects.filter(channel__organization__is_interesting=True)
+            .filter(Q(forwarded_from=self) | Q(references=self))
+            .exclude(channel=self)
+            .distinct()
+            .count()
+        )
+        if settings.REVERSED_EDGES:
+            Channel.objects.filter(pk=self.pk).update(in_degree=citations, out_degree=0)
+            self.in_degree = citations
+            self.out_degree = 0
+        else:
+            Channel.objects.filter(pk=self.pk).update(in_degree=0, out_degree=citations)
+            self.in_degree = 0
+            self.out_degree = citations
 
 
 class Message(TelegramBaseModel):

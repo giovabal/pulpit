@@ -83,6 +83,8 @@ python manage.py get_channels
 
 Downloads messages for all interesting channels. Re-run at any time to fetch new messages.
 
+After crawling, `get_channels` automatically refreshes the in-degree and out-degree counters for all interesting channels. It also refreshes the citation degree (the direction depends on `REVERSED_EDGES`) for non-interesting channels that are forwarded or mentioned (via `t.me/` links) by interesting ones — so the graph correctly shows how much each referenced channel is cited even if it was never crawled.
+
 To also fill gaps in message history (messages that were deleted or missed on a previous run):
 
 ```sh
