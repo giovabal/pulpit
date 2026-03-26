@@ -8,6 +8,7 @@ from django.core.paginator import InvalidPage
 from django.test import TestCase
 from django.urls import reverse
 
+from network.graph_builder import channel_network_data
 from webapp.managers import ChannelManager, ChannelQuerySet
 from webapp.models import Channel, Message, Organization
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
@@ -499,28 +500,28 @@ class ChannelNetworkDataTests(TestCase):
     def test_with_organization_sets_label(self) -> None:
         org = Organization.objects.create(name="Test Org", color="#ff0000")
         ch = Channel.objects.create(telegram_id=1, title="Chan", organization=org)
-        data = ch.network_data()
+        data = channel_network_data(ch)
         self.assertEqual(data["label"], "Chan")
 
     def test_communities_is_empty_dict_initially(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Chan")
-        data = ch.network_data()
+        data = channel_network_data(ch)
         self.assertEqual(data["communities"], {})
 
     def test_required_keys_present(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Chan")
-        data = ch.network_data()
+        data = channel_network_data(ch)
         for key in ("pk", "id", "label", "communities", "color", "url", "activity_period", "fans"):
             self.assertIn(key, data, msg=f"Missing key: {key}")
 
     def test_defaults_dict_merged(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Chan")
-        data = ch.network_data({"extra": "value"})
+        data = channel_network_data(ch, {"extra": "value"})
         self.assertEqual(data["extra"], "value")
 
     def test_defaults_override_computed_fields(self) -> None:
         ch = Channel.objects.create(telegram_id=1, title="Original")
-        data = ch.network_data({"label": "Override"})
+        data = channel_network_data(ch, {"label": "Override"})
         self.assertEqual(data["label"], "Override")
 
 

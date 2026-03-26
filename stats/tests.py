@@ -3,7 +3,11 @@ import json
 from django.test import TestCase
 from django.urls import reverse
 
-from stats.views import _channel_month_spine, _global_month_spine, _reindex_to_spine
+from stats.queries import (
+    channel_month_spine as _channel_month_spine,
+    global_month_spine as _global_month_spine,
+    reindex_to_spine as _reindex_to_spine,
+)
 from webapp.models import Channel, Message, Organization
 
 import pandas as pd

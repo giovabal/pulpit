@@ -8,10 +8,40 @@ from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 from network.utils import make_date_q
 from webapp.models import Channel, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
+from webapp.utils.colors import hex_to_rgb
 
 import networkx as nx
 
 logger = logging.getLogger(__name__)
+
+
+def channel_network_data(
+    channel: Channel,
+    default: dict | None = None,
+    skip: frozenset[str] | set[str] = frozenset(),
+) -> dict:
+    """Build the graph-node dict for a channel."""
+    default = default or {}
+    data: dict = {
+        "pk": str(channel.pk),
+        "id": channel.telegram_id,
+        "label": channel.title,
+        "communities": {},
+        "color": ",".join(
+            map(str, hex_to_rgb(channel.organization.color if channel.organization else settings.DEAD_LEAVES_COLOR))
+        ),
+        "pic": channel.profile_picture.picture.url[1:] if channel.profile_picture else "",
+        "url": channel.telegram_url,
+        "activity_period": "" if "activity_period" in skip else channel.activity_period,
+        "fans": channel.participants_count,
+        "in_deg": channel.in_degree,
+        "is_lost": channel.is_lost,
+        "messages_count": 0 if "messages_count" in skip else channel.message_set.count(),
+        "out_deg": channel.out_degree,
+    }
+    data.update(default)
+    return data
+
 
 VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
 
@@ -45,7 +75,7 @@ def build_graph(
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
     for channel in channel_qs:
-        channel_dict[str(channel.pk)] = {"channel": channel, "data": channel.network_data(skip=_skip)}
+        channel_dict[str(channel.pk)] = {"channel": channel, "data": channel_network_data(channel, skip=_skip)}
         graph.add_node(str(channel.pk), data=channel_dict[str(channel.pk)]["data"])
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]

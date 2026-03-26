@@ -6,7 +6,7 @@ from typing import Any
 
 from django.template.loader import render_to_string
 
-from network.community_metrics import network_summary_rows
+from network.community_stats import network_summary_rows
 from network.utils import CommunityTableData, GraphData
 
 import openpyxl

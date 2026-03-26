@@ -12,7 +12,6 @@ from django.urls import reverse
 from webapp.managers import ChannelManager
 from webapp.models import Organization
 from webapp.models.base import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
-from webapp.utils.colors import hex_to_rgb
 
 
 class Channel(TelegramBaseModel):
@@ -118,30 +117,6 @@ class Channel(TelegramBaseModel):
             if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
             else f"{start.strftime(date_template)} - "
         )
-
-    def network_data(
-        self, default: dict[str, Any] | None = None, skip: frozenset[str] | set[str] = frozenset()
-    ) -> dict[str, Any]:
-        default = default or {}
-        data: dict[str, Any] = {
-            "pk": str(self.pk),
-            "id": self.telegram_id,
-            "label": self.title,
-            "communities": {},
-            "color": ",".join(
-                map(str, hex_to_rgb(self.organization.color if self.organization else settings.DEAD_LEAVES_COLOR))
-            ),
-            "pic": self.profile_picture.picture.url[1:] if self.profile_picture else "",
-            "url": self.telegram_url,
-            "activity_period": "" if "activity_period" in skip else self.activity_period,
-            "fans": self.participants_count,
-            "in_deg": self.in_degree,
-            "is_lost": self.is_lost,
-            "messages_count": 0 if "messages_count" in skip else self.message_set.count(),
-            "out_deg": self.out_degree,
-        }
-        data.update(default)
-        return data
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.username = self.username or ""

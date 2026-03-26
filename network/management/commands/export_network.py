@@ -6,7 +6,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from network import community, community_metrics, exporter, graph_builder, layout, measures, tables
+from network import community, community_stats, exporter, graph_builder, layout, measures, tables
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
@@ -356,7 +356,7 @@ class Command(BaseCommand):
 
             self.stdout.write("  - network … ", ending="")
             self.stdout.flush()
-            community_table_data = community_metrics.compute_community_metrics(
+            community_table_data = community_stats.compute_community_metrics(
                 graph_data,
                 communities_data,
                 graph,
