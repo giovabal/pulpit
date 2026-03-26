@@ -12,8 +12,8 @@ from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.management import AsyncBaseCommand
 from webapp.models import Channel
+from webapp_engine.async_commands import AsyncBaseCommand
 
 from telethon import errors
 from telethon.sync import TelegramClient

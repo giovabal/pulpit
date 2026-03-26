@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
+from crawler.hole_fixer import find_missing_message_ids
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 
@@ -75,59 +76,55 @@ class FindMissingMessageIdsTests(TestCase):
     def setUp(self) -> None:
         org = Organization.objects.create(name="Org1", is_interesting=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=org)
-        api_client = _make_api_client()
-        media_handler = MagicMock()
-        reference_resolver = MagicMock()
-        self.crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
         for tid in telegram_ids:
             Message.objects.create(telegram_id=tid, channel=self.channel)
 
     def test_empty_channel_returns_empty(self) -> None:
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(result, [])
 
     def test_single_message_returns_empty(self) -> None:
         self._create_messages([5])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(result, [])
 
     def test_consecutive_messages_no_holes(self) -> None:
         self._create_messages([1, 2, 3, 4, 5])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(result, [])
 
     def test_single_gap_detected(self) -> None:
         self._create_messages([1, 2, 4, 5])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(result, [3])
 
     def test_multiple_gaps_detected(self) -> None:
         self._create_messages([1, 2, 4, 7])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(sorted(result), [3, 5, 6])
 
     def test_large_gap_fills_all_missing_ids(self) -> None:
         self._create_messages([1, 10])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         self.assertEqual(result, list(range(2, 10)))
 
     def test_min_telegram_id_filters_earlier_messages(self) -> None:
         self._create_messages([1, 3, 5, 7])  # holes at 2, 4, 6
-        result = self.crawler._find_missing_message_ids(self.channel, min_telegram_id=5)
+        result = find_missing_message_ids(self.channel, min_telegram_id=5)
         # Only [5, 7] are considered → hole at 6
         self.assertEqual(result, [6])
 
     def test_min_telegram_id_below_all_messages_includes_all(self) -> None:
         self._create_messages([2, 5])
-        result = self.crawler._find_missing_message_ids(self.channel, min_telegram_id=1)
+        result = find_missing_message_ids(self.channel, min_telegram_id=1)
         self.assertEqual(result, [3, 4])
 
     def test_ordering_is_by_telegram_id(self) -> None:
         # Messages created in reverse order
         self._create_messages([5, 3, 1])
-        result = self.crawler._find_missing_message_ids(self.channel)
+        result = find_missing_message_ids(self.channel)
         # Gaps between 1→3 (missing 2) and 3→5 (missing 4)
         self.assertEqual(sorted(result), [2, 4])
 
