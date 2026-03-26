@@ -19,6 +19,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
+from django.views.generic import RedirectView
 from django.views.static import serve
 
 
@@ -28,14 +29,18 @@ class AccessUser:
 
 admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
 
+_graph_root = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("stats/", include("stats.urls")),
+    *(
+        [
+            path("graph/", RedirectView.as_view(url="/graph/index.html", permanent=False)),
+            re_path(r"^graph/(?P<path>.*)$", serve, {"document_root": _graph_root}),
+        ]
+        if settings.DEBUG
+        else []
+    ),
     path("", include("webapp.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-if settings.DEBUG:
-    _graph_root = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
-    urlpatterns += [
-        re_path(r"^graph/(?P<path>.*)$", serve, {"document_root": _graph_root}),
-    ]
