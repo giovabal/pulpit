@@ -24,6 +24,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`graph.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
+| `GRAPH_OUTPUT_DIR` | Directory where `export_network` writes all output files. Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/` regardless of this setting. | `graph` |
 
 ## Graph layout
 

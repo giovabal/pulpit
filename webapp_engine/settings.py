@@ -172,3 +172,5 @@ NETWORK_MEASURES = config(
 COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
 
 LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)
+
+GRAPH_OUTPUT_DIR = config("GRAPH_OUTPUT_DIR", default="graph", cast=str)

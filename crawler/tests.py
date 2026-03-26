@@ -873,8 +873,9 @@ class ChannelCrawlerSearchChannelTests(TestCase):
     def test_creates_new_channels_from_results(self) -> None:
         mock_tc = _make_telegram_channel(telegram_id=100, username="newchan")
         self.api_client.client.return_value = self._make_search_result([mock_tc])
-        count = self.crawler.search_channel("ukraine")
-        self.assertEqual(count, 1)
+        found, new = self.crawler.search_channel("ukraine")
+        self.assertEqual(found, 1)
+        self.assertEqual(new, 1)
         self.assertTrue(Channel.objects.filter(telegram_id=100).exists())
 
     def test_skips_channel_already_in_db(self) -> None:
@@ -882,20 +883,22 @@ class ChannelCrawlerSearchChannelTests(TestCase):
         mock_tc = _make_telegram_channel(telegram_id=200, username="existing")
         self.api_client.client.return_value = self._make_search_result([mock_tc])
         initial_count = Channel.objects.count()
-        self.crawler.search_channel("test")
+        found, new = self.crawler.search_channel("test")
         self.assertEqual(Channel.objects.count(), initial_count)
+        self.assertEqual(found, 1)
+        self.assertEqual(new, 0)
 
     def test_skips_result_without_id_attribute(self) -> None:
         tc_no_id = MagicMock(spec=[])  # no attributes
         self.api_client.client.return_value = self._make_search_result([tc_no_id])
-        count = self.crawler.search_channel("test")
-        self.assertEqual(count, 0)
+        found, new = self.crawler.search_channel("test")
+        self.assertEqual(found, 0)
 
     def test_returns_count_of_found_channels(self) -> None:
         channels = [_make_telegram_channel(telegram_id=300 + i, username=f"chan{i}") for i in range(3)]
         self.api_client.client.return_value = self._make_search_result(channels)
-        count = self.crawler.search_channel("batch")
-        self.assertEqual(count, 3)
+        found, new = self.crawler.search_channel("batch")
+        self.assertEqual(found, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -921,6 +924,7 @@ class SearchChannelsCommandTests(TestCase):
         from django.core.management import call_command
 
         mock_crawler = MagicMock()
+        mock_crawler.search_channel.return_value = (0, 0)
         mock_crawler_cls.return_value = mock_crawler
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
@@ -939,7 +943,9 @@ class SearchChannelsCommandTests(TestCase):
     ) -> None:
         from django.core.management import call_command
 
-        mock_crawler_cls.return_value = MagicMock()
+        mock_crawler = MagicMock()
+        mock_crawler.search_channel.return_value = (0, 0)
+        mock_crawler_cls.return_value = mock_crawler
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -965,6 +971,7 @@ class SearchChannelsCommandTests(TestCase):
             SearchTerm.objects.create(word=f"term{i}")
 
         mock_crawler = MagicMock()
+        mock_crawler.search_channel.return_value = (0, 0)
         mock_crawler_cls.return_value = mock_crawler
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)

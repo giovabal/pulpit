@@ -18,7 +18,8 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 
 class AccessUser:
@@ -32,3 +33,9 @@ urlpatterns = [
     path("stats/", include("stats.urls")),
     path("", include("webapp.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.DEBUG:
+    _graph_root = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
+    urlpatterns += [
+        re_path(r"^graph/(?P<path>.*)$", serve, {"document_root": _graph_root}),
+    ]

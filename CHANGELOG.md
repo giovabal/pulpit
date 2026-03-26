@@ -16,6 +16,7 @@
 ### Improvements
 - `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
 - `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
+- New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
 
 ## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*

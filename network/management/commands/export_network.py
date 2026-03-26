@@ -1,6 +1,5 @@
 import datetime
 import os
-import re
 from typing import Any
 
 from django.conf import settings
@@ -10,55 +9,7 @@ from network import community, community_stats, exporter, graph_builder, layout,
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
-VALID_MEASURES = {
-    "PAGERANK",
-    "HITSHUB",
-    "HITSAUTH",
-    "BETWEENNESS",
-    "INDEGCENTRALITY",
-    "OUTDEGCENTRALITY",
-    "HARMONICCENTRALITY",
-    "KATZ",
-    "BURTCONSTRAINT",
-    "AMPLIFICATION",
-    "CONTENTORIGINALITY",
-}
-
-_BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
-_BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
-
-# Expansion targets for the ALL shortcut
-_ALL_MEASURES = [*sorted(VALID_MEASURES), "BRIDGING"]
-_ALL_STRATEGIES = ["ORGANIZATION", "LEIDEN", "LOUVAIN", "KCORE", "INFOMAP", "WEAKCC", "STRONGCC"]
-
-
-def _is_valid_measure(token: str) -> bool:
-    return token in VALID_MEASURES or bool(_BRIDGING_RE.match(token))
-
-
-def _find_bridging_token(measures: list[str]) -> str | None:
-    return next((m for m in measures if _BRIDGING_RE.match(m)), None)
-
-
-def _bridging_strategy(token: str) -> str:
-    """Return the community strategy encoded in a BRIDGING token (defaults to LEIDEN)."""
-    m = _BRIDGING_RE.match(token)
-    return (m.group(1) or _BRIDGING_DEFAULT_STRATEGY) if m else _BRIDGING_DEFAULT_STRATEGY
-
-
 TABLE_FORMAT_CHOICES = ["none", "html", "xlsx", "html+xlsx"]
-
-# Dispatch table for standard measures: (settings key, progress label, exporter function)
-# HITS and BRIDGING are handled separately because they have non-standard signatures.
-_MEASURE_STEPS = [
-    ("PAGERANK", "pagerank", "apply_pagerank"),
-    ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),
-    ("INDEGCENTRALITY", "in-degree centrality", "apply_in_degree_centrality"),
-    ("OUTDEGCENTRALITY", "out-degree centrality", "apply_out_degree_centrality"),
-    ("HARMONICCENTRALITY", "harmonic centrality", "apply_harmonic_centrality"),
-    ("KATZ", "Katz centrality", "apply_katz_centrality"),
-    ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
-]
 
 
 class Command(BaseCommand):
@@ -137,13 +88,13 @@ class Command(BaseCommand):
                 f"Invalid COMMUNITY_STRATEGIES value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
-        invalid_measures = [m for m in network_measures if not _is_valid_measure(m)]
+        invalid_measures = [m for m in network_measures if not measures.is_valid_measure(m)]
         if invalid_measures:
-            valid_display = sorted(VALID_MEASURES) + ["ALL", "BRIDGING", "BRIDGING(<STRATEGY>)"]
+            valid_display = sorted(measures.VALID_MEASURES) + ["ALL", "BRIDGING", "BRIDGING(<STRATEGY>)"]
             raise CommandError(f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {valid_display}.")
-        bridging_token = _find_bridging_token(network_measures)
+        bridging_token = measures.find_bridging_token(network_measures)
         if bridging_token is not None:
-            bstrategy = _bridging_strategy(bridging_token)
+            bstrategy = measures.bridging_strategy(bridging_token)
             if bstrategy not in community.VALID_STRATEGIES:
                 raise CommandError(
                     f"Invalid strategy in {bridging_token!r}: {bstrategy!r}. "
@@ -176,9 +127,9 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         communities_strategy = (
-            _ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
+            measures.ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
         )
-        network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
+        network_measures = measures.ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
         bridging_token = self._validate_settings(communities_strategy, network_measures)
         selected_measures = set(network_measures)
 
@@ -289,7 +240,7 @@ class Command(BaseCommand):
                 ),
             ),
         ]
-        for key, label, fn in [*_MEASURE_STEPS, *_orm_steps]:
+        for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:
             if key in selected_measures:
                 self.stdout.write(f"- {label} … ", ending="")
                 self.stdout.flush()
@@ -305,7 +256,7 @@ class Command(BaseCommand):
             self.stdout.write("done")
 
         if bridging_token is not None:
-            strategy_key = _bridging_strategy(bridging_token).lower()
+            strategy_key = measures.bridging_strategy(bridging_token).lower()
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
             measures_labels += measures.apply_bridging_centrality(graph_data, graph, strategy_key)
@@ -315,7 +266,7 @@ class Command(BaseCommand):
             self.stdout.write("- small components")
             exporter.reposition_isolated_nodes(graph_data, main_component)
 
-        root_target = "graph"
+        root_target = settings.GRAPH_OUTPUT_DIR
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
 
@@ -332,7 +283,7 @@ class Command(BaseCommand):
             communities_data,
             measures_labels,
             channel_qs,
-            graph_dir="graph",
+            graph_dir=root_target,
             include_positions=not nograph,
             positions_3d=positions_3d,
         )
@@ -371,21 +322,21 @@ class Command(BaseCommand):
             self.stdout.write("- table (html)")
             tables.write_table_html(
                 graph_data,
-                output_filename="graph/channel_table.html",
+                output_filename=os.path.join(root_target, "channel_table.html"),
                 seo=seo,
                 project_title=project_title,
             )
             self.stdout.write("- network table (html)")
-            tables.write_network_metrics_json(community_table_data, strategies, graph_dir="graph")
+            tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_network_table_html(
-                output_filename="graph/network_table.html",
+                output_filename=os.path.join(root_target, "network_table.html"),
                 seo=seo,
                 project_title=project_title,
             )
             self.stdout.write("- community table (html)")
-            tables.write_community_metrics_json(community_table_data, strategies, graph_dir="graph")
+            tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_table_html(
-                output_filename="graph/community_table.html",
+                output_filename=os.path.join(root_target, "community_table.html"),
                 seo=seo,
                 project_title=project_title,
             )
@@ -395,27 +346,27 @@ class Command(BaseCommand):
                 graph_data,
                 measures_labels,
                 strategies,
-                output_filename="graph/channel_table.xlsx",
+                output_filename=os.path.join(root_target, "channel_table.xlsx"),
                 project_title=project_title,
             )
             self.stdout.write("- network table (xlsx)")
             tables.write_network_table_xlsx(
                 community_table_data,
                 strategies,
-                output_filename="graph/network_table.xlsx",
+                output_filename=os.path.join(root_target, "network_table.xlsx"),
                 project_title=project_title,
             )
             self.stdout.write("- community table (xlsx)")
             tables.write_community_table_xlsx(
                 community_table_data,
                 strategies,
-                output_filename="graph/community_table.xlsx",
+                output_filename=os.path.join(root_target, "community_table.xlsx"),
                 project_title=project_title,
             )
 
         if not nograph:
             self.stdout.write("- media")
-            exporter.copy_channel_media(channel_qs, "graph")
+            exporter.copy_channel_media(channel_qs, root_target)
 
         compare_files: set[str] = set()
         if compare_data_dir is not None:
@@ -429,9 +380,9 @@ class Command(BaseCommand):
             )
 
         self.stdout.write("- index")
-        os.makedirs("graph", exist_ok=True)
+        os.makedirs(root_target, exist_ok=True)
         tables.write_index_html(
-            output_filename="graph/index.html",
+            output_filename=os.path.join(root_target, "index.html"),
             seo=seo,
             project_title=project_title,
             include_graph=not nograph,

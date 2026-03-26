@@ -173,6 +173,12 @@ python manage.py export_network --compare /path/to/other/graph
 
 ### 7. View the graph
 
+When `runserver` is running, the output is available directly at:
+
+[http://localhost:8000/graph/](http://localhost:8000/graph/)
+
+To serve it as a standalone site instead (e.g. for deployment or sharing without the Django server):
+
 ```sh
 cd graph
 python -m http.server 8001
