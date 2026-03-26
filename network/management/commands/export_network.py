@@ -6,7 +6,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from network import community, exporter, graph_builder, layout
+from network import community, exporter, graph_builder, layout, measures, tables
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
@@ -180,7 +180,7 @@ class Command(BaseCommand):
         )
         network_measures = _ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
         bridging_token = self._validate_settings(communities_strategy, network_measures)
-        measures = set(network_measures)
+        selected_measures = set(network_measures)
 
         nograph = options["nograph"]
         seo = options["seo"]
@@ -269,7 +269,7 @@ class Command(BaseCommand):
         self.stdout.write(f"{len(main_component)} nodes")
 
         self.stdout.write("- degrees, activity and fans")
-        measures_labels = exporter.apply_base_node_measures(
+        measures_labels = measures.apply_base_node_measures(
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
@@ -277,38 +277,38 @@ class Command(BaseCommand):
             (
                 "AMPLIFICATION",
                 "amplification factor",
-                lambda gd, g: exporter.apply_amplification_factor(
+                lambda gd, g: measures.apply_amplification_factor(
                     gd, g, channel_dict, start_date=start_date, end_date=end_date
                 ),
             ),
             (
                 "CONTENTORIGINALITY",
                 "content originality",
-                lambda gd, g: exporter.apply_content_originality(
+                lambda gd, g: measures.apply_content_originality(
                     gd, g, channel_dict, start_date=start_date, end_date=end_date
                 ),
             ),
         ]
         for key, label, fn in [*_MEASURE_STEPS, *_orm_steps]:
-            if key in measures:
+            if key in selected_measures:
                 self.stdout.write(f"- {label} … ", ending="")
                 self.stdout.flush()
-                measures_labels += (getattr(exporter, fn) if isinstance(fn, str) else fn)(graph_data, graph)
+                measures_labels += (getattr(measures, fn) if isinstance(fn, str) else fn)(graph_data, graph)
                 self.stdout.write("done")
 
-        if measures & {"HITSHUB", "HITSAUTH"}:
+        if selected_measures & {"HITSHUB", "HITSAUTH"}:
             self.stdout.write("- HITS … ", ending="")
             self.stdout.flush()
-            hits_labels = exporter.apply_hits(graph_data, graph)
+            hits_labels = measures.apply_hits(graph_data, graph)
             _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
-            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in measures]
+            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in selected_measures]
             self.stdout.write("done")
 
         if bridging_token is not None:
             strategy_key = _bridging_strategy(bridging_token).lower()
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
-            measures_labels += exporter.apply_bridging_centrality(graph_data, graph, strategy_key)
+            measures_labels += measures.apply_bridging_centrality(graph_data, graph, strategy_key)
             self.stdout.write("done")
 
         if not nograph:
@@ -356,7 +356,7 @@ class Command(BaseCommand):
 
             self.stdout.write("  - network … ", ending="")
             self.stdout.flush()
-            community_table_data = exporter.compute_community_metrics(
+            community_table_data = tables.compute_community_metrics(
                 graph_data,
                 communities_data,
                 graph,
@@ -369,29 +369,29 @@ class Command(BaseCommand):
             )
         if "html" in table_format:
             self.stdout.write("- table (html)")
-            exporter.write_table_html(
+            tables.write_table_html(
                 graph_data,
                 output_filename="graph/channel_table.html",
                 seo=seo,
                 project_title=project_title,
             )
             self.stdout.write("- network table (html)")
-            exporter.write_network_metrics_json(community_table_data, strategies, graph_dir="graph")
-            exporter.write_network_table_html(
+            tables.write_network_metrics_json(community_table_data, strategies, graph_dir="graph")
+            tables.write_network_table_html(
                 output_filename="graph/network_table.html",
                 seo=seo,
                 project_title=project_title,
             )
             self.stdout.write("- community table (html)")
-            exporter.write_community_metrics_json(community_table_data, strategies, graph_dir="graph")
-            exporter.write_community_table_html(
+            tables.write_community_metrics_json(community_table_data, strategies, graph_dir="graph")
+            tables.write_community_table_html(
                 output_filename="graph/community_table.html",
                 seo=seo,
                 project_title=project_title,
             )
         if "xlsx" in table_format:
             self.stdout.write("- table (xlsx)")
-            exporter.write_table_xlsx(
+            tables.write_table_xlsx(
                 graph_data,
                 measures_labels,
                 strategies,
@@ -399,14 +399,14 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
             self.stdout.write("- network table (xlsx)")
-            exporter.write_network_table_xlsx(
+            tables.write_network_table_xlsx(
                 community_table_data,
                 strategies,
                 output_filename="graph/network_table.xlsx",
                 project_title=project_title,
             )
             self.stdout.write("- community table (xlsx)")
-            exporter.write_community_table_xlsx(
+            tables.write_community_table_xlsx(
                 community_table_data,
                 strategies,
                 output_filename="graph/community_table.xlsx",
@@ -420,9 +420,9 @@ class Command(BaseCommand):
         compare_files: set[str] = set()
         if compare_data_dir is not None:
             self.stdout.write("- compare network files")
-            compare_files = exporter.copy_compare_project(compare_data_dir, root_target)
+            compare_files = tables.copy_compare_project(compare_data_dir, root_target)
             self.stdout.write("- network compare table (html)")
-            exporter.write_network_compare_table_html(
+            tables.write_network_compare_table_html(
                 output_filename=os.path.join(root_target, "network_compare_table.html"),
                 seo=seo,
                 project_title=project_title,
@@ -430,7 +430,7 @@ class Command(BaseCommand):
 
         self.stdout.write("- index")
         os.makedirs("graph", exist_ok=True)
-        exporter.write_index_html(
+        tables.write_index_html(
             output_filename="graph/index.html",
             seo=seo,
             project_title=project_title,

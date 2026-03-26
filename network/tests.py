@@ -21,8 +21,6 @@ from network.community import (
     normalize_community_map,
 )
 from network.exporter import (
-    apply_base_node_measures,
-    apply_pagerank,
     build_graph_data,
     ensure_graph_root,
     find_main_component,
@@ -31,6 +29,10 @@ from network.exporter import (
 )
 from network.graph_builder import build_graph
 from network.layout import compute_layout
+from network.measures import (
+    apply_base_node_measures,
+    apply_pagerank,
+)
 from webapp.models import Channel, Message, Organization
 from webapp.utils.colors import parse_color
 
@@ -1174,13 +1176,13 @@ def _patch_export_pipeline() -> list:
         f"{_EXPORT_CMD}.layout.forceatlas2_positions",
         f"{_EXPORT_CMD}.exporter.build_graph_data",
         f"{_EXPORT_CMD}.exporter.find_main_component",
-        f"{_EXPORT_CMD}.exporter.apply_base_node_measures",
-        f"{_EXPORT_CMD}.exporter.apply_pagerank",
+        f"{_EXPORT_CMD}.measures.apply_base_node_measures",
+        f"{_EXPORT_CMD}.measures.apply_pagerank",
         f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes",
         f"{_EXPORT_CMD}.exporter.ensure_graph_root",
         f"{_EXPORT_CMD}.exporter.write_graph_files",
-        f"{_EXPORT_CMD}.exporter.write_table_html",
-        f"{_EXPORT_CMD}.exporter.write_table_xlsx",
+        f"{_EXPORT_CMD}.tables.write_table_html",
+        f"{_EXPORT_CMD}.tables.write_table_xlsx",
         f"{_EXPORT_CMD}.exporter.copy_channel_media",
     ]
     # Apply in reverse so the first target becomes the first positional arg
@@ -1227,13 +1229,13 @@ class ExportNetworkCommandTests(TestCase):
             call_command("export_network", enddate="2023-13-01")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
@@ -1255,13 +1257,13 @@ class ExportNetworkCommandTests(TestCase):
             call_command("export_network")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
@@ -1320,13 +1322,13 @@ class ExportNetworkCommandTests(TestCase):
         mock_copy.assert_called_once()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
@@ -1371,13 +1373,13 @@ class ExportNetworkCommandTests(TestCase):
         mock_table_xls.assert_not_called()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
@@ -1422,13 +1424,13 @@ class ExportNetworkCommandTests(TestCase):
         mock_table_xls.assert_called_once()
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_xlsx")
-    @patch(f"{_EXPORT_CMD}.exporter.write_table_html")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
     @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
     @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
     @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_pagerank")
-    @patch(f"{_EXPORT_CMD}.exporter.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
     @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
     @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
     @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")

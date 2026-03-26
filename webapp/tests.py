@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from webapp.managers import ChannelManager, ChannelQuerySet
 from webapp.models import Channel, Message, Organization
+from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
     average_color,
@@ -20,7 +21,6 @@ from webapp.utils.colors import (
     rgb_avg,
     rgb_to_hex,
 )
-from webapp_engine.paginator import DiggPage, DiggPaginator, SoftPaginator
 
 # ─── hex_to_rgb ────────────────────────────────────────────────────────────────
 

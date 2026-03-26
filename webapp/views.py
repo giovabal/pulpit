@@ -5,7 +5,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
 
-from webapp_engine.paginator import DiggPaginator
+from webapp.paginator import DiggPaginator
 
 from .mixins import BaseMixin
 from .models import Channel, Message

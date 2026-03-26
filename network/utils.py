@@ -1,6 +1,20 @@
 import datetime
+from typing import Any
 
 from django.db.models import Q
+
+type GraphData = dict[str, list[dict[str, Any]]]
+type CommunityTableData = dict[str, Any]
+# CommunityTableData structure:
+# {
+#   "network_summary": dict,          # from _network_summary() plus "centralizations"
+#   "strategies": {
+#     strategy_key: [                 # ordered as in communities_data
+#       {"group": tuple, "node_count": int, "metrics": dict},
+#       ...
+#     ]
+#   }
+# }
 
 
 def make_date_q(
