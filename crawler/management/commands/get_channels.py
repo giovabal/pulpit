@@ -80,6 +80,25 @@ class ProgressPrinter:
         self._line_length = 0
         self._current_channel = None
 
+    def ensure_newline(self) -> None:
+        """Move to a new line only if a progress line is currently shown."""
+        if self._line_length > 0:
+            self.newline()
+
+
+class _WarningLogHandler(logging.Handler):
+    """Route WARNING+ log records to the terminal as coloured, newline-separated messages."""
+
+    def __init__(self, printer: ProgressPrinter, style: Any) -> None:
+        super().__init__(logging.WARNING)
+        self._printer = printer
+        self._style = style
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._printer.ensure_newline()
+        msg = self.format(record)
+        print(self._style.WARNING(msg) if record.levelno < logging.ERROR else self._style.ERROR(msg))
+
 
 class Command(AsyncBaseCommand):
     args = ""
@@ -187,43 +206,47 @@ class Command(AsyncBaseCommand):
                     channels = channels.filter(id__lte=fromid)
                 total_channels = channels.count()
                 printer = ProgressPrinter(self.stdout, total_channels)
-
-                for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
-                    try:
-                        pre_crawl_max_id = crawler.get_channel(
-                            channel.telegram_id,
-                            fix_holes=fix_holes,
-                            status_callback=lambda message, idx=index: printer.status(message, idx),
-                        )
-                    except errors.FloodWaitError as error:
-                        printer.newline()
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
+                warning_handler = _WarningLogHandler(printer, self.style)
+                logging.getLogger().addHandler(warning_handler)
+                try:
+                    for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                        try:
+                            pre_crawl_max_id = crawler.get_channel(
+                                channel.telegram_id,
+                                fix_holes=fix_holes,
+                                status_callback=lambda message, idx=index: printer.status(message, idx),
                             )
-                        )
-                        continue
+                        except errors.FloodWaitError as error:
+                            printer.newline()
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
+                                )
+                            )
+                            continue
+                        printer.newline()
+                        if do_refresh:
+                            self._refresh_channel(
+                                channel,
+                                crawler,
+                                index,
+                                total_channels,
+                                refresh_limit,
+                                refresh_min_date,
+                                pre_crawl_max_id,
+                                printer,
+                            )
+
                     printer.newline()
-                    if do_refresh:
-                        self._refresh_channel(
-                            channel,
-                            crawler,
-                            index,
-                            total_channels,
-                            refresh_limit,
-                            refresh_min_date,
-                            pre_crawl_max_id,
-                            printer,
-                        )
 
-                printer.newline()
+                    self.stdout.write("\nRetrying unresolved message references … ", ending="")
+                    self.stdout.flush()
+                    crawler.get_missing_references()
+                    self.stdout.write("done")
 
-                self.stdout.write("\nRetrying unresolved message references … ", ending="")
-                self.stdout.flush()
-                crawler.get_missing_references()
-                self.stdout.write("done")
-
-                media_handler.clean_leftovers()
+                    media_handler.clean_leftovers()
+                finally:
+                    logging.getLogger().removeHandler(warning_handler)
         finally:
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
