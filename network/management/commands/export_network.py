@@ -44,6 +44,13 @@ class Command(BaseCommand):
             help="Also produce Excel spreadsheet output (channel_table.xlsx, network_table.xlsx, community_table.xlsx).",
         )
         parser.add_argument(
+            "--gexf",
+            dest="gexf",
+            action="store_true",
+            default=False,
+            help="Also write network.gexf with all computed measures embedded as node attributes.",
+        )
+        parser.add_argument(
             "--seo",
             action="store_true",
             default=False,
@@ -136,6 +143,7 @@ class Command(BaseCommand):
         do_3dgraph = options["graph_3d"]
         do_html = options["html"]
         do_xlsx = options["xlsx"]
+        do_gexf = options["gexf"]
 
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
@@ -384,6 +392,11 @@ class Command(BaseCommand):
         if do_graph or do_3dgraph:
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, root_target)
+
+        if do_gexf:
+            self.stdout.write("- gexf")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_gexf(graph, graph_data, os.path.join(root_target, "network.gexf"))
 
         compare_files: set[str] = set()
         if compare_data_dir is not None:

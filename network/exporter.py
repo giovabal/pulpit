@@ -133,6 +133,31 @@ def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str =
         _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title)
 
 
+_GEXF_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
+
+
+def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -> None:
+    """Write a GEXF file with all computed node attributes embedded."""
+    g = graph.copy()
+    node_by_id = {n["id"]: n for n in graph_data["nodes"]}
+    for node_id in g.nodes():
+        node = node_by_id.get(node_id)
+        if node is None:
+            continue
+        attrs = g.nodes[node_id]
+        attrs.pop("data", None)
+        for key, value in node.items():
+            if key in _GEXF_SKIP:
+                continue
+            if key == "communities":
+                for strategy, label in (value or {}).items():
+                    if label is not None:
+                        attrs[f"community_{strategy}"] = str(label)
+            elif value is not None:
+                attrs[key] = value
+    nx.write_gexf(g, output_filename)
+
+
 def write_robots_txt(root_target: str, seo: bool) -> None:
     """Write a robots.txt that either allows or disallows all crawlers."""
     if seo:

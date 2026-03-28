@@ -68,6 +68,7 @@ def write_table_xlsx(
     nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
 
     wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
     if project_title:
         wb.properties.title = project_title
     ws = wb.active
@@ -169,6 +170,7 @@ def write_network_table_xlsx(
 ) -> None:
     summary = community_table_data["network_summary"]
     wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
     if project_title:
         wb.properties.title = project_title
 
@@ -303,6 +305,7 @@ def write_community_table_xlsx(
     ]
 
     wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
     if project_title:
         wb.properties.title = project_title
     wb.remove(wb.active)  # no default sheet needed

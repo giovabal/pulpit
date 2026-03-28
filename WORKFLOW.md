@@ -82,6 +82,7 @@ python manage.py export_network --xlsx             # also produce Excel spreadsh
 python manage.py export_network --no-html          # skip HTML tables
 python manage.py export_network --no-graph         # skip the graph entirely (tables only)
 python manage.py export_network --no-graph --xlsx  # Excel tables only
+python manage.py export_network --gexf             # also write network.gexf
 ```
 
 The Excel output produces `graph/channel_table.xlsx` (one row per channel), `graph/network_table.xlsx` (whole-network metrics on a single sheet), and `graph/community_table.xlsx` (one sheet per community detection strategy).

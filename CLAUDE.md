@@ -33,6 +33,7 @@ python manage.py export_network              # default: 2D graph + HTML tables
 python manage.py export_network --seo        # same but mini-site is search-engine friendly
 python manage.py export_network --3d         # also produce 3D graph
 python manage.py export_network --xlsx       # also produce Excel spreadsheets
+python manage.py export_network --gexf       # also write network.gexf (all measures as node attributes)
 python manage.py export_network --no-html    # skip HTML tables
 python manage.py export_network --no-graph   # skip graph (tables only)
 
@@ -100,4 +101,4 @@ Edge weight = (forwards + references) / total channel messages. Direction is con
 
 All runtime options go in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional settings: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `20000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`).
+Key optional settings: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `5000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`).

@@ -12,11 +12,7 @@ Currently, `--startdate`/`--enddate` filters the entire export to a single windo
 
 **Academic basis:** Holme & Saramäki (2012) established that static-graph analysis misses the order and timing of links, which is essential for influence propagation. In Telegram research, studies of Russian IOs found that network topology changed dramatically before and after major events (elections, invasions). A static snapshot of 2 years of data hides this.
 
-### 1.2 — Edge velocity / recency weighting
-
-Add a new `EDGE_WEIGHT_STRATEGY` option: `RECENCY_WEIGHTED`, where edges from the last N days receive higher weight than older ones. Older cross-references decay exponentially. This surfaces networks that are currently active vs. historically active.
-
-### 1.3 — First-mover / cascade detection
+### 1.2 — First-mover / cascade detection
 
 For each (source → target) edge, record the chronological order of first reference: which channel first forwarded another, and which came later? This identifies true originators vs. followers. Exportable as a `first_seen` edge attribute in `channel_position.json`.
 
@@ -164,17 +160,9 @@ Currently, channels are assigned to Organizations one-by-one in Django admin. Ad
 
 New Django admin view showing, for each channel: days since last crawl, message gap density (holes), whether `is_lost` is set, days since last subscriber count update. Lets operators quickly identify stale data.
 
-### 7.3 — Differential export report
-
-When `--compare` is used, generate a human-readable HTML report (not just tables) summarizing what changed: "5 channels entered the top-20 by PageRank. Channel X moved from community A to B. Network density increased by 15%. Two new bridges appeared between clusters Y and Z." Narrative generated from a structured diff of `network_metrics.json` between exports.
-
-### 7.4 — Multiple database support (PostgreSQL)
+### 7.3 — Multiple database support (PostgreSQL)
 
 SQLite is fine for single-researcher use but breaks under concurrent writes. Add optional PostgreSQL configuration to `settings.py`. Primarily a `settings.py` + `requirements.txt` change. Enables multiple crawlers running in parallel (one per channel batch) and shared team environments.
-
-### 7.5 — GEXF export for Gephi interoperability
-
-An `export_network --format gexf` option that writes a `.gexf` file with all computed measures embedded as node attributes. Every researcher in this field uses Gephi for further analysis; this makes Pulpit an input stage for existing workflows. Minimal effort; high adoption value.
 
 ---
 
@@ -206,10 +194,6 @@ Export a pairwise structural similarity matrix (cosine similarity of node featur
 
 New `export_network --archive` flag that bundles: the `graph/` output directory, a snapshot of the `.env` configuration (with credentials stripped), a `git describe` version tag, the SQLite DB schema (not data), and a README into a ZIP file. Allows researchers to share self-contained, reproducible analysis packages.
 
-### 9.4 — Pulpit attribution in graph output
-
-Add a `<meta name="generator">` tag and a visible "Analyzed with Pulpit" credit in `index.html`. Aids academic attribution tracking when outputs are published.
-
 ---
 
 ## 10. Priority matrix
@@ -221,7 +205,6 @@ Add a `<meta name="generator">` tag and a visible "Analyzed with Pulpit" credit 
 | High | 2.1 Cross-posting similarity | Medium | High — core IO detection signal |
 | High | 5.2 Edge type differentiation (forwards vs. references) | Low | Medium — immediate interpretability gain |
 | High | 5.3 Ego-graph exploration mode | Low | High — standard feature in all SNA tools |
-| High | 7.5 GEXF export | Low | High — Gephi interoperability |
 | High | 2.5 Forwarding latency as coordination signal | Low | High — direct CIB evidence |
 | Medium | 4.5 NMI between community strategies | Low | Medium — methodological validation |
 | Medium | 3.3 Language detection | Low | Medium — essential for multilingual corpora |
@@ -236,7 +219,7 @@ Add a `<meta name="generator">` tag and a visible "Analyzed with Pulpit" credit 
 | Low | 3.1 Topic modeling (BERTopic) | High | High but complex dependency |
 | Low | 4.2 Spreading efficiency (SIR) | Medium | High analytically but expensive |
 | Low | 5.1 Timeline slider | High | High but depends on 1.1 |
-| Low | 7.4 PostgreSQL support | Medium | Operational scalability |
+| Low | 7.3 PostgreSQL support | Medium | Operational scalability |
 
 ---
 
