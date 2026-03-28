@@ -156,6 +156,7 @@ class Command(BaseCommand):
                 draw_dead_leaves=settings.DRAW_DEAD_LEAVES,
                 start_date=start_date,
                 end_date=end_date,
+                recency_weights=settings.RECENCY_WEIGHTS,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e

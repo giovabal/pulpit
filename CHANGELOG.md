@@ -4,6 +4,7 @@
 
 ### New features
 - Project logo.
+- New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
 
 ## [0.8] - 2026-03-08
 *3D graph and network comparison.*
