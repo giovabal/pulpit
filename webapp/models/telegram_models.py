@@ -91,8 +91,8 @@ class Channel(TelegramBaseModel):
     def profile_picture(self) -> "ProfilePicture | None":
         if hasattr(self, "_prefetched_profile_pics"):
             pics = self._prefetched_profile_pics
-            return pics[-1] if pics else None
-        return self.profilepicture_set.order_by("date").last()
+            return pics[0] if pics else None
+        return self.profilepicture_set.order_by("-date").first()
 
     def _get_activity_bounds(
         self,
@@ -130,18 +130,34 @@ class Channel(TelegramBaseModel):
         self.out_degree = out_degree
 
     def refresh_degrees(self) -> None:
-        """Recompute and persist in_degree and out_degree from current message data."""
-        in_degree = (
-            Message.objects.filter(channel__organization__is_interesting=True, forwarded_from=self)
+        """Recompute and persist in_degree and out_degree from current message data.
+
+        Counts both forwarded-from citations and t.me/username reference citations,
+        matching the edge construction in graph_builder. Respects REVERSED_EDGES:
+        when True, citations are incoming edges (stored in in_degree); when False,
+        citations are outgoing edges (stored in out_degree), consistent with
+        refresh_cited_degree() for non-interesting channels.
+        """
+        cited_by = (
+            Message.objects.filter(channel__organization__is_interesting=True)
+            .filter(Q(forwarded_from=self) | Q(references=self))
             .exclude(channel=self)
+            .distinct()
             .count()
         )
-        out_degree = (
-            Message.objects.filter(channel=self, forwarded_from__organization__is_interesting=True)
+        cites = (
+            Message.objects.filter(channel=self)
+            .filter(
+                Q(forwarded_from__organization__is_interesting=True) | Q(references__organization__is_interesting=True)
+            )
             .exclude(forwarded_from=self)
+            .distinct()
             .count()
         )
-        self._set_degrees(in_degree, out_degree)
+        if settings.REVERSED_EDGES:
+            self._set_degrees(cited_by, cites)
+        else:
+            self._set_degrees(cites, cited_by)
 
     def refresh_cited_degree(self) -> None:
         """Recompute and persist the citation count for a non-interesting channel.

@@ -224,6 +224,11 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
+        # Pre-compute betweenness once when both BETWEENNESS and BRIDGING are active.
+        _cached_betweenness: "dict | None" = None
+        if "BETWEENNESS" in selected_measures and bridging_token is not None:
+            _cached_betweenness = measures.compute_betweenness(graph)
+
         _orm_steps = [
             (
                 "AMPLIFICATION",
@@ -244,7 +249,15 @@ class Command(BaseCommand):
             if key in selected_measures:
                 self.stdout.write(f"- {label} … ", ending="")
                 self.stdout.flush()
-                measures_labels += (getattr(measures, fn) if isinstance(fn, str) else fn)(graph_data, graph)
+                if key == "BETWEENNESS" and _cached_betweenness is not None:
+                    step_labels = measures.apply_betweenness_centrality(
+                        graph_data, graph, betweenness=_cached_betweenness
+                    )
+                elif isinstance(fn, str):
+                    step_labels = getattr(measures, fn)(graph_data, graph)
+                else:
+                    step_labels = fn(graph_data, graph)
+                measures_labels += step_labels
                 self.stdout.write("done")
 
         if selected_measures & {"HITSHUB", "HITSAUTH"}:
@@ -259,7 +272,9 @@ class Command(BaseCommand):
             strategy_key = measures.bridging_strategy(bridging_token).lower()
             self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
-            measures_labels += measures.apply_bridging_centrality(graph_data, graph, strategy_key)
+            measures_labels += measures.apply_bridging_centrality(
+                graph_data, graph, strategy_key, betweenness=_cached_betweenness
+            )
             self.stdout.write("done")
 
         if not nograph:

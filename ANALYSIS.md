@@ -106,7 +106,7 @@ The measure is local: it only examines the immediate neighbourhood of each node,
 
 ### Amplification factor
 
-Amplification factor = **forwards received from other channels ÷ own message count**. It measures how much a channel's content is redistributed by others, normalised by the channel's output volume. A value of 1.0 means each published message is forwarded, on average, exactly once by other channels in the network. Values above 1.0 indicate viral reach exceeding production rate: the channel's content spreads more than it is produced. Only forwards from channels marked `is_interesting=True` are counted, keeping the measure consistent with the graph's edge definitions.
+Amplification factor = **forwards received from other channels ÷ own message count**. It measures how much a channel's content is redistributed by others, normalised by the channel's output volume. A value of 1.0 means each published message is forwarded, on average, exactly once by other channels in the network. Values above 1.0 indicate viral reach exceeding production rate: the channel's content spreads more than it is produced. Only forwards from channels currently in the graph are counted, keeping the measure consistent with its edge structure. When `DRAW_DEAD_LEAVES=False` (the default) this means only channels marked `is_interesting=True`; when `DRAW_DEAD_LEAVES=True`, dead-leaf channels that appear in the graph contribute their forwards too.
 
 The normalisation by message count is what makes this measure distinct from raw in-degree. A channel that publishes rarely but whose every post gets forwarded by dozens of others scores far higher than a prolific channel that is occasionally forwarded. It isolates *efficiency of spread* from *volume of output*.
 

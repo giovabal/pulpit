@@ -16,12 +16,20 @@ Promise.all([
     var orderedExtra = extraMeasures.filter(function(m) { return m[0] === "pagerank"; })
         .concat(extraMeasures.filter(function(m) { return m[0] !== "pagerank"; }));
 
-    // Heatmap ranges
+    // Heatmap ranges (single pass per key)
     var hmKeys = BASE_KEYS.concat(orderedExtra.map(function(m) { return m[0]; }));
     var hmRanges = {};
     hmKeys.forEach(function(key) {
-        var vals = nodes.map(function(n) { return n[key]; }).filter(function(v) { return v !== null && v !== undefined; });
-        if (vals.length) hmRanges[key] = [Math.min.apply(null, vals), Math.max.apply(null, vals)];
+        var mn = Infinity, mx = -Infinity, hasVal = false;
+        nodes.forEach(function(n) {
+            var v = n[key];
+            if (v !== null && v !== undefined) {
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+                hasVal = true;
+            }
+        });
+        if (hasVal) hmRanges[key] = [mn, mx];
     });
 
     // Build thead
@@ -45,8 +53,9 @@ Promise.all([
     addTh("Activity end", "");
     thead.appendChild(htr);
 
-    // Build tbody
+    // Build tbody via DocumentFragment (single DOM insertion)
     var tbody = document.querySelector("#channel-table tbody");
+    var fragment = document.createDocumentFragment();
     nodes.forEach(function(node) {
         var tr = document.createElement("tr");
 
@@ -90,8 +99,9 @@ Promise.all([
         addTd(node.activity_start || "", "", "", "", "");
         addTd(node.activity_end || "", "", "", "", "");
 
-        tbody.appendChild(tr);
+        fragment.appendChild(tr);
     });
+    tbody.appendChild(fragment);
 
     document.getElementById("channel-count").textContent =
         nodes.length + " channel" + (nodes.length !== 1 ? "s" : "") + ". Click column headers to sort.";

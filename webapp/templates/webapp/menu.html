@@ -19,7 +19,7 @@
       <a href="{{ channel.get_absolute_url }}"{% if selected_channel == channel %} class="active" aria-current="page"{% endif %}>
         <div class="ch-title">{{ channel.title }}</div>
         <div class="ch-meta">
-          <span>{{ channel.message_set.all.count }} msgs</span>
+          <span>{{ channel.messages_count }} msgs</span>
           <span class="org-label">
             <span class="org-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
             <span class="org-name">{{ channel.organization }}</span>

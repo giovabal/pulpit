@@ -5,14 +5,20 @@ fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r
     strategies.forEach(function(strategyKey) {
         var rows = data.strategies[strategyKey].rows;
 
-        // Heatmap ranges per column
+        // Heatmap ranges per column (single pass)
         var hmCols = ["node_count", "internal_edges", "external_edges", "density", "reciprocity", "avg_clustering", "avg_path_length", "diameter"];
         var hmRanges = {};
         hmCols.forEach(function(col) {
-            var vals = rows.map(function(r) {
-                return col === "node_count" ? r.node_count : r.metrics[col];
-            }).filter(function(v) { return v !== null && v !== undefined; });
-            if (vals.length) hmRanges[col] = [Math.min.apply(null, vals), Math.max.apply(null, vals)];
+            var mn = Infinity, mx = -Infinity, hasVal = false;
+            rows.forEach(function(r) {
+                var v = col === "node_count" ? r.node_count : r.metrics[col];
+                if (v !== null && v !== undefined) {
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                    hasVal = true;
+                }
+            });
+            if (hasVal) hmRanges[col] = [mn, mx];
         });
 
         // Heading
@@ -52,6 +58,7 @@ fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r
         table.appendChild(thead);
 
         var tbody = document.createElement("tbody");
+        var tbodyFrag = document.createDocumentFragment();
         rows.forEach(function(row) {
             var tr = document.createElement("tr");
 
@@ -85,8 +92,9 @@ fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r
             addNumTd(row.metrics.avg_path_length, "avg_path_length", 4);
             addNumTd(row.metrics.diameter, "diameter", 0);
 
-            tbody.appendChild(tr);
+            tbodyFrag.appendChild(tr);
         });
+        tbody.appendChild(tbodyFrag);
         table.appendChild(tbody);
         tableDiv.appendChild(table);
         container.appendChild(tableDiv);
@@ -116,13 +124,15 @@ fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r
 
             var listSpan = document.createElement("span");
             listSpan.className = "community-channels-list";
+            var chipsFrag = document.createDocumentFragment();
             row.channels.forEach(function(ch) {
                 var a = document.createElement("a");
                 a.href = ch.url || "#";
                 a.className = "community-channel-chip";
                 a.textContent = ch.label;
-                listSpan.appendChild(a);
+                chipsFrag.appendChild(a);
             });
+            listSpan.appendChild(chipsFrag);
             group.appendChild(listSpan);
             details.appendChild(group);
         });

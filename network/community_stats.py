@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 
 from network.utils import CommunityTableData, GraphData, make_date_q
 from webapp.models import Message
@@ -13,6 +13,11 @@ import networkx as nx
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Minimum community size for which avg_path_length / diameter are computed.
+# Tiny communities (singletons, pairs) are trivially O(1) but incur WCC setup overhead;
+# skipping them avoids calling weakly_connected_components on many 1–2 node subgraphs.
+_PATH_LENGTH_MIN_NODES = 3
 
 
 def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
@@ -118,7 +123,7 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
         avg_clustering = None
     avg_path_length = None
     diameter = None
-    if n >= 2:
+    if n >= _PATH_LENGTH_MIN_NODES:
         try:
             wccs = list(nx.weakly_connected_components(subgraph))
             largest_wcc = max(wccs, key=len)
@@ -165,10 +170,14 @@ def _network_content_metrics(
     """Compute network-wide content originality and amplification ratio from the DB."""
     channel_pks = list(channel_qs.values_list("pk", flat=True))
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
-    total = Message.objects.filter(msg_q).count()
+    agg = Message.objects.filter(msg_q).aggregate(
+        total=Count("id"),
+        forwarded_out=Count("id", filter=Q(forwarded_from__isnull=False)),
+    )
+    total = agg["total"]
     if total == 0:
         return {"network_originality": None, "network_amplification": None}
-    forwarded_out = Message.objects.filter(msg_q & Q(forwarded_from__isnull=False)).count()
+    forwarded_out = agg["forwarded_out"]
     fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True) & make_date_q(
         start_date, end_date
     )

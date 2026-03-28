@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, QuerySet
 
 from network.utils import make_date_q
 from webapp.models import Channel, Message, ProfilePicture
@@ -58,14 +58,15 @@ def build_graph(
     """
     qs_filter = Q(organization__is_interesting=True)
     if draw_dead_leaves:
-        qs_filter |= Q(in_degree__gt=0)
+        # Citations are stored in in_degree when REVERSED_EDGES=True, out_degree otherwise.
+        qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = (
         Channel.objects.filter(qs_filter, channel_type_filter())
         .select_related("organization")
         .prefetch_related(
             Prefetch(
                 "profilepicture_set",
-                queryset=ProfilePicture.objects.order_by("date"),
+                queryset=ProfilePicture.objects.order_by("-date")[:1],
                 to_attr="_prefetched_profile_pics",
             )
         )
@@ -112,6 +113,7 @@ def build_graph(
             channel_id__in=channel_ids,
             message__channel_id__in=channel_ids,
         )
+        .exclude(message__forwarded_from=F("channel"))
         .values("message__channel_id", "channel_id")
         .annotate(total=Count("id"))
     }
@@ -159,5 +161,23 @@ def build_graph(
     max_weight = max(edge[2] for edge in edge_list)
     for edge in edge_list:
         graph.add_edge(edge[0], edge[1], weight=10 * edge[2] / max_weight)
+
+    # Remove dead leaves that ended up with no edges after date filtering.
+    # Their all-time DB degree earned them a slot, but the restricted window contains
+    # no citations for them — they would otherwise appear as isolated ghost nodes.
+    if draw_dead_leaves and (start_date or end_date):
+        orphaned = [
+            cid
+            for cid in list(channel_dict)
+            if graph.degree(cid) == 0
+            and (
+                channel_dict[cid]["channel"].organization is None
+                or not channel_dict[cid]["channel"].organization.is_interesting
+            )
+        ]
+        for cid in orphaned:
+            graph.remove_node(cid)
+            del channel_dict[cid]
+        channel_qs = channel_qs.filter(pk__in=[int(cid) for cid in channel_dict])
 
     return graph, channel_dict, edge_list, channel_qs

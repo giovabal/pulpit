@@ -4,9 +4,11 @@ import re
 import shutil
 import tempfile
 from argparse import ArgumentParser
+from collections import Counter
 from typing import Any
 
 from django.conf import settings
+from django.db.models import F
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
@@ -271,15 +273,86 @@ class Command(AsyncBaseCommand):
 
         self.stdout.write(f"\nRefreshing degrees for {len(interesting_pks)} interesting channels … ", ending="")
         self.stdout.flush()
-        for channel in Channel.objects.filter(pk__in=interesting_pks):
-            channel.refresh_degrees()
+        if interesting_pks:
+            # Build (message_id, target_channel_id) pairs for all citations toward interesting channels,
+            # taking the union of forward-from and reference links so each message counts once per target.
+            fwd_cited_by = set(
+                Message.objects.filter(
+                    channel__organization__is_interesting=True,
+                    forwarded_from_id__in=interesting_pks,
+                )
+                .exclude(channel_id=F("forwarded_from_id"))
+                .values_list("id", "forwarded_from_id")
+            )
+            ref_cited_by = set(
+                Message.references.through.objects.filter(
+                    message__channel__organization__is_interesting=True,
+                    channel_id__in=interesting_pks,
+                )
+                .exclude(message__channel_id=F("channel_id"))
+                .values_list("message_id", "channel_id")
+            )
+            cited_by_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited_by | ref_cited_by)
+
+            # Outgoing: messages from each interesting channel that cite another interesting channel.
+            fwd_cites = set(
+                Message.objects.filter(
+                    channel_id__in=interesting_pks,
+                    forwarded_from_id__in=interesting_pks,
+                )
+                .exclude(channel_id=F("forwarded_from_id"))
+                .values_list("channel_id", "id")
+            )
+            ref_cites = set(
+                Message.references.through.objects.filter(
+                    message__channel_id__in=interesting_pks,
+                    channel_id__in=interesting_pks,
+                )
+                .exclude(message__channel_id=F("channel_id"))
+                .values_list("message__channel_id", "message_id")
+            )
+            cites_counts: Counter[int] = Counter(src for src, _ in fwd_cites | ref_cites)
+
+            channels_to_update = list(Channel.objects.filter(pk__in=interesting_pks))
+            for ch in channels_to_update:
+                cited_by = cited_by_counts.get(ch.pk, 0)
+                cites = cites_counts.get(ch.pk, 0)
+                if settings.REVERSED_EDGES:
+                    ch.in_degree, ch.out_degree = cited_by, cites
+                else:
+                    ch.in_degree, ch.out_degree = cites, cited_by
+            Channel.objects.bulk_update(channels_to_update, ["in_degree", "out_degree"])
         self.stdout.write("done")
 
         if cited_pks:
             self.stdout.write(f"Refreshing citation degree for {len(cited_pks)} referenced channels … ", ending="")
             self.stdout.flush()
-            for channel in Channel.objects.filter(pk__in=cited_pks):
-                channel.refresh_cited_degree()
+            fwd_cited = set(
+                Message.objects.filter(
+                    channel__organization__is_interesting=True,
+                    forwarded_from_id__in=cited_pks,
+                )
+                .exclude(channel_id=F("forwarded_from_id"))
+                .values_list("id", "forwarded_from_id")
+            )
+            ref_cited = set(
+                Message.references.through.objects.filter(
+                    message__channel__organization__is_interesting=True,
+                    channel_id__in=cited_pks,
+                )
+                .exclude(message__channel_id=F("channel_id"))
+                .values_list("message_id", "channel_id")
+            )
+            citations_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited | ref_cited)
+
+            cited_channels = list(Channel.objects.filter(pk__in=cited_pks))
+            for ch in cited_channels:
+                citations = citations_counts.get(ch.pk, 0)
+                if settings.REVERSED_EDGES:
+                    ch.in_degree, ch.out_degree = citations, 0
+                else:
+                    ch.in_degree, ch.out_degree = 0, citations
+            Channel.objects.bulk_update(cited_channels, ["in_degree", "out_degree"])
             self.stdout.write("done")
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))

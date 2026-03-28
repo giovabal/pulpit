@@ -100,10 +100,24 @@ def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]
     return [("hits_hub", "HITS Hub"), ("hits_authority", "HITS Authority")]
 
 
-def apply_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add betweenness centrality to each node."""
+def compute_betweenness(graph: nx.DiGraph) -> dict[str, float]:
+    """Compute betweenness centrality and return the raw values dict."""
+    return nx.betweenness_centrality(graph, weight="weight")
+
+
+def apply_betweenness_centrality(
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    betweenness: "dict[str, float] | None" = None,
+) -> list[tuple[str, str]]:
+    """Add betweenness centrality to each node.
+
+    If ``betweenness`` is provided (pre-computed via ``compute_betweenness``),
+    the nx call is skipped, allowing the caller to share one computation with
+    ``apply_bridging_centrality``.
+    """
     key = "betweenness"
-    values: dict[str, float] = nx.betweenness_centrality(graph, weight="weight")
+    values = betweenness if betweenness is not None else compute_betweenness(graph)
     for node in graph_data["nodes"]:
         node[key] = values.get(node["id"], 0.0)
     return [(key, "Betweenness Centrality")]
@@ -151,17 +165,25 @@ def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     return [(key, "Katz Centrality")]
 
 
-def apply_bridging_centrality(graph_data: GraphData, graph: nx.DiGraph, strategy_key: str) -> list[tuple[str, str]]:
+def apply_bridging_centrality(
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    strategy_key: str,
+    betweenness: "dict[str, float] | None" = None,
+) -> list[tuple[str, str]]:
     """Add bridging centrality (betweenness × neighbor-community Shannon entropy) to each node.
 
     For each node, the Shannon entropy is computed over the community distribution of its
     neighbours weighted by edge strength. Nodes that connect many distinct communities score
     high on entropy; multiplying by betweenness surfaces nodes that are both structurally
     central and community-diverse.
+
+    If ``betweenness`` is provided (pre-computed via ``compute_betweenness``), the nx call
+    is skipped, allowing the caller to share one computation with ``apply_betweenness_centrality``.
     """
     key = "bridging_centrality"
 
-    betweenness: dict[str, float] = nx.betweenness_centrality(graph, weight="weight")
+    betweenness = betweenness if betweenness is not None else compute_betweenness(graph)
 
     community_map: dict[str, str] = {
         node_id: node_data["communities"][strategy_key]
@@ -225,9 +247,7 @@ def apply_amplification_factor(
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
 
-    fwd_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True) & make_date_q(
-        start_date, end_date
-    )
+    fwd_q = Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     forwards_received: dict[int, int] = {
         item["forwarded_from_id"]: item["total"]
         for item in Message.objects.filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))

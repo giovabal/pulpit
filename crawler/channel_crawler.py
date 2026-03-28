@@ -36,7 +36,7 @@ class ChannelCrawler:
         location = channel_full_info.full_chat.location
         if location:
             channel.telegram_location = getattr(location, "address", "") or str(location)
-        channel.save(update_fields=["participants_count", "about"])
+        channel.save(update_fields=["participants_count", "about", "telegram_location"])
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
@@ -256,15 +256,18 @@ class ChannelCrawler:
             if isinstance(telegram_message, MessageService):
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
                 continue
+            update_kwargs: dict = {
+                "views": telegram_message.views,
+                "forwards": telegram_message.forwards,
+                "pinned": bool(telegram_message.pinned),
+                "_updated": now,
+            }
+            if telegram_message.pinned:
+                update_kwargs["has_been_pinned"] = True
             rows = Message.objects.filter(
                 channel=channel,
                 telegram_id=telegram_message.id,
-            ).update(
-                views=telegram_message.views,
-                forwards=telegram_message.forwards,
-                pinned=bool(telegram_message.pinned),
-                _updated=now,
-            )
+            ).update(**update_kwargs)
             if rows:
                 updated += 1
             update_status(f"refreshing message stats … {updated} updated")

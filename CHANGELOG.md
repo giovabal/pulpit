@@ -13,10 +13,21 @@
   - `graph/index.html` gains a "Compare network" section listing all copied `_2` files and linking to the comparison page.
 
 
+### Fixed
+- `telegram_location` was silently discarded on every crawl: the field was assigned from the Telegram API response but missing from `update_fields` in `set_more_channel_details`, so location data was never persisted.
+- `has_been_pinned` was never updated by `--refresh-messages-stats`: the refresh path uses `QuerySet.update()`, which bypasses `Message.save()` where `has_been_pinned` is set. Messages that first became pinned after their initial crawl would show `pinned=True` after a refresh but `has_been_pinned=False`, losing the historical record once they were unpinned. The refresh now explicitly sets `has_been_pinned=True` when the Telegram API reports a message as currently pinned.
+- A message that both forwards from channel B and contains a `t.me/B` link (common when editors include inline attribution) was counted in both `forwarded_counts` and `reference_counts` in the graph builder, doubling that edge's contribution to the weight. References to a channel that is already the `forwarded_from` source of the same message are now excluded from `reference_counts`.
+- `refresh_degrees()` for interesting channels only counted forwards toward their in/out-degree totals, while `refresh_cited_degree()` for non-interesting channels counted both forwards and `t.me/` references. This made the same field mean different things depending on whether a channel was interesting. Both paths now count forwards and references, matching the edge construction in the graph builder.
+- `refresh_degrees()` did not respect `REVERSED_EDGES`: it always stored "cited by" in `in_degree` and "cites" in `out_degree` regardless of the setting, while `refresh_cited_degree()` correctly swapped the two fields when `REVERSED_EDGES=False`. The two paths are now consistent.
+- When `DRAW_DEAD_LEAVES=True` with `REVERSED_EDGES=False`, no dead leaves were ever drawn: `refresh_cited_degree()` stores citations in `out_degree` in that configuration, but the dead-leaves inclusion filter always checked `in_degree__gt=0`. The filter now checks the correct field for the active edge direction.
+- Dead-leaf nodes with no citations in the active date window appeared as isolated ghost nodes when `DRAW_DEAD_LEAVES=True` was combined with `--startdate`/`--enddate`: they were selected based on their all-time cached degree rather than the date-filtered edge set. Dead leaves that end up with no edges after date filtering are now removed from the graph and the output tables.
+- Amplification factor only counted forwards from channels with `is_interesting=True`, but when `DRAW_DEAD_LEAVES=True` the graph includes edges from dead-leaf channels, so a channel heavily forwarded by dead leaves showed low amplification while appearing well-connected in the graph. The measure now counts forwards from all channels present in the graph, keeping it consistent with the edge structure.
+
 ### Improvements
 - `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
 - `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
 - New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
+- Various performance improvements across the backend and frontend.
 
 ## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
