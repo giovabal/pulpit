@@ -74,12 +74,14 @@ By default also writes three sortable HTML tables:
 
 All HTML outputs load their data at page load time from `graph/data/*.json`; they are static files that work from any HTTP server.
 
-To control the tabular output format:
+To control what outputs are produced, use `--format` with a comma-separated list of `graph`, `3dgraph`, `html`, and `xlsx` (default: `graph,html`):
 
 ```sh
-python manage.py export_network --table-format xlsx       # Excel only
-python manage.py export_network --table-format html+xlsx  # both HTML and Excel
-python manage.py export_network --table-format none       # no tabular output
+python manage.py export_network --format graph,html        # default: 2D graph + HTML tables
+python manage.py export_network --format graph,3dgraph,html  # also generate the 3D graph
+python manage.py export_network --format graph,html,xlsx   # graph + both HTML and Excel tables
+python manage.py export_network --format html,xlsx         # tables only, no graph
+python manage.py export_network --format graph             # graph only, no tables
 ```
 
 The Excel output produces `graph/channel_table.xlsx` (one row per channel), `graph/network_table.xlsx` (whole-network metrics on a single sheet), and `graph/community_table.xlsx` (one sheet per community detection strategy).
@@ -96,20 +98,6 @@ To make the output discoverable by search engines (sets `index, follow` robots t
 
 ```sh
 python manage.py export_network --seo
-```
-
-To also generate a 3D graph alongside the 2D one:
-
-```sh
-python manage.py export_network --3d
-```
-
-This produces `graph/graph3d.html`, a Three.js scene where you can rotate, zoom, and pan the graph and click nodes to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end, so it is slower on large graphs.
-
-To skip graph generation entirely (tables and `index.html` are still produced):
-
-```sh
-python manage.py export_network --nograph
 ```
 
 To compare this network against another export side-by-side:

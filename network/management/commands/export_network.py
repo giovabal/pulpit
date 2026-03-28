@@ -9,7 +9,7 @@ from network import community, community_stats, exporter, graph_builder, layout,
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
-TABLE_FORMAT_CHOICES = ["none", "html", "xlsx", "html+xlsx"]
+VALID_FORMATS = {"graph", "3dgraph", "html", "xlsx"}
 
 
 class Command(BaseCommand):
@@ -18,10 +18,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
-            "--table-format",
-            choices=TABLE_FORMAT_CHOICES,
-            default="html",
-            help='Tabular output format alongside the graph: "html" (default), "xlsx", "html+xlsx", or "none".',
+            "--format",
+            default="graph,html",
+            metavar="FORMAT[,FORMAT...]",
+            help=(
+                "Comma-separated list of outputs to produce. "
+                "graph = 2D interactive map, "
+                "3dgraph = 3D interactive map, "
+                "html = HTML tables (channel, network, community), "
+                "xlsx = Excel spreadsheets. "
+                "Default: graph,html."
+            ),
         )
         parser.add_argument(
             "--seo",
@@ -30,27 +37,6 @@ class Command(BaseCommand):
             help=(
                 "Optimise the output mini-site for search engine discovery: sets indexable robots tags "
                 "and adds meta descriptions. Without this flag the output actively discourages indexing."
-            ),
-        )
-        parser.add_argument(
-            "--nograph",
-            action="store_true",
-            default=False,
-            help=(
-                "Skip the graph mini-site: no layout computation, no graph.html, no media copy. "
-                "Only tabular output (channel_table / community_table) is produced. "
-                "Implies --table-format html+xlsx unless --table-format is set explicitly."
-            ),
-        )
-        parser.add_argument(
-            "--3d",
-            action="store_true",
-            default=False,
-            dest="graph_3d",
-            help=(
-                "Also produce a 3D graph visualisation (graph3d.html). "
-                "ForceAtlas2 runs in 3D using the vectorised O(n²) back-end "
-                "(Barnes-Hut is 2D-only), so this is slower on large graphs."
             ),
         )
         parser.add_argument(
@@ -133,9 +119,17 @@ class Command(BaseCommand):
         bridging_token = self._validate_settings(communities_strategy, network_measures)
         selected_measures = set(network_measures)
 
-        nograph = options["nograph"]
+        raw_formats = [f.strip().lower() for f in options["format"].split(",") if f.strip()]
+        invalid_formats = [f for f in raw_formats if f not in VALID_FORMATS]
+        if invalid_formats:
+            raise CommandError(f"Invalid --format value(s): {invalid_formats!r}. Choose from {sorted(VALID_FORMATS)}.")
+        formats = set(raw_formats)
+        do_graph = "graph" in formats
+        do_3dgraph = "3dgraph" in formats
+        do_html = "html" in formats
+        do_xlsx = "xlsx" in formats
+
         seo = options["seo"]
-        graph_3d = options["graph_3d"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
         compare_data_dir = options["compare"]
@@ -180,7 +174,7 @@ class Command(BaseCommand):
         community.apply_edge_colors(graph, edge_list, channel_dict)
 
         positions_3d: dict | None = None
-        if not nograph:
+        if do_graph or do_3dgraph:
             self.stdout.write("\nSet spatial distribution of nodes")
             self.stdout.write("- Kamada-Kawai … ", ending="")
             self.stdout.flush()
@@ -200,7 +194,7 @@ class Command(BaseCommand):
                 self.stdout.write("- rotating layout 90°")
                 positions = layout.rotate_positions(positions)
 
-            if graph_3d:
+            if do_3dgraph:
                 self.stdout.write("- Kamada-Kawai 3D … ", ending="")
                 self.stdout.flush()
                 initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
@@ -278,7 +272,7 @@ class Command(BaseCommand):
             )
             self.stdout.write("done")
 
-        if not nograph:
+        if do_graph or do_3dgraph:
             self.stdout.write("- small components")
             exporter.reposition_isolated_nodes(graph_data, main_component)
 
@@ -286,11 +280,11 @@ class Command(BaseCommand):
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
 
-        if not nograph:
+        if do_graph or do_3dgraph:
             self.stdout.write("\nGenerate map")
             exporter.ensure_graph_root(root_target)
             self.stdout.write("- config files")
-            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title, include_3d=graph_3d)
+            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title, include_3d=do_3dgraph)
             exporter.write_robots_txt(root_target, seo)
 
         self.stdout.write("- data files")
@@ -300,13 +294,12 @@ class Command(BaseCommand):
             measures_labels,
             channel_qs,
             graph_dir=root_target,
-            include_positions=not nograph,
+            include_positions=do_graph or do_3dgraph,
             positions_3d=positions_3d,
         )
 
-        table_format = options["table_format"]
         strategies = [s.lower() for s in communities_strategy]
-        if "html" in table_format or "xlsx" in table_format:
+        if do_html or do_xlsx:
             self.stdout.write("- community metrics")
             _steps = ["network"] + strategies
             _step_iter = iter(_steps)
@@ -334,7 +327,7 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
             )
-        if "html" in table_format:
+        if do_html:
             self.stdout.write("- table (html)")
             tables.write_table_html(
                 graph_data,
@@ -356,7 +349,7 @@ class Command(BaseCommand):
                 seo=seo,
                 project_title=project_title,
             )
-        if "xlsx" in table_format:
+        if do_xlsx:
             self.stdout.write("- table (xlsx)")
             tables.write_table_xlsx(
                 graph_data,
@@ -380,7 +373,7 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
 
-        if not nograph:
+        if do_graph or do_3dgraph:
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, root_target)
 
@@ -401,14 +394,14 @@ class Command(BaseCommand):
             output_filename=os.path.join(root_target, "index.html"),
             seo=seo,
             project_title=project_title,
-            include_graph=not nograph,
-            include_3d_graph=not nograph and graph_3d,
-            include_channel_html="html" in table_format,
-            include_channel_xlsx="xlsx" in table_format,
-            include_network_html="html" in table_format,
-            include_network_xlsx="xlsx" in table_format,
-            include_community_html="html" in table_format,
-            include_community_xlsx="xlsx" in table_format,
+            include_graph=do_graph,
+            include_3d_graph=do_3dgraph,
+            include_channel_html=do_html,
+            include_channel_xlsx=do_xlsx,
+            include_network_html=do_html,
+            include_network_xlsx=do_xlsx,
+            include_community_html=do_html,
+            include_community_xlsx=do_xlsx,
             include_compare_html=compare_data_dir is not None,
             compare_files=compare_files,
             strategies=strategies,
