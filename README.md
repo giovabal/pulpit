@@ -1,4 +1,4 @@
-<img src="webapp_engine/static/pulpit_logo.svg" alt="" style="float: right;" width="80">
+<img align="right" src="webapp_engine/static/pulpit_logo.svg" alt="" width="120">
 
 # Pulpit
 ### Political undercurrents: linkage, propagation, influence on Telegram

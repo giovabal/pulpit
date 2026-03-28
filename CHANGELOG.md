@@ -2,8 +2,8 @@
 
 ## [0.9] - To be announced
 
-### Improvements
-- README now displays the project logo.
+### New features
+- Project logo.
 
 ## [0.8] - 2026-03-08
 *3D graph and network comparison.*
