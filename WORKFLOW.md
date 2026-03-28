@@ -136,4 +136,4 @@ Open [http://localhost:8001/](http://localhost:8001/). The landing page (`index.
 
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)
 
-<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>
+<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

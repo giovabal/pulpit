@@ -84,4 +84,4 @@ Pulpit is intended for academic research, investigative journalism, and analytic
 
 Laws governing data collection, storage, and analysis of public communications vary across jurisdictions and change over time. Telegram's Terms of Service are likewise subject to revision. It is your responsibility to verify that your use of this software complies with the laws of your country and with Telegram's current Terms of Service before running it. The authors accept no liability for uses that fall outside lawful research and analysis.
 
-<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>
+<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

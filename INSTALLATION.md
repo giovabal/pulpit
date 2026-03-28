@@ -47,4 +47,4 @@ You are ready to start collecting data. See [WORKFLOW.md](WORKFLOW.md) for the c
 
 ← [README](README.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)
 
-<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>
+<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

@@ -63,4 +63,4 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)
 
-<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>
+<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">
