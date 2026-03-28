@@ -1,5 +1,7 @@
 # Configuration
 
+Pulpit is configured through a `.env` file in the project root. Copy `env.example` as a starting point and fill in at least the three Telegram credentials before running any management command. All other settings have defaults that work for a first run; refer to the sections below when you want to change how channels are crawled, how the graph is weighted, or how communities are detected and coloured.
+
 All options go in `.env`. Copy `env.example` as a starting point.
 
 ## Telegram
@@ -58,4 +60,4 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 ---
 
-← [README](README.md)
+← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)

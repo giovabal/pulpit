@@ -4,6 +4,43 @@ This document explains the analytical tools available in Pulpit — what they me
 
 ---
 
+## Quick reference
+
+### Measures
+
+Configured via `NETWORK_MEASURES` in `.env`. Use `ALL` to enable everything.
+
+| Measure | Key | Question it answers |
+| :------ | :-- | :------------------ |
+| PageRank | `PAGERANK` | Which channels do the network's key players treat as authoritative? |
+| HITS Hub | `HITSHUB` | Which channels actively amplify others — the distributors? |
+| HITS Authority | `HITSAUTH` | Which channels are the original sources that distributors spread? |
+| Betweenness centrality | `BETWEENNESS` | Which channels sit on the bridges between sub-networks? |
+| In-degree centrality | `INDEGCENTRALITY` | Which channels are cited by the largest fraction of others? |
+| Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
+| Harmonic centrality | `HARMONICCENTRALITY` | Which channels can reach the rest of the network in the fewest hops? |
+| Katz centrality | `KATZ` | Which channels are most accessible through all paths, direct and indirect? |
+| Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
+| Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
+| Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
+| Bridging centrality | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
+
+### Community detection strategies
+
+Configured via `COMMUNITY_STRATEGIES` in `.env`. Use `ALL` to run everything simultaneously.
+
+| Strategy | Key | What it reveals |
+| :------- | :-- | :-------------- |
+| Organization | `ORGANIZATION` | Your own domain-knowledge groupings, defined in the admin |
+| Louvain | `LOUVAIN` | Data-driven modularity clusters |
+| Leiden | `LEIDEN` | Sharper, more cohesive modularity clusters |
+| K-core | `KCORE` | Hierarchy: the innermost ideological core vs. peripheral amplifiers |
+| Infomap | `INFOMAP` | Echo chambers: groups where information circulates in closed loops |
+| Weakly connected components | `WEAKCC` | Structural islands with no path to the rest of the network |
+| Strongly connected components | `STRONGCC` | Mutually reinforcing cores: channels in closed directed loops |
+
+---
+
 ## Network measures
 
 A network measure assigns a numerical score to each channel based on its position in the graph. Pulpit computes edges from forwards and `t.me/` references: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weights reflect how often, relative to A's total output.
@@ -365,4 +402,4 @@ Modularity is reported for each active community detection strategy in `network_
 
 ---
 
-← [README](README.md)
+← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Changelog](CHANGELOG.md)

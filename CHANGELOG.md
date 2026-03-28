@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.9] - To be announced
+
 ## [0.8] - 2026-03-08
 *3D graph and network comparison.*
 
@@ -186,4 +188,4 @@
 
 ---
 
-← [README](README.md)
+← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md)

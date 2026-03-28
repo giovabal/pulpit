@@ -11,7 +11,7 @@ Pulpit is developed and primarily used on GNU/Linux. Windows 10+ is also support
 ## Install dependencies
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/giovabal/pulpit
 cd pulpit
 sh setup.sh          # creates a virtual environment and installs dependencies
 ```
@@ -39,6 +39,10 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full list of options.
 python manage.py migrate
 ```
 
+## Next steps
+
+You are ready to start collecting data. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
+
 ---
 
-← [README](README.md)
+← [README](README.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)
