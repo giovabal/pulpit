@@ -12,6 +12,11 @@
   - `graph/network_compare_table.html` is generated with a 3-column whole-network metrics table (Metric / This network / Compare network), a modularity-by-strategy comparison table, and interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. A "Normalize axes [0–1] per network" toggle min-max scales each network's values independently, making size-dependent measures (degree, fans, message count) directly comparable across networks of different sizes.
   - `graph/index.html` gains a "Compare network" section listing all copied `_2` files and linking to the comparison page.
 
+### Improvements
+- `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
+- `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
+- New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
+- Various performance improvements across the backend and frontend.
 
 ### Fixed
 - `telegram_location` was silently discarded on every crawl: the field was assigned from the Telegram API response but missing from `update_fields` in `set_more_channel_details`, so location data was never persisted.
@@ -23,11 +28,6 @@
 - Dead-leaf nodes with no citations in the active date window appeared as isolated ghost nodes when `DRAW_DEAD_LEAVES=True` was combined with `--startdate`/`--enddate`: they were selected based on their all-time cached degree rather than the date-filtered edge set. Dead leaves that end up with no edges after date filtering are now removed from the graph and the output tables.
 - Amplification factor only counted forwards from channels with `is_interesting=True`, but when `DRAW_DEAD_LEAVES=True` the graph includes edges from dead-leaf channels, so a channel heavily forwarded by dead leaves showed low amplification while appearing well-connected in the graph. The measure now counts forwards from all channels present in the graph, keeping it consistent with the edge structure.
 
-### Improvements
-- `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
-- `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
-- New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
-- Various performance improvements across the backend and frontend.
 
 ## [0.7] - 2026-03-23
 *Widening the selection of whole-network measures. Adding more node measures and comparing them.*
