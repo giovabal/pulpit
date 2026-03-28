@@ -32,7 +32,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `FA2_ITERATIONS` | Number of ForceAtlas2 iterations | `20000` |
+| `FA2_ITERATIONS` | Number of ForceAtlas2 iterations | `5000` |
 | `LAYOUT` | Desired graph orientation: `HORIZONTAL` or `VERTICAL`. When the computed layout's aspect ratio does not match, the graph is automatically rotated 90°. | `HORIZONTAL` |
 
 ## Network analysis

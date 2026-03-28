@@ -145,7 +145,7 @@ TELEGRAM_CONNECTION_RETRIES = config("TELEGRAM_CONNECTION_RETRIES", default=10, 
 TELEGRAM_RETRY_DELAY = config("TELEGRAM_RETRY_DELAY", default=5, cast=int)
 TELEGRAM_FLOOD_SLEEP_THRESHOLD = config("TELEGRAM_FLOOD_SLEEP_THRESHOLD", default=60, cast=int)
 
-FA2_ITERATIONS = config("FA2_ITERATIONS", default=20000, cast=int)
+FA2_ITERATIONS = config("FA2_ITERATIONS", default=5000, cast=int)
 
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 
