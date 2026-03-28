@@ -9,31 +9,36 @@ Visual samples of Pulpit output across different graph sizes, community detectio
 <img src="webapp_engine/static/screenshot_00.jpg" alt="Example output for 2D graph">
 <figcaption>Example output for 2D graph.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_01.jpg" alt="Example output for channels">
 <figcaption>Example output for channels.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_03.jpg" alt="Example output for communities">
 <figcaption>Example output for communities.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_04.jpg" alt="Example output for whole-network measures">
 <figcaption>Example output for whole-network measures.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_05.jpg" alt="Example output for measure comparison">
 <figcaption>Example output for measure comparison.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 
 ## Example output, second graph
@@ -43,19 +48,20 @@ Visual samples of Pulpit output across different graph sizes, community detectio
 <img src="webapp_engine/static/screenshot_06.jpg" alt="Example output for 3D graph">
 <figcaption>Example output for 3D graph.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_07.jpg" alt="Example output for clicking a single node">
 <figcaption>Example output for clicking a single node.</figcaption>
 </figure>
-<br>
+
+<hr>
 
 <figure>
 <img src="webapp_engine/static/screenshot_08.jpg" alt="Example output for visualization options menu">
 <figcaption>Example output for visualization options menu.</figcaption>
 </figure>
-<br>
 
 
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md) · [Changelog](CHANGELOG.md)
