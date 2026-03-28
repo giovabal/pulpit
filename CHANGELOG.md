@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8] - To be announced
+## [0.8] - 2026-03-08
 *3D graph and network comparison.*
 
 ### New features
