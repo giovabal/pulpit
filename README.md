@@ -1,4 +1,6 @@
-<img align="right" src="webapp_engine/static/pulpit_logo.svg" alt="" width="120">
+<table>
+<tr>
+<td valign="top">
 
 # Pulpit
 ### Political undercurrents: linkage, propagation, influence on Telegram
@@ -8,6 +10,15 @@ Telegram is home to thousands of political channels — news outlets, activist g
 **Pulpit** makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
 
 It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence. Pulpit is actively developed and evolving — see the [changelog](CHANGELOG.md) for what is new.
+
+</td>
+<td valign="top" align="right" width="140">
+
+<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="120">
+
+</td>
+</tr>
+</table>
 
 ---
 
