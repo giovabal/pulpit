@@ -1,15 +1,17 @@
 # Changelog
 
 ## [0.9] - To be announced
+*A logo. Refining measures and communities detection.*
 
 ### New features
 - Project logo.
+- New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. The most direct measure of influence propagation, independent of follower count or structural centrality. Number of runs controlled by `SPREADING_RUNS` (default 200).
 - `export_network --gexf` writes `graph/network.gexf` with all computed measures (PageRank, betweenness, etc.), community assignments, and channel metadata embedded as node attributes, ready to open in Gephi or any GEXF-compatible tool.
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
 
 ### Improvements
 - New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared. Recommended when citation direction carries semantic weight, as in Telegram networks where amplification flows asymmetrically.
-- `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed igraph to `ModularityVertexPartition`, making it functionally equivalent to `LEIDEN_DIRECTED`.
+- `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed graph, making it functionally equivalent to `LEIDEN_DIRECTED`.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
 
 ### Backward incompatibility

@@ -23,6 +23,7 @@ Configured via `NETWORK_MEASURES` in `.env`. Use `ALL` to enable everything.
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
+| Spreading efficiency | `SPREADING` | If this channel starts spreading a message, what fraction of the network eventually receives it? (SIR simulation; slow) |
 | Bridging centrality | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
 
 ### Community detection strategies
@@ -161,6 +162,24 @@ Content originality = **1 − (forwarded messages / total messages)**. A value o
 **In practice:** content originality separates **producers** from **distributors** in the most direct way possible. High-originality channels write their own material; low-originality channels are pure relay nodes — their value is in their audience and distribution reach, not in what they create. Combined with amplification factor, it produces a two-axis characterisation of each channel's role: a channel that is high on both (original content that spreads widely) is a primary source; a channel low on both (mostly forwards that nobody re-shares) is a peripheral amplifier with limited influence in both directions.
 
 **Example:** the official channel of a political party will typically score near 1.0 — almost all posts are original statements, press releases, or commentary. A news aggregator channel will score near 0.0 — it exists to curate and forward, producing little of its own. A hybrid channel — say, a political commentator who writes daily analysis but also regularly forwards breaking news from wire channels — will score somewhere in the middle, and the exact value reveals how much of its identity is commentary versus aggregation.
+
+---
+
+### Spreading efficiency
+
+Spreading efficiency answers a direct question: **if this channel were the first to publish a piece of information, what fraction of the network would eventually receive it?**
+
+The measure runs a **SIR epidemic simulation** on the directed citation graph. The channel is set as the only initial infective. At each step, every infected node transmits to each susceptible successor with a probability equal to the edge weight (clipped to [0, 1]), and independently recovers with a fixed probability of 0.3. The simulation repeats until no infected nodes remain. The spreading efficiency is the mean fraction of other nodes ever infected, averaged over `SPREADING_RUNS` independent Monte Carlo runs (default 200).
+
+The SIR model is the standard epidemiological model for rumour propagation and meme spread in social networks. Unlike structural measures (degree, betweenness), spreading efficiency directly captures the *dynamics* of information flow: a channel with high PageRank but embedded in a tight, insular cluster may spread less widely than a lower-ranked channel that bridges several communities.
+
+**Parameters:** transmission probability = edge weight; recovery probability γ = 0.3 per step (mean infectious period ≈ 3 steps). The number of Monte Carlo runs is set by `SPREADING_RUNS` in `.env`. Higher values increase precision but scale linearly with runtime.
+
+**Computational cost:** O(runs × N × mean outbreak size) per export. For a 500-node network with 200 runs, expect 10–60 seconds depending on network density.
+
+**In practice:** use `SPREADING` to find channels whose structural position in the citation graph makes them efficient propagators — independent of their raw follower count or message volume. A channel with spreading efficiency 0.3 seeds processes that eventually reach 30% of the network on average.
+
+**Example:** a mid-tier channel with few followers and modest PageRank turns out to bridge three large ideological clusters. Its spreading efficiency is 0.45 — higher than several prominent channels — because information starting there can flow into all three clusters rather than circulating within one. Amplification factor measures how much it was forwarded; spreading efficiency measures how far its information can reach.
 
 ---
 

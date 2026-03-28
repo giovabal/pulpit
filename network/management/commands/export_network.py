@@ -255,6 +255,11 @@ class Command(BaseCommand):
                     gd, g, channel_dict, start_date=start_date, end_date=end_date
                 ),
             ),
+            (
+                "SPREADING",
+                "spreading efficiency (SIR)",
+                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=settings.SPREADING_RUNS),
+            ),
         ]
         for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:
             if key in selected_measures:

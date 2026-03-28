@@ -82,6 +82,7 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker, high = embedded in dense clique; `null` for isolated nodes |
 | `AMPLIFICATION` | Amplification factor = forwards received from interesting channels / own message count; respects `--startdate`/`--enddate` |
 | `CONTENTORIGINALITY` | Content originality = 1 − (forwarded messages / total messages); `null` if no messages; respects `--startdate`/`--enddate` |
+| `SPREADING` | SIR spreading efficiency — mean fraction of nodes infected when node seeds the process; Monte Carlo, O(runs × N); number of runs set by `SPREADING_RUNS` (default 200) |
 | `ALL` | Expand to all measures above; `BRIDGING` uses `LEIDEN` as community basis |
 
 ### Edge construction
