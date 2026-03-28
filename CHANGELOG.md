@@ -9,6 +9,7 @@
 
 ### Improvements
 - New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared. Recommended when citation direction carries semantic weight, as in Telegram networks where amplification flows asymmetrically.
+- `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed igraph to `ModularityVertexPartition`, making it functionally equivalent to `LEIDEN_DIRECTED`.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
 
 ### Backward incompatibility

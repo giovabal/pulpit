@@ -156,9 +156,10 @@ def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, C
     node_ids: list[str] = sorted(graph.nodes())
     node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
 
-    ig_graph = ig.Graph(n=len(node_ids), directed=True)
-    edges = [(node_id_map[s], node_id_map[t]) for s, t in graph.edges()]
-    weights = [graph.edges[s, t].get("weight", 1.0) for s, t in graph.edges()]
+    undirected = graph.to_undirected(reciprocal=False)
+    ig_graph = ig.Graph(n=len(node_ids), directed=False)
+    edges = [(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()]
+    weights = [undirected.edges[s, t].get("weight", 1.0) for s, t in undirected.edges()]
     ig_graph.add_edges(edges)
 
     partition = leidenalg.find_partition(

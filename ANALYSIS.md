@@ -208,7 +208,7 @@ An automatic algorithm that maximises **modularity** — a measure of how much m
 
 ### Leiden
 
-Leiden is a refinement of the Louvain algorithm that addresses one of its known weaknesses: Louvain can produce communities that are internally disconnected — where some nodes are loosely attached to a group they do not actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected internally.
+Leiden is a refinement of the Louvain algorithm that addresses one of its known weaknesses: Louvain can produce communities that are internally disconnected — where some nodes are loosely attached to a group they do not actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected internally. Like `LOUVAIN`, it operates on a **symmetrized** (undirected) view of the graph, so an edge A→B and an edge B→A are treated as equivalent. Use `LEIDEN_DIRECTED` when citation direction matters.
 
 **In practice:** Leiden tends to produce sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. The communities it finds are not just modular — they are structurally compact. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
 
