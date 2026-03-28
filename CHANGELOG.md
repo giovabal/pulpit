@@ -8,7 +8,7 @@
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
 
 ### Improvements
-- `FA2_ITERATIONS` default reduced from 20,000 to 5,000. With Kamada-Kawai seeding, ForceAtlas2 starts from near-optimal positions and converges well within 5,000 iterations for typical networks (up to ~1,000 nodes); 20,000 was excessive and only warranted for very large, unseeded runs.
+- `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
 
 ### Backward incompatibility
 - `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--no-graph` (skip 2D graph), `--no-html` (skip HTML tables). Default output is 2D graph + HTML tables.

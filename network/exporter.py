@@ -14,6 +14,7 @@ from network.utils import GraphData
 from webapp.models import Channel
 
 import networkx as nx
+from networkx.readwrite.gexf import GEXFWriter
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,15 @@ def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -
                         attrs[f"community_{strategy}"] = str(label)
             elif value is not None:
                 attrs[key] = value
-    nx.write_gexf(g, output_filename)
+    writer = GEXFWriter()
+    meta = writer.xml.find("meta")
+    if meta is not None:
+        creator_el = meta.find("creator")
+        if creator_el is not None:
+            creator_el.text = "Pulpit"
+    writer.add_graph(g)
+    with open(output_filename, "wb") as fh:
+        writer.write(fh)
 
 
 def write_robots_txt(root_target: str, seo: bool) -> None:
