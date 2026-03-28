@@ -1,7 +1,3 @@
-<table>
-<tr>
-<td valign="top">
-
 # Pulpit
 ### Political undercurrents: linkage, propagation, influence on Telegram
 
@@ -10,15 +6,6 @@ Telegram is home to thousands of political channels — news outlets, activist g
 **Pulpit** makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
 
 It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence. Pulpit is actively developed and evolving — see the [changelog](CHANGELOG.md) for what is new.
-
-</td>
-<td valign="top" align="right" width="140">
-
-<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="120">
-
-</td>
-</tr>
-</table>
 
 ---
 
@@ -96,3 +83,5 @@ Pulpit is built around three stages:
 Pulpit is intended for academic research, investigative journalism, and analytical work on publicly accessible Telegram channels. It was written with the aim of complying with applicable laws and with [Telegram's Terms of Service](https://telegram.org/tos) as they stood at the time of development.
 
 Laws governing data collection, storage, and analysis of public communications vary across jurisdictions and change over time. Telegram's Terms of Service are likewise subject to revision. It is your responsibility to verify that your use of this software complies with the laws of your country and with Telegram's current Terms of Service before running it. The authors accept no liability for uses that fall outside lawful research and analysis.
+
+<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>

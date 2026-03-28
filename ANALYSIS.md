@@ -403,3 +403,5 @@ Modularity is reported for each active community detection strategy in `network_
 ---
 
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Changelog](CHANGELOG.md)
+
+<p align="center"><img src="webapp_engine/static/pulpit_logo.svg" alt="Pulpit" width="80"></p>
