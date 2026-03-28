@@ -4,43 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Working rules
 
-- **NEVER run `git add`, `git commit`, or `git push` unless the user explicitly says so in that message.** After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Do not combine them with implementation in the same response. Wait for the user to send a separate message asking for a commit or push.
+- **NEVER run `git add`, `git commit`, or `git push` unless the user explicitly says so in that message.** After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Wait for the user to send a separate message asking for a commit or push.
 - Run `ruff check . --fix && ruff format .` before declaring any code change done.
 - Smoke-test changes with a quick `python -c "..."` call where practical before finishing.
 
 ## Commands
 
 ```bash
-# Setup
 sh setup.sh                          # Create .venv and install dependencies
-
-# Linting (run before committing)
-ruff check . --fix && ruff format .
-
-# Database and server
 python manage.py migrate
 python manage.py runserver           # Web UI at localhost:8000
-
-# Crawling workflow
-python manage.py search_channels             # Find channels via search terms (all terms)
-python manage.py search_channels --amount N  # Limit to N search terms
-python manage.py get_channels                # Crawl channels (add --fixholes to fill gaps)
-python manage.py get_channels --fromid 42    # Only crawl channels with database id <= 42
-python manage.py get_channels --refresh-messages-stats               # Also refresh views/forwards/pinned on all messages per channel
-python manage.py get_channels --refresh-messages-stats 200           # Same but only the 200 most recent per channel
-python manage.py get_channels --refresh-messages-stats 2024-01-01    # Same but only messages from that date to present
-python manage.py export_network              # default: 2D graph + HTML tables
-python manage.py export_network --seo        # same but mini-site is search-engine friendly
-python manage.py export_network --3d         # also produce 3D graph
-python manage.py export_network --xlsx       # also produce Excel spreadsheets
-python manage.py export_network --gexf       # also write network.gexf (all measures as node attributes)
-python manage.py export_network --no-html    # skip HTML tables
-python manage.py export_network --no-graph   # skip graph (tables only)
-
-# View graph (from repo root)
-cd graph && python -m http.server 8001
-# Open http://localhost:8001/
+python manage.py search_channels     # Find channels via search terms
+python manage.py get_channels        # Crawl channels and resolve references
+python manage.py export_network      # Build graph, detect communities, export
 ```
+
+See WORKFLOW.md for all flags and options.
 
 ## Architecture
 
@@ -49,24 +28,30 @@ cd graph && python -m http.server 8001
 ### Data flow
 
 1. User adds `SearchTerm` entries in Django admin
-2. `search_channels` management command finds channels via Telegram API and creates `Channel` records
-3. User assigns channels to `Organization` objects and marks them `is_interesting=True` in admin
-4. `get_channels` command uses `TelegramCrawler` to fetch messages and resolve references between channels
-5. `export_network` command builds the graph, applies community detection, runs the spatial layout, and writes output to `graph/`
+2. `search_channels` finds channels via Telegram API → `Channel` records
+3. User assigns channels to `Organization` objects, marks `is_interesting=True`
+4. `get_channels` fetches messages and resolves cross-channel references
+5. `export_network` builds the graph, detects communities, runs layout, writes output to `graph/`
 
 ### Key modules
 
-- **`network/layout.py`** — Spatial layout pipeline: Kamada-Kawai seeds initial positions, then `pyforceatlas2` runs ForceAtlas2. Two public functions (`kamada_kawai_positions`, `forceatlas2_positions`) plus a convenience wrapper `compute_layout`.
-- **`network/exporter.py`** — Builds `GraphData` from the NetworkX graph; applies network measures (PageRank, HITS, betweenness, in-degree, out-degree, harmonic centrality); writes `graph/data.json` and the accessory config file; writes `graph/channel_table.html` / `graph/channel_table.xlsx` (one row per channel), `graph/network_table.html` / `graph/network_table.xlsx` (whole-network structural metrics), and `graph/community_table.html` / `graph/community_table.xlsx` (structural metrics per community, one table/sheet per strategy).
-- **`network/community.py`** — Community detection strategies: ORGANIZATION, LOUVAIN, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
+- **`crawler/channel_crawler.py`** (`ChannelCrawler`) — Core Telegram crawler: rate limiting, flood-wait handling, message fetching, reference resolution orchestration.
+- **`crawler/client.py`** — `TelegramAPIClient` wrapper around Telethon.
+- **`crawler/hole_fixer.py`** — Detects and fills gaps in per-channel message ID sequences.
+- **`crawler/media_handler.py`** — Media download and storage.
+- **`crawler/reference_resolver.py`** — Resolves `t.me/` references to `Channel` records.
 - **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
-- **`network/management/commands/export_network.py`** — Orchestrates the full export: validates settings, builds graph, runs community detection, runs layout, applies measures, writes output files and optional tables (channel_table, network_table, and community_table, HTML/XLSX).
-- **`webapp/crawler.py`** (`TelegramCrawler`) — Telethon-based Telegram API client. Handles rate limiting, flood-wait errors, message hole detection, and media downloads.
-- **`webapp/models/`** — `Channel`, `Message` (with `references` ManyToMany back to Channel), `Organization`, `SearchTerm`, and media models.
+- **`network/measures.py`** — All centrality and influence measures; `apply_*` functions called from `export_network`.
+- **`network/community.py`** — Community detection: ORGANIZATION, LOUVAIN, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
+- **`network/layout.py`** — Spatial layout: Kamada-Kawai seed → ForceAtlas2 (`pyforceatlas2`).
+- **`network/exporter.py`** — Builds `GraphData`; writes `graph/data.json` and config; GEXF export.
+- **`network/tables.py`** — Writes channel, network, and community HTML/XLSX tables.
+- **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
+- **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
 
 ### Network measures
 
-Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
+Configured via `NETWORK_MEASURES` in `.env` (comma-separated).
 
 | Key | Description |
 | :-- | :---------- |
@@ -76,30 +61,29 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated). Valid values:
 | `BETWEENNESS` | Betweenness centrality |
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
-| `HARMONICCENTRALITY` | Normalized harmonic centrality |
+| `HARMONICCENTRALITY` | Harmonic centrality |
 | `KATZ` | Katz centrality |
-| `BRIDGING` or `BRIDGING(STRATEGY)` | Bridging centrality (betweenness × neighbour-community Shannon entropy); defaults to `LEIDEN` when no strategy is specified; the chosen strategy must also be in `COMMUNITY_STRATEGIES` |
-| `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker, high = embedded in dense clique; `null` for isolated nodes |
-| `AMPLIFICATION` | Amplification factor = forwards received from interesting channels / own message count; respects `--startdate`/`--enddate` |
-| `CONTENTORIGINALITY` | Content originality = 1 − (forwarded messages / total messages); `null` if no messages; respects `--startdate`/`--enddate` |
-| `SPREADING` | SIR spreading efficiency — mean fraction of nodes infected when node seeds the process; Monte Carlo, O(runs × N); number of runs set by `SPREADING_RUNS` (default 200) |
-| `ALL` | Expand to all measures above; `BRIDGING` uses `LEIDEN` as community basis |
+| `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `COMMUNITY_STRATEGIES` |
+| `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
+| `AMPLIFICATION` | Forwards received from interesting channels / own message count |
+| `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
+| `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `SPREADING_RUNS` (default 200) |
+| `ALL` | All of the above; `BRIDGING` uses `LEIDEN` as community basis |
 
 ### Edge construction
 
-Edges between channels are built from two sources:
-- `Message.forwarded_from` — channel that was forwarded
-- `Message.references` — channels mentioned via `t.me/[username]` regex
+- `Message.forwarded_from` — channel whose content was forwarded
+- `Message.references` — channels mentioned via `t.me/[username]`
 
-Edge weight = (forwards + references) / total channel messages. Direction is controlled by `REVERSED_EDGES` env var.
+Edge weight = (forwards + references) / total messages from source channel. Direction controlled by `REVERSED_EDGES`.
 
 ### Code style
 
 - Python 3.12, line length 120, double quotes (see `ruff.toml`)
-- `ruff` for both linting and formatting
+- `ruff` for linting and formatting
 
 ### Configuration
 
-All runtime options go in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
+All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional settings: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `5000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`).
+Key optional: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `5000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`), `SPREADING_RUNS` (default `200`).

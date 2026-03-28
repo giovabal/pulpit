@@ -13,7 +13,7 @@ It is designed for journalists, researchers, and analysts working on political c
 
 ![Example graph — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette](webapp_engine/static/example.jpg)
 
-<figcaption>Example output — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette.</figcaption>
+<figcaption>Example output — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette. More screenshots [are available](SCREENSHOTS.md).</figcaption>
 </figure>
 
 ## How it works
