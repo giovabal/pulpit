@@ -189,6 +189,7 @@ class Command(AsyncBaseCommand):
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
 
+        warning_handler: _WarningLogHandler | None = None
         try:
             with TelegramClient(
                 "anon",
@@ -210,46 +211,50 @@ class Command(AsyncBaseCommand):
                 printer = ProgressPrinter(self.stdout, total_channels)
                 warning_handler = _WarningLogHandler(printer, self.style)
                 logging.getLogger().addHandler(warning_handler)
-                try:
-                    for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
-                        try:
-                            pre_crawl_max_id = crawler.get_channel(
-                                channel.telegram_id,
-                                fix_holes=fix_holes,
-                                status_callback=lambda message, idx=index: printer.status(message, idx),
-                            )
-                        except errors.FloodWaitError as error:
-                            printer.newline()
-                            self.stdout.write(
-                                self.style.WARNING(
-                                    f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
-                                )
-                            )
-                            continue
+
+                for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                    try:
+                        pre_crawl_max_id = crawler.get_channel(
+                            channel.telegram_id,
+                            fix_holes=fix_holes,
+                            status_callback=lambda message, idx=index: printer.status(message, idx),
+                        )
+                    except errors.FloodWaitError as error:
                         printer.newline()
-                        if do_refresh:
-                            self._refresh_channel(
-                                channel,
-                                crawler,
-                                index,
-                                total_channels,
-                                refresh_limit,
-                                refresh_min_date,
-                                pre_crawl_max_id,
-                                printer,
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
                             )
-
+                        )
+                        continue
                     printer.newline()
+                    if do_refresh:
+                        self._refresh_channel(
+                            channel,
+                            crawler,
+                            index,
+                            total_channels,
+                            refresh_limit,
+                            refresh_min_date,
+                            pre_crawl_max_id,
+                            printer,
+                        )
 
-                    self.stdout.write("\nRetrying unresolved message references … ", ending="")
-                    self.stdout.flush()
-                    crawler.get_missing_references()
-                    self.stdout.write("done")
+                printer.newline()
 
-                    media_handler.clean_leftovers()
-                finally:
-                    logging.getLogger().removeHandler(warning_handler)
+                self.stdout.write("\nRetrying unresolved message references … ", ending="")
+                self.stdout.flush()
+                crawler.get_missing_references()
+                self.stdout.write("done")
+
+                media_handler.clean_leftovers()
+            # The TelegramClient context manager has now exited and the connection
+            # is closed.  Any "Server closed the connection" warning from Telethon
+            # is emitted here, while warning_handler is still attached, so it will
+            # be coloured correctly.
         finally:
+            if warning_handler is not None:
+                logging.getLogger().removeHandler(warning_handler)
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
         from webapp.models import Message

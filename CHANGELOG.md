@@ -5,6 +5,7 @@
 
 ### New features
 - Project logo.
+- A few screenshots added to documentation.
 - New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. The most direct measure of influence propagation, independent of follower count or structural centrality. Number of runs controlled by `SPREADING_RUNS` (default 200).
 - `export_network --gexf` writes `graph/network.gexf` with all computed measures (PageRank, betweenness, etc.), community assignments, and channel metadata embedded as node attributes, ready to open in Gephi or any GEXF-compatible tool.
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
@@ -13,6 +14,7 @@
 - New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared. Recommended when citation direction carries semantic weight, as in Telegram networks where amplification flows asymmetrically.
 - `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed graph, making it functionally equivalent to `LEIDEN_DIRECTED`.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
+- Documentation now has a new structure and a navigation menu.
 
 ### Backward incompatibility
 - `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--no-graph` (skip 2D graph), `--no-html` (skip HTML tables). Default output is 2D graph + HTML tables.
@@ -203,6 +205,6 @@
 
 ---
 
-← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md)
+← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Analysis](ANALYSIS.md) · [Screenshots](SCREENSHOTS.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

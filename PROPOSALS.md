@@ -76,9 +76,6 @@ Extract domains from the `webpage_url` field (already stored on messages). Build
 
 Standard betweenness assumes shortest paths. Random-walk betweenness (Newman 2005) accounts for all paths, weighted by their probability — more realistic for how information actually diffuses. Implement via `networkx.current_flow_betweenness_centrality`. Useful for identifying brokers that standard betweenness misses in dense graphs.
 
-### 4.2 — Spreading efficiency (SIR model)
-
-Run a simple SIR (Susceptible-Infected-Recovered) epidemic simulation on the graph with each node as the seed. The "spreading efficiency" of a node = number of nodes infected when it seeds the process. This is the most direct measure of influence spread but computationally expensive. Implement as an optional `SPREADING` measure with a configurable number of Monte Carlo runs.
 
 ### 4.3 — Ego network density
 
@@ -132,10 +129,6 @@ In addition to community coloring, add an option to position nodes by measure va
 
 Add a `--since HOURS` option to `get_channels`: only crawl new messages from the last N hours. Combined with a cron job, enables near-real-time monitoring. Distinguishable from existing behavior because it doesn't backfill history; it only fetches messages newer than `max_telegram_id` with a time constraint.
 
-### 6.2 — Channel discovery via mentions
-
-Currently, `search_channels` uses keyword search. Add a second discovery mode: `discover_channels` command that scans all unresolved `t.me/` references from `Message.missing_references` and attempts to resolve them. Any new channel found above a minimum reference threshold gets added to the database. This enables organic network growth without manual search-term definition.
-
 ### 6.3 — Group/supergroup reply crawling
 
 Supergroups (`megagroup=True`) store discussion replies. Currently, these are crawled as channels but their replies (comments) are not fetched. Fetching replies would reveal which channels' posts generate discussion and who participates. New `Message.reply_to` field and `--crawl-replies` option.
@@ -168,10 +161,6 @@ SQLite is fine for single-researcher use but breaks under concurrent writes. Add
 
 ## 8. Community Detection Enhancements
 
-### 8.1 — Directed modularity (Leicht & Newman)
-
-The current Louvain/Leiden implementations symmetrize the adjacency matrix, discarding edge direction. Leicht & Newman (2008) defined a proper modularity for directed graphs using in/out-degree null models. Implement as a `LEIDEN_DIRECTED` strategy using `leidenalg`'s `ModularityVertexPartition` with a directed adjacency matrix. Particularly meaningful for Telegram where direction (who cites whom) carries semantic weight.
-
 ### 8.2 — CPM (Constant Potts Model) for Leiden
 
 The Leiden algorithm in `leidenalg` supports multiple quality functions. Standard modularity has a resolution limit: it fails to find small communities in large networks. CPM does not. Adding a `LEIDEN_CPM` strategy alongside `LEIDEN` lets researchers compare and identify small communities that modularity-based detection merges into larger ones.
@@ -200,7 +189,6 @@ New `export_network --archive` flag that bundles: the `graph/` output directory,
 
 | Priority | Proposal | Effort | Impact |
 | :------- | :------- | :----- | :----- |
-| High | 6.2 Channel discovery via mentions | Low | High — organic network growth |
 | High | 1.1 Temporal snapshots | Medium | High — transforms static to dynamic analysis |
 | High | 2.1 Cross-posting similarity | Medium | High — core IO detection signal |
 | High | 5.2 Edge type differentiation (forwards vs. references) | Low | Medium — immediate interpretability gain |
@@ -215,9 +203,7 @@ New `export_network --archive` flag that bundles: the `graph/` output directory,
 | Medium | 4.6 View engagement ratio | Low | Medium — Telegram-specific bot signal |
 | Medium | 2.4 CooRNet-style coordinated sharing | Medium | High — exposes invisible coordination rings |
 | Medium | 8.2 CPM Leiden (no resolution limit) | Low | Medium — better small-community detection |
-| Low | 8.1 Directed modularity | Low | Medium — more principled community detection |
 | Low | 3.1 Topic modeling (BERTopic) | High | High but complex dependency |
-| Low | 4.2 Spreading efficiency (SIR) | Medium | High analytically but expensive |
 | Low | 5.1 Timeline slider | High | High but depends on 1.1 |
 | Low | 7.3 PostgreSQL support | Medium | Operational scalability |
 

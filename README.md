@@ -76,6 +76,7 @@ Pulpit is built around three stages:
 | [CONFIGURATION.md](CONFIGURATION.md) | Full reference for all `.env` settings |
 | [ANALYSIS.md](ANALYSIS.md) | All network measures and community detection strategies — what they measure and how to read them |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [SCREENSHOTS.md](SCREENSHOTS.md) | Example output across different graph sizes, strategies, and display modes |
 
 
 ## Disclaimer
