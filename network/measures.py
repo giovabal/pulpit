@@ -323,7 +323,16 @@ _BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
 
 # Expansion targets for the ALL shortcut
 ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
-ALL_STRATEGIES: list[str] = ["ORGANIZATION", "LEIDEN", "LOUVAIN", "KCORE", "INFOMAP", "WEAKCC", "STRONGCC"]
+ALL_STRATEGIES: list[str] = [
+    "ORGANIZATION",
+    "LEIDEN",
+    "LEIDEN_DIRECTED",
+    "LOUVAIN",
+    "KCORE",
+    "INFOMAP",
+    "WEAKCC",
+    "STRONGCC",
+]
 
 # Dispatch table: (settings key, progress label, apply function name)
 # HITS and BRIDGING are handled separately because they have non-standard signatures.

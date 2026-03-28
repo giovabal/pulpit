@@ -8,6 +8,7 @@
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
 
 ### Improvements
+- New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared. Recommended when citation direction carries semantic weight, as in Telegram networks where amplification flows asymmetrically.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
 
 ### Backward incompatibility

@@ -34,6 +34,7 @@ Configured via `COMMUNITY_STRATEGIES` in `.env`. Use `ALL` to run everything sim
 | Organization | `ORGANIZATION` | Your own domain-knowledge groupings, defined in the admin |
 | Louvain | `LOUVAIN` | Data-driven modularity clusters |
 | Leiden | `LEIDEN` | Sharper, more cohesive modularity clusters |
+| Leiden (directed) | `LEIDEN_DIRECTED` | Like Leiden, but modularity uses in/out-degree null model — direction-aware |
 | K-core | `KCORE` | Hierarchy: the innermost ideological core vs. peripheral amplifiers |
 | Infomap | `INFOMAP` | Echo chambers: groups where information circulates in closed loops |
 | Weakly connected components | `WEAKCC` | Structural islands with no path to the rest of the network |
@@ -212,6 +213,16 @@ Leiden is a refinement of the Louvain algorithm that addresses one of its known 
 **In practice:** Leiden tends to produce sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. The communities it finds are not just modular — they are structurally compact. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
 
 **Example:** in a network where a mainstream news aggregator forwards content from dozens of ideologically diverse channels, Louvain may lump several distinct sub-movements into a single broad community anchored by that aggregator. Leiden's refinement step will pull apart these loosely connected sub-groups, revealing the underlying ideological clusters that the aggregator happens to span.
+
+---
+
+### Leiden (directed)
+
+`LEIDEN_DIRECTED` runs the same Leiden optimisation as `LEIDEN` but with a **directed null model** (Leicht & Newman 2008). Standard modularity partitions assume that, by chance, edges form in proportion to total degree. The directed version refines this: the expected weight of an edge from channel A to channel B is proportional to A's **out-degree** multiplied by B's **in-degree**, divided by the total edge mass. A channel that cites many others (high out-degree) but is rarely cited back (low in-degree) contributes differently to the null model than one that is heavily cited without citing back, producing communities that reflect asymmetric citation roles.
+
+**In practice:** use `LEIDEN_DIRECTED` when the distinction between who cites and who is cited matters for your research question. In political Telegram networks, where direction carries semantic weight — amplification flows from small channels toward influential ones — the directed null model tends to produce communities that align better with observed information flow than the symmetric alternative. Communities found by `LEIDEN_DIRECTED` can differ meaningfully from `LEIDEN` when the network contains strong asymmetries (hub-and-spoke structures, one-way amplifiers, or coordinated source channels that are cited far more often than they cite back).
+
+**Example:** a cluster of regional nationalist channels all cite a single national aggregator but are never cited by it. Under standard Leiden they may be merged with the aggregator because the undirected edge density is high. With the directed null model the asymmetry is penalised: the aggregator's high in-degree inflates the expected citations toward it, so receiving many citations from the cluster is less surprising — and the cluster is more likely to be split away as its own community.
 
 ---
 

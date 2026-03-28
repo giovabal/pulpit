@@ -49,7 +49,7 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `COMMUNITY_STRATEGIES` | Comma-separated list of community detection algorithms to apply: `ORGANIZATION` (uses the admin-defined organizations as communities), `LEIDEN` (Leiden modularity), `LOUVAIN` (Louvain modularity), `KCORE` (k-shell decomposition), `INFOMAP` (information-flow-based clustering), `ALL` (all of the above). Multiple strategies can be selected simultaneously; the user can switch between them in the graph viewer. | `ORGANIZATION` |
+| `COMMUNITY_STRATEGIES` | Comma-separated list of community detection algorithms to apply: `ORGANIZATION` (uses the admin-defined organizations as communities), `LEIDEN` (Leiden modularity), `LEIDEN_DIRECTED` (Leiden with directed null model — Leicht & Newman 2008; recommended when citation direction is semantically meaningful), `LOUVAIN` (Louvain modularity), `KCORE` (k-shell decomposition), `INFOMAP` (information-flow-based clustering), `ALL` (all of the above). Multiple strategies can be selected simultaneously; the user can switch between them in the graph viewer. | `ORGANIZATION` |
 | `COMMUNITY_PALETTE` | Color palette for communities. Use `ORGANIZATION` to take colors from the admin, or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
 
 ## Drawing

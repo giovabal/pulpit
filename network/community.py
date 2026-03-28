@@ -23,7 +23,7 @@ from infomap import Infomap
 
 logger = logging.getLogger(__name__)
 
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN", "WEAKCC", "STRONGCC"}
+COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN", "LEIDEN_DIRECTED", "WEAKCC", "STRONGCC"}
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
@@ -177,6 +177,43 @@ def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, C
     return community_map, build_community_palette(community_map, palette_name)
 
 
+def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    """Directed modularity (Leicht & Newman 2008) via leidenalg.
+
+    Uses ModularityVertexPartition on a directed igraph so the null model is
+    k_out_i * k_in_j / m rather than the undirected k_i * k_j / (2m).
+    Communities are built from asymmetric citation patterns: a source that
+    cites many channels without being cited back is treated differently from
+    a target that is widely cited.  Edge direction is preserved throughout
+    the optimisation.
+    """
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+
+    ig_graph = ig.Graph(n=len(node_ids), directed=True)
+    edges = [(node_id_map[s], node_id_map[t]) for s, t in graph.edges()]
+    weights = [graph.edges[s, t].get("weight", 1.0) for s, t in graph.edges()]
+    ig_graph.add_edges(edges)
+    if weights:
+        ig_graph.es["weight"] = weights
+
+    partition = leidenalg.find_partition(
+        ig_graph,
+        leidenalg.ModularityVertexPartition,
+        weights="weight",
+        seed=0,
+    )
+
+    for community_index, community in enumerate(partition, start=1):
+        for node_index in community:
+            community_map[node_ids[node_index]] = community_index
+
+    community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
 def detect(
     strategy: str, palette_name: str, graph: nx.DiGraph, channel_dict: dict[str, Any]
 ) -> tuple[CommunityMap, CommunityPalette]:
@@ -189,6 +226,8 @@ def detect(
         return detect_infomap(graph, palette_name)
     if strategy == "LEIDEN":
         return detect_leiden(graph, palette_name)
+    if strategy == "LEIDEN_DIRECTED":
+        return detect_leiden_directed(graph, palette_name)
     if strategy == "WEAKCC":
         return detect_weakcc(graph, palette_name)
     if strategy == "STRONGCC":
