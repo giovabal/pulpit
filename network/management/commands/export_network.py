@@ -9,8 +9,6 @@ from network import community, community_stats, exporter, graph_builder, layout,
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
-VALID_FORMATS = {"graph", "3dgraph", "html", "xlsx"}
-
 
 class Command(BaseCommand):
     args = ""
@@ -18,17 +16,32 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
-            "--format",
-            default="graph,html",
-            metavar="FORMAT[,FORMAT...]",
-            help=(
-                "Comma-separated list of outputs to produce. "
-                "graph = 2D interactive map, "
-                "3dgraph = 3D interactive map, "
-                "html = HTML tables (channel, network, community), "
-                "xlsx = Excel spreadsheets. "
-                "Default: graph,html."
-            ),
+            "--no-graph",
+            dest="graph",
+            action="store_false",
+            default=True,
+            help="Skip the 2D interactive graph (graph.html and layout computation).",
+        )
+        parser.add_argument(
+            "--3d",
+            dest="graph_3d",
+            action="store_true",
+            default=False,
+            help="Also produce a 3D graph (graph3d.html). Slower on large graphs.",
+        )
+        parser.add_argument(
+            "--no-html",
+            dest="html",
+            action="store_false",
+            default=True,
+            help="Skip HTML table output (channel_table.html, network_table.html, community_table.html).",
+        )
+        parser.add_argument(
+            "--xlsx",
+            dest="xlsx",
+            action="store_true",
+            default=False,
+            help="Also produce Excel spreadsheet output (channel_table.xlsx, network_table.xlsx, community_table.xlsx).",
         )
         parser.add_argument(
             "--seo",
@@ -119,15 +132,10 @@ class Command(BaseCommand):
         bridging_token = self._validate_settings(communities_strategy, network_measures)
         selected_measures = set(network_measures)
 
-        raw_formats = [f.strip().lower() for f in options["format"].split(",") if f.strip()]
-        invalid_formats = [f for f in raw_formats if f not in VALID_FORMATS]
-        if invalid_formats:
-            raise CommandError(f"Invalid --format value(s): {invalid_formats!r}. Choose from {sorted(VALID_FORMATS)}.")
-        formats = set(raw_formats)
-        do_graph = "graph" in formats
-        do_3dgraph = "3dgraph" in formats
-        do_html = "html" in formats
-        do_xlsx = "xlsx" in formats
+        do_graph = options["graph"]
+        do_3dgraph = options["graph_3d"]
+        do_html = options["html"]
+        do_xlsx = options["xlsx"]
 
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")

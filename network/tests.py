@@ -1368,7 +1368,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", format="graph")
+        call_command("export_network", html=False)
         mock_table_html.assert_not_called()
         mock_table_xls.assert_not_called()
 
@@ -1419,7 +1419,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", format="graph,xlsx")
+        call_command("export_network", html=False, xlsx=True)
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
 
@@ -1470,6 +1470,6 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", format="graph,html,xlsx")
+        call_command("export_network", xlsx=True)
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()

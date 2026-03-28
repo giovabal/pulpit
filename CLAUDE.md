@@ -29,11 +29,12 @@ python manage.py get_channels --fromid 42    # Only crawl channels with database
 python manage.py get_channels --refresh-messages-stats               # Also refresh views/forwards/pinned on all messages per channel
 python manage.py get_channels --refresh-messages-stats 200           # Same but only the 200 most recent per channel
 python manage.py get_channels --refresh-messages-stats 2024-01-01    # Same but only messages from that date to present
-python manage.py export_network                              # default: graph + HTML tables
-python manage.py export_network --seo                        # same but mini-site is search-engine friendly
-python manage.py export_network --format graph,3dgraph,html  # also generate 3D graph
-python manage.py export_network --format html,xlsx           # tables only, no graph
-python manage.py export_network --format graph               # graph only, no tables
+python manage.py export_network              # default: 2D graph + HTML tables
+python manage.py export_network --seo        # same but mini-site is search-engine friendly
+python manage.py export_network --3d         # also produce 3D graph
+python manage.py export_network --xlsx       # also produce Excel spreadsheets
+python manage.py export_network --no-html    # skip HTML tables
+python manage.py export_network --no-graph   # skip graph (tables only)
 
 # View graph (from repo root)
 cd graph && python -m http.server 8001

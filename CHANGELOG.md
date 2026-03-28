@@ -7,7 +7,7 @@
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
 
 ### Backward incompatibility
-- `export_network` option rework: `--table-format`, `--nograph`, and `--3d` are replaced by a single `--format FORMAT[,FORMAT...]` flag that takes a comma-separated list of `graph`, `3dgraph`, `html`, `xlsx`. Default is `graph,html`.
+- `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--no-graph` (skip 2D graph), `--no-html` (skip HTML tables). Default output is 2D graph + HTML tables.
 
 ## [0.8] - 2026-03-08
 *3D graph and network comparison.*

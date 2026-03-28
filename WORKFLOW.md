@@ -74,14 +74,14 @@ By default also writes three sortable HTML tables:
 
 All HTML outputs load their data at page load time from `graph/data/*.json`; they are static files that work from any HTTP server.
 
-To control what outputs are produced, use `--format` with a comma-separated list of `graph`, `3dgraph`, `html`, and `xlsx` (default: `graph,html`):
+By default `export_network` produces the 2D graph and HTML tables. Use flags to change what is generated:
 
 ```sh
-python manage.py export_network --format graph,html        # default: 2D graph + HTML tables
-python manage.py export_network --format graph,3dgraph,html  # also generate the 3D graph
-python manage.py export_network --format graph,html,xlsx   # graph + both HTML and Excel tables
-python manage.py export_network --format html,xlsx         # tables only, no graph
-python manage.py export_network --format graph             # graph only, no tables
+python manage.py export_network --3d               # also produce graph3d.html
+python manage.py export_network --xlsx             # also produce Excel spreadsheets
+python manage.py export_network --no-html          # skip HTML tables
+python manage.py export_network --no-graph         # skip the graph entirely (tables only)
+python manage.py export_network --no-graph --xlsx  # Excel tables only
 ```
 
 The Excel output produces `graph/channel_table.xlsx` (one row per channel), `graph/network_table.xlsx` (whole-network metrics on a single sheet), and `graph/community_table.xlsx` (one sheet per community detection strategy).
