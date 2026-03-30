@@ -227,7 +227,7 @@ class Command(AsyncBaseCommand):
                             )
                         )
                         continue
-                    printer.newline()
+                    printer.ensure_newline()
                     if do_refresh:
                         self._refresh_channel(
                             channel,
