@@ -4,15 +4,15 @@
 *A logo. Refining measures and communities detection.*
 
 ### New features
-- New `NETWORK_MEASURES` option: `FLOWBETWEENNESS` (random-walk / current-flow betweenness centrality, Newman 2005). Unlike standard betweenness, which only counts shortest paths, flow betweenness integrates over all paths weighted by their random-walk probability — more realistic for how information diffuses through dense graphs. The directed graph is symmetrised before computation; nodes outside the largest connected component receive 0.0. Useful for identifying brokers that shortest-path betweenness underestimates in richly connected networks.
 - Project logo.
 - A few screenshots added to documentation.
-- New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. The most direct measure of influence propagation, independent of follower count or structural centrality. Number of runs controlled by `SPREADING_RUNS` (default 200).
-- `export_network --gexf` writes `graph/network.gexf` with all computed measures (PageRank, betweenness, etc.), community assignments, and channel metadata embedded as node attributes, ready to open in Gephi or any GEXF-compatible tool.
+- New `NETWORK_MEASURES` option: `FLOWBETWEENNESS` (random-walk / current-flow betweenness centrality, Newman 2005).
+- New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. Number of runs controlled by `SPREADING_RUNS` (default 200).
 - New `RECENCY_WEIGHTS` option (integer N or `None`, default `None`). When set, messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`. This surfaces channels that are currently active rather than historically prominent, and is compatible with all `EDGE_WEIGHT_STRATEGY` values.
+- `export_network --gexf` writes `graph/network.gexf` with all computed measures (PageRank, betweenness, etc.), community assignments, and channel metadata embedded as node attributes, ready to open in Gephi or any GEXF-compatible tool.
 
 ### Improvements
-- New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared. Recommended when citation direction carries semantic weight, as in Telegram networks where amplification flows asymmetrically.
+- New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared.
 - `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed graph, making it functionally equivalent to `LEIDEN_DIRECTED`.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
 - Documentation now has a new structure and a navigation menu.

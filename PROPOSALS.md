@@ -72,11 +72,6 @@ Extract domains from the `webpage_url` field (already stored on messages). Build
 
 ## 4. New Network Measures
 
-### 4.1 — Flow betweenness (random-walk betweenness)
-
-Standard betweenness assumes shortest paths. Random-walk betweenness (Newman 2005) accounts for all paths, weighted by their probability — more realistic for how information actually diffuses. Implement via `networkx.current_flow_betweenness_centrality`. Useful for identifying brokers that standard betweenness misses in dense graphs.
-
-
 ### 4.3 — Ego network density
 
 For each channel, compute the density of connections among its immediate neighbors. High ego-network density = channel embedded in a cohesive echo chamber. Low = channel serves as a hub for otherwise disconnected sources. Complementary to `BURTCONSTRAINT`.
@@ -88,10 +83,6 @@ Measure how quickly a channel adopts content that originated elsewhere (via forw
 ### 4.5 — Normalized Mutual Information between community strategies
 
 Currently, community tables are shown per-strategy. A new entry in `network_table` could show NMI between every pair of strategies (LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP, etc.). This answers: does the algorithmic partition agree with the analyst's manual grouping? High NMI means your Organizations map well onto structural clusters; low NMI means the network's topology cuts across your labels.
-
-### 4.6 — View engagement ratio
-
-Telegram stores per-message view counts (already crawled into `Message.views`). A `VIEW_ENGAGEMENT_RATIO` measure — `avg_views / participants_count` — flags channels where views grow much faster than the subscriber-to-view ratio would predict, a likely signal of view-botting. This is a Telegram-specific signal not available on other platforms.
 
 ---
 
@@ -116,10 +107,6 @@ Given two channels selected by the user, highlight the shortest path(s) between 
 ### 5.5 — Community evolution visualization
 
 When `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.
-
-### 5.6 — Node positioning by measure
-
-In addition to community coloring, add an option to position nodes by measure value rather than spatial layout: a scatter plot view where X and Y axes are any two measures (e.g. PageRank vs. Content Originality). Each node is a dot. This turns the graph into a 2D typology of channels. Already partially supported by the scatter plot in `network_table.html`, but not with spatial node rendering.
 
 ---
 
