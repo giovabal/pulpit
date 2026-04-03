@@ -16,6 +16,7 @@ Configured via `NETWORK_MEASURES` in `.env`. Use `ALL` to enable everything.
 | HITS Hub | `HITSHUB` | Which channels actively amplify others — the distributors? |
 | HITS Authority | `HITSAUTH` | Which channels are the original sources that distributors spread? |
 | Betweenness centrality | `BETWEENNESS` | Which channels sit on the bridges between sub-networks? |
+| Flow betweenness | `FLOWBETWEENNESS` | Which channels are brokers that standard betweenness misses — important to random-walk diffusion, not just shortest paths? |
 | In-degree centrality | `INDEGCENTRALITY` | Which channels are cited by the largest fraction of others? |
 | Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
 | Harmonic centrality | `HARMONICCENTRALITY` | Which channels can reach the rest of the network in the fewest hops? |
@@ -88,6 +89,18 @@ A channel scores high on betweenness if it sits on many of the shortest paths co
 **In practice:** betweenness centrality is the measure most useful for understanding cross-community dynamics. A channel that bridges two ideological camps — say, mainstream conservative media and the far right — will score high even if it does not have particularly high prestige within either camp. Removing a high-betweenness channel from the network would increase the distance between the communities it connects.
 
 **Example:** a channel that regularly references both a cluster of religious nationalist outlets and a cluster of economic libertarian outlets — groups that don't directly cross-reference much — will appear as a bridge between two otherwise separate ecosystems. It may be the main vector through which narratives migrate from one community to the other.
+
+---
+
+### Flow betweenness
+
+Standard betweenness centrality assumes that information travels along shortest paths. Flow betweenness (Newman 2005, *Physical Review E* 71, 036111) relaxes that assumption: it models information as a random walk that diffuses through the network along *all* paths, with each path weighted by its probability under a random-walk process. The score for a node is the fraction of all such random-walk flows that pass through it.
+
+The graph is symmetrised to undirected before computation (the random-walk model assumes current can flow in both directions along any edge). Edge weights are preserved. Because the algorithm requires a connected graph, nodes outside the largest connected component receive 0.0.
+
+**In practice:** flow betweenness and shortest-path betweenness identify different kinds of brokers. In dense, richly interconnected networks where many near-shortest paths exist, shortest-path betweenness underestimates nodes whose importance comes from being passively traversed by diffusing content rather than lying on the single optimal route. Flow betweenness surfaces those passive brokers. The two measures are most informative when compared: a channel that ranks high on flow betweenness but low on shortest-path betweenness is a node that standard betweenness misses — structurally important to diffusion but not a bottleneck in the geodesic sense.
+
+**Example:** two large ideological clusters are loosely connected through several mid-tier channels that all roughly share the same shortest-path betweenness. One of those channels, however, is embedded in a denser local sub-graph where many short cycles exist: random walks frequently pass through it simply because it has many slightly longer alternative paths converging on it. Flow betweenness assigns it a higher score than its peers, flagging it as the de-facto relay point for information diffusing between the two clusters — even though no single shortest-path analysis would single it out.
 
 ---
 

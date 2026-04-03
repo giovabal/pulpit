@@ -219,6 +219,42 @@ def apply_bridging_centrality(
     return [(key, "Bridging Centrality")]
 
 
+def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add random-walk (current-flow) betweenness centrality to each node.
+
+    Uses ``networkx.current_flow_betweenness_centrality`` (Newman 2005), which models
+    information as a random walk rather than routing it along shortest paths.  Each node's
+    score reflects how often it lies on a random walk between any two other nodes,
+    integrating over *all* paths weighted by their probability — not just the shortest one.
+
+    The directed graph is symmetrised to undirected before computation (consistent with the
+    random-walk assumption that current flows in both directions along any edge).  Edge
+    weights are preserved.  Because the algorithm requires a connected graph, nodes outside
+    the largest weakly-connected component receive 0.0; a warning is logged when this occurs.
+    """
+    key = "flow_betweenness"
+    ugraph = graph.to_undirected()
+
+    if not nx.is_connected(ugraph):
+        logger.warning(
+            "flow_betweenness: graph is not connected — computing on the largest component; all other nodes receive 0.0"
+        )
+        largest_cc = max(nx.connected_components(ugraph), key=len)
+        subgraph = ugraph.subgraph(largest_cc)
+    else:
+        subgraph = ugraph
+
+    try:
+        values: dict[str, float] = nx.current_flow_betweenness_centrality(subgraph, weight="weight")
+    except Exception as exc:
+        logger.warning("flow_betweenness: computation failed (%s)", exc)
+        return []
+
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Flow Betweenness")]
+
+
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Burt's constraint to each node. Isolated nodes receive None (undefined)."""
     key = "burt_constraint"
@@ -391,6 +427,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "HITSHUB",
         "HITSAUTH",
         "BETWEENNESS",
+        "FLOWBETWEENNESS",
         "INDEGCENTRALITY",
         "OUTDEGCENTRALITY",
         "HARMONICCENTRALITY",
@@ -423,6 +460,7 @@ ALL_STRATEGIES: list[str] = [
 MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("PAGERANK", "pagerank", "apply_pagerank"),
     ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),
+    ("FLOWBETWEENNESS", "flow betweenness centrality", "apply_flow_betweenness_centrality"),
     ("INDEGCENTRALITY", "in-degree centrality", "apply_in_degree_centrality"),
     ("OUTDEGCENTRALITY", "out-degree centrality", "apply_out_degree_centrality"),
     ("HARMONICCENTRALITY", "harmonic centrality", "apply_harmonic_centrality"),

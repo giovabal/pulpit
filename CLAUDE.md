@@ -59,6 +59,7 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated).
 | `HITSHUB` | HITS hub score |
 | `HITSAUTH` | HITS authority score |
 | `BETWEENNESS` | Betweenness centrality |
+| `FLOWBETWEENNESS` | Random-walk (current-flow) betweenness — Newman 2005; graph symmetrised, computed on largest connected component |
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Harmonic centrality |

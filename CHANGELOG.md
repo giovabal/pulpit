@@ -4,6 +4,7 @@
 *A logo. Refining measures and communities detection.*
 
 ### New features
+- New `NETWORK_MEASURES` option: `FLOWBETWEENNESS` (random-walk / current-flow betweenness centrality, Newman 2005). Unlike standard betweenness, which only counts shortest paths, flow betweenness integrates over all paths weighted by their random-walk probability — more realistic for how information diffuses through dense graphs. The directed graph is symmetrised before computation; nodes outside the largest connected component receive 0.0. Useful for identifying brokers that shortest-path betweenness underestimates in richly connected networks.
 - Project logo.
 - A few screenshots added to documentation.
 - New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. The most direct measure of influence propagation, independent of follower count or structural centrality. Number of runs controlled by `SPREADING_RUNS` (default 200).
@@ -19,8 +20,8 @@
 ### Backward incompatibility
 - `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--no-graph` (skip 2D graph), `--no-html` (skip HTML tables). Default output is 2D graph + HTML tables.
 
-## [0.8] - 2026-03-08
-*3D graph and network comparison.*
+## [0.8] - 2026-03-28
+*3D graph and network comparison. Fixes.*
 
 ### New features
 - After each `get_channels` run, in-degree and out-degree are refreshed for all interesting channels. The citation degree is now also refreshed for non-interesting channels that are forwarded or mentioned (via `t.me/` links) by interesting ones — previously only channels reached via forwards were updated, and t.me/username references were missed. The field that receives the citation count is `in_degree` when `REVERSED_EDGES=True` (citations arrive as incoming graph edges) or `out_degree` when `REVERSED_EDGES=False` (citations leave as outgoing edges).
