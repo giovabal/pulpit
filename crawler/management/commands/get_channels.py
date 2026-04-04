@@ -58,20 +58,25 @@ class ProgressPrinter:
         self._current_channel: int | None = None
         self._line_length = 0
 
+    @staticmethod
+    def _fit(line: str) -> str:
+        cols = shutil.get_terminal_size().columns
+        return line if len(line) <= cols else line[: cols - 1]
+
     def status(self, message: str, channel_index: int) -> None:
         if self._current_channel != channel_index:
             if self._current_channel is not None:
                 self._stdout.write("", ending="\n")
             self._current_channel = channel_index
             self._line_length = 0
-        line = f"[{channel_index}/{self._total}] {message}"
+        line = self._fit(f"[{channel_index}/{self._total}] {message}")
         padding = " " * max(0, self._line_length - len(line))
         self._stdout.write(f"\r{line}{padding}", ending="")
         self._stdout.flush()
         self._line_length = len(line)
 
     def indented(self, message: str, indent: str) -> None:
-        line = f"{indent}{message}"
+        line = self._fit(f"{indent}{message}")
         padding = " " * max(0, self._line_length - len(line))
         self._stdout.write(f"\r{line}{padding}", ending="")
         self._stdout.flush()
