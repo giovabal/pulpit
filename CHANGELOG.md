@@ -25,6 +25,7 @@
 ### Fixed
 - Progress lines in the terminal are now truncated to fit the terminal width instead of wrapping.
 - `--refresh-messages-stats` now downloads missing media for messages that were crawled before image or video download was enabled. Already-downloaded media is skipped.
+- All summary counts and chart time series now consistently apply both the `organization__is_interesting` flag and the `CHANNEL_TYPES` filter. Previously, message counts, date range, forwards, and chart data were computed over all channels, ignoring both filters.
 
 
 ## [0.8] - 2026-03-28

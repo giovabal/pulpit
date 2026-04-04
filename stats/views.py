@@ -25,8 +25,9 @@ class _GlobalTimeSeriesBase(View):
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
 
+        interesting_pks = Channel.objects.interesting().values("pk")
         monthly_data = (
-            Message.objects.filter(channel__organization__is_interesting=True, date__isnull=False)
+            Message.objects.filter(channel__in=interesting_pks, date__isnull=False)
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(**{self.annotate_field: self.get_annotation()})
@@ -91,7 +92,8 @@ class SubscribersHistoryDataView(View):
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
         channels = (
-            Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False)
+            Channel.objects.interesting()
+            .filter(participants_count__isnull=False)
             .annotate(first_message=models.Min("message_set__date"))
             .filter(first_message__isnull=False)
             .values("participants_count", "first_message")
@@ -202,9 +204,10 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
     y_label = "forwards received"
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        interesting_pks = Channel.objects.interesting().values("pk")
         qs = (
             Message.objects.filter(
-                channel__organization__is_interesting=True,
+                channel__in=interesting_pks,
                 forwarded_from=channel,
                 date__isnull=False,
             )

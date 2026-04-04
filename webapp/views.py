@@ -40,16 +40,16 @@ class HomeView(ListView):
         ctx["query"] = q
         ctx["original_query"] = f"&q={q}" if q else ""
 
-        interesting_channels = Channel.objects.filter(organization__is_interesting=True).count()
-        total_messages = Message.objects.count()
+        interesting_qs = Channel.objects.interesting()
+        interesting_channels = interesting_qs.count()
+        interesting_msgs = Message.objects.filter(channel__in=interesting_qs.values("pk"))
+        total_messages = interesting_msgs.count()
         total_subscribers = (
-            Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False).aggregate(
-                total=Sum("participants_count")
-            )["total"]
+            interesting_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"]
             or 0
         )
-        date_agg = Message.objects.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
-        total_forwards = Message.objects.filter(forwarded_from__isnull=False).count()
+        date_agg = interesting_msgs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
+        total_forwards = interesting_msgs.filter(forwarded_from__isnull=False).count()
 
         ctx["summary"] = [
             {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
@@ -253,7 +253,7 @@ class ChannelDetailView(ListView):
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
         total_forwards_sent = msg_qs.filter(forwarded_from__isnull=False).count()
         total_forwards_received = Message.objects.filter(
-            channel__organization__is_interesting=True, forwarded_from=ch
+            channel__in=Channel.objects.interesting().values("pk"), forwarded_from=ch
         ).count()
         date_agg = msg_qs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
 

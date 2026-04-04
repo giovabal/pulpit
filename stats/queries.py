@@ -25,7 +25,10 @@ def _month_spine(q: models.Q) -> list[str]:
 
 def global_month_spine() -> list[str]:
     """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across interesting channels."""
-    return _month_spine(models.Q(channel__organization__is_interesting=True))
+    from webapp.models import Channel
+
+    interesting_pks = Channel.objects.interesting().values("pk")
+    return _month_spine(models.Q(channel__in=interesting_pks))
 
 
 def channel_month_spine(channel: Channel) -> list[str]:
