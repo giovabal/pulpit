@@ -178,9 +178,7 @@ def _network_content_metrics(
     if total == 0:
         return {"network_originality": None, "network_amplification": None}
     forwarded_out = agg["forwarded_out"]
-    fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel__organization__is_interesting=True) & make_date_q(
-        start_date, end_date
-    )
+    fwd_in_q = Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks) & make_date_q(start_date, end_date)
     forwards_received = Message.objects.filter(fwd_in_q).count()
     return {
         "network_originality": round(1 - forwarded_out / total, 4),
