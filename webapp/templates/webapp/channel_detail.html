@@ -4,28 +4,48 @@
 
 {% block content %}
 <div class="channel-card">
+
   <div class="channel-card-body">
     {% for picture in selected_channel.profilepicture_set.all|slice:":1" %}
     <figure class="mb-0 flex-shrink-0">
       <img src="{{ picture.picture.url }}" class="channel-avatar" alt="{{ selected_channel.title }} avatar">
     </figure>
     {% endfor %}
+
     <div class="channel-info">
       <div class="channel-info-header">
-        <h1 class="channel-title">{{ selected_channel.title }}</h1>
-        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
+        <div class="channel-title-row">
+          <h1 class="channel-title">{{ selected_channel.title }}</h1>
+          {% if selected_channel.verified %}<span class="ch-badge ch-badge--verified"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Verified</span>{% endif %}
+          {% if selected_channel.scam %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Scam</span>{% endif %}
+          {% if selected_channel.fake %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Fake</span>{% endif %}
+          {% if selected_channel.restricted %}<span class="ch-badge ch-badge--warn"><i class="bi bi-slash-circle" aria-hidden="true"></i> Restricted</span>{% endif %}
+        </div>
+        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link flex-shrink-0" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
         </a>
       </div>
-      <div class="channel-stats">
-        <span><i class="bi bi-people" aria-hidden="true"></i> {{ selected_channel.participants_count|default:"0" }}</span>
-        <time datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i> {{ selected_channel.updated }}</time>
+
+      <div class="channel-meta-row">
+        {% if selected_channel.username %}<span class="ch-meta-item"><i class="bi bi-at" aria-hidden="true"></i>{{ selected_channel.username }}</span>{% endif %}
+        <span class="ch-meta-item"><i class="bi bi-broadcast" aria-hidden="true"></i>{{ selected_channel.channel_type }}</span>
+        {% if selected_channel.organization %}<span class="ch-meta-item"><span class="org-dot" style="background: {{ selected_channel.organization.color }};" aria-hidden="true"></span>{{ selected_channel.organization }}</span>{% endif %}
+        {% if selected_channel.participants_count %}<span class="ch-meta-item"><i class="bi bi-people" aria-hidden="true"></i>{{ selected_channel.participants_count }} subscribers</span>{% endif %}
+        {% if selected_channel.date %}<span class="ch-meta-item"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
+        <time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>
+        {% if selected_channel.telegram_location %}<span class="ch-meta-item"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ selected_channel.telegram_location }}</span>{% endif %}
+        {% if selected_channel.in_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
+        {% if selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
+        {% if selected_channel.has_link %}<span class="ch-meta-item"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
+        {% if selected_channel.signatures %}<span class="ch-meta-item"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
       </div>
-      {% if selected_channel.about %}
-      <div class="channel-about">{{ selected_channel.about|linebreaks|urlize }}</div>
-      {% endif %}
     </div>
   </div>
+
+  {% if selected_channel.about %}
+  <div class="channel-about">{{ selected_channel.about|linebreaks|urlize }}</div>
+  {% endif %}
+
 </div>
 
 <div class="ch-summary-grid">
@@ -75,6 +95,32 @@
     });
   });
 </script>
+
+<div class="search-header">
+  <form method="get" action="" class="search-form" role="search">
+    <div class="search-input-wrap">
+      <i class="bi bi-search search-icon" aria-hidden="true"></i>
+      <input
+        type="search"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search messages in this channel…"
+        class="search-input"
+        aria-label="Search messages"
+      >
+      <button type="submit" class="search-btn">Search</button>
+    </div>
+  </form>
+  {% if query %}
+  <p class="search-summary">
+    {% if page_obj.paginator.count %}
+      {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for <strong>{{ query }}</strong>
+    {% else %}
+      No results for <strong>{{ query }}</strong>
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
 
 {% include "webapp/pagination.html" %}
 

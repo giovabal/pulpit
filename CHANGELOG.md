@@ -6,9 +6,6 @@
 ### New features
 - Project logo.
 - Webapp navigation replaced with a top horizontal menu (Network / Channels / Data). The former sidebar is removed from all pages.
-- New **Network** page (`/`): combines the summary stats, the message search form, and the stats panels on a single page. Searching filters messages inline without leaving the page.
-- New **Channels** page (`/channels/`): browsable, client-side-filterable grid of small channel cards, each showing org colour, title, message count, and subscriber count.
-- New **Data** page (`/data/`): hub for all graph output (network maps, tables). Cards are shown or hidden based on which files are present in the output directory, with a prompt to run `export_network` if nothing has been generated yet.
 - A few screenshots added to documentation.
 - New `NETWORK_MEASURES` option: `FLOWBETWEENNESS` (random-walk / current-flow betweenness centrality, Newman 2005).
 - New `NETWORK_MEASURES` option: `SPREADING` (spreading efficiency). Runs a Monte Carlo SIR epidemic simulation with each node as the seed and reports the mean fraction of the network eventually infected. Number of runs controlled by `SPREADING_RUNS` (default 200).
