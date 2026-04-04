@@ -87,6 +87,9 @@ class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
 
 class SubscribersHistoryDataView(View):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        spine = global_month_spine()
+        if not spine:
+            return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
         channels = (
             Channel.objects.filter(organization__is_interesting=True, participants_count__isnull=False)
             .annotate(first_message=models.Min("message_set__date"))
@@ -103,14 +106,23 @@ class SubscribersHistoryDataView(View):
             ]
         )
         if df.empty:
-            return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
+            return JsonResponse({"labels": spine, "values": [0] * len(spine), "y_label": "total subscribers"})
         monthly = df.groupby("month")["participants_count"].sum().reset_index()
         monthly = monthly.sort_values("month")
         monthly["cumulative"] = monthly["participants_count"].cumsum()
+        monthly = (
+            monthly.set_index("month")[["cumulative"]]
+            .reindex(spine)
+            .ffill()
+            .fillna(0)
+            .astype(int)
+            .reset_index()
+            .rename(columns={"index": "month"})
+        )
         return JsonResponse(
             {
                 "labels": list(monthly["month"]),
-                "values": list(monthly["cumulative"].astype(int)),
+                "values": list(monthly["cumulative"]),
                 "y_label": "total subscribers",
             }
         )
