@@ -11,7 +11,7 @@ from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel, Message
+from webapp.models import Channel, Message, MessagePicture, MessageVideo
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetFullChannelRequest
@@ -270,6 +270,22 @@ class ChannelCrawler:
             ).update(**update_kwargs)
             if rows:
                 updated += 1
+                if telegram_message.media:
+                    if (
+                        settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
+                        and hasattr(telegram_message.media, "photo")
+                        and not MessagePicture.objects.filter(
+                            message__channel=channel, message__telegram_id=telegram_message.id
+                        ).exists()
+                    ):
+                        self.media_handler.download_message_picture(telegram_message)
+                    if (
+                        settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO
+                        and not MessageVideo.objects.filter(
+                            message__channel=channel, message__telegram_id=telegram_message.id
+                        ).exists()
+                    ):
+                        self.media_handler.download_message_video(telegram_message)
             update_status(f"refreshing message stats … {updated} updated")
         return updated
 

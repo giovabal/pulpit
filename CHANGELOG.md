@@ -24,6 +24,7 @@
 
 ### Fixed
 - Progress lines in the terminal are now truncated to fit the terminal width instead of wrapping.
+- `--refresh-messages-stats` now downloads missing media for messages that were crawled before image or video download was enabled. Already-downloaded media is skipped.
 
 
 ## [0.8] - 2026-03-28

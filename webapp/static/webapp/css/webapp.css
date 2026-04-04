@@ -340,12 +340,11 @@ body {
   margin-bottom: .5rem;
   overflow: hidden;
   transition: box-shadow .15s;
-  border-left: 3px solid transparent;
 }
 
 .post-card:hover { box-shadow: var(--shadow); }
-.post-card.is-pinned { border-left-color: #f59e0b; }
-.post-card.was-pinned { border-left-color: #d1d5db; }
+.post-card.is-pinned { box-shadow: inset 3px 0 0 #f59e0b, var(--shadow-sm); }
+.post-card.was-pinned { box-shadow: inset 3px 0 0 #d1d5db, var(--shadow-sm); }
 
 .forwarded-banner {
   display: flex;
@@ -395,12 +394,9 @@ body {
   justify-content: center;
   gap: .4rem;
   width: 100%;
-  max-width: 22rem;
   height: 9rem;
   background: var(--bg);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: .78rem;
 }
 .media-placeholder i { font-size: 1.75rem; opacity: .5; }
