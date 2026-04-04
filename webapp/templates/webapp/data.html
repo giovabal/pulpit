@@ -1,0 +1,69 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+
+{% block content %}
+<div class="data-page">
+
+  <div class="data-header">
+    <div>
+      <h1 class="h5 fw-semibold mb-1">Data</h1>
+      <p class="text-muted mb-0" style="font-size:.85rem;">Generated network output — choose a view below</p>
+    </div>
+    <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm flex-shrink-0">
+      <i class="bi bi-book me-1" aria-hidden="true"></i>Documentation
+    </a>
+  </div>
+
+  {% if not graph_available %}
+  <div class="alert alert-secondary" role="alert">
+    <i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>
+    No graph output found. Run <code>python manage.py export_network</code> to generate it.
+  </div>
+  {% else %}
+
+  {% if maps %}
+  <div class="row g-3 mb-4">
+    {% for card in maps %}
+    <div class="col-md-6 col-xl-4">
+      <div class="data-card">
+        <div class="data-card-icon"><i class="bi {{ card.icon }}" aria-hidden="true"></i></div>
+        <div>
+          <h2 class="data-card-title">{{ card.title }}</h2>
+          <p class="data-card-desc">{{ card.description }}</p>
+          <a href="{{ card.url }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">{{ card.action }}</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <hr class="mb-4">
+  {% endif %}
+
+  {% if tables %}
+  <div class="row g-3">
+    {% for card in tables %}
+    <div class="col-md-6 col-xl-4">
+      <div class="data-card">
+        <div class="data-card-icon"><i class="bi {{ card.icon }}" aria-hidden="true"></i></div>
+        <div>
+          <h2 class="data-card-title">{{ card.title }}</h2>
+          <p class="data-card-desc">{{ card.description }}</p>
+          <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ card.url }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">{{ card.action }}</a>
+            {% if card.docs_url %}
+            <a href="{{ card.docs_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-book" aria-hidden="true"></i> Docs
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock content %}

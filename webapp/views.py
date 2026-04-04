@@ -1,24 +1,44 @@
 from typing import Any
 
-from django.db.models import Max, Min, QuerySet, Sum
+from django.conf import settings
+from django.db.models import Count, Max, Min, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
 
 from webapp.paginator import DiggPaginator
 
-from .mixins import BaseMixin
 from .models import Channel, Message
 from .utils.dates import fmt_date
 
 
-class HomeView(BaseMixin, TemplateView):
+class HomeView(ListView):
     template_name = "webapp/home.html"
+    model = Message
+    paginator_class = DiggPaginator
+    paginate_by = 50
+    paginate_orphans = 15
+    page_kwarg = "page"
 
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+    def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
+        q = self.request.GET.get("q", "").strip()
+        if not q:
+            return Message.objects.none()
+        return (
+            Message.objects.filter(channel__organization__is_interesting=True)
+            .select_related("channel", "channel__organization", "forwarded_from")
+            .filter(message__icontains=q)
+            .order_by("-date")
+        )
+
+    def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         from django.urls import reverse
 
-        ctx = super().get_context_data(**kwargs)
+        ctx = super().get_context_data(*args, **kwargs)
+
+        q = self.request.GET.get("q", "").strip()
+        ctx["query"] = q
+        ctx["original_query"] = f"&q={q}" if q else ""
 
         interesting_channels = Channel.objects.filter(organization__is_interesting=True).count()
         total_messages = Message.objects.count()
@@ -32,11 +52,7 @@ class HomeView(BaseMixin, TemplateView):
         total_forwards = Message.objects.filter(forwarded_from__isnull=False).count()
 
         ctx["summary"] = [
-            {
-                "icon": "bi-broadcast",
-                "label": "Channels",
-                "value": f"{interesting_channels:,}",
-            },
+            {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
             {"icon": "bi-chat-left-text", "label": "Messages collected", "value": f"{total_messages:,}"},
             {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
             {
@@ -88,7 +104,92 @@ class HomeView(BaseMixin, TemplateView):
         return ctx
 
 
-class MessageSearchView(BaseMixin, ListView):
+class ChannelListView(ListView):
+    template_name = "webapp/channels.html"
+    model = Channel
+    context_object_name = "channel_list"
+
+    def get_queryset(self) -> QuerySet[Channel]:
+        return (
+            Channel.objects.interesting()
+            .select_related("organization")
+            .annotate(messages_count=Count("message_set"))
+            .order_by("title")
+        )
+
+
+class DataView(TemplateView):
+    template_name = "webapp/data.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        graph_dir = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
+        docs_base = "https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md"
+
+        maps = []
+        if (graph_dir / "graph.html").exists():
+            maps.append(
+                {
+                    "title": "Network map",
+                    "icon": "bi-map",
+                    "description": "Interactive force-directed graph. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.",
+                    "url": "/graph/graph.html",
+                    "action": "Open map",
+                }
+            )
+        if (graph_dir / "graph3d.html").exists():
+            maps.append(
+                {
+                    "title": "3D Network map",
+                    "icon": "bi-box",
+                    "description": "3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.",
+                    "url": "/graph/graph3d.html",
+                    "action": "Open 3D map",
+                }
+            )
+
+        tables = []
+        if (graph_dir / "channel_table.html").exists():
+            tables.append(
+                {
+                    "title": "Channels",
+                    "icon": "bi-table",
+                    "description": "One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments.",
+                    "url": "/graph/channel_table.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#network-measures",
+                }
+            )
+        if (graph_dir / "community_table.html").exists():
+            tables.append(
+                {
+                    "title": "Community statistics",
+                    "icon": "bi-diagram-3",
+                    "description": "Structural metrics per detected community: size, internal/external edges, density, reciprocity, clustering, path length.",
+                    "url": "/graph/community_table.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#community-detection-strategies",
+                }
+            )
+        if (graph_dir / "network_table.html").exists():
+            tables.append(
+                {
+                    "title": "Network statistics",
+                    "icon": "bi-bar-chart",
+                    "description": "Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy.",
+                    "url": "/graph/network_table.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#whole-network-measures",
+                }
+            )
+
+        ctx["maps"] = maps
+        ctx["tables"] = tables
+        ctx["graph_available"] = bool(maps or tables)
+        return ctx
+
+
+class MessageSearchView(ListView):
     template_name = "webapp/message_search.html"
     model = Message
     paginator_class = DiggPaginator
@@ -115,7 +216,7 @@ class MessageSearchView(BaseMixin, ListView):
         return context_data
 
 
-class ChannelDetailView(BaseMixin, ListView):
+class ChannelDetailView(ListView):
     template_name = "webapp/channel_detail.html"
     model = Message
     paginator_class = DiggPaginator

@@ -25,6 +25,55 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- Top navbar ---------- */
+.topnav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.topnav-inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1.5rem;
+  height: 52px;
+  width: 100%;
+}
+
+.topnav-brand {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .9375rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.topnav-brand:hover { color: var(--text); }
+
+.topnav-links {
+  gap: .125rem;
+}
+
+.topnav .nav-link {
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--muted);
+  padding: .35rem .75rem;
+  border-radius: .375rem;
+  transition: background .12s, color .12s;
+}
+
+.topnav .nav-link:hover { background: var(--sidebar-hover); color: var(--text); }
+.topnav .nav-link.active { color: var(--accent); background: var(--sidebar-active); }
+
 /* ---------- Sidebar ---------- */
 .sidebar {
   width: 260px;
@@ -179,9 +228,11 @@ body {
 
 /* ---------- Main ---------- */
 .main-content {
-  flex: 1;
   padding: 1.75rem 2rem;
   min-width: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ---------- Channel header ---------- */
@@ -623,3 +674,160 @@ body {
 }
 
 .search-result-channel a:hover { color: var(--text); }
+
+/* ---------- Channels page ---------- */
+.channels-page {}
+
+.channels-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.channel-filter-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color .12s, box-shadow .12s;
+  width: 16rem;
+}
+
+.channel-filter-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+.channel-filter-icon {
+  padding: 0 .5rem 0 .75rem;
+  color: var(--muted);
+  font-size: .85rem;
+  flex-shrink: 0;
+}
+
+.channel-filter-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: .5rem .5rem .5rem 0;
+  font-size: .8rem;
+  color: var(--text);
+  min-width: 0;
+}
+
+.channels-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: 0;
+}
+
+.channel-row { display: contents; }
+
+.channel-row-link {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: .5rem .75rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .12s, border-color .12s;
+  width: 220px;
+  min-width: 0;
+}
+
+.channel-row-link:hover {
+  box-shadow: var(--shadow);
+  border-color: #d1d5db;
+  color: var(--text);
+}
+
+.channel-row-dot { flex-shrink: 0; margin-top: .25rem; }
+
+.channel-row-body { min-width: 0; flex: 1; }
+
+.channel-row-title {
+  display: block;
+  font-size: .8rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-row-meta {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  margin-top: .2rem;
+  font-size: .68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.channel-row-meta-sep { opacity: .4; }
+
+.channels-empty {
+  color: var(--muted);
+  font-size: .875rem;
+  padding: 1rem 0;
+}
+
+/* ---------- Data page ---------- */
+.data-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.data-card {
+  display: flex;
+  gap: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 1.125rem 1.25rem;
+  height: 100%;
+}
+
+.data-card-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.data-card-title {
+  font-size: .9rem;
+  font-weight: 600;
+  margin: 0 0 .35rem;
+}
+
+.data-card-desc {
+  font-size: .8rem;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: .75rem;
+}

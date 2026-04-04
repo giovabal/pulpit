@@ -5,19 +5,6 @@
 {% block content %}
 <div class="home-page">
 
-  <div class="home-header">
-    <div class="home-brand">
-      <div class="home-icon"><i class="bi bi-broadcast" aria-hidden="true"></i></div>
-      <div>
-        <h1 class="h4 fw-bold mb-0">Pulpit</h1>
-        <p class="text-muted mb-0 home-tagline">Telegram channel network explorer</p>
-      </div>
-    </div>
-    <a href="/admin/" class="btn btn-sm btn-outline-secondary flex-shrink-0">
-      <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
-    </a>
-  </div>
-
   <div class="summary-grid">
     {% for card in summary %}
     <div class="summary-card">
@@ -28,6 +15,68 @@
     </div>
     {% endfor %}
   </div>
+
+  <div class="search-header">
+    <form method="get" action="" class="search-form" role="search">
+      <div class="search-input-wrap">
+        <i class="bi bi-search search-icon" aria-hidden="true"></i>
+        <input
+          type="search"
+          name="q"
+          value="{{ query }}"
+          placeholder="Search messages…"
+          class="search-input"
+          aria-label="Search messages"
+        >
+        <button type="submit" class="search-btn">Search</button>
+      </div>
+    </form>
+    {% if query %}
+    <p class="search-summary">
+      {% if page_obj.paginator.count %}
+        {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for <strong>{{ query }}</strong>
+      {% else %}
+        No results for <strong>{{ query }}</strong>
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  {% if query %}
+  {% include "webapp/pagination.html" %}
+  <ol class="post-list list-unstyled mt-2">
+    {% for post in page_obj %}
+    <li>
+      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}">
+        <div class="search-result-channel">
+          <a href="{{ post.channel.get_absolute_url }}">
+            <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
+            {{ post.channel.title }}
+          </a>
+        </div>
+        {% if post.forwarded_from %}
+        <div class="forwarded-banner">
+          <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+          forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
+        </div>
+        {% endif %}
+        <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+        <footer class="post-footer">
+          <div class="post-meta">
+            <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
+            <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
+            <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+          </div>
+          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
+            <i class="bi bi-telegram" aria-hidden="true"></i>
+          </a>
+        </footer>
+      </article>
+    </li>
+    {% endfor %}
+  </ol>
+  {% include "webapp/pagination.html" %}
+  {% endif %}
 
   {% for panel in panels %}
   <div class="stats-panel mb-3">

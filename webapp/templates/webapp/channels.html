@@ -1,0 +1,55 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+
+{% block content %}
+<div class="channels-page">
+
+  <div class="channels-header">
+    <h1 class="h5 fw-semibold mb-0">Channels</h1>
+    <div class="channel-filter-wrap">
+      <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
+      <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+    </div>
+  </div>
+
+  <ul class="channels-list list-unstyled" id="channels-list">
+    {% for channel in channel_list %}
+    <li class="channel-row" data-title="{{ channel.title|lower }}">
+      <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
+        <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
+        <span class="channel-row-body">
+          <span class="channel-row-title">{{ channel.title }}</span>
+          <span class="channel-row-meta">
+            <span>{{ channel.organization }}</span>
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
+            {% if channel.participants_count %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
+            {% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    {% empty %}
+    <li class="channels-empty">No channels found.</li>
+    {% endfor %}
+  </ul>
+
+</div>
+
+<script>
+  (function () {
+    var input = document.getElementById("channel-filter");
+    var rows = document.querySelectorAll(".channel-row");
+    input.addEventListener("input", function () {
+      var q = this.value.toLowerCase();
+      rows.forEach(function (row) {
+        row.style.display = row.dataset.title.includes(q) ? "" : "none";
+      });
+    });
+    input.focus();
+  })();
+</script>
+{% endblock content %}
