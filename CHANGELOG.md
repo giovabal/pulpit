@@ -13,6 +13,7 @@
 - `export_network --gexf` writes `graph/network.gexf` with all computed measures (PageRank, betweenness, etc.), community assignments, and channel metadata embedded as node attributes, ready to open in Gephi or any GEXF-compatible tool.
 
 ### Improvements
+- SQLite is now configured with WAL journal mode and `synchronous=NORMAL`, allowing concurrent readers during writes and improving performance under load.
 - New `COMMUNITY_STRATEGIES` option: `LEIDEN_DIRECTED`. Uses the Leiden algorithm with a directed null model (Leicht & Newman 2008): the expected weight of an edge A→B is proportional to A's out-degree × B's in-degree rather than total degree squared.
 - `LEIDEN` now symmetrizes the graph before community detection (consistent with `LOUVAIN`). Previously it passed a directed graph, making it functionally equivalent to `LEIDEN_DIRECTED`.
 - `FA2_ITERATIONS` default reduced from 20,000 to 5,000.
