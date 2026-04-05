@@ -47,6 +47,53 @@ Then run migrations for whichever backend you configured:
 python manage.py migrate
 ```
 
+## Migrating between database engines
+
+Django's `dumpdata` / `loaddata` commands transfer all data between any two supported backends. Media files (channel avatars) live on disk and do not need to be migrated.
+
+### SQLite → PostgreSQL
+
+```sh
+# 1. Dump all data from the current SQLite database
+python manage.py dumpdata \
+    --natural-foreign --natural-primary \
+    --exclude contenttypes --exclude auth.permission \
+    -o data.json
+
+# 2. Switch .env to the new backend
+#    DB_ENGINE=postgresql  DB_NAME=...  DB_USER=...  DB_PASSWORD=...  DB_HOST=...
+
+# 3. Create the PostgreSQL database (if it doesn't exist yet)
+createdb -U <user> <dbname>
+
+# 4. Create the schema on the new database
+python manage.py migrate
+
+# 5. Load the data
+python manage.py loaddata data.json
+```
+
+### PostgreSQL → SQLite
+
+```sh
+# 1. Dump all data from PostgreSQL
+python manage.py dumpdata \
+    --natural-foreign --natural-primary \
+    --exclude contenttypes --exclude auth.permission \
+    -o data.json
+
+# 2. Switch .env back to SQLite
+#    DB_ENGINE=sqlite  DB_NAME=db.sqlite3
+
+# 3. Create the schema
+python manage.py migrate
+
+# 4. Load the data
+python manage.py loaddata data.json
+```
+
+> `--exclude contenttypes` and `--exclude auth.permission` are necessary: these tables are populated automatically by `migrate` and re-importing them causes primary-key conflicts. `--natural-foreign --natural-primary` improves cross-database compatibility by using named keys instead of raw integer IDs.
+
 ## Access control
 
 By default (`WEB_ACCESS=ALL`) the interface is fully open — no login required. This is suitable for running Pulpit locally on your own machine.
