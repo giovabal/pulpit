@@ -35,6 +35,14 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full list of options.
 
 ## Initialise the database
 
+By default Pulpit uses SQLite. To use PostgreSQL instead, set `DB_ENGINE=postgresql` (and the other `DB_*` credentials) in `.env`, create the database, and install the driver:
+
+```sh
+pip install psycopg2-binary
+```
+
+Then run migrations for whichever backend you configured:
+
 ```sh
 python manage.py migrate
 ```

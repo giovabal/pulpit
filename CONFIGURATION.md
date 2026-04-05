@@ -21,6 +21,25 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 > **Note on message statistics:** view counts, forward counts, and pinned status are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` to re-fetch and update these fields: omit a value to refresh all messages, pass an integer N to refresh the N most recent messages per channel, or pass a date (`YYYY-MM-DD`) to refresh all messages from that date to the present. The `_updated` timestamp on each refreshed message is set to the time of the refresh.
 
+## Database
+
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `DB_ENGINE` | Database backend: `sqlite` or `postgresql` | `sqlite` |
+| `DB_NAME` | SQLite: filename (resolved from project root). PostgreSQL: database name. | `db.sqlite3` |
+| `DB_USER` | PostgreSQL only: database user | _(empty)_ |
+| `DB_PASSWORD` | PostgreSQL only: database password | _(empty)_ |
+| `DB_HOST` | PostgreSQL only: host | `localhost` |
+| `DB_PORT` | PostgreSQL only: port | `5432` |
+
+PostgreSQL requires `psycopg2` — install it separately before running:
+
+```sh
+pip install psycopg2-binary
+```
+
+> SQLite is the default and works out of the box. It is configured with WAL journal mode and `synchronous=NORMAL` for better concurrency. PostgreSQL is recommended when running Pulpit on a shared server or when the database may be accessed by multiple processes concurrently.
+
 ## Project
 
 | Option | Description | Default |

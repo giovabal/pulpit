@@ -1,16 +1,16 @@
 # Changelog
 
 ## [0.10] - To be announced
-*Commands management, access control.*
+*Commands management. Access control.*
 
 ### New features
-- New **Operations panel** (`/ops/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
-- `export_network --graphml` writes `graph/network.graphml` with all computed measures and community assignments embedded as node attributes, compatible with R/igraph, NetworkX, yEd, and any GraphML-aware tool.
+- New **Operations panel** (`/operations/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
 - New `WEB_ACCESS` setting with three modes: `ALL` (default, no auth required), `OPEN` (admin and operations require a staff account), `PROTECTED` (all pages require login; admin and operations require staff). Includes a login form styled consistently with the rest of the webapp. Staff accounts are managed through Django's user system (`python manage.py createsuperuser`).
+- PostgreSQL support: set `DB_ENGINE=postgresql` in `.env` to use PostgreSQL instead of SQLite. SQLite remains the default. Requires `psycopg2-binary` (install separately).
+- `export_network --graphml` writes `graph/network.graphml` with all computed measures and community assignments embedded as node attributes, compatible with R/igraph, NetworkX, yEd, and any GraphML-aware tool.
 
 ### Improvements
-- `get_channels` progress output no longer clips lines to 80 characters when running as a subprocess (Operations panel). Lines are only clipped when attached to a real terminal.
-- Message options (sort / content-type filter) are now displayed inline with the search bar rather than on a separate line.
+- Message options (sort / content-type filter) for the search bar.
 
 
 ## [0.9] - 2026-04-05
