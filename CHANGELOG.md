@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.9] - To be announced
+## [0.9] - 2026-05-05
 *A logo. Refining measures and communities detection. New webapp navigation.*
 
 ### New features
