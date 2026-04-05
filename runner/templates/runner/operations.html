@@ -116,10 +116,10 @@
          {% if task.status == "idle" %}style="display:none"{% endif %}>
       <div class="ops-log-bar">
         <span class="ops-log-bar-title">Output</span>
-        <span id="log-meta-{{ task.name }}">
-          {% if task.start_time %}started {{ task.start_time|slice:":19"|cut:"T" }}{% endif %}
-          {% if task.exit_code is not None %} · exit {{ task.exit_code }}{% endif %}
-        </span>
+        <span id="log-meta-{{ task.name }}"
+          {% if task.start_time %}data-start="{{ task.start_time }}"{% endif %}
+          {% if task.end_time %}data-end="{{ task.end_time }}"{% endif %}
+          {% if task.exit_code is not None %}data-exit="{{ task.exit_code }}"{% endif %}></span>
       </div>
       <pre class="ops-log" id="log-{{ task.name }}"></pre>
     </div>
@@ -147,7 +147,7 @@
 
   function formatTimestamp(iso) {
     if (!iso) return '';
-    return iso.slice(0, 19).replace('T', ' ');
+    return new Date(iso).toLocaleString();
   }
 
   function classifyLine(text) {
@@ -297,6 +297,14 @@
     const statusClass = Array.from(badge.classList).find(c => c.startsWith('ops-badge--'));
     const status = statusClass ? statusClass.replace('ops-badge--', '') : 'idle';
     monitors[name].resumeIfRunning(status);
+    // Format server-rendered timestamps in the local timezone.
+    const metaEl = document.getElementById('log-meta-' + name);
+    if (metaEl && metaEl.dataset.start) {
+      let meta = 'started ' + formatTimestamp(metaEl.dataset.start);
+      if (metaEl.dataset.end) meta += ' · ended ' + formatTimestamp(metaEl.dataset.end);
+      if (metaEl.dataset.exit !== undefined) meta += ' · exit ' + metaEl.dataset.exit;
+      metaEl.textContent = meta;
+    }
   });
 })();
 </script>
