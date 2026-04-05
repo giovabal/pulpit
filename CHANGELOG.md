@@ -1,10 +1,11 @@
 # Changelog
 
 ## [0.10] - To be announced
-*Commands management.*
+*Commands management, access control.*
 
 ### New features
-- New **Ops panel** (`/ops/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
+- New **Operations panel** (`/ops/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
+- New `WEB_ACCESS` setting with three modes: `ALL` (default, no auth required), `OPEN` (admin and ops require a staff account), `PROTECTED` (all pages require login; admin and ops require staff). Includes a login form styled consistently with the rest of the webapp. Staff accounts are managed through Django's user system (`python manage.py createsuperuser`).
 
 
 ## [0.9] - 2026-05-05

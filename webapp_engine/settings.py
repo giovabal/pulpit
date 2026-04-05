@@ -55,6 +55,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "webapp_engine.middleware.WebAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -72,6 +73,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "webapp.context_processors.web_access",
             ],
         },
     },
@@ -181,3 +183,9 @@ COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str
 LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)
 
 GRAPH_OUTPUT_DIR = config("GRAPH_OUTPUT_DIR", default="graph", cast=str)
+
+WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).upper()
+
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"

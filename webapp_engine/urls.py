@@ -18,21 +18,24 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
 from django.views.generic import RedirectView
 from django.views.static import serve
 
+if settings.WEB_ACCESS == "ALL":
 
-class AccessUser:
-    has_module_perms = has_perm = __getattr__ = lambda s, *a, **kw: True
+    class AccessUser:
+        has_module_perms = has_perm = __getattr__ = lambda s, *a, **kw: True
 
-
-admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
+    admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
 
 _graph_root = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("login/", auth_views.LoginView.as_view(template_name="webapp/login.html"), name="login"),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("stats/", include("stats.urls")),
     *(
         [

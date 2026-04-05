@@ -49,6 +49,8 @@ See WORKFLOW.md for all flags and options.
 - **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
 - **`runner/tasks.py`** — Task manager for Ops panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
 - **`runner/views.py`** — Ops panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
+- **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/ops/`), `PROTECTED` (login required everywhere; staff required for `/ops/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
+- **`webapp/context_processors.py`** — Exposes `WEB_ACCESS` to all templates.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
 
 ### Network measures

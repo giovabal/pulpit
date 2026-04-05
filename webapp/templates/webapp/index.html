@@ -39,9 +39,24 @@
               <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>
             </li>
           </ul>
+          {% if WEB_ACCESS == "ALL" %}
           <a href="/admin/" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
           </a>
+          {% elif request.user.is_authenticated %}
+          {% if request.user.is_staff %}
+          <a href="/admin/" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
+          </a>
+          {% endif %}
+          <span class="topnav-user">{{ request.user.username }}</span>
+          <form method="post" action="{% url 'logout' %}" class="d-inline m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Log out</button>
+          </form>
+          {% else %}
+          <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-secondary">Log in</a>
+          {% endif %}
         </div>
       </div>
     </nav>

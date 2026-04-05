@@ -27,6 +27,9 @@ All options go in `.env`. Copy `env.example` as a starting point.
 | :----- | :---------- | ------: |
 | `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`graph.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
 | `GRAPH_OUTPUT_DIR` | Directory where `export_network` writes all output files. Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/` regardless of this setting. | `graph` |
+| `WEB_ACCESS` | Access control for the web interface. `ALL` — no login required anywhere (default, suitable for local use). `OPEN` — all pages are public except `/admin/` and `/ops/`, which require a staff account. `PROTECTED` — all pages require login; `/admin/` and `/ops/` additionally require a staff account. Staff accounts are Django users with `is_staff = True`, created via `python manage.py createsuperuser` or in the admin. | `ALL` |
+
+> **User accounts:** `WEB_ACCESS=ALL` requires no accounts. For `OPEN` or `PROTECTED`, create a staff account first with `python manage.py createsuperuser`. Staff accounts (`is_staff=True`) can reach `/admin/` and `/ops/`; regular accounts can reach everything else in `PROTECTED` mode but are blocked from admin and ops. The login form is always served at `/login/` regardless of mode. After logging in, a **Log out** button appears in the top navigation bar next to the user's name; the **Admin** button is shown only to staff.
 
 ## Graph layout
 

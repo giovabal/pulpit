@@ -39,6 +39,23 @@ See [CONFIGURATION.md](CONFIGURATION.md) for the full list of options.
 python manage.py migrate
 ```
 
+## Access control
+
+By default (`WEB_ACCESS=ALL`) the interface is fully open — no login required. This is suitable for running Pulpit locally on your own machine.
+
+If the server is reachable on a network, set `WEB_ACCESS` in `.env` to restrict access:
+
+- **`OPEN`** — read-only pages (Network, Channels, Data) remain public. The Admin and Ops panel require a **staff** account.
+- **`PROTECTED`** — all pages require login. Admin and Ops additionally require a **staff** account.
+
+In either restricted mode, create at least one staff account before starting the server:
+
+```sh
+python manage.py createsuperuser
+```
+
+This account can log in to both `/admin/` and `/ops/`. You can also create regular (non-staff) accounts in the admin; in `PROTECTED` mode they can view pages but not administer or operate the system.
+
 ## Next steps
 
 Start the server and open the browser interface:

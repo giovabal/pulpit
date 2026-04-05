@@ -16,6 +16,28 @@
   --chart-fill: rgba(67,56,202,.08);
   --chart-grid: #ece9e3;
   --chart-label: #78716c;
+  /* Bootstrap primary override — match accent */
+  --bs-primary: #4338ca;
+  --bs-primary-rgb: 67, 56, 202;
+  --bs-link-color: #4338ca;
+  --bs-link-color-rgb: 67, 56, 202;
+  --bs-link-hover-color: #3730a3;
+  --bs-link-hover-color-rgb: 55, 48, 163;
+}
+
+/* Remap Bootstrap btn-primary to accent */
+.btn-primary {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #4338ca;
+  --bs-btn-border-color: #4338ca;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #3730a3;
+  --bs-btn-hover-border-color: #3730a3;
+  --bs-btn-active-bg: #3730a3;
+  --bs-btn-active-border-color: #3730a3;
+  --bs-btn-disabled-bg: #4338ca;
+  --bs-btn-disabled-border-color: #4338ca;
+  --bs-btn-focus-shadow-rgb: 67, 56, 202;
 }
 
 /* ---------- Utilities ---------- */
@@ -712,4 +734,46 @@ body {
   color: var(--muted);
   line-height: 1.55;
   margin-bottom: .75rem;
+}
+
+/* ---------- Login page ---------- */
+.login-body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 22rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+  box-shadow: var(--shadow);
+  padding: 2.25rem 2rem;
+}
+
+.login-logo-link {
+  display: block;
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.login-logo { height: 44px; }
+
+.login-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: var(--text);
+}
+
+/* ---------- Navbar auth ---------- */
+.topnav-user {
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--muted);
 }
