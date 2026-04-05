@@ -14,6 +14,7 @@ TASK_NAMES = ("get_channels", "search_channels", "export_network")
 
 _MANAGE_PY = str(settings.BASE_DIR / "manage.py")
 _TMP_DIR = settings.BASE_DIR / "tmp"
+_LAUNCH_LOCKS: dict[str, threading.Lock] = {name: threading.Lock() for name in TASK_NAMES}
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
 
@@ -105,37 +106,38 @@ def launch(task: str, args: list[str]) -> None:
     if task not in TASK_NAMES:
         raise ValueError(f"Unknown task: {task!r}")
 
-    current = get_status(task)
-    if current["status"] == "running":
-        raise RuntimeError(f"Task {task!r} is already running (PID {current['pid']}).")
+    with _LAUNCH_LOCKS[task]:
+        current = get_status(task)
+        if current["status"] == "running":
+            raise RuntimeError(f"Task {task!r} is already running (PID {current['pid']}).")
 
-    _TMP_DIR.mkdir(exist_ok=True)
-    log_path = _log_path(task)
-    meta_path = _meta_path(task)
+        _TMP_DIR.mkdir(exist_ok=True)
+        log_path = _log_path(task)
+        meta_path = _meta_path(task)
 
-    meta: dict = {
-        "start_time": datetime.now(timezone.utc).isoformat(),
-        "end_time": None,
-        "args": args,
-        "pid": None,
-        "exit_code": None,
-    }
-    meta_path.write_text(json.dumps(meta))
+        meta: dict = {
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "end_time": None,
+            "args": args,
+            "pid": None,
+            "exit_code": None,
+        }
+        meta_path.write_text(json.dumps(meta))
 
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, _MANAGE_PY, task, *args],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env=env,
-        )
-    finally:
-        log_file.close()
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, _MANAGE_PY, task, *args],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+            )
+        finally:
+            log_file.close()
 
-    meta["pid"] = proc.pid
-    meta_path.write_text(json.dumps(meta))
+        meta["pid"] = proc.pid
+        meta_path.write_text(json.dumps(meta))
 
     def _reaper() -> None:
         exit_code = proc.wait()
