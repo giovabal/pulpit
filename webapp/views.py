@@ -1,7 +1,8 @@
 from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, QuerySet, Sum
+from django.db.models import Count, Max, Min, Q, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
@@ -9,7 +10,57 @@ from django.views.generic import ListView, TemplateView
 from webapp.paginator import DiggPaginator
 
 from .models import Channel, Message
+from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date
+
+# ---- message list options ------------------------------------------------
+
+_CONTENT_TYPES = ["text", "image", "video", "sound", "other"]
+
+_CONTENT_TYPE_Q: dict[str, Q] = {
+    "text": Q(media_type=""),
+    "image": Q(media_type="photo"),
+    "video": Q(media_type="video"),
+    "sound": Q(media_type="audio"),
+    "other": ~Q(media_type__in=["", "photo", "video", "audio"]),
+}
+
+
+def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
+    sort = params.get("sort", "asc")
+    qs = qs.order_by("date" if sort == "asc" else "-date")
+    selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
+    if selected and set(selected) != set(_CONTENT_TYPES):
+        type_q: Q = Q(pk__in=[])
+        for t in selected:
+            type_q |= _CONTENT_TYPE_Q[t]
+        qs = qs.filter(type_q)
+    return qs
+
+
+def _message_options_context(params: Any) -> dict[str, Any]:
+    sort = params.get("sort", "asc")
+    selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
+    if not selected:
+        selected = list(_CONTENT_TYPES)
+    options_active = sort != "asc" or set(selected) != set(_CONTENT_TYPES)
+
+    extra: dict[str, Any] = {}
+    if params.get("q"):
+        extra["q"] = params["q"]
+    if sort != "asc":
+        extra["sort"] = sort
+    if set(selected) != set(_CONTENT_TYPES):
+        extra["type"] = selected
+    original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
+
+    return {
+        "sort": sort,
+        "selected_types": selected,
+        "all_types": _CONTENT_TYPES,
+        "options_active": options_active,
+        "original_query": original_query,
+    }
 
 
 class HomeView(ListView):
@@ -24,12 +75,12 @@ class HomeView(ListView):
         q = self.request.GET.get("q", "").strip()
         if not q:
             return Message.objects.none()
-        return (
+        qs = (
             Message.objects.filter(channel__organization__is_interesting=True)
             .select_related("channel", "channel__organization", "forwarded_from")
             .filter(message__icontains=q)
-            .order_by("-date")
         )
+        return _apply_message_options(qs, self.request.GET)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         from django.urls import reverse
@@ -38,7 +89,7 @@ class HomeView(ListView):
 
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
-        ctx["original_query"] = f"&q={q}" if q else ""
+        ctx.update(_message_options_context(self.request.GET))
 
         interesting_qs = Channel.objects.interesting()
         interesting_channels = interesting_qs.count()
@@ -116,6 +167,17 @@ class ChannelListView(ListView):
             .annotate(messages_count=Count("message_set"))
             .order_by("title")
         )
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        ctx["excluded_list"] = (
+            Channel.objects.filter(organization__is_interesting=True)
+            .exclude(channel_type_filter())
+            .select_related("organization")
+            .annotate(messages_count=Count("message_set"))
+            .order_by("title")
+        )
+        return ctx
 
 
 class DataView(TemplateView):
@@ -198,22 +260,20 @@ class MessageSearchView(ListView):
     page_kwarg = "page"
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = (
-            Message.objects.filter(channel__organization__is_interesting=True)
-            .select_related("channel", "channel__organization", "forwarded_from")
-            .order_by("-date")
+        qs = Message.objects.filter(channel__organization__is_interesting=True).select_related(
+            "channel", "channel__organization", "forwarded_from"
         )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(message__icontains=q)
-        return qs
+        return _apply_message_options(qs, self.request.GET)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        context_data = super().get_context_data(*args, **kwargs)
+        ctx = super().get_context_data(*args, **kwargs)
         q = self.request.GET.get("q", "").strip()
-        context_data["query"] = q
-        context_data["original_query"] = f"&q={q}" if q else ""
-        return context_data
+        ctx["query"] = q
+        ctx.update(_message_options_context(self.request.GET))
+        return ctx
 
 
 class ChannelDetailView(ListView):

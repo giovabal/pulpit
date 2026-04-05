@@ -6,7 +6,10 @@
 <div class="channels-page">
 
   <div class="channels-header">
-    <h1 class="h5 fw-semibold mb-0">Channels</h1>
+    <div class="d-flex align-items-baseline gap-2">
+      <h1 class="h5 fw-semibold mb-0">Channels</h1>
+      <span class="channels-count" id="channels-count"></span>
+    </div>
     <div class="channel-filter-wrap">
       <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
       <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
@@ -37,18 +40,67 @@
     {% endfor %}
   </ul>
 
+  {% if excluded_list %}
+  <div class="channels-section-sep" id="excluded-sep">
+    <span>Excluded from analysis <span class="channels-section-sep-count" id="excluded-count"></span> · CHANNEL_TYPES filter</span>
+  </div>
+  <ul class="channels-list list-unstyled" id="excluded-list">
+    {% for channel in excluded_list %}
+    <li class="channel-row" data-title="{{ channel.title|lower }}">
+      <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
+        <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
+        <span class="channel-row-body">
+          <span class="channel-row-title">{{ channel.title }}</span>
+          <span class="channel-row-meta">
+            <span>{{ channel.organization }}</span>
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
+            {% if channel.participants_count %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
+            {% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
 </div>
 
 <script>
   (function () {
     var input = document.getElementById("channel-filter");
-    var rows = document.querySelectorAll(".channel-row");
+    var mainRows = Array.from(document.querySelectorAll("#channels-list .channel-row"));
+    var excludedSep = document.getElementById("excluded-sep");
+    var excludedList = document.getElementById("excluded-list");
+    var excludedRows = excludedList ? Array.from(excludedList.querySelectorAll(".channel-row")) : [];
+    var countEl = document.getElementById("channels-count");
+    var excludedCountEl = document.getElementById("excluded-count");
+
+    function visible(rows) {
+      return rows.filter(function (r) { return r.style.display !== "none"; }).length;
+    }
+
+    function updateCounts() {
+      countEl.textContent = visible(mainRows).toLocaleString();
+      if (excludedCountEl) excludedCountEl.textContent = visible(excludedRows).toLocaleString();
+    }
+
+    updateCounts();
+
     input.addEventListener("input", function () {
       var q = this.value.toLowerCase();
-      rows.forEach(function (row) {
+      mainRows.concat(excludedRows).forEach(function (row) {
         row.style.display = row.dataset.title.includes(q) ? "" : "none";
       });
+      if (excludedSep) {
+        excludedSep.style.display = visible(excludedRows) ? "" : "none";
+      }
+      updateCounts();
     });
+
     input.focus();
   })();
 </script>

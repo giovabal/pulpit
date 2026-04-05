@@ -16,6 +16,27 @@
     {% endfor %}
   </div>
 
+  {% for panel in panels %}
+  <div class="stats-panel mb-3">
+    <button class="stats-toggle"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#panel-{{ panel.id }}"
+            aria-expanded="false"
+            aria-controls="panel-{{ panel.id }}">
+      <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
+      {{ panel.title }}
+      <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
+    </button>
+    <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
+      <div class="stats-panel-body">
+        <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
+        <div class="chart-canvas-wrap chart-canvas-wrap--lg"><canvas></canvas></div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
   <div class="search-header">
     <form method="get" action="" class="search-form" role="search">
       <div class="search-input-wrap">
@@ -30,6 +51,7 @@
         >
         <button type="submit" class="search-btn">Search</button>
       </div>
+      {% include "webapp/message_options.html" %}
     </form>
     {% if query %}
     <p class="search-summary">
@@ -77,27 +99,6 @@
   </ol>
   {% include "webapp/pagination.html" %}
   {% endif %}
-
-  {% for panel in panels %}
-  <div class="stats-panel mb-3">
-    <button class="stats-toggle"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#panel-{{ panel.id }}"
-            aria-expanded="false"
-            aria-controls="panel-{{ panel.id }}">
-      <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
-      {{ panel.title }}
-      <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
-    </button>
-    <div class="collapse" id="panel-{{ panel.id }}" data-chart-url="{{ panel.url }}">
-      <div class="stats-panel-body">
-        <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
-        <div class="chart-canvas-wrap chart-canvas-wrap--lg"><canvas></canvas></div>
-      </div>
-    </div>
-  </div>
-  {% endfor %}
 
 </div>
 
