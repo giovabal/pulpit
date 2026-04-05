@@ -11,7 +11,15 @@
   --radius: .5rem;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
   --shadow: 0 4px 12px rgba(0,0,0,.08);
+  /* chart colours — read by renderChart() via getComputedStyle */
+  --chart-line: #4338ca;
+  --chart-fill: rgba(67,56,202,.08);
+  --chart-grid: #ece9e3;
+  --chart-label: #78716c;
 }
+
+/* ---------- Utilities ---------- */
+.page-subtitle { font-size: .85rem; }
 
 /* ---------- Base ---------- */
 body {

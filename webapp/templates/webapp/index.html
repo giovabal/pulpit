@@ -33,10 +33,10 @@
               <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>
+              <a class="nav-link{% if url_name == 'ops' %} active{% endif %}" href="{% url 'ops' %}">Operations</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link{% if url_name == 'ops' %} active{% endif %}" href="{% url 'ops' %}">Ops</a>
+              <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>
             </li>
           </ul>
           <a href="/admin/" class="btn btn-sm btn-outline-secondary">
@@ -56,14 +56,19 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script>
       function renderChart(canvas, data) {
+        const css = getComputedStyle(document.documentElement);
+        const chartLine  = css.getPropertyValue("--chart-line").trim();
+        const chartFill  = css.getPropertyValue("--chart-fill").trim();
+        const chartGrid  = css.getPropertyValue("--chart-grid").trim();
+        const chartLabel = css.getPropertyValue("--chart-label").trim();
         new Chart(canvas, {
           type: "line",
           data: {
             labels: data.labels,
             datasets: [{
               data: data.values,
-              borderColor: "#2563eb",
-              backgroundColor: "rgba(37,99,235,0.08)",
+              borderColor: chartLine,
+              backgroundColor: chartFill,
               borderWidth: 2,
               pointRadius: 3,
               pointHoverRadius: 5,
@@ -84,11 +89,11 @@
               },
             },
             scales: {
-              x: { grid: { display: false }, ticks: { font: { size: 11 }, color: "#6b7280" } },
+              x: { grid: { display: false }, ticks: { font: { size: 11 }, color: chartLabel } },
               y: {
-                title: { display: true, text: data.y_label, font: { size: 11 }, color: "#6b7280" },
-                grid: { color: "#f0f0f0" },
-                ticks: { font: { size: 11 }, color: "#6b7280" },
+                title: { display: true, text: data.y_label, font: { size: 11 }, color: chartLabel },
+                grid: { color: chartGrid },
+                ticks: { font: { size: 11 }, color: chartLabel },
               },
             },
           },
