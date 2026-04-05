@@ -356,7 +356,7 @@ body {
   line-height: 1.5;
 }
 
-.pagination .page-item.active .page-link { background: var(--accent); border-color: var(--accent); }
+.pagination .page-item.active .page-link { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pagination .page-item.disabled .page-link { color: #a9a29d; }
 
 /* ---------- Summary cards ---------- */
