@@ -63,8 +63,8 @@ Visual samples of Pulpit output across different graph sizes, community detectio
 ## Example output, Web app
 
 <figure>
-<img src="webapp_engine/static/screenshot_10.jpg" alt="Example screen in Web app, whole network">
-<figcaption>Example screen in Web app, whole network.</figcaption>
+<img src="webapp_engine/static/screenshot_10.jpg" alt="Example screen in Web app, channel list">
+<figcaption>Example screen in Web app, channel list.</figcaption>
 </figure>
 
 <hr>
@@ -72,6 +72,21 @@ Visual samples of Pulpit output across different graph sizes, community detectio
 <figure>
 <img src="webapp_engine/static/screenshot_11.jpg" alt="Example screen in Web app, single channel">
 <figcaption>Example screen in Web app, single channel.</figcaption>
+</figure>
+
+<hr>
+
+<figure>
+<img src="webapp_engine/static/screenshot_12.jpg" alt="Example screen in Web app, single channel">
+<figcaption>Example screen in Web app, single channel.</figcaption>
+</figure>
+
+
+## Example output, Operations
+
+<figure>
+<img src="webapp_engine/static/screenshot_13.jpg" alt="Example screen in operations app">
+<figcaption>Example screen in operations.</figcaption>
 </figure>
 
 

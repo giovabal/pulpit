@@ -140,10 +140,6 @@ Currently, channels are assigned to Organizations one-by-one in Django admin. Ad
 
 New Django admin view showing, for each channel: days since last crawl, message gap density (holes), whether `is_lost` is set, days since last subscriber count update. Lets operators quickly identify stale data.
 
-### 7.3 — Multiple database support (PostgreSQL)
-
-SQLite is fine for single-researcher use but breaks under concurrent writes. Add optional PostgreSQL configuration to `settings.py`. Primarily a `settings.py` + `requirements.txt` change. Enables multiple crawlers running in parallel (one per channel batch) and shared team environments.
-
 ---
 
 ## 8. Community Detection Enhancements
@@ -165,10 +161,6 @@ Composite measure combining: low content originality + high amplification + high
 ### 9.2 — Structural similarity matrix export
 
 Export a pairwise structural similarity matrix (cosine similarity of node feature vectors across all measures) as a CSV. Enables researchers to import into R or Python for further analysis — clustering, regression, ML — outside the Pulpit pipeline.
-
-### 9.3 — Reproducible research archive
-
-New `export_network --archive` flag that bundles: the `graph/` output directory, a snapshot of the `.env` configuration (with credentials stripped), a `git describe` version tag, the SQLite DB schema (not data), and a README into a ZIP file. Allows researchers to share self-contained, reproducible analysis packages.
 
 ---
 

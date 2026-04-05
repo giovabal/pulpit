@@ -14,6 +14,6 @@ graph/*
 channels/*
 static/*
 .env
-*.sqlite3
+*.sqlite3*
 *.session
 *.session-journal
