@@ -93,6 +93,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--xlsx")
         if post.get("gexf"):
             args.append("--gexf")
+        if post.get("graphml"):
+            args.append("--graphml")
         if post.get("seo"):
             args.append("--seo")
         if post.get("no_graph"):

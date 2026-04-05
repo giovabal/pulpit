@@ -134,11 +134,11 @@ def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str =
         _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title)
 
 
-_GEXF_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
+_EXPORT_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
 
 
-def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -> None:
-    """Write a GEXF file with all computed node attributes embedded."""
+def _prepare_export_graph(graph: nx.DiGraph, graph_data: GraphData) -> nx.DiGraph:
+    """Return an annotated copy of *graph* with node attributes from *graph_data*."""
     g = graph.copy()
     node_by_id = {n["id"]: n for n in graph_data["nodes"]}
     for node_id in g.nodes():
@@ -148,7 +148,7 @@ def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -
         attrs = g.nodes[node_id]
         attrs.pop("data", None)
         for key, value in node.items():
-            if key in _GEXF_SKIP:
+            if key in _EXPORT_SKIP:
                 continue
             if key == "communities":
                 for strategy, label in (value or {}).items():
@@ -156,6 +156,12 @@ def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -
                         attrs[f"community_{strategy}"] = str(label)
             elif value is not None:
                 attrs[key] = value
+    return g
+
+
+def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -> None:
+    """Write a GEXF file with all computed node attributes embedded."""
+    g = _prepare_export_graph(graph, graph_data)
     writer = GEXFWriter()
     meta = writer.xml.find("meta")
     if meta is not None:
@@ -165,6 +171,12 @@ def write_gexf(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -
     writer.add_graph(g)
     with open(output_filename, "wb") as fh:
         writer.write(fh)
+
+
+def write_graphml(graph: nx.DiGraph, graph_data: GraphData, output_filename: str) -> None:
+    """Write a GraphML file with all computed node attributes embedded."""
+    g = _prepare_export_graph(graph, graph_data)
+    nx.write_graphml(g, output_filename)
 
 
 def write_robots_txt(root_target: str, seo: bool) -> None:

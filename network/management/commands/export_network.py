@@ -51,6 +51,13 @@ class Command(BaseCommand):
             help="Also write network.gexf with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
+            "--graphml",
+            dest="graphml",
+            action="store_true",
+            default=False,
+            help="Also write network.graphml with all computed measures embedded as node attributes.",
+        )
+        parser.add_argument(
             "--seo",
             action="store_true",
             default=False,
@@ -144,6 +151,7 @@ class Command(BaseCommand):
         do_html = options["html"]
         do_xlsx = options["xlsx"]
         do_gexf = options["gexf"]
+        do_graphml = options["graphml"]
 
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
@@ -402,6 +410,11 @@ class Command(BaseCommand):
             self.stdout.write("- gexf")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_gexf(graph, graph_data, os.path.join(root_target, "network.gexf"))
+
+        if do_graphml:
+            self.stdout.write("- graphml")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
 
         compare_files: set[str] = set()
         if compare_data_dir is not None:

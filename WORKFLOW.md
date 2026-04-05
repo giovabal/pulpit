@@ -81,6 +81,7 @@ Optional (expand **Options** to set):
 - **3D graph** — also produce `graph3d.html`
 - **Excel spreadsheets** — also produce `channel_table.xlsx`, `network_table.xlsx`, `community_table.xlsx`
 - **GEXF file** — also write `network.gexf`
+- **GraphML file** — also write `network.graphml`
 - **SEO-optimised** — sets `index, follow` robots tags and writes a permissive `robots.txt`; without this flag the output actively discourages indexing
 - **Skip 2D graph** — skip the interactive graph (tables only)
 - **Skip HTML tables** — skip HTML tables (graph only)
@@ -97,6 +98,7 @@ python manage.py export_network --no-html
 python manage.py export_network --no-graph
 python manage.py export_network --no-graph --xlsx
 python manage.py export_network --gexf
+python manage.py export_network --graphml
 python manage.py export_network --seo
 python manage.py export_network --startdate 2023-01-01
 python manage.py export_network --enddate 2023-12-31
