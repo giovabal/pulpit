@@ -45,8 +45,8 @@ By default (`WEB_ACCESS=ALL`) the interface is fully open — no login required.
 
 If the server is reachable on a network, set `WEB_ACCESS` in `.env` to restrict access:
 
-- **`OPEN`** — read-only pages (Network, Channels, Data) remain public. The Admin and Ops panel require a **staff** account.
-- **`PROTECTED`** — all pages require login. Admin and Ops additionally require a **staff** account.
+- **`OPEN`** — read-only pages (Network, Channels, Data) remain public. The Admin and Operations panel require a **staff** account.
+- **`PROTECTED`** — all pages require login. Admin and Operations additionally require a **staff** account.
 
 In either restricted mode, create at least one staff account before starting the server:
 
@@ -64,7 +64,7 @@ Start the server and open the browser interface:
 python manage.py runserver   # open http://localhost:8000
 ```
 
-The **Ops panel** (`/ops/`) lets you launch and monitor all data collection and export tasks directly from the browser. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
+The **Operations panel** (`/ops/`) lets you launch and monitor all data collection and export tasks directly from the browser. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
 
 ---
 
