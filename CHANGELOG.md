@@ -1,12 +1,12 @@
 # Changelog
 
 ## [0.10] - To be announced
-*Commands management. Access control.*
+*Commands management. Access control. Multiple database support.*
 
 ### New features
 - New **Operations panel** (`/operations/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
 - New `WEB_ACCESS` setting with three modes: `ALL` (default, no auth required), `OPEN` (admin and operations require a staff account), `PROTECTED` (all pages require login; admin and operations require staff). Includes a login form styled consistently with the rest of the webapp. Staff accounts are managed through Django's user system (`python manage.py createsuperuser`).
-- PostgreSQL support: set `DB_ENGINE=postgresql` in `.env` to use PostgreSQL instead of SQLite. SQLite remains the default. Requires `psycopg2-binary` (install separately).
+- PostgreSQL, MySQL, and MariaDB support via `DB_ENGINE` in `.env` (`postgresql`, `mysql`, or `mariadb`). SQLite remains the default. Requires `psycopg2-binary` (PostgreSQL) or `mysqlclient` (MySQL/MariaDB), installed separately. MySQL/MariaDB connections use `utf8mb4` charset.
 - `export_network --graphml` writes `graph/network.graphml` with all computed measures and community assignments embedded as node attributes, compatible with R/igraph, NetworkX, yEd, and any GraphML-aware tool.
 
 ### Improvements

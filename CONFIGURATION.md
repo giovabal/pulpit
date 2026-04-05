@@ -25,20 +25,21 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `DB_ENGINE` | Database backend: `sqlite` or `postgresql` | `sqlite` |
-| `DB_NAME` | SQLite: filename (resolved from project root). PostgreSQL: database name. | `db.sqlite3` |
-| `DB_USER` | PostgreSQL only: database user | _(empty)_ |
-| `DB_PASSWORD` | PostgreSQL only: database password | _(empty)_ |
-| `DB_HOST` | PostgreSQL only: host | `localhost` |
-| `DB_PORT` | PostgreSQL only: port | `5432` |
+| `DB_ENGINE` | Database backend: `sqlite`, `postgresql`, `mysql`, or `mariadb` | `sqlite` |
+| `DB_NAME` | SQLite: filename (resolved from project root). All others: database name. | `db.sqlite3` |
+| `DB_USER` | PostgreSQL / MySQL / MariaDB: database user | _(empty)_ |
+| `DB_PASSWORD` | PostgreSQL / MySQL / MariaDB: database password | _(empty)_ |
+| `DB_HOST` | PostgreSQL / MySQL / MariaDB: host | `localhost` |
+| `DB_PORT` | PostgreSQL / MySQL / MariaDB: port | `5432` for PostgreSQL, `3306` for MySQL/MariaDB |
 
-PostgreSQL requires `psycopg2` — install it separately before running:
+Each non-SQLite backend requires its driver — install separately before running:
 
 ```sh
-pip install psycopg2-binary
+pip install psycopg2-binary   # PostgreSQL
+pip install mysqlclient        # MySQL or MariaDB
 ```
 
-> SQLite is the default and works out of the box. It is configured with WAL journal mode and `synchronous=NORMAL` for better concurrency. PostgreSQL is recommended when running Pulpit on a shared server or when the database may be accessed by multiple processes concurrently.
+> SQLite is the default and works out of the box; it is configured with WAL journal mode and `synchronous=NORMAL` for better concurrency. The server-based backends (PostgreSQL, MySQL, MariaDB) are recommended when running Pulpit on a shared server or when the database may be accessed by multiple processes concurrently. MySQL and MariaDB connections use `utf8mb4` charset; create the database with `CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci` to match.
 
 ## Project
 

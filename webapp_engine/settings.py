@@ -98,6 +98,20 @@ if _DB_ENGINE == "postgresql":
             "PORT": config("DB_PORT", default="5432"),
         }
     }
+elif _DB_ENGINE in ("mysql", "mariadb"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": config("DB_NAME", cast=str),
+            "USER": config("DB_USER", default=""),
+            "PASSWORD": config("DB_PASSWORD", default=""),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="3306"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
 else:
     DATABASES = {
         "default": {
