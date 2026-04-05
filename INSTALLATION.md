@@ -41,7 +41,13 @@ python manage.py migrate
 
 ## Next steps
 
-You are ready to start collecting data. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
+Start the server and open the browser interface:
+
+```sh
+python manage.py runserver   # open http://localhost:8000
+```
+
+The **Ops panel** (`/ops/`) lets you launch and monitor all data collection and export tasks directly from the browser. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
 
 ---
 

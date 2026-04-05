@@ -26,7 +26,7 @@ It is designed for journalists, researchers, and analysts working on political c
 
 ## What you get
 
-After `export_network` completes, the `graph/` directory contains:
+After the export completes, the `graph/` directory contains:
 
 - **`index.html`** — a landing page listing every output with descriptions and links; the starting point for sharing or publishing results
 - **`graph.html`** — the interactive 2D graph: search channels, filter by community, size nodes by any computed measure, inspect individual channels and their connections
@@ -42,18 +42,22 @@ During development the entire output is served at `http://localhost:8000/graph/`
 > See [INSTALLATION.md](INSTALLATION.md) for setup and [WORKFLOW.md](WORKFLOW.md) for the complete guide including all options.
 
 ```sh
-python manage.py runserver          # admin interface at http://localhost:8000/admin/
-python manage.py search_channels    # discover channels from your search terms
+python manage.py migrate
+python manage.py runserver   # open http://localhost:8000
 ```
 
-In the admin, assign channels to **Organizations** and mark them `is_interesting = True`.
+Once the server is running, the whole workflow is driven from the browser:
 
-```sh
-python manage.py get_channels       # crawl messages and resolve references
-python manage.py export_network     # build graph, detect communities, export
-```
+1. **Admin** (`/admin/`) → add **Search Terms** to seed channel discovery.
+2. **Ops** (`/ops/`) → run **Search Channels** to find matching Telegram channels.
+3. **Admin** → assign channels to **Organizations**, mark `is_interesting = True`.
+4. **Ops** → run **Get Channels** to crawl messages and resolve cross-channel references.
+5. **Ops** → run **Export Network** to build the graph and write output files.
+6. **Data** (`/data/`) → browse the exported graph and tables, or open `http://localhost:8000/graph/` directly.
 
-Open `http://localhost:8000/graph/`.
+The **Channels** tab (`/channels/`) and per-channel pages show crawled data, message history, and network statistics as you go.
+
+All three operations are also available as CLI commands for scripted or automated runs — see [WORKFLOW.md](WORKFLOW.md).
 
 
 ## How it's built
@@ -72,7 +76,7 @@ Pulpit is built around three stages:
 | | |
 | :--- | :--- |
 | [INSTALLATION.md](INSTALLATION.md) | Requirements, setup, and database initialisation |
-| [WORKFLOW.md](WORKFLOW.md) | Complete step-by-step guide: finding channels, crawling, exporting, all options |
+| [WORKFLOW.md](WORKFLOW.md) | Complete step-by-step guide: finding channels, crawling, exporting — via the Ops panel and the CLI |
 | [CONFIGURATION.md](CONFIGURATION.md) | Full reference for all `.env` settings |
 | [ANALYSIS.md](ANALYSIS.md) | All network measures and community detection strategies — what they measure and how to read them |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |

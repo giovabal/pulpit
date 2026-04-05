@@ -28,10 +28,10 @@ See WORKFLOW.md for all flags and options.
 ### Data flow
 
 1. User adds `SearchTerm` entries in Django admin
-2. `search_channels` finds channels via Telegram API → `Channel` records
+2. Ops panel (`/ops/`) or `search_channels` finds channels via Telegram API → `Channel` records
 3. User assigns channels to `Organization` objects, marks `is_interesting=True`
-4. `get_channels` fetches messages and resolves cross-channel references
-5. `export_network` builds the graph, detects communities, runs layout, writes output to `graph/`
+4. Ops panel or `get_channels` fetches messages and resolves cross-channel references
+5. Ops panel or `export_network` builds the graph, detects communities, runs layout, writes output to `graph/`
 
 ### Key modules
 
@@ -47,6 +47,8 @@ See WORKFLOW.md for all flags and options.
 - **`network/exporter.py`** — Builds `GraphData`; writes `graph/data.json` and config; GEXF export.
 - **`network/tables.py`** — Writes channel, network, and community HTML/XLSX tables.
 - **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
+- **`runner/tasks.py`** — Task manager for Ops panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
+- **`runner/views.py`** — Ops panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
 
 ### Network measures

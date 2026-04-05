@@ -1,15 +1,11 @@
 # Changelog
 
 ## [0.10] - To be announced
-*Commands management, filter consistency.*
+*Commands management.*
 
 ### New features
 - New **Ops panel** (`/ops/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
 
-### Fixed
-- All summary counts (channels, messages, date range, forwards, subscribers) and chart time series now consistently apply both `organization__is_interesting` and `CHANNEL_TYPES`. Previously most queries ignored `CHANNEL_TYPES` entirely, and global message and forwards counts had no filter at all.
-- `ChannelForwardsReceivedHistoryView` and the channel detail "forwards received" count now restrict to channels in the interesting set instead of using the raw `is_interesting` flag.
-- Network-wide content metrics (`_network_content_metrics`) now restrict both sides of the forwards query to `channel_pks` derived from `build_graph`, instead of using a bare `is_interesting` check on the receiving side.
 
 ## [0.9] - 2026-05-05
 *A logo. Refining measures and communities detection. New webapp navigation.*
