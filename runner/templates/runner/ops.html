@@ -1,0 +1,476 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+{% block extra_styles %}
+<style>
+/* ---- Ops page ---- */
+.ops-header { margin-bottom: 1.75rem; }
+.ops-header h1 { font-size: 1.25rem; font-weight: 700; margin: 0 0 .25rem; }
+.ops-header p  { font-size: .875rem; color: var(--muted); margin: 0; }
+
+.ops-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.ops-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ops-card-info {
+  display: flex;
+  align-items: center;
+  gap: .875rem;
+  min-width: 0;
+}
+
+.ops-card-icon {
+  width: 38px; height: 38px;
+  background: var(--accent-bg);
+  border-radius: .5rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ops-card-title { font-size: .9375rem; font-weight: 600; line-height: 1.25; }
+.ops-card-desc  { font-size: .8rem; color: var(--muted); margin-top: .125rem; }
+
+.ops-card-actions {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-shrink: 0;
+}
+
+/* status badge */
+.ops-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .7rem; font-weight: 600;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.ops-badge--idle    { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.ops-badge--running { background: #dbeafe; color: #1d4ed8; }
+.ops-badge--done    { background: #dcfce7; color: #166534; }
+.ops-badge--failed  { background: #fee2e2; color: #991b1b; }
+
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+.ops-badge--running .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#1d4ed8; animation: pulse-dot 1.2s ease-in-out infinite; }
+
+/* options section */
+.ops-opts {
+  padding: .875rem 1.25rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.ops-opts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.5rem;
+  align-items: flex-start;
+}
+
+.ops-field {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+
+.ops-field label {
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ops-field input[type="text"],
+.ops-field input[type="number"],
+.ops-field input[type="date"] {
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .3rem .55rem;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+  width: 11rem;
+}
+
+.ops-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(67,56,202,.15);
+}
+
+.ops-check {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .8rem;
+  color: var(--text);
+  cursor: pointer;
+  padding-top: 1.15rem; /* align with labeled fields */
+}
+.ops-check input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+.ops-refresh-row {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+}
+
+/* log terminal */
+.ops-log-wrap {
+  border-top: 1px solid var(--border);
+}
+
+.ops-log-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .375rem .875rem;
+  background: #1a1a2e;
+  font-size: .7rem;
+  color: #8888aa;
+}
+
+.ops-log-bar-title { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+
+.ops-log {
+  margin: 0;
+  padding: .75rem 1rem;
+  background: #1a1a2e;
+  color: #c8d3f5;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: .75rem;
+  line-height: 1.55;
+  max-height: 420px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ops-log::-webkit-scrollbar { width: 4px; }
+.ops-log::-webkit-scrollbar-track { background: #13131f; }
+.ops-log::-webkit-scrollbar-thumb { background: #44446a; border-radius: 2px; }
+
+.ops-log .line-success { color: #9ece6a; }
+.ops-log .line-warning { color: #e0af68; }
+.ops-log .line-error   { color: #f7768e; }
+
+.ops-last-run {
+  font-size: .72rem;
+  color: var(--muted);
+  padding: .5rem 1.25rem .75rem;
+  border-top: 1px solid var(--border);
+}
+</style>
+{% endblock extra_styles %}
+
+{% block content %}
+<div class="ops-page">
+  <div class="ops-header">
+    <h1>Operations</h1>
+    <p>Launch and monitor data collection and export tasks. Only one instance of each task can run at a time.</p>
+  </div>
+
+  {% for task in tasks %}
+  <div class="ops-card" id="card-{{ task.name }}">
+
+    <div class="ops-card-header">
+      <div class="ops-card-info">
+        <div class="ops-card-icon"><i class="bi {{ task.icon }}" aria-hidden="true"></i></div>
+        <div>
+          <div class="ops-card-title">{{ task.title }}</div>
+          <div class="ops-card-desc">{{ task.description }}</div>
+        </div>
+      </div>
+      <div class="ops-card-actions">
+        <span class="ops-badge ops-badge--{{ task.status }}" id="badge-{{ task.name }}">
+          {% if task.status == "running" %}<span class="dot"></span>{% endif %}
+          {{ task.status }}
+        </span>
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#opts-{{ task.name }}"
+                aria-expanded="false"
+                aria-controls="opts-{{ task.name }}">
+          <i class="bi bi-sliders me-1" aria-hidden="true"></i>Options
+        </button>
+        <button class="btn btn-sm btn-primary" id="run-{{ task.name }}"
+                {% if task.status == "running" %}disabled{% endif %}>
+          <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+        </button>
+        <button class="btn btn-sm btn-outline-danger" id="abort-{{ task.name }}"
+                {% if task.status != "running" %}disabled{% endif %}>
+          <i class="bi bi-stop-fill me-1" aria-hidden="true"></i>Abort
+        </button>
+      </div>
+    </div>
+
+    {# ---- options ---- #}
+    <div class="collapse" id="opts-{{ task.name }}">
+      <div class="ops-opts">
+        <form id="form-{{ task.name }}">
+          {% csrf_token %}
+
+          {% if task.name == "get_channels" %}
+          <div class="ops-opts-grid">
+            <label class="ops-check">
+              <input type="checkbox" name="fixholes">Fix message holes
+            </label>
+            <div class="ops-refresh-row">
+              <label class="ops-check">
+                <input type="checkbox" name="do_refresh" id="do_refresh_check">Refresh message stats
+              </label>
+              <div class="ops-field">
+                <label for="refresh_value">N or YYYY-MM-DD (blank = all)</label>
+                <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" style="width:15rem">
+              </div>
+            </div>
+            <div class="ops-field">
+              <label for="fromid">Only channels with DB id ≤</label>
+              <input type="number" name="fromid" id="fromid" placeholder="optional">
+            </div>
+          </div>
+
+          {% elif task.name == "search_channels" %}
+          <div class="ops-opts-grid">
+            <div class="ops-field">
+              <label for="amount_{{ task.name }}">Max search terms to process</label>
+              <input type="number" name="amount" id="amount_{{ task.name }}" placeholder="all">
+            </div>
+          </div>
+
+          {% elif task.name == "export_network" %}
+          <div class="ops-opts-grid">
+            <label class="ops-check"><input type="checkbox" name="graph_3d">3D graph</label>
+            <label class="ops-check"><input type="checkbox" name="xlsx">Excel spreadsheets</label>
+            <label class="ops-check"><input type="checkbox" name="gexf">GEXF file</label>
+            <label class="ops-check"><input type="checkbox" name="seo">SEO-optimised output</label>
+            <label class="ops-check"><input type="checkbox" name="no_graph">Skip 2D graph</label>
+            <label class="ops-check"><input type="checkbox" name="no_html">Skip HTML tables</label>
+            <div class="ops-field">
+              <label for="startdate">Start date</label>
+              <input type="date" name="startdate" id="startdate">
+            </div>
+            <div class="ops-field">
+              <label for="enddate">End date</label>
+              <input type="date" name="enddate" id="enddate">
+            </div>
+            <div class="ops-field">
+              <label for="compare">Compare with project dir</label>
+              <input type="text" name="compare" id="compare" placeholder="path/to/graph/" style="width:14rem">
+            </div>
+          </div>
+          {% endif %}
+
+        </form>
+      </div>
+    </div>
+
+    {# ---- log terminal ---- #}
+    <div class="ops-log-wrap" id="log-wrap-{{ task.name }}"
+         {% if task.status == "idle" %}style="display:none"{% endif %}>
+      <div class="ops-log-bar">
+        <span class="ops-log-bar-title">Output</span>
+        <span id="log-meta-{{ task.name }}">
+          {% if task.start_time %}started {{ task.start_time|slice:":19"|cut:"T" }}{% endif %}
+          {% if task.exit_code is not None %} · exit {{ task.exit_code }}{% endif %}
+        </span>
+      </div>
+      <pre class="ops-log" id="log-{{ task.name }}"></pre>
+    </div>
+
+    {% if task.args and task.status != "running" %}
+    <div class="ops-last-run">
+      Last run: <code>{{ task.name }}{% for a in task.args %} {{ a }}{% endfor %}</code>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endfor %}
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  'use strict';
+
+  function getCsrfToken() {
+    const m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+  }
+
+  function formatTimestamp(iso) {
+    if (!iso) return '';
+    return iso.slice(0, 19).replace('T', ' ');
+  }
+
+  function classifyLine(text) {
+    const l = text.toLowerCase();
+    if (l.includes('error') || l.startsWith('traceback') || l.startsWith('exception')) return 'line-error';
+    if (l.includes('warning') || l.includes('skipping')) return 'line-warning';
+    if (l.includes('complete') || l.includes('done') || l.includes('success')) return 'line-success';
+    return '';
+  }
+
+  class TaskMonitor {
+    constructor(name) {
+      this.name = name;
+      this.offset = 0;
+      this.poller = null;
+      this.autoScroll = true;
+
+      this.badge    = document.getElementById('badge-' + name);
+      this.runBtn   = document.getElementById('run-' + name);
+      this.abortBtn = document.getElementById('abort-' + name);
+      this.logWrap  = document.getElementById('log-wrap-' + name);
+      this.logEl    = document.getElementById('log-' + name);
+      this.logMeta  = document.getElementById('log-meta-' + name);
+      this.form     = document.getElementById('form-' + name);
+
+      this.runBtn.addEventListener('click', () => this.run());
+      this.abortBtn.addEventListener('click', () => this.abort());
+      this.logEl.addEventListener('scroll', () => {
+        const el = this.logEl;
+        this.autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      });
+    }
+
+    _setBadge(status) {
+      this.badge.className = 'ops-badge ops-badge--' + status;
+      this.badge.innerHTML = (status === 'running' ? '<span class="dot"></span> ' : '') + status;
+    }
+
+    _setButtons(status) {
+      const running = status === 'running';
+      this.runBtn.disabled = running;
+      this.abortBtn.disabled = !running;
+    }
+
+    _appendLines(lines) {
+      for (const line of lines) {
+        const div = document.createElement('div');
+        div.textContent = line;
+        const cls = classifyLine(line);
+        if (cls) div.className = cls;
+        this.logEl.appendChild(div);
+      }
+      if (this.autoScroll) {
+        this.logEl.scrollTop = this.logEl.scrollHeight;
+      }
+    }
+
+    async fetchStatus() {
+      let data;
+      try {
+        const resp = await fetch('/ops/status/' + this.name + '/?offset=' + this.offset);
+        data = await resp.json();
+      } catch (_) {
+        return;
+      }
+
+      if (data.lines && data.lines.length) this._appendLines(data.lines);
+      this.offset = data.next_offset;
+      this._setBadge(data.status);
+      this._setButtons(data.status);
+
+      if (data.start_time) {
+        let meta = 'started ' + formatTimestamp(data.start_time);
+        if (data.end_time) meta += ' · ended ' + formatTimestamp(data.end_time);
+        if (data.exit_code != null) meta += ' · exit ' + data.exit_code;
+        this.logMeta.textContent = meta;
+      }
+
+      if (data.status === 'done' || data.status === 'failed') {
+        this.stopPolling();
+      }
+    }
+
+    startPolling() {
+      if (this.poller) return;
+      this.poller = setInterval(() => this.fetchStatus(), 1000);
+    }
+
+    stopPolling() {
+      if (this.poller) { clearInterval(this.poller); this.poller = null; }
+    }
+
+    async run() {
+      const formData = new FormData(this.form);
+      let resp;
+      try {
+        resp = await fetch('/ops/run/' + this.name + '/', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-CSRFToken': getCsrfToken() },
+        });
+      } catch (e) {
+        alert('Network error: ' + e);
+        return;
+      }
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        alert('Error: ' + (err.error || resp.statusText));
+        return;
+      }
+      // Reset log and start monitoring.
+      this.offset = 0;
+      this.autoScroll = true;
+      this.logEl.innerHTML = '';
+      this.logMeta.textContent = 'started just now';
+      this.logWrap.style.display = '';
+      this._setBadge('running');
+      this._setButtons('running');
+      this.startPolling();
+    }
+
+    async abort() {
+      try {
+        await fetch('/ops/abort/' + this.name + '/', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCsrfToken() },
+        });
+      } catch (_) {}
+    }
+
+    /* On page load, resume monitoring if the task is already running. */
+    resumeIfRunning(initialStatus) {
+      if (initialStatus === 'running') {
+        this.logWrap.style.display = '';
+        this.startPolling();
+      }
+    }
+  }
+
+  const monitors = {};
+  document.querySelectorAll('.ops-card').forEach(function (card) {
+    const name = card.id.replace('card-', '');
+    const badge = card.querySelector('.ops-badge');
+    const initialStatus = badge ? badge.dataset.status || badge.textContent.trim() : 'idle';
+    monitors[name] = new TaskMonitor(name);
+    // Seed: read badge status from the class name set server-side.
+    const statusClass = Array.from(badge.classList).find(c => c.startsWith('ops-badge--'));
+    const status = statusClass ? statusClass.replace('ops-badge--', '') : 'idle';
+    monitors[name].resumeIfRunning(status);
+  });
+})();
+</script>
+{% endblock extra_scripts %}

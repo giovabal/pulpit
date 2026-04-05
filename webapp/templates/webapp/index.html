@@ -35,6 +35,9 @@
             <li class="nav-item">
               <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>
             </li>
+            <li class="nav-item">
+              <a class="nav-link{% if url_name == 'ops' %} active{% endif %}" href="{% url 'ops' %}">Ops</a>
+            </li>
           </ul>
           <a href="/admin/" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin

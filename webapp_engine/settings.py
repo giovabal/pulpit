@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "webapp",
     "crawler",
     "network",
+    "runner",
 ]
 
 MIDDLEWARE = [
