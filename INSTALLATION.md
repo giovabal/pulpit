@@ -40,6 +40,7 @@ By default Pulpit uses SQLite. To use a server-based backend, set `DB_ENGINE` in
 ```sh
 pip install psycopg2-binary   # PostgreSQL
 pip install mysqlclient        # MySQL or MariaDB
+pip install oracledb           # Oracle
 ```
 
 Then run migrations for whichever backend you configured:
@@ -96,9 +97,34 @@ python manage.py migrate
 python manage.py loaddata data.json
 ```
 
+### SQLite → Oracle
+
+```sh
+# 1. Dump all data from SQLite
+python manage.py dumpdata \
+    --natural-foreign --natural-primary \
+    --exclude contenttypes --exclude auth.permission \
+    -o data.json
+
+# 2. Switch .env to Oracle
+#    DB_ENGINE=oracle  DB_NAME=ORCL  DB_USER=...  DB_PASSWORD=...  DB_HOST=...
+
+# 3. Create the Oracle user / schema (connect as DBA)
+sqlplus sys/<password>@<host>/<service> as sysdba
+SQL> CREATE USER pulpit IDENTIFIED BY <password>;
+SQL> GRANT CONNECT, RESOURCE, CREATE SESSION TO pulpit;
+SQL> GRANT UNLIMITED TABLESPACE TO pulpit;
+
+# 4. Create the schema
+python manage.py migrate
+
+# 5. Load the data
+python manage.py loaddata data.json
+```
+
 ### Any engine → any other engine
 
-The same two-step pattern works for any combination: dump from the source, point `.env` at the target, run `migrate`, then `loaddata`. The steps above for PostgreSQL and MySQL/MariaDB show the only engine-specific differences (how to create the database before running `migrate`).
+The same pattern works for any combination: dump from the source, point `.env` at the target, run `migrate`, then `loaddata`. The engine-specific steps above show only how to create the database/schema before running `migrate`.
 
 > `--exclude contenttypes` and `--exclude auth.permission` are necessary: these tables are populated automatically by `migrate` and re-importing them causes primary-key conflicts. `--natural-foreign --natural-primary` improves cross-database compatibility by using named keys instead of raw integer IDs.
 

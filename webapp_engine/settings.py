@@ -112,6 +112,17 @@ elif _DB_ENGINE in ("mysql", "mariadb"):
             },
         }
     }
+elif _DB_ENGINE == "oracle":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.oracle",
+            "NAME": config("DB_NAME", cast=str),
+            "USER": config("DB_USER", default=""),
+            "PASSWORD": config("DB_PASSWORD", default=""),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="1521"),
+        }
+    }
 else:
     DATABASES = {
         "default": {

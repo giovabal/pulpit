@@ -25,21 +25,22 @@ All options go in `.env`. Copy `env.example` as a starting point.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `DB_ENGINE` | Database backend: `sqlite`, `postgresql`, `mysql`, or `mariadb` | `sqlite` |
-| `DB_NAME` | SQLite: filename (resolved from project root). All others: database name. | `db.sqlite3` |
-| `DB_USER` | PostgreSQL / MySQL / MariaDB: database user | _(empty)_ |
-| `DB_PASSWORD` | PostgreSQL / MySQL / MariaDB: database password | _(empty)_ |
-| `DB_HOST` | PostgreSQL / MySQL / MariaDB: host | `localhost` |
-| `DB_PORT` | PostgreSQL / MySQL / MariaDB: port | `5432` for PostgreSQL, `3306` for MySQL/MariaDB |
+| `DB_ENGINE` | Database backend: `sqlite`, `postgresql`, `mysql`, `mariadb`, or `oracle` | `sqlite` |
+| `DB_NAME` | SQLite: filename (resolved from project root). Oracle: service name or full DSN. All others: database name. | `db.sqlite3` |
+| `DB_USER` | All non-SQLite backends: database user | _(empty)_ |
+| `DB_PASSWORD` | All non-SQLite backends: database password | _(empty)_ |
+| `DB_HOST` | All non-SQLite backends: host | `localhost` |
+| `DB_PORT` | All non-SQLite backends: port | `5432` (PostgreSQL), `3306` (MySQL/MariaDB), `1521` (Oracle) |
 
 Each non-SQLite backend requires its driver — install separately before running:
 
 ```sh
 pip install psycopg2-binary   # PostgreSQL
 pip install mysqlclient        # MySQL or MariaDB
+pip install oracledb           # Oracle
 ```
 
-> SQLite is the default and works out of the box; it is configured with WAL journal mode and `synchronous=NORMAL` for better concurrency. The server-based backends (PostgreSQL, MySQL, MariaDB) are recommended when running Pulpit on a shared server or when the database may be accessed by multiple processes concurrently. MySQL and MariaDB connections use `utf8mb4` charset; create the database with `CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci` to match.
+> SQLite is the default and works out of the box; it is configured with WAL journal mode and `synchronous=NORMAL` for better concurrency. The server-based backends are recommended when running Pulpit on a shared server or when the database may be accessed by multiple processes concurrently. MySQL and MariaDB connections use `utf8mb4` charset; create the database with `CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci` to match. For Oracle, `DB_NAME` accepts a service name (`ORCL`), an Easy Connect string (`host/service`), or a full TNS alias defined in `tnsnames.ora`.
 
 ## Project
 
