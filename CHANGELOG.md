@@ -7,8 +7,12 @@
 - New **Operations panel** (`/ops/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
 - New `WEB_ACCESS` setting with three modes: `ALL` (default, no auth required), `OPEN` (admin and operations require a staff account), `PROTECTED` (all pages require login; admin and operations require staff). Includes a login form styled consistently with the rest of the webapp. Staff accounts are managed through Django's user system (`python manage.py createsuperuser`).
 
+### Improvements
+- `get_channels` progress output no longer clips lines to 80 characters when running as a subprocess (Operations panel). Lines are only clipped when attached to a real terminal.
+- Message options (sort / content-type filter) are now displayed inline with the search bar rather than on a separate line.
 
-## [0.9] - 2026-05-05
+
+## [0.9] - 2026-04-05
 *A logo. Refining measures and communities detection. New webapp navigation.*
 
 ### New features

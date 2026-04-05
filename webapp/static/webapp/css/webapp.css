@@ -502,9 +502,15 @@ body {
 /* ---------- Search ---------- */
 .search-header { max-width: 52rem; margin-left: auto; margin-right: auto; margin-bottom: 1.25rem; }
 
-.search-form { margin-bottom: .75rem; }
+.search-form {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
 
 .search-input-wrap {
+  flex: 1;
   display: flex;
   align-items: center;
   background: var(--surface);
@@ -559,7 +565,7 @@ body {
 }
 
 .msg-options-row {
-  margin-top: .5rem;
+  flex-shrink: 0;
 }
 
 .msg-options-menu {

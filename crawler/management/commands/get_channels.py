@@ -57,9 +57,11 @@ class ProgressPrinter:
         self._total = total
         self._current_channel: int | None = None
         self._line_length = 0
+        self._is_tty = getattr(stdout, "isatty", lambda: False)()
 
-    @staticmethod
-    def _fit(line: str) -> str:
+    def _fit(self, line: str) -> str:
+        if not self._is_tty:
+            return line
         cols = shutil.get_terminal_size().columns
         return line if len(line) <= cols else line[: cols - 1]
 
