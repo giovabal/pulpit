@@ -14,7 +14,7 @@ from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel
+from webapp.models import Channel, Message
 from webapp_engine.async_commands import AsyncBaseCommand
 
 from telethon import errors
@@ -249,10 +249,23 @@ class Command(AsyncBaseCommand):
 
                 printer.newline()
 
-                self.stdout.write("\nRetrying unresolved message references … ", ending="")
-                self.stdout.flush()
-                crawler.get_missing_references()
-                self.stdout.write("done")
+                n_missing = Message.objects.exclude(missing_references="").count()
+                if n_missing == 0:
+                    self.stdout.write("\nNo unresolved message references.")
+                else:
+                    _ref_len = [0]
+
+                    def _ref_progress(done: int, total: int) -> None:
+                        line = printer._fit(f"Retrying unresolved message references [{done}/{total}]")
+                        padding = " " * max(0, _ref_len[0] - len(line))
+                        self.stdout.write(f"\r{line}{padding}", ending="")
+                        self.stdout.flush()
+                        _ref_len[0] = len(line)
+
+                    self.stdout.write(f"\nRetrying {n_missing} unresolved message references", ending="")
+                    self.stdout.flush()
+                    crawler.get_missing_references(status_callback=_ref_progress)
+                    self.stdout.write("", ending="\n")
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection
@@ -263,8 +276,6 @@ class Command(AsyncBaseCommand):
             if warning_handler is not None:
                 logging.getLogger().removeHandler(warning_handler)
             shutil.rmtree(download_temp_dir, ignore_errors=True)
-
-        from webapp.models import Message
 
         interesting_pks = set(Channel.objects.interesting().values_list("pk", flat=True))
 

@@ -93,9 +93,11 @@ class ReferenceResolver:
 
         return missing
 
-    def get_missing_references(self) -> None:
+    def get_missing_references(self, status_callback=None) -> None:
+        qs = Message.objects.exclude(missing_references="")
+        total = qs.count() if status_callback is not None else 0
         resolved: list[Message] = []
-        for message in Message.objects.exclude(missing_references="").iterator(chunk_size=500):
+        for index, message in enumerate(qs.iterator(chunk_size=500), start=1):
             all_resolved = True
             for reference in message.missing_references.split("|"):
                 if not reference or reference in SKIPPABLE_REFERENCES:
@@ -111,5 +113,7 @@ class ReferenceResolver:
             if len(resolved) >= 500:
                 Message.objects.bulk_update(resolved, ["missing_references"])
                 resolved.clear()
+            if status_callback is not None:
+                status_callback(index, total)
         if resolved:
             Message.objects.bulk_update(resolved, ["missing_references"])
