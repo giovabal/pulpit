@@ -49,7 +49,7 @@ python manage.py runserver   # open http://localhost:8000
 Once the server is running, the whole workflow is driven from the browser:
 
 1. **Admin** (`/admin/`) → add **Search Terms** to seed channel discovery.
-2. **Operations** (`/ops/`) → run **Search Channels** to find matching Telegram channels.
+2. **Operations** (`/operations/`) → run **Search Channels** to find matching Telegram channels.
 3. **Admin** → assign channels to **Organizations**, mark `is_interesting = True`.
 4. **Operations** → run **Get Channels** to crawl messages and resolve cross-channel references.
 5. **Operations** → run **Export Network** to build the graph and write output files.
