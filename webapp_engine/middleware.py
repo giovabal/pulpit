@@ -7,8 +7,8 @@ class WebAccessMiddleware:
     Enforce the WEB_ACCESS policy set in settings.
 
     ALL (default) — no restrictions; admin bypass remains active.
-    OPEN          — /ops/ requires is_staff; everything else is public.
-    PROTECTED     — /ops/ requires is_staff; all other paths require login.
+    OPEN          — /operations/ requires is_staff; everything else is public.
+    PROTECTED     — /operations/ requires is_staff; all other paths require login.
 
     /admin/ is always left to Django's own authentication.
     /login/, /logout/, and /static/ are always exempt.
@@ -31,7 +31,7 @@ class WebAccessMiddleware:
         if any(path.startswith(p) for p in self._ALWAYS_EXEMPT):
             return self.get_response(request)
 
-        is_ops = path.startswith("/ops/")
+        is_ops = path.startswith("/operations/")
 
         if is_ops:
             if not request.user.is_authenticated:

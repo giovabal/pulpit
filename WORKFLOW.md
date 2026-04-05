@@ -2,7 +2,7 @@
 
 A complete guide to collecting, processing, and exporting a Pulpit network.
 
-The primary way to run operations is through the **Operations panel** in the browser (`/ops/`). Each operation can also be run as a CLI management command — useful for scripting, automation, or running on a remote server without a browser.
+The primary way to run operations is through the **Operations panel** in the browser (`/operations/`). Each operation can also be run as a CLI management command — useful for scripting, automation, or running on a remote server without a browser.
 
 > On some systems replace `python` with `python3` or `py`.
 
@@ -21,7 +21,7 @@ Go to **Admin** (`/admin/`) → **Search Terms** and add keywords. These are use
 
 ## 3. Discover channels
 
-**Operations panel** (`/ops/`) → **Search Channels** → click **Run**.
+**Operations panel** (`/operations/`) → **Search Channels** → click **Run**.
 
 Optional: expand **Options** to set a maximum number of search terms to process in this run.
 
@@ -40,7 +40,7 @@ In the **Admin** (`/admin/`), open **Channels** and assign each channel you want
 
 ## 5. Crawl channels
 
-**Operations panel** (`/ops/`) → **Get Channels** → click **Run**.
+**Operations panel** (`/operations/`) → **Get Channels** → click **Run**.
 
 Downloads messages for all interesting channels and resolves cross-channel references. Re-run at any time to fetch new messages.
 
@@ -65,7 +65,7 @@ python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh a
 
 ## 6. Export the graph
 
-**Operations panel** (`/ops/`) → **Export Network** → click **Run**.
+**Operations panel** (`/operations/`) → **Export Network** → click **Run**.
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
 By default produces the 2D interactive graph and three sortable HTML tables:

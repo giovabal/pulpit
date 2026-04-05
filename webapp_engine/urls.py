@@ -45,6 +45,6 @@ urlpatterns = [
         if settings.DEBUG
         else []
     ),
-    path("ops/", include("runner.urls")),
+    path("operations/", include("runner.urls")),
     path("", include("webapp.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

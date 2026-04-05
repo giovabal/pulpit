@@ -28,7 +28,7 @@ See WORKFLOW.md for all flags and options.
 ### Data flow
 
 1. User adds `SearchTerm` entries in Django admin
-2. Operations panel (`/ops/`) or `search_channels` finds channels via Telegram API → `Channel` records
+2. Operations panel (`/operations/`) or `search_channels` finds channels via Telegram API → `Channel` records
 3. User assigns channels to `Organization` objects, marks `is_interesting=True`
 4. Operations panel or `get_channels` fetches messages and resolves cross-channel references
 5. Operations panel or `export_network` builds the graph, detects communities, runs layout, writes output to `graph/`
@@ -49,7 +49,7 @@ See WORKFLOW.md for all flags and options.
 - **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
 - **`runner/tasks.py`** — Task manager for Operations panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
 - **`runner/views.py`** — Operations panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
-- **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/ops/`), `PROTECTED` (login required everywhere; staff required for `/ops/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
+- **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/operations/`), `PROTECTED` (login required everywhere; staff required for `/operations/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
 - **`webapp/context_processors.py`** — Exposes `WEB_ACCESS` to all templates.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
 

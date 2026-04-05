@@ -54,7 +54,7 @@ In either restricted mode, create at least one staff account before starting the
 python manage.py createsuperuser
 ```
 
-This account can log in to both `/admin/` and `/ops/`. You can also create regular (non-staff) accounts in the admin; in `PROTECTED` mode they can view pages but not administer or operate the system.
+This account can log in to both `/admin/` and `/operations/`. You can also create regular (non-staff) accounts in the admin; in `PROTECTED` mode they can view pages but not administer or operate the system.
 
 ## Next steps
 
@@ -64,7 +64,7 @@ Start the server and open the browser interface:
 python manage.py runserver   # open http://localhost:8000
 ```
 
-The **Operations panel** (`/ops/`) lets you launch and monitor all data collection and export tasks directly from the browser. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
+The **Operations panel** (`/operations/`) lets you launch and monitor all data collection and export tasks directly from the browser. See [WORKFLOW.md](WORKFLOW.md) for the complete step-by-step guide.
 
 ---
 

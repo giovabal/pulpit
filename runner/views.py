@@ -25,13 +25,13 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
 }
 
 
-class OpsView(View):
+class OperationsView(View):
     def get(self, request: HttpRequest) -> HttpResponse:
         task_info = []
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
-        return render(request, "runner/ops.html", {"tasks": task_info})
+        return render(request, "runner/operations.html", {"tasks": task_info})
 
 
 class RunTaskView(View):

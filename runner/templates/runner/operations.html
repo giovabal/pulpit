@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'runner/css/ops.css' %}">
+<link rel="stylesheet" href="{% static 'runner/css/operations.css' %}">
 {% endblock extra_styles %}
 
 {% block content %}
@@ -207,7 +207,7 @@
     async fetchStatus() {
       let data;
       try {
-        const resp = await fetch('/ops/status/' + this.name + '/?offset=' + this.offset);
+        const resp = await fetch('/operations/status/' + this.name + '/?offset=' + this.offset);
         data = await resp.json();
       } catch (_) {
         return;
@@ -243,7 +243,7 @@
       const formData = new FormData(this.form);
       let resp;
       try {
-        resp = await fetch('/ops/run/' + this.name + '/', {
+        resp = await fetch('/operations/run/' + this.name + '/', {
           method: 'POST',
           body: formData,
           headers: { 'X-CSRFToken': getCsrfToken() },
@@ -270,7 +270,7 @@
 
     async abort() {
       try {
-        await fetch('/ops/abort/' + this.name + '/', {
+        await fetch('/operations/abort/' + this.name + '/', {
           method: 'POST',
           headers: { 'X-CSRFToken': getCsrfToken() },
         });
