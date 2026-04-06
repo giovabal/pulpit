@@ -101,8 +101,35 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
     return lines, new_offset
 
 
+_WRAPPER_SCRIPT = """\
+import json, signal, subprocess, sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+meta_path = Path(sys.argv[1])
+cmd = sys.argv[2:]
+proc = subprocess.Popen(cmd)
+signal.signal(signal.SIGTERM, lambda _sig, _frame: proc.send_signal(signal.SIGTERM))
+exit_code = proc.wait()
+try:
+    m = json.loads(meta_path.read_text())
+    m["exit_code"] = exit_code
+    m["end_time"] = datetime.now(timezone.utc).isoformat()
+    meta_path.write_text(json.dumps(m))
+except Exception:
+    pass
+sys.exit(exit_code)
+"""
+
+
 def launch(task: str, args: list[str]) -> None:
-    """Launch a management command as a subprocess, streaming output to a log file."""
+    """Launch a management command as a subprocess, streaming output to a log file.
+
+    The command is wrapped in a small self-contained Python script that is spawned
+    as an independent process.  That wrapper process is not a daemon thread — it
+    survives Django dev-server auto-reloads — so the exit code is always recorded
+    in the meta file once the command finishes.
+    """
     if task not in TASK_NAMES:
         raise ValueError(f"Unknown task: {task!r}")
 
@@ -125,10 +152,11 @@ def launch(task: str, args: list[str]) -> None:
         meta_path.write_text(json.dumps(meta))
 
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        cmd = [sys.executable, _MANAGE_PY, task, *args]
         log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
         try:
             proc = subprocess.Popen(
-                [sys.executable, _MANAGE_PY, task, *args],
+                [sys.executable, "-c", _WRAPPER_SCRIPT, str(meta_path), *cmd],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 env=env,
@@ -138,18 +166,6 @@ def launch(task: str, args: list[str]) -> None:
 
         meta["pid"] = proc.pid
         meta_path.write_text(json.dumps(meta))
-
-    def _reaper() -> None:
-        exit_code = proc.wait()
-        try:
-            current_meta = json.loads(meta_path.read_text())
-            current_meta["exit_code"] = exit_code
-            current_meta["end_time"] = datetime.now(timezone.utc).isoformat()
-            meta_path.write_text(json.dumps(current_meta))
-        except Exception:
-            pass
-
-    threading.Thread(target=_reaper, daemon=True).start()
 
 
 def abort(task: str) -> bool:
