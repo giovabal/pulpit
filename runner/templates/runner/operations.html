@@ -147,7 +147,7 @@
 
   function formatTimestamp(iso) {
     if (!iso) return '';
-    return new Date(iso).toLocaleString();
+    return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
   }
 
   function classifyLine(text) {

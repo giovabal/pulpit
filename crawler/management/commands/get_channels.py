@@ -294,8 +294,6 @@ class Command(AsyncBaseCommand):
             )
         ) - interesting_pks
 
-        self.stdout.write(f"\nRefreshing degrees for {len(interesting_pks)} interesting channels … ", ending="")
-        self.stdout.flush()
         if interesting_pks:
             # Build (message_id, target_channel_id) pairs for all citations toward interesting channels,
             # taking the union of forward-from and reference links so each message counts once per target.
@@ -344,12 +342,22 @@ class Command(AsyncBaseCommand):
                     ch.in_degree, ch.out_degree = cited_by, cites
                 else:
                     ch.in_degree, ch.out_degree = cites, cited_by
-            Channel.objects.bulk_update(channels_to_update, ["in_degree", "out_degree"])
-        self.stdout.write("done")
+
+            total = len(channels_to_update)
+            _len: list[int] = [0]
+            self.stdout.write(f"\nRefreshing degrees for {total} interesting channels", ending="")
+            self.stdout.flush()
+            for i in range(0, total, 100):
+                Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
+                done = min(i + 100, total)
+                line = printer._fit(f"Refreshing degrees for {total} interesting channels [{done}/{total}]")
+                padding = " " * max(0, _len[0] - len(line))
+                self.stdout.write(f"\r{line}{padding}", ending="")
+                self.stdout.flush()
+                _len[0] = len(line)
+            self.stdout.write("", ending="\n")
 
         if cited_pks:
-            self.stdout.write(f"Refreshing citation degree for {len(cited_pks)} referenced channels … ", ending="")
-            self.stdout.flush()
             fwd_cited = set(
                 Message.objects.filter(
                     channel__organization__is_interesting=True,
@@ -375,7 +383,19 @@ class Command(AsyncBaseCommand):
                     ch.in_degree, ch.out_degree = citations, 0
                 else:
                     ch.in_degree, ch.out_degree = 0, citations
-            Channel.objects.bulk_update(cited_channels, ["in_degree", "out_degree"])
-            self.stdout.write("done")
+
+            total = len(cited_channels)
+            _len2: list[int] = [0]
+            self.stdout.write(f"Refreshing citation degree for {total} referenced channels", ending="")
+            self.stdout.flush()
+            for i in range(0, total, 100):
+                Channel.objects.bulk_update(cited_channels[i : i + 100], ["in_degree", "out_degree"])
+                done = min(i + 100, total)
+                line = printer._fit(f"Refreshing citation degree for {total} referenced channels [{done}/{total}]")
+                padding = " " * max(0, _len2[0] - len(line))
+                self.stdout.write(f"\r{line}{padding}", ending="")
+                self.stdout.flush()
+                _len2[0] = len(line)
+            self.stdout.write("", ending="\n")
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
