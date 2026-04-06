@@ -12,6 +12,9 @@
 ### Improvements
 - Message options (sort / content-type filter) for the search bar.
 
+### Fixed
+- Profile pictures are now copied in the right place for graph. And got a favicon.ico file.
+
 
 ## [0.9] - 2026-04-05
 *A logo. Refining measures and communities detection. New webapp navigation.*

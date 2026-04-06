@@ -146,14 +146,14 @@ function structured_neighbors(nodeId) {
 // =============================================================================
 
 function node_sort(x, y) {
-    return x.label.localeCompare(y.label);
+    return (x.label || '').localeCompare(y.label || '');
 }
 
 function get_anchor(node) {
     var color = node.originalColor || '#ccc';
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
     return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + label + '"></i>'
-         + ' <a href="#" class="node-link" data="' + node.id + '">' + node.label + '</a>';
+         + ' <a href="#" class="node-link" data="' + node.id + '">' + (node.label || node.id) + '</a>';
 }
 
 function get_group(node) {
@@ -179,7 +179,7 @@ function get_neighbors_list(id_list) {
 function show_node_info(nodeId) {
     var node = graph.getNodeAttributes(nodeId);
     var key = node.url ? node.url.replace('https://t.me/', '') : '';
-    el('node_label').innerHTML = node.label;
+    el('node_label').innerHTML = node.label || node.id;
     var urlEl = el('node_url');
     urlEl.innerHTML = '@' + key;
     urlEl.href = node.url;

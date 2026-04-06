@@ -263,7 +263,7 @@ def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
     for username, telegram_id in channel_qs.values_list("username", "telegram_id"):
         channel_dir = username or str(telegram_id)
         src = os.path.join(settings.MEDIA_ROOT, "channels", channel_dir, "profile")
-        dst = os.path.join(root_target, "channels", channel_dir, "profile")
+        dst = os.path.join(root_target, "media", "channels", channel_dir, "profile")
         try:
             shutil.copytree(src, dst, dirs_exist_ok=True)
         except FileNotFoundError:
