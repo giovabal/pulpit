@@ -44,7 +44,13 @@ In the **Admin** (`/admin/`), open **Channels** and assign each channel you want
 
 Downloads messages for all interesting channels and resolves cross-channel references. Re-run at any time to fetch new messages.
 
-After crawling, `get_channels` automatically refreshes the in-degree and out-degree counters for all interesting channels. It also refreshes the citation degree (direction depends on `REVERSED_EDGES`) for non-interesting channels that are forwarded or mentioned — so the graph correctly shows how much each referenced channel is cited even if it was never crawled.
+After crawling, `get_channels` runs three additional discovery and maintenance steps automatically:
+
+1. **Retry unresolved message references** — re-attempts `t.me/` usernames from message text that previously could not be resolved to a channel (e.g. due to a temporary flood wait).
+2. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. This is a zero-cost discovery pass using data already stored locally; new channels are added to the database but not crawled until you mark them as interesting.
+3. **Fetch recommended channels** *(opt-in, set `FETCH_RECOMMENDED_CHANNELS=True` in `.env`)* — calls the Telegram "recommended channels" API for each interesting channel and adds any suggestions not yet in the database.
+
+`get_channels` also automatically refreshes the in-degree and out-degree counters for all interesting channels and the citation degree for non-interesting channels that are forwarded or mentioned — so the graph correctly shows how much each referenced channel is cited even if it was never crawled.
 
 Optional (expand **Options** to set):
 

@@ -13,7 +13,7 @@ from django.db.models import F
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
-from crawler.reference_resolver import ReferenceResolver
+from crawler.reference_resolver import SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import Channel, Message
 from webapp_engine.async_commands import AsyncBaseCommand
 
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _REFRESH_SKIP = object()  # sentinel: flag not provided at all
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ABOUT_REF_RE = re.compile(r"t\.me/((?:[-\w.]|(?:%[\da-fA-F]{2}))+)")
 
 
 def _parse_refresh_arg(raw: Any) -> tuple[int | None, datetime.date | None]:
@@ -266,6 +267,80 @@ class Command(AsyncBaseCommand):
                     self.stdout.flush()
                     crawler.get_missing_references(status_callback=_ref_progress)
                     self.stdout.write("", ending="\n")
+
+                # ---- mine Channel.about for t.me/ references ----
+                about_refs: set[str] = set()
+                for about_text in Channel.objects.exclude(about="").values_list("about", flat=True):
+                    for m in _ABOUT_REF_RE.finditer(about_text):
+                        ref = m.group(1).strip().lower()
+                        if ref and ref not in SKIPPABLE_REFERENCES:
+                            about_refs.add(ref)
+
+                if about_refs:
+                    known_lower = {
+                        u.lower() for u in Channel.objects.exclude(username="").values_list("username", flat=True)
+                    }
+                    new_about_refs = sorted(about_refs - known_lower)
+                    if new_about_refs:
+                        n_about = len(new_about_refs)
+                        self.stdout.write(f"\nFetching {n_about} channels referenced in about texts", ending="")
+                        self.stdout.flush()
+                        _about_len: list[int] = [0]
+                        fetched_about = 0
+                        for i, ref in enumerate(new_about_refs, start=1):
+                            line = printer._fit(f"About texts [{i}/{n_about}] {ref}")
+                            padding = " " * max(0, _about_len[0] - len(line))
+                            self.stdout.write(f"\r{line}{padding}", ending="")
+                            self.stdout.flush()
+                            _about_len[0] = len(line)
+                            try:
+                                channel, _ = crawler.get_basic_channel(ref)
+                                if channel:
+                                    fetched_about += 1
+                            except errors.FloodWaitError as exc:
+                                self.stdout.write("", ending="\n")
+                                self.stdout.write(
+                                    self.style.WARNING(f"Flood wait while fetching about references: {exc}")
+                                )
+                                break
+                            except ValueError:
+                                pass  # user account, not a channel
+                            except Exception as exc:
+                                logger.warning("Error fetching about reference %s: %s", ref, exc)
+                        self.stdout.write("", ending="\n")
+                        self.stdout.write(f"About texts: {fetched_about}/{n_about} new channels fetched.")
+                    else:
+                        self.stdout.write("\nAbout texts: all referenced channels already in DB.")
+
+                # ---- fetch Telegram-recommended channels ----
+                if settings.FETCH_RECOMMENDED_CHANNELS:
+                    interesting_channels = list(Channel.objects.interesting())
+                    n_rec = len(interesting_channels)
+                    self.stdout.write(f"\nFetching recommended channels for {n_rec} interesting channels", ending="")
+                    self.stdout.flush()
+                    _rec_len: list[int] = [0]
+                    rec_total = 0
+                    rec_new = 0
+                    for i, channel in enumerate(interesting_channels, start=1):
+                        line = printer._fit(f"Recommended channels [{i}/{n_rec}] {channel}")
+                        padding = " " * max(0, _rec_len[0] - len(line))
+                        self.stdout.write(f"\r{line}{padding}", ending="")
+                        self.stdout.flush()
+                        _rec_len[0] = len(line)
+                        try:
+                            found, new = crawler.get_recommended_channels(channel)
+                            rec_total += found
+                            rec_new += new
+                        except errors.FloodWaitError as exc:
+                            self.stdout.write("", ending="\n")
+                            self.stdout.write(
+                                self.style.WARNING(f"Flood wait while fetching recommended channels: {exc}")
+                            )
+                            break
+                        except Exception as exc:
+                            logger.warning("Error fetching recommended channels for %s: %s", channel, exc)
+                    self.stdout.write("", ending="\n")
+                    self.stdout.write(f"Recommended channels: {rec_total} found, {rec_new} new.")
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection

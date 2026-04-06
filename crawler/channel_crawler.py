@@ -14,7 +14,7 @@ from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, MessagePicture, MessageVideo
 
 from telethon import errors, functions
-from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
 from telethon.tl.types import MessageService
 
 logger = logging.getLogger(__name__)
@@ -288,6 +288,32 @@ class ChannelCrawler:
                         self.media_handler.download_message_video(telegram_message)
             update_status(f"refreshing message stats … {updated} updated")
         return updated
+
+    def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:
+        """Fetch Telegram-recommended channels for *channel*. Returns (total_found, new_to_db)."""
+        from telethon.tl.types import InputChannel
+
+        if not channel.access_hash:
+            return 0, 0
+        self.api_client.wait()
+        try:
+            result = self.api_client.client(
+                GetChannelRecommendationsRequest(
+                    channel=InputChannel(channel_id=channel.telegram_id, access_hash=channel.access_hash)
+                )
+            )
+        except (errors.rpcerrorlist.ChannelPrivateError, errors.rpcerrorlist.ChannelInvalidError):
+            return 0, 0
+        total = 0
+        new = 0
+        for chat in result.chats:
+            if not hasattr(chat, "id"):
+                continue
+            total += 1
+            if not Channel.objects.filter(telegram_id=chat.id).exists():
+                Channel.from_telegram_object(chat, force_update=True)
+                new += 1
+        return total, new
 
     def search_channel(self, q: str, limit: int = 1000) -> tuple[int, int]:
         """Search for channels matching q. Returns (total_found, new_to_db)."""
