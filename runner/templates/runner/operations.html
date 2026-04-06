@@ -56,7 +56,10 @@
           {% if task.name == "search_channels" %}
           <div class="ops-params">
             <div class="ops-param">
-              <label for="amount_sc">Max search terms <span class="ops-param-hint">(blank = all)</span></label>
+              <label for="amount_sc">Max search terms
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Limit how many search terms are processed in this run. Leave blank to process all terms in order of last check date."></i>
+              </label>
               <input type="number" name="amount" id="amount_sc" placeholder="–" min="1">
             </div>
           </div>
@@ -65,43 +68,83 @@
           <div class="ops-flags">
             <label class="ops-flag">
               <input type="checkbox" name="fixholes">Fix message holes
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
             </label>
             <label class="ops-flag">
               <input type="checkbox" name="do_refresh">Refresh message stats
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
             </label>
           </div>
           <div class="ops-params">
             <div class="ops-param">
-              <label for="refresh_value">Refresh limit <span class="ops-param-hint">N or YYYY-MM-DD, blank = all; only if refresh is checked</span></label>
+              <label for="refresh_value">Refresh limit
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when Refresh message stats is checked."></i>
+              </label>
               <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md">
             </div>
             <div class="ops-param">
-              <label for="fromid">From DB id ≤ <span class="ops-param-hint">optional</span></label>
+              <label for="fromid">From DB id ≤
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Process only channels whose internal database ID is at most this value. Useful to resume an interrupted run or target a specific subset of channels."></i>
+              </label>
               <input type="number" name="fromid" id="fromid" placeholder="–" min="1">
             </div>
           </div>
 
           {% elif task.name == "export_network" %}
           <div class="ops-flags">
-            <label class="ops-flag"><input type="checkbox" name="graph_3d">3D graph</label>
-            <label class="ops-flag"><input type="checkbox" name="xlsx">Excel spreadsheets</label>
-            <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file</label>
-            <label class="ops-flag"><input type="checkbox" name="graphml">GraphML file</label>
-            <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised</label>
-            <label class="ops-flag ops-flag--skip"><input type="checkbox" name="no_graph">Skip 2D graph</label>
-            <label class="ops-flag ops-flag--skip"><input type="checkbox" name="no_html">Skip HTML tables</label>
+            <label class="ops-flag"><input type="checkbox" name="graph_3d">3D graph
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Generate an additional 3D force-directed graph (graph3d.html) rendered with Three.js. Rotate, zoom, and pan with the mouse."></i>
+            </label>
+            <label class="ops-flag"><input type="checkbox" name="xlsx">Excel spreadsheets
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Export channel, community, and network tables as .xlsx files alongside the HTML versions."></i>
+            </label>
+            <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Export the network as a GEXF file with all measures and community assignments as node attributes. Compatible with Gephi."></i>
+            </label>
+            <label class="ops-flag"><input type="checkbox" name="graphml">GraphML file
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Export the network as a GraphML file. Compatible with R/igraph, NetworkX, yEd, and most graph analysis tools."></i>
+            </label>
+            <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Add meta tags and structured data to the graph HTML for better search engine indexing. Use when publishing the graph publicly."></i>
+            </label>
+            <label class="ops-flag ops-flag--skip"><input type="checkbox" name="no_graph">Skip 2D graph
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Skip generating the 2D interactive graph (graph.html). Useful when you only need tables or other export formats and want a faster run."></i>
+            </label>
+            <label class="ops-flag ops-flag--skip"><input type="checkbox" name="no_html">Skip HTML tables
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Skip generating the channel, community, and network HTML tables. Useful when you only need the graph visualisation."></i>
+            </label>
           </div>
           <div class="ops-params">
             <div class="ops-param">
-              <label for="startdate">Start date</label>
+              <label for="startdate">Start date
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Include only messages from this date onward when computing edge weights and activity metrics. Leave blank for no lower bound."></i>
+              </label>
               <input type="date" name="startdate" id="startdate">
             </div>
             <div class="ops-param">
-              <label for="enddate">End date</label>
+              <label for="enddate">End date
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Include only messages up to and including this date. Leave blank for no upper bound."></i>
+              </label>
               <input type="date" name="enddate" id="enddate">
             </div>
             <div class="ops-param">
-              <label for="compare">Compare with project dir <span class="ops-param-hint">optional</span></label>
+              <label for="compare">Compare with project dir
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Path to a previously exported graph directory. When provided, the channel table will include a comparison column showing degree changes since that snapshot."></i>
+              </label>
               <input type="text" name="compare" id="compare" placeholder="path/to/graph/" data-width="lg">
             </div>
           </div>
@@ -139,6 +182,9 @@
 <script>
 (function () {
   'use strict';
+  document.querySelectorAll('.ops-tip').forEach(function (el) {
+    new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+  });
 
   function getCsrfToken() {
     const m = document.cookie.match(/csrftoken=([^;]+)/);

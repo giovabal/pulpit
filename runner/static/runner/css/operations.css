@@ -141,6 +141,16 @@
   opacity: .75;
 }
 
+.ops-tip {
+  font-style: normal;
+  font-size: .75rem;
+  opacity: .55;
+  cursor: help;
+  margin-left: .2rem;
+  vertical-align: middle;
+}
+.ops-tip:hover { opacity: .9; }
+
 .ops-param input {
   border: 1px solid var(--border);
   border-radius: .375rem;
