@@ -9,7 +9,7 @@ from django.views.generic import ListView, TemplateView
 
 from webapp.paginator import DiggPaginator
 
-from .models import Channel, Message
+from .models import Channel, Message, Organization
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date
 
@@ -177,6 +177,7 @@ class ChannelListView(ListView):
             .annotate(messages_count=Count("message_set"))
             .order_by("title")
         )
+        ctx["organizations"] = Organization.objects.filter(is_interesting=True).order_by("name")
         return ctx
 
 

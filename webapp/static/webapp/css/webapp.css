@@ -674,9 +674,32 @@ body {
   min-width: 0;
 }
 
+.channel-filters {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.channel-org-select {
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .4rem .6rem;
+  height: 2.1rem;
+  cursor: pointer;
+}
+
+.channel-org-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+}
+
 .channels-list {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: .5rem;
   margin: 0;
 }

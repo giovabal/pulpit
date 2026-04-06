@@ -10,15 +10,25 @@
       <h1 class="h5 fw-semibold mb-0">Channels</h1>
       <span class="channels-count" id="channels-count"></span>
     </div>
-    <div class="channel-filter-wrap">
-      <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
-      <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+    <div class="channel-filters">
+      <div class="channel-filter-wrap">
+        <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
+        <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+      </div>
+      {% if organizations %}
+      <select id="org-filter" class="channel-org-select" aria-label="Filter by organization">
+        <option value="">All organizations</option>
+        {% for org in organizations %}
+        <option value="{{ org.pk }}">{{ org.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
     </div>
   </div>
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -46,7 +56,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -72,6 +82,7 @@
 <script>
   (function () {
     var input = document.getElementById("channel-filter");
+    var orgSelect = document.getElementById("org-filter");
     var mainRows = Array.from(document.querySelectorAll("#channels-list .channel-row"));
     var excludedSep = document.getElementById("excluded-sep");
     var excludedList = document.getElementById("excluded-list");
@@ -88,18 +99,24 @@
       if (excludedCountEl) excludedCountEl.textContent = visible(excludedRows).toLocaleString();
     }
 
-    updateCounts();
-
-    input.addEventListener("input", function () {
-      var q = this.value.toLowerCase();
+    function applyFilters() {
+      var q = input.value.toLowerCase();
+      var org = orgSelect ? orgSelect.value : "";
       mainRows.concat(excludedRows).forEach(function (row) {
-        row.style.display = row.dataset.title.includes(q) ? "" : "none";
+        var matchText = row.dataset.title.includes(q);
+        var matchOrg = !org || row.dataset.org === org;
+        row.style.display = (matchText && matchOrg) ? "" : "none";
       });
       if (excludedSep) {
         excludedSep.style.display = visible(excludedRows) ? "" : "none";
       }
       updateCounts();
-    });
+    }
+
+    updateCounts();
+
+    input.addEventListener("input", applyFilters);
+    if (orgSelect) orgSelect.addEventListener("change", applyFilters);
 
     input.focus();
   })();
