@@ -290,15 +290,11 @@ class ChannelDetailView(ListView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = (
-            Message.objects.filter(channel=self.selected_channel)
-            .prefetch_related("references", "forwarded_from")
-            .order_by("date")
-        )
+        qs = Message.objects.filter(channel=self.selected_channel).prefetch_related("references", "forwarded_from")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(message__icontains=q)
-        return qs
+        return _apply_message_options(qs, self.request.GET)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         from django.urls import reverse
@@ -307,7 +303,7 @@ class ChannelDetailView(ListView):
         ch = self.selected_channel
         q = self.request.GET.get("q", "").strip()
         context_data["query"] = q
-        context_data["original_query"] = f"&q={q}" if q else ""
+        context_data.update(_message_options_context(self.request.GET))
 
         msg_qs = Message.objects.filter(channel=ch)
         total_messages = msg_qs.count()
