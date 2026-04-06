@@ -11,7 +11,7 @@
     {% for num in page_obj.elided_page_range %}
     {% if num == page_obj.number %}
     <li class="page-item active"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}" aria-current="page">{{ num }}</a></li>
-    {% elif not num %}
+    {% elif num == page_obj.paginator.ELLIPSIS %}
     <li class="page-item disabled"><span class="page-link" aria-hidden="true">…</span></li>
     {% else %}
     <li class="page-item"><a class="page-link" href="./?{{ view.page_kwarg }}={{ num }}{{ original_query }}{{ original_fragment }}">{{ num }}</a></li>

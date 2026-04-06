@@ -60,10 +60,6 @@ Run BERTopic or LDA on stored message text to assign each channel to topic clust
 
 Rather than just detecting topics, track which narrative frames appear in messages (keyword lists or small embedding classifiers). Count how often each channel uses each narrative. Output narrative adoption rates per channel, and flag channels that adopt new narratives quickly (narrative amplifiers) vs. originate them.
 
-### 3.3 — Language detection per channel
-
-Automatically detect the primary language of each channel's messages (using `langdetect` or `lingua`). Store as a `Channel.language` field. Use in the graph frontend as a filter/coloring option. Critical for multilingual monitoring projects.
-
 ### 3.4 — URL domain analysis
 
 Extract domains from the `webpage_url` field (already stored on messages). Build a secondary graph: channels sharing the same external URLs or domains. Channels that consistently share links to the same set of domains — especially obscure ones — form implicit networks even without direct forwards. Output as `domain_table` or an additional edge type in the graph.
@@ -92,10 +88,6 @@ Currently, community tables are shown per-strategy. A new entry in `network_tabl
 
 If temporal snapshots are generated (see 1.1), add a timeline slider to `graph.html` that morphs the graph between snapshots. Nodes fade in/out, edges change weight, communities shift. Uses Sigma.js `animateNodes()` for smooth transitions.
 
-### 5.2 — Edge type differentiation
-
-Currently, edges from `forwarded_from` and from `t.me/` references are merged. Expose them as separate edge types (toggle in the UI): "Forwards only", "References only", "Both". Different rendering (solid vs. dashed) for each type. This lets researchers distinguish direct content amplification from looser mentions.
-
 ### 5.3 — Ego-graph exploration mode
 
 Clicking a node currently shows in/out edges in a sidebar. Add a dedicated "Explore neighborhood" mode: clicking a node isolates it and its N-hop neighborhood, grays out everything else, and allows N to be adjusted (slider 1–3 hops). Essential for drilling into individual channels without losing network context.
@@ -112,10 +104,6 @@ When `--compare` is used, enhance `network_compare_table.html` with a Sankey dia
 
 ## 6. Crawling Improvements
 
-### 6.1 — Scheduled incremental crawl
-
-Add a `--since HOURS` option to `get_channels`: only crawl new messages from the last N hours. Combined with a cron job, enables near-real-time monitoring. Distinguishable from existing behavior because it doesn't backfill history; it only fetches messages newer than `max_telegram_id` with a time constraint.
-
 ### 6.3 — Group/supergroup reply crawling
 
 Supergroups (`megagroup=True`) store discussion replies. Currently, these are crawled as channels but their replies (comments) are not fetched. Fetching replies would reveal which channels' posts generate discussion and who participates. New `Message.reply_to` field and `--crawl-replies` option.
@@ -124,17 +112,9 @@ Supergroups (`megagroup=True`) store discussion replies. Currently, these are cr
 
 Telegram messages have emoji reactions. Store `Message.reactions` as a JSON field (reaction emoji → count). Expose total reaction count as a new column in `channel_table`, and a reaction-weighted engagement measure. Reactions are already available in the Telethon API via `message.reactions`.
 
-### 6.5 — Geo-tagged message tracking
-
-Messages with location entities in text, or channels with `has_geo=True`. Extract and store location mentions; build a geographic distribution of channel audiences. Exportable as a heatmap alongside the network graph.
-
 ---
 
 ## 7. Organization & Workflow
-
-### 7.1 — Bulk channel labeling via CSV import
-
-Currently, channels are assigned to Organizations one-by-one in Django admin. Add a management command `import_organizations --file labels.csv` accepting a CSV with columns `telegram_id` or `username`, `organization_name`, `color`. Creates organizations and assigns channels in bulk. Essential for projects with hundreds of channels.
 
 ### 7.2 — Channel health dashboard
 

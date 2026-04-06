@@ -13,13 +13,13 @@
 - Message options (sort / content-type filter) for the search bar.
 - Channels page: organization filter select and 4-column grid layout.
 - `get_channels` now mines the `about` field of all channels in the DB for `t.me/` links after the main crawl loop, fetching any referenced channels not yet in the database (zero extra API calls for already-known channels).
-- `get_channels` optionally fetches Telegram-recommended channels for each interesting channel (`FETCH_RECOMMENDED_CHANNELS=True` in `.env`). Both discovery steps show `[done/total]` progress.
+- `get_channels` optionally fetches Telegram-recommended channels for each interesting channel (`FETCH_RECOMMENDED_CHANNELS=True` in `.env`).
+- Hardened SQLite concurrency.
 
 ### Fixed
 - Graph: clicking a node no longer crashes when a neighbour channel has a null label (channels discovered but not yet crawled).
 - Graph: profile pictures now served at the correct path (`media/channels/…`) matching the URL embedded in the data JSON.
 - Graph: favicon added to 2D and 3D graph pages.
-- Operations panel: completed tasks were incorrectly shown as "failed" when the Django dev server reloaded mid-run. The reaper daemon thread is replaced with a self-contained wrapper subprocess that records the exit code independently of server lifetime.
 
 
 ## [0.9] - 2026-04-05
