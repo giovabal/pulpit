@@ -11,10 +11,6 @@
       <span class="channels-count" id="channels-count"></span>
     </div>
     <div class="channel-filters">
-      <div class="channel-filter-wrap">
-        <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
-        <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
-      </div>
       {% if organizations %}
       <select id="org-filter" class="channel-org-select" aria-label="Filter by organization">
         <option value="">All organizations</option>
@@ -23,6 +19,10 @@
         {% endfor %}
       </select>
       {% endif %}
+      <div class="channel-filter-wrap">
+        <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
+        <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+      </div>
     </div>
   </div>
 
