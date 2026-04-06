@@ -130,6 +130,8 @@ else:
             "NAME": BASE_DIR / config("DB_NAME", default="db.sqlite3", cast=str),
             "OPTIONS": {
                 "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+                "transaction_mode": "IMMEDIATE",  # grab write lock at transaction start, avoids lock-upgrade races
+                "timeout": 30,  # seconds SQLite busy-retries before raising OperationalError: database is locked
             },
         }
     }
