@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.10] - To be announced
+## [0.10] - 2026-04-07
 *Commands management. Access control. Multiple database support.*
 
 ### New features
