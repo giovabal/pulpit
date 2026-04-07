@@ -270,7 +270,7 @@ class Command(AsyncBaseCommand):
 
                 # ---- mine Channel.about for t.me/ references ----
                 about_refs: set[str] = set()
-                for about_text in Channel.objects.exclude(about="").values_list("about", flat=True):
+                for about_text in Channel.objects.interesting().exclude(about="").values_list("about", flat=True):
                     for m in _ABOUT_REF_RE.finditer(about_text):
                         ref = m.group(1).strip().lower()
                         if ref and ref not in SKIPPABLE_REFERENCES:

@@ -54,7 +54,7 @@ def build_community_palette(community_map: CommunityMap, palette_name: str) -> C
 
 def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> CommunityMap:
     """Assign all isolated nodes (no edges) to the same community as the first isolated node."""
-    isolated = sorted(node_id for node_id in graph.nodes() if graph.degree(node_id) == 0)
+    isolated = sorted((node_id for node_id in graph.nodes() if graph.degree(node_id) == 0), key=lambda x: int(x))
     if len(isolated) <= 1:
         return community_map
     target_community = community_map[isolated[0]]

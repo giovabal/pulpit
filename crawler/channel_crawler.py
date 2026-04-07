@@ -243,14 +243,17 @@ class ChannelCrawler:
             if min_date is not None
             else None
         )
+        # When max_telegram_id is set, pass it as max_id to iter_messages so that newly-crawled
+        # messages don't consume the limit before we reach the messages we actually want to refresh.
+        # Telethon's max_id is exclusive (id < max_id), so add 1 to include max_telegram_id itself.
+        iter_max_id = (max_telegram_id + 1) if (max_telegram_id is not None and max_telegram_id > 0) else None
         updated = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             limit=limit,
             wait_time=self.api_client.wait_time,
+            max_id=iter_max_id,
         ):
-            if max_telegram_id is not None and telegram_message.id > max_telegram_id:
-                continue
             if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
                 break
             if isinstance(telegram_message, MessageService):

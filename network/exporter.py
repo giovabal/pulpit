@@ -99,7 +99,8 @@ def ensure_graph_root(root_target: str) -> None:
     else:
         os.makedirs(root_target)
     try:
-        shutil.copytree("webapp_engine/map", root_target, dirs_exist_ok=True)
+        map_src = str(settings.BASE_DIR / "webapp_engine" / "map")
+        shutil.copytree(map_src, root_target, dirs_exist_ok=True)
     except OSError as e:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 

@@ -80,7 +80,7 @@ class ReferenceResolver:
         if telegram_message.entities:
             tme = "https://t.me/"
             for entity in telegram_message.entities:
-                if not (hasattr(entity, "url") and entity.url.startswith(tme)):
+                if not (hasattr(entity, "url") and entity.url and entity.url.startswith(tme)):
                     continue
                 reference = entity.url[len(tme) :].split("/")[0].strip().lower()
                 if reference in SKIPPABLE_REFERENCES:

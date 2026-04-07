@@ -36,8 +36,12 @@ def _is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except (ProcessLookupError, PermissionError):
+    except ProcessLookupError:
         return False
+    except PermissionError:
+        # Process exists but we can't signal it (e.g. PID recycled by a privileged process).
+        # Treat as running to avoid falsely reporting "failed".
+        return True
 
 
 def get_status(task: str) -> dict:
