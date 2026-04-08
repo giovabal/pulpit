@@ -5,7 +5,7 @@
 # Oracle support (optional — install manually when DB_ENGINE=oracle)
 # oracledb>=2.0
 fa2==1.1.2
-django==6.0.3
+django==6.0.4
 beautifulsoup4==4.14.3
 django-admin-logs==1.5.0
 django-colorfield==0.14.0
