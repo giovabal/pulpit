@@ -35,7 +35,13 @@ class ReferenceResolver:
         return wait_seconds
 
     def _resolve_one(self, reference: str, log_prefix: str = "") -> tuple[Channel | None, bool]:
-        """Try to resolve a username to a Channel. Returns (channel_or_None, failed_bool)."""
+        """Try to resolve a username to a Channel.
+
+        Returns (channel, should_retry) where:
+          - (channel, False) — resolved successfully
+          - (None, True)     — temporary failure (flood wait, RPC error, paused); retry later
+          - (None, False)    — permanent failure (username invalid or not found); do not retry
+        """
         channel = Channel.objects.filter(username=reference).first()
         if channel:
             return channel, False
@@ -48,6 +54,7 @@ class ReferenceResolver:
             new_telegram_channel = self.api_client.client.get_entity(reference)
             return Channel.from_telegram_object(new_telegram_channel, force_update=True), False
         except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
+            # Permanent: username does not exist or is invalid — no point retrying
             return None, False
         except errors.rpcerrorlist.FloodWaitError as error:
             wait_seconds = self._pause(error)
@@ -59,6 +66,7 @@ class ReferenceResolver:
             )
             return None, True
         except errors.RPCError as error:
+            # Transient RPC error — keep for retry
             logger.warning(
                 "Unable to resolve %sreference '%s': %s",
                 f"{log_prefix} " if log_prefix else "",
@@ -75,10 +83,10 @@ class ReferenceResolver:
             reference = reference.strip().lower()
             if reference in SKIPPABLE_REFERENCES:
                 continue
-            channel, failed = self._resolve_one(reference, log_prefix="message")
+            channel, should_retry = self._resolve_one(reference, log_prefix="message")
             if channel:
                 message.references.add(channel)
-            elif failed:
+            elif should_retry:
                 missing.append(reference)
 
         if telegram_message.entities:
@@ -89,10 +97,10 @@ class ReferenceResolver:
                 reference = entity.url[len(tme) :].split("/")[0].strip().lower()
                 if reference in SKIPPABLE_REFERENCES:
                     continue
-                channel, failed = self._resolve_one(reference, log_prefix="URL")
+                channel, should_retry = self._resolve_one(reference, log_prefix="URL")
                 if channel:
                     message.references.add(channel)
-                elif failed:
+                elif should_retry:
                     missing.append(reference)
 
         return missing
@@ -113,13 +121,13 @@ class ReferenceResolver:
                 if is_dead and not force_retry:
                     remaining.append(raw)
                     continue
-                channel, failed = self._resolve_one(reference)
+                channel, should_retry = self._resolve_one(reference)
                 if channel:
                     message.references.add(channel)
-                elif failed:
-                    remaining.append(reference)
+                elif should_retry:
+                    remaining.append(reference)  # transient failure — keep for retry
                 else:
-                    remaining.append(DEAD_PREFIX + reference)
+                    remaining.append(DEAD_PREFIX + reference)  # permanent failure — mark dead
             new_value = "|".join(remaining)
             if new_value != message.missing_references:
                 message.missing_references = new_value

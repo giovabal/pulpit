@@ -368,8 +368,16 @@ class GetMissingReferencesTests(TestCase):
         msg = Message.objects.create(telegram_id=5, channel=self.channel, missing_references="|floodchan")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
-        # FloodWaitError → missing_references NOT cleared
-        self.assertNotEqual(msg.missing_references, "")
+        # FloodWaitError → kept for retry, NOT marked dead
+        self.assertEqual(msg.missing_references, "floodchan")
+
+    def test_rpc_error_not_marked_as_dead(self) -> None:
+        self.api_client.client.get_entity.side_effect = _rpc_error()
+        msg = Message.objects.create(telegram_id=12, channel=self.channel, missing_references="|rpcchan")
+        self.resolver.get_missing_references()
+        msg.refresh_from_db()
+        # Generic RPCError → transient, kept for retry without dead prefix
+        self.assertEqual(msg.missing_references, "rpcchan")
 
     def test_joinchat_skippable_reference_ignored(self) -> None:
         msg = Message.objects.create(telegram_id=6, channel=self.channel, missing_references="|joinchat")
@@ -420,9 +428,7 @@ class GetMissingReferencesTests(TestCase):
             raise _flood_error(seconds=5)
 
         self.api_client.client.get_entity.side_effect = side_effect
-        msg = Message.objects.create(
-            telegram_id=11, channel=self.channel, missing_references="|deadchan|floodchan"
-        )
+        msg = Message.objects.create(telegram_id=11, channel=self.channel, missing_references="|deadchan|floodchan")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
         # deadchan → marked dead; floodchan → kept for retry
