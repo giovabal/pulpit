@@ -15,9 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class MediaHandler:
-    def __init__(self, api_client: TelegramAPIClient, download_temp_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        api_client: TelegramAPIClient,
+        download_temp_dir: str | None = None,
+        download_images: bool = False,
+        download_video: bool = False,
+    ) -> None:
         self.api_client = api_client
         self.download_temp_dir = download_temp_dir
+        self.download_images = download_images
+        self.download_video = download_video
 
     def _download_media(self, telegram_object: Any) -> str | None:
         if self.download_temp_dir:
@@ -49,7 +57,7 @@ class MediaHandler:
         return pictures_downloaded
 
     def download_message_picture(self, telegram_message: Any) -> int:
-        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES:
+        if not self.download_images:
             return 0
         if not hasattr(telegram_message.media, "photo"):
             return 0
@@ -73,7 +81,7 @@ class MediaHandler:
         return 0
 
     def download_message_video(self, telegram_message: Any) -> None:
-        if not settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO:
+        if not self.download_video:
             return
         document = getattr(telegram_message, "document", None)
         if not document and telegram_message.media:

@@ -61,6 +61,8 @@ def build_graph(
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
     recency_weights: int | None = None,
+    channel_types: list[str] | None = None,
+    edge_weight_strategy: str = "PARTIAL_REFERENCES",
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -72,7 +74,7 @@ def build_graph(
         # Citations are stored in in_degree when REVERSED_EDGES=True, out_degree otherwise.
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = (
-        Channel.objects.filter(qs_filter, channel_type_filter())
+        Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
         .select_related("organization")
         .prefetch_related(
             Prefetch(
@@ -93,7 +95,6 @@ def build_graph(
     channel_ids = [int(channel_id) for channel_id in channel_dict]
     date_q = make_date_q(start_date, end_date)
     references_through = Message.references.through
-    edge_weight_strategy = settings.EDGE_WEIGHT_STRATEGY
 
     if recency_weights is not None:
         today = datetime.date.today()

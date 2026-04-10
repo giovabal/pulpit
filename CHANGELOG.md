@@ -9,6 +9,7 @@
 - `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--graph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--graph` and/or `--html` to generate the interactive graph and HTML tables.
 - `FETCH_RECOMMENDED_CHANNELS` `.env` option removed; use `get_channels --fetch-recommended-channels` instead.
 - `FA2_ITERATIONS` and `LAYOUT` `.env` options removed; use `export_network --fa2-iterations N` and `export_network --vertical-layout` instead.
+- `NETWORK_MEASURES`, `COMMUNITY_STRATEGIES`, `EDGE_WEIGHT_STRATEGY`, `RECENCY_WEIGHTS`, `SPREADING_RUNS`, `DRAW_DEAD_LEAVES`, and `CHANNEL_TYPES` `.env` options removed; pass them as `export_network` flags instead. Defaults are unchanged: `--measures PAGERANK`, `--community-strategies ORGANIZATION`, `--edge-weight-strategy PARTIAL_REFERENCES`, `--channel-types CHANNEL`; `--recency-weights`, `--spreading-runs`, and `--draw-dead-leaves` are opt-in.
 
 ## [0.10] - 2026-04-07
 *Commands management. Access control. Multiple database support.*

@@ -3,7 +3,7 @@ import tempfile
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
@@ -628,7 +628,8 @@ class MediaHandlerMessagePictureTests(TestCase):
         from crawler.media_handler import MediaHandler
 
         self.api_client = _make_api_client()
-        self.handler = MediaHandler(self.api_client)
+        self.handler = MediaHandler(self.api_client)  # download_images=False by default
+        self.handler_dl = MediaHandler(self.api_client, download_images=True)
         self.org = Organization.objects.create(name="Org", is_interesting=True)
         self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
@@ -645,43 +646,38 @@ class MediaHandlerMessagePictureTests(TestCase):
             del tm.media.photo  # hasattr returns False
         return tm
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=False)
     def test_returns_zero_when_download_disabled(self) -> None:
         tm = self._make_tg_message()
         result = self.handler.download_message_picture(tm)
         self.assertEqual(result, 0)
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
     def test_returns_zero_when_no_photo_attribute(self) -> None:
         tm = self._make_tg_message(has_photo=False)
-        result = self.handler.download_message_picture(tm)
+        result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 0)
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
     @patch("crawler.media_handler.MessagePicture.from_telegram_object")
     def test_returns_1_on_success(self, mock_from_tg: MagicMock) -> None:
         tm = self._make_tg_message()
-        self.handler._download_media = MagicMock(return_value=None)
-        result = self.handler.download_message_picture(tm)
+        self.handler_dl._download_media = MagicMock(return_value=None)
+        result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 1)
         mock_from_tg.assert_called_once()
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
     def test_returns_zero_on_file_migrate_error(self) -> None:
         from telethon.errors.rpcerrorlist import FileMigrateError
 
         tm = self._make_tg_message()
         err = FileMigrateError.__new__(FileMigrateError)
-        self.handler._download_media = MagicMock(side_effect=err)
-        result = self.handler.download_message_picture(tm)
+        self.handler_dl._download_media = MagicMock(side_effect=err)
+        result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 0)
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True)
     def test_returns_zero_on_message_does_not_exist(self) -> None:
         tm = self._make_tg_message()
         tm.id = 9999  # No message with this telegram_id in DB
-        self.handler._download_media = MagicMock(return_value=None)
-        result = self.handler.download_message_picture(tm)
+        self.handler_dl._download_media = MagicMock(return_value=None)
+        result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 0)
 
 
@@ -695,7 +691,8 @@ class MediaHandlerMessageVideoTests(TestCase):
         from crawler.media_handler import MediaHandler
 
         self.api_client = _make_api_client()
-        self.handler = MediaHandler(self.api_client)
+        self.handler = MediaHandler(self.api_client)  # download_video=False by default
+        self.handler_dl = MediaHandler(self.api_client, download_video=True)
         self.org = Organization.objects.create(name="Org", is_interesting=True)
         self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
@@ -712,7 +709,6 @@ class MediaHandlerMessageVideoTests(TestCase):
             tm.media.document = None
         return tm
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=False)
     def test_returns_when_download_disabled(self) -> None:
         tm = self._make_tg_message()
         # Should return None without doing anything
@@ -720,36 +716,32 @@ class MediaHandlerMessageVideoTests(TestCase):
         self.assertIsNone(result)
         self.api_client.client.download_media.assert_not_called()
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
     def test_returns_when_no_document(self) -> None:
         tm = self._make_tg_message(has_document=False)
         tm.media = None
-        self.handler.download_message_video(tm)
+        self.handler_dl.download_message_video(tm)
         self.api_client.client.download_media.assert_not_called()
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
     def test_returns_when_not_video_mime_type(self) -> None:
         tm = self._make_tg_message(mime_type="image/jpeg")
-        self.handler.download_message_video(tm)
+        self.handler_dl.download_message_video(tm)
         self.api_client.client.download_media.assert_not_called()
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
     @patch("crawler.media_handler.MessageVideo.from_telegram_object")
     def test_downloads_video_with_correct_mime_type(self, mock_from_tg: MagicMock) -> None:
         tm = self._make_tg_message(mime_type="video/mp4")
-        self.handler._download_media = MagicMock(return_value=None)
-        self.handler.download_message_video(tm)
+        self.handler_dl._download_media = MagicMock(return_value=None)
+        self.handler_dl.download_message_video(tm)
         mock_from_tg.assert_called_once()
 
-    @override_settings(TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=True)
     def test_handles_file_migrate_error_gracefully(self) -> None:
         from telethon.errors.rpcerrorlist import FileMigrateError
 
         tm = self._make_tg_message()
         err = FileMigrateError.__new__(FileMigrateError)
-        self.handler._download_media = MagicMock(side_effect=err)
+        self.handler_dl._download_media = MagicMock(side_effect=err)
         try:
-            self.handler.download_message_video(tm)
+            self.handler_dl.download_message_video(tm)
         except Exception:
             self.fail("download_message_video raised an unexpected exception")
 
@@ -1071,6 +1063,9 @@ class GetChannelsCommandTests(TestCase):
 
     def test_get_missing_references_called_at_end(self) -> None:
         from django.core.management import call_command
+
+        # Create a message with an unresolved reference so the command has something to retry.
+        Message.objects.create(telegram_id=1, channel=self.ch1, missing_references="someref")
 
         tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()
         with tc_p as mock_tc, api_p, crawler_p as mock_crawler_cls, media_p as mock_media_cls, resolver_p:

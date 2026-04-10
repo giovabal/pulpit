@@ -214,6 +214,7 @@ class Command(AsyncBaseCommand):
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
         fromid: int | None = options["fromid"]
+        messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
@@ -229,9 +230,14 @@ class Command(AsyncBaseCommand):
                 flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
             ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
                 api_client = TelegramAPIClient(client)
-                media_handler = MediaHandler(api_client, download_temp_dir=download_temp_dir)
+                media_handler = MediaHandler(
+                    api_client,
+                    download_temp_dir=download_temp_dir,
+                    download_images=settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES,
+                    download_video=settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO,
+                )
                 reference_resolver = ReferenceResolver(api_client)
-                crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
+                crawler = ChannelCrawler(api_client, media_handler, reference_resolver, messages_limit=messages_limit)
 
                 channels = Channel.objects.interesting().order_by("-id")
                 if fromid is not None:

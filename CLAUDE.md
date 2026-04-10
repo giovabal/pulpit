@@ -55,7 +55,7 @@ See WORKFLOW.md for all flags and options.
 
 ### Network measures
 
-Configured via `NETWORK_MEASURES` in `.env` (comma-separated).
+Configured via `--measures` on `export_network` (comma-separated).
 
 | Key | Description |
 | :-- | :---------- |
@@ -68,11 +68,11 @@ Configured via `NETWORK_MEASURES` in `.env` (comma-separated).
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Harmonic centrality |
 | `KATZ` | Katz centrality |
-| `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `COMMUNITY_STRATEGIES` |
+| `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `--community-strategies` |
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
 | `AMPLIFICATION` | Forwards received from interesting channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
-| `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `SPREADING_RUNS` (default 200) |
+| `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `--spreading-runs` (default 200) |
 | `ALL` | All of the above; `BRIDGING` uses `LEIDEN` as community basis |
 
 ### Edge construction
@@ -91,4 +91,4 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`), `SPREADING_RUNS` (default `200`).
+Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `get_channels` and `export_network`; see WORKFLOW.md.

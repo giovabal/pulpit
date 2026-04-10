@@ -119,5 +119,25 @@ def _build_args(task: str, post: Any) -> list[str]:
         compare = post.get("compare", "").strip()
         if compare:
             args += ["--compare", compare]
+        if post.get("draw_dead_leaves"):
+            args.append("--draw-dead-leaves")
+        measures_val = post.get("measures", "").strip()
+        if measures_val:
+            args += ["--measures", measures_val]
+        community_strategies_val = post.get("community_strategies", "").strip()
+        if community_strategies_val:
+            args += ["--community-strategies", community_strategies_val]
+        edge_weight_strategy_val = post.get("edge_weight_strategy", "").strip()
+        if edge_weight_strategy_val:
+            args += ["--edge-weight-strategy", edge_weight_strategy_val]
+        recency_weights_val = post.get("recency_weights", "").strip()
+        if recency_weights_val:
+            args += ["--recency-weights", recency_weights_val]
+        spreading_runs_val = post.get("spreading_runs", "").strip()
+        if spreading_runs_val:
+            args += ["--spreading-runs", spreading_runs_val]
+        channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
+        if channel_types:
+            args += ["--channel-types", ",".join(channel_types)]
 
     return args

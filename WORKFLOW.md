@@ -98,7 +98,14 @@ Optional (expand **Options** to set):
 - **GraphML file** — also write `network.graphml`
 - **SEO-optimised** — sets `index, follow` robots tags and writes a permissive `robots.txt`; without this flag the output actively discourages indexing
 - **Vertical layout** — orient the graph vertically; default is horizontal; the graph is rotated 90° when the computed aspect ratio does not match
+- **Draw dead leaves** — include non-interesting channels referenced by interesting ones as leaf nodes; adds context but can significantly increase graph size
 - **FA2 iterations** — number of ForceAtlas2 layout iterations; higher values improve node separation but take longer; default 5000
+- **Recency weights** — integer N; messages up to N days old carry full weight; older messages decay as `exp(−(age−N)/N)`; leave blank to weight all messages equally
+- **Spreading runs** — Monte Carlo SIR simulations per node for the `SPREADING` measure; default 200
+- **Edge weight strategy** — how edge weights are computed: `PARTIAL_REFERENCES` (default), `PARTIAL_MESSAGES`, `TOTAL`, or `NONE` (unweighted)
+- **Channel types** — which Telegram entity types to include: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
+- **Measures** — comma-separated list of centrality measures: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `FLOWBETWEENNESS`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `HARMONICCENTRALITY`, `KATZ`, `SPREADING`, `BRIDGING` or `BRIDGING(STRATEGY)`, `BURTCONSTRAINT`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `ALL`; default `PAGERANK`
+- **Community strategies** — comma-separated list of community detection algorithms: `ORGANIZATION`, `LEIDEN`, `LEIDEN_DIRECTED`, `LOUVAIN`, `KCORE`, `INFOMAP`, `ALL`; default `ORGANIZATION`
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded
 - **Compare with project dir** — path to a previous `export_network` output (`graph/` directory); produces a side-by-side comparison page
 
@@ -117,6 +124,15 @@ python manage.py export_network --graphml
 python manage.py export_network --seo
 python manage.py export_network --graph --vertical-layout
 python manage.py export_network --graph --fa2-iterations 10000
+python manage.py export_network --draw-dead-leaves
+python manage.py export_network --measures PAGERANK,BETWEENNESS,BRIDGING
+python manage.py export_network --measures ALL
+python manage.py export_network --community-strategies LEIDEN,LOUVAIN
+python manage.py export_network --community-strategies ALL
+python manage.py export_network --edge-weight-strategy TOTAL
+python manage.py export_network --recency-weights 30
+python manage.py export_network --spreading-runs 500
+python manage.py export_network --channel-types CHANNEL,GROUP
 python manage.py export_network --startdate 2023-01-01
 python manage.py export_network --enddate 2023-12-31
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31

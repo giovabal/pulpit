@@ -3,7 +3,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from django.conf import settings
 from django.db.models import Max, Min, Q
 from django.utils import timezone
 
@@ -22,12 +21,16 @@ logger = logging.getLogger(__name__)
 
 class ChannelCrawler:
     def __init__(
-        self, api_client: TelegramAPIClient, media_handler: MediaHandler, reference_resolver: ReferenceResolver
+        self,
+        api_client: TelegramAPIClient,
+        media_handler: MediaHandler,
+        reference_resolver: ReferenceResolver,
+        messages_limit: int | None = 100,
     ) -> None:
         self.api_client = api_client
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
-        self.messages_limit_per_channel: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
+        self.messages_limit_per_channel = messages_limit
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
@@ -275,19 +278,15 @@ class ChannelCrawler:
                 updated += 1
                 if telegram_message.media:
                     if (
-                        settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
-                        and hasattr(telegram_message.media, "photo")
+                        hasattr(telegram_message.media, "photo")
                         and not MessagePicture.objects.filter(
                             message__channel=channel, message__telegram_id=telegram_message.id
                         ).exists()
                     ):
                         self.media_handler.download_message_picture(telegram_message)
-                    if (
-                        settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO
-                        and not MessageVideo.objects.filter(
-                            message__channel=channel, message__telegram_id=telegram_message.id
-                        ).exists()
-                    ):
+                    if not MessageVideo.objects.filter(
+                        message__channel=channel, message__telegram_id=telegram_message.id
+                    ).exists():
                         self.media_handler.download_message_video(telegram_message)
             update_status(f"refreshing message stats … {updated} updated")
         return updated

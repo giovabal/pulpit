@@ -10,6 +10,11 @@ from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
 
+def _parse_csv(value: str) -> list[str]:
+    """Split a comma-separated string into a list of uppercase tokens."""
+    return [s.strip().upper() for s in value.split(",") if s.strip()]
+
+
 class Command(BaseCommand):
     args = ""
     help = "write file"
@@ -107,19 +112,101 @@ class Command(BaseCommand):
                 "network_compare_table.html is generated with side-by-side metrics tables and scatter plots."
             ),
         )
+        parser.add_argument(
+            "--measures",
+            dest="measures",
+            default="PAGERANK",
+            metavar="MEASURES",
+            help=(
+                "Comma-separated list of centrality measures to compute. "
+                "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, FLOWBETWEENNESS, INDEGCENTRALITY, "
+                "OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, SPREADING, BRIDGING or BRIDGING(STRATEGY), "
+                "BURTCONSTRAINT, AMPLIFICATION, CONTENTORIGINALITY, ALL. Default: PAGERANK."
+            ),
+        )
+        parser.add_argument(
+            "--community-strategies",
+            dest="community_strategies",
+            default="ORGANIZATION",
+            metavar="STRATEGIES",
+            help=(
+                "Comma-separated list of community detection algorithms to apply. "
+                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LOUVAIN, KCORE, INFOMAP, ALL. "
+                "Default: ORGANIZATION."
+            ),
+        )
+        parser.add_argument(
+            "--edge-weight-strategy",
+            dest="edge_weight_strategy",
+            default="PARTIAL_REFERENCES",
+            choices=sorted(VALID_EDGE_WEIGHT_STRATEGIES),
+            metavar="STRATEGY",
+            help=(
+                "How edge weights are computed from forward and citation counts. "
+                "NONE = all edges equal weight; TOTAL = raw count; "
+                "PARTIAL_MESSAGES = count / total messages; "
+                "PARTIAL_REFERENCES = count / forwarded-or-citing messages (default)."
+            ),
+        )
+        parser.add_argument(
+            "--recency-weights",
+            dest="recency_weights",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Apply recency decay: messages up to N days old carry full weight; "
+                "older messages decay as exp(-(age-N)/N). "
+                "Omit to weight all messages equally."
+            ),
+        )
+        parser.add_argument(
+            "--spreading-runs",
+            dest="spreading_runs",
+            type=int,
+            default=200,
+            metavar="N",
+            help="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Default: 200.",
+        )
+        parser.add_argument(
+            "--draw-dead-leaves",
+            dest="draw_dead_leaves",
+            action="store_true",
+            default=False,
+            help=(
+                "Include non-interesting channels that are referenced by interesting ones as leaf nodes in the graph."
+            ),
+        )
+        parser.add_argument(
+            "--channel-types",
+            dest="channel_types",
+            default="CHANNEL",
+            metavar="TYPES",
+            help=(
+                "Comma-separated list of Telegram entity types to include in the graph. "
+                "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
+                "USER (user accounts and bots). Default: CHANNEL."
+            ),
+        )
 
-    def _validate_settings(self, communities_strategy: list[str], network_measures: list[str]) -> str | None:
+    def _validate_settings(
+        self,
+        communities_strategy: list[str],
+        network_measures: list[str],
+        channel_types: list[str],
+        edge_weight_strategy: str,
+    ) -> str | None:
         """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
-                f"Invalid COMMUNITY_STRATEGIES value(s): {invalid_strategies!r}. "
+                f"Invalid --community-strategies value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
         invalid_measures = [m for m in network_measures if not measures.is_valid_measure(m)]
         if invalid_measures:
             valid_display = sorted(measures.VALID_MEASURES) + ["ALL", "BRIDGING", "BRIDGING(<STRATEGY>)"]
-            raise CommandError(f"Invalid NETWORK_MEASURES value(s): {invalid_measures!r}. Choose from {valid_display}.")
+            raise CommandError(f"Invalid --measures value(s): {invalid_measures!r}. Choose from {valid_display}.")
         bridging_token = measures.find_bridging_token(network_measures)
         if bridging_token is not None:
             bstrategy = measures.bridging_strategy(bridging_token)
@@ -130,17 +217,17 @@ class Command(BaseCommand):
                 )
             if bstrategy not in communities_strategy:
                 raise CommandError(
-                    f"BRIDGING community basis {bstrategy!r} is not in COMMUNITY_STRATEGIES. "
+                    f"BRIDGING community basis {bstrategy!r} is not in --community-strategies. "
                     f"Add it or change the BRIDGING strategy."
                 )
-        invalid_channel_types = [t for t in settings.CHANNEL_TYPES if t not in VALID_CHANNEL_TYPES]
+        invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(
-                f"Invalid CHANNEL_TYPES value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
+                f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        if settings.EDGE_WEIGHT_STRATEGY not in VALID_EDGE_WEIGHT_STRATEGIES:
+        if edge_weight_strategy not in VALID_EDGE_WEIGHT_STRATEGIES:
             raise CommandError(
-                f"Invalid EDGE_WEIGHT_STRATEGY value: {settings.EDGE_WEIGHT_STRATEGY!r}. "
+                f"Invalid --edge-weight-strategy value: {edge_weight_strategy!r}. "
                 f"Choose from {sorted(VALID_EDGE_WEIGHT_STRATEGIES)}."
             )
         return bridging_token
@@ -154,11 +241,17 @@ class Command(BaseCommand):
             raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.") from err
 
     def handle(self, *args: Any, **options: Any) -> None:
+        raw_community_strategies = _parse_csv(options["community_strategies"])
         communities_strategy = (
-            measures.ALL_STRATEGIES if "ALL" in settings.COMMUNITY_STRATEGIES else settings.COMMUNITY_STRATEGIES
+            measures.ALL_STRATEGIES if "ALL" in raw_community_strategies else raw_community_strategies
         )
-        network_measures = measures.ALL_MEASURES if "ALL" in settings.NETWORK_MEASURES else settings.NETWORK_MEASURES
-        bridging_token = self._validate_settings(communities_strategy, network_measures)
+        raw_network_measures = _parse_csv(options["measures"])
+        network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
+        channel_types = _parse_csv(options["channel_types"])
+        edge_weight_strategy: str = options["edge_weight_strategy"]
+        bridging_token = self._validate_settings(
+            communities_strategy, network_measures, channel_types, edge_weight_strategy
+        )
         selected_measures = set(network_measures)
 
         do_graph = options["graph"]
@@ -190,10 +283,12 @@ class Command(BaseCommand):
         self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
-                draw_dead_leaves=settings.DRAW_DEAD_LEAVES,
+                draw_dead_leaves=options["draw_dead_leaves"],
                 start_date=start_date,
                 end_date=end_date,
-                recency_weights=settings.RECENCY_WEIGHTS,
+                recency_weights=options["recency_weights"],
+                channel_types=channel_types,
+                edge_weight_strategy=edge_weight_strategy,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
@@ -206,7 +301,10 @@ class Command(BaseCommand):
             self.stdout.flush()
             try:
                 community_map, community_palette = community.detect(
-                    strategy, settings.COMMUNITY_PALETTE, graph, channel_dict
+                    strategy,
+                    settings.COMMUNITY_PALETTE,
+                    graph,
+                    channel_dict,  # COMMUNITY_PALETTE stays in settings
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
@@ -285,7 +383,7 @@ class Command(BaseCommand):
             (
                 "SPREADING",
                 "spreading efficiency (SIR)",
-                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=settings.SPREADING_RUNS),
+                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=options["spreading_runs"]),
             ),
         ]
         for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:

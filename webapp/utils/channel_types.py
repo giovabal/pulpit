@@ -1,12 +1,11 @@
-from django.conf import settings
 from django.db.models import Q
 
 VALID_CHANNEL_TYPES = {"CHANNEL", "GROUP", "USER"}
 
 
-def channel_type_filter() -> Q:
-    """Return a Q filter matching the channel types enabled in CHANNEL_TYPES."""
-    types = set(settings.CHANNEL_TYPES)
+def channel_type_filter(channel_types: list[str] | None = None) -> Q:
+    """Return a Q filter matching the given channel types. Defaults to CHANNEL (broadcast channels only)."""
+    types = set(channel_types) if channel_types is not None else {"CHANNEL"}
     q = Q(pk__in=[])  # start empty; OR in each enabled type
     if "CHANNEL" in types:
         # Broadcast channels (and unknowns with all flags False)

@@ -195,28 +195,9 @@ TELEGRAM_FLOOD_SLEEP_THRESHOLD = config("TELEGRAM_FLOOD_SLEEP_THRESHOLD", defaul
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 
 REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
-EDGE_WEIGHT_STRATEGY = config("EDGE_WEIGHT_STRATEGY", default="PARTIAL_REFERENCES", cast=str)
-RECENCY_WEIGHTS = config("RECENCY_WEIGHTS", default=None, cast=optional_int)
-SPREADING_RUNS = config("SPREADING_RUNS", default=200, cast=int)
 
-DRAW_DEAD_LEAVES = config("DRAW_DEAD_LEAVES", default=False, cast=bool)
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 
-CHANNEL_TYPES = config(
-    "CHANNEL_TYPES",
-    default="CHANNEL",
-    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
-)
-COMMUNITY_STRATEGIES = config(
-    "COMMUNITY_STRATEGIES",
-    default="ORGANIZATION",
-    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
-)
-NETWORK_MEASURES = config(
-    "NETWORK_MEASURES",
-    default="PAGERANK",
-    cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
-)
 COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
 
 GRAPH_OUTPUT_DIR = config("GRAPH_OUTPUT_DIR", default="graph", cast=str)

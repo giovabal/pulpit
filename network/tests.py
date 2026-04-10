@@ -1190,7 +1190,6 @@ def _patch_export_pipeline() -> list:
     return decorators
 
 
-@override_settings(NETWORK_MEASURES=["PAGERANK"], COMMUNITY_STRATEGIES=["ORGANIZATION"])
 class ExportNetworkCommandTests(TestCase):
     def _configure_happy_path(
         self,
@@ -1303,7 +1302,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network")  # default: --table-format html
+        call_command("export_network", graph=True, html=True)
 
         mock_build.assert_called_once()
         mock_detect.assert_called()
@@ -1470,6 +1469,6 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", xlsx=True)
+        call_command("export_network", html=True, xlsx=True)
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
