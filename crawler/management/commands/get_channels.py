@@ -129,6 +129,16 @@ class Command(AsyncBaseCommand):
             help="Only crawl channels whose database id is less than or equal to this value.",
         )
         parser.add_argument(
+            "--fetch-recommended-channels",
+            action="store_true",
+            default=False,
+            help=(
+                "After crawling, fetch Telegram-recommended channels for each interesting channel "
+                "and add any new ones to the database. New channels are not crawled automatically; "
+                "mark them as interesting to include them in the next run."
+            ),
+        )
+        parser.add_argument(
             "--force-retry-unresolved-references",
             action="store_true",
             default=False,
@@ -194,6 +204,7 @@ class Command(AsyncBaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         fix_holes: bool = options["fixholes"]
+        fetch_recommended: bool = options["fetch_recommended_channels"]
         force_retry: bool = options["force_retry_unresolved_references"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
@@ -328,7 +339,7 @@ class Command(AsyncBaseCommand):
                         self.stdout.write("\nAbout texts: all referenced channels already in DB.")
 
                 # ---- fetch Telegram-recommended channels ----
-                if settings.FETCH_RECOMMENDED_CHANNELS:
+                if fetch_recommended:
                     interesting_channels = list(Channel.objects.interesting())
                     n_rec = len(interesting_channels)
                     self.stdout.write(f"\nFetching recommended channels for {n_rec} interesting channels", ending="")

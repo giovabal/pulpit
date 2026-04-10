@@ -48,13 +48,14 @@ After crawling, `get_channels` runs three additional discovery and maintenance s
 
 1. **Retry unresolved message references** — re-attempts `t.me/` usernames from message text that previously could not be resolved to a channel (e.g. due to a temporary flood wait). References that fail permanently (deleted or invalid channels) are marked as dead and skipped on future runs; use **Force-retry dead references** to override this.
 2. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. This is a zero-cost discovery pass using data already stored locally; new channels are added to the database but not crawled until you mark them as interesting.
-3. **Fetch recommended channels** *(opt-in, set `FETCH_RECOMMENDED_CHANNELS=True` in `.env`)* — calls the Telegram "recommended channels" API for each interesting channel and adds any suggestions not yet in the database.
+3. **Fetch recommended channels** *(opt-in, pass `--fetch-recommended-channels`)* — calls the Telegram "recommended channels" API for each interesting channel and adds any suggestions not yet in the database.
 
 `get_channels` also automatically refreshes the in-degree and out-degree counters for all interesting channels and the citation degree for non-interesting channels that are forwarded or mentioned — so the graph correctly shows how much each referenced channel is cited even if it was never crawled.
 
 Optional (expand **Options** to set):
 
 - **Fix message holes** — fill gaps in message history (messages deleted or missed on a previous run)
+- **Fetch recommended channels** — after crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database; new channels are not crawled automatically
 - **Force-retry dead references** — re-attempt `t.me/` references previously marked as permanently unresolvable (e.g. deleted channels); by default these are skipped to avoid redundant API calls
 - **Refresh message stats** — update view counts, forward counts, and pinned status; combine with **Refresh limit** to restrict to the N most recent messages per channel, or messages from a given date
 - **From DB id ≤** — crawl only channels whose database id is at most this value; useful to resume or target a specific subset
@@ -64,6 +65,7 @@ Optional (expand **Options** to set):
 ```sh
 python manage.py get_channels
 python manage.py get_channels --fixholes
+python manage.py get_channels --fetch-recommended-channels
 python manage.py get_channels --force-retry-unresolved-references
 python manage.py get_channels --fromid 42
 python manage.py get_channels --refresh-messages-stats               # refresh all messages

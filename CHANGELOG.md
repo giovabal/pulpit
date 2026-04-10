@@ -7,6 +7,7 @@
 
 ### Backward incompatibility
 - `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--graph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--graph` and/or `--html` to generate the interactive graph and HTML tables.
+- `FETCH_RECOMMENDED_CHANNELS` `.env` option removed; use `get_channels --fetch-recommended-channels` instead.
 
 ## [0.10] - 2026-04-07
 *Commands management. Access control. Multiple database support.*
