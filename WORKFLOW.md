@@ -46,7 +46,7 @@ Downloads messages for all interesting channels and resolves cross-channel refer
 
 After crawling, `get_channels` runs three additional discovery and maintenance steps automatically:
 
-1. **Retry unresolved message references** — re-attempts `t.me/` usernames from message text that previously could not be resolved to a channel (e.g. due to a temporary flood wait).
+1. **Retry unresolved message references** — re-attempts `t.me/` usernames from message text that previously could not be resolved to a channel (e.g. due to a temporary flood wait). References that fail permanently (deleted or invalid channels) are marked as dead and skipped on future runs; use **Force-retry dead references** to override this.
 2. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. This is a zero-cost discovery pass using data already stored locally; new channels are added to the database but not crawled until you mark them as interesting.
 3. **Fetch recommended channels** *(opt-in, set `FETCH_RECOMMENDED_CHANNELS=True` in `.env`)* — calls the Telegram "recommended channels" API for each interesting channel and adds any suggestions not yet in the database.
 
@@ -55,6 +55,7 @@ After crawling, `get_channels` runs three additional discovery and maintenance s
 Optional (expand **Options** to set):
 
 - **Fix message holes** — fill gaps in message history (messages deleted or missed on a previous run)
+- **Force-retry dead references** — re-attempt `t.me/` references previously marked as permanently unresolvable (e.g. deleted channels); by default these are skipped to avoid redundant API calls
 - **Refresh message stats** — update view counts, forward counts, and pinned status; combine with **Refresh limit** to restrict to the N most recent messages per channel, or messages from a given date
 - **From DB id ≤** — crawl only channels whose database id is at most this value; useful to resume or target a specific subset
 
@@ -63,6 +64,7 @@ Optional (expand **Options** to set):
 ```sh
 python manage.py get_channels
 python manage.py get_channels --fixholes
+python manage.py get_channels --force-retry-unresolved-references
 python manage.py get_channels --fromid 42
 python manage.py get_channels --refresh-messages-stats               # refresh all messages
 python manage.py get_channels --refresh-messages-stats 200           # refresh only the 200 most recent per channel
@@ -74,7 +76,9 @@ python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh a
 **Operations panel** (`/operations/`) → **Export Network** → click **Run**.
 
 Builds the graph, applies community detection and layout, and writes the result to `graph/`.
-By default produces the 2D interactive graph and three sortable HTML tables:
+By default only the data files (`graph/data/*.json`) are written. Enable additional outputs with the options below.
+
+When **2D graph** is enabled, the output also includes:
 
 - `graph/channel_table.html` — one row per channel with all computed measures
 - `graph/network_table.html` — whole-network structural metrics (density, reciprocity, clustering, path length, WCC/SCC fractions, directed assortativity, Freeman centralization, modularity per strategy) plus an interactive scatter plot for comparing any two measures
@@ -84,13 +88,13 @@ All HTML outputs load their data at page load time from `graph/data/*.json`; the
 
 Optional (expand **Options** to set):
 
-- **3D graph** — also produce `graph3d.html`
+- **2D graph** — generate the interactive `graph.html` and run the layout computation
+- **HTML tables** — generate `channel_table.html`, `network_table.html`, and `community_table.html`
+- **3D graph** — also produce `graph3d.html` (requires **2D graph**)
 - **Excel spreadsheets** — also produce `channel_table.xlsx`, `network_table.xlsx`, `community_table.xlsx`
 - **GEXF file** — also write `network.gexf`
 - **GraphML file** — also write `network.graphml`
 - **SEO-optimised** — sets `index, follow` robots tags and writes a permissive `robots.txt`; without this flag the output actively discourages indexing
-- **Skip 2D graph** — skip the interactive graph (tables only)
-- **Skip HTML tables** — skip HTML tables (graph only)
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded
 - **Compare with project dir** — path to a previous `export_network` output (`graph/` directory); produces a side-by-side comparison page
 

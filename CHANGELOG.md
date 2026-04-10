@@ -2,6 +2,12 @@
 
 ## [0.11] - To be announced
 
+### Improvements
+- `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
+
+### Backward incompatibility
+- `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--graph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--graph` and/or `--html` to generate the interactive graph and HTML tables.
+
 ## [0.10] - 2026-04-07
 *Commands management. Access control. Multiple database support.*
 
