@@ -99,10 +99,10 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--graphml")
         if post.get("seo"):
             args.append("--seo")
-        if post.get("no_graph"):
-            args.append("--no-graph")
-        if post.get("no_html"):
-            args.append("--no-html")
+        if post.get("graph"):
+            args.append("--graph")
+        if post.get("html"):
+            args.append("--html")
         startdate = post.get("startdate", "").strip()
         if startdate:
             args += ["--startdate", startdate]

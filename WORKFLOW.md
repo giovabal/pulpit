@@ -98,18 +98,19 @@ Optional (expand **Options** to set):
 
 ```sh
 python manage.py export_network
-python manage.py export_network --3d
-python manage.py export_network --xlsx
-python manage.py export_network --no-html
-python manage.py export_network --no-graph
-python manage.py export_network --no-graph --xlsx
+python manage.py export_network --graph
+python manage.py export_network --html
+python manage.py export_network --graph --html
+python manage.py export_network --graph --3d
+python manage.py export_network --graph --xlsx
+python manage.py export_network --html --xlsx
 python manage.py export_network --gexf
 python manage.py export_network --graphml
 python manage.py export_network --seo
 python manage.py export_network --startdate 2023-01-01
 python manage.py export_network --enddate 2023-12-31
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31
-python manage.py export_network --compare /path/to/other/graph
+python manage.py export_network --graph --compare /path/to/other/graph
 ```
 
 The `--compare` argument must be the `graph/` output directory of a previous run — the directory that contains `index.html`. The command:

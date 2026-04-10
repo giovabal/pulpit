@@ -16,11 +16,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
-            "--no-graph",
+            "--graph",
             dest="graph",
-            action="store_false",
-            default=True,
-            help="Skip the 2D interactive graph (graph.html and layout computation).",
+            action="store_true",
+            default=False,
+            help="Generate the 2D interactive graph (graph.html and layout computation).",
         )
         parser.add_argument(
             "--3d",
@@ -30,11 +30,11 @@ class Command(BaseCommand):
             help="Also produce a 3D graph (graph3d.html). Slower on large graphs.",
         )
         parser.add_argument(
-            "--no-html",
+            "--html",
             dest="html",
-            action="store_false",
-            default=True,
-            help="Skip HTML table output (channel_table.html, network_table.html, community_table.html).",
+            action="store_true",
+            default=False,
+            help="Generate HTML table output (channel_table.html, network_table.html, community_table.html).",
         )
         parser.add_argument(
             "--xlsx",

@@ -44,7 +44,7 @@
 - Documentation now has a new structure and a navigation menu.
 
 ### Backward incompatibility
-- `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--no-graph` (skip 2D graph), `--no-html` (skip HTML tables). Default output is 2D graph + HTML tables.
+- `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--graph` (generate 2D graph), `--html` (generate HTML tables). Default output is data files only.
 
 ### Fixed
 - Progress lines in the terminal are now truncated to fit the terminal width instead of wrapping.
