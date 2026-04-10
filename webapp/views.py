@@ -246,9 +246,79 @@ class DataView(TemplateView):
                 }
             )
 
+        compare_maps = []
+        if (graph_dir / "graph_2.html").exists():
+            compare_maps.append(
+                {
+                    "title": "Network map (comparison)",
+                    "icon": "bi-map",
+                    "description": "Interactive force-directed graph for the comparison dataset.",
+                    "url": "/graph/graph_2.html",
+                    "action": "Open map",
+                }
+            )
+        if (graph_dir / "graph3d_2.html").exists():
+            compare_maps.append(
+                {
+                    "title": "3D Network map (comparison)",
+                    "icon": "bi-box",
+                    "description": "3D force-directed graph for the comparison dataset.",
+                    "url": "/graph/graph3d_2.html",
+                    "action": "Open 3D map",
+                }
+            )
+
+        compare_tables = []
+        if (graph_dir / "network_compare_table.html").exists():
+            compare_tables.append(
+                {
+                    "title": "Network comparison",
+                    "icon": "bi-bar-chart",
+                    "description": "Side-by-side whole-network metrics for the two datasets.",
+                    "url": "/graph/network_compare_table.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#whole-network-measures",
+                }
+            )
+        if (graph_dir / "channel_table_2.html").exists():
+            compare_tables.append(
+                {
+                    "title": "Channels (comparison)",
+                    "icon": "bi-table",
+                    "description": "Per-channel measures and community assignments for the comparison dataset.",
+                    "url": "/graph/channel_table_2.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#network-measures",
+                }
+            )
+        if (graph_dir / "community_table_2.html").exists():
+            compare_tables.append(
+                {
+                    "title": "Community statistics (comparison)",
+                    "icon": "bi-diagram-3",
+                    "description": "Structural metrics per community for the comparison dataset.",
+                    "url": "/graph/community_table_2.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#community-detection-strategies",
+                }
+            )
+        if (graph_dir / "network_table_2.html").exists():
+            compare_tables.append(
+                {
+                    "title": "Network statistics (comparison)",
+                    "icon": "bi-bar-chart",
+                    "description": "Whole-network structural metrics for the comparison dataset.",
+                    "url": "/graph/network_table_2.html",
+                    "action": "Open table",
+                    "docs_url": f"{docs_base}#whole-network-measures",
+                }
+            )
+
         ctx["maps"] = maps
         ctx["tables"] = tables
-        ctx["graph_available"] = bool(maps or tables)
+        ctx["compare_maps"] = compare_maps
+        ctx["compare_tables"] = compare_tables
+        ctx["graph_available"] = bool(maps or tables or compare_maps or compare_tables)
         return ctx
 
 

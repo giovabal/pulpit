@@ -445,7 +445,8 @@ class Command(BaseCommand):
         )
 
         strategies = [s.lower() for s in communities_strategy]
-        if do_html or do_xlsx:
+        need_community_metrics = do_html or do_xlsx or compare_data_dir is not None
+        if need_community_metrics:
             self.stdout.write("- community metrics")
             _steps = ["network"] + strategies
             _step_iter = iter(_steps)
@@ -473,6 +474,8 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
             )
+        if need_community_metrics:
+            tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
         if do_html:
             self.stdout.write("- table (html)")
             tables.write_table_html(
@@ -482,7 +485,6 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
             self.stdout.write("- network table (html)")
-            tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_network_table_html(
                 output_filename=os.path.join(root_target, "network_table.html"),
                 seo=seo,
