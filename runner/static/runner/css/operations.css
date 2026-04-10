@@ -208,6 +208,37 @@
 .ops-log .line-warning { color: #e0af68; }
 .ops-log .line-error   { color: #f7768e; }
 
+/* ---- directory picker ---- */
+.dir-picker { position: relative; display: inline-flex; }
+
+.dir-picker-drop {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  max-width: 32rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: .375rem;
+  box-shadow: var(--shadow-sm);
+  z-index: 200;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.dir-picker-item {
+  font-size: .78rem;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  padding: .28rem .6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.dir-picker-item:hover,
+.dir-picker-item:focus { background: var(--accent-bg); color: var(--accent); outline: none; }
+
 /* ---- last-run footer ---- */
 .ops-last-run {
   font-size: .72rem;
