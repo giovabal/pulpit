@@ -71,29 +71,78 @@
     {{ panel.title }}
     <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
   </button>
-  <div class="collapse" id="{{ panel.id }}" data-chart-url="{{ panel.url }}">
+  <div class="collapse" id="{{ panel.id }}" data-panel-url="{{ panel.url }}" data-panel-type="{{ panel.type|default:'chart' }}">
     <div class="stats-panel-body">
       <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
+      {% if panel.type == "table" %}
+      <div class="panel-tables-wrap"></div>
+      {% else %}
       <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas></canvas></div>
+      {% endif %}
     </div>
   </div>
 </div>
 {% endfor %}
 
 <script>
-  document.querySelectorAll('.collapse[data-chart-url]').forEach(function (collapse) {
-    var canvas = collapse.querySelector('canvas');
+  document.querySelectorAll('.collapse[data-panel-url]').forEach(function (collapse) {
     var spinner = collapse.querySelector('.stats-spinner');
     var loaded = false;
     collapse.addEventListener('show.bs.collapse', function () {
       if (!loaded) {
         loaded = true;
-        fetch(collapse.dataset.chartUrl)
+        fetch(collapse.dataset.panelUrl)
           .then(function (r) { return r.json(); })
-          .then(function (data) { spinner.classList.add('hidden'); renderChart(canvas, data); });
+          .then(function (data) {
+            spinner.classList.add('hidden');
+            if (collapse.dataset.panelType === 'table') {
+              renderContactTables(collapse.querySelector('.panel-tables-wrap'), data);
+            } else {
+              renderChart(collapse.querySelector('canvas'), data);
+            }
+          });
       }
     });
   });
+
+  function renderContactTables(wrap, data) {
+    var sections = [
+      { title: 'Domains', rows: data.domains || [], colKey: 'domain', colLabel: 'Domain' },
+      { title: 'Emails', rows: data.emails || [], colKey: 'email', colLabel: 'Email' },
+    ];
+    sections.forEach(function (sec) {
+      var section = document.createElement('div');
+      section.className = 'panel-table-section';
+      var h = document.createElement('h3');
+      h.className = 'panel-table-title';
+      h.textContent = sec.title;
+      section.appendChild(h);
+      if (sec.rows.length === 0) {
+        var empty = document.createElement('p');
+        empty.className = 'panel-table-empty';
+        empty.textContent = 'None found.';
+        section.appendChild(empty);
+      } else {
+        var table = document.createElement('table');
+        table.className = 'stats-table';
+        var thead = table.createTHead();
+        var hrow = thead.insertRow();
+        [sec.colLabel, 'Count'].forEach(function (label) {
+          var th = document.createElement('th');
+          th.textContent = label;
+          hrow.appendChild(th);
+        });
+        var tbody = table.createTBody();
+        sec.rows.forEach(function (row) {
+          var tr = tbody.insertRow();
+          var td1 = tr.insertCell(); td1.textContent = row[sec.colKey];
+          var td2 = tr.insertCell(); td2.textContent = row['count'];
+        });
+        section.appendChild(table);
+      }
+      wrap.appendChild(section);
+    });
+  }
 </script>
 
 <div class="search-header">

@@ -367,6 +367,13 @@ class ChannelDetailView(ListView):
                 "icon": "bi-graph-up",
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
             },
+            {
+                "id": "ch-contact-info",
+                "title": "Domains & emails mentioned",
+                "icon": "bi-link-45deg",
+                "url": reverse("channel-contact-info", kwargs={"pk": ch.pk}),
+                "type": "table",
+            },
         ]
 
         context_data.update({"selected_channel": ch, "summary": summary, "panels": panels})

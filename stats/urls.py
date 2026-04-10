@@ -42,4 +42,9 @@ urlpatterns = [
         views.ChannelAvgInvolvementHistoryView.as_view(),
         name="channel-avg-involvement-history",
     ),
+    path(
+        "data/channel/<int:pk>/contact_info/",
+        views.ChannelContactInfoView.as_view(),
+        name="channel-contact-info",
+    ),
 ]

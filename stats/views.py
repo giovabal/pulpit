@@ -1,3 +1,5 @@
+import re
+from collections import Counter
 from typing import Any, ClassVar
 
 from django.db import models
@@ -11,6 +13,10 @@ from stats.queries import channel_month_spine, global_month_spine, reindex_to_sp
 from webapp.models import Channel, Message
 
 import pandas as pd
+
+_URL_RE = re.compile(r"https?://(?:www\.)?([^/\s?#\[<>\"\']+)", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
+_TELEGRAM_HOSTS = frozenset({"t.me", "telegram.me", "telegram.org", "telegra.ph", "telesco.pe"})
 
 
 class _GlobalTimeSeriesBase(View):
@@ -234,3 +240,29 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
             .order_by("month")
         )
         return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
+
+
+class ChannelContactInfoView(View):
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        texts = (
+            Message.objects.filter(channel=channel)
+            .exclude(message__isnull=True)
+            .exclude(message="")
+            .values_list("message", flat=True)
+        )
+        domain_counter: Counter = Counter()
+        email_counter: Counter = Counter()
+        for text in texts:
+            for raw_host in _URL_RE.findall(text):
+                host = raw_host.split(":")[0].lower().rstrip(".,;)")
+                if host and host not in _TELEGRAM_HOSTS and not host.endswith(".telegram.org"):
+                    domain_counter[host] += 1
+            for email in _EMAIL_RE.findall(text):
+                email_counter[email.lower()] += 1
+        return JsonResponse(
+            {
+                "domains": [{"domain": d, "count": c} for d, c in domain_counter.most_common()],
+                "emails": [{"email": e, "count": c} for e, c in email_counter.most_common()],
+            }
+        )

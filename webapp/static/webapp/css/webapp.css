@@ -436,6 +436,45 @@ body {
 .chart-canvas-wrap--lg { height: 480px; }
 .chart-canvas-wrap--sm { height: 320px; }
 
+/* ---------- Panel tables (contact info) ---------- */
+.panel-tables-wrap {
+  display: flex;
+  gap: 2rem;
+  padding: .875rem 1rem;
+  min-height: 8rem;
+  overflow-x: auto;
+}
+.panel-table-section { flex: 1; min-width: 12rem; }
+.panel-table-title {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin: 0 0 .5rem;
+}
+.panel-table-empty { font-size: .8rem; color: var(--muted); margin: 0; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.stats-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  border-bottom: 1px solid var(--border);
+  padding: .2rem .4rem;
+}
+.stats-table td {
+  padding: .25rem .4rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  word-break: break-all;
+}
+.stats-table tr:last-child td { border-bottom: none; }
+.stats-table th:last-child,
+.stats-table td:last-child { text-align: right; }
+
 /* ---------- Home ---------- */
 .home-wrap {
   display: flex;
