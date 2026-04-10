@@ -104,6 +104,7 @@
   padding: 0 .3rem;
 }
 .ops-fieldset .ops-flags { margin-bottom: 0; }
+.ops-fieldset .ops-flags + .ops-params { margin-top: .5rem; }
 
 /* flag chips */
 .ops-flags {

@@ -54,54 +54,72 @@
           {% csrf_token %}
 
           {% if task.name == "search_channels" %}
-          <div class="ops-params">
-            <div class="ops-param">
-              <label for="amount_sc">Max search terms
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Limit how many search terms are processed in this run. Leave blank to process all terms in order of last check date."></i>
-              </label>
-              <input type="number" name="amount" id="amount_sc" placeholder="–" min="1">
+          <fieldset class="ops-fieldset">
+            <legend>Scope</legend>
+            <div class="ops-params">
+              <div class="ops-param">
+                <label for="amount_sc">Max search terms
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Limit how many search terms are processed in this run. Leave blank to process all terms in order of last check date."></i>
+                </label>
+                <input type="number" name="amount" id="amount_sc" placeholder="–" min="1">
+              </div>
             </div>
-          </div>
+          </fieldset>
 
           {% elif task.name == "get_channels" %}
-          <div class="ops-flags">
-            <label class="ops-flag">
-              <input type="checkbox" name="fixholes">Fix message holes
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
-            </label>
-            <label class="ops-flag">
-              <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
-            </label>
-            <label class="ops-flag">
-              <input type="checkbox" name="force_retry_unresolved_references">Force-retry dead references
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Re-attempt references already marked as permanently unresolvable (e.g. deleted channels). By default these are skipped to avoid redundant API calls."></i>
-            </label>
-            <label class="ops-flag">
-              <input type="checkbox" name="do_refresh">Refresh message stats
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
-            </label>
-          </div>
-          <div class="ops-params">
-            <div class="ops-param">
-              <label for="refresh_value">Refresh limit
+          <fieldset class="ops-fieldset">
+            <legend>Crawl</legend>
+            <div class="ops-flags">
+              <label class="ops-flag">
+                <input type="checkbox" name="fixholes">Fix message holes
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when Refresh message stats is checked."></i>
+                   title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
               </label>
-              <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md">
-            </div>
-            <div class="ops-param">
-              <label for="fromid">From DB id ≤
+              <label class="ops-flag">
+                <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Process only channels whose internal database ID is at most this value. Useful to resume an interrupted run or target a specific subset of channels."></i>
+                   title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
               </label>
-              <input type="number" name="fromid" id="fromid" placeholder="–" min="1">
+              <label class="ops-flag">
+                <input type="checkbox" name="force_retry_unresolved_references">Force-retry dead references
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Re-attempt references already marked as permanently unresolvable (e.g. deleted channels). By default these are skipped to avoid redundant API calls."></i>
+              </label>
             </div>
+          </fieldset>
+          <div class="ops-fieldset-row">
+            <fieldset class="ops-fieldset">
+              <legend>Stats refresh</legend>
+              <div class="ops-flags">
+                <label class="ops-flag">
+                  <input type="checkbox" name="do_refresh">Refresh message stats
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
+                </label>
+              </div>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="refresh_value">Refresh limit
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when Refresh message stats is checked."></i>
+                  </label>
+                  <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md">
+                </div>
+              </div>
+            </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>Scope</legend>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="fromid">From DB id ≤
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Process only channels whose internal database ID is at most this value. Useful to resume an interrupted run or target a specific subset of channels."></i>
+                  </label>
+                  <input type="number" name="fromid" id="fromid" placeholder="–" min="1">
+                </div>
+              </div>
+            </fieldset>
           </div>
 
           {% elif task.name == "export_network" %}
