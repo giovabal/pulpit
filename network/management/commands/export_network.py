@@ -79,6 +79,24 @@ class Command(BaseCommand):
             help="Only include messages on or before this date.",
         )
         parser.add_argument(
+            "--fa2-iterations",
+            dest="fa2_iterations",
+            type=int,
+            default=5000,
+            metavar="N",
+            help="Number of ForceAtlas2 iterations for the 2D and 3D layout. Default: 5000.",
+        )
+        parser.add_argument(
+            "--vertical-layout",
+            dest="vertical_layout",
+            action="store_true",
+            default=False,
+            help=(
+                "Orient the graph vertically. By default the layout is horizontal. "
+                "When the computed aspect ratio does not match the chosen orientation the graph is rotated 90°."
+            ),
+        )
+        parser.add_argument(
             "--compare",
             default=None,
             metavar="PROJECT_DIR",
@@ -92,9 +110,6 @@ class Command(BaseCommand):
 
     def _validate_settings(self, communities_strategy: list[str], network_measures: list[str]) -> str | None:
         """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
-        if settings.LAYOUT not in (layout.LAYOUT_HORIZONTAL, layout.LAYOUT_VERTICAL):
-            raise CommandError(f"Invalid LAYOUT value: {settings.LAYOUT!r}. Choose HORIZONTAL or VERTICAL.")
-
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
@@ -153,6 +168,10 @@ class Command(BaseCommand):
         do_gexf = options["gexf"]
         do_graphml = options["graphml"]
 
+        fa2_iterations: int = options["fa2_iterations"]
+        vertical_layout: bool = options["vertical_layout"]
+        target_layout = layout.LAYOUT_VERTICAL if vertical_layout else layout.LAYOUT_HORIZONTAL
+
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
@@ -204,16 +223,16 @@ class Command(BaseCommand):
             self.stdout.flush()
             initial_pos = layout.kamada_kawai_positions(graph)
             self.stdout.write("done")
-            self.stdout.write(f"- ForceAtlas2 ({settings.FA2_ITERATIONS} iterations) … ", ending="")
+            self.stdout.write(f"- ForceAtlas2 ({fa2_iterations} iterations) … ", ending="")
             self.stdout.flush()
-            positions = layout.forceatlas2_positions(graph, initial_pos, settings.FA2_ITERATIONS)
+            positions = layout.forceatlas2_positions(graph, initial_pos, fa2_iterations)
             self.stdout.write("done")
 
             xs, ys = zip(*positions.values(), strict=False)
             width = max(xs) - min(xs)
             height = max(ys) - min(ys)
-            if (settings.LAYOUT == layout.LAYOUT_HORIZONTAL and height > width) or (
-                settings.LAYOUT == layout.LAYOUT_VERTICAL and width > height
+            if (target_layout == layout.LAYOUT_HORIZONTAL and height > width) or (
+                target_layout == layout.LAYOUT_VERTICAL and width > height
             ):
                 self.stdout.write("- rotating layout 90°")
                 positions = layout.rotate_positions(positions)
@@ -223,9 +242,9 @@ class Command(BaseCommand):
                 self.stdout.flush()
                 initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
                 self.stdout.write("done")
-                self.stdout.write(f"- ForceAtlas2 3D ({settings.FA2_ITERATIONS} iterations) … ", ending="")
+                self.stdout.write(f"- ForceAtlas2 3D ({fa2_iterations} iterations) … ", ending="")
                 self.stdout.flush()
-                positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, settings.FA2_ITERATIONS)
+                positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, fa2_iterations)
                 self.stdout.write("done")
         else:
             positions = {}

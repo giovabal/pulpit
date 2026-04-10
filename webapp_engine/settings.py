@@ -192,8 +192,6 @@ TELEGRAM_CONNECTION_RETRIES = config("TELEGRAM_CONNECTION_RETRIES", default=10, 
 TELEGRAM_RETRY_DELAY = config("TELEGRAM_RETRY_DELAY", default=5, cast=int)
 TELEGRAM_FLOOD_SLEEP_THRESHOLD = config("TELEGRAM_FLOOD_SLEEP_THRESHOLD", default=60, cast=int)
 
-FA2_ITERATIONS = config("FA2_ITERATIONS", default=5000, cast=int)
-
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 
 REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
@@ -220,8 +218,6 @@ NETWORK_MEASURES = config(
     cast=lambda v: [s.strip().upper() for s in v.split("#")[0].split(",") if s.strip()],
 )
 COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
-
-LAYOUT = config("LAYOUT", default="HORIZONTAL", cast=str)
 
 GRAPH_OUTPUT_DIR = config("GRAPH_OUTPUT_DIR", default="graph", cast=str)
 

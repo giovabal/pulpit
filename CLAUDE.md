@@ -91,4 +91,4 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `FA2_ITERATIONS` (default `5000`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`), `SPREADING_RUNS` (default `200`).
+Key optional: `COMMUNITY_STRATEGIES` (default `ORGANIZATION`), `NETWORK_MEASURES` (default `PAGERANK`), `REVERSED_EDGES` (default `True`), `DRAW_DEAD_LEAVES` (default `False`), `SPREADING_RUNS` (default `200`).

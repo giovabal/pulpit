@@ -52,13 +52,6 @@ pip install oracledb           # Oracle
 
 > **User accounts:** `WEB_ACCESS=ALL` requires no accounts. For `OPEN` or `PROTECTED`, create a staff account first with `python manage.py createsuperuser`. Staff accounts (`is_staff=True`) can reach `/admin/` and `/operations/`; regular accounts can reach everything else in `PROTECTED` mode but are blocked from admin and operations. The login form is always served at `/login/` regardless of mode. After logging in, a **Log out** button appears in the top navigation bar next to the user's name; the **Admin** button is shown only to staff.
 
-## Graph layout
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `FA2_ITERATIONS` | Number of ForceAtlas2 iterations | `5000` |
-| `LAYOUT` | Desired graph orientation: `HORIZONTAL` or `VERTICAL`. When the computed layout's aspect ratio does not match, the graph is automatically rotated 90°. | `HORIZONTAL` |
-
 ## Network analysis
 
 | Option | Description | Default |

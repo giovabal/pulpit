@@ -97,6 +97,8 @@ Optional (expand **Options** to set):
 - **GEXF file** — also write `network.gexf`
 - **GraphML file** — also write `network.graphml`
 - **SEO-optimised** — sets `index, follow` robots tags and writes a permissive `robots.txt`; without this flag the output actively discourages indexing
+- **Vertical layout** — orient the graph vertically; default is horizontal; the graph is rotated 90° when the computed aspect ratio does not match
+- **FA2 iterations** — number of ForceAtlas2 layout iterations; higher values improve node separation but take longer; default 5000
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded
 - **Compare with project dir** — path to a previous `export_network` output (`graph/` directory); produces a side-by-side comparison page
 
@@ -113,6 +115,8 @@ python manage.py export_network --html --xlsx
 python manage.py export_network --gexf
 python manage.py export_network --graphml
 python manage.py export_network --seo
+python manage.py export_network --graph --vertical-layout
+python manage.py export_network --graph --fa2-iterations 10000
 python manage.py export_network --startdate 2023-01-01
 python manage.py export_network --enddate 2023-12-31
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31

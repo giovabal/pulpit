@@ -134,8 +134,19 @@
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Generate the channel, community, and network HTML tables."></i>
             </label>
+            <label class="ops-flag"><input type="checkbox" name="vertical_layout">Vertical layout
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Orient the graph vertically. By default the layout is horizontal. The graph is rotated 90° when the computed aspect ratio does not match."></i>
+            </label>
           </div>
           <div class="ops-params">
+            <div class="ops-param">
+              <label for="fa2_iterations">FA2 iterations
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Number of ForceAtlas2 layout iterations. Higher values improve node separation but take longer. Default: 5000."></i>
+              </label>
+              <input type="number" name="fa2_iterations" id="fa2_iterations" placeholder="5000" min="1">
+            </div>
             <div class="ops-param">
               <label for="startdate">Start date
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"

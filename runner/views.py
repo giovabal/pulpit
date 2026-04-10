@@ -105,6 +105,11 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--graph")
         if post.get("html"):
             args.append("--html")
+        if post.get("vertical_layout"):
+            args.append("--vertical-layout")
+        fa2 = post.get("fa2_iterations", "").strip()
+        if fa2:
+            args += ["--fa2-iterations", fa2]
         startdate = post.get("startdate", "").strip()
         if startdate:
             args += ["--startdate", startdate]
