@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Working rules
 
-- **NEVER run `git add`, `git commit`, or `git push` unless the user explicitly says so in that message.** After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Wait for the user to send a separate message asking for a commit or push.
+- **NEVER run `git add`, `git commit`, or `git push` unless the user explicitly requests that exact operation in their message.** Each operation requires its own explicit instruction: "commit" authorises a commit only; "push" authorises a push only; "commit and push" authorises both. After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Do not revert and push. Wait for the user to send a separate message.
 - Run `ruff check . --fix && ruff format .` before declaring any code change done.
 - Smoke-test changes with a quick `python -c "..."` call where practical before finishing.
 
