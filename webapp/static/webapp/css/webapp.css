@@ -187,6 +187,7 @@ body {
 .ch-badge--verified { background: #e0e7ff; color: #4338ca; }
 .ch-badge--danger   { background: #fee2e2; color: #b91c1c; }
 .ch-badge--warn     { background: #fef3c7; color: #92400e; }
+.ch-badge--muted    { background: var(--border); color: var(--text-muted); }
 
 .channel-meta-row {
   display: flex;

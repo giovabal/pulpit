@@ -20,6 +20,7 @@
           {% if selected_channel.scam %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Scam</span>{% endif %}
           {% if selected_channel.fake %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Fake</span>{% endif %}
           {% if selected_channel.restricted %}<span class="ch-badge ch-badge--warn"><i class="bi bi-slash-circle" aria-hidden="true"></i> Restricted</span>{% endif %}
+          {% if not is_interesting %}<span class="ch-badge ch-badge--muted">Not monitored</span>{% endif %}
         </div>
         <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link flex-shrink-0" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>
@@ -31,11 +32,11 @@
         <span class="ch-meta-item"><i class="bi bi-broadcast" aria-hidden="true"></i>{{ selected_channel.channel_type }}</span>
         {% if selected_channel.organization %}<span class="ch-meta-item"><span class="org-dot" style="background: {{ selected_channel.organization.color }};" aria-hidden="true"></span>{{ selected_channel.organization }}</span>{% endif %}
         {% if selected_channel.participants_count %}<span class="ch-meta-item"><i class="bi bi-people" aria-hidden="true"></i>{{ selected_channel.participants_count }} subscribers</span>{% endif %}
-        {% if selected_channel.date %}<span class="ch-meta-item"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
-        <time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>
+        {% if selected_channel.date and is_interesting %}<span class="ch-meta-item"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
+        {% if is_interesting %}<time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>{% endif %}
         {% if selected_channel.telegram_location %}<span class="ch-meta-item"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ selected_channel.telegram_location }}</span>{% endif %}
         {% if selected_channel.in_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
-        {% if selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
+        {% if is_interesting and selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
         {% if selected_channel.has_link %}<span class="ch-meta-item"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
         {% if selected_channel.signatures %}<span class="ch-meta-item"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
       </div>
