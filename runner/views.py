@@ -121,10 +121,10 @@ def _build_args(task: str, post: Any) -> list[str]:
             args += ["--compare", compare]
         if post.get("draw_dead_leaves"):
             args.append("--draw-dead-leaves")
-        measures_val = post.get("measures", "").strip()
+        measures_val = ",".join(post.getlist("measures"))
         if measures_val:
             args += ["--measures", measures_val]
-        community_strategies_val = post.get("community_strategies", "").strip()
+        community_strategies_val = ",".join(post.getlist("community_strategies"))
         if community_strategies_val:
             args += ["--community-strategies", community_strategies_val]
         edge_weight_strategy_val = post.get("edge_weight_strategy", "").strip()

@@ -76,6 +76,35 @@
   background: var(--bg);
 }
 
+/* fieldset groups */
+.ops-fieldset {
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  padding: .5rem .75rem .6rem;
+  margin-bottom: .5rem;
+}
+.ops-fieldset:last-child { margin-bottom: 0; }
+
+.ops-fieldset-row {
+  display: flex;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  align-items: stretch;
+}
+.ops-fieldset-row > .ops-fieldset {
+  flex: 1;
+  margin-bottom: 0;
+}
+.ops-fieldset legend {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 0 .3rem;
+}
+.ops-fieldset .ops-flags { margin-bottom: 0; }
+
 /* flag chips */
 .ops-flags {
   display: flex;
@@ -151,7 +180,8 @@
 }
 .ops-tip:hover { opacity: .9; }
 
-.ops-param input {
+.ops-param input,
+.ops-param select:not([multiple]) {
   border: 1px solid var(--border);
   border-radius: .375rem;
   background: var(--surface);
@@ -162,12 +192,29 @@
   transition: border-color .12s, box-shadow .12s;
   width: 9rem;
 }
-.ops-param input[data-width="md"] { width: 13rem; }
-.ops-param input[data-width="lg"] { width: 17rem; }
-.ops-param input:focus {
+.ops-param input[data-width="md"],
+.ops-param select[data-width="md"] { width: 13rem; }
+.ops-param input[data-width="lg"],
+.ops-param select[data-width="lg"] { width: 17rem; }
+.ops-param input:focus,
+.ops-param select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(67,56,202,.15);
 }
+
+.ops-param select[multiple] {
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .2rem;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+  width: 14rem;
+}
+.ops-param select[multiple] option { padding: .15rem .4rem; border-radius: .25rem; }
+.ops-param select[multiple] option:checked { background: var(--accent-bg); color: var(--accent); }
 
 /* ---- log terminal ---- */
 .ops-log-wrap {
