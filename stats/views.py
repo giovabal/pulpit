@@ -108,7 +108,7 @@ class SubscribersHistoryDataView(View):
             ]
         )
         if df.empty:
-            return JsonResponse({"labels": spine, "values": [0] * len(spine), "y_label": "total subscribers"})
+            return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
         monthly = df.groupby("month")["participants_count"].sum().reset_index()
         monthly = monthly.sort_values("month")
         monthly["cumulative"] = monthly["participants_count"].cumsum()

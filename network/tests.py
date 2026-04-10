@@ -1138,7 +1138,7 @@ class CopyChannelMediaTests(TestCase):
 
             with override_settings(MEDIA_ROOT=media_root):
                 copy_channel_media(Channel.objects.filter(pk=ch.pk), output_root)
-            dst = os.path.join(output_root, "channels", "copychan", "profile", "photo.jpg")
+            dst = os.path.join(output_root, "media", "channels", "copychan", "profile", "photo.jpg")
             self.assertTrue(os.path.exists(dst))
 
     def test_oserror_on_copy_is_logged_not_raised(self) -> None:

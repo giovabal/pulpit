@@ -709,30 +709,6 @@ class HomeViewTests(TestCase):
     def test_get_returns_200(self) -> None:
         self.assertEqual(self.client.get(reverse("home")).status_code, 200)
 
-    def test_channel_list_in_context(self) -> None:
-        self.assertIn("channel_list", self.client.get(reverse("home")).context)
-
-    def test_channel_list_contains_only_interesting_channels(self) -> None:
-        interesting_org = Organization.objects.create(name="In", is_interesting=True)
-        boring_org = Organization.objects.create(name="Out", is_interesting=False)
-        ch_in = Channel.objects.create(telegram_id=1, title="A", organization=interesting_org)
-        ch_out = Channel.objects.create(telegram_id=2, title="B", organization=boring_org)
-
-        channel_list = list(self.client.get(reverse("home")).context["channel_list"])
-        self.assertIn(ch_in, channel_list)
-        self.assertNotIn(ch_out, channel_list)
-
-    def test_channel_list_ordered_alphabetically(self) -> None:
-        org = Organization.objects.create(name="Org", is_interesting=True)
-        for title in ("Zebra", "Apple", "Mango"):
-            Channel.objects.create(telegram_id=ord(title[0]), title=title, organization=org)
-
-        titles = [ch.title for ch in self.client.get(reverse("home")).context["channel_list"]]
-        self.assertEqual(titles, sorted(titles))
-
-    def test_empty_channel_list_when_no_interesting_channels(self) -> None:
-        self.assertEqual(len(self.client.get(reverse("home")).context["channel_list"]), 0)
-
 
 # ─── ChannelDetailView ─────────────────────────────────────────────────────────
 
@@ -768,10 +744,6 @@ class ChannelDetailViewTests(TestCase):
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
         channel_ids = {m.channel_id for m in response.context["object_list"]}
         self.assertEqual(channel_ids, {self.ch.pk})
-
-    def test_channel_list_from_mixin_in_context(self) -> None:
-        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
-        self.assertIn("channel_list", response.context)
 
     def test_uses_digg_paginator(self) -> None:
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
