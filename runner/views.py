@@ -72,6 +72,8 @@ def _build_args(task: str, post: Any) -> list[str]:
     if task == "get_channels":
         if post.get("fixholes"):
             args.append("--fixholes")
+        if post.get("force_retry_unresolved_references"):
+            args.append("--force-retry-unresolved-references")
         if post.get("do_refresh"):
             args.append("--refresh-messages-stats")
             val = post.get("refresh_value", "").strip()

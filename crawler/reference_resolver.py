@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 # "joinchat" is a Telegram invite-link prefix (t.me/joinchat/<code>), not a real channel username.
 SKIPPABLE_REFERENCES = {"joinchat"}
 
+# Prefix stored in missing_references to mark a reference as permanently unresolvable.
+# Prefixed entries are skipped on subsequent retries unless force_retry=True.
+DEAD_PREFIX = "!"
+
 
 class ReferenceResolver:
     def __init__(self, api_client: TelegramAPIClient) -> None:
@@ -93,27 +97,37 @@ class ReferenceResolver:
 
         return missing
 
-    def get_missing_references(self, status_callback=None) -> None:
+    def get_missing_references(self, status_callback=None, force_retry: bool = False) -> None:
         qs = Message.objects.exclude(missing_references="")
         total = qs.count() if status_callback is not None else 0
-        resolved: list[Message] = []
+        to_update: list[Message] = []
         for index, message in enumerate(qs.iterator(chunk_size=500), start=1):
-            all_resolved = True
-            for reference in message.missing_references.split("|"):
-                if not reference or reference in SKIPPABLE_REFERENCES:
+            remaining: list[str] = []
+            for raw in message.missing_references.split("|"):
+                if not raw:
+                    continue
+                is_dead = raw.startswith(DEAD_PREFIX)
+                reference = raw[len(DEAD_PREFIX) :] if is_dead else raw
+                if reference in SKIPPABLE_REFERENCES:
+                    continue
+                if is_dead and not force_retry:
+                    remaining.append(raw)
                     continue
                 channel, failed = self._resolve_one(reference)
                 if channel:
                     message.references.add(channel)
-                if failed:
-                    all_resolved = False
-            if all_resolved:
-                message.missing_references = ""
-                resolved.append(message)
-            if len(resolved) >= 500:
-                Message.objects.bulk_update(resolved, ["missing_references"])
-                resolved.clear()
+                elif failed:
+                    remaining.append(reference)
+                else:
+                    remaining.append(DEAD_PREFIX + reference)
+            new_value = "|".join(remaining)
+            if new_value != message.missing_references:
+                message.missing_references = new_value
+                to_update.append(message)
+            if len(to_update) >= 500:
+                Message.objects.bulk_update(to_update, ["missing_references"])
+                to_update.clear()
             if status_callback is not None:
                 status_callback(index, total)
-        if resolved:
-            Message.objects.bulk_update(resolved, ["missing_references"])
+        if to_update:
+            Message.objects.bulk_update(to_update, ["missing_references"])

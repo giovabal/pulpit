@@ -389,6 +389,47 @@ class GetMissingReferencesTests(TestCase):
         self.assertIn(ch_a, msg.references.all())
         self.assertEqual(msg.missing_references, "")
 
+    def test_permanent_failure_marked_as_dead(self) -> None:
+        self.api_client.client.get_entity.side_effect = ValueError("not found")
+        msg = Message.objects.create(telegram_id=8, channel=self.channel, missing_references="|deadchan")
+        self.resolver.get_missing_references()
+        msg.refresh_from_db()
+        self.assertEqual(msg.missing_references, "!deadchan")
+
+    def test_dead_reference_skipped_by_default(self) -> None:
+        msg = Message.objects.create(telegram_id=9, channel=self.channel, missing_references="!deadchan")
+        self.resolver.get_missing_references()
+        self.api_client.client.get_entity.assert_not_called()
+        msg.refresh_from_db()
+        self.assertEqual(msg.missing_references, "!deadchan")
+
+    def test_dead_reference_retried_with_force_retry(self) -> None:
+        mock_tc = _make_telegram_channel(telegram_id=777, username="deadchan")
+        self.api_client.client.get_entity.return_value = mock_tc
+        msg = Message.objects.create(telegram_id=10, channel=self.channel, missing_references="!deadchan")
+        self.resolver.get_missing_references(force_retry=True)
+        self.api_client.client.get_entity.assert_called_once_with("deadchan")
+        msg.refresh_from_db()
+        self.assertEqual(msg.missing_references, "")
+
+    def test_mixed_dead_and_temp_failure(self) -> None:
+        # One reference permanently dead, another still temporarily failing
+        def side_effect(ref):
+            if ref == "deadchan":
+                raise ValueError("not found")
+            raise _flood_error(seconds=5)
+
+        self.api_client.client.get_entity.side_effect = side_effect
+        msg = Message.objects.create(
+            telegram_id=11, channel=self.channel, missing_references="|deadchan|floodchan"
+        )
+        self.resolver.get_missing_references()
+        msg.refresh_from_db()
+        # deadchan → marked dead; floodchan → kept for retry
+        self.assertIn("!deadchan", msg.missing_references)
+        self.assertIn("floodchan", msg.missing_references)
+        self.assertNotIn("!floodchan", msg.missing_references)
+
 
 # ---------------------------------------------------------------------------
 # TelegramAPIClient

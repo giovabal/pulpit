@@ -13,7 +13,7 @@ from django.db.models import F
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
-from crawler.reference_resolver import SKIPPABLE_REFERENCES, ReferenceResolver
+from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import Channel, Message
 from webapp_engine.async_commands import AsyncBaseCommand
 
@@ -129,6 +129,15 @@ class Command(AsyncBaseCommand):
             help="Only crawl channels whose database id is less than or equal to this value.",
         )
         parser.add_argument(
+            "--force-retry-unresolved-references",
+            action="store_true",
+            default=False,
+            help=(
+                "Retry all unresolved message references, including those already marked as permanently "
+                "unresolvable (e.g. deleted channels). By default, permanently dead references are skipped."
+            ),
+        )
+        parser.add_argument(
             "--refresh-messages-stats",
             nargs="?",
             const=None,
@@ -185,6 +194,7 @@ class Command(AsyncBaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         fix_holes: bool = options["fixholes"]
+        force_retry: bool = options["force_retry_unresolved_references"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
         except ValueError as exc:
@@ -250,9 +260,14 @@ class Command(AsyncBaseCommand):
 
                 printer.newline()
 
-                n_missing = Message.objects.exclude(missing_references="").count()
+                if force_retry:
+                    n_missing = Message.objects.exclude(missing_references="").count()
+                else:
+                    n_missing = Message.objects.filter(
+                        missing_references__regex=r"(^|[|])[^" + DEAD_PREFIX + r"]"
+                    ).count()
                 if n_missing == 0:
-                    self.stdout.write("\nNo unresolved message references.")
+                    self.stdout.write("\nNo unresolved message references to retry.")
                 else:
                     _ref_len = [0]
 
@@ -265,7 +280,7 @@ class Command(AsyncBaseCommand):
 
                     self.stdout.write(f"\nRetrying {n_missing} unresolved message references", ending="")
                     self.stdout.flush()
-                    crawler.get_missing_references(status_callback=_ref_progress)
+                    crawler.get_missing_references(status_callback=_ref_progress, force_retry=force_retry)
                     self.stdout.write("", ending="\n")
 
                 # ---- mine Channel.about for t.me/ references ----

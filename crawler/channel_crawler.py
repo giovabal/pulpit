@@ -332,5 +332,5 @@ class ChannelCrawler:
                     new_count += 1
         return results_count, new_count
 
-    def get_missing_references(self, status_callback=None) -> None:
-        self.reference_resolver.get_missing_references(status_callback=status_callback)
+    def get_missing_references(self, status_callback=None, force_retry: bool = False) -> None:
+        self.reference_resolver.get_missing_references(status_callback=status_callback, force_retry=force_retry)
