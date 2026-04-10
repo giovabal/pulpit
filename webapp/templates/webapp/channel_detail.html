@@ -50,7 +50,7 @@
 
 <div class="ch-summary-grid">
   {% for card in summary %}
-  <div class="summary-card">
+  <div class="summary-card{% if card.dim %} summary-card--dim{% endif %}">
     <i class="bi {{ card.icon }} sc-icon" aria-hidden="true"></i>
     <span class="sc-label">{{ card.label }}</span>
     <span class="sc-value">{{ card.value }}</span>
@@ -74,7 +74,7 @@
   <div class="collapse" id="{{ panel.id }}" data-panel-url="{{ panel.url }}" data-panel-type="{{ panel.type|default:'chart' }}">
     <div class="stats-panel-body">
       <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
-      {% if panel.type == "table" %}
+      {% if panel.type == "table" or panel.type == "cross-refs" %}
       <div class="panel-tables-wrap"></div>
       {% else %}
       <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas></canvas></div>
@@ -97,6 +97,8 @@
             spinner.classList.add('hidden');
             if (collapse.dataset.panelType === 'table') {
               renderContactTables(collapse.querySelector('.panel-tables-wrap'), data);
+            } else if (collapse.dataset.panelType === 'cross-refs') {
+              renderCrossRefsTables(collapse.querySelector('.panel-tables-wrap'), data);
             } else {
               renderChart(collapse.querySelector('canvas'), data);
             }
@@ -104,6 +106,64 @@
       }
     });
   });
+
+  function renderCrossRefsTables(wrap, data) {
+    var sections = [
+      { title: 'Channels mentioned', rows: data.mentioned || [] },
+      { title: 'Channels mentioning', rows: data.mentioning || [] },
+    ];
+    sections.forEach(function (sec) {
+      var section = document.createElement('div');
+      section.className = 'panel-table-section';
+      var h = document.createElement('h3');
+      h.className = 'panel-table-title';
+      h.textContent = sec.title;
+      section.appendChild(h);
+      if (sec.rows.length === 0) {
+        var empty = document.createElement('p');
+        empty.className = 'panel-table-empty';
+        empty.textContent = 'None found.';
+        section.appendChild(empty);
+      } else {
+        var table = document.createElement('table');
+        table.className = 'stats-table';
+        var thead = table.createTHead();
+        var hrow = thead.insertRow();
+        ['Channel', 'Count'].forEach(function (label) {
+          var th = document.createElement('th');
+          th.textContent = label;
+          hrow.appendChild(th);
+        });
+        var tbody = table.createTBody();
+        sec.rows.forEach(function (row) {
+          var tr = tbody.insertRow();
+          var td1 = tr.insertCell();
+          if (row.url) {
+            var a = document.createElement('a');
+            a.href = row.url;
+            a.textContent = row.title;
+            td1.appendChild(a);
+          } else {
+            td1.textContent = row.title;
+          }
+          if (row.telegram_url) {
+            var tg = document.createElement('a');
+            tg.href = row.telegram_url;
+            tg.target = '_blank';
+            tg.rel = 'noopener noreferrer';
+            tg.className = 'tg-link ms-2';
+            tg.title = 'Open on Telegram';
+            tg.innerHTML = '<i class="bi bi-telegram" aria-hidden="true"></i>';
+            td1.appendChild(tg);
+          }
+          var td2 = tr.insertCell();
+          td2.textContent = row.count;
+        });
+        section.appendChild(table);
+      }
+      wrap.appendChild(section);
+    });
+  }
 
   function renderContactTables(wrap, data) {
     var sections = [
@@ -145,6 +205,7 @@
   }
 </script>
 
+{% if is_interesting %}
 <div class="search-header">
   <form method="get" action="" class="search-form" role="search">
     <div class="search-input-wrap">
@@ -248,4 +309,5 @@
 </ol>
 
 {% include "webapp/pagination.html" %}
+{% endif %}
 {% endblock content %}

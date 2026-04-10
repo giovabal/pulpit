@@ -4,6 +4,8 @@
 
 ### New features
 - Channel detail page now includes a lazy-loaded **Domains & emails** panel listing all non-Telegram domains and email addresses found in the channel's messages, sorted by frequency.
+- Channel detail page now includes a lazy-loaded **Channel connections** panel with two tables: channels mentioned by this channel (forwards sent + t.me references) and channels that mention it (forwards received + t.me references from interesting channels), each row linking to the internal page and to Telegram.
+- Channel detail pages for non-interesting channels are now trimmed: only the **Channel connections** panel is shown, the first four summary cards are grayed out, and the message search form and post list are hidden.
 
 ### Improvements
 - `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.

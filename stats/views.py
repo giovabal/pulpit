@@ -242,6 +242,56 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
         return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
 
 
+class ChannelCrossRefsView(View):
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        interesting_pks = Channel.objects.interesting().values("pk")
+
+        fwd_out = Counter(
+            Message.objects.filter(channel=channel, forwarded_from__isnull=False)
+            .exclude(forwarded_from=channel)
+            .values_list("forwarded_from", flat=True)
+        )
+        ref_out = Counter(
+            cpk
+            for cpk in Message.objects.filter(channel=channel).values_list("references", flat=True)
+            if cpk is not None and cpk != channel.pk
+        )
+        mentioned = fwd_out + ref_out
+
+        fwd_in = Counter(
+            Message.objects.filter(channel__in=interesting_pks, forwarded_from=channel).values_list(
+                "channel", flat=True
+            )
+        )
+        ref_in = Counter(
+            Message.objects.filter(channel__in=interesting_pks, references=channel)
+            .exclude(channel=channel)
+            .values_list("channel", flat=True)
+        )
+        mentioning = fwd_in + ref_in
+
+        all_pks = [cpk for cpk in set(mentioned) | set(mentioning) if cpk is not None]
+        channel_map = {
+            c.pk: {"title": c.title or str(c.telegram_id), "url": c.get_absolute_url(), "telegram_url": c.telegram_url}
+            for c in Channel.objects.filter(pk__in=all_pks)
+        }
+
+        def serialize(counter: Counter) -> list[dict]:
+            return [
+                {
+                    "title": channel_map.get(cpk, {}).get("title", str(cpk)),
+                    "url": channel_map.get(cpk, {}).get("url", ""),
+                    "telegram_url": channel_map.get(cpk, {}).get("telegram_url", ""),
+                    "count": count,
+                }
+                for cpk, count in counter.most_common()
+                if cpk is not None
+            ]
+
+        return JsonResponse({"mentioned": serialize(mentioned), "mentioning": serialize(mentioning)})
+
+
 class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)

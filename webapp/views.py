@@ -305,6 +305,8 @@ class ChannelDetailView(ListView):
         context_data["query"] = q
         context_data.update(_message_options_context(self.request.GET))
 
+        is_interesting = Channel.objects.interesting().filter(pk=ch.pk).exists()
+
         msg_qs = Message.objects.filter(channel=ch)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
@@ -335,6 +337,9 @@ class ChannelDetailView(ListView):
                 "note": "from other channels",
             },
         ]
+        if not is_interesting:
+            for card in summary[:-1]:
+                card["dim"] = True
 
         panels = [
             {
@@ -368,6 +373,13 @@ class ChannelDetailView(ListView):
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
             },
             {
+                "id": "ch-cross-refs",
+                "title": "Channel connections",
+                "icon": "bi-arrow-left-right",
+                "url": reverse("channel-cross-refs", kwargs={"pk": ch.pk}),
+                "type": "cross-refs",
+            },
+            {
                 "id": "ch-contact-info",
                 "title": "Domains & emails mentioned",
                 "icon": "bi-link-45deg",
@@ -376,5 +388,10 @@ class ChannelDetailView(ListView):
             },
         ]
 
-        context_data.update({"selected_channel": ch, "summary": summary, "panels": panels})
+        if not is_interesting:
+            panels = [p for p in panels if p["id"] == "ch-cross-refs"]
+
+        context_data.update(
+            {"selected_channel": ch, "summary": summary, "panels": panels, "is_interesting": is_interesting}
+        )
         return context_data
