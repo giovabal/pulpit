@@ -1,4 +1,3 @@
-import os
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -65,30 +64,6 @@ class TaskStatusView(View):
         status = tasks.get_status(task)
         lines, new_offset = tasks.get_log_lines(task, offset)
         return JsonResponse({**status, "lines": lines, "next_offset": new_offset})
-
-
-class BrowseDirsView(View):
-    """Return up to 20 subdirectory paths matching a given path prefix."""
-
-    def get(self, request: HttpRequest) -> JsonResponse:
-        raw = request.GET.get("path", "").strip()
-        if not raw:
-            return JsonResponse({"dirs": []})
-        if raw.endswith("/") or raw.endswith(os.sep):
-            base, prefix = raw, ""
-        else:
-            base = os.path.dirname(raw) or "."
-            prefix = os.path.basename(raw)
-        try:
-            entries = os.listdir(base)
-        except OSError:
-            return JsonResponse({"dirs": []})
-        dirs = sorted(
-            os.path.normpath(os.path.join(base, e)) + "/"
-            for e in entries
-            if e.startswith(prefix) and os.path.isdir(os.path.join(base, e))
-        )
-        return JsonResponse({"dirs": dirs[:20]})
 
 
 def _build_args(task: str, post: Any) -> list[str]:

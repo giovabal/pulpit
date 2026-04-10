@@ -150,10 +150,7 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Path to a previously exported graph directory, it can be the same network or a different one. When provided, the channel table will include a comparison between the two networks."></i>
               </label>
-              <div class="dir-picker">
-                <input type="text" name="compare" id="compare" placeholder="path/to/graph/" data-width="lg" autocomplete="off">
-                <div class="dir-picker-drop" id="compare-drop" hidden></div>
-              </div>
+              <input type="text" name="compare" id="compare" placeholder="path/to/graph/" data-width="lg">
             </div>
           </div>
           {% endif %}
@@ -359,67 +356,6 @@
       if (metaEl.dataset.exit !== undefined) meta += ' · exit ' + metaEl.dataset.exit;
       metaEl.textContent = meta;
     }
-  });
-})();
-
-(function () {
-  'use strict';
-  const input = document.getElementById('compare');
-  const drop  = document.getElementById('compare-drop');
-  if (!input || !drop) return;
-
-  let timer = null;
-
-  function close() { drop.hidden = true; drop.innerHTML = ''; }
-
-  function open(dirs) {
-    drop.innerHTML = dirs.map(function (d) {
-      return '<div class="dir-picker-item" tabindex="-1">' + d + '</div>';
-    }).join('');
-    drop.hidden = false;
-    drop.querySelectorAll('.dir-picker-item').forEach(function (item) {
-      item.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-        input.value = item.textContent;
-        close();
-        input.dispatchEvent(new Event('input'));
-      });
-    });
-  }
-
-  input.addEventListener('input', function () {
-    clearTimeout(timer);
-    var val = input.value;
-    if (!val) { close(); return; }
-    timer = setTimeout(async function () {
-      try {
-        var resp = await fetch('/operations/browse/?path=' + encodeURIComponent(val));
-        var data = await resp.json();
-        if (data.dirs && data.dirs.length) { open(data.dirs); } else { close(); }
-      } catch (_) { close(); }
-    }, 180);
-  });
-
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { close(); return; }
-    if (e.key === 'ArrowDown' && !drop.hidden) {
-      e.preventDefault();
-      var first = drop.querySelector('.dir-picker-item');
-      if (first) first.focus();
-    }
-  });
-
-  drop.addEventListener('keydown', function (e) {
-    var items = Array.from(drop.querySelectorAll('.dir-picker-item'));
-    var idx   = items.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < items.length - 1) items[idx + 1].focus(); }
-    if (e.key === 'ArrowUp')   { e.preventDefault(); if (idx > 0) items[idx - 1].focus(); else input.focus(); }
-    if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); input.value = items[idx].textContent; close(); input.dispatchEvent(new Event('input')); }
-    if (e.key === 'Escape') { close(); input.focus(); }
-  });
-
-  document.addEventListener('click', function (e) {
-    if (!input.contains(e.target) && !drop.contains(e.target)) close();
   });
 })();
 </script>
