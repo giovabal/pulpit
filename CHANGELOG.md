@@ -16,7 +16,7 @@
 - `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
 
 ### Backward incompatibility
-- `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--graph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--graph` and/or `--html` to generate the interactive graph and HTML tables.
+- `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--2dgraph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--2dgraph` and/or `--html` to generate the interactive graph and HTML tables.
 - `FETCH_RECOMMENDED_CHANNELS` `.env` option removed; use `get_channels --fetch-recommended-channels` instead.
 - `FA2_ITERATIONS` and `LAYOUT` `.env` options removed; use `export_network --fa2-iterations N` and `export_network --vertical-layout` instead.
 - `NETWORK_MEASURES`, `COMMUNITY_STRATEGIES`, `EDGE_WEIGHT_STRATEGY`, `RECENCY_WEIGHTS`, `SPREADING_RUNS`, `DRAW_DEAD_LEAVES`, and `CHANNEL_TYPES` `.env` options removed; pass them as `export_network` flags instead. Defaults are unchanged: `--measures PAGERANK`, `--community-strategies ORGANIZATION`, `--edge-weight-strategy PARTIAL_REFERENCES`, `--channel-types CHANNEL`; `--recency-weights`, `--spreading-runs`, and `--draw-dead-leaves` are opt-in.
@@ -63,7 +63,7 @@
 - Documentation now has a new structure and a navigation menu.
 
 ### Backward incompatibility
-- `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3d` (add 3D graph), `--xlsx` (add Excel output), `--graph` (generate 2D graph), `--html` (generate HTML tables). Default output is data files only.
+- `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3dgraph` (add 3D graph), `--xlsx` (add Excel output), `--2dgraph` (generate 2D graph), `--html` (generate HTML tables). Default output is data files only.
 
 ### Fixed
 - Progress lines in the terminal are now truncated to fit the terminal width instead of wrapping.
@@ -77,7 +77,7 @@
 ### New features
 - After each `get_channels` run, in-degree and out-degree are refreshed for all interesting channels. The citation degree is now also refreshed for non-interesting channels that are forwarded or mentioned (via `t.me/` links) by interesting ones — previously only channels reached via forwards were updated, and t.me/username references were missed. The field that receives the citation count is `in_degree` when `REVERSED_EDGES=True` (citations arrive as incoming graph edges) or `out_degree` when `REVERSED_EDGES=False` (citations leave as outgoing edges).
 - New `EDGE_WEIGHT_STRATEGY` option controls how edge weights are computed from forward and citation counts. `NONE` = all edges have equal weight (unweighted graph); `TOTAL` = raw count of forwards + citations; `PARTIAL_MESSAGES` = raw count divided by the total number of messages posted by the channel; `PARTIAL_REFERENCES` = raw count divided by the number of messages that are either forwarded from another source or contain at least one citation (default).
-- `export_network --3d` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end. Spheres are shaded with Lambert lighting for improved depth readability.
+- `export_network --3dgraph` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end. Spheres are shaded with Lambert lighting for improved depth readability.
 - `export_network --compare PROJECT_DIR` accepts the `graph/` output directory of a previous export (the one containing `index.html`) and produces a full side-by-side comparison:
   - The compare network's `data/`, graph files, `*_table.html`, and `*.xlsx` are copied into the current `graph/` directory with `_2` suffixes (`data_2/`, `graph_2.html`, `channel_table_2.html`, etc.). Internal links inside the copied HTML files are rewritten to their `_2` equivalents.
   - `graph/network_compare_table.html` is generated with a 3-column whole-network metrics table (Metric / This network / Compare network), a modularity-by-strategy comparison table, and interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. A "Normalize axes [0–1] per network" toggle min-max scales each network's values independently, making size-dependent measures (degree, fans, message count) directly comparable across networks of different sizes.

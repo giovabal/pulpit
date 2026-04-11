@@ -92,7 +92,7 @@ def _build_args(task: str, post: Any) -> list[str]:
 
     elif task == "export_network":
         if post.get("graph_3d"):
-            args.append("--3d")
+            args.append("--3dgraph")
         if post.get("xlsx"):
             args.append("--xlsx")
         if post.get("gexf"):
@@ -102,7 +102,7 @@ def _build_args(task: str, post: Any) -> list[str]:
         if post.get("seo"):
             args.append("--seo")
         if post.get("graph"):
-            args.append("--graph")
+            args.append("--2dgraph")
         if post.get("html"):
             args.append("--html")
         if post.get("vertical_layout"):

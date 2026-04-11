@@ -21,14 +21,14 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
-            "--graph",
+            "--2dgraph",
             dest="graph",
             action="store_true",
             default=False,
             help="Generate the 2D interactive graph (graph.html and layout computation).",
         )
         parser.add_argument(
-            "--3d",
+            "--3dgraph",
             dest="graph_3d",
             action="store_true",
             default=False,
