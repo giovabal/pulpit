@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.11] - To be announced
+## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*
 
 ### New features
