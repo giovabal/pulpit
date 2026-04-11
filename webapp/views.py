@@ -172,7 +172,7 @@ class ChannelListView(ListView):
         ctx = super().get_context_data(**kwargs)
         ctx["excluded_list"] = (
             Channel.objects.filter(organization__is_interesting=True)
-            .exclude(channel_type_filter())
+            .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .select_related("organization")
             .annotate(messages_count=Count("message_set"))
             .order_by("title")
