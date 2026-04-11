@@ -19,7 +19,7 @@ from webapp.models import Channel, Message
 
 interesting_ids = set(Channel.objects.interesting().values_list("id", flat=True))
 referenced_ids = set(
-    Channel.objects.filter(organization__is_interesting=True)
+    Channel.objects.interesting()
     .exclude(message_set__forwarded_from__isnull=True)
     .values_list("message_set__forwarded_from_id", flat=True)
     .distinct()

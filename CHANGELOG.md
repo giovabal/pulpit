@@ -8,8 +8,6 @@
 - Channel detail page now includes a lazy-loaded **Channel connections** panel with two tables: channels mentioned by this channel (forwards sent + t.me references) and channels that mention it (forwards received + t.me references from interesting channels), each row linking to the internal page and to Telegram.
 - Network Statistics table now includes a lazy-loaded **degree distribution** bar chart (bins of 10 links), switchable between forwards received and forwards sent.
 - Network Comparison table now includes the same degree distribution chart showing both networks side by side, and power-law trend lines for each network in the measure comparison scatter plot.
-
-### New features
 - New `DEFAULT_CHANNEL_TYPES` `.env` option (comma-separated; default `CHANNEL`): sets which Telegram entity types are considered monitored throughout the app — used as the default for `get_channels --channel-types` and `export_network --channel-types`, and applied by `Channel.objects.interesting()` everywhere channels are filtered by monitoring status. Operations panel channel-type checkboxes reflect the setting on page load.
 - `get_channels` now accepts `--channel-types` (same values and default as `export_network`).
 
@@ -18,6 +16,9 @@
 - Network Statistics and Network Comparison tables: added **Edges / Nodes** row after Edges in the whole-network metrics summary.
 - Generated table pages footer now shows the Pulpit logo instead of plain text.
 - `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
+
+### Fixes
+- `MessageSearchView` and the message search on the home page now respect `DEFAULT_CHANNEL_TYPES` when scoping results to monitored channels; `scripts/delete_unused_messages.py` likewise uses `Channel.objects.interesting()` so the type filter is applied consistently.
 
 ### Backward incompatibility
 - Network comparison extracted into a dedicated `compare_networks` command; `export_network --compare` is removed. Run `python manage.py compare_networks /path/to/graph` (or use the new **Compare Networks** card in the Operations panel) after exporting to generate the side-by-side comparison page.

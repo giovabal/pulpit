@@ -76,7 +76,7 @@ class HomeView(ListView):
         if not q:
             return Message.objects.none()
         qs = (
-            Message.objects.filter(channel__organization__is_interesting=True)
+            Message.objects.filter(channel__in=Channel.objects.interesting())
             .select_related("channel", "channel__organization", "forwarded_from")
             .filter(message__icontains=q)
         )
@@ -334,7 +334,7 @@ class MessageSearchView(ListView):
     page_kwarg = "page"
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = Message.objects.filter(channel__organization__is_interesting=True).select_related(
+        qs = Message.objects.filter(channel__in=Channel.objects.interesting()).select_related(
             "channel", "channel__organization", "forwarded_from"
         )
         q = self.request.GET.get("q", "").strip()
