@@ -151,12 +151,12 @@ class Command(AsyncBaseCommand):
         parser.add_argument(
             "--channel-types",
             dest="channel_types",
-            default="CHANNEL",
+            default=None,
             metavar="TYPES",
             help=(
                 "Comma-separated list of Telegram entity types to crawl. "
                 "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
-                "USER (user accounts and bots). Default: CHANNEL."
+                "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting."
             ),
         )
         parser.add_argument(
@@ -226,7 +226,12 @@ class Command(AsyncBaseCommand):
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
         fromid: int | None = options["fromid"]
-        channel_types = [s.strip().upper() for s in options["channel_types"].split(",") if s.strip()]
+        channel_types_raw = options["channel_types"]
+        channel_types = (
+            [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
+            if channel_types_raw is not None
+            else settings.DEFAULT_CHANNEL_TYPES
+        )
         invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(

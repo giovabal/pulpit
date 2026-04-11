@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.db import models
 
 from webapp.utils.channel_types import channel_type_filter
@@ -7,7 +8,9 @@ from webapp.utils.channel_types import channel_type_filter
 
 class ChannelQuerySet(models.QuerySet["Channel"]):
     def interesting(self) -> ChannelQuerySet:
-        return self.filter(organization__is_interesting=True).filter(channel_type_filter())
+        return self.filter(organization__is_interesting=True).filter(
+            channel_type_filter(settings.DEFAULT_CHANNEL_TYPES)
+        )
 
 
 class ChannelManager(models.Manager["Channel"]):

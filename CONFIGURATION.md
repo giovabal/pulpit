@@ -57,6 +57,7 @@ pip install oracledb           # Oracle
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
+| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Used as the default for `get_channels --channel-types`, `export_network --channel-types`, and the definition of "interesting" channels throughout the app. | `CHANNEL` |
 
 
 ## Community detection

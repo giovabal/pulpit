@@ -169,12 +169,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--channel-types",
             dest="channel_types",
-            default="CHANNEL",
+            default=None,
             metavar="TYPES",
             help=(
                 "Comma-separated list of Telegram entity types to include in the graph. "
                 "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
-                "USER (user accounts and bots). Default: CHANNEL."
+                "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting."
             ),
         )
 
@@ -236,7 +236,10 @@ class Command(BaseCommand):
         )
         raw_network_measures = _parse_csv(options["measures"])
         network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
-        channel_types = _parse_csv(options["channel_types"])
+        channel_types_raw = options["channel_types"]
+        channel_types = (
+            _parse_csv(channel_types_raw) if channel_types_raw is not None else settings.DEFAULT_CHANNEL_TYPES
+        )
         edge_weight_strategy: str = options["edge_weight_strategy"]
         bridging_token = self._validate_settings(
             communities_strategy, network_measures, channel_types, edge_weight_strategy

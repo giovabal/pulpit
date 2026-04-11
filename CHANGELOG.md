@@ -9,6 +9,10 @@
 - Network Statistics table now includes a lazy-loaded **degree distribution** bar chart (bins of 10 links), switchable between forwards received and forwards sent.
 - Network Comparison table now includes the same degree distribution chart showing both networks side by side, and power-law trend lines for each network in the measure comparison scatter plot.
 
+### New features
+- New `DEFAULT_CHANNEL_TYPES` `.env` option (comma-separated; default `CHANNEL`): sets which Telegram entity types are considered monitored throughout the app — used as the default for `get_channels --channel-types` and `export_network --channel-types`, and applied by `Channel.objects.interesting()` everywhere channels are filtered by monitoring status. Operations panel channel-type checkboxes reflect the setting on page load.
+- `get_channels` now accepts `--channel-types` (same values and default as `export_network`).
+
 ### Improvements
 - Generated HTML tables overhauled for scientific rigor: metric grouping with labeled sub-headers, normalization range annotations (e.g. "Density (0–1)"), interpretive tooltips on all column headers, em-dash for undefined values, `†` footnote symbol for WCC-only metrics, column reordering with group separators (Network position / Influence / Structural / Content / Communities), merged Activity column, rank column (#), 3 significant figures for continuous measures, diverging heatmap for Burt's Constraint, mean ± SD footer row, default sort by size in community table, External Fraction and Modularity Contribution columns in community table, table preambles populated from a new `data/meta.json` export artifact, and locale-aware thousands separators.
 - Network Statistics and Network Comparison tables: added **Edges / Nodes** row after Edges in the whole-network metrics summary.

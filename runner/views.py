@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
@@ -36,7 +37,11 @@ class OperationsView(View):
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
-        return render(request, "runner/operations.html", {"tasks": task_info})
+        return render(
+            request,
+            "runner/operations.html",
+            {"tasks": task_info, "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES)},
+        )
 
 
 class RunTaskView(View):

@@ -196,6 +196,10 @@ PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 
 REVERSED_EDGES = config("REVERSED_EDGES", default=True, cast=bool)
 
+DEFAULT_CHANNEL_TYPES: list[str] = [
+    t.strip().upper() for t in config("DEFAULT_CHANNEL_TYPES", default="CHANNEL", cast=str).split(",") if t.strip()
+]
+
 DEAD_LEAVES_COLOR = config("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
 
 COMMUNITY_PALETTE = config("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
