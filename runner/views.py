@@ -25,7 +25,7 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "compare_networks": {
         "title": "Compare Networks",
         "description": "Copy a previously exported network and generate side-by-side comparison tables and scatter plots.",
-        "icon": "bi-arrows-angle-contract",
+        "icon": "bi-intersect",
     },
 }
 

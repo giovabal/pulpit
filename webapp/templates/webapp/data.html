@@ -64,9 +64,32 @@
   </div>
   {% endif %}
 
-  {% if compare_maps or compare_tables %}
+  {% if compare_highlight or compare_maps or compare_tables %}
   <hr class="my-4">
   <h2 class="h6 fw-semibold mb-3 text-muted">Comparison</h2>
+  {% if compare_highlight %}
+  <div class="row g-3 mb-4">
+    {% for card in compare_highlight %}
+    <div class="col-md-6 col-xl-4">
+      <div class="data-card">
+        <div class="data-card-icon"><i class="bi {{ card.icon }}" aria-hidden="true"></i></div>
+        <div>
+          <h2 class="data-card-title">{{ card.title }}</h2>
+          <p class="data-card-desc">{{ card.description }}</p>
+          <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ card.url }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">{{ card.action }}</a>
+            {% if card.docs_url %}
+            <a href="{{ card.docs_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-book" aria-hidden="true"></i> Docs
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
   {% if compare_maps %}
   <div class="row g-3 mb-4">
     {% for card in compare_maps %}

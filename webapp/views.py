@@ -193,7 +193,7 @@ class DataView(TemplateView):
         if (graph_dir / "graph.html").exists():
             maps.append(
                 {
-                    "title": "Network map",
+                    "title": "2D Network map",
                     "icon": "bi-map",
                     "description": "Interactive force-directed graph. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.",
                     "url": "/graph/graph.html",
@@ -268,18 +268,20 @@ class DataView(TemplateView):
                 }
             )
 
-        compare_tables = []
+        compare_highlight = []
         if (graph_dir / "network_compare_table.html").exists():
-            compare_tables.append(
+            compare_highlight.append(
                 {
                     "title": "Network comparison",
-                    "icon": "bi-bar-chart",
+                    "icon": "bi-intersect",
                     "description": "Side-by-side whole-network metrics for the two datasets.",
                     "url": "/graph/network_compare_table.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#whole-network-measures",
                 }
             )
+
+        compare_tables = []
         if (graph_dir / "channel_table_2.html").exists():
             compare_tables.append(
                 {
@@ -316,9 +318,10 @@ class DataView(TemplateView):
 
         ctx["maps"] = maps
         ctx["tables"] = tables
+        ctx["compare_highlight"] = compare_highlight
         ctx["compare_maps"] = compare_maps
         ctx["compare_tables"] = compare_tables
-        ctx["graph_available"] = bool(maps or tables or compare_maps or compare_tables)
+        ctx["graph_available"] = bool(maps or tables or compare_highlight or compare_maps or compare_tables)
         return ctx
 
 
