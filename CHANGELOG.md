@@ -1,6 +1,7 @@
 # Changelog
 
 ## [0.11] - To be announced
+*Reworking commands options. Reworking tables presentation.*
 
 ### New features
 - Channel detail page now includes a lazy-loaded **Domains & emails** panel listing all non-Telegram domains and email addresses found in the channel's messages, sorted by frequency.
@@ -9,6 +10,7 @@
 - Network Comparison table now includes the same degree distribution chart showing both networks side by side, and power-law trend lines for each network in the measure comparison scatter plot.
 
 ### Improvements
+- Generated HTML tables overhauled for scientific rigor: metric grouping with labeled sub-headers, normalization range annotations (e.g. "Density (0–1)"), interpretive tooltips on all column headers, em-dash for undefined values, `†` footnote symbol for WCC-only metrics, column reordering with group separators (Network position / Influence / Structural / Content / Communities), merged Activity column, rank column (#), 3 significant figures for continuous measures, diverging heatmap for Burt's Constraint, mean ± SD footer row, default sort by size in community table, External Fraction and Modularity Contribution columns in community table, table preambles populated from a new `data/meta.json` export artifact, and locale-aware thousands separators.
 - Network Statistics and Network Comparison tables: added **Edges / Nodes** row after Edges in the whole-network metrics summary.
 - Generated table pages footer now shows the Pulpit logo instead of plain text.
 - `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.

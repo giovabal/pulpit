@@ -1,3 +1,4 @@
+import datetime
 import html as _html
 import json
 import logging
@@ -258,6 +259,45 @@ def write_graph_files(
     # communities.json — strategy group definitions (metrics rows added later by write_community_metrics_json)
     with open(os.path.join(data_dir, "communities.json"), "w") as f:
         f.write(json.dumps({"strategies": communities_data}))
+
+
+def write_meta_json(
+    graph_dir: str,
+    *,
+    project_title: str = "",
+    reversed_edges: bool = True,
+    edge_weight_strategy: str = "COMBINED",
+    start_date: "datetime.date | None" = None,
+    end_date: "datetime.date | None" = None,
+    total_nodes: int = 0,
+    total_edges: int = 0,
+) -> None:
+    """Write data/meta.json with export metadata consumed by table preambles."""
+    _weight_labels = {
+        "COMBINED": "forwards and mentions (combined)",
+        "FORWARDS": "forwards only",
+        "REFERENCES": "mentions only",
+    }
+    edge_direction = (
+        "edges point from citing channel to cited channel"
+        if reversed_edges
+        else "edges point from cited channel to citing channel"
+    )
+    payload: dict[str, object] = {
+        "export_date": datetime.date.today().isoformat(),
+        "project_title": project_title,
+        "reversed_edges": reversed_edges,
+        "edge_direction": edge_direction,
+        "edge_weight_strategy": edge_weight_strategy,
+        "edge_weight_label": _weight_labels.get(edge_weight_strategy, edge_weight_strategy),
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "total_nodes": total_nodes,
+        "total_edges": total_edges,
+    }
+    data_dir = os.path.join(graph_dir, "data")
+    with open(os.path.join(data_dir, "meta.json"), "w") as f:
+        f.write(json.dumps(payload))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:

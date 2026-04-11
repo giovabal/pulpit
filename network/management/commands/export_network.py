@@ -443,6 +443,16 @@ class Command(BaseCommand):
             include_positions=do_graph or do_3dgraph,
             positions_3d=positions_3d,
         )
+        exporter.write_meta_json(
+            graph_dir=root_target,
+            project_title=project_title,
+            reversed_edges=settings.REVERSED_EDGES,
+            edge_weight_strategy=edge_weight_strategy,
+            start_date=start_date,
+            end_date=end_date,
+            total_nodes=len(graph.nodes),
+            total_edges=len(graph.edges),
+        )
 
         strategies = [s.lower() for s in communities_strategy]
         need_community_metrics = do_html or do_xlsx or compare_data_dir is not None

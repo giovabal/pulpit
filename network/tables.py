@@ -113,27 +113,25 @@ def write_network_metrics_json(
     graph_dir: str,
 ) -> None:
     def _fmt(val: float | None, decimals: int = 4) -> str:
-        return "N/A" if val is None else f"{val:.{decimals}f}"
+        return "—" if val is None else f"{val:.{decimals}f}"
 
     data_dir = os.path.join(graph_dir, "data")
     summary = community_table_data["network_summary"]
     summary_rows = []
-    for label, value in network_summary_rows(summary):
+    for label, value, group in network_summary_rows(summary):
         if isinstance(value, float):
             display = _fmt(value)
         elif value is None:
-            display = "N/A"
+            display = "—"
         else:
             display = str(value)
-        summary_rows.append({"label": label, "value": display})
+        summary_rows.append({"label": label, "value": display, "group": group})
 
     modularity_rows = []
     for strategy_key in strategies:
         entry = community_table_data["strategies"].get(strategy_key)
         mod = entry["modularity"] if entry else None
-        modularity_rows.append(
-            {"strategy": strategy_key.capitalize(), "value": _fmt(mod) if mod is not None else "N/A"}
-        )
+        modularity_rows.append({"strategy": strategy_key.capitalize(), "value": _fmt(mod) if mod is not None else "—"})
 
     payload = {
         "wcc_note_visible": not summary["path_on_full"],
@@ -179,11 +177,11 @@ def write_network_table_xlsx(
     ws.append(["Metric", "Value"])
     for cell in ws[1]:
         cell.font = Font(bold=True)
-    for label, value in network_summary_rows(summary):
+    for label, value, _group in network_summary_rows(summary):
         ws.append([label, value])
     if not summary["path_on_full"]:
         ws.append([])
-        ws.append(["* Computed on the largest weakly connected component (undirected)"])
+        ws.append(["† Computed on the largest weakly connected component (undirected)"])
 
     ws.append([])
     ws.append(["Strategy", "Modularity"])
@@ -389,6 +387,8 @@ def write_community_metrics_json(
         strategy_entry = communities_file["strategies"].get(strategy_key)
         if strategy_entry is not None:
             strategy_entry["rows"] = rows_out
+            mod = entry.get("modularity")
+            strategy_entry["modularity"] = round(mod, 6) if mod is not None else None
 
     with open(communities_path, "w") as f:
         f.write(json.dumps(communities_file))

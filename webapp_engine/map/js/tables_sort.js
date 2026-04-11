@@ -4,8 +4,29 @@ function heatmapBg(val, min, max) {
     return "background-color:rgb(" + Math.round(255 - ratio * 35) + "," + Math.round(255 - ratio * 21) + "," + Math.round(255 - ratio * 6) + ")";
 }
 function fmtNum(val, decimals) {
-    if (val === null || val === undefined) return "N/A";
+    if (val === null || val === undefined) return "—";
     return decimals === 0 ? String(Math.round(val)) : val.toFixed(decimals);
+}
+function sigFig(val, n) {
+    if (val === null || val === undefined) return "—";
+    if (!isFinite(val) || val === 0) return "0";
+    return parseFloat(val.toPrecision(n)).toString();
+}
+function fmtInt(val) {
+    if (val === null || val === undefined) return "—";
+    return Math.round(val).toLocaleString();
+}
+function divergingHeatmapBg(val, center, lo, hi) {
+    if (val === null || val === undefined) return "";
+    if (val <= center) {
+        if (center <= lo) return "";
+        var r = (center - val) / (center - lo);
+        return "background-color:rgb(" + Math.round(255 - r * 155) + "," + Math.round(255 - r * 100) + ",255)";
+    } else {
+        if (hi <= center) return "";
+        var r2 = (val - center) / (hi - center);
+        return "background-color:rgb(255," + Math.round(255 - r2 * 165) + "," + Math.round(255 - r2 * 175) + ")";
+    }
 }
 function numSortVal(val) {
     return val !== null && val !== undefined ? String(val) : "";

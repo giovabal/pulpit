@@ -133,6 +133,12 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
                 diameter = nx.diameter(ug)
         except Exception as exc:
             logger.debug("wcc/path_length/diameter unavailable for subgraph: %s", exc)
+    m = graph.number_of_edges()
+    modularity_contribution = None
+    if m > 0:
+        d_out = sum(graph.out_degree(nd) for nd in nodes_set)
+        d_in = sum(graph.in_degree(nd) for nd in nodes_set)
+        modularity_contribution = round(internal_edges / m - (d_out * d_in) / (m * m), 6)
     return {
         "internal_edges": internal_edges,
         "external_edges": external_edges,
@@ -141,6 +147,7 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
         "avg_clustering": avg_clustering,
         "avg_path_length": avg_path_length,
         "diameter": diameter,
+        "modularity_contribution": modularity_contribution,
     }
 
 
@@ -248,6 +255,7 @@ def compute_community_metrics(
                     "avg_clustering": None,
                     "avg_path_length": None,
                     "diameter": None,
+                    "modularity_contribution": None,
                 }
             )
             channels = sorted(
@@ -271,36 +279,36 @@ def compute_community_metrics(
     return result
 
 
-def network_summary_rows(summary: dict[str, Any]) -> list[list[Any]]:
-    """Return (label, value) rows for all whole-network metrics."""
-    path_marker = " *" if not summary["path_on_full"] else ""
-    rows: list[list[Any]] = [
-        ["Nodes", summary["n"]],
-        ["Edges", summary["e"]],
-        ["Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None],
-        ["Density", summary["density"]],
-        ["Reciprocity", summary["reciprocity"]],
-        ["Avg Clustering", summary["avg_clustering"]],
-        [f"Avg Path Length{path_marker}", summary["avg_path_length"]],
-        [f"Diameter{path_marker}", summary["diameter"]],
-        ["WCC count", summary["wcc_count"]],
-        ["Largest WCC fraction", summary["wcc_fraction"]],
-        ["SCC count", summary["scc_count"]],
-        ["Largest SCC fraction", summary["scc_fraction"]],
+def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
+    """Return (label, value, group) rows for all whole-network metrics."""
+    path_marker = " †" if not summary["path_on_full"] else ""
+    rows: list[tuple[str, Any, str]] = [
+        ("Nodes", summary["n"], "Size"),
+        ("Edges", summary["e"], "Size"),
+        ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),
+        ("Density (0–1)", summary["density"], "Size"),
+        ("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths"),
+        ("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths"),
+        (f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths"),
+        (f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths"),
+        ("WCC count", summary["wcc_count"], "Component structure"),
+        ("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure"),
+        ("SCC count", summary["scc_count"], "Component structure"),
+        ("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure"),
     ]
     for assort_key, assort_label in [
-        ("in_in", "Assortativity in→in"),
-        ("in_out", "Assortativity in→out"),
-        ("out_in", "Assortativity out→in"),
-        ("out_out", "Assortativity out→out"),
+        ("in_in", "Assortativity in→in (−1–1)"),
+        ("in_out", "Assortativity in→out (−1–1)"),
+        ("out_in", "Assortativity out→in (−1–1)"),
+        ("out_out", "Assortativity out→out (−1–1)"),
     ]:
-        rows.append([assort_label, summary.get("assortativity", {}).get(assort_key)])
+        rows.append((assort_label, summary.get("assortativity", {}).get(assort_key), "Degree correlation"))
     if summary.get("mean_burt_constraint") is not None:
-        rows.append(["Mean Burt's Constraint", summary["mean_burt_constraint"]])
+        rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
     if summary.get("network_originality") is not None:
-        rows.append(["Content Originality", summary["network_originality"]])
+        rows.append(("Content Originality (0–1)", summary["network_originality"], "Content"))
     if summary.get("network_amplification") is not None:
-        rows.append(["Amplification Ratio", summary["network_amplification"]])
+        rows.append(("Amplification Ratio", summary["network_amplification"], "Content"))
     for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
-        rows.append([f"{c_label} Centralization", c_val])
+        rows.append((f"{c_label} Centralization (0–1)", c_val, "Centralization"))
     return rows

@@ -1,8 +1,26 @@
 Promise.all([
     fetch((window.DATA_DIR||"data/")+"network_metrics.json").then(function(r) { return r.json(); }),
     fetch((window.DATA_DIR||"data/")+"channels.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
 ]).then(function(results) {
-    var data = results[0], channels = results[1];
+    var data = results[0], channels = results[1], meta = results[2];
+
+    // Preamble (proposal 16)
+    if (meta) {
+        var preambleTarget = document.getElementById("network-preamble");
+        if (preambleTarget) {
+            var pEl = document.createElement("p"); pEl.className = "table-preamble";
+            var parts = ["Whole-network structural metrics for a graph of "
+                + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
+            parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
+            if (meta.start_date || meta.end_date) {
+                parts.push("Data range: " + (meta.start_date || "\u2013") + " to " + (meta.end_date || "present") + ".");
+            }
+            parts.push("Exported " + meta.export_date + ".");
+            pEl.textContent = parts.join(" ");
+            preambleTarget.appendChild(pEl);
+        }
+    }
     var nodes = channels.nodes;
     var measures = channels.measures || []; // [[key, label], ...]
 
@@ -19,17 +37,55 @@ Promise.all([
         th.textContent = label; sTr.appendChild(th);
     });
     sThead.appendChild(sTr); summaryTable.appendChild(sThead);
+    var METRIC_TOOLTIPS = {
+        "Nodes": "Total number of nodes (channels) in the graph.",
+        "Edges": "Total number of directed edges (links) between channels.",
+        "Edges / Nodes": "Mean degree — average links per node; a rough indicator of overall connectivity.",
+        "Density": "Fraction of all possible directed edges that are present; 0 = sparse, 1 = fully connected.",
+        "Reciprocity": "Proportion of edges that have a reciprocal edge; 0 = unidirectional, 1 = fully bidirectional.",
+        "Avg Clustering": "Mean probability that two neighbours of a node are also connected to each other.",
+        "Avg Path Length": "Average shortest-path distance between nodes in the largest weakly connected component.",
+        "Diameter": "Longest shortest path (maximum eccentricity) in the largest weakly connected component.",
+        "WCC count": "Number of weakly connected components; 1 = all nodes reachable ignoring edge direction.",
+        "Largest WCC fraction": "Share of all nodes that belong to the largest weakly connected component.",
+        "SCC count": "Number of strongly connected components; 1 = every node can reach every other following directed edges.",
+        "Largest SCC fraction": "Share of all nodes that belong to the largest strongly connected component.",
+        "Assortativity in\u2192in": "Pearson correlation of in-degree between source and target nodes across all edges; +1 = hubs connect to hubs.",
+        "Assortativity in\u2192out": "Correlation between in-degree of the source node and out-degree of the target node.",
+        "Assortativity out\u2192in": "Correlation between out-degree of the source node and in-degree of the target node.",
+        "Assortativity out\u2192out": "Pearson correlation of out-degree between source and target nodes; +1 = high-senders link to high-senders.",
+        "Mean Burt\u2019s Constraint": "Network-average Burt constraint; lower = more structural-hole brokerage on average.",
+        "Content Originality": "Share of messages that are not forwards; higher = more original content production.",
+        "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
+    };
+
     var sTbody = document.createElement("tbody");
+    var currentGroup = null;
     data.summary_rows.forEach(function(row) {
+        if (row.group && row.group !== currentGroup) {
+            currentGroup = row.group;
+            var gtr = document.createElement("tr"); gtr.className = "summary-group-header";
+            var gtd = document.createElement("td"); gtd.colSpan = 2; gtd.textContent = row.group;
+            gtr.appendChild(gtd); sTbody.appendChild(gtr);
+        }
         var tr = document.createElement("tr");
-        var td1 = document.createElement("td"); td1.textContent = row.label;
+        var td1 = document.createElement("td");
+        td1.textContent = row.label;
+        var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*\u2020\s*$/, "").trim();
+        var tip = METRIC_TOOLTIPS[baseLabel];
+        if (!tip) {
+            // centralization rows end in "Centralization (0–1)"
+            var centrMatch = baseLabel.match(/^(.*)\s+Centralization$/);
+            if (centrMatch) tip = "Freeman (1978) graph-level centralization for " + centrMatch[1] + "; 0 = uniform distribution, 1 = star graph.";
+        }
+        if (tip) td1.title = tip;
         var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = row.value;
         tr.appendChild(td1); tr.appendChild(td2); sTbody.appendChild(tr);
     });
     summaryTable.appendChild(sTbody); summarySection.appendChild(summaryTable);
     if (data.wcc_note_visible) {
         var note = document.createElement("p"); note.className = "text-muted small mt-1";
-        note.textContent = "* Computed on the largest weakly connected component (undirected)";
+        note.textContent = "\u2020 Computed on the largest weakly connected component (undirected)";
         summarySection.appendChild(note);
     }
 

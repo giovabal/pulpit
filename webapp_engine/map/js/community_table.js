@@ -1,96 +1,144 @@
-fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }).then(function(data) {
+Promise.all([
+    fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }),
+    fetch((window.DATA_DIR||"data/")+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+]).then(function(results) {
+    var data = results[0], meta = results[1];
     var container = document.getElementById("community-tables");
     var strategies = Object.keys(data.strategies);
 
-    strategies.forEach(function(strategyKey) {
-        var rows = data.strategies[strategyKey].rows;
+    // Preamble (proposal 16)
+    if (meta) {
+        var pEl = document.createElement("p"); pEl.className = "table-preamble";
+        var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
+        parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
+        if (meta.start_date || meta.end_date) {
+            parts.push("Data range: " + (meta.start_date || "\u2013") + " to " + (meta.end_date || "present") + ".");
+        }
+        parts.push("Exported " + meta.export_date + ".");
+        pEl.textContent = parts.join(" ");
+        container.appendChild(pEl);
+    }
 
-        // Heatmap ranges per column (single pass)
-        var hmCols = ["node_count", "internal_edges", "external_edges", "density", "reciprocity", "avg_clustering", "avg_path_length", "diameter"];
+    strategies.forEach(function(strategyKey) {
+        var stratData = data.strategies[strategyKey];
+        var rows = stratData.rows;
+
+        // Default sort by node_count descending (proposal 14)
+        rows.sort(function(a, b) { return (b.node_count || 0) - (a.node_count || 0); });
+
+        // Pre-compute external fraction for each row (proposal 13)
+        rows.forEach(function(r) {
+            var total = r.metrics.external_edges + 2 * r.metrics.internal_edges;
+            r._ext_frac = total > 0 ? r.metrics.external_edges / total : 0;
+        });
+
+        // Heatmap ranges
+        var hmKeys = ["node_count", "internal_edges", "external_edges", "_ext_frac", "density",
+                      "reciprocity", "avg_clustering", "avg_path_length", "diameter", "modularity_contribution"];
         var hmRanges = {};
-        hmCols.forEach(function(col) {
+        hmKeys.forEach(function(key) {
             var mn = Infinity, mx = -Infinity, hasVal = false;
             rows.forEach(function(r) {
-                var v = col === "node_count" ? r.node_count : r.metrics[col];
+                var v = key === "node_count" ? r.node_count : key === "_ext_frac" ? r._ext_frac : r.metrics[key];
                 if (v !== null && v !== undefined) {
-                    if (v < mn) mn = v;
-                    if (v > mx) mx = v;
-                    hasVal = true;
+                    if (v < mn) mn = v; if (v > mx) mx = v; hasVal = true;
                 }
             });
-            if (hasVal) hmRanges[col] = [mn, mx];
+            if (hasVal) hmRanges[key] = [mn, mx];
         });
+
+        // Check if any row has modularity_contribution
+        var hasMod = rows.some(function(r) {
+            return r.metrics && r.metrics.modularity_contribution !== null && r.metrics.modularity_contribution !== undefined;
+        });
+
+        // Column definitions (proposals 12, 13, 15, 18)
+        var COL_DEFS = [
+            {key: null,                   label: "Community",              cls: "",       fmt: null,      tip: "Community name and color swatch"},
+            {key: "node_count",           label: "Nodes",                  cls: "number", fmt: "int",     tip: "Number of channels in this community"},
+            {key: "internal_edges",       label: "Internal Edges",         cls: "number", fmt: "int",     tip: "Directed edges between channels within this community"},
+            {key: "external_edges",       label: "Ext. Edges",             cls: "number", fmt: "int",     tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)"},
+            {key: "_ext_frac",            label: "Ext. Fraction (0\u20131)", cls: "number", fmt: "sig3", tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral"},
+            {key: "density",              label: "Int. Density (0\u20131)", cls: "number", fmt: "sig3",   tip: "Fraction of possible directed within-community edges that exist"},
+            {key: "reciprocity",          label: "Reciprocity (0\u20131)",  cls: "number", fmt: "sig3",   tip: "Proportion of within-community directed edges that are bidirectional"},
+            {key: "avg_clustering",       label: "Avg Clustering (0\u20131)", cls: "number", fmt: "sig3", tip: "Mean local clustering coefficient of community nodes"},
+            {key: "avg_path_length",      label: "Avg Path Length",        cls: "number", fmt: "sig3",   tip: "Average shortest path in the largest weakly connected component (undirected)"},
+            {key: "diameter",             label: "Diameter",               cls: "number", fmt: "int",    tip: "Longest shortest path in the largest weakly connected component (undirected)"},
+        ];
+        if (hasMod) {
+            COL_DEFS.push({
+                key: "modularity_contribution", label: "Mod. Contribution", cls: "number", fmt: "sig3",
+                tip: "Community\u2019s contribution to network modularity (Leicht \u0026 Newman 2008 directed formula)",
+            });
+        }
 
         // Heading
         var h3 = document.createElement("h3");
         h3.id = "strategy-" + strategyKey;
-        h3.className = "mt-4 mb-3";
+        h3.className = "mt-4 mb-1";
         h3.textContent = strategyKey.charAt(0).toUpperCase() + strategyKey.slice(1);
         container.appendChild(h3);
 
-        var note = document.createElement("p");
-        note.className = "text-muted small";
-        note.textContent = "Avg Path Length and Diameter are computed on the largest weakly connected component (undirected).";
-        container.appendChild(note);
+        var stratNote = document.createElement("p");
+        stratNote.className = "text-muted small mb-2";
+        var nComm = rows.length;
+        var modStr = (stratData.modularity !== null && stratData.modularity !== undefined)
+            ? " Network modularity Q\u2009=\u2009" + sigFig(stratData.modularity, 3) + "." : "";
+        stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr
+            + " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
+        container.appendChild(stratNote);
 
         // Table
-        var tableDiv = document.createElement("div");
-        tableDiv.className = "table-responsive";
-
+        var tableDiv = document.createElement("div"); tableDiv.className = "table-responsive";
         var table = document.createElement("table");
         table.className = "table table-hover table-sm sortable";
         table.setAttribute("aria-labelledby", "strategy-" + strategyKey);
 
         var thead = document.createElement("thead");
         var htr = document.createElement("tr");
-        [
-            ["Community", ""], ["Nodes", "number"], ["Internal Edges", "number"],
-            ["External Edges", "number"], ["Density", "number"], ["Reciprocity", "number"],
-            ["Avg Clustering", "number"], ["Avg Path Length", "number"], ["Diameter", "number"],
-        ].forEach(function(h) {
-            var th = document.createElement("th");
-            th.scope = "col";
-            if (h[1]) th.className = h[1];
-            th.textContent = h[0];
+        COL_DEFS.forEach(function(col) {
+            var th = document.createElement("th"); th.scope = "col";
+            if (col.cls) th.className = col.cls;
+            th.textContent = col.label;
+            if (col.tip) th.title = col.tip;
             htr.appendChild(th);
         });
-        thead.appendChild(htr);
-        table.appendChild(thead);
+        thead.appendChild(htr); table.appendChild(thead);
 
         var tbody = document.createElement("tbody");
         var tbodyFrag = document.createDocumentFragment();
         rows.forEach(function(row) {
             var tr = document.createElement("tr");
 
-            var nameTd = document.createElement("td");
-            nameTd.setAttribute("data-sort-value", row.label);
-            var swatch = document.createElement("span");
-            swatch.className = "color-swatch color-swatch--lg";
-            swatch.style.background = row.hex_color;
-            swatch.setAttribute("aria-hidden", "true");
-            nameTd.appendChild(swatch);
-            nameTd.appendChild(document.createTextNode(row.label));
-            tr.appendChild(nameTd);
-
-            function addNumTd(val, col, decimals) {
-                var td = document.createElement("td");
-                td.className = "number";
-                var range = hmRanges[col];
-                if (range) td.setAttribute("style", heatmapBg(val, range[0], range[1]));
-                var sv = numSortVal(val);
-                if (sv) td.setAttribute("data-sort-value", sv);
-                td.textContent = fmtNum(val, decimals);
-                tr.appendChild(td);
+            function getVal(col) {
+                if (col.key === null) return null;
+                if (col.key === "node_count") return row.node_count;
+                if (col.key === "_ext_frac") return row._ext_frac;
+                return row.metrics[col.key];
             }
 
-            addNumTd(row.node_count, "node_count", 0);
-            addNumTd(row.metrics.internal_edges, "internal_edges", 0);
-            addNumTd(row.metrics.external_edges, "external_edges", 0);
-            addNumTd(row.metrics.density, "density", 4);
-            addNumTd(row.metrics.reciprocity, "reciprocity", 4);
-            addNumTd(row.metrics.avg_clustering, "avg_clustering", 4);
-            addNumTd(row.metrics.avg_path_length, "avg_path_length", 4);
-            addNumTd(row.metrics.diameter, "diameter", 0);
+            COL_DEFS.forEach(function(col) {
+                if (col.key === null) {
+                    // Community name cell
+                    var nameTd = document.createElement("td");
+                    nameTd.setAttribute("data-sort-value", row.label);
+                    var swatch = document.createElement("span");
+                    swatch.className = "color-swatch color-swatch--lg";
+                    swatch.style.background = row.hex_color;
+                    swatch.setAttribute("aria-hidden", "true");
+                    nameTd.appendChild(swatch);
+                    nameTd.appendChild(document.createTextNode(row.label));
+                    tr.appendChild(nameTd);
+                    return;
+                }
+                var val = getVal(col);
+                var td = document.createElement("td"); td.className = "number";
+                var range = hmRanges[col.key];
+                if (range) td.setAttribute("style", heatmapBg(val, range[0], range[1]));
+                var sv = numSortVal(val); if (sv) td.setAttribute("data-sort-value", sv);
+                td.textContent = col.fmt === "int" ? fmtInt(val) : sigFig(val, 3);
+                tr.appendChild(td);
+            });
 
             tbodyFrag.appendChild(tr);
         });
@@ -109,32 +157,21 @@ fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r
 
         rows.forEach(function(row) {
             if (!row.channels || !row.channels.length) return;
-            var group = document.createElement("div");
-            group.className = "community-channels-group mt-2";
-
-            var labelSpan = document.createElement("span");
-            labelSpan.className = "community-channels-label";
+            var group = document.createElement("div"); group.className = "community-channels-group mt-2";
+            var labelSpan = document.createElement("span"); labelSpan.className = "community-channels-label";
             var labelSwatch = document.createElement("span");
-            labelSwatch.className = "color-swatch color-swatch--sm";
-            labelSwatch.style.background = row.hex_color;
+            labelSwatch.className = "color-swatch color-swatch--sm"; labelSwatch.style.background = row.hex_color;
             labelSwatch.setAttribute("aria-hidden", "true");
-            labelSpan.appendChild(labelSwatch);
-            labelSpan.appendChild(document.createTextNode(row.label));
+            labelSpan.appendChild(labelSwatch); labelSpan.appendChild(document.createTextNode(row.label));
             group.appendChild(labelSpan);
-
-            var listSpan = document.createElement("span");
-            listSpan.className = "community-channels-list";
+            var listSpan = document.createElement("span"); listSpan.className = "community-channels-list";
             var chipsFrag = document.createDocumentFragment();
             row.channels.forEach(function(ch) {
-                var a = document.createElement("a");
-                a.href = ch.url || "#";
-                a.className = "community-channel-chip";
-                a.textContent = ch.label;
+                var a = document.createElement("a"); a.href = ch.url || "#";
+                a.className = "community-channel-chip"; a.textContent = ch.label;
                 chipsFrag.appendChild(a);
             });
-            listSpan.appendChild(chipsFrag);
-            group.appendChild(listSpan);
-            details.appendChild(group);
+            listSpan.appendChild(chipsFrag); group.appendChild(listSpan); details.appendChild(group);
         });
 
         container.appendChild(details);
