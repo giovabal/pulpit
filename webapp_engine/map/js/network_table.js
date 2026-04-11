@@ -59,6 +59,91 @@ Promise.all([
 
     initSortableTables();
 
+    // --- Degree distribution histogram (lazy) ---
+    var distSection = document.getElementById("degree-dist-section");
+
+    var distControls = document.createElement("div");
+    distControls.className = "d-flex align-items-end gap-3 mb-3";
+    var dirWrap = document.createElement("div");
+    var dirLbl = document.createElement("label");
+    dirLbl.className = "form-label mb-1 d-block fw-semibold small";
+    dirLbl.htmlFor = "deg-dir-select";
+    dirLbl.textContent = "Direction";
+    var dirSel = document.createElement("select");
+    dirSel.className = "form-select form-select-sm";
+    dirSel.id = "deg-dir-select";
+    dirSel.style.width = "auto";
+    [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) {
+        dirSel.appendChild(new Option(opt[1], opt[0]));
+    });
+    dirWrap.appendChild(dirLbl);
+    dirWrap.appendChild(dirSel);
+    distControls.appendChild(dirWrap);
+    distSection.appendChild(distControls);
+
+    var distCanvasWrap = document.createElement("div");
+    distCanvasWrap.style.cssText = "height:280px;position:relative;";
+    var distCanvas = document.createElement("canvas");
+    distCanvasWrap.appendChild(distCanvas);
+    distSection.appendChild(distCanvasWrap);
+
+    function buildDistData(key) {
+        var vals = nodes.map(function(n) { return n[key] || 0; });
+        var maxVal = Math.max.apply(null, vals);
+        var binSize = 10;
+        var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
+        var counts = new Array(numBins).fill(0);
+        vals.forEach(function(v) { counts[Math.floor(v / binSize)]++; });
+        while (counts.length > 1 && counts[counts.length - 1] === 0) counts.pop();
+        var labels = counts.map(function(_, i) {
+            return (i * binSize) + "\u2013" + (i * binSize + binSize - 1);
+        });
+        return { labels: labels, counts: counts };
+    }
+
+    var distChart = null;
+    var distInitialized = false;
+
+    function initDistChart() {
+        if (distInitialized) return;
+        distInitialized = true;
+        var dd = buildDistData(dirSel.value);
+        distChart = new Chart(distCanvas, {
+            type: "bar",
+            data: {
+                labels: dd.labels,
+                datasets: [{ label: "Nodes", data: dd.counts, backgroundColor: "rgba(30,41,59,0.7)", borderRadius: 3 }]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { title: { display: true, text: "Nodes", font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 }, precision: 0 } }
+                }
+            }
+        });
+    }
+
+    dirSel.addEventListener("change", function() {
+        if (!distChart) return;
+        var dd = buildDistData(dirSel.value);
+        distChart.data.labels = dd.labels;
+        distChart.data.datasets[0].data = dd.counts;
+        distChart.update();
+    });
+
+    if ("IntersectionObserver" in window) {
+        var distObs = new IntersectionObserver(function(entries, obs) {
+            if (entries[0].isIntersecting) { obs.disconnect(); initDistChart(); }
+        }, { threshold: 0.1 });
+        distObs.observe(distSection);
+    } else {
+        initDistChart();
+    }
+
     // --- Dynamic scatter plot ---
     if (measures.length < 2) return;
 

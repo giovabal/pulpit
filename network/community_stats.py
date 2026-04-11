@@ -277,6 +277,7 @@ def network_summary_rows(summary: dict[str, Any]) -> list[list[Any]]:
     rows: list[list[Any]] = [
         ["Nodes", summary["n"]],
         ["Edges", summary["e"]],
+        ["Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None],
         ["Density", summary["density"]],
         ["Reciprocity", summary["reciprocity"]],
         ["Avg Clustering", summary["avg_clustering"]],

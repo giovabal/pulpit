@@ -95,6 +95,100 @@ Promise.all([
 
     initSortableTables();
 
+    // --- Degree distribution histogram (lazy, both networks) ---
+    var distSection = document.getElementById("degree-dist-section");
+
+    var distControls = document.createElement("div");
+    distControls.className = "d-flex align-items-end gap-3 mb-3";
+    var dirWrap = document.createElement("div");
+    var dirLbl = document.createElement("label");
+    dirLbl.className = "form-label mb-1 d-block fw-semibold small";
+    dirLbl.htmlFor = "deg-dir-select";
+    dirLbl.textContent = "Direction";
+    var dirSel = document.createElement("select");
+    dirSel.className = "form-select form-select-sm";
+    dirSel.id = "deg-dir-select";
+    dirSel.style.width = "auto";
+    [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) {
+        dirSel.appendChild(new Option(opt[1], opt[0]));
+    });
+    dirWrap.appendChild(dirLbl);
+    dirWrap.appendChild(dirSel);
+    distControls.appendChild(dirWrap);
+    distSection.appendChild(distControls);
+
+    var distCanvasWrap = document.createElement("div");
+    distCanvasWrap.style.cssText = "height:280px;position:relative;";
+    var distCanvas = document.createElement("canvas");
+    distCanvasWrap.appendChild(distCanvas);
+    distSection.appendChild(distCanvasWrap);
+
+    function buildCompareDistData(key) {
+        var valsA = nodesA.map(function(n) { return n[key] || 0; });
+        var valsB = nodesB.map(function(n) { return n[key] || 0; });
+        var maxVal = Math.max.apply(null, valsA.concat(valsB));
+        var binSize = 10;
+        var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
+        var countsA = new Array(numBins).fill(0);
+        var countsB = new Array(numBins).fill(0);
+        valsA.forEach(function(v) { countsA[Math.floor(v / binSize)]++; });
+        valsB.forEach(function(v) { countsB[Math.floor(v / binSize)]++; });
+        while (numBins > 1 && countsA[numBins - 1] === 0 && countsB[numBins - 1] === 0) {
+            countsA.pop(); countsB.pop(); numBins--;
+        }
+        var labels = countsA.map(function(_, i) {
+            return (i * binSize) + "\u2013" + (i * binSize + binSize - 1);
+        });
+        return { labels: labels, countsA: countsA, countsB: countsB };
+    }
+
+    var distChart = null;
+    var distInitialized = false;
+
+    function initDistChart() {
+        if (distInitialized) return;
+        distInitialized = true;
+        var dd = buildCompareDistData(dirSel.value);
+        distChart = new Chart(distCanvas, {
+            type: "bar",
+            data: {
+                labels: dd.labels,
+                datasets: [
+                    { label: "This network", data: dd.countsA, backgroundColor: "rgba(37,99,235,0.65)", borderRadius: 3 },
+                    { label: "Compare network", data: dd.countsB, backgroundColor: "rgba(220,38,38,0.65)", borderRadius: 3 }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true, position: "top" } },
+                scales: {
+                    x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { title: { display: true, text: "Nodes", font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 }, precision: 0 } }
+                }
+            }
+        });
+    }
+
+    dirSel.addEventListener("change", function() {
+        if (!distChart) return;
+        var dd = buildCompareDistData(dirSel.value);
+        distChart.data.labels = dd.labels;
+        distChart.data.datasets[0].data = dd.countsA;
+        distChart.data.datasets[1].data = dd.countsB;
+        distChart.update();
+    });
+
+    if ("IntersectionObserver" in window) {
+        var distObs = new IntersectionObserver(function(entries, obs) {
+            if (entries[0].isIntersecting) { obs.disconnect(); initDistChart(); }
+        }, { threshold: 0.1 });
+        distObs.observe(distSection);
+    } else {
+        initDistChart();
+    }
+
     // --- Scatter plots ---
     // Use the intersection of measures available in both exports
     var keysB = new Set(measuresB.map(function(m) { return m[0]; }));
@@ -165,13 +259,36 @@ Promise.all([
         return { min: mn, range: mx - mn || 1 };
     }
 
+    function powerLawFit(pts) {
+        var valid = pts.filter(function(p) { return p.x > 0 && p.y > 0; });
+        if (valid.length < 2) return null;
+        var n = valid.length, sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        valid.forEach(function(p) { var lx = Math.log(p.x), ly = Math.log(p.y); sumX += lx; sumY += ly; sumXY += lx * ly; sumX2 += lx * lx; });
+        var d = n * sumX2 - sumX * sumX;
+        if (!d) return null;
+        var slope = (n * sumXY - sumX * sumY) / d;
+        return { slope: slope, intercept: (sumY - slope * sumX) / n };
+    }
+
+    function buildRegLine(pts) {
+        var valid = pts.filter(function(p) { return p.x > 0 && p.y > 0; });
+        var fit = powerLawFit(valid);
+        if (!fit) return [];
+        var xs = valid.map(function(p) { return p.x; });
+        var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+        return [
+            { x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
+            { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }
+        ];
+    }
+
     function buildDatasets(xKey, yKey) {
         var normalize = normalizeChk.checked;
         var axA = normalize ? { x: minMax(nodesA, xKey), y: minMax(nodesA, yKey) } : null;
         var axB = normalize ? { x: minMax(nodesB, xKey), y: minMax(nodesB, yKey) } : null;
         var ptsA = buildPts(nodesA, xKey, yKey, axA && axA.x.min, axA && axA.x.range, axA && axA.y.min, axA && axA.y.range);
         var ptsB = buildPts(nodesB, xKey, yKey, axB && axB.x.min, axB && axB.x.range, axB && axB.y.min, axB && axB.y.range);
-        return { ptsA: ptsA, ptsB: ptsB };
+        return { ptsA: ptsA, ptsB: ptsB, regA: buildRegLine(ptsA), regB: buildRegLine(ptsB) };
     }
 
     var initial = buildDatasets(xSelect.value, ySelect.value);
@@ -184,7 +301,9 @@ Promise.all([
         data: {
             datasets: [
                 { label: "This network", data: initial.ptsA, backgroundColor: "rgba(37,99,235,0.55)", pointRadius: 4, pointHoverRadius: 6 },
+                { label: "Trend A", data: initial.regA, type: "line", borderColor: "rgba(37,99,235,0.75)", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
                 { label: "Compare network", data: initial.ptsB, backgroundColor: "rgba(220,38,38,0.55)", pointRadius: 4, pointHoverRadius: 6 },
+                { label: "Trend B", data: initial.regB, type: "line", borderColor: "rgba(220,38,38,0.75)", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
             ],
         },
         options: {
@@ -196,8 +315,9 @@ Promise.all([
                 y: { type: scaleType(), title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
             },
             plugins: {
-                legend: { display: true, position: "top" },
+                legend: { display: true, position: "top", labels: { filter: function(item) { return item.datasetIndex % 2 === 0; } } },
                 tooltip: {
+                    filter: function(item) { return item.datasetIndex % 2 === 0; },
                     callbacks: {
                         label: function(ctx) {
                             var d = ctx.raw, xLbl = chart.options.scales.x.title.text, yLbl = chart.options.scales.y.title.text;
@@ -216,7 +336,9 @@ Promise.all([
         var xKey = xSelect.value, yKey = ySelect.value;
         var ds = buildDatasets(xKey, yKey);
         chart.data.datasets[0].data = ds.ptsA;
-        chart.data.datasets[1].data = ds.ptsB;
+        chart.data.datasets[1].data = ds.regA;
+        chart.data.datasets[2].data = ds.ptsB;
+        chart.data.datasets[3].data = ds.regB;
         chart.options.scales.x.type = scaleType();
         chart.options.scales.y.type = scaleType();
         chart.options.scales.x.title.text = labelOf[xKey];
