@@ -86,6 +86,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--fetch-recommended-channels")
         if post.get("force_retry_unresolved_references"):
             args.append("--force-retry-unresolved-references")
+        if post.get("fix_missing_media"):
+            args.append("--fix-missing-media")
         if post.get("do_refresh"):
             args.append("--refresh-messages-stats")
             val = post.get("refresh_value", "").strip()

@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -14,7 +15,7 @@ from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
-from webapp.models import Channel, Message
+from webapp.models import Channel, Message, MessagePicture, MessageVideo
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
 from webapp_engine.async_commands import AsyncBaseCommand
 
@@ -160,6 +161,16 @@ class Command(AsyncBaseCommand):
             ),
         )
         parser.add_argument(
+            "--fix-missing-media",
+            action="store_true",
+            default=False,
+            help=(
+                "After crawling, identify messages whose media file is absent from disk "
+                "or was never downloaded, and re-fetch it from Telegram. "
+                "Covers both photo and video attachments."
+            ),
+        )
+        parser.add_argument(
             "--refresh-messages-stats",
             nargs="?",
             const=None,
@@ -214,10 +225,124 @@ class Command(AsyncBaseCommand):
             self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
             logger.exception("Refresh failed for channel %s", channel.telegram_id)
 
+    def _fix_missing_media(
+        self,
+        interesting_qs: Any,
+        api_client: TelegramAPIClient,
+        download_temp_dir: str,
+        printer: ProgressPrinter,
+    ) -> None:
+        """Re-download media files that are absent from disk or were never fetched."""
+        fix_handler = MediaHandler(
+            api_client,
+            download_temp_dir=download_temp_dir,
+            download_images=True,
+            download_video=True,
+        )
+
+        # Messages with photo/video media_type but no corresponding record
+        needs_pic: set[int] = set(
+            Message.objects.filter(channel__in=interesting_qs, media_type="photo")
+            .filter(messagepicture__isnull=True)
+            .values_list("id", flat=True)
+        )
+        needs_vid: set[int] = set(
+            Message.objects.filter(channel__in=interesting_qs, media_type="video")
+            .filter(messagevideo__isnull=True)
+            .values_list("id", flat=True)
+        )
+
+        # Records that exist but whose file is missing on disk
+        for mp in MessagePicture.objects.filter(message__channel__in=interesting_qs).select_related("message"):
+            if mp.picture and not os.path.exists(mp.picture.path):
+                needs_pic.add(mp.message_id)
+        for mv in MessageVideo.objects.filter(message__channel__in=interesting_qs).select_related("message"):
+            if mv.video and not os.path.exists(mv.video.path):
+                needs_vid.add(mv.message_id)
+
+        all_msg_pks = needs_pic | needs_vid
+        if not all_msg_pks:
+            self.stdout.write("\nNo missing media found.")
+            return
+
+        # Group by channel: channel_pk → [(message_pk, telegram_id)]
+        channel_to_msgs: dict[int, list[tuple[int, int]]] = {}
+        for msg_pk, channel_pk, telegram_id in Message.objects.filter(pk__in=all_msg_pks).values_list(
+            "id", "channel_id", "telegram_id"
+        ):
+            channel_to_msgs.setdefault(channel_pk, []).append((msg_pk, telegram_id))
+
+        n_channels = len(channel_to_msgs)
+        n_messages = len(all_msg_pks)
+        self.stdout.write(f"\nFixing missing media: {n_messages} message(s) across {n_channels} channel(s)")
+
+        downloaded = 0
+        skipped = 0
+        _BATCH = 100
+        for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
+            channel = Channel.objects.get(pk=channel_pk)
+            channel_label = f"[id={channel.id}] {channel}"
+            telegram_ids = [tid for _, tid in msg_list]
+            pk_by_tid: dict[int, int] = {tid: pk for pk, tid in msg_list}
+            n = len(telegram_ids)
+            printer.status(f"{channel_label} | {n} message(s) with missing media", ch_idx)
+            try:
+                api_client.wait()
+                telegram_entity = api_client.client.get_entity(channel.telegram_id)
+            except errors.FloodWaitError as exc:
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Flood wait for {channel}: {exc}"))
+                skipped += n
+                continue
+            except Exception as exc:
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Could not get entity for {channel}: {exc}"))
+                skipped += n
+                continue
+
+            for i in range(0, n, _BATCH):
+                batch_tids = telegram_ids[i : i + _BATCH]
+                try:
+                    api_client.wait()
+                    tg_messages = api_client.client.get_messages(telegram_entity, ids=batch_tids)
+                except errors.FloodWaitError as exc:
+                    printer.newline()
+                    self.stdout.write(self.style.WARNING(f"Flood wait fetching messages for {channel}: {exc}"))
+                    skipped += len(batch_tids)
+                    continue
+                except Exception as exc:
+                    printer.newline()
+                    self.stdout.write(self.style.WARNING(f"Error fetching messages for {channel}: {exc}"))
+                    skipped += len(batch_tids)
+                    continue
+
+                if not isinstance(tg_messages, list):
+                    tg_messages = [tg_messages]
+
+                for tg_msg in tg_messages:
+                    if tg_msg is None or not hasattr(tg_msg, "peer_id"):
+                        skipped += 1
+                        continue
+                    msg_pk = pk_by_tid.get(tg_msg.id)
+                    if msg_pk in needs_pic:
+                        fix_handler.download_message_picture(tg_msg)
+                    if msg_pk in needs_vid:
+                        fix_handler.download_message_video(tg_msg)
+                    downloaded += 1
+                    printer.status(
+                        f"{channel_label} | downloaded {downloaded}/{n_messages}",
+                        ch_idx,
+                    )
+
+            printer.ensure_newline()
+
+        self.stdout.write(f"Missing media: {downloaded} downloaded, {skipped} skipped.")
+
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
         fix_holes: bool = options["fixholes"]
+        fix_missing_media: bool = options["fix_missing_media"]
         fetch_recommended: bool = options["fetch_recommended_channels"]
         force_retry: bool = options["force_retry_unresolved_references"]
         try:
@@ -399,6 +524,9 @@ class Command(AsyncBaseCommand):
                             logger.warning("Error fetching recommended channels for %s: %s", channel, exc)
                     self.stdout.write("", ending="\n")
                     self.stdout.write(f"Recommended channels: {rec_total} found, {rec_new} new.")
+
+                if fix_missing_media:
+                    self._fix_missing_media(interesting_qs, api_client, download_temp_dir, printer)
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection

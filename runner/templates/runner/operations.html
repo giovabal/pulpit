@@ -86,6 +86,11 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Re-attempt references already marked as permanently unresolvable (e.g. deleted channels). By default these are skipped to avoid redundant API calls."></i>
               </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="fix_missing_media">Fix missing media
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="After crawling, find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
+              </label>
             </div>
           </fieldset>
           <fieldset class="ops-fieldset">
