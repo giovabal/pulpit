@@ -139,7 +139,7 @@ class Channel(TelegramBaseModel):
         refresh_cited_degree() for non-interesting channels.
         """
         cited_by = (
-            Message.objects.filter(channel__organization__is_interesting=True)
+            Message.objects.filter(channel__in=Channel.objects.interesting())
             .filter(Q(forwarded_from=self) | Q(references=self))
             .exclude(channel=self)
             .distinct()
@@ -148,7 +148,7 @@ class Channel(TelegramBaseModel):
         cites = (
             Message.objects.filter(channel=self)
             .filter(
-                Q(forwarded_from__organization__is_interesting=True) | Q(references__organization__is_interesting=True)
+                Q(forwarded_from__in=Channel.objects.interesting()) | Q(references__in=Channel.objects.interesting())
             )
             .exclude(forwarded_from=self)
             .distinct()
@@ -170,7 +170,7 @@ class Channel(TelegramBaseModel):
         The other field is set to 0.
         """
         citations = (
-            Message.objects.filter(channel__organization__is_interesting=True)
+            Message.objects.filter(channel__in=Channel.objects.interesting())
             .filter(Q(forwarded_from=self) | Q(references=self))
             .exclude(channel=self)
             .distinct()

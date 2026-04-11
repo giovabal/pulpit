@@ -18,7 +18,11 @@
 - `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
 
 ### Fixes
-- `MessageSearchView` and the message search on the home page now respect `DEFAULT_CHANNEL_TYPES` when scoping results to monitored channels; `scripts/delete_unused_messages.py` likewise uses `Channel.objects.interesting()` so the type filter is applied consistently.
+- `refresh_degrees` and `refresh_cited_degree` now filter citing channels through `Channel.objects.interesting()` so `DEFAULT_CHANNEL_TYPES` is respected when computing stored degree values.
+- `MessageSearchView` and home-page message search now scope results via `Channel.objects.interesting()` (respects `DEFAULT_CHANNEL_TYPES`); `scripts/delete_unused_messages.py` uses the same manager for consistency.
+- Channel detail message list now uses `select_related("forwarded_from")` instead of `prefetch_related`, eliminating a redundant query per page load.
+- Reference resolver: M2M writes (`message.references.add`) are now deferred until after `missing_references` is persisted via `bulk_update`, closing the inconsistency window if the process is interrupted mid-batch.
+- `export_network` table preambles now show a human-readable edge-weight description instead of the raw strategy key.
 
 ### Backward incompatibility
 - Network comparison extracted into a dedicated `compare_networks` command; `export_network --compare` is removed. Run `python manage.py compare_networks /path/to/graph` (or use the new **Compare Networks** card in the Operations panel) after exporting to generate the side-by-side comparison page.
@@ -44,7 +48,7 @@
 - `get_channels` optionally fetches Telegram-recommended channels for each interesting channel (`FETCH_RECOMMENDED_CHANNELS=True` in `.env`).
 - Hardened SQLite concurrency.
 
-### Fixed
+### Fixes
 - Graph: clicking a node no longer crashes when a neighbour channel has a null label (channels discovered but not yet crawled).
 - Graph: profile pictures now served at the correct path (`media/channels/…`) matching the URL embedded in the data JSON.
 - Graph: favicon added to 2D and 3D graph pages.
@@ -72,7 +76,7 @@
 ### Backward incompatibility
 - `export_network` option rework: `--table-format`, `--nograph`, and the previous `--3d` flag are replaced by four individual flags: `--3dgraph` (add 3D graph), `--xlsx` (add Excel output), `--2dgraph` (generate 2D graph), `--html` (generate HTML tables). Default output is data files only.
 
-### Fixed
+### Fixes
 - Progress lines in the terminal are now truncated to fit the terminal width instead of wrapping.
 - `--refresh-messages-stats` now downloads missing media for messages that were crawled before image or video download was enabled. Already-downloaded media is skipped.
 - All summary counts and chart time series now consistently apply both the `organization__is_interesting` flag and the `CHANNEL_TYPES` filter. Previously, message counts, date range, forwards, and chart data were computed over all channels, ignoring both filters.
@@ -96,7 +100,7 @@
 - New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
 - Various performance improvements across the backend and frontend.
 
-### Fixed
+### Fixes
 - `telegram_location` was silently discarded on every crawl: the field was assigned from the Telegram API response but missing from `update_fields` in `set_more_channel_details`, so location data was never persisted.
 - `has_been_pinned` was never updated by `--refresh-messages-stats`: the refresh path uses `QuerySet.update()`, which bypasses `Message.save()` where `has_been_pinned` is set. Messages that first became pinned after their initial crawl would show `pinned=True` after a refresh but `has_been_pinned=False`, losing the historical record once they were unpinned. The refresh now explicitly sets `has_been_pinned=True` when the Telegram API reports a message as currently pinned.
 - A message that both forwards from channel B and contains a `t.me/B` link (common when editors include inline attribution) was counted in both `forwarded_counts` and `reference_counts` in the graph builder, doubling that edge's contribution to the weight. References to a channel that is already the `forwarded_from` source of the same message are now excluded from `reference_counts`.
@@ -154,7 +158,7 @@
 - Organization admin list now shows and allows inline editing of the `is_interesting` flag.
 - `get_channels` with `--refresh-messages-stats` now skips messages that were freshly crawled in the same run.
 
-### Fixed
+### Fixes
 - `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
 
 
@@ -205,7 +209,7 @@
 
 
 ## [0.3.1] - 2026-03-08
-### Fixed
+### Fixes
 - `KCORE` communities are now following their natural order, starting from the innermost core.
 
 
@@ -250,12 +254,12 @@
 
 
 ## [0.1.2] - 2026-03-02
-### Fixed
+### Fixes
 - Direct channel references in messages are now correctly processed.
 
 
 ## [0.1.1] - 2026-02-23
-### Fixed
+### Fixes
 - The measure selection menu now works correctly.
 
 

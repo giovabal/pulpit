@@ -109,6 +109,7 @@ class ReferenceResolver:
         qs = Message.objects.exclude(missing_references="")
         total = qs.count() if status_callback is not None else 0
         to_update: list[Message] = []
+        to_add: list[tuple[Message, "Channel"]] = []
         for index, message in enumerate(qs.iterator(chunk_size=500), start=1):
             remaining: list[str] = []
             for raw in message.missing_references.split("|"):
@@ -123,7 +124,7 @@ class ReferenceResolver:
                     continue
                 channel, should_retry = self._resolve_one(reference)
                 if channel:
-                    message.references.add(channel)
+                    to_add.append((message, channel))  # deferred until after bulk_update
                 elif should_retry:
                     remaining.append(reference)  # transient failure — keep for retry
                 else:
@@ -135,7 +136,12 @@ class ReferenceResolver:
             if len(to_update) >= 500:
                 Message.objects.bulk_update(to_update, ["missing_references"])
                 to_update.clear()
+                for msg, ch in to_add:
+                    msg.references.add(ch)
+                to_add.clear()
             if status_callback is not None:
                 status_callback(index, total)
         if to_update:
             Message.objects.bulk_update(to_update, ["missing_references"])
+        for msg, ch in to_add:
+            msg.references.add(ch)

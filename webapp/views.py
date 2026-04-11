@@ -363,7 +363,11 @@ class ChannelDetailView(ListView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = Message.objects.filter(channel=self.selected_channel).prefetch_related("references", "forwarded_from")
+        qs = (
+            Message.objects.filter(channel=self.selected_channel)
+            .select_related("forwarded_from")
+            .prefetch_related("references")
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(message__icontains=q)

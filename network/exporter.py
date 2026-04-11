@@ -274,9 +274,10 @@ def write_meta_json(
 ) -> None:
     """Write data/meta.json with export metadata consumed by table preambles."""
     _weight_labels = {
-        "COMBINED": "forwards and mentions (combined)",
-        "FORWARDS": "forwards only",
-        "REFERENCES": "mentions only",
+        "NONE": "unweighted (all edges equal)",
+        "TOTAL": "raw forward + mention count",
+        "PARTIAL_MESSAGES": "count divided by total messages",
+        "PARTIAL_REFERENCES": "count divided by forwarding/citing messages",
     }
     edge_direction = (
         "edges point from citing channel to cited channel"
