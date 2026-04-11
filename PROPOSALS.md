@@ -60,10 +60,6 @@ Run BERTopic or LDA on stored message text to assign each channel to topic clust
 
 Rather than just detecting topics, track which narrative frames appear in messages (keyword lists or small embedding classifiers). Count how often each channel uses each narrative. Output narrative adoption rates per channel, and flag channels that adopt new narratives quickly (narrative amplifiers) vs. originate them.
 
-### 3.4 — URL domain analysis
-
-Extract domains from the `webpage_url` field (already stored on messages). Build a secondary graph: channels sharing the same external URLs or domains. Channels that consistently share links to the same set of domains — especially obscure ones — form implicit networks even without direct forwards. Output as `domain_table` or an additional edge type in the graph.
-
 ---
 
 ## 4. New Network Measures
