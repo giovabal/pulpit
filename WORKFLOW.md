@@ -58,6 +58,7 @@ Optional (expand **Options** to set):
 - **Fetch recommended channels** — after crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database; new channels are not crawled automatically
 - **Force-retry dead references** — re-attempt `t.me/` references previously marked as permanently unresolvable (e.g. deleted channels); by default these are skipped to avoid redundant API calls
 - **Refresh message stats** — update view counts, forward counts, and pinned status; combine with **Refresh limit** to restrict to the N most recent messages per channel, or messages from a given date
+- **Channel types** — which Telegram entity types to crawl: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
 - **From DB id ≤** — crawl only channels whose database id is at most this value; useful to resume or target a specific subset
 
 **CLI alternative:**
@@ -68,6 +69,7 @@ python manage.py get_channels --fixholes
 python manage.py get_channels --fetch-recommended-channels
 python manage.py get_channels --force-retry-unresolved-references
 python manage.py get_channels --fromid 42
+python manage.py get_channels --channel-types CHANNEL,GROUP
 python manage.py get_channels --refresh-messages-stats               # refresh all messages
 python manage.py get_channels --refresh-messages-stats 200           # refresh only the 200 most recent per channel
 python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh all messages from that date to present

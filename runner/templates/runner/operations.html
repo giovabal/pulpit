@@ -88,6 +88,17 @@
               </label>
             </div>
           </fieldset>
+          <fieldset class="ops-fieldset">
+            <legend>Channel types
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Which Telegram entity types to crawl."></i>
+            </legend>
+            <div class="ops-flags">
+              <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" checked>Channel</label>
+              <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1">Group</label>
+              <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1">User</label>
+            </div>
+          </fieldset>
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset">
               <legend>Stats refresh</legend>

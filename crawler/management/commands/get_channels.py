@@ -15,6 +15,7 @@ from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import Channel, Message
+from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
 from webapp_engine.async_commands import AsyncBaseCommand
 
 from telethon import errors
@@ -148,6 +149,17 @@ class Command(AsyncBaseCommand):
             ),
         )
         parser.add_argument(
+            "--channel-types",
+            dest="channel_types",
+            default="CHANNEL",
+            metavar="TYPES",
+            help=(
+                "Comma-separated list of Telegram entity types to crawl. "
+                "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
+                "USER (user accounts and bots). Default: CHANNEL."
+            ),
+        )
+        parser.add_argument(
             "--refresh-messages-stats",
             nargs="?",
             const=None,
@@ -203,17 +215,26 @@ class Command(AsyncBaseCommand):
             logger.exception("Refresh failed for channel %s", channel.telegram_id)
 
     def handle(self, *args: Any, **options: Any) -> None:
+        from django.core.management.base import CommandError
+
         fix_holes: bool = options["fixholes"]
         fetch_recommended: bool = options["fetch_recommended_channels"]
         force_retry: bool = options["force_retry_unresolved_references"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
         except ValueError as exc:
-            from django.core.management.base import CommandError
-
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
         fromid: int | None = options["fromid"]
+        channel_types = [s.strip().upper() for s in options["channel_types"].split(",") if s.strip()]
+        invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
+        if invalid_channel_types:
+            raise CommandError(
+                f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
+            )
+        interesting_qs = Channel.objects.filter(organization__is_interesting=True).filter(
+            channel_type_filter(channel_types)
+        )
         messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
@@ -239,7 +260,7 @@ class Command(AsyncBaseCommand):
                 reference_resolver = ReferenceResolver(api_client)
                 crawler = ChannelCrawler(api_client, media_handler, reference_resolver, messages_limit=messages_limit)
 
-                channels = Channel.objects.interesting().order_by("-id")
+                channels = interesting_qs.order_by("-id")
                 if fromid is not None:
                     channels = channels.filter(id__lte=fromid)
                 total_channels = channels.count()
@@ -302,7 +323,7 @@ class Command(AsyncBaseCommand):
 
                 # ---- mine Channel.about for t.me/ references ----
                 about_refs: set[str] = set()
-                for about_text in Channel.objects.interesting().exclude(about="").values_list("about", flat=True):
+                for about_text in interesting_qs.exclude(about="").values_list("about", flat=True):
                     for m in _ABOUT_REF_RE.finditer(about_text):
                         ref = m.group(1).strip().lower()
                         if ref and ref not in SKIPPABLE_REFERENCES:
@@ -346,7 +367,7 @@ class Command(AsyncBaseCommand):
 
                 # ---- fetch Telegram-recommended channels ----
                 if fetch_recommended:
-                    interesting_channels = list(Channel.objects.interesting())
+                    interesting_channels = list(interesting_qs)
                     n_rec = len(interesting_channels)
                     self.stdout.write(f"\nFetching recommended channels for {n_rec} interesting channels", ending="")
                     self.stdout.flush()
@@ -384,7 +405,7 @@ class Command(AsyncBaseCommand):
                 logging.getLogger().removeHandler(warning_handler)
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
-        interesting_pks = set(Channel.objects.interesting().values_list("pk", flat=True))
+        interesting_pks = set(interesting_qs.values_list("pk", flat=True))
 
         # Non-interesting channels cited by interesting channels: via forwards or t.me/username references.
         cited_pks = (

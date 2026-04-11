@@ -89,6 +89,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         fromid = post.get("fromid", "").strip()
         if fromid:
             args += ["--fromid", fromid]
+        channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
+        if channel_types:
+            args += ["--channel-types", ",".join(channel_types)]
 
     elif task == "search_channels":
         amount = post.get("amount", "").strip()
