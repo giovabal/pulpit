@@ -102,17 +102,6 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--compare",
-            default=None,
-            metavar="PROJECT_DIR",
-            help=(
-                "Path to a graph/ output directory from a previous export_network run "
-                "(the directory that contains index.html). "
-                "Its data/, graph files, *_table.html and *.xlsx files are copied with _2 suffixes; "
-                "network_compare_table.html is generated with side-by-side metrics tables and scatter plots."
-            ),
-        )
-        parser.add_argument(
             "--measures",
             dest="measures",
             default="PAGERANK",
@@ -268,16 +257,6 @@ class Command(BaseCommand):
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
-        compare_data_dir = options["compare"]
-        if compare_data_dir is not None:
-            compare_data_dir = os.path.abspath(compare_data_dir)
-            if not os.path.isdir(compare_data_dir):
-                raise CommandError(f"--compare: not a directory: {compare_data_dir!r}")
-            if not os.path.isfile(os.path.join(compare_data_dir, "index.html")):
-                raise CommandError(
-                    f"--compare: {compare_data_dir!r} does not look like a graph/ output directory "
-                    "(no index.html found). Point to the directory that contains index.html."
-                )
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
@@ -455,7 +434,7 @@ class Command(BaseCommand):
         )
 
         strategies = [s.lower() for s in communities_strategy]
-        need_community_metrics = do_html or do_xlsx or compare_data_dir is not None
+        need_community_metrics = do_html or do_xlsx
         if need_community_metrics:
             self.stdout.write("- community metrics")
             _steps = ["network"] + strategies
@@ -545,17 +524,6 @@ class Command(BaseCommand):
             os.makedirs(root_target, exist_ok=True)
             exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
 
-        compare_files: set[str] = set()
-        if compare_data_dir is not None:
-            self.stdout.write("- compare network files")
-            compare_files = tables.copy_compare_project(compare_data_dir, root_target)
-            self.stdout.write("- network compare table (html)")
-            tables.write_network_compare_table_html(
-                output_filename=os.path.join(root_target, "network_compare_table.html"),
-                seo=seo,
-                project_title=project_title,
-            )
-
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)
         tables.write_index_html(
@@ -570,8 +538,8 @@ class Command(BaseCommand):
             include_network_xlsx=do_xlsx,
             include_community_html=do_html,
             include_community_xlsx=do_xlsx,
-            include_compare_html=compare_data_dir is not None,
-            compare_files=compare_files,
+            include_compare_html=False,
+            compare_files=set(),
             strategies=strategies,
         )
 

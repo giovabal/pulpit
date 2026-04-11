@@ -107,7 +107,6 @@ Optional (expand **Options** to set):
 - **Measures** — comma-separated list of centrality measures: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `FLOWBETWEENNESS`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `HARMONICCENTRALITY`, `KATZ`, `SPREADING`, `BRIDGING` or `BRIDGING(STRATEGY)`, `BURTCONSTRAINT`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `ALL`; default `PAGERANK`
 - **Community strategies** — comma-separated list of community detection algorithms: `ORGANIZATION`, `LEIDEN`, `LEIDEN_DIRECTED`, `LOUVAIN`, `KCORE`, `INFOMAP`, `ALL`; default `ORGANIZATION`
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded
-- **Compare with project dir** — path to a previous `export_network` output (`graph/` directory); produces a side-by-side comparison page
 
 **CLI alternative:**
 
@@ -136,14 +135,32 @@ python manage.py export_network --channel-types CHANNEL,GROUP
 python manage.py export_network --startdate 2023-01-01
 python manage.py export_network --enddate 2023-12-31
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31
-python manage.py export_network --2dgraph --compare /path/to/other/graph
 ```
 
-The `--compare` argument must be the `graph/` output directory of a previous run — the directory that contains `index.html`. The command:
+## 6b. Compare two networks
+
+**Operations panel** (`/operations/`) → **Compare Networks** → set **Project directory** → click **Run**.
+
+Copies a previously exported `graph/` directory into the current one with `_2` suffixes and generates a side-by-side comparison page. Run this after `export_network` whenever you want to compare the current network with an earlier snapshot or a different dataset.
+
+The command:
 
 1. Copies the compare network's `data/`, graph files, `*_table.html`, and `*.xlsx` into the current `graph/` directory with `_2` suffixes (`data_2/`, `graph_2.html`, `channel_table_2.html`, `network_table_2.xlsx`, etc.). Internal links inside the copied HTML files are rewritten to their `_2` equivalents so they work as a self-contained set.
 2. Generates `graph/network_compare_table.html` with a 3-column whole-network metrics table, a modularity-by-strategy comparison table, and interactive scatter plots with this network's nodes in blue and the compare network's nodes in red. A "Normalize axes [0–1] per network" toggle min-max scales each network's values independently, making size-dependent measures comparable across networks of different sizes.
-3. Adds a "Compare network" section to `graph/index.html` listing all copied files and linking to the comparison page.
+3. Updates `graph/index.html` with a "Compare network" section listing all copied files and linking to the comparison page.
+
+Optional (expand **Options** to set):
+
+- **SEO-optimised** — sets `index, follow` robots tags on the generated HTML
+
+**CLI alternative:**
+
+```sh
+python manage.py compare_networks /path/to/other/graph
+python manage.py compare_networks /path/to/other/graph --seo
+```
+
+The argument must be the `graph/` output directory of a previous `export_network` run — the directory that contains `index.html`.
 
 ## 7. View the graph
 

@@ -22,6 +22,11 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
         "description": "Build the graph, compute measures, detect communities, and write output files.",
         "icon": "bi-diagram-3",
     },
+    "compare_networks": {
+        "title": "Compare Networks",
+        "description": "Copy a previously exported network and generate side-by-side comparison tables and scatter plots.",
+        "icon": "bi-arrows-angle-contract",
+    },
 }
 
 
@@ -116,9 +121,6 @@ def _build_args(task: str, post: Any) -> list[str]:
         enddate = post.get("enddate", "").strip()
         if enddate:
             args += ["--enddate", enddate]
-        compare = post.get("compare", "").strip()
-        if compare:
-            args += ["--compare", compare]
         if post.get("draw_dead_leaves"):
             args.append("--draw-dead-leaves")
         measures_val = ",".join(post.getlist("measures"))
@@ -139,5 +141,12 @@ def _build_args(task: str, post: Any) -> list[str]:
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]
+
+    elif task == "compare_networks":
+        project_dir = post.get("project_dir", "").strip()
+        if project_dir:
+            args.append(project_dir)
+        if post.get("seo"):
+            args.append("--seo")
 
     return args

@@ -176,13 +176,6 @@
                   </label>
                   <input type="date" name="enddate" id="enddate">
                 </div>
-                <div class="ops-param">
-                  <label for="compare">Compare with project dir
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Path to a previously exported graph directory, it can be the same network or a different one. When provided, the channel table will include a comparison between the two networks."></i>
-                  </label>
-                  <input type="text" name="compare" id="compare" placeholder="path/to/graph/" data-width="lg">
-                </div>
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
@@ -293,6 +286,29 @@
                   <option value="STRONGCC" selected>STRONGCC</option>
                 </select>
               </div>
+            </div>
+          </fieldset>
+
+          {% elif task.name == "compare_networks" %}
+          <fieldset class="ops-fieldset">
+            <legend>Compare directory</legend>
+            <div class="ops-params">
+              <div class="ops-param">
+                <label for="project_dir">Project directory
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Path to a previously exported graph/ directory (must contain index.html). Its data/, graph files, *_table.html, and *.xlsx are copied with _2 suffixes and a side-by-side comparison page is generated."></i>
+                </label>
+                <input type="text" name="project_dir" id="project_dir" placeholder="path/to/graph/" data-width="lg">
+              </div>
+            </div>
+          </fieldset>
+          <fieldset class="ops-fieldset">
+            <legend>Presentation</legend>
+            <div class="ops-flags">
+              <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Add meta tags to the generated HTML for better search engine indexing."></i>
+              </label>
             </div>
           </fieldset>
 
