@@ -250,7 +250,7 @@ class DataView(TemplateView):
         if (graph_dir / "graph_2.html").exists():
             compare_maps.append(
                 {
-                    "title": "Network map (comparison)",
+                    "title": "2D Network map (comparison)",
                     "icon": "bi-map",
                     "description": "Interactive force-directed graph for the comparison dataset.",
                     "url": "/graph/graph_2.html",
