@@ -220,6 +220,9 @@ class Command(AsyncBaseCommand):
                     f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
                 )
             )
+        except ValueError as error:
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
         except Exception as error:
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
