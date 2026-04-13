@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12] - To be announced
+
+### Bug fixes
+- `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
+
 ## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*
 
