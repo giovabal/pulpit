@@ -25,7 +25,7 @@ class ReferenceResolver:
         self.reference_resolution_paused_until: datetime | None = None
 
     def _is_paused(self) -> bool:
-        return self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until
+        return bool(self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until)
 
     def _pause(self, error: Any) -> int:
         wait_seconds = max(getattr(error, "seconds", 0), 1)
@@ -77,31 +77,29 @@ class ReferenceResolver:
 
     def resolve_message_references(self, message: Message, telegram_message: Any) -> list[str]:
         """Resolve all references in a message. Returns list of unresolved reference strings."""
-        missing: list[str] = []
+        refs: set[str] = set()
 
         for reference in message.get_telegram_references():
-            reference = reference.strip().lower()
-            if reference in SKIPPABLE_REFERENCES:
-                continue
-            channel, should_retry = self._resolve_one(reference, log_prefix="message")
-            if channel:
-                message.references.add(channel)
-            elif should_retry:
-                missing.append(reference)
+            ref = reference.strip().lower()
+            if ref and ref not in SKIPPABLE_REFERENCES:
+                refs.add(ref)
 
         if telegram_message.entities:
             tme = "https://t.me/"
             for entity in telegram_message.entities:
                 if not (hasattr(entity, "url") and entity.url and entity.url.startswith(tme)):
                     continue
-                reference = entity.url[len(tme) :].split("/")[0].strip().lower()
-                if reference in SKIPPABLE_REFERENCES:
-                    continue
-                channel, should_retry = self._resolve_one(reference, log_prefix="URL")
-                if channel:
-                    message.references.add(channel)
-                elif should_retry:
-                    missing.append(reference)
+                ref = entity.url[len(tme) :].split("/")[0].strip().lower()
+                if ref and ref not in SKIPPABLE_REFERENCES:
+                    refs.add(ref)
+
+        missing: list[str] = []
+        for reference in refs:
+            channel, should_retry = self._resolve_one(reference)
+            if channel:
+                message.references.add(channel)
+            elif should_retry:
+                missing.append(reference)
 
         return missing
 

@@ -6,11 +6,20 @@
 - Channel list: date range filter to show only channels active in a given period.
 - `get_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
 - `get_channels`: new `--toid` flag to set a lower-bound channel DB id, complementing the existing `--fromid`.
+- New `TELEGRAM_SESSION_NAME` setting (default: `anon`) replaces the previously hard-coded Telethon session file name; set it to match an existing `.session` file when running multiple instances.
+- New `IGNORE_FLOODWAIT` setting (default: `True`). When set to `False`, any `FloodWaitError` above the auto-sleep threshold causes the crawler to pause for `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` (default: `900`) before continuing instead of immediately skipping to the next item.
+
+### Improvements
+- `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
+- `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
 
 ### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
 - `get_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
 - `ChannelCrawler`: `get_entity()` calls for previously-unseen forwarded channels are no longer issued inline during message iteration. They are deferred to a post-crawl pass (`_resolve_pending_forwards`) where each lookup is spaced by the configured grace time, eliminating the burst of API requests that triggered flood waits on channels with many novel forward sources.
+- `get_channels`: if crawling a channel raises `FloodWaitError`, `_resolve_pending_forwards()` is now guaranteed to run via `try/finally`, preventing deferred forwarded-channel lookups from being silently lost on interruption.
+- `ReferenceResolver`: `resolve_message_references()` now collects all references into a set before resolving, eliminating duplicate API calls when the same username appears in both the message text and a `t.me/` entity URL.
+- `MediaHandler`: `download_message_picture()` and `download_message_video()` now catch `FileMigrateError`, `FileReferenceExpiredError`, `FileReferenceInvalidError`, and `Message.DoesNotExist`; these transient Telegram errors are logged as warnings instead of interrupting the crawl.
 - Operations panel command output now always shows a subtle vertical scrollbar.
 
 ## [0.11] - 2026-04-11

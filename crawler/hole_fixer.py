@@ -1,4 +1,5 @@
-from collections.abc import Callable
+import itertools
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from django.db.models import Max
@@ -8,18 +9,21 @@ from webapp.models import Channel
 _HOLE_FETCH_BATCH_SIZE: int = 100
 
 
+def iter_hole_ranges(channel: Channel, min_telegram_id: int | None = None) -> Iterator[tuple[int, int]]:
+    """Yield ``(start, end)`` pairs for each contiguous block of missing message IDs."""
+    qs = channel.message_set.order_by("telegram_id")
+    if min_telegram_id is not None:
+        qs = qs.filter(telegram_id__gte=min_telegram_id)
+    prev_id: int | None = None
+    for (current_id,) in qs.values_list("telegram_id").iterator():
+        if prev_id is not None and current_id - prev_id > 1:
+            yield (prev_id + 1, current_id - 1)
+        prev_id = current_id
+
+
 def find_missing_message_ids(channel: Channel, min_telegram_id: int | None = None) -> list[int]:
     """Return the list of telegram_ids that are absent from channel's stored messages."""
-    messages = channel.message_set.order_by("telegram_id")
-    if min_telegram_id is not None:
-        messages = messages.filter(telegram_id__gte=min_telegram_id)
-    holes: list[int] = []
-    prev_id: int | None = None
-    for (current_id,) in messages.values_list("telegram_id").iterator():
-        if prev_id is not None and current_id - prev_id > 1:
-            holes.extend(range(prev_id + 1, current_id))
-        prev_id = current_id
-    return holes
+    return [mid for start, end in iter_hole_ranges(channel, min_telegram_id) for mid in range(start, end + 1)]
 
 
 def fix_message_holes(
@@ -38,24 +42,36 @@ def fix_message_holes(
     Progress checkpoints are saved after each batch so an interrupted run can resume.
     """
     baseline_min_id = channel.last_hole_check_max_telegram_id
-    missing_ids = find_missing_message_ids(channel, min_telegram_id=baseline_min_id)
-    if not missing_ids:
+
+    # Build a lazy stream of every missing ID — never materialised in full.
+    id_stream = (
+        mid
+        for start, end in iter_hole_ranges(channel, min_telegram_id=baseline_min_id)
+        for mid in range(start, end + 1)
+    )
+
+    # Peek: if the stream is empty there are no holes.
+    first = next(id_stream, None)
+    if first is None:
         channel.last_hole_check_max_telegram_id = channel.message_set.aggregate(Max("telegram_id"))["telegram_id__max"]
         channel.save(update_fields=["last_hole_check_max_telegram_id"])
         update_status(f"{channel_label} | no message holes found")
         return 0, 0
 
+    # Put the peeked item back at the front.
+    id_stream = itertools.chain([first], id_stream)
+
+    # Honour the optional budget — but keep id_stream as the shared ref so we
+    # can probe it after islice is exhausted to detect truncation.
+    consume_stream = itertools.islice(id_stream, remaining_limit) if remaining_limit is not None else id_stream
+
+    update_status(f"{channel_label} | fixing message holes")
+
     processed_messages = 0
     downloaded_images = 0
-    was_limited = False
-    if remaining_limit is not None and remaining_limit > 0:
-        was_limited = len(missing_ids) > remaining_limit
-        missing_ids = missing_ids[:remaining_limit]
 
-    update_status(f"{channel_label} | fixing {len(missing_ids)} missing message ids")
-
-    for offset in range(0, len(missing_ids), _HOLE_FETCH_BATCH_SIZE):
-        batch = missing_ids[offset : offset + _HOLE_FETCH_BATCH_SIZE]
+    def flush(batch: list[int]) -> None:
+        nonlocal processed_messages, downloaded_images
         api_client.wait()
         messages = api_client.client.get_messages(telegram_channel, ids=batch)
         if not isinstance(messages, list):
@@ -66,11 +82,22 @@ def fix_message_holes(
             downloaded_images += get_message_fn(channel, telegram_message)
             processed_messages += 1
             update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
-        # Save progress after each batch so an interrupted run resumes from here
+        # Save progress after each batch so an interrupted run resumes from here.
         channel.last_hole_check_max_telegram_id = batch[-1]
         channel.save(update_fields=["last_hole_check_max_telegram_id"])
 
-    if was_limited:
+    batch: list[int] = []
+    for mid in consume_stream:
+        batch.append(mid)
+        if len(batch) >= _HOLE_FETCH_BATCH_SIZE:
+            flush(batch)
+            batch = []
+    if batch:
+        flush(batch)
+
+    # If remaining_limit was set and the underlying stream still has items,
+    # we were truncated — checkpoint is already at the last processed ID.
+    if remaining_limit is not None and next(id_stream, None) is not None:
         update_status(f"{channel_label} | hole-fix limit reached, checkpoint saved")
         return processed_messages, downloaded_images
 

@@ -76,7 +76,13 @@ class MediaHandler:
             )
             self._cleanup_downloaded_file(picture_filename)
             return 1
-        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
+        except (
+            errors.rpcerrorlist.FileMigrateError,
+            errors.rpcerrorlist.FileReferenceExpiredError,
+            errors.rpcerrorlist.FileReferenceInvalidError,
+            ValueError,
+            Message.DoesNotExist,
+        ) as e:
             logger.warning("Error downloading message picture: %s\n%s", e, telegram_message.__dict__)
         return 0
 
@@ -105,7 +111,13 @@ class MediaHandler:
                 },
             )
             self._cleanup_downloaded_file(video_filename)
-        except (errors.rpcerrorlist.FileMigrateError, ValueError, Message.DoesNotExist) as e:
+        except (
+            errors.rpcerrorlist.FileMigrateError,
+            errors.rpcerrorlist.FileReferenceExpiredError,
+            errors.rpcerrorlist.FileReferenceInvalidError,
+            ValueError,
+            Message.DoesNotExist,
+        ) as e:
             logger.warning("Error downloading message video: %s\n%s", e, telegram_message.__dict__)
 
     def clean_leftovers(self) -> None:

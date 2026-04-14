@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
-from crawler.hole_fixer import find_missing_message_ids
+from crawler.hole_fixer import find_missing_message_ids, fix_message_holes, iter_hole_ranges
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 
@@ -127,6 +127,244 @@ class FindMissingMessageIdsTests(TestCase):
         result = find_missing_message_ids(self.channel)
         # Gaps between 1→3 (missing 2) and 3→5 (missing 4)
         self.assertEqual(sorted(result), [2, 4])
+
+
+# ---------------------------------------------------------------------------
+# iter_hole_ranges
+# ---------------------------------------------------------------------------
+
+
+class IterHoleRangesTests(TestCase):
+    def setUp(self) -> None:
+        org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=50, organization=org)
+
+    def _create_messages(self, telegram_ids: list[int]) -> None:
+        for tid in telegram_ids:
+            Message.objects.create(telegram_id=tid, channel=self.channel)
+
+    def test_empty_channel_yields_nothing(self) -> None:
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+
+    def test_single_message_yields_nothing(self) -> None:
+        self._create_messages([5])
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+
+    def test_consecutive_messages_yield_nothing(self) -> None:
+        self._create_messages([1, 2, 3, 4, 5])
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+
+    def test_single_gap_of_one_yields_correct_range(self) -> None:
+        self._create_messages([1, 3])
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 2)])
+
+    def test_large_gap_yields_inclusive_range(self) -> None:
+        self._create_messages([1, 10])
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 9)])
+
+    def test_multiple_gaps_yield_multiple_ranges(self) -> None:
+        self._create_messages([1, 3, 6])
+        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 2), (4, 5)])
+
+    def test_min_telegram_id_excludes_earlier_ranges(self) -> None:
+        self._create_messages([1, 3, 5, 7])  # gaps at 2, 4, 6
+        result = list(iter_hole_ranges(self.channel, min_telegram_id=5))
+        self.assertEqual(result, [(6, 6)])
+
+    def test_min_telegram_id_below_all_messages_includes_all(self) -> None:
+        self._create_messages([2, 5])
+        result = list(iter_hole_ranges(self.channel, min_telegram_id=1))
+        self.assertEqual(result, [(3, 4)])
+
+    def test_returns_generator(self) -> None:
+        import types
+
+        self._create_messages([1, 3])
+        self.assertIsInstance(iter_hole_ranges(self.channel), types.GeneratorType)
+
+    def test_orm_sorts_ascending_regardless_of_insertion_order(self) -> None:
+        self._create_messages([10, 5, 1])  # created in reverse order
+        result = list(iter_hole_ranges(self.channel))
+        # gaps: 1→5 → (2,4), 5→10 → (6,9)
+        self.assertEqual(result, [(2, 4), (6, 9)])
+
+
+# ---------------------------------------------------------------------------
+# fix_message_holes
+# ---------------------------------------------------------------------------
+
+
+class FixMessageHolesTests(TestCase):
+    def setUp(self) -> None:
+        org = Organization.objects.create(name="Org", is_interesting=True)
+        self.channel = Channel.objects.create(telegram_id=60, organization=org)
+        self.api_client = _make_api_client()
+        self.telegram_channel = MagicMock()
+        self.status_messages: list[str] = []
+        # Default: get_messages returns a real message per requested ID
+        self.api_client.client.get_messages.side_effect = lambda tc, ids: [self._tg_msg(mid) for mid in ids]
+
+    def _create_messages(self, telegram_ids: list[int]) -> None:
+        for tid in telegram_ids:
+            Message.objects.create(telegram_id=tid, channel=self.channel)
+
+    def _tg_msg(self, telegram_id: int = 1) -> MagicMock:
+        tm = MagicMock()
+        tm.id = telegram_id
+        tm.peer_id = MagicMock()
+        return tm
+
+    def _status(self, msg: str) -> None:
+        self.status_messages.append(msg)
+
+    @staticmethod
+    def _noop_get_message_fn(ch, tm) -> int:
+        return 0
+
+    def _run(
+        self,
+        remaining_limit: int | None = None,
+        get_message_fn=None,
+    ) -> tuple[int, int]:
+        if get_message_fn is None:
+            get_message_fn = self._noop_get_message_fn
+        return fix_message_holes(
+            self.channel,
+            self.telegram_channel,
+            self.api_client,
+            get_message_fn,
+            remaining_limit,
+            self._status,
+            "CHAN",
+            0,
+        )
+
+    # -- no-holes path --
+
+    def test_no_holes_returns_zero_zero(self) -> None:
+        self._create_messages([1, 2, 3])
+        self.assertEqual(self._run(), (0, 0))
+
+    def test_no_holes_emits_correct_status(self) -> None:
+        self._create_messages([1, 2, 3])
+        self._run()
+        self.assertIn("CHAN | no message holes found", self.status_messages)
+
+    def test_no_holes_does_not_call_api(self) -> None:
+        self._create_messages([1, 2, 3])
+        self._run()
+        self.api_client.client.get_messages.assert_not_called()
+
+    def test_no_holes_updates_checkpoint_to_max(self) -> None:
+        self._create_messages([1, 2, 5])
+        self._run()
+        self.assertEqual(self.channel.last_hole_check_max_telegram_id, 5)
+
+    # -- happy path with holes --
+
+    def test_single_batch_one_api_call(self) -> None:
+        self._create_messages([1, 7])  # holes: 2,3,4,5,6
+        self._run()
+        self.assertEqual(self.api_client.client.get_messages.call_count, 1)
+
+    def test_single_batch_returns_correct_counts(self) -> None:
+        self._create_messages([1, 7])  # 5 holes
+        result = self._run()
+        self.assertEqual(result, (5, 0))
+
+    def test_two_batches_for_150_holes(self) -> None:
+        self._create_messages([1, 152])  # holes: 2..151 (150 total)
+        result = self._run()
+        self.assertEqual(result, (150, 0))
+        self.assertEqual(self.api_client.client.get_messages.call_count, 2)
+
+    def test_exactly_batch_size_holes_one_api_call(self) -> None:
+        self._create_messages([1, 102])  # holes: 2..101 (100 total = _HOLE_FETCH_BATCH_SIZE)
+        self._run()
+        self.assertEqual(self.api_client.client.get_messages.call_count, 1)
+
+    def test_batch_size_plus_one_holes_two_api_calls(self) -> None:
+        self._create_messages([1, 103])  # 101 holes
+        self._run()
+        self.assertEqual(self.api_client.client.get_messages.call_count, 2)
+
+    # -- remaining_limit --
+
+    def test_remaining_limit_truncates_fetch_count(self) -> None:
+        self._create_messages([1, 152])  # 150 holes
+        result = self._run(remaining_limit=50)
+        self.assertEqual(result, (50, 0))
+
+    def test_remaining_limit_emits_limit_reached_status(self) -> None:
+        self._create_messages([1, 152])  # 150 holes
+        self._run(remaining_limit=50)
+        self.assertIn("CHAN | hole-fix limit reached, checkpoint saved", self.status_messages)
+
+    def test_remaining_limit_checkpoint_at_last_processed_id(self) -> None:
+        self._create_messages([1, 152])  # holes start at 2
+        self._run(remaining_limit=50)
+        # 50 holes processed: IDs 2..51 → last batch[-1] = 51
+        self.assertEqual(self.channel.last_hole_check_max_telegram_id, 51)
+
+    def test_remaining_limit_exceeds_holes_no_limit_status(self) -> None:
+        self._create_messages([1, 6])  # 4 holes
+        self._run(remaining_limit=100)
+        self.assertNotIn("CHAN | hole-fix limit reached, checkpoint saved", self.status_messages)
+
+    def test_remaining_limit_exceeds_holes_processes_all(self) -> None:
+        self._create_messages([1, 6])  # 4 holes
+        result = self._run(remaining_limit=100)
+        self.assertEqual(result, (4, 0))
+
+    def test_remaining_limit_none_processes_all(self) -> None:
+        self._create_messages([1, 102])  # 100 holes
+        result = self._run(remaining_limit=None)
+        self.assertEqual(result, (100, 0))
+
+    # -- None / image handling --
+
+    def test_none_messages_are_skipped(self) -> None:
+        self._create_messages([1, 3])  # hole at 2
+        self.api_client.client.get_messages.side_effect = lambda tc, ids: [None]
+        result = self._run()
+        self.assertEqual(result, (0, 0))
+
+    def test_images_counted_in_return_value(self) -> None:
+        def one_image_fn(ch, tm) -> int:
+            return 1
+
+        self._create_messages([1, 3])  # hole at 2
+        result = self._run(get_message_fn=one_image_fn)
+        self.assertEqual(result, (1, 1))
+
+    # -- checkpoint and baseline --
+
+    def test_baseline_checkpoint_filters_earlier_holes(self) -> None:
+        self._create_messages([1, 3, 5, 7])  # gaps at 2, 4, 6
+        self.channel.last_hole_check_max_telegram_id = 4
+        self._run()
+        # Only hole 6 is in scope (min_telegram_id=4 → messages [5,7] → gap (6,6))
+        call_args = self.api_client.client.get_messages.call_args
+        self.assertEqual(call_args.kwargs["ids"], [6])
+
+    def test_full_run_updates_checkpoint_to_max_id(self) -> None:
+        self._create_messages([1, 3, 5])  # holes at 2, 4
+        self._run()
+        self.assertEqual(self.channel.last_hole_check_max_telegram_id, 5)
+
+    # -- API wait --
+
+    def test_api_wait_called_once_per_batch(self) -> None:
+        self._create_messages([1, 252])  # 250 holes → 3 batches
+        self._run()
+        self.assertEqual(self.api_client.wait.call_count, 3)
+
+    # -- progress status --
+
+    def test_progress_status_message_emitted(self) -> None:
+        self._create_messages([1, 3])  # hole at 2
+        self._run()
+        self.assertIn("CHAN | messages processed: 1", self.status_messages)
 
 
 # ---------------------------------------------------------------------------

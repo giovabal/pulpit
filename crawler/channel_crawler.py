@@ -1,8 +1,10 @@
 import datetime
 import logging
 from collections.abc import Callable
+from time import sleep
 from typing import Any
 
+from django.conf import settings
 from django.db.models import Max, Min, Q
 from django.utils import timezone
 
@@ -258,6 +260,8 @@ class ChannelCrawler:
                 Message.objects.filter(pk__in=message_pks).update(forwarded_from=resolved)
             except errors.rpcerrorlist.FloodWaitError:
                 logger.warning("Flood wait during forwarded-channel resolution; %d entries skipped", total - index + 1)
+                if not settings.IGNORE_FLOODWAIT:
+                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                 break
             except errors.rpcerrorlist.ChannelPrivateError:
                 Message.objects.filter(pk__in=message_pks).update(forwarded_from_private=channel_id)

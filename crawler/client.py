@@ -1,3 +1,4 @@
+import random
 from datetime import datetime, timedelta
 from time import sleep
 
@@ -18,5 +19,5 @@ class TelegramAPIClient:
     def wait(self) -> None:
         w = self.wait_time - (timezone.now() - self.last_call).total_seconds()
         if w > 0:
-            sleep(w)
+            sleep(w + random.uniform(0, 0.5))
         self.last_call = timezone.now()

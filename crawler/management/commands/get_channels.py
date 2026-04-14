@@ -6,6 +6,7 @@ import shutil
 import tempfile
 from argparse import ArgumentParser
 from collections import Counter
+from time import sleep
 from typing import Any
 
 from django.conf import settings
@@ -248,6 +249,8 @@ class Command(AsyncBaseCommand):
             self.stdout.write(
                 self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id} due to flood wait: {error}")
             )
+            if not settings.IGNORE_FLOODWAIT:
+                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
         except errors.rpcerrorlist.ChannelPrivateError:
             printer.newline()
             self.stdout.write(
@@ -328,6 +331,8 @@ class Command(AsyncBaseCommand):
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Flood wait for {channel}: {exc}"))
                 skipped += n
+                if not settings.IGNORE_FLOODWAIT:
+                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                 continue
             except Exception as exc:
                 printer.newline()
@@ -344,6 +349,8 @@ class Command(AsyncBaseCommand):
                     printer.newline()
                     self.stdout.write(self.style.WARNING(f"Flood wait fetching messages for {channel}: {exc}"))
                     skipped += len(batch_tids)
+                    if not settings.IGNORE_FLOODWAIT:
+                        sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                     continue
                 except Exception as exc:
                     printer.newline()
@@ -410,7 +417,7 @@ class Command(AsyncBaseCommand):
         warning_handler: _WarningLogHandler | None = None
         try:
             with TelegramClient(
-                "anon",
+                settings.TELEGRAM_SESSION_NAME,
                 settings.TELEGRAM_API_ID,
                 settings.TELEGRAM_API_HASH,
                 connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
@@ -448,11 +455,13 @@ class Command(AsyncBaseCommand):
                         except errors.FloodWaitError as error:
                             printer.newline()
                             self.stdout.write(
-                                self.style.WARNING(
-                                    f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
-                                )
+                                self.style.WARNING(f"Skipping channel {channel.telegram_id} due to flood wait: {error}")
                             )
+                            if not settings.IGNORE_FLOODWAIT:
+                                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                             continue
+                        finally:
+                            crawler._resolve_pending_forwards(lambda message, idx=index: printer.status(message, idx))
                         printer.ensure_newline()
                         if do_refresh:
                             self._refresh_channel(
@@ -525,6 +534,8 @@ class Command(AsyncBaseCommand):
                                 self.stdout.write(
                                     self.style.WARNING(f"Flood wait while fetching about references: {exc}")
                                 )
+                                if not settings.IGNORE_FLOODWAIT:
+                                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                                 break
                             except ValueError:
                                 pass  # user account, not a channel
@@ -559,6 +570,8 @@ class Command(AsyncBaseCommand):
                             self.stdout.write(
                                 self.style.WARNING(f"Flood wait while fetching recommended channels: {exc}")
                             )
+                            if not settings.IGNORE_FLOODWAIT:
+                                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                             break
                         except Exception as exc:
                             logger.warning("Error fetching recommended channels for %s: %s", channel, exc)

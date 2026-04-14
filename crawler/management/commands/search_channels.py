@@ -33,7 +33,7 @@ class Command(AsyncBaseCommand):
         total_found = 0
         total_new = 0
         with TelegramClient(
-            "anon",
+            settings.TELEGRAM_SESSION_NAME,
             settings.TELEGRAM_API_ID,
             settings.TELEGRAM_API_HASH,
             connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
