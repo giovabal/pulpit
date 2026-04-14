@@ -214,8 +214,26 @@ class Command(AsyncBaseCommand):
         pre_crawl_max_id: int,
         printer: ProgressPrinter,
     ) -> None:
+        # Resolve entity: try numeric ID first (cached), fall back to username only on failure.
         try:
             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+        except ValueError:
+            if not channel.username:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping refresh for channel {channel.telegram_id}: entity not in cache and no username stored"
+                    )
+                )
+                return
+            try:
+                telegram_channel = crawler.api_client.client.get_entity(channel.username)
+            except Exception as error:
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
+                return
+
+        try:
             refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
             crawler.refresh_message_stats(
                 channel,
@@ -237,9 +255,6 @@ class Command(AsyncBaseCommand):
                     f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
                 )
             )
-        except ValueError as error:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
         except Exception as error:
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))

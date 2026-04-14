@@ -69,10 +69,27 @@ class ChannelCrawler:
         try:
             channel, telegram_channel = self.get_basic_channel(seed)
         except ValueError:
-            logger.info("Seed is a user account, not a channel: %s", seed)
-            Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True)
-            return 0
+            # Numeric user-entity IDs fail when Telethon hasn't cached the access_hash.
+            # Fall back to username resolution (ResolveUsername), which needs no access_hash.
+            channel, telegram_channel = None, None
+            if isinstance(seed, int):
+                db_ch = Channel.objects.filter(telegram_id=seed).only("username").first()
+                if db_ch and db_ch.username:
+                    try:
+                        channel, telegram_channel = self.get_basic_channel(db_ch.username)
+                    except (
+                        ValueError,
+                        errors.rpcerrorlist.ChannelPrivateError,
+                        errors.rpcerrorlist.ChannelInvalidError,
+                    ):
+                        pass
+            if channel is None:
+                logger.info("Seed is a user account not resolvable by username: %s", seed)
+                update_status(f"[telegram_id={seed}] | skipped (user account)")
+                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True)
+                return 0
         if channel is None:
+            update_status(f"[telegram_id={seed}] | skipped (channel not found or private)")
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True)
             return 0
 

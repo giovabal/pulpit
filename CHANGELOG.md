@@ -9,6 +9,7 @@
 
 ### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
+- `get_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
 
 ## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*
