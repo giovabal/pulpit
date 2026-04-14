@@ -10,6 +10,8 @@
 ### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
 - `get_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
+- `ChannelCrawler`: `get_entity()` calls for previously-unseen forwarded channels are no longer issued inline during message iteration. They are deferred to a post-crawl pass (`_resolve_pending_forwards`) where each lookup is spaced by the configured grace time, eliminating the burst of API requests that triggered flood waits on channels with many novel forward sources.
+- Operations panel command output now always shows a subtle vertical scrollbar.
 
 ## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*

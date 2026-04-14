@@ -243,7 +243,9 @@
   font-size: .75rem;
   line-height: 1.55;
   max-height: 420px;
-  overflow-y: auto;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: #44446a #13131f;
   white-space: pre-wrap;
   word-break: break-all;
 }

@@ -1055,7 +1055,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("get_channels")
+            call_command("get_channels", get_new_messages=True)
 
             telegram_ids_crawled = {c.args[0] for c in mock_crawler.get_channel.call_args_list}
             self.assertIn(self.ch1.telegram_id, telegram_ids_crawled)
