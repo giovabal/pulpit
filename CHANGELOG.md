@@ -1,6 +1,7 @@
 # Changelog
 
 ## [0.12] - To be announced
+*A smoother Telegram interaction*
 
 ### New features
 - Channel list: date range filter to show only channels active in a given period.
@@ -12,6 +13,8 @@
 ### Improvements
 - `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
 - `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
+- `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
+- `ChannelCrawler`: deferred forwarded-channel lookups (`_pending_forwards`) are now persisted to a new `Message.pending_forward_telegram_id` DB field instead of held only in memory. A hard crash mid-crawl no longer silently discards those links; `_resolve_pending_forwards()` reads from the DB and picks up any leftover entries from previous runs automatically.
 
 ### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.

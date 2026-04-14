@@ -10,6 +10,7 @@ from time import sleep
 from typing import Any
 
 from django.conf import settings
+from django.core.management.base import BaseCommand
 from django.db.models import F
 
 from crawler.channel_crawler import ChannelCrawler
@@ -18,7 +19,6 @@ from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import Channel, Message, MessagePicture, MessageVideo
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
-from webapp_engine.async_commands import AsyncBaseCommand
 
 from telethon import errors
 from telethon.sync import TelegramClient
@@ -113,7 +113,7 @@ class _WarningLogHandler(logging.Handler):
         print(self._style.WARNING(msg) if record.levelno < logging.ERROR else self._style.ERROR(msg))
 
 
-class Command(AsyncBaseCommand):
+class Command(BaseCommand):
     args = ""
     help = "crawling Telegram groups"
 

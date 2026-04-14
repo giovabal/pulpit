@@ -33,9 +33,6 @@ class ChannelCrawler:
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
         self.messages_limit_per_channel = messages_limit
-        # Maps unknown forwarded-channel telegram_id → list of Message PKs waiting for resolution.
-        # Populated by get_message(); drained by _resolve_pending_forwards() after each crawl loop.
-        self._pending_forwards: dict[int, list[int]] = {}
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
@@ -191,7 +188,7 @@ class ChannelCrawler:
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
-        pending_forward_id: int | None = None
+        pending_forward_telegram_id: int | None = None
         if (
             telegram_message.fwd_from
             and telegram_message.fwd_from.from_id
@@ -204,7 +201,9 @@ class ChannelCrawler:
             else:
                 # Defer the get_entity() call to _resolve_pending_forwards() so that
                 # a channel with many novel forwards doesn't burst the API mid-iteration.
-                pending_forward_id = channel_id
+                # The telegram_id is persisted to DB so it survives a crash.
+                pending_forward_telegram_id = channel_id
+        message.pending_forward_telegram_id = pending_forward_telegram_id
 
         missing_references = self.reference_resolver.resolve_message_references(message, telegram_message)
         if missing_references:
@@ -233,40 +232,51 @@ class ChannelCrawler:
                 )
 
         message.save()
-        if pending_forward_id is not None:
-            self._pending_forwards.setdefault(pending_forward_id, []).append(message.pk)
         return downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:
         """Resolve forwarded-channel entity lookups deferred during get_message().
 
-        Iterates self._pending_forwards (channel_id → [message PKs]) with a full
-        api_client.wait() between each call, then clears the buffer.  On FloodWaitError
-        the loop stops early; unresolved messages keep forwarded_from=None and are
-        retried automatically on the next get_channel() call.
+        Reads all messages with pending_forward_telegram_id set (persisted to DB by
+        get_message() so that a hard crash does not lose the work).  Resolves each
+        unique channel with a full api_client.wait() between calls.  On FloodWaitError
+        the loop stops early; unresolved rows keep pending_forward_telegram_id set and
+        are retried automatically on the next get_channel() call.
         """
-        if not self._pending_forwards:
+        pending_ids = list(
+            Message.objects.filter(pending_forward_telegram_id__isnull=False)
+            .values_list("pending_forward_telegram_id", flat=True)
+            .distinct()
+        )
+        if not pending_ids:
             return
-        pending = list(self._pending_forwards.items())
-        self._pending_forwards.clear()
-        total = len(pending)
-        for index, (channel_id, message_pks) in enumerate(pending, 1):
+        total = len(pending_ids)
+        for index, channel_id in enumerate(pending_ids, 1):
             if status_callback:
                 status_callback(f"resolving forwarded channels … {index}/{total}")
             self.api_client.wait()
             try:
                 telegram_channel = self.api_client.client.get_entity(channel_id)
                 resolved = Channel.from_telegram_object(telegram_channel, force_update=True)
-                Message.objects.filter(pk__in=message_pks).update(forwarded_from=resolved)
+                Message.objects.filter(pending_forward_telegram_id=channel_id).update(
+                    forwarded_from=resolved,
+                    pending_forward_telegram_id=None,
+                )
             except errors.rpcerrorlist.FloodWaitError:
                 logger.warning("Flood wait during forwarded-channel resolution; %d entries skipped", total - index + 1)
                 if not settings.IGNORE_FLOODWAIT:
                     sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                 break
             except errors.rpcerrorlist.ChannelPrivateError:
-                Message.objects.filter(pk__in=message_pks).update(forwarded_from_private=channel_id)
+                Message.objects.filter(pending_forward_telegram_id=channel_id).update(
+                    forwarded_from_private=channel_id,
+                    pending_forward_telegram_id=None,
+                )
             except (AttributeError, ValueError):
-                Message.objects.filter(pk__in=message_pks).update(forwarded_from_private=0)
+                Message.objects.filter(pending_forward_telegram_id=channel_id).update(
+                    forwarded_from_private=0,
+                    pending_forward_telegram_id=None,
+                )
 
     def refresh_message_stats(
         self,

@@ -1181,6 +1181,169 @@ class ChannelCrawlerSearchChannelTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# ChannelCrawler — pending forwards (DB-backed, crash-safe)
+# ---------------------------------------------------------------------------
+
+
+class ChannelCrawlerPendingForwardsTests(TestCase):
+    def setUp(self) -> None:
+        self.api_client = _make_api_client()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.source_channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.msg = Message.objects.create(telegram_id=1, channel=self.source_channel)
+
+    def _set_pending(self, channel_id: int) -> None:
+        self.msg.pending_forward_telegram_id = channel_id
+        self.msg.save(update_fields=["pending_forward_telegram_id"])
+
+    def _make_tg_message(self, msg_id: int, fwd_channel_id: int | None = None) -> MagicMock:
+        """Build a minimal Telethon message mock safe to pass to get_message()."""
+        tm = MagicMock()
+        tm.id = msg_id
+        tm.peer_id.channel_id = self.source_channel.telegram_id
+        # TELEGRAM_OBJECT_PROPERTIES must have safe values (not raw MagicMocks).
+        tm.date = None
+        tm.out = False
+        tm.mentioned = False
+        tm.post = False
+        tm.from_scheduled = False
+        tm.message = ""
+        tm.grouped_id = None
+        tm.views = None
+        tm.forwards = None
+        tm.pinned = False
+        tm.entities = []
+        tm.media = None
+        if fwd_channel_id is not None:
+            tm.fwd_from.from_id.channel_id = fwd_channel_id
+        else:
+            tm.fwd_from = None
+        return tm
+
+    # -- get_message persists pending_forward_telegram_id to DB --
+
+    def test_get_message_persists_pending_forward_to_db(self) -> None:
+        """Novel forwarded-from channel is stored in DB so a crash does not lose it."""
+        tm = self._make_tg_message(msg_id=99, fwd_channel_id=9999)
+
+        self.crawler.get_message(self.source_channel, tm)
+
+        msg = Message.objects.get(telegram_id=99, channel=self.source_channel)
+        self.assertEqual(msg.pending_forward_telegram_id, 9999)
+        self.assertIsNone(msg.forwarded_from)
+
+    def test_get_message_does_not_set_pending_when_channel_already_in_db(self) -> None:
+        """Known forwarded-from channel sets forwarded_from directly, no pending field."""
+        fwd_channel = Channel.objects.create(telegram_id=7777, organization=self.org)
+        tm = self._make_tg_message(msg_id=100, fwd_channel_id=fwd_channel.telegram_id)
+
+        self.crawler.get_message(self.source_channel, tm)
+
+        msg = Message.objects.get(telegram_id=100, channel=self.source_channel)
+        self.assertIsNone(msg.pending_forward_telegram_id)
+        self.assertEqual(msg.forwarded_from, fwd_channel)
+
+    def test_get_message_clears_stale_pending_when_channel_now_in_db(self) -> None:
+        """If a previous run left pending_forward_telegram_id set and the channel is
+        now in the DB, a fresh get_message() call clears the stale flag."""
+        fwd_channel = Channel.objects.create(telegram_id=8888, organization=self.org)
+        self._set_pending(8888)  # stale flag from a previous crashed run
+
+        tm = self._make_tg_message(msg_id=self.msg.telegram_id, fwd_channel_id=fwd_channel.telegram_id)
+
+        self.crawler.get_message(self.source_channel, tm)
+
+        self.msg.refresh_from_db()
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+        self.assertEqual(self.msg.forwarded_from, fwd_channel)
+
+    # -- _resolve_pending_forwards reads from DB --
+
+    def test_resolve_pending_does_nothing_when_db_empty(self) -> None:
+        self.crawler._resolve_pending_forwards()
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_resolve_pending_sets_forwarded_from_and_clears_field(self) -> None:
+        self._set_pending(5555)
+        fwd_tc = _make_telegram_channel(telegram_id=5555, username="fwdchan")
+        self.api_client.client.get_entity.return_value = fwd_tc
+
+        self.crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        self.assertIsNotNone(self.msg.forwarded_from)
+        self.assertEqual(self.msg.forwarded_from.telegram_id, 5555)
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+
+    def test_resolve_pending_survives_crash_leftovers(self) -> None:
+        """pending_forward_telegram_id set from a previous crashed session is resolved."""
+        # Simulate: a prior run saved the field but crashed before resolving it.
+        # A new ChannelCrawler instance (fresh session) should still fix it.
+        self._set_pending(6666)
+        fwd_tc = _make_telegram_channel(telegram_id=6666, username="leftover")
+        self.api_client.client.get_entity.return_value = fwd_tc
+        new_crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+
+        new_crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        self.assertEqual(self.msg.forwarded_from.telegram_id, 6666)
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+
+    def test_resolve_pending_batches_same_channel_one_api_call(self) -> None:
+        """Multiple messages forwarded from the same channel require only one get_entity."""
+        msg2 = Message.objects.create(telegram_id=2, channel=self.source_channel)
+        self._set_pending(4444)
+        msg2.pending_forward_telegram_id = 4444
+        msg2.save(update_fields=["pending_forward_telegram_id"])
+        fwd_tc = _make_telegram_channel(telegram_id=4444, username="shared")
+        self.api_client.client.get_entity.return_value = fwd_tc
+
+        self.crawler._resolve_pending_forwards()
+
+        self.assertEqual(self.api_client.client.get_entity.call_count, 1)
+        for m in [self.msg, msg2]:
+            m.refresh_from_db()
+            self.assertEqual(m.forwarded_from.telegram_id, 4444)
+            self.assertIsNone(m.pending_forward_telegram_id)
+
+    def test_resolve_pending_marks_private_channel(self) -> None:
+        self._set_pending(3333)
+        err = errors.rpcerrorlist.ChannelPrivateError.__new__(errors.rpcerrorlist.ChannelPrivateError)
+        self.api_client.client.get_entity.side_effect = err
+
+        self.crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        self.assertEqual(self.msg.forwarded_from_private, 3333)
+        self.assertIsNone(self.msg.forwarded_from)
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+
+    def test_resolve_pending_on_flood_wait_keeps_field_for_retry(self) -> None:
+        self._set_pending(2222)
+        self.api_client.client.get_entity.side_effect = _flood_error(seconds=30)
+
+        self.crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        # Field must remain set so the next run retries it.
+        self.assertEqual(self.msg.pending_forward_telegram_id, 2222)
+        self.assertIsNone(self.msg.forwarded_from)
+
+    def test_resolve_pending_calls_wait_once_per_unique_channel(self) -> None:
+        msg2 = Message.objects.create(telegram_id=3, channel=self.source_channel)
+        self._set_pending(1111)
+        msg2.pending_forward_telegram_id = 2222
+        msg2.save(update_fields=["pending_forward_telegram_id"])
+        self.api_client.client.get_entity.return_value = _make_telegram_channel(telegram_id=1111)
+
+        self.crawler._resolve_pending_forwards()
+
+        self.assertEqual(self.api_client.wait.call_count, 2)
+
+
+# ---------------------------------------------------------------------------
 # search_channels management command
 # ---------------------------------------------------------------------------
 

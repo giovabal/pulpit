@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.conf import settings
+from django.core.management.base import BaseCommand
 from django.db.models import F
 from django.utils import timezone
 
@@ -9,12 +10,11 @@ from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import SearchTerm
-from webapp_engine.async_commands import AsyncBaseCommand
 
 from telethon.sync import TelegramClient
 
 
-class Command(AsyncBaseCommand):
+class Command(BaseCommand):
     args = ""
     help = "crawling Telegram groups"
 

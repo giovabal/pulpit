@@ -206,6 +206,7 @@ class Message(TelegramBaseModel):
         Channel, on_delete=models.SET_NULL, null=True, related_name="forwarded_message_set"
     )
     forwarded_from_private = models.PositiveBigIntegerField(null=True)
+    pending_forward_telegram_id = models.PositiveBigIntegerField(null=True)
     references = models.ManyToManyField(Channel, related_name="reference_message_set")
     missing_references = models.TextField(blank=True)
     grouped_id = models.BigIntegerField(null=True)
