@@ -2,7 +2,10 @@
 
 ## [0.12] - To be announced
 
-### Bug fixes
+### New features
+- Channel list: date range filter to show only channels active in a given period.
+
+### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
 
 ## [0.11] - 2026-04-11

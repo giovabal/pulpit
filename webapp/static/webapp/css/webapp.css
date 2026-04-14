@@ -717,8 +717,52 @@ body {
 
 .channel-filters {
   display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.channel-filters-top {
+  display: flex;
   align-items: center;
   gap: .5rem;
+}
+
+.channel-date-range {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.channel-date-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .4rem .6rem;
+  height: 2.1rem;
+  cursor: pointer;
+  color-scheme: inherit;
+}
+
+.channel-date-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+}
+
+.channel-date-sep {
+  color: var(--muted);
+  font-size: .8rem;
+  flex-shrink: 0;
+}
+
+.channel-date-label {
+  font-size: .75rem;
+  color: var(--muted);
+  flex-shrink: 0;
 }
 
 .channel-org-select {

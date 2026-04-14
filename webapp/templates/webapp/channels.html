@@ -11,24 +11,33 @@
       <span class="channels-count" id="channels-count"></span>
     </div>
     <div class="channel-filters">
-      {% if organizations %}
-      <select id="org-filter" class="channel-org-select" aria-label="Filter by organization">
-        <option value="">All organizations</option>
-        {% for org in organizations %}
-        <option value="{{ org.pk }}">{{ org.name }}</option>
-        {% endfor %}
-      </select>
-      {% endif %}
-      <div class="channel-filter-wrap">
-        <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
-        <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+      <div class="channel-filters-top">
+        {% if organizations %}
+        <select id="org-filter" class="channel-org-select" aria-label="Filter by organization">
+          <option value="">All organizations</option>
+          {% for org in organizations %}
+          <option value="{{ org.pk }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <div class="channel-filter-wrap">
+          <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
+          <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
+        </div>
+      </div>
+      <div class="channel-date-range">
+        <label for="date-from" class="channel-date-label">From</label>
+        <input type="date" id="date-from" class="channel-date-input">
+        <span class="channel-date-sep">–</span>
+        <label for="date-to" class="channel-date-label">To</label>
+        <input type="date" id="date-to" class="channel-date-input">
       </div>
     </div>
   </div>
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -56,7 +65,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -83,6 +92,8 @@
   (function () {
     var input = document.getElementById("channel-filter");
     var orgSelect = document.getElementById("org-filter");
+    var dateFrom = document.getElementById("date-from");
+    var dateTo = document.getElementById("date-to");
     var mainRows = Array.from(document.querySelectorAll("#channels-list .channel-row"));
     var excludedSep = document.getElementById("excluded-sep");
     var excludedList = document.getElementById("excluded-list");
@@ -102,10 +113,21 @@
     function applyFilters() {
       var q = input.value.toLowerCase();
       var org = orgSelect ? orgSelect.value : "";
+      var from = dateFrom.value;
+      var to = dateTo.value;
       mainRows.concat(excludedRows).forEach(function (row) {
         var matchText = row.dataset.title.includes(q);
         var matchOrg = !org || row.dataset.org === org;
-        row.style.display = (matchText && matchOrg) ? "" : "none";
+        var matchDate = true;
+        if (from || to) {
+          var rowMin = row.dataset.dateMin || "";
+          var rowMax = row.dataset.dateMax || "";
+          if (rowMin && rowMax) {
+            if (from && rowMax < from) matchDate = false;
+            if (to && rowMin > to) matchDate = false;
+          }
+        }
+        row.style.display = (matchText && matchOrg && matchDate) ? "" : "none";
       });
       if (excludedSep) {
         excludedSep.style.display = visible(excludedRows) ? "" : "none";
@@ -117,6 +139,8 @@
 
     input.addEventListener("input", applyFilters);
     if (orgSelect) orgSelect.addEventListener("change", applyFilters);
+    dateFrom.addEventListener("change", applyFilters);
+    dateTo.addEventListener("change", applyFilters);
 
     input.focus();
   })();

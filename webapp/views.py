@@ -164,7 +164,11 @@ class ChannelListView(ListView):
         return (
             Channel.objects.interesting()
             .select_related("organization")
-            .annotate(messages_count=Count("message_set"))
+            .annotate(
+                messages_count=Count("message_set"),
+                first_message_date=Min("message_set__date"),
+                last_message_date=Max("message_set__date"),
+            )
             .order_by("title")
         )
 
@@ -174,7 +178,11 @@ class ChannelListView(ListView):
             Channel.objects.filter(organization__is_interesting=True)
             .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .select_related("organization")
-            .annotate(messages_count=Count("message_set"))
+            .annotate(
+                messages_count=Count("message_set"),
+                first_message_date=Min("message_set__date"),
+                last_message_date=Max("message_set__date"),
+            )
             .order_by("title")
         )
         ctx["organizations"] = Organization.objects.filter(is_interesting=True).order_by("name")
