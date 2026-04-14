@@ -4,6 +4,8 @@
 
 ### New features
 - Channel list: date range filter to show only channels active in a given period.
+- `get_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
+- `get_channels`: new `--toid` flag to set a lower-bound channel DB id, complementing the existing `--fromid`.
 
 ### Fixes
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.

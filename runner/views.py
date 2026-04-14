@@ -80,6 +80,8 @@ def _build_args(task: str, post: Any) -> list[str]:
     args: list[str] = []
 
     if task == "get_channels":
+        if post.get("get_new_messages"):
+            args.append("--get-new-messages")
         if post.get("fixholes"):
             args.append("--fixholes")
         if post.get("fetch_recommended_channels"):
@@ -96,6 +98,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         fromid = post.get("fromid", "").strip()
         if fromid:
             args += ["--fromid", fromid]
+        toid = post.get("toid", "").strip()
+        if toid:
+            args += ["--toid", toid]
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]

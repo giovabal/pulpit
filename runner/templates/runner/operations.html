@@ -72,6 +72,11 @@
             <legend>Crawl</legend>
             <div class="ops-flags">
               <label class="ops-flag">
+                <input type="checkbox" name="get_new_messages" checked>Get new messages
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Fetch new messages for each interesting channel. Uncheck to skip message crawling and only run post-processing steps (reference resolution, about-text mining, etc.)."></i>
+              </label>
+              <label class="ops-flag">
                 <input type="checkbox" name="fixholes">Fix message holes
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
@@ -130,9 +135,16 @@
                 <div class="ops-param">
                   <label for="fromid">From DB id ≤
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Process only channels whose internal database ID is at most this value. Useful to resume an interrupted run or target a specific subset of channels."></i>
+                       title="Process only channels whose internal database ID is at most this value."></i>
                   </label>
                   <input type="number" name="fromid" id="fromid" placeholder="–" min="1">
+                </div>
+                <div class="ops-param">
+                  <label for="toid">To DB id ≥
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Process only channels whose internal database ID is at least this value."></i>
+                  </label>
+                  <input type="number" name="toid" id="toid" placeholder="–" min="1">
                 </div>
               </div>
             </fieldset>

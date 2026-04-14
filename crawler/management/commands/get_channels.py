@@ -118,6 +118,16 @@ class Command(AsyncBaseCommand):
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
+            "--get-new-messages",
+            action="store_true",
+            default=False,
+            help=(
+                "Fetch new messages for each interesting channel. "
+                "Without this flag the per-channel crawl is skipped; "
+                "reference resolution, about-text mining, and other post-processing still run."
+            ),
+        )
+        parser.add_argument(
             "--fixholes",
             action="store_true",
             default=False,
@@ -129,6 +139,13 @@ class Command(AsyncBaseCommand):
             default=None,
             metavar="ID",
             help="Only crawl channels whose database id is less than or equal to this value.",
+        )
+        parser.add_argument(
+            "--toid",
+            type=int,
+            default=None,
+            metavar="ID",
+            help="Only crawl channels whose database id is greater than or equal to this value.",
         )
         parser.add_argument(
             "--fetch-recommended-channels",
@@ -344,6 +361,7 @@ class Command(AsyncBaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
+        get_new_messages: bool = options["get_new_messages"]
         fix_holes: bool = options["fixholes"]
         fix_missing_media: bool = options["fix_missing_media"]
         fetch_recommended: bool = options["fetch_recommended_channels"]
@@ -354,6 +372,7 @@ class Command(AsyncBaseCommand):
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
         fromid: int | None = options["fromid"]
+        toid: int | None = options["toid"]
         channel_types_raw = options["channel_types"]
         channel_types = (
             [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
@@ -396,40 +415,43 @@ class Command(AsyncBaseCommand):
                 channels = interesting_qs.order_by("-id")
                 if fromid is not None:
                     channels = channels.filter(id__lte=fromid)
+                if toid is not None:
+                    channels = channels.filter(id__gte=toid)
                 total_channels = channels.count()
                 printer = ProgressPrinter(self.stdout, total_channels)
                 warning_handler = _WarningLogHandler(printer, self.style)
                 logging.getLogger().addHandler(warning_handler)
 
-                for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
-                    try:
-                        pre_crawl_max_id = crawler.get_channel(
-                            channel.telegram_id,
-                            fix_holes=fix_holes,
-                            status_callback=lambda message, idx=index: printer.status(message, idx),
-                        )
-                    except errors.FloodWaitError as error:
-                        printer.newline()
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
+                if get_new_messages:
+                    for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                        try:
+                            pre_crawl_max_id = crawler.get_channel(
+                                channel.telegram_id,
+                                fix_holes=fix_holes,
+                                status_callback=lambda message, idx=index: printer.status(message, idx),
                             )
-                        )
-                        continue
-                    printer.ensure_newline()
-                    if do_refresh:
-                        self._refresh_channel(
-                            channel,
-                            crawler,
-                            index,
-                            total_channels,
-                            refresh_limit,
-                            refresh_min_date,
-                            pre_crawl_max_id,
-                            printer,
-                        )
+                        except errors.FloodWaitError as error:
+                            printer.newline()
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Skipping channel {channel.telegram_id} due to flood wait while resolving references: {error}"
+                                )
+                            )
+                            continue
+                        printer.ensure_newline()
+                        if do_refresh:
+                            self._refresh_channel(
+                                channel,
+                                crawler,
+                                index,
+                                total_channels,
+                                refresh_limit,
+                                refresh_min_date,
+                                pre_crawl_max_id,
+                                printer,
+                            )
 
-                printer.newline()
+                    printer.newline()
 
                 if force_retry:
                     n_missing = Message.objects.exclude(missing_references="").count()

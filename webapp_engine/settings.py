@@ -130,7 +130,9 @@ else:
             "NAME": BASE_DIR / config("DB_NAME", default="db.sqlite3", cast=str),
             "OPTIONS": {
                 "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
-                "transaction_mode": "IMMEDIATE",  # grab write lock at transaction start, avoids lock-upgrade races
+                # DEFERRED (default): write lock acquired only at first write, not at BEGIN.
+                # With WAL mode this gives the crawler and web server far less contention;
+                # Django's get_or_create handles the resulting IntegrityError race internally.
                 "timeout": 30,  # seconds SQLite busy-retries before raising OperationalError: database is locked
             },
         }
