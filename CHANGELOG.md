@@ -1,27 +1,27 @@
 # Changelog
 
 ## [0.12] - To be announced
-*A smoother Telegram interaction. Fixes.*
+*A smoother Telegram interaction. Organisation/community overlapping. Fixes.*
 
 ### New features
+- Community Statistics table: each algorithm section now includes a collapsible **Organisation × community distribution** panel with two side-by-side cross-tabulation tables. Rows are organisations, columns are community groups. The first table shows what share of each organisation's nodes fall into each community (rows sum to 100%); the second shows what share of each community's nodes come from each organisation (columns sum to 100%). The panel is only shown when the graph contains channels from more than one organisation.
+- Network Statistics table: when the graph includes more than one channel type (broadcast channels, groups, user accounts), per-type node counts are now shown as separate rows directly below the total node count.
 - Channel list: date range filter to show only channels active in a given period.
 - `get_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
-- `get_channels`: new `--ids` flag replaces the old `--fromid`/`--toid` pair. Accepts comma-separated IDs and ranges (e.g. `-30, 50-80, 99, 120-`): exact IDs, inclusive ranges, open-ended lower/upper bounds. Tokens are OR-ed; the Operations panel Scope field has been updated to a single text input matching this syntax.
+- `get_channels`: new `--ids` flag replaces the old `--fromid`. Accepts comma-separated IDs and ranges (e.g. `-30, 50-80, 99, 120-`): exact IDs, inclusive ranges, open-ended lower/upper bounds. Tokens are OR-ed; the Operations panel Scope field has been updated to a single text input matching this syntax.
 - New `TELEGRAM_SESSION_NAME` setting (default: `anon`) replaces the previously hard-coded Telethon session file name; set it to match an existing `.session` file when running multiple instances.
 - New `IGNORE_FLOODWAIT` setting (default: `True`). When set to `False`, any `FloodWaitError` above the auto-sleep threshold causes the crawler to pause for `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` (default: `900`) before continuing instead of immediately skipping to the next item.
 
 ### Improvements
-- Community Statistics table: each algorithm section now includes a collapsible **Organisation × community distribution** panel with two side-by-side cross-tabulation tables. Rows are organisations, columns are community groups. The first table shows what share of each organisation's nodes fall into each community (rows sum to 100%); the second shows what share of each community's nodes come from each organisation (columns sum to 100%). The panel is only shown when the graph contains channels from more than one organisation.
-- Network Statistics table: when the graph includes more than one channel type (broadcast channels, groups, user accounts), per-type node counts are now shown as separate rows directly below the total node count.
 - `ChannelCrawler`: when Telethon's session has lost the `access_hash` for a channel, the fallback now first tries a direct `GetChannels` lookup using the `access_hash` stored in the DB before falling back to username resolution. This avoids `ResolveUsernameRequest` flood waits for channels that have no stored username, and reduces unnecessary username lookups for those that do.
 - `set_more_channel_details` and `refresh_message_stats` now clear `is_lost` and `is_private` on the channel when they succeed, since a reachable channel is by definition neither lost nor private.
 - `Channel` model: new `is_private` boolean field distinguishes channels that returned a `ChannelPrivateError` (marked `is_private=True`) from channels that could not be found at all (marked `is_lost=True`). Both are excluded from all downstream queries — `Channel.objects.interesting()`, the graph builder, `get_channels` crawl targets — so private channels are never re-crawled or included in the network.
 - `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
 - `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
-- `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
 - `ChannelCrawler`: deferred forwarded-channel lookups (`_pending_forwards`) are now persisted to a new `Message.pending_forward_telegram_id` DB field instead of held only in memory. A hard crash mid-crawl no longer silently discards those links; `_resolve_pending_forwards()` reads from the DB and picks up any leftover entries from previous runs automatically.
 
 ### Fixes
+- SQLite: enabled WAL journal mode via a `connection_created` signal in `WebappConfig.ready()` and raised the busy-timeout to 30 s. Previously, a concurrent admin save during a crawl could immediately raise `database is locked`; with WAL + timeout the lock contention window shrinks to milliseconds and the write retries automatically before giving up.
 - `ChannelCrawler.get_message`: `forwarded_from` and `pending_forward_telegram_id` are now written to the DB immediately after they are determined, before any further processing. Previously they were only persisted by the final `message.save()`; a process kill in that window would leave the message in DB with no forward data and no recovery path (since the message is already within the known ID range and skipped on rerun).
 - `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
 - `get_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
@@ -30,6 +30,7 @@
 - `ReferenceResolver`: `resolve_message_references()` now collects all references into a set before resolving, eliminating duplicate API calls when the same username appears in both the message text and a `t.me/` entity URL.
 - `MediaHandler`: `download_message_picture()` and `download_message_video()` now catch `FileMigrateError`, `FileReferenceExpiredError`, `FileReferenceInvalidError`, and `Message.DoesNotExist`; these transient Telegram errors are logged as warnings instead of interrupting the crawl.
 - Operations panel command output now always shows a subtle vertical scrollbar.
+- `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
 
 ## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*

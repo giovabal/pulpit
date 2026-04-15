@@ -129,11 +129,10 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / config("DB_NAME", default="db.sqlite3", cast=str),
             "OPTIONS": {
-                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
-                # DEFERRED (default): write lock acquired only at first write, not at BEGIN.
-                # With WAL mode this gives the crawler and web server far less contention;
-                # Django's get_or_create handles the resulting IntegrityError race internally.
-                "timeout": 30,  # seconds SQLite busy-retries before raising OperationalError: database is locked
+                # Busy-wait up to 30 s before raising OperationalError: database is locked.
+                # WAL journal mode is activated via the connection_created signal in webapp/apps.py
+                # so concurrent reads (runserver) don't block crawler writes.
+                "timeout": 30,
             },
         }
     }
