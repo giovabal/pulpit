@@ -1,3 +1,4 @@
+import concurrent.futures
 import glob
 import logging
 import os
@@ -12,6 +13,8 @@ from webapp.models import Channel, Message, MessagePicture, MessageVideo, Profil
 from telethon import errors
 
 logger = logging.getLogger(__name__)
+
+DOWNLOAD_TIMEOUT_SECONDS = 120
 
 
 class MediaHandler:
@@ -28,9 +31,16 @@ class MediaHandler:
         self.download_video = download_video
 
     def _download_media(self, telegram_object: Any) -> str | None:
-        if self.download_temp_dir:
-            return self.api_client.client.download_media(telegram_object, file=self.download_temp_dir)
-        return self.api_client.client.download_media(telegram_object)
+        kwargs = {"file": self.download_temp_dir} if self.download_temp_dir else {}
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(self.api_client.client.download_media, telegram_object, **kwargs)
+        try:
+            return future.result(timeout=DOWNLOAD_TIMEOUT_SECONDS)
+        except concurrent.futures.TimeoutError:
+            logger.warning("Media download timed out after %ss; skipping file", DOWNLOAD_TIMEOUT_SECONDS)
+            return None
+        finally:
+            executor.shutdown(wait=False)
 
     def _cleanup_downloaded_file(self, filename: str | None) -> None:
         if filename and os.path.exists(filename):

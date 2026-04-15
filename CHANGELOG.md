@@ -29,6 +29,7 @@
 - `get_channels`: if crawling a channel raises `FloodWaitError`, `_resolve_pending_forwards()` is now guaranteed to run via `try/finally`, preventing deferred forwarded-channel lookups from being silently lost on interruption.
 - `ReferenceResolver`: `resolve_message_references()` now collects all references into a set before resolving, eliminating duplicate API calls when the same username appears in both the message text and a `t.me/` entity URL.
 - `MediaHandler`: `download_message_picture()` and `download_message_video()` now catch `FileMigrateError`, `FileReferenceExpiredError`, `FileReferenceInvalidError`, and `Message.DoesNotExist`; these transient Telegram errors are logged as warnings instead of interrupting the crawl.
+- `MediaHandler._download_media`: file downloads now run in a `ThreadPoolExecutor` with a 120-second timeout. Previously, a stalled Telegram CDN transfer would cause Telethon's asyncio event loop to spin at 100% CPU and hang the entire crawl indefinitely.
 - Operations panel command output now always shows a subtle vertical scrollbar.
 - `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
 
