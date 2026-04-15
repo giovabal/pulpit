@@ -16,7 +16,7 @@ from webapp.models import Channel, Message, MessagePicture, MessageVideo
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
-from telethon.tl.types import MessageService
+from telethon.tl.types import InputChannel, MessageService
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,9 @@ class ChannelCrawler:
         location = channel_full_info.full_chat.location
         if location:
             channel.telegram_location = getattr(location, "address", "") or str(location)
-        channel.save(update_fields=["participants_count", "about", "telegram_location"])
+        channel.is_lost = False
+        channel.is_private = False
+        channel.save(update_fields=["participants_count", "about", "telegram_location", "is_lost", "is_private"])
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
@@ -76,13 +78,23 @@ class ChannelCrawler:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
             return 0
         except ValueError:
-            # Numeric user-entity IDs fail when Telethon hasn't cached the access_hash.
-            # Fall back to username resolution (ResolveUsername), which needs no access_hash.
+            # Numeric channel IDs fail when Telethon hasn't cached the access_hash.
+            # Prefer a direct GetChannels lookup using the stored access_hash (no ResolveUsernameRequest).
+            # Fall back to username resolution only when access_hash is absent or stale.
             channel, telegram_channel = None, None
             is_private = False
             if isinstance(seed, int):
-                db_ch = Channel.objects.filter(telegram_id=seed).only("username").first()
-                if db_ch and db_ch.username:
+                db_ch = Channel.objects.filter(telegram_id=seed).only("username", "access_hash").first()
+                if db_ch and db_ch.access_hash:
+                    try:
+                        channel, telegram_channel = self.get_basic_channel(
+                            InputChannel(channel_id=seed, access_hash=db_ch.access_hash)
+                        )
+                    except errors.rpcerrorlist.ChannelPrivateError:
+                        is_private = True
+                    except (ValueError, errors.rpcerrorlist.ChannelInvalidError):
+                        pass
+                if channel is None and not is_private and db_ch and db_ch.username:
                     try:
                         channel, telegram_channel = self.get_basic_channel(db_ch.username)
                     except errors.rpcerrorlist.ChannelPrivateError:
@@ -313,6 +325,7 @@ class ChannelCrawler:
             if status_callback:
                 status_callback(message)
 
+        Channel.objects.filter(pk=channel.pk).update(is_lost=False, is_private=False)
         now = timezone.now()
         # Convert date to a timezone-aware datetime for comparison with message dates.
         cutoff: datetime.datetime | None = (
@@ -367,8 +380,6 @@ class ChannelCrawler:
 
     def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:
         """Fetch Telegram-recommended channels for *channel*. Returns (total_found, new_to_db)."""
-        from telethon.tl.types import InputChannel
-
         if not channel.access_hash:
             return 0, 0
         self.api_client.wait()

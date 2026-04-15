@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.12] - To be announced
-*A smoother Telegram interaction*
+*A smoother Telegram interaction. Fixes.*
 
 ### New features
 - Channel list: date range filter to show only channels active in a given period.
@@ -12,6 +12,8 @@
 
 ### Improvements
 - Network Statistics table: when the graph includes more than one channel type (broadcast channels, groups, user accounts), per-type node counts are now shown as separate rows directly below the total node count.
+- `ChannelCrawler`: when Telethon's session has lost the `access_hash` for a channel, the fallback now first tries a direct `GetChannels` lookup using the `access_hash` stored in the DB before falling back to username resolution. This avoids `ResolveUsernameRequest` flood waits for channels that have no stored username, and reduces unnecessary username lookups for those that do.
+- `set_more_channel_details` and `refresh_message_stats` now clear `is_lost` and `is_private` on the channel when they succeed, since a reachable channel is by definition neither lost nor private.
 - `Channel` model: new `is_private` boolean field distinguishes channels that returned a `ChannelPrivateError` (marked `is_private=True`) from channels that could not be found at all (marked `is_lost=True`). Both are excluded from all downstream queries — `Channel.objects.interesting()`, the graph builder, `get_channels` crawl targets — so private channels are never re-crawled or included in the network.
 - `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
 - `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
