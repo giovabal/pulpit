@@ -406,8 +406,11 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        interesting_qs = Channel.objects.filter(organization__is_interesting=True).filter(
-            channel_type_filter(channel_types)
+        interesting_qs = (
+            Channel.objects.filter(organization__is_interesting=True)
+            .filter(channel_type_filter(channel_types))
+            .exclude(is_lost=True)
+            .exclude(is_private=True)
         )
         messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"

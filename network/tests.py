@@ -552,6 +552,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
         "fans": 0,
         "in_deg": 0,
         "is_lost": False,
+        "is_private": False,
         "messages_count": 0,
         "out_deg": 0,
     }
@@ -566,6 +567,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
         "fans": 0,
         "in_deg": 0,
         "is_lost": False,
+        "is_private": False,
         "messages_count": 0,
         "out_deg": 0,
     }
@@ -603,6 +605,7 @@ class BuildGraphDataTests(TestCase):
             "fans",
             "in_deg",
             "is_lost",
+            "is_private",
             "messages_count",
             "out_deg",
         }
@@ -1204,7 +1207,10 @@ class ExportNetworkCommandTests(TestCase):
     ) -> None:
         fake_graph = nx.DiGraph()
         fake_graph.add_node("1")
-        mock_build.return_value = (fake_graph, {"1": {}}, [["1", "2", 1.0]], MagicMock())
+        fake_qs = MagicMock()
+        fake_qs.filter.return_value = fake_qs
+        fake_qs.count.return_value = 0
+        mock_build.return_value = (fake_graph, {"1": {}}, [["1", "2", 1.0]], fake_qs)
         mock_detect.return_value = ({"1": 1}, {1: (255, 0, 0)})
         mock_layout.return_value = {"1": (0.0, 0.0)}
         mock_graph_data.return_value = {"nodes": [], "edges": []}

@@ -37,6 +37,7 @@ def channel_network_data(
         "fans": channel.participants_count,
         "in_deg": channel.in_degree,
         "is_lost": channel.is_lost,
+        "is_private": channel.is_private,
         "messages_count": 0 if "messages_count" in skip else channel.message_set.count(),
         "out_deg": channel.out_degree,
     }
@@ -75,6 +76,8 @@ def build_graph(
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = (
         Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
+        .exclude(is_lost=True)
+        .exclude(is_private=True)
         .select_related("organization")
         .prefetch_related(
             Prefetch(

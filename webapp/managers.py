@@ -8,8 +8,11 @@ from webapp.utils.channel_types import channel_type_filter
 
 class ChannelQuerySet(models.QuerySet["Channel"]):
     def interesting(self) -> ChannelQuerySet:
-        return self.filter(organization__is_interesting=True).filter(
-            channel_type_filter(settings.DEFAULT_CHANNEL_TYPES)
+        return (
+            self.filter(organization__is_interesting=True)
+            .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
+            .exclude(is_lost=True)
+            .exclude(is_private=True)
         )
 
 

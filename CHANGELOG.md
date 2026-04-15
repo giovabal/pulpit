@@ -11,6 +11,8 @@
 - New `IGNORE_FLOODWAIT` setting (default: `True`). When set to `False`, any `FloodWaitError` above the auto-sleep threshold causes the crawler to pause for `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` (default: `900`) before continuing instead of immediately skipping to the next item.
 
 ### Improvements
+- Network Statistics table: when the graph includes more than one channel type (broadcast channels, groups, user accounts), per-type node counts are now shown as separate rows directly below the total node count.
+- `Channel` model: new `is_private` boolean field distinguishes channels that returned a `ChannelPrivateError` (marked `is_private=True`) from channels that could not be found at all (marked `is_lost=True`). Both are excluded from all downstream queries — `Channel.objects.interesting()`, the graph builder, `get_channels` crawl targets — so private channels are never re-crawled or included in the network.
 - `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
 - `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
 - `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.

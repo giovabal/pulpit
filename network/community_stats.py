@@ -169,6 +169,15 @@ def _freeman_centralization(values: list[float]) -> float | None:
     return sum(c_max - v for v in clean) / ((n - 1) * c_max)
 
 
+def _count_channel_types(channel_qs: QuerySet) -> dict[str, int]:
+    """Count channels per entity type (CHANNEL, GROUP, USER)."""
+    return {
+        "CHANNEL": channel_qs.filter(is_user_account=False, megagroup=False, gigagroup=False).count(),
+        "GROUP": channel_qs.filter(Q(megagroup=True) | Q(gigagroup=True), is_user_account=False).count(),
+        "USER": channel_qs.filter(is_user_account=True).count(),
+    }
+
+
 def _network_content_metrics(
     channel_qs: QuerySet,
     start_date: datetime.date | None = None,
@@ -225,6 +234,10 @@ def compute_community_metrics(
     network_summary["mean_burt_constraint"] = sum(constraint_vals) / len(constraint_vals) if constraint_vals else None
     if channel_qs is not None:
         network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
+        type_counts = _count_channel_types(channel_qs)
+        types_present = {k: v for k, v in type_counts.items() if v > 0}
+        if len(types_present) > 1:
+            network_summary["channel_type_counts"] = types_present
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     if status_callback:
@@ -279,11 +292,22 @@ def compute_community_metrics(
     return result
 
 
+_CHANNEL_TYPE_LABELS: dict[str, str] = {
+    "CHANNEL": "Broadcast channels",
+    "GROUP": "Groups",
+    "USER": "User accounts",
+}
+
+
 def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
     """Return (label, value, group) rows for all whole-network metrics."""
     path_marker = " †" if not summary["path_on_full"] else ""
     rows: list[tuple[str, Any, str]] = [
         ("Nodes", summary["n"], "Size"),
+    ]
+    for type_name, count in summary.get("channel_type_counts", {}).items():
+        rows.append((_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size"))
+    rows += [
         ("Edges", summary["e"], "Size"),
         ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),
         ("Density (0–1)", summary["density"], "Size"),

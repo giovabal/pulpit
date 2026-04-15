@@ -1052,14 +1052,13 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
         self.assertIs(tc, mock_tc)
         self.assertTrue(Channel.objects.filter(telegram_id=5).exists())
 
-    def test_returns_none_none_on_channel_private_error(self) -> None:
+    def test_propagates_channel_private_error(self) -> None:
         from telethon.errors.rpcerrorlist import ChannelPrivateError
 
         err = ChannelPrivateError.__new__(ChannelPrivateError)
         self.api_client.client.get_entity.side_effect = err
-        channel, tc = self.crawler.get_basic_channel(99)
-        self.assertIsNone(channel)
-        self.assertIsNone(tc)
+        with self.assertRaises(ChannelPrivateError):
+            self.crawler.get_basic_channel(99)
 
     def test_calls_api_client_wait_before_request(self) -> None:
         mock_tc = _make_telegram_channel(telegram_id=6, username="waitchan")

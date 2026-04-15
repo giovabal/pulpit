@@ -47,6 +47,7 @@ def build_graph_data(
             "fans",
             "in_deg",
             "is_lost",
+            "is_private",
             "messages_count",
             "out_deg",
         ):

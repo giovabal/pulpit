@@ -45,6 +45,7 @@ class Channel(TelegramBaseModel):
     participants_count = models.PositiveBigIntegerField(null=True)
     is_active = models.BooleanField(default=False)
     is_lost = models.BooleanField(default=False)
+    is_private = models.BooleanField(default=False)
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)
@@ -207,6 +208,7 @@ class Message(TelegramBaseModel):
     )
     forwarded_from_private = models.PositiveBigIntegerField(null=True)
     pending_forward_telegram_id = models.PositiveBigIntegerField(null=True)
+
     references = models.ManyToManyField(Channel, related_name="reference_message_set")
     missing_references = models.TextField(blank=True)
     grouped_id = models.BigIntegerField(null=True)
