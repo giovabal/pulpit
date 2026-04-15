@@ -1,5 +1,6 @@
-import concurrent.futures
+import asyncio
 import glob
+import inspect
 import logging
 import os
 import shutil
@@ -32,15 +33,20 @@ class MediaHandler:
 
     def _download_media(self, telegram_object: Any) -> str | None:
         kwargs = {"file": self.download_temp_dir} if self.download_temp_dir else {}
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(self.api_client.client.download_media, telegram_object, **kwargs)
-        try:
-            return future.result(timeout=DOWNLOAD_TIMEOUT_SECONDS)
-        except concurrent.futures.TimeoutError:
-            logger.warning("Media download timed out after %ss; skipping file", DOWNLOAD_TIMEOUT_SECONDS)
-            return None
-        finally:
-            executor.shutdown(wait=False)
+        client = self.api_client.client
+        # Unwrap the sync shim added by telethon.sync to get the raw async coroutine function.
+        async_download = inspect.unwrap(type(client).download_media)
+
+        async def _run() -> str | None:
+            try:
+                return await asyncio.wait_for(
+                    async_download(client, telegram_object, **kwargs), DOWNLOAD_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Media download timed out after %ss; skipping file", DOWNLOAD_TIMEOUT_SECONDS)
+                return None
+
+        return client.loop.run_until_complete(_run())
 
     def _cleanup_downloaded_file(self, filename: str | None) -> None:
         if filename and os.path.exists(filename):
