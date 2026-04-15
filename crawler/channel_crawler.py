@@ -210,7 +210,6 @@ class ChannelCrawler:
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
-        pending_forward_telegram_id: int | None = None
         if (
             telegram_message.fwd_from
             and telegram_message.fwd_from.from_id
@@ -219,13 +218,17 @@ class ChannelCrawler:
             channel_id = telegram_message.fwd_from.from_id.channel_id
             existing = Channel.objects.filter(telegram_id=channel_id).first()
             if existing:
+                # Persist immediately so a crash before message.save() doesn't lose the edge.
+                # Also clear any stale pending_forward_telegram_id from a previous partial run.
+                Message.objects.filter(pk=message.pk).update(forwarded_from=existing, pending_forward_telegram_id=None)
                 message.forwarded_from = existing
+                message.pending_forward_telegram_id = None
             else:
                 # Defer the get_entity() call to _resolve_pending_forwards() so that
                 # a channel with many novel forwards doesn't burst the API mid-iteration.
-                # The telegram_id is persisted to DB so it survives a crash.
-                pending_forward_telegram_id = channel_id
-        message.pending_forward_telegram_id = pending_forward_telegram_id
+                # Persisted to DB immediately so a crash doesn't lose the pending lookup.
+                Message.objects.filter(pk=message.pk).update(pending_forward_telegram_id=channel_id)
+                message.pending_forward_telegram_id = channel_id
 
         missing_references = self.reference_resolver.resolve_message_references(message, telegram_message)
         if missing_references:
