@@ -389,6 +389,9 @@ def write_community_metrics_json(
             strategy_entry["rows"] = rows_out
             mod = entry.get("modularity")
             strategy_entry["modularity"] = round(mod, 6) if mod is not None else None
+            cross_tab = entry.get("org_cross_tab")
+            if cross_tab is not None:
+                strategy_entry["org_cross_tab"] = cross_tab
 
     with open(communities_path, "w") as f:
         f.write(json.dumps(communities_file))

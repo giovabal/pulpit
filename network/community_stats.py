@@ -202,6 +202,62 @@ def _network_content_metrics(
     }
 
 
+def _compute_org_cross_tab(
+    nodes: list[dict],
+    strategy_rows: list[dict],
+    strategy_key: str,
+    pk_to_org: "dict[str, str]",
+) -> "dict | None":
+    """Cross-tabulation of organisations vs. community groups.
+
+    Returns None when fewer than two organisations are present in the graph.
+    The returned dict has:
+      ``orgs``           — sorted list of organisation names (row labels)
+      ``communities``    — community labels in strategy_rows order (column labels)
+      ``comm_colors``    — hex colour per community column
+      ``pct_by_org``     — matrix[org_idx][comm_idx]: % of that org's nodes in the community
+      ``pct_by_community``— matrix[org_idx][comm_idx]: % of that community's nodes from the org
+    """
+    community_labels = [row["label"] for row in strategy_rows]
+    if not community_labels:
+        return None
+    counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    org_names_seen: set[str] = set()
+    for node in nodes:
+        org_name = pk_to_org.get(node["id"])
+        if org_name is None:
+            continue
+        comm_label = (node.get("communities") or {}).get(strategy_key)
+        if comm_label is None:
+            continue
+        counts[org_name][comm_label] += 1
+        org_names_seen.add(org_name)
+    if len(org_names_seen) < 2:
+        return None
+    orgs = sorted(org_names_seen)
+    org_totals = {org: sum(counts[org][c] for c in community_labels) for org in orgs}
+    comm_totals = {c: sum(counts[org][c] for org in orgs) for c in community_labels}
+    comm_colors = {row["label"]: row["hex_color"] for row in strategy_rows}
+    pct_by_org: list[list[float | None]] = []
+    pct_by_community: list[list[float | None]] = []
+    for org in orgs:
+        row_by_org: list[float | None] = []
+        row_by_comm: list[float | None] = []
+        for comm in community_labels:
+            cnt = counts[org][comm]
+            row_by_org.append(round(cnt / org_totals[org] * 100, 1) if org_totals[org] else None)
+            row_by_comm.append(round(cnt / comm_totals[comm] * 100, 1) if comm_totals[comm] else None)
+        pct_by_org.append(row_by_org)
+        pct_by_community.append(row_by_comm)
+    return {
+        "orgs": orgs,
+        "communities": community_labels,
+        "comm_colors": [comm_colors.get(c, "#cccccc") for c in community_labels],
+        "pct_by_org": pct_by_org,
+        "pct_by_community": pct_by_community,
+    }
+
+
 def compute_community_metrics(
     graph_data: GraphData,
     communities_data: dict[str, Any],
@@ -232,12 +288,16 @@ def compute_community_metrics(
         node["burt_constraint"] for node in graph_data["nodes"] if node.get("burt_constraint") is not None
     ]
     network_summary["mean_burt_constraint"] = sum(constraint_vals) / len(constraint_vals) if constraint_vals else None
+    pk_to_org: dict[str, str] = {}
     if channel_qs is not None:
         network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
         type_counts = _count_channel_types(channel_qs)
         types_present = {k: v for k, v in type_counts.items() if v > 0}
         if len(types_present) > 1:
             network_summary["channel_type_counts"] = types_present
+        pk_to_org = {
+            str(pk): name for pk, name in channel_qs.values_list("pk", "organization__name") if name is not None
+        }
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     if status_callback:
@@ -286,7 +346,12 @@ def compute_community_metrics(
                 modularity = nx.community.modularity(graph, label_to_nodes.values())
             except Exception as exc:
                 logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
-        result["strategies"][strategy_key] = {"modularity": modularity, "rows": rows}
+        strategy_entry: dict[str, Any] = {"modularity": modularity, "rows": rows}
+        if pk_to_org:
+            cross_tab = _compute_org_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
+            if cross_tab is not None:
+                strategy_entry["org_cross_tab"] = cross_tab
+        result["strategies"][strategy_key] = strategy_entry
         if status_callback:
             status_callback(strategy_key)
     return result

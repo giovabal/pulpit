@@ -175,6 +175,81 @@ Promise.all([
         });
 
         container.appendChild(details);
+
+        // Organisation × community cross-tab
+        var orgCross = stratData.org_cross_tab;
+        if (orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
+            var crossDetails = document.createElement("details");
+            crossDetails.className = "community-channels mt-2 mb-4";
+            var crossSummary = document.createElement("summary");
+            crossSummary.className = "text-muted small";
+            crossSummary.textContent = "Organisation \u00d7 community distribution";
+            crossDetails.appendChild(crossSummary);
+
+            var crossWrapper = document.createElement("div");
+            crossWrapper.style.cssText = "display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:.75rem;";
+
+            var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
+                var outerDiv = document.createElement("div");
+                outerDiv.style.cssText = "flex:1 1 0;min-width:260px;overflow-x:auto;";
+                var titleP = document.createElement("p");
+                titleP.className = "small fw-semibold mb-1";
+                titleP.title = tableTooltip;
+                titleP.textContent = tableTitle;
+                outerDiv.appendChild(titleP);
+                var tbl = document.createElement("table");
+                tbl.className = "table table-sm table-hover";
+                tbl.style.cssText = "font-size:.8rem;white-space:nowrap;";
+                var thead = document.createElement("thead");
+                var htr = document.createElement("tr");
+                var th0 = document.createElement("th"); th0.textContent = "Organisation"; htr.appendChild(th0);
+                orgCross.communities.forEach(function(commLabel, ci) {
+                    var th = document.createElement("th"); th.className = "number";
+                    var sw = document.createElement("span");
+                    sw.className = "color-swatch color-swatch--sm";
+                    sw.style.background = orgCross.comm_colors[ci];
+                    sw.setAttribute("aria-hidden", "true");
+                    th.appendChild(sw);
+                    th.appendChild(document.createTextNode(commLabel));
+                    htr.appendChild(th);
+                });
+                thead.appendChild(htr); tbl.appendChild(thead);
+                var tbody = document.createElement("tbody");
+                var frag = document.createDocumentFragment();
+                orgCross.orgs.forEach(function(org, oi) {
+                    var tr = document.createElement("tr");
+                    var tdOrg = document.createElement("td"); tdOrg.textContent = org; tr.appendChild(tdOrg);
+                    matrix[oi].forEach(function(val) {
+                        var td = document.createElement("td"); td.className = "number";
+                        if (val !== null && val !== undefined) {
+                            td.setAttribute("style", heatmapBg(val, 0, 100));
+                            td.textContent = val.toFixed(1) + "%";
+                        } else {
+                            td.textContent = "\u2014";
+                        }
+                        tr.appendChild(td);
+                    });
+                    frag.appendChild(tr);
+                });
+                tbody.appendChild(frag); tbl.appendChild(tbody);
+                outerDiv.appendChild(tbl);
+                return outerDiv;
+            };
+
+            crossWrapper.appendChild(buildCrossTable(
+                orgCross.pct_by_org,
+                "% of organisation nodes per community",
+                "For each organisation: share of its nodes assigned to each community. Rows sum to 100%."
+            ));
+            crossWrapper.appendChild(buildCrossTable(
+                orgCross.pct_by_community,
+                "% of community nodes per organisation",
+                "For each community: share of its nodes coming from each organisation. Columns sum to 100%."
+            ));
+
+            crossDetails.appendChild(crossWrapper);
+            container.appendChild(crossDetails);
+        }
     });
 
     initSortableTables();
