@@ -6,7 +6,7 @@
 ### New features
 - Channel list: date range filter to show only channels active in a given period.
 - `get_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
-- `get_channels`: new `--toid` flag to set a lower-bound channel DB id, complementing the existing `--fromid`.
+- `get_channels`: new `--ids` flag replaces the old `--fromid`/`--toid` pair. Accepts comma-separated IDs and ranges (e.g. `-30, 50-80, 99, 120-`): exact IDs, inclusive ranges, open-ended lower/upper bounds. Tokens are OR-ed; the Operations panel Scope field has been updated to a single text input matching this syntax.
 - New `TELEGRAM_SESSION_NAME` setting (default: `anon`) replaces the previously hard-coded Telethon session file name; set it to match an existing `.session` file when running multiple instances.
 - New `IGNORE_FLOODWAIT` setting (default: `True`). When set to `False`, any `FloodWaitError` above the auto-sleep threshold causes the crawler to pause for `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` (default: `900`) before continuing instead of immediately skipping to the next item.
 

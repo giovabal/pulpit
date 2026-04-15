@@ -19,6 +19,7 @@ from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import Channel, Message, MessagePicture, MessageVideo
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
+from webapp.utils.id_ranges import parse_id_ranges
 
 from telethon import errors
 from telethon.sync import TelegramClient
@@ -135,18 +136,13 @@ class Command(BaseCommand):
             help="Check channel message ids for holes and fetch missing messages",
         )
         parser.add_argument(
-            "--fromid",
-            type=int,
+            "--ids",
             default=None,
-            metavar="ID",
-            help="Only crawl channels whose database id is less than or equal to this value.",
-        )
-        parser.add_argument(
-            "--toid",
-            type=int,
-            default=None,
-            metavar="ID",
-            help="Only crawl channels whose database id is greater than or equal to this value.",
+            metavar="RANGES",
+            help=(
+                "Restrict crawling to specific channel DB IDs. Accepts comma-separated values and ranges, "
+                "e.g. '5, 10-20, 50-' (from 50 upward), '-30' (up to 30). Tokens are OR-ed."
+            ),
         )
         parser.add_argument(
             "--fetch-recommended-channels",
@@ -393,8 +389,7 @@ class Command(BaseCommand):
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
         do_refresh = refresh_limit is not _REFRESH_SKIP
-        fromid: int | None = options["fromid"]
-        toid: int | None = options["toid"]
+        ids_str: str | None = options["ids"]
         channel_types_raw = options["channel_types"]
         channel_types = (
             [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
@@ -438,10 +433,11 @@ class Command(BaseCommand):
                 crawler = ChannelCrawler(api_client, media_handler, reference_resolver, messages_limit=messages_limit)
 
                 channels = interesting_qs.order_by("-id")
-                if fromid is not None:
-                    channels = channels.filter(id__lte=fromid)
-                if toid is not None:
-                    channels = channels.filter(id__gte=toid)
+                if ids_str:
+                    try:
+                        channels = channels.filter(parse_id_ranges(ids_str))
+                    except ValueError as exc:
+                        raise CommandError(f"Invalid --ids value: {exc}") from exc
                 total_channels = channels.count()
                 printer = ProgressPrinter(self.stdout, total_channels)
                 warning_handler = _WarningLogHandler(printer, self.style)

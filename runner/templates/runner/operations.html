@@ -133,18 +133,11 @@
               <legend>Scope</legend>
               <div class="ops-params">
                 <div class="ops-param">
-                  <label for="fromid">From DB id ≤
+                  <label for="ids">DB id filter
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Process only channels whose internal database ID is at most this value."></i>
+                       title="Comma-separated IDs and ranges, e.g. &quot;-30, 50-80, 99, 120-&quot;. -N = up to N; N- = from N upward; N-M = inclusive range. Tokens are OR-ed. Leave blank for all channels."></i>
                   </label>
-                  <input type="number" name="fromid" id="fromid" placeholder="–" min="1">
-                </div>
-                <div class="ops-param">
-                  <label for="toid">To DB id ≥
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Process only channels whose internal database ID is at least this value."></i>
-                  </label>
-                  <input type="number" name="toid" id="toid" placeholder="–" min="1">
+                  <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
                 </div>
               </div>
             </fieldset>

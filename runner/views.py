@@ -95,12 +95,9 @@ def _build_args(task: str, post: Any) -> list[str]:
             val = post.get("refresh_value", "").strip()
             if val:
                 args.append(val)
-        fromid = post.get("fromid", "").strip()
-        if fromid:
-            args += ["--fromid", fromid]
-        toid = post.get("toid", "").strip()
-        if toid:
-            args += ["--toid", toid]
+        ids = post.get("ids", "").strip()
+        if ids:
+            args += ["--ids", ids]
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]
