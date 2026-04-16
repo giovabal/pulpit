@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.12] - To be announced
+## [0.12] - 2026-04-16
 *A smoother Telegram interaction. Organisation/community overlapping. Fixes.*
 
 ### New features
