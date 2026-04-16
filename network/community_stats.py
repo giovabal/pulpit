@@ -218,7 +218,8 @@ def _compute_org_cross_tab(
       ``pct_by_org``     — matrix[org_idx][comm_idx]: % of that org's nodes in the community
       ``pct_by_community``— matrix[org_idx][comm_idx]: % of that community's nodes from the org
     """
-    community_labels = [row["label"] for row in strategy_rows]
+    # Each row has a "group" tuple of (id, count, label, hex_color).
+    community_labels = [row["group"][2] for row in strategy_rows]
     if not community_labels:
         return None
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -237,7 +238,7 @@ def _compute_org_cross_tab(
     orgs = sorted(org_names_seen)
     org_totals = {org: sum(counts[org][c] for c in community_labels) for org in orgs}
     comm_totals = {c: sum(counts[org][c] for org in orgs) for c in community_labels}
-    comm_colors = {row["label"]: row["hex_color"] for row in strategy_rows}
+    comm_colors = {row["group"][2]: row["group"][3] for row in strategy_rows}
     pct_by_org: list[list[float | None]] = []
     pct_by_community: list[list[float | None]] = []
     for org in orgs:
