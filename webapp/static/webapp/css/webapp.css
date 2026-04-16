@@ -775,10 +775,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: .35rem;
-  font-size: .78rem;
-  padding: .28rem .65rem;
+  font: inherit;
+  font-size: .8rem;
+  height: 2.1rem;
+  padding: 0 .6rem;
   border: 1px solid var(--border);
-  border-radius: .375rem;
+  border-radius: .5rem;
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
