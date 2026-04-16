@@ -221,9 +221,9 @@
                    title="Which Telegram entity types to include in the graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" checked>Channel</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1">Group</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1">User</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
