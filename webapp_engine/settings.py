@@ -4,13 +4,13 @@ from pathlib import Path
 from decouple import Csv, config
 
 # Telethon calls the deprecated asyncio.get_event_loop() during initialisation
-# when no loop is running yet (Python 3.12+). The crawl works correctly; suppress
-# the noise so it never surfaces in management command output or the ops panel.
+# when no loop is running yet (Python 3.12+). The warning is attributed to
+# whichever frame asyncio's stacklevel resolves to, so we match on message +
+# category only — the text is specific enough to avoid false positives.
 warnings.filterwarnings(
     "ignore",
     message="There is no current event loop",
     category=DeprecationWarning,
-    module=r"telethon\.",
 )
 
 
