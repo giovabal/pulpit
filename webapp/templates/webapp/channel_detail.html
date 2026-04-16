@@ -20,6 +20,8 @@
           {% if selected_channel.scam %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Scam</span>{% endif %}
           {% if selected_channel.fake %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Fake</span>{% endif %}
           {% if selected_channel.restricted %}<span class="ch-badge ch-badge--warn"><i class="bi bi-slash-circle" aria-hidden="true"></i> Restricted</span>{% endif %}
+          {% if selected_channel.is_lost %}<span class="ch-badge ch-badge--danger"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}
+          {% if selected_channel.is_private %}<span class="ch-badge ch-badge--warn"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span>{% endif %}
           {% if not is_interesting %}<span class="ch-badge ch-badge--muted">Not monitored</span>{% endif %}
         </div>
         <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link flex-shrink-0" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">

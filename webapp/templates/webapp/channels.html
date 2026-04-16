@@ -32,6 +32,12 @@
         <label for="date-to" class="channel-date-label">To</label>
         <input type="date" id="date-to" class="channel-date-input">
       </div>
+      {% if lost_list or private_list %}
+      <div class="channel-status-flags">
+        {% if lost_list %}<label class="channel-status-flag"><input type="checkbox" id="show-lost"> <i class="bi bi-question-circle-fill" aria-hidden="true"></i> Show lost ({{ lost_list|length }})</label>{% endif %}
+        {% if private_list %}<label class="channel-status-flag"><input type="checkbox" id="show-private"> <i class="bi bi-lock-fill" aria-hidden="true"></i> Show private ({{ private_list|length }})</label>{% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -86,6 +92,60 @@
   </ul>
   {% endif %}
 
+  {% if lost_list %}
+  <div class="channels-section-sep" id="lost-sep" style="display:none">
+    <span>Lost channels <span class="channels-section-sep-count" id="lost-count"></span></span>
+  </div>
+  <ul class="channels-list list-unstyled" id="lost-list" style="display:none">
+    {% for channel in lost_list %}
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+      <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
+        <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
+        <span class="channel-row-body">
+          <span class="channel-row-title">{{ channel.title }} <span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span></span>
+          <span class="channel-row-meta">
+            <span>{{ channel.organization }}</span>
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
+            {% if channel.participants_count %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
+            {% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if private_list %}
+  <div class="channels-section-sep" id="private-sep" style="display:none">
+    <span>Private channels <span class="channels-section-sep-count" id="private-count"></span></span>
+  </div>
+  <ul class="channels-list list-unstyled" id="private-list" style="display:none">
+    {% for channel in private_list %}
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+      <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
+        <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
+        <span class="channel-row-body">
+          <span class="channel-row-title">{{ channel.title }} <span class="ch-badge ch-badge--warn ms-1"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span></span>
+          <span class="channel-row-meta">
+            <span>{{ channel.organization }}</span>
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
+            {% if channel.participants_count %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
+            {% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
 </div>
 
 <script>
@@ -94,12 +154,24 @@
     var orgSelect = document.getElementById("org-filter");
     var dateFrom = document.getElementById("date-from");
     var dateTo = document.getElementById("date-to");
+    var showLost = document.getElementById("show-lost");
+    var showPrivate = document.getElementById("show-private");
+
     var mainRows = Array.from(document.querySelectorAll("#channels-list .channel-row"));
     var excludedSep = document.getElementById("excluded-sep");
     var excludedList = document.getElementById("excluded-list");
     var excludedRows = excludedList ? Array.from(excludedList.querySelectorAll(".channel-row")) : [];
+    var lostSep = document.getElementById("lost-sep");
+    var lostList = document.getElementById("lost-list");
+    var lostRows = lostList ? Array.from(lostList.querySelectorAll(".channel-row")) : [];
+    var privateSep = document.getElementById("private-sep");
+    var privateList = document.getElementById("private-list");
+    var privateRows = privateList ? Array.from(privateList.querySelectorAll(".channel-row")) : [];
+
     var countEl = document.getElementById("channels-count");
     var excludedCountEl = document.getElementById("excluded-count");
+    var lostCountEl = document.getElementById("lost-count");
+    var privateCountEl = document.getElementById("private-count");
 
     function visible(rows) {
       return rows.filter(function (r) { return r.style.display !== "none"; }).length;
@@ -108,30 +180,59 @@
     function updateCounts() {
       countEl.textContent = visible(mainRows).toLocaleString();
       if (excludedCountEl) excludedCountEl.textContent = visible(excludedRows).toLocaleString();
+      if (lostCountEl) lostCountEl.textContent = visible(lostRows).toLocaleString();
+      if (privateCountEl) privateCountEl.textContent = visible(privateRows).toLocaleString();
     }
 
-    function applyFilters() {
+    function matchesFilters(row) {
       var q = input.value.toLowerCase();
       var org = orgSelect ? orgSelect.value : "";
       var from = dateFrom.value;
       var to = dateTo.value;
-      mainRows.concat(excludedRows).forEach(function (row) {
-        var matchText = row.dataset.title.includes(q);
-        var matchOrg = !org || row.dataset.org === org;
-        var matchDate = true;
-        if (from || to) {
-          var rowMin = row.dataset.dateMin || "";
-          var rowMax = row.dataset.dateMax || "";
-          if (rowMin && rowMax) {
-            if (from && rowMax < from) matchDate = false;
-            if (to && rowMin > to) matchDate = false;
-          }
+      if (!row.dataset.title.includes(q)) return false;
+      if (org && row.dataset.org !== org) return false;
+      if (from || to) {
+        var rowMin = row.dataset.dateMin || "";
+        var rowMax = row.dataset.dateMax || "";
+        if (rowMin && rowMax) {
+          if (from && rowMax < from) return false;
+          if (to && rowMin > to) return false;
         }
-        row.style.display = (matchText && matchOrg && matchDate) ? "" : "none";
+      }
+      return true;
+    }
+
+    function applyFilters() {
+      var showingLost = showLost && showLost.checked;
+      var showingPrivate = showPrivate && showPrivate.checked;
+
+      mainRows.concat(excludedRows).forEach(function (row) {
+        row.style.display = matchesFilters(row) ? "" : "none";
       });
       if (excludedSep) {
         excludedSep.style.display = visible(excludedRows) ? "" : "none";
       }
+
+      if (lostList) {
+        lostList.style.display = showingLost ? "" : "none";
+        if (lostSep) lostSep.style.display = showingLost ? "" : "none";
+        if (showingLost) {
+          lostRows.forEach(function (row) {
+            row.style.display = matchesFilters(row) ? "" : "none";
+          });
+        }
+      }
+
+      if (privateList) {
+        privateList.style.display = showingPrivate ? "" : "none";
+        if (privateSep) privateSep.style.display = showingPrivate ? "" : "none";
+        if (showingPrivate) {
+          privateRows.forEach(function (row) {
+            row.style.display = matchesFilters(row) ? "" : "none";
+          });
+        }
+      }
+
       updateCounts();
     }
 
@@ -141,6 +242,8 @@
     if (orgSelect) orgSelect.addEventListener("change", applyFilters);
     dateFrom.addEventListener("change", applyFilters);
     dateTo.addEventListener("change", applyFilters);
+    if (showLost) showLost.addEventListener("change", applyFilters);
+    if (showPrivate) showPrivate.addEventListener("change", applyFilters);
 
     input.focus();
   })();

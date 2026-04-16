@@ -765,6 +765,38 @@ body {
   flex-shrink: 0;
 }
 
+.channel-status-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+
+.channel-status-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .78rem;
+  padding: .28rem .65rem;
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background .1s, border-color .1s, color .1s;
+}
+.channel-status-flag input[type="checkbox"] {
+  width: 13px; height: 13px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.channel-status-flag:has(input:checked) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .channel-org-select {
   border: 1px solid var(--border);
   border-radius: .5rem;

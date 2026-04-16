@@ -174,9 +174,8 @@ class ChannelListView(ListView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
-        ctx["excluded_list"] = (
+        _status_qs = (
             Channel.objects.filter(organization__is_interesting=True)
-            .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .select_related("organization")
             .annotate(
                 messages_count=Count("message_set"),
@@ -185,6 +184,21 @@ class ChannelListView(ListView):
             )
             .order_by("title")
         )
+        ctx["excluded_list"] = (
+            Channel.objects.filter(organization__is_interesting=True)
+            .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
+            .exclude(is_lost=True)
+            .exclude(is_private=True)
+            .select_related("organization")
+            .annotate(
+                messages_count=Count("message_set"),
+                first_message_date=Min("message_set__date"),
+                last_message_date=Max("message_set__date"),
+            )
+            .order_by("title")
+        )
+        ctx["lost_list"] = _status_qs.filter(is_lost=True)
+        ctx["private_list"] = _status_qs.filter(is_private=True)
         ctx["organizations"] = Organization.objects.filter(is_interesting=True).order_by("name")
         return ctx
 
