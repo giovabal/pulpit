@@ -431,7 +431,7 @@ Promise.all([
         note.className = "text-muted small mb-2";
         note.textContent = n + " \u00d7 " + n + " channels \u2014 " +
             maxCount + " partition" + (maxCount !== 1 ? "s" : "") +
-            " compared (ORGANIZATION excluded). Balloon area \u221d agreement count; upper triangle.";
+            " compared (ORGANIZATION excluded). Balloon area \u221d agreement count; lower triangle.";
         container.appendChild(note);
 
         // Legend
@@ -467,11 +467,12 @@ Promise.all([
         }
         function hideTip() { tip.style.display = "none"; }
 
-        // SVG
+        // SVG — no top padding (labels are at the bottom)
+        var bottomPad = 110;
         var scrollDiv = document.createElement("div");
         scrollDiv.style.cssText = "overflow-x:auto;";
         var svgW = labelW + n * cellSize;
-        var svgH = topPad + n * cellSize;
+        var svgH = topPad + n * cellSize + bottomPad;
         var svg = document.createElementNS(NS, "svg");
         svg.setAttribute("width", svgW); svg.setAttribute("height", svgH);
         svg.style.cssText = "display:block;";
@@ -491,19 +492,19 @@ Promise.all([
         }
         svg.appendChild(gridG);
 
-        // Lower-triangle shading (staircase polygon covering diagonal + below)
-        var triPts = [labelW + "," + topPad];
-        for (var si = 0; si < n; si++) {
-            triPts.push((labelW + (si + 1) * cellSize) + "," + (topPad + si * cellSize));
-            triPts.push((labelW + (si + 1) * cellSize) + "," + (topPad + (si + 1) * cellSize));
+        // Upper-triangle + diagonal shading (staircase polygon from top-left corner)
+        var triPts = [labelW + "," + topPad, (labelW + n * cellSize) + "," + topPad,
+                      (labelW + n * cellSize) + "," + (topPad + n * cellSize)];
+        for (var si = n - 1; si >= 0; si--) {
+            triPts.push((labelW + si * cellSize) + "," + (topPad + (si + 1) * cellSize));
+            triPts.push((labelW + si * cellSize) + "," + (topPad + si * cellSize));
         }
-        triPts.push(labelW + "," + (topPad + n * cellSize));
         var triPoly = document.createElementNS(NS, "polygon");
         triPoly.setAttribute("points", triPts.join(" "));
         triPoly.setAttribute("fill", "#f2f2f2");
         svg.appendChild(triPoly);
 
-        // Row labels
+        // Row labels (left side)
         channelList.forEach(function(lbl, i) {
             var tx = document.createElementNS(NS, "text");
             tx.setAttribute("x", labelW - 4);
@@ -516,13 +517,13 @@ Promise.all([
             svg.appendChild(tx);
         });
 
-        // Column labels (rotated −45°)
+        // Column labels (bottom, rotated −45° ascending from pivot)
         channelList.forEach(function(lbl, j) {
             var cx = labelW + j * cellSize + cellSize / 2;
-            var cy = topPad - 4;
+            var cy = topPad + n * cellSize + 4;
             var tx = document.createElementNS(NS, "text");
             tx.setAttribute("x", cx); tx.setAttribute("y", cy);
-            tx.setAttribute("text-anchor", "start");
+            tx.setAttribute("text-anchor", "end");
             tx.setAttribute("font-size", fontSize); tx.setAttribute("fill", "#333");
             tx.setAttribute("transform", "rotate(-45 " + cx + " " + cy + ")");
             var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "\u2026" : lbl;
@@ -531,11 +532,11 @@ Promise.all([
             svg.appendChild(tx);
         });
 
-        // Balloons
+        // Balloons (lower triangle only: row > col)
         var circleG = document.createElementNS(NS, "g");
         for (var ri = 0; ri < n; ri++) {
             for (var rj = 0; rj < n; rj++) {
-                if (ri >= rj) continue;
+                if (ri <= rj) continue;
                 var cnt = consensus[ri][rj];
                 if (cnt === 0) continue;
                 var ccx  = labelW + rj * cellSize + cellSize / 2;
