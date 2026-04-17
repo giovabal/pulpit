@@ -70,6 +70,7 @@ class Command(BaseCommand):
             include_network_xlsx=exists("network_table.xlsx"),
             include_community_html=exists("community_table.html"),
             include_community_xlsx=exists("community_table.xlsx"),
+            include_consensus_matrix_html=exists("consensus_matrix.html"),
             include_compare_html=True,
             compare_files=compare_files,
         )
