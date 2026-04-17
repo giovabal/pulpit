@@ -431,7 +431,7 @@ Promise.all([
         note.className = "text-muted small mb-2";
         note.textContent = n + " \u00d7 " + n + " channels \u2014 " +
             maxCount + " partition" + (maxCount !== 1 ? "s" : "") +
-            " compared (ORGANIZATION excluded). Balloon area \u221d agreement count; diagonal omitted.";
+            " compared (ORGANIZATION excluded). Balloon area \u221d agreement count; upper triangle.";
         container.appendChild(note);
 
         // Legend
@@ -491,16 +491,17 @@ Promise.all([
         }
         svg.appendChild(gridG);
 
-        // Diagonal shading
-        var diagG = document.createElementNS(NS, "g");
-        diagG.setAttribute("fill", "#f2f2f2");
-        for (var di = 0; di < n; di++) {
-            var dr = document.createElementNS(NS, "rect");
-            dr.setAttribute("x", labelW + di * cellSize); dr.setAttribute("y", topPad + di * cellSize);
-            dr.setAttribute("width", cellSize); dr.setAttribute("height", cellSize);
-            diagG.appendChild(dr);
+        // Lower-triangle shading (staircase polygon covering diagonal + below)
+        var triPts = [labelW + "," + topPad];
+        for (var si = 0; si < n; si++) {
+            triPts.push((labelW + (si + 1) * cellSize) + "," + (topPad + si * cellSize));
+            triPts.push((labelW + (si + 1) * cellSize) + "," + (topPad + (si + 1) * cellSize));
         }
-        svg.appendChild(diagG);
+        triPts.push(labelW + "," + (topPad + n * cellSize));
+        var triPoly = document.createElementNS(NS, "polygon");
+        triPoly.setAttribute("points", triPts.join(" "));
+        triPoly.setAttribute("fill", "#f2f2f2");
+        svg.appendChild(triPoly);
 
         // Row labels
         channelList.forEach(function(lbl, i) {
@@ -534,7 +535,7 @@ Promise.all([
         var circleG = document.createElementNS(NS, "g");
         for (var ri = 0; ri < n; ri++) {
             for (var rj = 0; rj < n; rj++) {
-                if (ri === rj) continue;
+                if (ri >= rj) continue;
                 var cnt = consensus[ri][rj];
                 if (cnt === 0) continue;
                 var ccx  = labelW + rj * cellSize + cellSize / 2;
