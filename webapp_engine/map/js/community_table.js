@@ -275,6 +275,14 @@ Promise.all([
             var crossPctByCommunity = reorderCols(orgCross.pct_by_community);
 
             var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
+                // Keep only columns where at least one row reaches ≥ 5%
+                var visCols = crossComm.reduce(function(acc, _, ci) {
+                    if (matrix.some(function(row) { return row[ci] !== null && row[ci] !== undefined && row[ci] >= 5; }))
+                        acc.push(ci);
+                    return acc;
+                }, []);
+                var hiddenCount = crossComm.length - visCols.length;
+
                 var outerDiv = document.createElement("div");
                 outerDiv.style.cssText = "overflow-x:auto;";
                 var titleP = document.createElement("p");
@@ -288,14 +296,14 @@ Promise.all([
                 var thead = document.createElement("thead");
                 var htr = document.createElement("tr");
                 var th0 = document.createElement("th"); th0.textContent = "Organisation"; htr.appendChild(th0);
-                crossComm.forEach(function(commLabel, ci) {
+                visCols.forEach(function(ci) {
                     var th = document.createElement("th"); th.className = "number";
                     var sw = document.createElement("span");
                     sw.className = "color-swatch color-swatch--sm";
                     sw.style.background = crossColors[ci];
                     sw.setAttribute("aria-hidden", "true");
                     th.appendChild(sw);
-                    th.appendChild(document.createTextNode(commLabel));
+                    th.appendChild(document.createTextNode(crossComm[ci]));
                     htr.appendChild(th);
                 });
                 thead.appendChild(htr); tbl.appendChild(thead);
@@ -304,7 +312,8 @@ Promise.all([
                 orgCross.orgs.forEach(function(org, oi) {
                     var tr = document.createElement("tr");
                     var tdOrg = document.createElement("td"); tdOrg.textContent = org; tr.appendChild(tdOrg);
-                    matrix[oi].forEach(function(val) {
+                    visCols.forEach(function(ci) {
+                        var val = matrix[oi][ci];
                         var td = document.createElement("td"); td.className = "number";
                         if (val !== null && val !== undefined && val >= 5) {
                             td.setAttribute("style", heatmapBg(val, 0, 100));
@@ -318,6 +327,13 @@ Promise.all([
                 });
                 tbody.appendChild(frag); tbl.appendChild(tbody);
                 outerDiv.appendChild(tbl);
+                if (hiddenCount > 0) {
+                    var hiddenNote = document.createElement("p");
+                    hiddenNote.className = "small text-muted mt-1 mb-0";
+                    hiddenNote.textContent = hiddenCount + " communit" + (hiddenCount === 1 ? "y" : "ies") +
+                        " hidden \u2014 all values < 5%.";
+                    outerDiv.appendChild(hiddenNote);
+                }
                 return outerDiv;
             };
 
