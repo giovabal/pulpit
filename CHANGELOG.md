@@ -1,10 +1,9 @@
 # Changelog
 
 ## [0.13] - To be announced
-*Four new community detection algorithms. Consensus matrix. Configurable distribution threshold.*
+*New community detection algorithms. Consensus matrix.*
 
 ### New features
-- **Four new community detection strategies:**
   - `LEIDEN_CPM_COARSE` and `LEIDEN_CPM_FINE`: Leiden optimisation with the **Constant Potts Model** (CPM) objective (Traag et al. 2011). Unlike modularity, CPM has no resolution limit — communities are defined as groups whose internal edge density exceeds a resolution parameter γ. The two variants differ only in their default γ (`--leiden-coarse-resolution`, default 0.01; `--leiden-fine-resolution`, default 0.05). Lower γ gives few, large communities; higher γ gives more, smaller ones. Both symmetrise the graph to undirected (same as `LEIDEN`).
   - `MCL`: **Markov Clustering** (van Dongen 2000). Alternates matrix expansion (random-walk diffusion) and inflation (contrast amplification) until convergence. Works natively on the directed weighted graph without symmetrisation. The inflation parameter r controls granularity (`--mcl-inflation`, default 2.0; typical range 1.5–4.0). New dependency: `markov-clustering`.
   - `INFOMAP_MEMORY`: **Second-order (memory) Infomap** (Rosvall et al., Nature Communications 2014). Builds a state network of directed-edge contexts — each state node represents "currently at channel B, having arrived from channel A" — and minimises the map equation on it. Captures sequential forwarding patterns invisible to first-order Infomap. Source nodes receive virtual entry states so they participate in the flow. No new dependency (extends the existing `infomap` package).
@@ -13,10 +12,6 @@
 - **Consensus matrix** (`consensus_matrix.html`): a new standalone page showing a lower-triangle balloon plot where each cell represents a channel pair. The balloon size grows and the colour shifts from blue to red as more non-ORGANIZATION community detection strategies agree in placing the pair in the same community. Channels are sorted by plurality community assignment then by name. A legend shows one circle per agreement level; hovering a cell shows a tooltip. Generated only when `export_network --consensus-matrix` is passed (or the matching checkbox in the Operations panel is ticked). Requires at least one non-ORGANIZATION strategy.
 - **Configurable organisation × community distribution threshold** (`--community-distribution-threshold N`, default 10): communities below this percentage in every organisation row are hidden from the cross-tab tables. The threshold is stored in `data/meta.json` and read by the JS at page load, so changing it on re-export is reflected without editing any HTML. Previously hard-coded at 5 %; the new default is 10 %. The value can also be set from the Operations panel (Distribution threshold % field).
 - `data/meta.json` now includes `has_consensus_matrix` (bool) and `community_distribution_threshold` (int). When `has_consensus_matrix` is true, the Community Statistics page injects a **Consensus matrix** button into its navigation bar automatically.
-- `ANALYSIS.md` documents all four new community detection strategies and both community analysis views (Organisation × Community distribution cross-tabs, Consensus matrix).
-
-### Fixes
-- Community Statistics table was blank after the consensus matrix extraction: the closing `});` of the `Promise.all().then()` block had been accidentally dropped. Fixed in both `webapp_engine/map/js/community_table.js` and `graph/js/community_table.js`.
 
 
 ## [0.12] - 2026-04-16

@@ -35,7 +35,12 @@ class MediaHandler:
         kwargs = {"file": self.download_temp_dir} if self.download_temp_dir else {}
         client = self.api_client.client
         # Unwrap the sync shim added by telethon.sync to get the raw async coroutine function.
-        async_download = inspect.unwrap(type(client).download_media)
+        # Falls back to a direct synchronous call when the client does not expose the shim
+        # (e.g. in tests using plain MagicMock).
+        try:
+            async_download = inspect.unwrap(type(client).download_media)
+        except AttributeError:
+            return client.download_media(telegram_object, **kwargs)
 
         async def _run() -> str | None:
             try:
