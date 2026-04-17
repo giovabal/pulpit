@@ -176,9 +176,9 @@ Promise.all([
 
         container.appendChild(details);
 
-        // Organisation × community cross-tab
+        // Organisation × community cross-tab (skip for ORGANIZATION strategy: it is trivially org×org)
         var orgCross = stratData.org_cross_tab;
-        if (orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
+        if (strategyKey !== "ORGANIZATION" && orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
             var crossDetails = document.createElement("details");
             crossDetails.className = "community-channels mt-2 mb-4";
             var crossSummary = document.createElement("summary");
@@ -187,11 +187,11 @@ Promise.all([
             crossDetails.appendChild(crossSummary);
 
             var crossWrapper = document.createElement("div");
-            crossWrapper.style.cssText = "display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:.75rem;";
+            crossWrapper.style.cssText = "display:flex;flex-direction:column;gap:1.5rem;margin-top:.75rem;";
 
             var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
                 var outerDiv = document.createElement("div");
-                outerDiv.style.cssText = "flex:1 1 0;min-width:260px;overflow-x:auto;";
+                outerDiv.style.cssText = "overflow-x:auto;";
                 var titleP = document.createElement("p");
                 titleP.className = "small fw-semibold mb-1";
                 titleP.title = tableTooltip;
