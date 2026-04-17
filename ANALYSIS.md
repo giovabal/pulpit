@@ -8,7 +8,7 @@ This document explains the analytical tools available in Pulpit — what they me
 
 ### Measures
 
-Configured via `NETWORK_MEASURES` in `.env`. Use `ALL` to enable everything.
+Configured via `--measures` on `export_network`. Use `ALL` to enable everything.
 
 | Measure | Key | Question it answers |
 | :------ | :-- | :------------------ |
@@ -29,7 +29,7 @@ Configured via `NETWORK_MEASURES` in `.env`. Use `ALL` to enable everything.
 
 ### Community detection strategies
 
-Configured via `COMMUNITY_STRATEGIES` in `.env`. Use `ALL` to run everything simultaneously.
+Configured via `--community-strategies` on `export_network`. Use `ALL` to run everything simultaneously.
 
 | Strategy | Key | What it reveals |
 | :------- | :-- | :-------------- |
@@ -37,8 +37,13 @@ Configured via `COMMUNITY_STRATEGIES` in `.env`. Use `ALL` to run everything sim
 | Louvain | `LOUVAIN` | Data-driven modularity clusters |
 | Leiden | `LEIDEN` | Sharper, more cohesive modularity clusters |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Like Leiden, but modularity uses in/out-degree null model — direction-aware |
+| Leiden CPM coarse | `LEIDEN_CPM_COARSE` | Resolution-parameter clustering without the modularity resolution limit; few, large communities |
+| Leiden CPM fine | `LEIDEN_CPM_FINE` | Same as above with a higher resolution parameter; more, smaller communities |
 | K-core | `KCORE` | Hierarchy: the innermost ideological core vs. peripheral amplifiers |
 | Infomap | `INFOMAP` | Echo chambers: groups where information circulates in closed loops |
+| Memory Infomap | `INFOMAP_MEMORY` | Like Infomap but second-order: where you came from changes where you go — detects context-dependent flow communities |
+| MCL | `MCL` | Directed-graph-native flow clustering via matrix inflation; good at circulation-pattern communities |
+| Walktrap | `WALKTRAP` | Random-walk distance clustering with a full dendrogram; good at shared-neighbourhood communities |
 | Weakly connected components | `WEAKCC` | Structural islands with no path to the rest of the network |
 | Strongly connected components | `STRONGCC` | Mutually reinforcing cores: channels in closed directed loops |
 
@@ -295,6 +300,120 @@ Two channels belong to the same strongly connected component if there is a **dir
 **In practice:** STRONGCC reveals the **mutually reinforcing cores** of the network. A large SCC is a group of channels that all ultimately cite each other in a closed directed loop — a genuine echo chamber in the strictest sense. Channels outside the large SCC either feed into it (they are cited but do not cite back) or drain from it (they amplify but are not amplified). In most real-world networks, STRONGCC produces one or a few large components and many singleton components (isolated nodes or channels with only one-way connections).
 
 **Example:** in a disinformation campaign, the coordinating accounts may form a large SCC — they all repost each other in a deliberate cycle to create the appearance of organic consensus. Downstream amplifier channels, which forward the content but are never referenced back, form singletons or small components. STRONGCC lets you distinguish between the coordinated nucleus and the unwitting (or witting) amplifiers at the periphery.
+
+---
+
+### Leiden CPM (coarse and fine)
+
+`LEIDEN_CPM_COARSE` and `LEIDEN_CPM_FINE` use the same Leiden optimisation engine as `LEIDEN` but replace the modularity objective with the **Constant Potts Model (CPM)** — Traag et al., *Physical Review E* 83, 016114 (2011).
+
+The CPM quality function is:
+
+> Q = Σ_c [ m_c − γ · C(n_c, 2) ]
+
+where m_c is the number of internal edges in community c, n_c is its size, C(n, 2) = n(n−1)/2 is the number of possible pairs, and **γ** is the resolution parameter. A community is stable when its internal edge density p_c = m_c / C(n_c, 2) exceeds γ, independently of the community's size. This removes modularity's **resolution limit**: modularity cannot reliably detect communities smaller than roughly √(m/2) edges, whereas CPM can detect communities of any size as long as their internal density is above γ.
+
+The two variants differ only in their default γ:
+
+| Key | Default γ | Effect |
+|:----|:--------|:-------|
+| `LEIDEN_CPM_COARSE` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
+| `LEIDEN_CPM_FINE` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
+
+The resolution can be adjusted at export time with `--leiden-coarse-resolution` and `--leiden-fine-resolution`. Both strategies symmetrise the graph to undirected before optimisation (same as `LEIDEN`).
+
+**In practice:** run both variants alongside `LEIDEN` to probe the network at multiple resolution scales. Communities that appear consistently across all three Leiden variants are the most structurally robust. Communities that appear only at fine resolution but not coarse correspond to tight local clusters embedded within larger blocs — useful for identifying the specific coordinated cores inside broader ideological movements. A partition that is stable across a range of γ values (revealed by running the two variants and comparing) represents genuine density structure in the data rather than a modularity artefact.
+
+**Example:** a broad "populist right" community detected by standard Leiden splits under LEIDEN_CPM_FINE into three tighter sub-communities — economic nationalists, religious conservatives, and an anti-immigration activist cluster — revealing that what looked like a unified bloc is actually three distinct echo chambers that merely share some cross-referencing channels at the periphery.
+
+---
+
+### MCL (Markov Clustering)
+
+*van Dongen, SIAM Journal on Matrix Analysis and Applications 22(4), 2000*
+
+MCL treats the network as a Markov chain and iterates two operations on the stochastic adjacency matrix:
+
+1. **Expansion**: raise the matrix to a power (default 2), spreading probability mass to multi-hop paths and mixing the random walk.
+2. **Inflation**: raise each entry to the power r (the inflation parameter) and renormalise by column, amplifying strong connections and suppressing weak ones.
+
+After convergence, the matrix is nearly block-diagonal: each block corresponds to a community. Higher inflation → more contrast → smaller, tighter communities. MCL works natively on the **directed weighted** graph without any symmetrisation, so the asymmetric forwarding patterns of Telegram channels are preserved end to end.
+
+The inflation parameter r is set by `--mcl-inflation` (default 2.0). Typical values for political networks are 1.5–2.5 for coarse partitions and 2.5–4.0 for fine ones.
+
+**In practice:** MCL is particularly effective at finding communities based on actual **circulation patterns** rather than on edge density alone. Two channels that forward each other heavily will be co-clustered even if they share few common neighbours — a pattern that modularity-based methods can miss. Because it operates on directed edges, MCL can detect asymmetric clusters: a set of channels that all forward from a common source but do not reference each other directly can still be grouped together if the resulting flow is sufficiently concentrated.
+
+**Example:** five regional channels all heavily forward from a single national outlet and rarely cite channels outside that flow. Under Louvain or Leiden they may be dispersed across two or three communities because their pairwise edge density is low. MCL groups them together because the shared flow pattern — all five channels funnel traffic through the same source — produces a characteristic matrix block after inflation converges.
+
+---
+
+### Memory Infomap (second-order)
+
+*Rosvall, Esquivel, Lancichinetti, West & Lambiotte, Nature Communications 5, 4630 (2014)*
+
+Standard Infomap (`INFOMAP`) models information as a **first-order** random walk: where the walker goes next depends only on its current position. Memory Infomap extends this to a **second-order** walk: the next step also depends on where the walker came from. This is implemented via a **state network**:
+
+- Each directed edge A→B in the original graph becomes a state node representing the context "currently at B, having arrived from A."
+- A link from state (A→B) to state (B→C) represents continuing the walk along the path A→B→C, with weight proportional to the outgoing edge weight w(B→C).
+- Channels with no incoming edges receive a virtual entry state so they participate in the clustering.
+
+After the state network is built, the standard map equation is minimised on it. The community of a physical channel is determined by plurality vote across all its state nodes.
+
+**In practice:** first-order Infomap can merge two channels into the same community simply because both are regularly cited by a third channel — even if the channels that cite A and the channels that cite B are completely different audiences. Memory Infomap separates them: the state nodes distinguish "arrived at A from the tech-commentary cluster" from "arrived at A from the military-commentary cluster", and if those two contexts behave differently in their onward flow, A's state nodes may be assigned to different communities. This is particularly relevant for Telegram forwarding chains, where the same channel may serve as a relay for multiple ideologically separate audiences simultaneously.
+
+**Example:** a channel that aggregates content from both a pro-government cluster and an independent journalism cluster is assigned to one community by standard Infomap. Memory Infomap detects that readers arriving via the pro-government path tend to continue to other pro-government channels, while those arriving via the journalism path tend to continue to other independent outlets. The channel's state nodes are split between two communities, correctly identifying it as a bridge rather than a member of either bloc.
+
+---
+
+### Walktrap
+
+*Pons & Latapy, Journal of Graph Algorithms and Applications 10(2), 2006*
+
+Walktrap computes a **random-walk distance** between each pair of channels: two channels are considered similar if a random walk of fixed length (4 steps) starting at one tends to reach the same set of channels as a walk starting at the other. Ward's agglomerative clustering is then applied to these distances, building a complete **dendrogram** from the bottom up. The dendrogram is cut at the partition that maximises modularity.
+
+The graph is symmetrised to undirected before clustering (same as `LEIDEN`). Edge weights are preserved throughout.
+
+**In practice:** Walktrap's random-walk distance captures a different notion of similarity than modularity optimisation. Two channels that never reference each other directly can still be close in Walktrap distance if they are embedded in the same dense neighbourhood — because random walks starting at either tend to visit the same channels within a few hops. This makes Walktrap good at finding communities based on **shared context** rather than direct connections. It is particularly informative for networks with strong hub-and-spoke structure, where many channels share a common aggregator without referencing each other: modularity-based methods may split them across communities, while Walktrap groups them by their common neighbourhood.
+
+The primary analytical output is the dendrogram itself: it shows which communities are most similar to each other and at what level of granularity sub-communities merge. In the current implementation the optimal cut (maximising modularity) is used automatically, but the hierarchy can be inspected to understand the multi-scale structure of the network.
+
+**Example:** two communities detected by Leiden — a far-right cluster and a religious conservative cluster — appear as adjacent branches in the Walktrap dendrogram: they merge at a relatively low distance, indicating that the two clusters share a substantial common neighbourhood of cross-referencing channels. A third community, a state-media cluster, merges only at a much higher level, indicating structural distance. This hierarchical information is not visible in Leiden's flat partition.
+
+---
+
+## Community analysis views
+
+Beyond listing per-community metrics, Pulpit generates two additional outputs that compare how different community detection strategies relate to your manual organisation groupings and to each other.
+
+---
+
+### Organisation × Community distribution
+
+For each non-ORGANIZATION community detection strategy, the Community Statistics table includes a collapsible **Organisation × community distribution** panel with two cross-tabulation tables. Both tables share the same rows (organisations) and columns (detected community groups).
+
+- **% of organisation nodes per community** (rows sum to 100%): for each organisation, what fraction of its channels ended up in each detected community? A row concentrated in one column means that organisation maps cleanly to a single algorithmic cluster; a spread-out row means its channels were split across multiple communities.
+- **% of community nodes per organisation** (columns sum to 100%): for each detected community, what fraction of its channels comes from each organisation? A column dominated by one organisation means that community is organisation-pure; a mixed column means the algorithm grouped channels from different organisations together.
+
+Columns are sorted so that each organisation's dominant community falls as close to a diagonal as possible (Hungarian algorithm assignment), making it easy to read the alignment at a glance. Communities where no organisation reaches the configured threshold (default 10%, set with `--community-distribution-threshold`) are hidden, and a note below the table reports how many were suppressed. The panel is only shown when the graph contains channels from more than one organisation.
+
+**In practice:** compare the two tables to understand mismatches between your domain-knowledge groupings and the algorithm's output. A high-purity column (one organisation dominates a community) with a concentrated row (that organisation maps cleanly to that community) means strong alignment — the algorithm confirmed your manual partition. A spread-out row for one organisation paired with mixed columns across several communities signals that the algorithm sees structure *within* what you treated as a single bloc — a prompt to investigate whether the organisation should be split, or whether the algorithm is picking up noise.
+
+---
+
+### Consensus matrix
+
+Generated with `export_network --consensus-matrix` (or the matching checkbox in the Operations panel). Requires at least one non-ORGANIZATION community detection strategy to be active.
+
+The consensus matrix (`consensus_matrix.html`) answers: **across all non-ORGANIZATION strategies, how consistently is each pair of channels placed in the same community?** For every pair of channels, the count of strategies that co-assign them to the same community is computed. The result is displayed as a lower-triangle balloon plot where:
+
+- **Radius** grows with agreement count — the more strategies agree, the larger the circle.
+- **Colour** shifts from blue (low agreement) to red (full agreement), making high-consensus pairs immediately visible.
+
+Channels are sorted by plurality community assignment (the community a channel is most often placed in across all non-ORGANIZATION strategies) and then by name within each plurality group, so pairs from the same detected community tend to cluster along the diagonal.
+
+A legend shows one circle per distinct agreement level (1/K … K/K, where K is the number of non-ORGANIZATION strategies). Hovering a cell shows a tooltip: "Channel A × Channel B: N/K partitions agree."
+
+**In practice:** the consensus matrix reveals which channel groupings are robust and which are algorithm-dependent. A pair of channels with near-full agreement (large red balloon) is co-clustered by every algorithm you ran — that grouping is stable regardless of which detection method you trust. A pair with low agreement (small blue balloon or no balloon at all) is split differently by each algorithm, signalling that their community relationship is structurally ambiguous — the network evidence for placing them together or apart is genuinely weak. Pairs in the same manual Organisation that consistently appear in different algorithmic communities are candidates for review: the citation patterns may not support the grouping you assumed.
 
 ---
 

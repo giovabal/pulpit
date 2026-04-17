@@ -16,4 +16,5 @@ telethon==1.43.1
 pypalettes==0.2.1
 infomap==2.9.2
 leidenalg==0.11.0
+markov-clustering==0.0.6.dev0
 openpyxl==3.1.5

@@ -155,6 +155,15 @@ def _build_args(task: str, post: Any) -> list[str]:
         community_distribution_threshold_val = post.get("community_distribution_threshold", "").strip()
         if community_distribution_threshold_val:
             args += ["--community-distribution-threshold", community_distribution_threshold_val]
+        leiden_coarse_resolution_val = post.get("leiden_coarse_resolution", "").strip()
+        if leiden_coarse_resolution_val:
+            args += ["--leiden-coarse-resolution", leiden_coarse_resolution_val]
+        leiden_fine_resolution_val = post.get("leiden_fine_resolution", "").strip()
+        if leiden_fine_resolution_val:
+            args += ["--leiden-fine-resolution", leiden_fine_resolution_val]
+        mcl_inflation_val = post.get("mcl_inflation", "").strip()
+        if mcl_inflation_val:
+            args += ["--mcl-inflation", mcl_inflation_val]
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]

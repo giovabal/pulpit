@@ -167,6 +167,41 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--leiden-coarse-resolution",
+            dest="leiden_coarse_resolution",
+            type=float,
+            default=0.01,
+            metavar="γ",
+            help=(
+                "CPM resolution parameter for LEIDEN_CPM_COARSE. "
+                "Communities form when their internal edge density exceeds γ. "
+                "Lower values → fewer, larger communities. Default: 0.01."
+            ),
+        )
+        parser.add_argument(
+            "--leiden-fine-resolution",
+            dest="leiden_fine_resolution",
+            type=float,
+            default=0.05,
+            metavar="γ",
+            help=(
+                "CPM resolution parameter for LEIDEN_CPM_FINE. "
+                "Communities form when their internal edge density exceeds γ. "
+                "Higher values → more, smaller communities. Default: 0.05."
+            ),
+        )
+        parser.add_argument(
+            "--mcl-inflation",
+            dest="mcl_inflation",
+            type=float,
+            default=2.0,
+            metavar="r",
+            help=(
+                "Inflation parameter for Markov Clustering (MCL). "
+                "Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."
+            ),
+        )
+        parser.add_argument(
             "--consensus-matrix",
             dest="consensus_matrix",
             action="store_true",
@@ -310,7 +345,10 @@ class Command(BaseCommand):
                     strategy,
                     settings.COMMUNITY_PALETTE,
                     graph,
-                    channel_dict,  # COMMUNITY_PALETTE stays in settings
+                    channel_dict,
+                    leiden_coarse_resolution=options["leiden_coarse_resolution"],
+                    leiden_fine_resolution=options["leiden_fine_resolution"],
+                    mcl_inflation=options["mcl_inflation"],
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e

@@ -18,12 +18,27 @@ from webapp.utils.colors import (
 
 import igraph as ig
 import leidenalg
+import markov_clustering as mc
 import networkx as nx
+import numpy as np
 from infomap import Infomap
 
 logger = logging.getLogger(__name__)
 
-COMMUNITY_ALGORITHMS = {"LOUVAIN", "KCORE", "INFOMAP", "LEIDEN", "LEIDEN_DIRECTED", "WEAKCC", "STRONGCC"}
+COMMUNITY_ALGORITHMS = {
+    "LOUVAIN",
+    "KCORE",
+    "INFOMAP",
+    "INFOMAP_MEMORY",
+    "LEIDEN",
+    "LEIDEN_DIRECTED",
+    "LEIDEN_CPM_COARSE",
+    "LEIDEN_CPM_FINE",
+    "MCL",
+    "WALKTRAP",
+    "WEAKCC",
+    "STRONGCC",
+}
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
 type CommunityMap = dict[str, int]
@@ -215,8 +230,200 @@ def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[Commun
     return community_map, build_community_palette(community_map, palette_name)
 
 
+def _build_undirected_igraph(
+    graph: nx.DiGraph, node_ids: list[str], node_id_map: dict[str, int]
+) -> tuple[ig.Graph, list[float]]:
+    """Build an undirected igraph from a NetworkX DiGraph, symmetrising edges."""
+    undirected = graph.to_undirected(reciprocal=False)
+    ig_graph = ig.Graph(n=len(node_ids), directed=False)
+    edges = [(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()]
+    weights = [undirected.edges[s, t].get("weight", 1.0) for s, t in undirected.edges()]
+    ig_graph.add_edges(edges)
+    return ig_graph, weights
+
+
+def detect_leiden_cpm(graph: nx.DiGraph, palette_name: str, resolution: float) -> tuple[CommunityMap, CommunityPalette]:
+    """Leiden algorithm with Constant Potts Model (CPM) objective.
+
+    Unlike modularity, CPM has no resolution limit: communities are defined as
+    groups whose internal edge density exceeds ``resolution``.  A low resolution
+    gives a coarse partition (few large communities); a high resolution gives a
+    fine partition (many small ones).
+
+    The graph is symmetrised to undirected before optimisation (same as LEIDEN).
+    """
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
+
+    partition = leidenalg.find_partition(
+        ig_graph,
+        leidenalg.CPMVertexPartition,
+        weights=weights if weights else None,
+        resolution_parameter=resolution,
+        seed=0,
+    )
+
+    for community_index, community in enumerate(partition, start=1):
+        for node_index in community:
+            community_map[node_ids[node_index]] = community_index
+
+    community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[CommunityMap, CommunityPalette]:
+    """Markov Clustering (MCL) — van Dongen 2000.
+
+    Works natively on the directed weighted graph: alternates matrix expansion
+    (random-walk diffusion) and inflation (contrast enhancement) until
+    convergence.  The ``inflation`` parameter controls granularity: higher
+    values produce more, smaller communities.
+    """
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    n = len(node_ids)
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+
+    matrix = np.zeros((n, n), dtype=float)
+    for source, target, edge_data in graph.edges(data=True):
+        matrix[node_id_map[source], node_id_map[target]] = edge_data.get("weight", 1.0)
+
+    # Give isolated nodes a self-loop so the stochastic matrix stays well-defined.
+    for i in range(n):
+        if matrix[i].sum() == 0 and matrix[:, i].sum() == 0:
+            matrix[i, i] = 1.0
+
+    result = mc.run_mcl(matrix, inflation=inflation)
+    clusters = mc.get_clusters(result)
+
+    assigned: set[int] = set()
+    for community_index, cluster in enumerate(clusters, start=1):
+        for node_index in cluster:
+            community_map[node_ids[node_index]] = community_index
+            assigned.add(node_index)
+
+    # Nodes not placed in any cluster (edge cases in sparse graphs) → singletons.
+    next_id = len(clusters) + 1
+    for i, node_id in enumerate(node_ids):
+        if i not in assigned:
+            community_map[node_id] = next_id
+            next_id += 1
+
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    """Second-order (memory) Infomap — Rosvall et al., Nature Communications 2014.
+
+    Builds a higher-order state network: each state node represents the context
+    "currently at channel B, having arrived from channel A".  The random walker
+    then follows the outgoing edges of B weighted by their actual citation
+    frequencies.  This captures sequential forwarding patterns that first-order
+    Infomap treats as independent.  Channels with no incoming edges receive a
+    virtual entry state so they participate in the flow.
+    """
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    n = len(node_ids)
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+
+    infomap = Infomap("--two-level --directed --silent --recorded-teleportation", seed=123)
+
+    # State node for edge A→B: state_id = idx_A * n + idx_B, physical node = idx_B.
+    for src, tgt in graph.edges():
+        infomap.add_state_node(node_id_map[src] * n + node_id_map[tgt], node_id_map[tgt])
+
+    # Virtual entry state for source nodes (no incoming edges, would be unreachable).
+    _virtual_base = n * n
+    for node_id in node_ids:
+        node_idx = node_id_map[node_id]
+        if graph.in_degree(node_id) == 0 and graph.out_degree(node_id) > 0:
+            infomap.add_state_node(_virtual_base + node_idx, node_idx)
+
+    # Trigram links: state(A→B) → state(B→C) with weight w(B→C).
+    for mid in node_ids:
+        mid_idx = node_id_map[mid]
+        predecessors = list(graph.predecessors(mid))
+        successors = list(graph.successors(mid))
+        if not successors:
+            continue
+        # Incoming state IDs: edge-states plus virtual entry if source node.
+        if predecessors:
+            in_states = [node_id_map[src] * n + mid_idx for src in predecessors]
+        else:
+            in_states = [_virtual_base + mid_idx]
+        for tgt in successors:
+            tgt_idx = node_id_map[tgt]
+            weight = graph.edges[mid, tgt].get("weight", 1.0)
+            state_out = mid_idx * n + tgt_idx
+            for state_in in in_states:
+                infomap.add_link(state_in, state_out, weight)
+
+    infomap.run()
+
+    # Aggregate state-node module assignments to physical nodes (plurality vote).
+    physical_modules: dict[int, list[int]] = {}
+    for node in infomap.nodes:
+        physical_modules.setdefault(node.node_id, []).append(node.module_id)
+
+    for phys_idx, modules in physical_modules.items():
+        community_map[node_ids[phys_idx]] = Counter(modules).most_common(1)[0][0]
+
+    # Isolated nodes with no state nodes at all → singleton fallback.
+    next_id = max(community_map.values(), default=0) + 1
+    for node_id in node_ids:
+        if node_id not in community_map:
+            community_map[node_id] = next_id
+            next_id += 1
+
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+def detect_walktrap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    """Walktrap community detection — Pons & Latapy 2005.
+
+    Computes short random-walk distances between nodes (default 4 steps): two
+    nodes are considered similar if a random walker starting at one tends to
+    visit the other within a few hops.  Ward's agglomerative clustering is then
+    applied to these distances, producing a full dendrogram that is cut at the
+    partition maximising modularity.
+
+    The graph is symmetrised to undirected before clustering (same as LEIDEN).
+    """
+    community_map: CommunityMap = {}
+    node_ids: list[str] = sorted(graph.nodes())
+    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
+
+    if weights:
+        ig_graph.es["weight"] = weights
+
+    dendrogram = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4)
+    partition = dendrogram.as_clustering()
+
+    for community_index, community in enumerate(partition, start=1):
+        for node_index in community:
+            community_map[node_ids[node_index]] = community_index
+
+    community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
 def detect(
-    strategy: str, palette_name: str, graph: nx.DiGraph, channel_dict: dict[str, Any]
+    strategy: str,
+    palette_name: str,
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    *,
+    leiden_coarse_resolution: float = 0.01,
+    leiden_fine_resolution: float = 0.05,
+    mcl_inflation: float = 2.0,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Run community detection. Returns (community_map, community_palette)."""
     if strategy == "LOUVAIN":
@@ -225,10 +432,20 @@ def detect(
         return detect_kcore(graph, palette_name)
     if strategy == "INFOMAP":
         return detect_infomap(graph, palette_name)
+    if strategy == "INFOMAP_MEMORY":
+        return detect_infomap_memory(graph, palette_name)
     if strategy == "LEIDEN":
         return detect_leiden(graph, palette_name)
     if strategy == "LEIDEN_DIRECTED":
         return detect_leiden_directed(graph, palette_name)
+    if strategy == "LEIDEN_CPM_COARSE":
+        return detect_leiden_cpm(graph, palette_name, leiden_coarse_resolution)
+    if strategy == "LEIDEN_CPM_FINE":
+        return detect_leiden_cpm(graph, palette_name, leiden_fine_resolution)
+    if strategy == "MCL":
+        return detect_mcl(graph, palette_name, mcl_inflation)
+    if strategy == "WALKTRAP":
+        return detect_walktrap(graph, palette_name)
     if strategy == "WEAKCC":
         return detect_weakcc(graph, palette_name)
     if strategy == "STRONGCC":
