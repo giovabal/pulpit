@@ -1,3 +1,66 @@
+function _hungarianMaxAssign(mat) {
+    // Optimal maximum-weight assignment for a rectangular matrix (rows × cols).
+    // Returns col index (0-based) for each row; -1 if the row is unmatched (nR > nC).
+    var nR = mat.length;
+    if (!nR) return [];
+    var nC = mat[0] ? mat[0].length : 0;
+    if (!nC) return new Array(nR).fill(-1);
+    var n = Math.max(nR, nC);
+    var INF = 1e15;
+    var u = new Array(n + 1).fill(0);
+    var v = new Array(n + 1).fill(0);
+    var p = new Array(n + 1).fill(0);   // p[j] = row (1-indexed) assigned to col j
+    var way = new Array(n + 1).fill(0);
+    function getCost(i, j) {
+        return (i < nR && j < nC && mat[i][j] != null) ? -mat[i][j] : 0;
+    }
+    for (var row = 1; row <= n; row++) {
+        p[0] = row;
+        var j0 = 0;
+        var minVal = new Array(n + 1).fill(INF);
+        var used = new Array(n + 1).fill(false);
+        do {
+            used[j0] = true;
+            var i0 = p[j0], delta = INF, j1 = 0;
+            for (var j = 1; j <= n; j++) {
+                if (!used[j]) {
+                    var cur = getCost(i0 - 1, j - 1) - u[i0] - v[j];
+                    if (cur < minVal[j]) { minVal[j] = cur; way[j] = j0; }
+                    if (minVal[j] < delta) { delta = minVal[j]; j1 = j; }
+                }
+            }
+            for (var jj = 0; jj <= n; jj++) {
+                if (used[jj]) { u[p[jj]] += delta; v[jj] -= delta; }
+                else { minVal[jj] -= delta; }
+            }
+            j0 = j1;
+        } while (p[j0] !== 0);
+        do {
+            var jPrev = way[j0];
+            p[j0] = p[jPrev];
+            j0 = jPrev;
+        } while (j0);
+    }
+    var ans = new Array(nR).fill(-1);
+    for (var j = 1; j <= n; j++) {
+        if (p[j] >= 1 && p[j] <= nR && j <= nC) ans[p[j] - 1] = j - 1;
+    }
+    return ans;
+}
+
+function _hungarianColPerm(matrix, nCols) {
+    // Column permutation that puts Hungarian-assigned cols first (in row order),
+    // then any unassigned cols, for near-diagonal table layout.
+    var assign = _hungarianMaxAssign(matrix);
+    var used = new Array(nCols).fill(false);
+    var perm = [];
+    assign.forEach(function(j) {
+        if (j >= 0 && j < nCols && !used[j]) { perm.push(j); used[j] = true; }
+    });
+    for (var j = 0; j < nCols; j++) { if (!used[j]) perm.push(j); }
+    return perm;
+}
+
 Promise.all([
     fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }),
     fetch((window.DATA_DIR||"data/")+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
@@ -189,6 +252,16 @@ Promise.all([
             var crossWrapper = document.createElement("div");
             crossWrapper.style.cssText = "display:flex;flex-direction:column;gap:1.5rem;margin-top:.75rem;";
 
+            // Reorder columns via Hungarian algorithm for near-diagonal legibility
+            var colPerm = _hungarianColPerm(orgCross.pct_by_org, orgCross.communities.length);
+            var crossComm = colPerm.map(function(j) { return orgCross.communities[j]; });
+            var crossColors = colPerm.map(function(j) { return orgCross.comm_colors[j]; });
+            function reorderCols(matrix) {
+                return matrix.map(function(row) { return colPerm.map(function(j) { return row[j]; }); });
+            }
+            var crossPctByOrg = reorderCols(orgCross.pct_by_org);
+            var crossPctByCommunity = reorderCols(orgCross.pct_by_community);
+
             var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
                 var outerDiv = document.createElement("div");
                 outerDiv.style.cssText = "overflow-x:auto;";
@@ -203,11 +276,11 @@ Promise.all([
                 var thead = document.createElement("thead");
                 var htr = document.createElement("tr");
                 var th0 = document.createElement("th"); th0.textContent = "Organisation"; htr.appendChild(th0);
-                orgCross.communities.forEach(function(commLabel, ci) {
+                crossComm.forEach(function(commLabel, ci) {
                     var th = document.createElement("th"); th.className = "number";
                     var sw = document.createElement("span");
                     sw.className = "color-swatch color-swatch--sm";
-                    sw.style.background = orgCross.comm_colors[ci];
+                    sw.style.background = crossColors[ci];
                     sw.setAttribute("aria-hidden", "true");
                     th.appendChild(sw);
                     th.appendChild(document.createTextNode(commLabel));
@@ -221,7 +294,7 @@ Promise.all([
                     var tdOrg = document.createElement("td"); tdOrg.textContent = org; tr.appendChild(tdOrg);
                     matrix[oi].forEach(function(val) {
                         var td = document.createElement("td"); td.className = "number";
-                        if (val !== null && val !== undefined) {
+                        if (val !== null && val !== undefined && val >= 5) {
                             td.setAttribute("style", heatmapBg(val, 0, 100));
                             td.textContent = val.toFixed(1) + "%";
                         } else {
@@ -237,12 +310,12 @@ Promise.all([
             };
 
             crossWrapper.appendChild(buildCrossTable(
-                orgCross.pct_by_org,
+                crossPctByOrg,
                 "% of organisation nodes per community",
                 "For each organisation: share of its nodes assigned to each community. Rows sum to 100%."
             ));
             crossWrapper.appendChild(buildCrossTable(
-                orgCross.pct_by_community,
+                crossPctByCommunity,
                 "% of community nodes per organisation",
                 "For each community: share of its nodes coming from each organisation. Columns sum to 100%."
             ));
