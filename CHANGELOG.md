@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13] - To be announced
+*Consensus matrix. Configurable distribution threshold.*
+
+### New features
+- **Consensus matrix** (`consensus_matrix.html`): a new standalone page showing a lower-triangle balloon plot where each cell represents a channel pair. The balloon size grows and the colour shifts from blue to red as more non-ORGANIZATION community detection strategies agree in placing the pair in the same community. Channels are sorted by plurality community assignment then by name. A legend shows one circle per agreement level; hovering a cell shows a tooltip. Generated only when `export_network --consensus-matrix` is passed (or the matching checkbox in the Operations panel is ticked). Requires at least one non-ORGANIZATION strategy.
+- **Configurable organisation × community distribution threshold** (`--community-distribution-threshold N`, default 10): communities below this percentage in every organisation row are hidden from the cross-tab tables. The threshold is stored in `data/meta.json` and read by the JS at page load, so changing it on re-export is reflected without editing any HTML. Previously hard-coded at 5 %; the new default is 10 %. The value can also be set from the Operations panel (Distribution threshold % field).
+- `data/meta.json` now includes `has_consensus_matrix` (bool) and `community_distribution_threshold` (int). When `has_consensus_matrix` is true, the Community Statistics page injects a **Consensus matrix** button into its navigation bar automatically.
+
+### Fixes
+- Community Statistics table was blank after the consensus matrix extraction: the closing `});` of the `Promise.all().then()` block had been accidentally dropped. Fixed in both `webapp_engine/map/js/community_table.js` and `graph/js/community_table.js`.
+
+
 ## [0.12] - 2026-04-16
 *A smoother Telegram interaction. Organisation/community overlapping. Fixes.*
 

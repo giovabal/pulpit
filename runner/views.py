@@ -150,6 +150,11 @@ def _build_args(task: str, post: Any) -> list[str]:
         spreading_runs_val = post.get("spreading_runs", "").strip()
         if spreading_runs_val:
             args += ["--spreading-runs", spreading_runs_val]
+        if post.get("consensus_matrix"):
+            args.append("--consensus-matrix")
+        community_distribution_threshold_val = post.get("community_distribution_threshold", "").strip()
+        if community_distribution_threshold_val:
+            args += ["--community-distribution-threshold", community_distribution_threshold_val]
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]

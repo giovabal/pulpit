@@ -272,6 +272,8 @@ def write_meta_json(
     end_date: "datetime.date | None" = None,
     total_nodes: int = 0,
     total_edges: int = 0,
+    community_distribution_threshold: int = 10,
+    has_consensus_matrix: bool = False,
 ) -> None:
     """Write data/meta.json with export metadata consumed by table preambles."""
     _weight_labels = {
@@ -296,6 +298,8 @@ def write_meta_json(
         "end_date": end_date.isoformat() if end_date else None,
         "total_nodes": total_nodes,
         "total_edges": total_edges,
+        "community_distribution_threshold": community_distribution_threshold,
+        "has_consensus_matrix": has_consensus_matrix,
     }
     data_dir = os.path.join(graph_dir, "data")
     with open(os.path.join(data_dir, "meta.json"), "w") as f:

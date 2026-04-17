@@ -164,6 +164,10 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Export channel, community, and network tables as .xlsx files alongside the HTML versions."></i>
               </label>
+              <label class="ops-flag"><input type="checkbox" name="consensus_matrix">Consensus matrix
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all non-ORGANIZATION community strategies."></i>
+              </label>
               <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Export the network as a GEXF file with all measures and community assignments as node attributes. Compatible with Gephi."></i>
@@ -249,6 +253,13 @@
                        title="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Higher values are more precise but slower. Default: 200."></i>
                   </label>
                   <input type="number" name="spreading_runs" id="spreading_runs" placeholder="200" min="1">
+                </div>
+                <div class="ops-param">
+                  <label for="community_distribution_threshold">Distribution threshold %
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Minimum percentage a community must reach in at least one organisation row to appear in the Organisation × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
+                  </label>
+                  <input type="number" name="community_distribution_threshold" id="community_distribution_threshold" placeholder="10" min="0" max="100">
                 </div>
                 <div class="ops-param">
                   <label for="edge_weight_strategy">Edge weight strategy

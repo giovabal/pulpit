@@ -415,6 +415,24 @@ def write_community_table_html(
         f.write(content)
 
 
+def write_consensus_matrix_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    if seo:
+        title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
+        robots_meta = "index, follow"
+    else:
+        title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
+        robots_meta = "noindex, nofollow"
+
+    context = {"title": title, "robots_meta": robots_meta}
+    content = render_to_string("network/consensus_matrix.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
 def write_index_html(
     output_filename: str,
     seo: bool = False,
@@ -427,6 +445,7 @@ def write_index_html(
     include_network_xlsx: bool = False,
     include_community_html: bool = False,
     include_community_xlsx: bool = False,
+    include_consensus_matrix_html: bool = False,
     include_compare_html: bool = False,
     compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
@@ -450,6 +469,7 @@ def write_index_html(
         "include_network_xlsx": include_network_xlsx,
         "include_community_html": include_community_html,
         "include_community_xlsx": include_community_xlsx,
+        "include_consensus_matrix_html": include_consensus_matrix_html,
         "include_compare_html": include_compare_html,
         "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],

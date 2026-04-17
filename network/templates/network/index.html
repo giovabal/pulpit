@@ -97,6 +97,20 @@
   </div>
   {% endif %}
 
+  {% if include_consensus_matrix_html %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h5>
+        <p class="card-text text-muted small">Channel-pair co-clustering agreement across all non-ORGANIZATION community detection strategies.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="consensus_matrix.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if include_network_html %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">

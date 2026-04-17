@@ -167,6 +167,29 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--consensus-matrix",
+            dest="consensus_matrix",
+            action="store_true",
+            default=False,
+            help=(
+                "Generate a consensus matrix page (consensus_matrix.html) showing how consistently "
+                "each channel pair is co-clustered across all non-ORGANIZATION community detection strategies. "
+                "Requires at least two non-ORGANIZATION strategies."
+            ),
+        )
+        parser.add_argument(
+            "--community-distribution-threshold",
+            dest="community_distribution_threshold",
+            type=int,
+            default=10,
+            metavar="N",
+            help=(
+                "Minimum percentage (0–100) a community must reach in at least one organisation row "
+                "to be shown in the Organisation × Community distribution cross-tab. "
+                "Columns below this threshold in every row are hidden. Default: 10."
+            ),
+        )
+        parser.add_argument(
             "--channel-types",
             dest="channel_types",
             default=None,
@@ -252,6 +275,7 @@ class Command(BaseCommand):
         do_xlsx = options["xlsx"]
         do_gexf = options["gexf"]
         do_graphml = options["graphml"]
+        do_consensus_matrix = options["consensus_matrix"]
 
         fa2_iterations: int = options["fa2_iterations"]
         vertical_layout: bool = options["vertical_layout"]
@@ -434,10 +458,12 @@ class Command(BaseCommand):
             end_date=end_date,
             total_nodes=len(graph.nodes),
             total_edges=len(graph.edges),
+            community_distribution_threshold=options["community_distribution_threshold"],
+            has_consensus_matrix=do_consensus_matrix,
         )
 
         strategies = [s.lower() for s in communities_strategy]
-        need_community_metrics = do_html or do_xlsx
+        need_community_metrics = do_html or do_xlsx or do_consensus_matrix
         if need_community_metrics:
             self.stdout.write("- community metrics")
             _steps = ["network"] + strategies
@@ -468,6 +494,7 @@ class Command(BaseCommand):
             )
         if need_community_metrics:
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
+            tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
         if do_html:
             self.stdout.write("- table (html)")
             tables.write_table_html(
@@ -483,7 +510,6 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
             self.stdout.write("- community table (html)")
-            tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_table_html(
                 output_filename=os.path.join(root_target, "community_table.html"),
                 seo=seo,
@@ -510,6 +536,14 @@ class Command(BaseCommand):
                 community_table_data,
                 strategies,
                 output_filename=os.path.join(root_target, "community_table.xlsx"),
+                project_title=project_title,
+            )
+
+        if do_consensus_matrix:
+            self.stdout.write("- consensus matrix (html)")
+            tables.write_consensus_matrix_html(
+                output_filename=os.path.join(root_target, "consensus_matrix.html"),
+                seo=seo,
                 project_title=project_title,
             )
 
@@ -544,6 +578,7 @@ class Command(BaseCommand):
             include_compare_html=False,
             compare_files=set(),
             strategies=strategies,
+            include_consensus_matrix_html=do_consensus_matrix,
         )
 
         self.stdout.write(self.style.SUCCESS("\nDone."))
