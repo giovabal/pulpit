@@ -86,7 +86,8 @@ Promise.all([
         var nav = document.querySelector(".d-flex.gap-2");
         if (nav) {
             var cmLink = document.createElement("a");
-            cmLink.href = "consensus_matrix.html";
+            var _cmpSuffix = (window.DATA_DIR || "").indexOf("_2") !== -1 ? "_2" : "";
+            cmLink.href = "consensus_matrix" + _cmpSuffix + ".html";
             cmLink.className = "btn btn-outline-secondary btn-sm";
             cmLink.innerHTML = '<i class="bi bi-grid" aria-hidden="true"></i> Consensus matrix';
             nav.insertBefore(cmLink, nav.firstChild);
