@@ -17,6 +17,7 @@ _TMP_DIR = settings.BASE_DIR / "tmp"
 _LAUNCH_LOCKS: dict[str, threading.Lock] = {name: threading.Lock() for name in TASK_NAMES}
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
+_WARNING_RE = re.compile(r"^/.+\.py:\d+: \w+Warning:")
 
 
 def _tmp(task: str, suffix: str) -> Path:
@@ -95,10 +96,18 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
 
     # Simulate terminal CR behaviour: split on \n, within each segment the last
     # \r-separated piece is what would be visible on screen.
+    # Also drop Python warning lines (header + indented code snippet).
     lines = []
+    skip_next = False
     for raw_line in text.split("\n"):
         segments = raw_line.split("\r")
         final = segments[-1].rstrip()
+        if _WARNING_RE.match(final):
+            skip_next = True
+            continue
+        if skip_next:
+            skip_next = False
+            continue
         if final:
             lines.append(final)
 
@@ -155,7 +164,7 @@ def launch(task: str, args: list[str]) -> None:
         }
         meta_path.write_text(json.dumps(meta))
 
-        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONWARNINGS": "ignore::DeprecationWarning"}
         cmd = [sys.executable, _MANAGE_PY, task, *args]
         log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
         try:

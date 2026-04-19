@@ -125,31 +125,42 @@ class HomeView(ListView):
                 "title": "Messages per month",
                 "icon": "bi-bar-chart-line",
                 "url": reverse("messages-history-data"),
+                "description": "Total number of messages posted by monitored channels each month.",
             },
             {
                 "id": "active-channels-history",
                 "title": "Active channels per month",
                 "icon": "bi-broadcast",
                 "url": reverse("active-channels-history-data"),
+                "description": "Number of distinct monitored channels that posted at least one message each month.",
             },
             {
                 "id": "forwards-history",
                 "title": "Forwards per month",
                 "icon": "bi-forward",
                 "url": reverse("forwards-history-data"),
+                "description": "Number of messages forwarded from other monitored channels each month. A proxy for cross-channel amplification activity.",
             },
-            {"id": "views-history", "title": "Views per month", "icon": "bi-eye", "url": reverse("views-history-data")},
+            {
+                "id": "views-history",
+                "title": "Views per month",
+                "icon": "bi-eye",
+                "url": reverse("views-history-data"),
+                "description": "Sum of view counts across all messages posted by monitored channels each month.",
+            },
             {
                 "id": "subscribers-history",
                 "title": "Cumulative subscribers",
                 "icon": "bi-people",
                 "url": reverse("subscribers-history-data"),
+                "description": "Total subscriber count across all monitored channels, accumulated over time. Each channel is counted from its first observed subscriber figure.",
             },
             {
                 "id": "avg-involvement-history",
                 "title": "Average involvement per month",
                 "icon": "bi-graph-up",
                 "url": reverse("avg-involvement-history-data"),
+                "description": "Average number of views per message across monitored channels each month. A proxy for audience engagement intensity.",
             },
         ]
         return ctx
@@ -446,30 +457,35 @@ class ChannelDetailView(ListView):
                 "title": "Messages per month",
                 "icon": "bi-bar-chart-line",
                 "url": reverse("channel-messages-history", kwargs={"pk": ch.pk}),
+                "description": "Number of messages posted by this channel each month.",
             },
             {
                 "id": "ch-views-history",
                 "title": "Views per month",
                 "icon": "bi-eye",
                 "url": reverse("channel-views-history", kwargs={"pk": ch.pk}),
+                "description": "Sum of view counts across all messages posted by this channel each month.",
             },
             {
                 "id": "ch-forwards-history",
                 "title": "Forwards sent per month",
                 "icon": "bi-forward",
                 "url": reverse("channel-forwards-history", kwargs={"pk": ch.pk}),
+                "description": "Number of messages this channel forwarded from other channels each month.",
             },
             {
                 "id": "ch-forwards-received-history",
                 "title": "Forwards received per month",
                 "icon": "bi-arrow-return-right",
                 "url": reverse("channel-forwards-received-history", kwargs={"pk": ch.pk}),
+                "description": "Number of times this channel's content was forwarded by other monitored channels each month.",
             },
             {
                 "id": "ch-avg-involvement-history",
                 "title": "Average involvement per month",
                 "icon": "bi-graph-up",
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
+                "description": "Average number of views per message for this channel each month. A proxy for audience engagement intensity.",
             },
             {
                 "id": "ch-cross-refs",
@@ -477,6 +493,7 @@ class ChannelDetailView(ListView):
                 "icon": "bi-arrow-left-right",
                 "url": reverse("channel-cross-refs", kwargs={"pk": ch.pk}),
                 "type": "cross-refs",
+                "description": "Channels this channel mentions (via t.me/ links) and channels that mention it.",
             },
             {
                 "id": "ch-contact-info",
@@ -484,6 +501,7 @@ class ChannelDetailView(ListView):
                 "icon": "bi-link-45deg",
                 "url": reverse("channel-contact-info", kwargs={"pk": ch.pk}),
                 "type": "table",
+                "description": "External domains and email addresses found in this channel's messages.",
             },
         ]
 

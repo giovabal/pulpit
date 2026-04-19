@@ -380,8 +380,10 @@ body {
 /* ---------- Stats panel ---------- */
 .stats-panel { max-width: 52rem; margin-left: auto; margin-right: auto; margin-bottom: 1rem; }
 
+.stats-toggle-wrap { display: flex; align-items: center; gap: .4rem; }
+
 .stats-toggle {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: .5rem;
@@ -408,6 +410,24 @@ body {
 
 .toggle-chevron { margin-left: auto; transition: transform .2s; }
 .stats-toggle[aria-expanded="true"] .toggle-chevron { transform: rotate(180deg); }
+
+.panel-info-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: .9rem;
+  border-radius: 50%;
+  transition: color .12s, background .12s;
+}
+.panel-info-btn:hover, .panel-info-btn:focus { color: var(--text); background: var(--hover); outline: none; }
 
 .stats-panel-body {
   position: relative;

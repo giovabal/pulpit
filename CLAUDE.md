@@ -52,6 +52,9 @@ See WORKFLOW.md for all flags and options.
 - **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/operations/`), `PROTECTED` (login required everywhere; staff required for `/operations/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
 - **`webapp/context_processors.py`** — Exposes `WEB_ACCESS` to all templates.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
+- **`events/models.py`** — `EventType` (name, description, hex color; default red) and `Event` (date, subject, FK to `EventType`). Both registered in Django admin.
+- **`events/views.py`** (`EventsDataView`) — `GET /events/data/` returns all events as a JSON array `[{date, subject, action, color}, …]`.
+- **`webapp/templates/webapp/index.html`** — `buildEventAnnotations(labels, events)` groups events by month and builds `chartjs-plugin-annotation` vertical-line annotations; `renderChart(canvas, data, events)` passes them to every Chart.js instance. Lines are dashed, colored by `EventType.color`; hovering shows a popup with date, action and subject.
 
 ### Network measures
 

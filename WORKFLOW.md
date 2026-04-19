@@ -164,7 +164,35 @@ python manage.py compare_networks /path/to/other/graph --seo
 
 The argument must be the `graph/` output directory of a previous `export_network` run — the directory that contains `index.html`.
 
-## 7. View the graph
+## 7. Add events (optional)
+
+Events mark significant external occurrences — elections, incidents, publication dates — on all time-series charts in the **Network** home page and on individual **Channel** detail pages.
+
+### Event types
+
+Go to **Admin** → **Event types** and create one or more types (e.g. *Election*, *Incident*, *Publication*). Each type has:
+
+| Field | Description |
+| :---- | :---------- |
+| Name | Short label shown in chart tooltips |
+| Description | Optional free-text note |
+| Color | Hex color used for the vertical marker line (default: red) |
+
+### Events
+
+Go to **Admin** → **Events** and create entries:
+
+| Field | Description |
+| :---- | :---------- |
+| Date | The date of the event (full calendar date) |
+| Subject | One-line description shown in the tooltip |
+| Action | The `EventType` this event belongs to |
+
+### How they appear in charts
+
+Events are fetched once per page load from `GET /events/data/`. For each chart, events whose month falls within the chart's time span are drawn as dashed vertical lines in the EventType color. Hovering a line shows a popup listing all events in that month: date, type name, and subject. Multiple events in the same month share a single line (first event's color is used).
+
+## 8. View the graph
 
 After exporting, go to **Data** (`/data/`) or open [http://localhost:8000/graph/](http://localhost:8000/graph/) directly.
 

@@ -1,16 +1,10 @@
 # Changelog
 
-## [Unreleased]
-*Events timeline. Event markers on home-page charts.*
-
-### New features
-- **Events app**: new `EventType` model (name, description, color) and `Event` model (date, subject, action → EventType). Both are registered in the Django admin. EventType color defaults to pure red and is shown as a color-picker widget.
-- **Event markers on home-page charts**: each time-series chart on the home page now draws a dashed vertical line for every event whose date falls within the chart's time span. The line color matches the EventType color. Hovering the line shows a popup listing all events in that month (date, action type, subject). Powered by `chartjs-plugin-annotation` v3.
-
 ## [0.13] - To be announced
-*New community detection algorithms. Consensus matrix.*
+*New community detection algorithms. Consensus matrix. Events timeline.*
 
 ### New features
+- **Event markers on home-page charts**: each time-series chart on the home page now draws a dashed vertical line for every event whose date falls within the chart's time span. The line color matches the EventType color. Hovering the line shows a popup listing all events in that month (date, action type, subject).
   - `LEIDEN_CPM_COARSE` and `LEIDEN_CPM_FINE`: Leiden optimisation with the **Constant Potts Model** (CPM) objective (Traag et al. 2011). Unlike modularity, CPM has no resolution limit — communities are defined as groups whose internal edge density exceeds a resolution parameter γ. The two variants differ only in their default γ (`--leiden-coarse-resolution`, default 0.01; `--leiden-fine-resolution`, default 0.05). Lower γ gives few, large communities; higher γ gives more, smaller ones. Both symmetrise the graph to undirected (same as `LEIDEN`).
   - `MCL`: **Markov Clustering** (van Dongen 2000). Alternates matrix expansion (random-walk diffusion) and inflation (contrast amplification) until convergence. Works natively on the directed weighted graph without symmetrisation. The inflation parameter r controls granularity (`--mcl-inflation`, default 2.0; typical range 1.5–4.0). New dependency: `markov-clustering`.
   - `INFOMAP_MEMORY`: **Second-order (memory) Infomap** (Rosvall et al., Nature Communications 2014). Builds a state network of directed-edge contexts — each state node represents "currently at channel B, having arrived from channel A" — and minimises the map equation on it. Captures sequential forwarding patterns invisible to first-order Infomap. Source nodes receive virtual entry states so they participate in the flow. No new dependency (extends the existing `infomap` package).

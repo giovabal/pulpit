@@ -64,16 +64,29 @@
 
 {% for panel in panels %}
 <div class="stats-panel">
-  <button class="stats-toggle"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#{{ panel.id }}"
-          aria-expanded="false"
-          aria-controls="{{ panel.id }}">
-    <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
-    {{ panel.title }}
-    <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
-  </button>
+  <div class="stats-toggle-wrap">
+    <button class="stats-toggle"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#{{ panel.id }}"
+            aria-expanded="false"
+            aria-controls="{{ panel.id }}">
+      <i class="bi {{ panel.icon }}" aria-hidden="true"></i>
+      {{ panel.title }}
+      <i class="bi bi-chevron-down toggle-chevron" aria-hidden="true"></i>
+    </button>
+    {% if panel.description %}
+    <button class="panel-info-btn"
+            type="button"
+            data-bs-toggle="popover"
+            data-bs-trigger="hover focus"
+            data-bs-placement="right"
+            data-bs-content="{{ panel.description }}"
+            aria-label="About this panel">
+      <i class="bi bi-info-circle" aria-hidden="true"></i>
+    </button>
+    {% endif %}
+  </div>
   <div class="collapse" id="{{ panel.id }}" data-panel-url="{{ panel.url }}" data-panel-type="{{ panel.type|default:'chart' }}">
     <div class="stats-panel-body">
       <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
@@ -88,24 +101,27 @@
 {% endfor %}
 
 <script>
+  var eventsPromise = fetch("{% url 'events-data' %}").then(function (r) { return r.json(); });
+
   document.querySelectorAll('.collapse[data-panel-url]').forEach(function (collapse) {
     var spinner = collapse.querySelector('.stats-spinner');
     var loaded = false;
     collapse.addEventListener('show.bs.collapse', function () {
       if (!loaded) {
         loaded = true;
-        fetch(collapse.dataset.panelUrl)
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            spinner.classList.add('hidden');
-            if (collapse.dataset.panelType === 'table') {
-              renderContactTables(collapse.querySelector('.panel-tables-wrap'), data);
-            } else if (collapse.dataset.panelType === 'cross-refs') {
-              renderCrossRefsTables(collapse.querySelector('.panel-tables-wrap'), data);
-            } else {
-              renderChart(collapse.querySelector('canvas'), data);
-            }
-          });
+        var isChart = collapse.dataset.panelType !== 'table' && collapse.dataset.panelType !== 'cross-refs';
+        var fetches = [fetch(collapse.dataset.panelUrl).then(function (r) { return r.json(); })];
+        if (isChart) fetches.push(eventsPromise);
+        Promise.all(fetches).then(function (results) {
+          spinner.classList.add('hidden');
+          if (collapse.dataset.panelType === 'table') {
+            renderContactTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
+          } else if (collapse.dataset.panelType === 'cross-refs') {
+            renderCrossRefsTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
+          } else {
+            renderChart(collapse.querySelector('canvas'), results[0], results[1]);
+          }
+        });
       }
     });
   });
@@ -314,3 +330,11 @@
 {% include "webapp/pagination.html" %}
 {% endif %}
 {% endblock content %}
+
+{% block extra_scripts %}
+<script>
+  document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
+    new bootstrap.Popover(el);
+  });
+</script>
+{% endblock extra_scripts %}
