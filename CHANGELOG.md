@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+*Events timeline. Event markers on home-page charts.*
+
+### New features
+- **Events app**: new `EventType` model (name, description, color) and `Event` model (date, subject, action → EventType). Both are registered in the Django admin. EventType color defaults to pure red and is shown as a color-picker widget.
+- **Event markers on home-page charts**: each time-series chart on the home page now draws a dashed vertical line for every event whose date falls within the chart's time span. The line color matches the EventType color. Hovering the line shows a popup listing all events in that month (date, action type, subject). Powered by `chartjs-plugin-annotation` v3.
+
 ## [0.13] - To be announced
 *New community detection algorithms. Consensus matrix.*
 

@@ -37,6 +37,7 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(template_name="webapp/login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("stats/", include("stats.urls")),
+    path("events/", include("events.urls")),
     *(
         [
             path("graph/", RedirectView.as_view(url="/graph/index.html", permanent=False)),

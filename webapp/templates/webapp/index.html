@@ -69,8 +69,52 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
     <script>
-      function renderChart(canvas, data) {
+      function buildEventAnnotations(labels, events) {
+        if (!events || !events.length) return {};
+        const byMonth = {};
+        for (const e of events) {
+          const month = e.date.slice(0, 7);
+          if (!byMonth[month]) byMonth[month] = [];
+          byMonth[month].push(e);
+        }
+        const annotations = {};
+        for (const [month, evts] of Object.entries(byMonth)) {
+          if (!labels.includes(month)) continue;
+          const lines = evts.map(function (e) { return e.date + "  \u2014  " + e.action + ": " + e.subject; });
+          const color = evts[0].color;
+          annotations["evt_" + month.replace("-", "_")] = {
+            type: "line",
+            xMin: month,
+            xMax: month,
+            borderColor: color,
+            borderWidth: 2,
+            borderDash: [5, 4],
+            label: {
+              content: lines,
+              display: false,
+              backgroundColor: "rgba(30, 30, 30, 0.88)",
+              color: "#fff",
+              font: { size: 12, family: "Inter, sans-serif" },
+              padding: { x: 10, y: 8 },
+              borderRadius: 4,
+              position: "start",
+            },
+            enter: function (ctx) {
+              ctx.element.label.options.display = true;
+              ctx.chart.draw();
+            },
+            leave: function (ctx) {
+              ctx.element.label.options.display = false;
+              ctx.chart.draw();
+            },
+          };
+        }
+        return annotations;
+      }
+
+      function renderChart(canvas, data, events) {
         const css = getComputedStyle(document.documentElement);
         const chartLine  = css.getPropertyValue("--chart-line").trim();
         const chartFill  = css.getPropertyValue("--chart-fill").trim();
@@ -101,6 +145,9 @@
                 callbacks: {
                   label: function (ctx) { return data.y_label + ": " + ctx.raw.toLocaleString(); },
                 },
+              },
+              annotation: {
+                annotations: buildEventAnnotations(data.labels, events),
               },
             },
             scales: {
