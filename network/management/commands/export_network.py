@@ -7,7 +7,10 @@ from django.core.management.base import BaseCommand, CommandError
 
 from network import community, community_stats, exporter, graph_builder, layout, measures, tables
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
+from network.utils import GraphData
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
+
+import networkx as nx
 
 
 def _parse_csv(value: str) -> list[str]:
@@ -287,6 +290,172 @@ class Command(BaseCommand):
         except ValueError as err:
             raise CommandError(f"Invalid date for {flag}: {value!r}. Expected format: yyyy-mm-dd.") from err
 
+    def _compute_communities(
+        self,
+        graph: nx.DiGraph,
+        channel_dict: dict,
+        edge_list: list,
+        communities_strategy: list[str],
+        options: dict,
+    ) -> dict[str, tuple]:
+        """Run all community detection strategies and apply results to the graph."""
+        strategy_results: dict[str, tuple] = {}
+        self.stdout.write("Calculate communities")
+        for strategy in communities_strategy:
+            self.stdout.write(f"- {strategy.lower()} … ", ending="")
+            self.stdout.flush()
+            try:
+                community_map, community_palette = community.detect(
+                    strategy,
+                    settings.COMMUNITY_PALETTE,
+                    graph,
+                    channel_dict,
+                    leiden_coarse_resolution=options["leiden_coarse_resolution"],
+                    leiden_fine_resolution=options["leiden_fine_resolution"],
+                    mcl_inflation=options["mcl_inflation"],
+                )
+            except ValueError as e:
+                raise CommandError(str(e)) from e
+            community.apply_to_graph(graph, channel_dict, community_map, community_palette, strategy)
+            strategy_results[strategy] = (community_map, community_palette)
+            n_communities = len(set(community_map.values()))
+            self.stdout.write(f"{n_communities} communities")
+        community.apply_edge_colors(graph, edge_list, channel_dict)
+        return strategy_results
+
+    def _compute_layout(
+        self,
+        graph: nx.DiGraph,
+        do_graph: bool,
+        do_3dgraph: bool,
+        fa2_iterations: int,
+        target_layout: str,
+    ) -> tuple[dict, dict | None]:
+        """Compute 2D (and optionally 3D) ForceAtlas2 positions."""
+        positions_3d: dict | None = None
+        if not (do_graph or do_3dgraph):
+            return {}, None
+
+        self.stdout.write("\nSet spatial distribution of nodes")
+        self.stdout.write("- Kamada-Kawai … ", ending="")
+        self.stdout.flush()
+        initial_pos = layout.kamada_kawai_positions(graph)
+        self.stdout.write("done")
+        self.stdout.write(f"- ForceAtlas2 ({fa2_iterations} iterations) … ", ending="")
+        self.stdout.flush()
+        positions = layout.forceatlas2_positions(graph, initial_pos, fa2_iterations)
+        self.stdout.write("done")
+
+        xs, ys = zip(*positions.values(), strict=False)
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if (target_layout == layout.LAYOUT_HORIZONTAL and height > width) or (
+            target_layout == layout.LAYOUT_VERTICAL and width > height
+        ):
+            self.stdout.write("- rotating layout 90°")
+            positions = layout.rotate_positions(positions)
+
+        if do_3dgraph:
+            self.stdout.write("- Kamada-Kawai 3D … ", ending="")
+            self.stdout.flush()
+            initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
+            self.stdout.write("done")
+            self.stdout.write(f"- ForceAtlas2 3D ({fa2_iterations} iterations) … ", ending="")
+            self.stdout.flush()
+            positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, fa2_iterations)
+            self.stdout.write("done")
+
+        return positions, positions_3d
+
+    def _compute_measures(
+        self,
+        graph: nx.DiGraph,
+        graph_data: GraphData,
+        channel_dict: dict,
+        selected_measures: set[str],
+        bridging_token: str | None,
+        start_date: datetime.date | None,
+        end_date: datetime.date | None,
+        do_graph: bool,
+        do_3dgraph: bool,
+        spreading_runs: int,
+    ) -> list[tuple[str, str]]:
+        """Compute all network measures and return (key, label) pairs for each active measure."""
+        self.stdout.write("\nCalculations on the graph")
+        self.stdout.write("- largest component … ", ending="")
+        self.stdout.flush()
+        main_component_nodes = exporter.find_main_component(graph)
+        self.stdout.write(f"{len(main_component_nodes)} nodes")
+
+        self.stdout.write("- degrees, activity and fans")
+        measures_labels = measures.apply_base_node_measures(
+            graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+        )
+
+        # Pre-compute betweenness once when both BETWEENNESS and BRIDGING are active.
+        _cached_betweenness: dict | None = None
+        if "BETWEENNESS" in selected_measures and bridging_token is not None:
+            _cached_betweenness = measures.compute_betweenness(graph)
+
+        _orm_steps = [
+            (
+                "AMPLIFICATION",
+                "amplification factor",
+                lambda gd, g: measures.apply_amplification_factor(
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                ),
+            ),
+            (
+                "CONTENTORIGINALITY",
+                "content originality",
+                lambda gd, g: measures.apply_content_originality(
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                ),
+            ),
+            (
+                "SPREADING",
+                "spreading efficiency (SIR)",
+                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=spreading_runs),
+            ),
+        ]
+        for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:
+            if key in selected_measures:
+                self.stdout.write(f"- {label} … ", ending="")
+                self.stdout.flush()
+                if key == "BETWEENNESS" and _cached_betweenness is not None:
+                    step_labels = measures.apply_betweenness_centrality(
+                        graph_data, graph, betweenness=_cached_betweenness
+                    )
+                elif isinstance(fn, str):
+                    step_labels = getattr(measures, fn)(graph_data, graph)
+                else:
+                    step_labels = fn(graph_data, graph)
+                measures_labels += step_labels
+                self.stdout.write("done")
+
+        if selected_measures & {"HITSHUB", "HITSAUTH"}:
+            self.stdout.write("- HITS … ", ending="")
+            self.stdout.flush()
+            hits_labels = measures.apply_hits(graph_data, graph)
+            _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
+            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in selected_measures]
+            self.stdout.write("done")
+
+        if bridging_token is not None:
+            strategy_key = measures.bridging_strategy(bridging_token).lower()
+            self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
+            self.stdout.flush()
+            measures_labels += measures.apply_bridging_centrality(
+                graph_data, graph, strategy_key, betweenness=_cached_betweenness
+            )
+            self.stdout.write("done")
+
+        if do_graph or do_3dgraph:
+            self.stdout.write("- small components")
+            exporter.reposition_isolated_nodes(graph_data, main_component_nodes)
+
+        return measures_labels
+
     def handle(self, *args: Any, **options: Any) -> None:
         raw_community_strategies = _parse_csv(options["community_strategies"])
         communities_strategy = (
@@ -335,140 +504,27 @@ class Command(BaseCommand):
             raise CommandError(str(e)) from e
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
-        self.stdout.write("Calculate communities")
-        strategy_results: dict[str, tuple] = {}
-        for strategy in communities_strategy:
-            self.stdout.write(f"- {strategy.lower()} … ", ending="")
-            self.stdout.flush()
-            try:
-                community_map, community_palette = community.detect(
-                    strategy,
-                    settings.COMMUNITY_PALETTE,
-                    graph,
-                    channel_dict,
-                    leiden_coarse_resolution=options["leiden_coarse_resolution"],
-                    leiden_fine_resolution=options["leiden_fine_resolution"],
-                    mcl_inflation=options["mcl_inflation"],
-                )
-            except ValueError as e:
-                raise CommandError(str(e)) from e
-            community.apply_to_graph(graph, channel_dict, community_map, community_palette, strategy)
-            strategy_results[strategy] = (community_map, community_palette)
-            n_communities = len(set(community_map.values()))
-            self.stdout.write(f"{n_communities} communities")
-        community.apply_edge_colors(graph, edge_list, channel_dict)
+        strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
+        positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
 
-        positions_3d: dict | None = None
-        if do_graph or do_3dgraph:
-            self.stdout.write("\nSet spatial distribution of nodes")
-            self.stdout.write("- Kamada-Kawai … ", ending="")
-            self.stdout.flush()
-            initial_pos = layout.kamada_kawai_positions(graph)
-            self.stdout.write("done")
-            self.stdout.write(f"- ForceAtlas2 ({fa2_iterations} iterations) … ", ending="")
-            self.stdout.flush()
-            positions = layout.forceatlas2_positions(graph, initial_pos, fa2_iterations)
-            self.stdout.write("done")
-
-            xs, ys = zip(*positions.values(), strict=False)
-            width = max(xs) - min(xs)
-            height = max(ys) - min(ys)
-            if (target_layout == layout.LAYOUT_HORIZONTAL and height > width) or (
-                target_layout == layout.LAYOUT_VERTICAL and width > height
-            ):
-                self.stdout.write("- rotating layout 90°")
-                positions = layout.rotate_positions(positions)
-
-            if do_3dgraph:
-                self.stdout.write("- Kamada-Kawai 3D … ", ending="")
-                self.stdout.flush()
-                initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
-                self.stdout.write("done")
-                self.stdout.write(f"- ForceAtlas2 3D ({fa2_iterations} iterations) … ", ending="")
-                self.stdout.flush()
-                positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, fa2_iterations)
-                self.stdout.write("done")
-        else:
-            positions = {}
-
-        self.stdout.write("\nCalculations on the graph")
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
-
-        self.stdout.write("- largest component … ", ending="")
-        self.stdout.flush()
-        main_component = exporter.find_main_component(graph)
-        self.stdout.write(f"{len(main_component)} nodes")
-
-        self.stdout.write("- degrees, activity and fans")
-        measures_labels = measures.apply_base_node_measures(
-            graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+        measures_labels = self._compute_measures(
+            graph,
+            graph_data,
+            channel_dict,
+            selected_measures,
+            bridging_token,
+            start_date,
+            end_date,
+            do_graph,
+            do_3dgraph,
+            options["spreading_runs"],
         )
-
-        # Pre-compute betweenness once when both BETWEENNESS and BRIDGING are active.
-        _cached_betweenness: "dict | None" = None
-        if "BETWEENNESS" in selected_measures and bridging_token is not None:
-            _cached_betweenness = measures.compute_betweenness(graph)
-
-        _orm_steps = [
-            (
-                "AMPLIFICATION",
-                "amplification factor",
-                lambda gd, g: measures.apply_amplification_factor(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date
-                ),
-            ),
-            (
-                "CONTENTORIGINALITY",
-                "content originality",
-                lambda gd, g: measures.apply_content_originality(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date
-                ),
-            ),
-            (
-                "SPREADING",
-                "spreading efficiency (SIR)",
-                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=options["spreading_runs"]),
-            ),
-        ]
-        for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:
-            if key in selected_measures:
-                self.stdout.write(f"- {label} … ", ending="")
-                self.stdout.flush()
-                if key == "BETWEENNESS" and _cached_betweenness is not None:
-                    step_labels = measures.apply_betweenness_centrality(
-                        graph_data, graph, betweenness=_cached_betweenness
-                    )
-                elif isinstance(fn, str):
-                    step_labels = getattr(measures, fn)(graph_data, graph)
-                else:
-                    step_labels = fn(graph_data, graph)
-                measures_labels += step_labels
-                self.stdout.write("done")
-
-        if selected_measures & {"HITSHUB", "HITSAUTH"}:
-            self.stdout.write("- HITS … ", ending="")
-            self.stdout.flush()
-            hits_labels = measures.apply_hits(graph_data, graph)
-            _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
-            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in selected_measures]
-            self.stdout.write("done")
-
-        if bridging_token is not None:
-            strategy_key = measures.bridging_strategy(bridging_token).lower()
-            self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
-            self.stdout.flush()
-            measures_labels += measures.apply_bridging_centrality(
-                graph_data, graph, strategy_key, betweenness=_cached_betweenness
-            )
-            self.stdout.write("done")
-
-        if do_graph or do_3dgraph:
-            self.stdout.write("- small components")
-            exporter.reposition_isolated_nodes(graph_data, main_component)
 
         root_target = settings.GRAPH_OUTPUT_DIR
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
+        strategies = [s.lower() for s in communities_strategy]
 
         if do_graph or do_3dgraph:
             self.stdout.write("\nGenerate map")
@@ -500,7 +556,6 @@ class Command(BaseCommand):
             has_consensus_matrix=do_consensus_matrix,
         )
 
-        strategies = [s.lower() for s in communities_strategy]
         need_community_metrics = do_html or do_xlsx or do_consensus_matrix
         if need_community_metrics:
             self.stdout.write("- community metrics")

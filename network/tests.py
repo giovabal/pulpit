@@ -20,6 +20,12 @@ from network.community import (
     detect_organization,
     normalize_community_map,
 )
+from network.community_stats import (
+    _freeman_centralization,
+    _network_summary,
+    compute_community_metrics,
+    network_summary_rows,
+)
 from network.exporter import (
     build_graph_data,
     ensure_graph_root,
@@ -30,8 +36,21 @@ from network.exporter import (
 from network.graph_builder import build_graph
 from network.layout import compute_layout
 from network.measures import (
+    apply_amplification_factor,
     apply_base_node_measures,
+    apply_betweenness_centrality,
+    apply_bridging_centrality,
+    apply_burt_constraint,
+    apply_content_originality,
+    apply_flow_betweenness_centrality,
+    apply_harmonic_centrality,
+    apply_hits,
+    apply_in_degree_centrality,
+    apply_katz_centrality,
+    apply_out_degree_centrality,
     apply_pagerank,
+    apply_spreading_efficiency,
+    compute_betweenness,
 )
 from webapp.models import Channel, Message, Organization
 from webapp.utils.colors import parse_color
@@ -1478,3 +1497,534 @@ class ExportNetworkCommandTests(TestCase):
         call_command("export_network", html=True, xlsx=True)
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_hits
+# ---------------------------------------------------------------------------
+
+
+class ApplyHitsTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["1", "2", "3"])
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_hub_and_authority_to_all_nodes(self) -> None:
+        apply_hits(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("hits_hub", node)
+            self.assertIn("hits_authority", node)
+
+    def test_returns_two_labels(self) -> None:
+        labels = apply_hits(self.graph_data, self.graph)
+        keys = [k for k, _ in labels]
+        self.assertIn("hits_hub", keys)
+        self.assertIn("hits_authority", keys)
+
+    def test_hub_and_authority_are_floats(self) -> None:
+        apply_hits(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIsInstance(node["hits_hub"], float)
+            self.assertIsInstance(node["hits_authority"], float)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — compute_betweenness / apply_betweenness_centrality
+# ---------------------------------------------------------------------------
+
+
+class ComputeBetweennessTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c")])
+
+    def test_returns_dict_of_floats(self) -> None:
+        result = compute_betweenness(self.graph)
+        self.assertIsInstance(result, dict)
+        for v in result.values():
+            self.assertIsInstance(v, float)
+
+    def test_intermediate_node_has_highest_betweenness(self) -> None:
+        # a→b→c: b lies on the only path a→c (alongside the direct edge)
+        graph = nx.DiGraph()
+        graph.add_edges_from([("a", "b"), ("b", "c")])
+        result = compute_betweenness(graph)
+        # b is the only possible intermediate node
+        self.assertGreater(result["b"], result["a"])
+        self.assertGreater(result["b"], result["c"])
+
+
+class ApplyBetweennessTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_betweenness_key(self) -> None:
+        apply_betweenness_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("betweenness", node)
+
+    def test_precomputed_values_used_directly(self) -> None:
+        precomputed = {"1": 0.5, "2": 0.25, "3": 0.0}
+        apply_betweenness_centrality(self.graph_data, self.graph, betweenness=precomputed)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertAlmostEqual(node_map["1"]["betweenness"], 0.5)
+        self.assertAlmostEqual(node_map["2"]["betweenness"], 0.25)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — in/out degree, harmonic, Katz centralities
+# ---------------------------------------------------------------------------
+
+
+class ApplyInDegreeCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("3", "2")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_in_degree_centrality_key(self) -> None:
+        apply_in_degree_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("in_degree_centrality", node)
+
+    def test_sink_node_has_higher_in_degree_than_source(self) -> None:
+        apply_in_degree_centrality(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertGreater(node_map["2"]["in_degree_centrality"], node_map["1"]["in_degree_centrality"])
+
+
+class ApplyOutDegreeCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("1", "3")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_out_degree_centrality_key(self) -> None:
+        apply_out_degree_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("out_degree_centrality", node)
+
+    def test_source_node_has_higher_out_degree_than_sinks(self) -> None:
+        apply_out_degree_centrality(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertGreater(node_map["1"]["out_degree_centrality"], node_map["2"]["out_degree_centrality"])
+
+
+class ApplyHarmonicCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_harmonic_centrality_key(self) -> None:
+        apply_harmonic_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("harmonic_centrality", node)
+
+    def test_values_in_unit_interval(self) -> None:
+        apply_harmonic_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertGreaterEqual(node["harmonic_centrality"], 0.0)
+            self.assertLessEqual(node["harmonic_centrality"], 1.0)
+
+
+class ApplyKatzCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_katz_centrality_key(self) -> None:
+        apply_katz_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("katz_centrality", node)
+
+    def test_values_are_positive_floats(self) -> None:
+        apply_katz_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIsInstance(node["katz_centrality"], float)
+            self.assertGreater(node["katz_centrality"], 0.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_flow_betweenness_centrality
+# ---------------------------------------------------------------------------
+
+
+class ApplyFlowBetweennessTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_flow_betweenness_key(self) -> None:
+        apply_flow_betweenness_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("flow_betweenness", node)
+
+    def test_disconnected_graph_outside_nodes_get_zero(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edges_from([("a", "b"), ("b", "c")])
+        graph.add_node("isolated")
+        graph_data: dict = {
+            "nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "isolated"}],
+            "edges": [],
+        }
+        apply_flow_betweenness_centrality(graph_data, graph)
+        node_map = {n["id"]: n for n in graph_data["nodes"]}
+        self.assertEqual(node_map["isolated"]["flow_betweenness"], 0.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_burt_constraint
+# ---------------------------------------------------------------------------
+
+
+class ApplyBurtConstraintTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
+        self.graph.add_node("isolated")
+        self.graph_data: dict = {
+            "nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "isolated"}],
+            "edges": [],
+        }
+
+    def test_adds_burt_constraint_key(self) -> None:
+        apply_burt_constraint(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("burt_constraint", node)
+
+    def test_isolated_node_gets_none(self) -> None:
+        apply_burt_constraint(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertIsNone(node_map["isolated"]["burt_constraint"])
+
+    def test_connected_node_gets_numeric_value(self) -> None:
+        apply_burt_constraint(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertIsNotNone(node_map["1"]["burt_constraint"])
+        self.assertIsInstance(node_map["1"]["burt_constraint"], float)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_bridging_centrality
+# ---------------------------------------------------------------------------
+
+
+class ApplyBridgingCentralityTests(TestCase):
+    def setUp(self) -> None:
+        # Two triangles linked by a bridge node "bridge"
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from(
+            [
+                ("a", "b"),
+                ("b", "a"),
+                ("b", "bridge"),
+                ("bridge", "c"),
+                ("c", "d"),
+                ("d", "c"),
+            ]
+        )
+        for node_id, comm in [("a", "X"), ("b", "X"), ("bridge", "Y"), ("c", "Y"), ("d", "Y")]:
+            self.graph.nodes[node_id]["data"] = {"communities": {"louvain": comm}}
+        self.graph_data: dict = {
+            "nodes": [{"id": n} for n in ["a", "b", "bridge", "c", "d"]],
+            "edges": [],
+        }
+
+    def test_adds_bridging_centrality_key(self) -> None:
+        apply_bridging_centrality(self.graph_data, self.graph, "louvain")
+        for node in self.graph_data["nodes"]:
+            self.assertIn("bridging_centrality", node)
+
+    def test_bridge_node_scores_higher_than_within_community_node(self) -> None:
+        apply_bridging_centrality(self.graph_data, self.graph, "louvain")
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        # "bridge" connects both communities; "a" connects only within X
+        self.assertGreater(node_map["bridge"]["bridging_centrality"], node_map["a"]["bridging_centrality"])
+
+
+# ---------------------------------------------------------------------------
+# measures/_spreading.py — apply_spreading_efficiency
+# ---------------------------------------------------------------------------
+
+
+class ApplySpreadingEfficiencyTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from(
+            [("1", "2", {"weight": 1.0}), ("2", "3", {"weight": 1.0}), ("1", "3", {"weight": 1.0})]
+        )
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_spreading_efficiency_key(self) -> None:
+        apply_spreading_efficiency(self.graph_data, self.graph, runs=10)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("spreading_efficiency", node)
+
+    def test_single_node_graph_gets_zero(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_node("solo")
+        graph_data: dict = {"nodes": [{"id": "solo"}], "edges": []}
+        apply_spreading_efficiency(graph_data, graph, runs=5)
+        self.assertEqual(graph_data["nodes"][0]["spreading_efficiency"], 0.0)
+
+    def test_values_in_unit_interval(self) -> None:
+        apply_spreading_efficiency(self.graph_data, self.graph, runs=10)
+        for node in self.graph_data["nodes"]:
+            self.assertGreaterEqual(node["spreading_efficiency"], 0.0)
+            self.assertLessEqual(node["spreading_efficiency"], 1.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_content.py — apply_amplification_factor
+# ---------------------------------------------------------------------------
+
+
+class ApplyAmplificationFactorTests(TestCase):
+    def setUp(self) -> None:
+        org = Organization.objects.create(name="Org", is_interesting=True, color="#FF0000")
+        self.ch1 = Channel.objects.create(telegram_id=10, organization=org, title="Source")
+        self.ch2 = Channel.objects.create(telegram_id=11, organization=org, title="Amplifier")
+        # ch1 has 4 own messages; ch2 forwards 2 of ch1's messages into ch2's channel
+        # → ch1's content is "amplified" 2 times; ch1 has 4 messages → factor = 2/4 = 0.5
+        Message.objects.create(telegram_id=1, channel=self.ch1)
+        Message.objects.create(telegram_id=2, channel=self.ch1)
+        Message.objects.create(telegram_id=3, channel=self.ch1)
+        Message.objects.create(telegram_id=4, channel=self.ch1)
+        Message.objects.create(telegram_id=5, channel=self.ch2, forwarded_from=self.ch1)
+        Message.objects.create(telegram_id=6, channel=self.ch2, forwarded_from=self.ch1)
+        self.channel_dict = {
+            str(self.ch1.pk): {"channel": self.ch1},
+            str(self.ch2.pk): {"channel": self.ch2},
+        }
+        self.graph_data: dict = {
+            "nodes": [{"id": str(self.ch1.pk)}, {"id": str(self.ch2.pk)}],
+            "edges": [],
+        }
+        self.graph = nx.DiGraph()
+
+    def test_amplification_factor_computed_correctly(self) -> None:
+        apply_amplification_factor(self.graph_data, self.graph, self.channel_dict)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        # ch1 has 4 messages and is forwarded 2 times → 2/4 = 0.5
+        self.assertAlmostEqual(node_map[str(self.ch1.pk)]["amplification_factor"], 0.5)
+        # ch2 is never forwarded from → 0.0
+        self.assertEqual(node_map[str(self.ch2.pk)]["amplification_factor"], 0.0)
+
+    def test_channel_with_no_messages_gets_zero(self) -> None:
+        apply_amplification_factor(self.graph_data, self.graph, self.channel_dict)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertEqual(node_map[str(self.ch2.pk)]["amplification_factor"], 0.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_content.py — apply_content_originality
+# ---------------------------------------------------------------------------
+
+
+class ApplyContentOriginalityTests(TestCase):
+    def setUp(self) -> None:
+        org = Organization.objects.create(name="Org2", is_interesting=True, color="#00FF00")
+        self.ch1 = Channel.objects.create(telegram_id=20, organization=org, title="Original")
+        self.ch2 = Channel.objects.create(telegram_id=21, organization=org, title="Forwarder")
+        # ch1: 4 messages, 0 forwarded → originality 1.0
+        for i in range(4):
+            Message.objects.create(telegram_id=100 + i, channel=self.ch1)
+        # ch2: 4 messages, 2 forwarded → originality 0.5
+        Message.objects.create(telegram_id=200, channel=self.ch2, forwarded_from=self.ch1)
+        Message.objects.create(telegram_id=201, channel=self.ch2, forwarded_from=self.ch1)
+        Message.objects.create(telegram_id=202, channel=self.ch2)
+        Message.objects.create(telegram_id=203, channel=self.ch2)
+        graph = nx.DiGraph()
+        self.channel_dict = {
+            str(self.ch1.pk): {"channel": self.ch1},
+            str(self.ch2.pk): {"channel": self.ch2},
+        }
+        self.graph_data: dict = {
+            "nodes": [{"id": str(self.ch1.pk)}, {"id": str(self.ch2.pk)}],
+            "edges": [],
+        }
+        self.graph = graph
+
+    def test_all_original_messages_scores_one(self) -> None:
+        apply_content_originality(self.graph_data, self.graph, self.channel_dict)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertAlmostEqual(node_map[str(self.ch1.pk)]["content_originality"], 1.0)
+
+    def test_half_forwarded_scores_half(self) -> None:
+        apply_content_originality(self.graph_data, self.graph, self.channel_dict)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertAlmostEqual(node_map[str(self.ch2.pk)]["content_originality"], 0.5)
+
+    def test_channel_with_no_messages_gets_none(self) -> None:
+        org = Organization.objects.create(name="OrgEmpty", is_interesting=True, color="#0000FF")
+        empty_ch = Channel.objects.create(telegram_id=99, organization=org, title="Empty")
+        channel_dict = {str(empty_ch.pk): {"channel": empty_ch}}
+        graph_data: dict = {"nodes": [{"id": str(empty_ch.pk)}], "edges": []}
+        apply_content_originality(graph_data, nx.DiGraph(), channel_dict)
+        self.assertIsNone(graph_data["nodes"][0]["content_originality"])
+
+
+# ---------------------------------------------------------------------------
+# community_stats.py — _freeman_centralization
+# ---------------------------------------------------------------------------
+
+
+class FreemanCentralizationTests(TestCase):
+    def test_returns_none_for_empty_list(self) -> None:
+        self.assertIsNone(_freeman_centralization([]))
+
+    def test_returns_none_for_single_value(self) -> None:
+        self.assertIsNone(_freeman_centralization([0.5]))
+
+    def test_returns_none_when_all_zero(self) -> None:
+        self.assertIsNone(_freeman_centralization([0.0, 0.0, 0.0]))
+
+    def test_returns_zero_for_equal_values(self) -> None:
+        result = _freeman_centralization([0.5, 0.5, 0.5])
+        self.assertAlmostEqual(result, 0.0)
+
+    def test_returns_one_for_star_pattern(self) -> None:
+        # One node with max centrality, all others at zero → centralization = 1.0
+        result = _freeman_centralization([1.0, 0.0, 0.0])
+        self.assertAlmostEqual(result, 1.0)
+
+    def test_none_entries_ignored(self) -> None:
+        # None entries should be filtered; result same as [1.0, 0.0, 0.0]
+        result = _freeman_centralization([1.0, None, 0.0, None, 0.0])
+        self.assertAlmostEqual(result, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# community_stats.py — _network_summary
+# ---------------------------------------------------------------------------
+
+
+class NetworkSummaryTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("a", "c")])
+
+    def test_returns_expected_keys(self) -> None:
+        summary = _network_summary(self.graph)
+        for key in ("n", "e", "density", "reciprocity", "avg_clustering", "wcc_count", "scc_count"):
+            self.assertIn(key, summary)
+
+    def test_node_and_edge_counts_correct(self) -> None:
+        summary = _network_summary(self.graph)
+        self.assertEqual(summary["n"], 3)
+        self.assertEqual(summary["e"], 4)
+
+    def test_density_in_unit_interval(self) -> None:
+        summary = _network_summary(self.graph)
+        self.assertGreaterEqual(summary["density"], 0.0)
+        self.assertLessEqual(summary["density"], 1.0)
+
+    def test_empty_graph_does_not_raise(self) -> None:
+        summary = _network_summary(nx.DiGraph())
+        self.assertEqual(summary["n"], 0)
+        self.assertEqual(summary["e"], 0)
+
+
+# ---------------------------------------------------------------------------
+# community_stats.py — network_summary_rows
+# ---------------------------------------------------------------------------
+
+
+class NetworkSummaryRowsTests(TestCase):
+    def _make_summary(self) -> dict:
+        return {
+            "n": 5,
+            "e": 8,
+            "density": 0.4,
+            "reciprocity": 0.25,
+            "avg_clustering": 0.3,
+            "avg_path_length": 2.1,
+            "diameter": 4,
+            "path_on_full": True,
+            "wcc_count": 1,
+            "wcc_fraction": 1.0,
+            "scc_count": 2,
+            "scc_fraction": 0.6,
+            "assortativity": {"in_in": None, "in_out": None, "out_in": None, "out_out": None},
+            "centralizations": {},
+        }
+
+    def test_returns_list_of_three_tuples(self) -> None:
+        rows = network_summary_rows(self._make_summary())
+        self.assertIsInstance(rows, list)
+        for row in rows:
+            self.assertIsInstance(row, tuple)
+            self.assertEqual(len(row), 3)
+
+    def test_nodes_row_present(self) -> None:
+        rows = network_summary_rows(self._make_summary())
+        labels = [r[0] for r in rows]
+        self.assertIn("Nodes", labels)
+
+    def test_edges_row_value_matches_summary(self) -> None:
+        rows = network_summary_rows(self._make_summary())
+        row_map = {r[0]: r[1] for r in rows}
+        self.assertEqual(row_map["Nodes"], 5)
+        self.assertEqual(row_map["Edges"], 8)
+
+
+# ---------------------------------------------------------------------------
+# community_stats.py — compute_community_metrics
+# ---------------------------------------------------------------------------
+
+
+class ComputeCommunityMetricsTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1")])
+        for node_id in ["1", "2", "3"]:
+            self.graph.nodes[node_id]["data"] = {"communities": {"leiden": f"comm_{node_id}"}}
+        self.graph_data: dict = {
+            "nodes": [
+                {"id": "1", "communities": {"leiden": "comm_1"}},
+                {"id": "2", "communities": {"leiden": "comm_2"}},
+                {"id": "3", "communities": {"leiden": "comm_3"}},
+            ],
+            "edges": [],
+        }
+        self.communities_data = {
+            "leiden": {
+                "groups": [
+                    (1, 1, "comm_1", "#ff0000"),
+                    (2, 1, "comm_2", "#00ff00"),
+                    (3, 1, "comm_3", "#0000ff"),
+                ]
+            }
+        }
+
+    def test_returns_network_summary_and_strategies_keys(self) -> None:
+        result = compute_community_metrics(self.graph_data, self.communities_data, self.graph, ["leiden"])
+        self.assertIn("network_summary", result)
+        self.assertIn("strategies", result)
+
+    def test_network_summary_has_correct_node_count(self) -> None:
+        result = compute_community_metrics(self.graph_data, self.communities_data, self.graph, ["leiden"])
+        self.assertEqual(result["network_summary"]["n"], 3)
+
+    def test_strategy_entry_present_for_requested_strategy(self) -> None:
+        result = compute_community_metrics(self.graph_data, self.communities_data, self.graph, ["leiden"])
+        self.assertIn("leiden", result["strategies"])
+
+    def test_status_callback_called_for_each_step(self) -> None:
+        calls: list[str] = []
+        compute_community_metrics(
+            self.graph_data,
+            self.communities_data,
+            self.graph,
+            ["leiden"],
+            status_callback=calls.append,
+        )
+        # callback called once for "network" and once per strategy
+        self.assertGreaterEqual(len(calls), 2)

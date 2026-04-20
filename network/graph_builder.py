@@ -57,6 +57,55 @@ def _recency_decay(date: datetime.datetime | datetime.date | None, today: dateti
     return math.exp(-excess / n) if excess > 0 else 1.0
 
 
+def _filter_inactive_channels(
+    channel_dict: dict[str, dict[str, Any]],
+    graph: nx.DiGraph,
+    channel_qs: QuerySet[Channel],
+    messages_per_channel: dict,
+) -> tuple[list[int], QuerySet[Channel]]:
+    """Remove channels with no activity in the date range from channel_dict and graph in-place."""
+    active_ids = set(messages_per_channel.keys())
+    inactive = [cid for cid, cdata in channel_dict.items() if cdata["channel"].pk not in active_ids]
+    for cid in inactive:
+        graph.remove_node(cid)
+        del channel_dict[cid]
+    new_channel_ids = [int(cid) for cid in channel_dict]
+    return new_channel_ids, channel_qs.filter(pk__in=new_channel_ids)
+
+
+def _build_edge_list(
+    forwarded_counts: dict,
+    reference_counts: dict,
+    referencing_counts: dict,
+    messages_per_channel: dict,
+    pk_to_str: dict[int, str],
+    edge_weight_strategy: str,
+) -> list[list[str | float]]:
+    """Compute weighted edge list from raw count dicts."""
+    edge_list: list[list[str | float]] = []
+    for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
+        if target_pk == source_pk:
+            continue
+        total = forwarded_counts.get((target_pk, source_pk), 0) + reference_counts.get((target_pk, source_pk), 0)
+        if edge_weight_strategy == "NONE":
+            weight = 1.0
+        elif edge_weight_strategy == "TOTAL":
+            weight = float(total)
+        elif edge_weight_strategy == "PARTIAL_MESSAGES":
+            message_count = messages_per_channel.get(target_pk, 0)
+            weight = total / message_count if message_count else 0.0
+        else:  # PARTIAL_REFERENCES (default)
+            ref_count = referencing_counts.get(target_pk, 0)
+            weight = total / ref_count if ref_count else 0.0
+        if weight > 0:
+            target_str = pk_to_str[target_pk]
+            source_str = pk_to_str[source_pk]
+            edge: list[str | float] = [target_str, source_str] if settings.REVERSED_EDGES else [source_str, target_str]
+            edge.append(weight)
+            edge_list.append(edge)
+    return edge_list
+
+
 def build_graph(
     draw_dead_leaves: bool = False,
     start_date: datetime.date | None = None,
@@ -109,13 +158,7 @@ def build_graph(
             )
 
         if start_date or end_date:
-            active_ids = set(messages_per_channel.keys())
-            inactive = [cid for cid, cdata in channel_dict.items() if cdata["channel"].pk not in active_ids]
-            for cid in inactive:
-                graph.remove_node(cid)
-                del channel_dict[cid]
-            channel_ids = [int(cid) for cid in channel_dict]
-            channel_qs = channel_qs.filter(pk__in=channel_ids)
+            channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
 
         forwarded_counts: dict[tuple[int, int], float] = {}
         for ch_id, fwd_id, date in Message.objects.filter(
@@ -158,13 +201,7 @@ def build_graph(
         }
 
         if start_date or end_date:
-            active_ids = set(messages_per_channel.keys())
-            inactive = [cid for cid, cdata in channel_dict.items() if cdata["channel"].pk not in active_ids]
-            for cid in inactive:
-                graph.remove_node(cid)
-                del channel_dict[cid]
-            channel_ids = [int(cid) for cid in channel_dict]
-            channel_qs = channel_qs.filter(pk__in=channel_ids)
+            channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
 
         forwarded_counts = {
             (item["channel_id"], item["forwarded_from_id"]): item["total"]
@@ -197,27 +234,9 @@ def build_graph(
             }
 
     pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
-    edge_list: list[list[str | float]] = []
-    for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
-        if target_pk == source_pk:
-            continue
-        total = forwarded_counts.get((target_pk, source_pk), 0) + reference_counts.get((target_pk, source_pk), 0)
-        if edge_weight_strategy == "NONE":
-            weight = 1.0
-        elif edge_weight_strategy == "TOTAL":
-            weight = float(total)
-        elif edge_weight_strategy == "PARTIAL_MESSAGES":
-            message_count = messages_per_channel.get(target_pk, 0)
-            weight = total / message_count if message_count else 0.0
-        else:  # PARTIAL_REFERENCES (default)
-            ref_count = referencing_counts.get(target_pk, 0)
-            weight = total / ref_count if ref_count else 0.0
-        if weight > 0:
-            target_str = pk_to_str[target_pk]
-            source_str = pk_to_str[source_pk]
-            edge: list[str | float] = [target_str, source_str] if settings.REVERSED_EDGES else [source_str, target_str]
-            edge.append(weight)
-            edge_list.append(edge)
+    edge_list = _build_edge_list(
+        forwarded_counts, reference_counts, referencing_counts, messages_per_channel, pk_to_str, edge_weight_strategy
+    )
 
     if not edge_list:
         raise ValueError("There are no relationships between channels.")

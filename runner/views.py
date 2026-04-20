@@ -82,7 +82,7 @@ def _build_args(task: str, post: Any) -> list[str]:
     if task == "get_channels":
         if post.get("get_new_messages"):
             args.append("--get-new-messages")
-        if post.get("fixholes"):
+        if post.get("fix_holes"):
             args.append("--fixholes")
         if post.get("fetch_recommended_channels"):
             args.append("--fetch-recommended-channels")

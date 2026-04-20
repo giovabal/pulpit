@@ -27,12 +27,12 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
     density = nx.density(graph)
     try:
         reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
-    except Exception as exc:
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
         logger.debug("reciprocity unavailable: %s", exc)
         reciprocity = None
     try:
         avg_clustering = nx.average_clustering(graph)
-    except Exception as exc:
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
         logger.debug("avg_clustering unavailable: %s", exc)
         avg_clustering = None
     avg_path_length = None
@@ -53,14 +53,14 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
                 ug = graph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-        except Exception as exc:
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("wcc/path_length/diameter unavailable: %s", exc)
         try:
             sccs = list(nx.strongly_connected_components(graph))
             largest_scc = max(sccs, key=len)
             scc_count = len(sccs)
             scc_fraction = len(largest_scc) / n
-        except Exception as exc:
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("scc unavailable: %s", exc)
     assortativity: dict[str, float | None] = {
         "in_in": None,
@@ -84,7 +84,7 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
             ]:
                 if x.std() > 0 and y.std() > 0:
                     assortativity[key] = float(np.corrcoef(x, y)[0, 1])
-        except Exception as exc:
+        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
             logger.debug("assortativity unavailable: %s", exc)
     return {
         "n": n,
@@ -113,12 +113,12 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
     density = nx.density(subgraph)
     try:
         reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
-    except Exception as exc:
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
         logger.debug("reciprocity unavailable for subgraph: %s", exc)
         reciprocity = None
     try:
         avg_clustering = nx.average_clustering(subgraph)
-    except Exception as exc:
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
         logger.debug("avg_clustering unavailable for subgraph: %s", exc)
         avg_clustering = None
     avg_path_length = None
@@ -131,7 +131,7 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
                 ug = subgraph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-        except Exception as exc:
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("wcc/path_length/diameter unavailable for subgraph: %s", exc)
     m = graph.number_of_edges()
     modularity_contribution = None
@@ -259,6 +259,64 @@ def _compute_org_cross_tab(
     }
 
 
+def _compute_strategy_entry(
+    strategy_key: str,
+    strategy_data: dict[str, Any],
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    id_to_node: dict[str, dict],
+    pk_to_org: dict[str, str],
+) -> dict[str, Any]:
+    """Compute metrics for a single community-detection strategy."""
+    label_to_nodes: dict[str, set[str]] = defaultdict(set)
+    for node in graph_data["nodes"]:
+        lbl = (node.get("communities") or {}).get(strategy_key)
+        if lbl:
+            label_to_nodes[lbl].add(node["id"])
+
+    rows = []
+    for group in strategy_data["groups"]:
+        _community_id, _count, label, _hex_color = group
+        nodes_set = label_to_nodes.get(str(label), set())
+        metrics = (
+            _subgraph_metrics(nodes_set, graph)
+            if nodes_set
+            else {
+                "internal_edges": 0,
+                "external_edges": 0,
+                "density": 0.0,
+                "reciprocity": 0.0,
+                "avg_clustering": None,
+                "avg_path_length": None,
+                "diameter": None,
+                "modularity_contribution": None,
+            }
+        )
+        channels = sorted(
+            (
+                {"label": id_to_node[nid].get("label") or nid, "url": id_to_node[nid].get("url") or ""}
+                for nid in nodes_set
+                if nid in id_to_node
+            ),
+            key=lambda c: c["label"].lower(),
+        )
+        rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics, "channels": channels})
+
+    modularity = None
+    if label_to_nodes:
+        try:
+            modularity = nx.community.modularity(graph, label_to_nodes.values())
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError, ValueError) as exc:
+            logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
+
+    entry: dict[str, Any] = {"modularity": modularity, "rows": rows}
+    if pk_to_org:
+        cross_tab = _compute_org_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
+        if cross_tab is not None:
+            entry["org_cross_tab"] = cross_tab
+    return entry
+
+
 def compute_community_metrics(
     graph_data: GraphData,
     communities_data: dict[str, Any],
@@ -309,50 +367,9 @@ def compute_community_metrics(
             if status_callback:
                 status_callback(strategy_key)
             continue
-        label_to_nodes: dict[str, set[str]] = defaultdict(set)
-        for node in graph_data["nodes"]:
-            lbl = (node.get("communities") or {}).get(strategy_key)
-            if lbl:
-                label_to_nodes[lbl].add(node["id"])
-        rows = []
-        for group in strategy_data["groups"]:
-            _community_id, _count, label, _hex_color = group
-            nodes_set = label_to_nodes.get(str(label), set())
-            metrics = (
-                _subgraph_metrics(nodes_set, graph)
-                if nodes_set
-                else {
-                    "internal_edges": 0,
-                    "external_edges": 0,
-                    "density": 0.0,
-                    "reciprocity": 0.0,
-                    "avg_clustering": None,
-                    "avg_path_length": None,
-                    "diameter": None,
-                    "modularity_contribution": None,
-                }
-            )
-            channels = sorted(
-                (
-                    {"label": id_to_node[nid].get("label") or nid, "url": id_to_node[nid].get("url") or ""}
-                    for nid in nodes_set
-                    if nid in id_to_node
-                ),
-                key=lambda c: c["label"].lower(),
-            )
-            rows.append({"group": group, "node_count": len(nodes_set), "metrics": metrics, "channels": channels})
-        modularity = None
-        if label_to_nodes:
-            try:
-                modularity = nx.community.modularity(graph, label_to_nodes.values())
-            except Exception as exc:
-                logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
-        strategy_entry: dict[str, Any] = {"modularity": modularity, "rows": rows}
-        if pk_to_org:
-            cross_tab = _compute_org_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
-            if cross_tab is not None:
-                strategy_entry["org_cross_tab"] = cross_tab
-        result["strategies"][strategy_key] = strategy_entry
+        result["strategies"][strategy_key] = _compute_strategy_entry(
+            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org
+        )
         if status_callback:
             status_callback(strategy_key)
     return result
