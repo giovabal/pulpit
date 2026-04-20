@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.14] - To be announced
+*New layout*
+
+
+
 ## [0.13] - 2026-04-20
 *New community detection algorithms. Consensus matrix. Events timeline.*
 
