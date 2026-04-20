@@ -108,7 +108,9 @@ class ChannelCrawler:
             if channel is None:
                 logger.info("Seed is a user account not resolvable by username: %s", seed)
                 update_status(f"[telegram_id={seed}] | skipped (user account)")
-                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True)
+                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                    is_user_account=True, is_lost=False
+                )
                 return 0
         if channel is None:
             update_status(f"[telegram_id={seed}] | skipped (channel not found)")
@@ -200,6 +202,7 @@ class ChannelCrawler:
         self._resolve_pending_forwards(status_callback)
         channel.are_messages_crawled = True
         channel.is_lost = False
+        channel.is_private = False
         channel.save()
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
         return last_known_id
