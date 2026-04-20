@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.13] - To be announced
+## [0.13] - 2026-04-20
 *New community detection algorithms. Consensus matrix. Events timeline.*
 
 ### New features
