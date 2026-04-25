@@ -256,7 +256,7 @@
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Higher values are more precise but slower. Default: 200."></i>
                   </label>
-                  <input type="number" name="spreading_runs" id="spreading_runs" placeholder="200" min="1">
+                  <input type="number" name="spreading_runs" id="spreading_runs" placeholder="200" min="1" data-requires-measure="SPREADING">
                 </div>
                 <div class="ops-param">
                   <label for="community_distribution_threshold">Distribution threshold %
@@ -270,21 +270,21 @@
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Resolution parameter for LEIDEN_CPM_COARSE. Communities form when internal edge density exceeds γ. Lower = fewer, larger communities. Default: 0.01."></i>
                   </label>
-                  <input type="number" name="leiden_coarse_resolution" id="leiden_coarse_resolution" placeholder="0.01" min="0" max="1" step="0.001">
+                  <input type="number" name="leiden_coarse_resolution" id="leiden_coarse_resolution" placeholder="0.01" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_COARSE">
                 </div>
                 <div class="ops-param">
                   <label for="leiden_fine_resolution">CPM fine resolution γ
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Resolution parameter for LEIDEN_CPM_FINE. Communities form when internal edge density exceeds γ. Higher = more, smaller communities. Default: 0.05."></i>
                   </label>
-                  <input type="number" name="leiden_fine_resolution" id="leiden_fine_resolution" placeholder="0.05" min="0" max="1" step="0.001">
+                  <input type="number" name="leiden_fine_resolution" id="leiden_fine_resolution" placeholder="0.05" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_FINE">
                 </div>
                 <div class="ops-param">
                   <label for="mcl_inflation">MCL inflation r
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Inflation parameter for Markov Clustering. Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."></i>
                   </label>
-                  <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="2.0" min="1" max="10" step="0.1">
+                  <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="2.0" min="1" max="10" step="0.1" data-requires-strategy="MCL">
                 </div>
                 <div class="ops-param">
                   <label for="edge_weight_strategy">Edge weight strategy
@@ -575,6 +575,29 @@
       if (metaEl.dataset.exit !== undefined) meta += ' · exit ' + metaEl.dataset.exit;
       metaEl.textContent = meta;
     }
+  });
+})();
+
+(function () {
+  'use strict';
+  // Disable computation inputs whose measure/strategy is not selected.
+  function syncLinkedInputs() {
+    document.querySelectorAll('[data-requires-measure]').forEach(function (input) {
+      var cb = document.querySelector('input[name="measures"][value="' + input.dataset.requiresMeasure + '"]');
+      var on = !cb || cb.checked;
+      input.disabled = !on;
+      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+    });
+    document.querySelectorAll('[data-requires-strategy]').forEach(function (input) {
+      var cb = document.querySelector('input[name="community_strategies"][value="' + input.dataset.requiresStrategy + '"]');
+      var on = !cb || cb.checked;
+      input.disabled = !on;
+      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+    });
+  }
+  syncLinkedInputs();
+  document.querySelectorAll('input[name="measures"], input[name="community_strategies"]').forEach(function (cb) {
+    cb.addEventListener('change', syncLinkedInputs);
   });
 })();
 </script>

@@ -272,6 +272,9 @@
 }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
 
+/* ---- disabled computation param ---- */
+.ops-param--disabled { opacity: .35; pointer-events: none; }
+
 /* ---- last-run footer ---- */
 .ops-last-run {
   font-size: .72rem;
