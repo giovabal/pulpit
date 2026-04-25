@@ -739,6 +739,7 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     if (animation_frame_id_3d !== null) {
         cancelAnimationFrame(animation_frame_id_3d);
         animation_frame_id_3d = null;
+        controls.enabled = true;  // restore if previous animation was interrupted
     }
 
     if (edge_segments) edge_segments.visible = false;
@@ -765,10 +766,18 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
         el('node_details').style.display = 'none';
     }
 
-    // Remove departing nodes immediately (edges hidden)
+    // Remove departing nodes immediately (edges hidden).
+    // Also explicitly remove the CSS2DObject DOM element — scene.remove(mesh)
+    // alone is not guaranteed to purge it from the label_renderer container
+    // before the next render, leaving ghost labels visible for one or more frames.
     old_only.forEach(function(id) {
         var node = nodes_index[id];
         if (!node) return;
+        var lbl = label_objects[id];
+        if (lbl) {
+            node.mesh.remove(lbl);
+            if (lbl.element && lbl.element.parentNode) lbl.element.parentNode.removeChild(lbl.element);
+        }
         scene.remove(node.mesh);
         node.mesh.material.dispose();
         var mi = node_meshes.indexOf(node.mesh);
@@ -829,6 +838,25 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
         adj_in[id]  = new Set();
     });
 
+    // Pre-compute target camera from the new year's bounding box so we can
+    // animate the camera smoothly instead of letting OrbitControls hold still
+    // while nodes cluster and then snapping with reset_camera() at the end.
+    var new_box = new THREE.Box3();
+    new_pos_data.nodes.forEach(function(p) {
+        new_box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z || 0));
+    });
+    var new_center = new THREE.Vector3(), new_size_v = new THREE.Vector3();
+    new_box.getCenter(new_center);
+    new_box.getSize(new_size_v);
+    var new_max_dim    = Math.max(new_size_v.x, new_size_v.y, new_size_v.z) || 1;
+    var new_cam_dist   = new_max_dim / (2 * Math.tan(camera.fov * Math.PI / 360)) * 1.5;
+    var target_cam_pos = new THREE.Vector3(new_center.x, new_center.y, new_center.z + new_cam_dist);
+    var target_cam_tgt = new_center.clone();
+
+    var start_cam_pos = camera.position.clone();
+    var start_cam_tgt = controls.target.clone();
+    controls.enabled  = false;
+
     function _lerp(a, b, t) { return a + (b - a) * t; }
     function _ease(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
     var start_ts = null;
@@ -858,17 +886,23 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
             node.x = nx; node.y = ny; node.z = nz;
         });
 
+        camera.position.lerpVectors(start_cam_pos, target_cam_pos, e);
+        controls.target.lerpVectors(start_cam_tgt, target_cam_tgt, e);
+        controls.update();
+
         if (raw < 1) {
             animation_frame_id_3d = requestAnimationFrame(step);
         } else {
             animation_frame_id_3d = null;
-            _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max);
+            _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max,
+                              target_cam_pos, target_cam_tgt);
         }
     }
     animation_frame_id_3d = requestAnimationFrame(step);
 }
 
-function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max) {
+function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max,
+                            target_cam_pos, target_cam_tgt) {
     new_pos_data.nodes.forEach(function(np) {
         var node = nodes_index[np.id];
         if (!node) return;
@@ -932,7 +966,12 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
     apply_node_size(current_size_key);
     set_labels_visibility();
     el('about_graph_stats').innerHTML = node_meshes.length + ' channels, ' + edge_list.length + ' connections';
-    reset_camera();
+
+    // Snap camera to the pre-computed target and restore user controls.
+    camera.position.copy(target_cam_pos);
+    controls.target.copy(target_cam_tgt);
+    controls.update();
+    controls.enabled = true;
 }
 
 function reload_graph_3d(data_dir) {
