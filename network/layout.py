@@ -34,6 +34,47 @@ def rotate_positions(positions: dict[str, tuple[float, float]]) -> dict[str, tup
     return {key: (y, -x) for key, (x, y) in positions.items()}
 
 
+# Four axis-aligned rotation matrices (row-vector convention: v @ R.T).
+_ROTATIONS: list[np.ndarray] = [
+    np.array([[1, 0], [0, 1]], dtype=float),  # 0°
+    np.array([[0, 1], [-1, 0]], dtype=float),  # 90° clockwise
+    np.array([[-1, 0], [0, -1]], dtype=float),  # 180°
+    np.array([[0, -1], [1, 0]], dtype=float),  # 270° clockwise
+]
+
+
+def align_to_reference(
+    positions: dict[str, tuple[float, float]],
+    reference_positions: dict[str, tuple[float, float]],
+) -> dict[str, tuple[float, float]]:
+    """Return *positions* rotated to best match *reference_positions*.
+
+    Tests the four axis-aligned rotations (0°, 90°, 180°, 270°) on the nodes
+    present in both dicts and picks the rotation that minimises mean squared
+    distance to the reference.  When no common nodes exist the input is
+    returned unchanged.
+    """
+    common = list(set(positions) & set(reference_positions))
+    if not common:
+        return positions
+
+    ref_pts = np.array([reference_positions[k] for k in common])  # (m, 2)
+    our_pts = np.array([positions[k] for k in common])  # (m, 2)
+
+    best_R = _ROTATIONS[0]
+    best_msd = float("inf")
+    for R in _ROTATIONS:
+        msd = float(np.mean(np.sum((our_pts @ R.T - ref_pts) ** 2, axis=1)))
+        if msd < best_msd:
+            best_msd, best_R = msd, R
+
+    if best_R is _ROTATIONS[0]:
+        return positions  # identity — nothing to do
+
+    all_pts = np.array(list(positions.values())) @ best_R.T
+    return dict(zip(positions.keys(), (tuple(row) for row in all_pts.tolist()), strict=False))
+
+
 def kamada_kawai_positions(graph: nx.DiGraph) -> dict:
     """Return initial node positions via Kamada-Kawai."""
     return nx.kamada_kawai_layout(graph, weight="weight")
