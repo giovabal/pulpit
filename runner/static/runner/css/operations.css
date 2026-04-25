@@ -261,10 +261,11 @@
 /* ---- two-column flag grid (measures / community strategies) ---- */
 .ops-flags--grid { display: grid; grid-template-columns: repeat(2, 1fr); }
 .ops-dir {
-  font-size: .6rem;
+  font-size: .75rem;
   opacity: .5;
   flex-shrink: 0;
   pointer-events: none;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 /* ---- last-run footer ---- */
