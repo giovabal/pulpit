@@ -5,17 +5,11 @@
 
 ### New features
 - **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`) and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
-- **Year switcher in `graph.html`**: when `data/timeline.json` is present, a compact year navigator appears in the bottom navigation bar: **[←]** / **[→]** step through years in order, **[All]** returns to the full-range view, and the current-year button opens a scrollable dropup list for direct access to any year. All year datasets are preloaded during the initial spinner so transitions are instant. Switching years triggers an animated morph: shared nodes glide to their new positions, arriving nodes grow into place, and the camera smoothly pans and zooms to fit the new layout. The selected community coloring and node-size measure are preserved across switches.
+- **Year switcher in `graph.html`**: when `data/timeline.json` is present, a compact year navigator appears in the bottom navigation bar: **[←]** / **[→]** step through years in order, **[All]** returns to the full-range view, and the current-year button opens a scrollable dropup list for direct access to any year.
 
 ### Improvements
 - New fonts and reworked details for most of the webapp and HTML output.
 - Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.
-- Operations panel: Computation options split into two side-by-side fieldsets — **Computation** (FA2 iterations, recency weights, distribution threshold) and **Linked parameters** (spreading runs, Leiden CPM γ, MCL inflation), the latter graying out automatically when the associated measure or strategy is unchecked. Edge weight strategy moved to its own fieldset with radio chip buttons, paired with the Channel types fieldset.
-- `graph.html` Options panel: community coloring strategy names now shown in plain English ("Leiden directed", "K-core", "Weak connected components", etc.) instead of raw internal keys.
-- Year-graph orientation stabilised: per-year ForceAtlas2 runs are now seeded from the full-range layout positions (Kamada-Kawai only for nodes absent from the reference), and the result is corrected via the best-matching 0°/90°/180°/270° rotation against the reference. This prevents the graph from flipping or mirroring between years.
-
-### Fixes
-- Year-switcher first-click freeze: switching from the full-range view to a year view could block the main thread long enough to trigger the browser "page not responding" dialog. Root cause: `graph.dropNode()` removes incident edges one by one (O(degree) per node); calling it for every departing node on a dense full-range graph produced O(E) synchronous work. Fixed by calling `graph.clearEdges()` first (a single bulk pass) so every subsequent `dropNode()` is O(1).
 
 
 ## [0.13] - 2026-04-20

@@ -43,6 +43,13 @@ var current_size_key  = 'in_deg';
 var current_group     = '';
 var labels_mode       = 'on_size';
 
+var current_data_dir      = window.DATA_DIR || 'data/';
+var active_year           = null;
+var year_sequence         = [];
+var year_cache            = {};
+var year_cache_pend       = {};
+var animation_frame_id_3d = null;
+
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
 var g_size_min       = 1;
 var g_size_max       = 10;
@@ -580,11 +587,22 @@ function reset_camera() {
 // UI builders
 // =============================================================================
 
+var STRATEGY_LABELS = {
+    organization: 'Organization', leiden: 'Leiden', leiden_directed: 'Leiden directed',
+    leiden_cpm_coarse: 'Leiden CPM coarse', leiden_cpm_fine: 'Leiden CPM fine',
+    louvain: 'Louvain', kcore: 'K-core', infomap: 'Infomap', infomap_memory: 'Infomap memory',
+    mcl: 'MCL', walktrap: 'Walktrap', weakcc: 'Weak connected components', strongcc: 'Strong connected components',
+};
+function strategy_label(key) {
+    return STRATEGY_LABELS[key.toLowerCase()] ||
+        (key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, ' '));
+}
+
 function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);
     if (strategies.length <= 1) { el('community-strategy-group').style.display = 'none'; return; }
     el('community-strategy-select').innerHTML = strategies.map(function(s) {
-        return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
+        return '<option value="' + s + '">' + strategy_label(s) + '</option>';
     }).join('');
     el('community-strategy-group').style.display = '';
 }
@@ -627,10 +645,10 @@ function apply_group_filter(group) {
 // =============================================================================
 
 function get_data() {
-    Promise.all([
-        fetch((window.DATA_DIR||'data/')+'channel_position_3d.json').then(function(r) { return r.json(); }),
-        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
-        fetch((window.DATA_DIR||'data/')+'communities.json').then(function(r) { return r.json(); }),
+    return Promise.all([
+        fetch(current_data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
+        fetch(current_data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(current_data_dir + 'communities.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         var pos_data  = results[0];
         var ch_data   = results[1];
@@ -656,13 +674,381 @@ function get_data() {
 
         el('about_graph_stats').innerHTML =
             node_meshes.length + ' channels, ' + edge_list.length + ' connections';
-        el('loading_message').innerHTML = 'Done!';
-        bootstrap.Modal.getInstance(el('loading_modal')).hide();
         reset_camera();
     }).catch(function(err) {
         el('loading_message').innerHTML = 'Error: ' + err.message;
         console.error(err);
     });
+}
+
+// =============================================================================
+// Year switching
+// =============================================================================
+
+function preload_year_3d(data_dir) {
+    if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
+    year_cache_pend[data_dir] = true;
+    return Promise.all([
+        fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        delete year_cache_pend[data_dir];
+        year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
+    }).catch(function() { delete year_cache_pend[data_dir]; });
+}
+
+function _apply_accessory_3d(ch_data, comm_data) {
+    var prev_strategy = active_strategy;
+    var prev_size     = el('size-select') ? el('size-select').value : current_size_key;
+
+    accessory_data          = ch_data;
+    community_strategy_data = comm_data.strategies;
+    community_color_maps    = build_community_color_maps(comm_data.strategies);
+
+    var strategies  = Object.keys(comm_data.strategies);
+    active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1)
+        ? prev_strategy : (strategies[0] || null);
+
+    build_strategy_selector(comm_data.strategies);
+    if (active_strategy) {
+        var sel = el('community-strategy-select');
+        if (sel) sel.value = active_strategy;
+        build_legend(comm_data.strategies[active_strategy]);
+    }
+
+    el('size-select').innerHTML = ch_data.measures.map(function(m) {
+        return '<option value="' + m[0] + '">' + m[1] + '</option>';
+    }).join('');
+    var found = false;
+    if (prev_size) {
+        var opts = el('size-select').options;
+        for (var i = 0; i < opts.length; i++) {
+            if (opts[i].value === prev_size) {
+                el('size-select').value = prev_size;
+                current_size_key = prev_size;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found && el('size-select').options.length > 0) current_size_key = el('size-select').value;
+}
+
+function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
+    if (animation_frame_id_3d !== null) {
+        cancelAnimationFrame(animation_frame_id_3d);
+        animation_frame_id_3d = null;
+    }
+
+    if (edge_segments) edge_segments.visible = false;
+
+    var new_pos_map = {}, new_ch_map = {};
+    new_pos_data.nodes.forEach(function(n) { new_pos_map[n.id] = n; });
+    new_ch_data.nodes.forEach(function(n) { new_ch_map[n.id] = n; });
+
+    var old_ids  = Object.keys(nodes_index);
+    var old_only = old_ids.filter(function(id) { return !new_pos_map[id]; });
+    var both     = old_ids.filter(function(id) { return !!new_pos_map[id]; });
+    var new_only = new_pos_data.nodes.map(function(n) { return n.id; })
+                      .filter(function(id) { return !nodes_index[id]; });
+
+    var cx = 0, cy = 0, cz = 0;
+    if (old_ids.length) {
+        old_ids.forEach(function(id) { var n = nodes_index[id]; cx += n.x; cy += n.y; cz += (n.z || 0); });
+        cx /= old_ids.length; cy /= old_ids.length; cz /= old_ids.length;
+    }
+
+    if (selected_node_id && old_only.indexOf(selected_node_id) >= 0) {
+        selected_node_id = null;
+        el('infobar').style.display      = 'none';
+        el('node_details').style.display = 'none';
+    }
+
+    // Remove departing nodes immediately (edges hidden)
+    old_only.forEach(function(id) {
+        var node = nodes_index[id];
+        if (!node) return;
+        scene.remove(node.mesh);
+        node.mesh.material.dispose();
+        var mi = node_meshes.indexOf(node.mesh);
+        if (mi >= 0) node_meshes.splice(mi, 1);
+        delete label_objects[id];
+        delete nodes_index[id];
+        delete adj_out[id];
+        delete adj_in[id];
+    });
+
+    var snap = {};
+    both.forEach(function(id) {
+        var n = nodes_index[id];
+        snap[id] = { x: n.x, y: n.y, z: n.z || 0, size: n.size };
+    });
+
+    // New size bounds
+    var bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+    new_pos_data.nodes.forEach(function(p) {
+        if (p.x < bx0) bx0 = p.x; if (p.x > bx1) bx1 = p.x;
+        if (p.y < by0) by0 = p.y; if (p.y > by1) by1 = p.y;
+        var pz = p.z || 0;
+        if (pz < bz0) bz0 = pz; if (pz > bz1) bz1 = pz;
+    });
+    if (!isFinite(bx0)) { bx0 = 0; bx1 = 1; by0 = 0; by1 = 1; bz0 = 0; bz1 = 1; }
+    var new_diam     = Math.sqrt(Math.pow(bx1-bx0,2)+Math.pow(by1-by0,2)+Math.pow(bz1-bz0,2)) || 1;
+    var new_size_min = new_diam * SIZE_MIN_FRAC;
+    var new_size_max = new_diam * SIZE_MAX_FRAC;
+
+    var sv = new_pos_data.nodes.map(function(n) { return (new_ch_map[n.id] || {})[current_size_key] || 0; });
+    var sv_min = sv.length ? Math.min.apply(null, sv) : 0;
+    var sv_rng = ((sv.length ? Math.max.apply(null, sv) : 0) - sv_min) || 1;
+    var target_sizes = {};
+    new_pos_data.nodes.forEach(function(n) {
+        var v = (new_ch_map[n.id] || {})[current_size_key] || 0;
+        target_sizes[n.id] = new_size_min + ((v - sv_min) / sv_rng) * (new_size_max - new_size_min);
+    });
+
+    new_only.forEach(function(id) {
+        var m     = new_ch_map[id] || {};
+        var color = m.color ? parse_color(m.color) : new THREE.Color(0.5, 0.5, 0.5);
+        var mesh  = new THREE.Mesh(sphere_geom, new THREE.MeshLambertMaterial({ color: color.clone() }));
+        mesh.position.set(cx, cy, cz);
+        mesh.scale.setScalar(0);
+        mesh.userData.id = id;
+        nodes_index[id] = Object.assign({}, m, { x: cx, y: cy, z: cz, size: 0, orig_color: color.clone(), mesh: mesh });
+        scene.add(mesh);
+        node_meshes.push(mesh);
+        var div = document.createElement('div');
+        div.className = 'node-label';
+        div.textContent = m.label || id;
+        var lbl = new CSS2DObject(div);
+        lbl.position.set(0, 1.3, 0);
+        lbl.visible = false;
+        mesh.add(lbl);
+        label_objects[id] = lbl;
+        adj_out[id] = new Set();
+        adj_in[id]  = new Set();
+    });
+
+    function _lerp(a, b, t) { return a + (b - a) * t; }
+    function _ease(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
+    var start_ts = null;
+
+    function step(ts) {
+        if (!start_ts) start_ts = ts;
+        var raw = Math.min((ts - start_ts) / duration_ms, 1);
+        var e   = _ease(raw);
+
+        both.forEach(function(id) {
+            var s = snap[id], np = new_pos_map[id], sz = target_sizes[id] !== undefined ? target_sizes[id] : s.size;
+            var node = nodes_index[id];
+            if (!node) return;
+            var nx = _lerp(s.x, np.x, e), ny = _lerp(s.y, np.y, e), nz = _lerp(s.z, np.z || 0, e);
+            node.mesh.position.set(nx, ny, nz);
+            node.mesh.scale.setScalar(_lerp(s.size, sz, e));
+            node.x = nx; node.y = ny; node.z = nz;
+        });
+
+        new_only.forEach(function(id) {
+            var np = new_pos_map[id], sz = target_sizes[id] || 0;
+            var node = nodes_index[id];
+            if (!node) return;
+            var nx = _lerp(cx, np.x, e), ny = _lerp(cy, np.y, e), nz = _lerp(cz, np.z || 0, e);
+            node.mesh.position.set(nx, ny, nz);
+            node.mesh.scale.setScalar(sz * e);
+            node.x = nx; node.y = ny; node.z = nz;
+        });
+
+        if (raw < 1) {
+            animation_frame_id_3d = requestAnimationFrame(step);
+        } else {
+            animation_frame_id_3d = null;
+            _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max);
+        }
+    }
+    animation_frame_id_3d = requestAnimationFrame(step);
+}
+
+function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max) {
+    new_pos_data.nodes.forEach(function(np) {
+        var node = nodes_index[np.id];
+        if (!node) return;
+        var sz = target_sizes[np.id] !== undefined ? target_sizes[np.id] : node.size;
+        node.mesh.position.set(np.x, np.y, np.z || 0);
+        node.mesh.scale.setScalar(sz);
+        node.x = np.x; node.y = np.y; node.z = np.z || 0; node.size = sz;
+        var m = new_ch_map[np.id];
+        if (m) {
+            var SKIP = { x:1, y:1, z:1, size:1, mesh:1, orig_color:1 };
+            Object.keys(m).forEach(function(k) { if (!SKIP[k]) node[k] = m[k]; });
+            var lbl = label_objects[np.id];
+            if (lbl) lbl.element.textContent = m.label || np.id;
+        }
+    });
+
+    g_size_min        = new_size_min;
+    g_size_max        = new_size_max;
+    g_label_threshold = g_size_min + LABEL_SIZE_FRAC * (g_size_max - g_size_min);
+
+    if (edge_segments) {
+        scene.remove(edge_segments);
+        edge_segments.geometry.dispose();
+        edge_segments.material.dispose();
+        edge_segments = null;
+    }
+    edge_list = [];
+    Object.keys(nodes_index).forEach(function(id) { adj_out[id] = new Set(); adj_in[id] = new Set(); });
+
+    var VERTS_PER_EDGE = CURVE_SEGMENTS * 2;
+    var positions = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
+    var colors    = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
+    var vc = 0;
+    new_pos_data.edges.forEach(function(e) {
+        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        if (!src || !tgt) return;
+        var sp  = new THREE.Vector3(src.x, src.y, src.z || 0);
+        var tp  = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
+        var pts = new THREE.QuadraticBezierCurve3(sp, curve_control(sp, tp), tp).getPoints(CURVE_SEGMENTS);
+        var c   = avg_darken(src.orig_color, tgt.orig_color);
+        var vs  = vc;
+        for (var i = 0; i < CURVE_SEGMENTS; i++) {
+            var p0 = pts[i], p1 = pts[i+1];
+            positions[vc*3]=p0.x; positions[vc*3+1]=p0.y; positions[vc*3+2]=p0.z;
+            colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
+            positions[vc*3]=p1.x; positions[vc*3+1]=p1.y; positions[vc*3+2]=p1.z;
+            colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
+        }
+        edge_list.push({ source: e.source, target: e.target, vert_start: vs });
+        adj_out[e.source].add(e.target);
+        adj_in[e.target].add(e.source);
+    });
+    var used = vc * 3;
+    var geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions.subarray(0, used), 3));
+    geom.setAttribute('color',    new THREE.BufferAttribute(colors.subarray(0, used), 3));
+    edge_segments = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: EDGE_OPACITY }));
+    scene.add(edge_segments);
+
+    if (active_strategy) apply_strategy_colors(active_strategy);
+    apply_node_size(current_size_key);
+    set_labels_visibility();
+    el('about_graph_stats').innerHTML = node_meshes.length + ' channels, ' + edge_list.length + ' connections';
+    reset_camera();
+}
+
+function reload_graph_3d(data_dir) {
+    if (animation_frame_id_3d !== null) { cancelAnimationFrame(animation_frame_id_3d); animation_frame_id_3d = null; }
+    current_data_dir = data_dir;
+    el('infobar').style.display      = 'none';
+    el('node_details').style.display = 'none';
+    selected_node_id = null;
+
+    var c = year_cache[data_dir];
+    if (c) {
+        _apply_accessory_3d(c.ch, c.comm);
+        animate_year_transition_3d(c.pos, c.ch, 700);
+    } else {
+        Promise.all([
+            fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
+            fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+            fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+        ]).then(function(results) {
+            _apply_accessory_3d(results[1], results[2]);
+            animate_year_transition_3d(results[0], results[1], 700);
+        });
+    }
+}
+
+function update_year_buttons_active(year_str) {
+    active_year = String(year_str);
+    var container = el('year-switcher');
+    if (!container) return;
+    var all_btn = container.querySelector('.year-btn--all');
+    if (all_btn) all_btn.classList.toggle('active', active_year === 'all');
+    var lbl = el('year-drop-label');
+    if (lbl) lbl.textContent = (active_year === 'all') ? '—' : active_year;
+    container.querySelectorAll('.year-drop-item').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.year === active_year);
+    });
+    var idx  = year_sequence.indexOf(active_year);
+    var prev = el('year-prev');
+    var next = el('year-next');
+    if (prev) prev.disabled = (idx <= 0);
+    if (next) next.disabled = (idx < 0 || idx >= year_sequence.length - 1);
+}
+
+function _go_year_3d(year) {
+    if (year === active_year) return;
+    update_year_buttons_active(year);
+    reload_graph_3d(year === 'all' ? 'data/' : 'data_' + year + '/');
+}
+
+function _year_drop_close() {
+    var menu = el('year-drop-menu');
+    var btn  = el('year-drop-btn');
+    if (menu) menu.classList.remove('open');
+    if (btn)  btn.setAttribute('aria-expanded', 'false');
+}
+
+function init_year_switcher(timeline) {
+    var years_with_graph = (timeline.years || []).filter(function(y) { return y.has_graph; });
+    if (!years_with_graph.length) return;
+    var container = el('year-switcher');
+    if (!container) return;
+
+    year_sequence = ['all'].concat(years_with_graph.map(function(y) { return String(y.year); }));
+
+    var drop_items = years_with_graph.map(function(entry) {
+        return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
+    }).join('');
+
+    container.innerHTML = [
+        '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
+        '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
+        '<button class="year-btn year-btn--all" data-year="all">All</button>',
+        '<span class="year-sep" aria-hidden="true"></span>',
+        '<div class="year-drop-wrap">',
+        '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
+        '<span id="year-drop-label">—</span>',
+        '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i></button>',
+        '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
+        '</div>',
+        '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
+        '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
+    ].join('');
+
+    container.style.display = 'flex';
+
+    var init_year = 'all';
+    if (window.DATA_DIR) {
+        var m = window.DATA_DIR.match(/data_(\d+)\//);
+        if (m) init_year = m[1];
+    }
+    update_year_buttons_active(init_year);
+
+    container.querySelector('.year-btn--all').addEventListener('click', function() {
+        _go_year_3d('all'); _year_drop_close();
+    });
+    el('year-prev').addEventListener('click', function() {
+        var idx = year_sequence.indexOf(active_year);
+        if (idx > 0) { _go_year_3d(year_sequence[idx - 1]); _year_drop_close(); }
+    });
+    el('year-next').addEventListener('click', function() {
+        var idx = year_sequence.indexOf(active_year);
+        if (idx >= 0 && idx < year_sequence.length - 1) { _go_year_3d(year_sequence[idx + 1]); _year_drop_close(); }
+    });
+    el('year-drop-btn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var menu = el('year-drop-menu');
+        var open = menu.classList.toggle('open');
+        this.setAttribute('aria-expanded', String(open));
+    });
+    el('year-drop-menu').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var btn = e.target.closest('.year-drop-item');
+        if (!btn) return;
+        _go_year_3d(btn.dataset.year);
+    });
+    document.addEventListener('click', function() { _year_drop_close(); });
 }
 
 // =============================================================================
@@ -674,9 +1060,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var loading_el       = el('loading_modal');
     var loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
-    loading_el.addEventListener('shown.bs.modal', function() { get_data(); }, { once: true });
+
+    var graph_promise = new Promise(function(resolve) {
+        loading_el.addEventListener('shown.bs.modal', function() {
+            get_data().then(resolve);
+        }, { once: true });
+    });
+
     loading_modal_bs.show();
     el('loading_message').innerHTML = 'Loading…<br>Please wait.';
+
+    var years_promise = fetch('data/timeline.json')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function() { return null; })
+        .then(function(timeline) {
+            if (!timeline) return;
+            init_year_switcher(timeline);
+            var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
+            var dirs  = ['data/'].concat(years.map(function(y) { return 'data_' + y.year + '/'; }));
+            var total = dirs.length, done = 0;
+            return Promise.all(dirs.map(function(dir) {
+                return preload_year_3d(dir).then(function() {
+                    done++;
+                    var m = dir.match(/data_(\d+)\//);
+                    el('loading_message').innerHTML =
+                        (m ? m[1] : 'All') + ' (' + done + ' / ' + total + ')';
+                });
+            }));
+        });
+
+    Promise.all([graph_promise, years_promise])
+        .then(function() { loading_modal_bs.hide(); });
 
     el('community-strategy-select').addEventListener('change', function() {
         active_strategy = this.value;
