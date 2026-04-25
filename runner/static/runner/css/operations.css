@@ -128,7 +128,8 @@
   user-select: none;
   transition: background .1s, border-color .1s, color .1s;
 }
-.ops-flag input[type="checkbox"] {
+.ops-flag input[type="checkbox"],
+.ops-flag input[type="radio"] {
   width: 13px; height: 13px;
   accent-color: var(--accent);
   cursor: pointer;

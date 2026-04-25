@@ -235,6 +235,37 @@
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
+              <legend>Edge weights
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="How edge weights are derived from forward and citation counts. Affects all measures that use edge weights."></i>
+              </legend>
+              <div class="ops-flags ops-flags--grid">
+                <label class="ops-flag">
+                  <input type="radio" name="edge_weight_strategy" value="PARTIAL_REFERENCES" checked>Partial references
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="count / forwarded-or-citing messages from source (default)"></i>
+                </label>
+                <label class="ops-flag">
+                  <input type="radio" name="edge_weight_strategy" value="PARTIAL_MESSAGES">Partial messages
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="count / total messages from source channel"></i>
+                </label>
+                <label class="ops-flag">
+                  <input type="radio" name="edge_weight_strategy" value="TOTAL">Total count
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Raw forward + citation count — no normalisation"></i>
+                </label>
+                <label class="ops-flag">
+                  <input type="radio" name="edge_weight_strategy" value="NONE">Equal weight
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="All edges have the same weight regardless of interaction count"></i>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="ops-fieldset-row">
+            <fieldset class="ops-fieldset">
               <legend>Computation</legend>
               <div class="ops-params">
                 <div class="ops-param">
@@ -252,6 +283,21 @@
                   <input type="number" name="recency_weights" id="recency_weights" placeholder="–" min="1">
                 </div>
                 <div class="ops-param">
+                  <label for="community_distribution_threshold">Distribution threshold %
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Minimum percentage a community must reach in at least one organisation row to appear in the Organisation × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
+                  </label>
+                  <input type="number" name="community_distribution_threshold" id="community_distribution_threshold" placeholder="10" min="0" max="100">
+                </div>
+              </div>
+            </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>Linked parameters
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Parameters for specific measures and community strategies. Each input is enabled only when the corresponding measure or strategy is selected below."></i>
+              </legend>
+              <div class="ops-params">
+                <div class="ops-param">
                   <label for="spreading_runs">Spreading runs
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Higher values are more precise but slower. Default: 200."></i>
@@ -259,21 +305,14 @@
                   <input type="number" name="spreading_runs" id="spreading_runs" placeholder="200" min="1" data-requires-measure="SPREADING">
                 </div>
                 <div class="ops-param">
-                  <label for="community_distribution_threshold">Distribution threshold %
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Minimum percentage a community must reach in at least one organisation row to appear in the Organisation × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
-                  </label>
-                  <input type="number" name="community_distribution_threshold" id="community_distribution_threshold" placeholder="10" min="0" max="100">
-                </div>
-                <div class="ops-param">
-                  <label for="leiden_coarse_resolution">CPM coarse resolution γ
+                  <label for="leiden_coarse_resolution">CPM coarse γ
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Resolution parameter for LEIDEN_CPM_COARSE. Communities form when internal edge density exceeds γ. Lower = fewer, larger communities. Default: 0.01."></i>
                   </label>
                   <input type="number" name="leiden_coarse_resolution" id="leiden_coarse_resolution" placeholder="0.01" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_COARSE">
                 </div>
                 <div class="ops-param">
-                  <label for="leiden_fine_resolution">CPM fine resolution γ
+                  <label for="leiden_fine_resolution">CPM fine γ
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Resolution parameter for LEIDEN_CPM_FINE. Communities form when internal edge density exceeds γ. Higher = more, smaller communities. Default: 0.05."></i>
                   </label>
@@ -285,18 +324,6 @@
                        title="Inflation parameter for Markov Clustering. Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."></i>
                   </label>
                   <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="2.0" min="1" max="10" step="0.1" data-requires-strategy="MCL">
-                </div>
-                <div class="ops-param">
-                  <label for="edge_weight_strategy">Edge weight strategy
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="How edge weights are computed from forward and citation counts."></i>
-                  </label>
-                  <select name="edge_weight_strategy" id="edge_weight_strategy" data-width="lg">
-                    <option value="PARTIAL_REFERENCES" selected>PARTIAL_REFERENCES — count / forwarded-or-citing messages</option>
-                    <option value="PARTIAL_MESSAGES">PARTIAL_MESSAGES — count / total messages</option>
-                    <option value="TOTAL">TOTAL — raw count</option>
-                    <option value="NONE">NONE — all edges equal weight</option>
-                  </select>
                 </div>
               </div>
             </fieldset>

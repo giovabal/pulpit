@@ -609,8 +609,14 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
     var start_cam  = sigma_instance.getCamera().getState();
     var target_cam = { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
 
-    // Hide all edges via a single renderer setting — avoids O(E) attribute writes on large graphs
-    sigma_instance.setSetting('edgeReducer', function(edge, data) { return Object.assign({}, data, { hidden: true }); });
+    // Clear all edges in one bulk pass before touching nodes.
+    // clearEdges() is a single internal loop — far cheaper than letting dropNode()
+    // remove each incident edge one by one (O(degree) per node).
+    // After this call every dropNode() is O(1).
+    graph.clearEdges();
+
+    // Drop departing nodes — O(1) each because no edges remain.
+    old_only.forEach(function(id) { if (graph.hasNode(id)) graph.dropNode(id); });
 
     // Add arriving nodes at the centre with size 0 so they can grow into place
     new_only.forEach(function(id) {
@@ -634,14 +640,6 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
             graph.setNodeAttribute(id, 'y',    _lerp(s.y,    n.y, e));
             graph.setNodeAttribute(id, 'size', _lerp(s.size, sz,  e));
         });
-        // Nodes leaving this year: shrink and drift toward new graph centre so they
-        // stay inside the new bounding box — prevents a normalization jump when dropped.
-        old_only.forEach(function(id) {
-            var s = snap[id];
-            graph.setNodeAttribute(id, 'x',    _lerp(s.x, new_cx, e));
-            graph.setNodeAttribute(id, 'y',    _lerp(s.y, new_cy, e));
-            graph.setNodeAttribute(id, 'size', s.size * (1 - e));
-        });
         // Nodes entering this year: grow from centre to their final position
         new_only.forEach(function(id) {
             var n = new_pos_map[id], sz = target_size[id] || 2;
@@ -664,14 +662,10 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
             animation_frame_id = requestAnimationFrame(step);
         } else {
             animation_frame_id = null;
-            // Defer the heavy cleanup to the next frame so the last animation
+            // Defer the remaining cleanup to the next frame so the last animation
             // frame is painted before any synchronous work blocks the thread.
             requestAnimationFrame(function() {
-                // Drop departing nodes (now at new_cx/new_cy, so no bbox jump)
-                old_only.forEach(function(id) { if (graph.hasNode(id)) graph.dropNode(id); });
-
-                // Swap in the new year's edges
-                graph.clearEdges();
+                // Add the new year's edges (old edges were cleared before animation started)
                 new_pos_data.edges.forEach(function(e) {
                     if (!graph.hasNode(e.source) || !graph.hasNode(e.target)) return;
                     var col = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
@@ -689,7 +683,6 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
 
                 el('about_graph_stats').innerHTML =
                     graph.nodes().length + ' channels, ' + graph.edges().length + ' connections';
-                sigma_instance.setSetting('edgeReducer', null);
                 graph_loaded = true;
                 maybe_apply_initial_colors();
             });
