@@ -180,6 +180,10 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Include non-interesting channels that are referenced by interesting ones as leaf nodes. Adds context but can significantly increase graph size."></i>
               </label>
+              <label class="ops-flag"><input type="checkbox" name="timeline_step">Timeline by year
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Repeat the export for each calendar year found in the data. Generates per-year graphs, tables, and an animated timeline player (graph_timeline.html). Substantially increases total run time."></i>
+              </label>
             </div>
           </fieldset>
 
@@ -299,51 +303,47 @@
           </div>
 
           <fieldset class="ops-fieldset">
-            <legend>Measures &amp; communities</legend>
-            <div class="ops-params">
-              <div class="ops-param">
-                <label for="measures">Measures
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Centrality measures to compute. Hold Ctrl / Cmd to select multiple."></i>
-                </label>
-                <select name="measures" id="measures" multiple size="8">
-                  <option value="PAGERANK" selected>PAGERANK</option>
-                  <option value="HITSHUB" selected>HITSHUB</option>
-                  <option value="HITSAUTH" selected>HITSAUTH</option>
-                  <option value="BETWEENNESS" selected>BETWEENNESS</option>
-                  <option value="FLOWBETWEENNESS" selected>FLOWBETWEENNESS</option>
-                  <option value="INDEGCENTRALITY" selected>INDEGCENTRALITY</option>
-                  <option value="OUTDEGCENTRALITY" selected>OUTDEGCENTRALITY</option>
-                  <option value="HARMONICCENTRALITY" selected>HARMONICCENTRALITY</option>
-                  <option value="KATZ" selected>KATZ</option>
-                  <option value="SPREADING" selected>SPREADING</option>
-                  <option value="BRIDGING" selected>BRIDGING</option>
-                  <option value="BURTCONSTRAINT" selected>BURTCONSTRAINT</option>
-                  <option value="AMPLIFICATION" selected>AMPLIFICATION</option>
-                  <option value="CONTENTORIGINALITY" selected>CONTENTORIGINALITY</option>
-                </select>
-              </div>
-              <div class="ops-param">
-                <label for="community_strategies">Community strategies
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Community detection algorithms to run. Hold Ctrl / Cmd to select multiple."></i>
-                </label>
-                <select name="community_strategies" id="community_strategies" multiple size="8">
-                  <option value="ORGANIZATION" selected>ORGANIZATION</option>
-                  <option value="LEIDEN" selected>LEIDEN</option>
-                  <option value="LEIDEN_DIRECTED" selected>LEIDEN_DIRECTED</option>
-                  <option value="LEIDEN_CPM_COARSE" selected>LEIDEN_CPM_COARSE</option>
-                  <option value="LEIDEN_CPM_FINE" selected>LEIDEN_CPM_FINE</option>
-                  <option value="LOUVAIN" selected>LOUVAIN</option>
-                  <option value="KCORE" selected>KCORE</option>
-                  <option value="INFOMAP" selected>INFOMAP</option>
-                  <option value="INFOMAP_MEMORY" selected>INFOMAP_MEMORY</option>
-                  <option value="MCL" selected>MCL</option>
-                  <option value="WALKTRAP" selected>WALKTRAP</option>
-                  <option value="WEAKCC" selected>WEAKCC</option>
-                  <option value="STRONGCC" selected>STRONGCC</option>
-                </select>
-              </div>
+            <legend>Measures
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Centrality measures to compute. &#x2192; = uses edge direction. &#x2194; = graph is symmetrised."></i>
+            </legend>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag"><input type="checkbox" name="measures" value="PAGERANK" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>PAGERANK</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSHUB" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>HITSHUB</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSAUTH" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>HITSAUTH</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BETWEENNESS" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>BETWEENNESS</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="FLOWBETWEENNESS" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>FLOWBETWEENNESS</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="INDEGCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>INDEGCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="OUTDEGCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>OUTDEGCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HARMONICCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>HARMONICCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="KATZ" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>KATZ</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="SPREADING" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>SPREADING</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BRIDGING" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>BRIDGING</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BURTCONSTRAINT" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>BURTCONSTRAINT</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>AMPLIFICATION</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="CONTENTORIGINALITY" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — no graph structure used"></i>CONTENTORIGINALITY</label>
+            </div>
+          </fieldset>
+
+          <fieldset class="ops-fieldset">
+            <legend>Community strategies
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Community detection algorithms to run. &#x2192; = uses edge direction. &#x2194; = graph is symmetrised."></i>
+            </legend>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" checked>ORGANIZATION</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>LEIDEN_DIRECTED</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN_CPM_COARSE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_FINE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN_CPM_FINE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LOUVAIN" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LOUVAIN</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="KCORE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>KCORE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>INFOMAP</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP_MEMORY" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>INFOMAP_MEMORY</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="MCL" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>MCL</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WALKTRAP" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>WALKTRAP</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WEAKCC" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — ignores edge direction"></i>WEAKCC</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" checked><i class="bi bi-arrow-right ops-dir" title="Directional"></i>STRONGCC</label>
             </div>
           </fieldset>
 

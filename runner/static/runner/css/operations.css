@@ -239,7 +239,7 @@
   padding: .75rem 1rem;
   background: #1a1a2e;
   color: #c8d3f5;
-  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-family: "IBM Plex Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: .75rem;
   line-height: 1.55;
   max-height: 420px;
@@ -257,6 +257,15 @@
 .ops-log .line-success { color: #9ece6a; }
 .ops-log .line-warning { color: #e0af68; }
 .ops-log .line-error   { color: #f7768e; }
+
+/* ---- two-column flag grid (measures / community strategies) ---- */
+.ops-flags--grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+.ops-dir {
+  font-size: .6rem;
+  opacity: .5;
+  flex-shrink: 0;
+  pointer-events: none;
+}
 
 /* ---- last-run footer ---- */
 .ops-last-run {

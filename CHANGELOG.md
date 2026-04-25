@@ -1,8 +1,11 @@
 # Changelog
 
 ## [0.14] - To be announced
-*New layout*
+*Layout improvements.*
 
+### Improvements
+- New fonts and reworked details for most of the webapp and HTML output.
+- Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.
 
 
 ## [0.13] - 2026-04-20
