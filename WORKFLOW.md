@@ -139,7 +139,64 @@ python manage.py export_network --enddate 2023-12-31
 python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31
 ```
 
-## 6b. Compare two networks
+## 6b. Timeline export (year-by-year animation)
+
+Enable **Timeline by year** in the Operations panel (or pass `--timeline-step year` on the CLI) together with **2D graph** to generate a full per-year breakdown of the network alongside the normal full-range export.
+
+### What is produced
+
+In addition to the regular `graph/` output, the exporter repeats the full pipeline — graph construction, community detection, layout, measure computation — once per calendar year found in the message data, and writes:
+
+| Path | Description |
+| :--- | :---------- |
+| `graph/data_YYYY/` | Per-year data files (`channel_position.json`, `channels.json`, `communities.json`, `community_metrics.json`, `meta.json`) |
+| `graph/graph_YYYY.html` | Stand-alone 2D graph for that year (same layout and controls as `graph.html`) |
+| `graph/channel_table_YYYY.html` | Per-year channel table *(requires `--html`)* |
+| `graph/network_table_YYYY.html` | Per-year network metrics table *(requires `--html`)* |
+| `graph/community_table_YYYY.html` | Per-year community statistics table *(requires `--html`)* |
+| `graph/data/timeline.json` | Index listing all generated years and their node/edge counts |
+| `graph/graph_timeline.html` | Animated timeline player (see below) |
+
+Years with no messages in the database are silently skipped.
+
+### Year switcher in the 2D graph
+
+When `data/timeline.json` is present, `graph.html` automatically shows a row of compact year buttons in the bottom navigation bar (`All · 2020 · 2021 · 2022 …`). All year datasets are preloaded in the background while the initial spinner is active, so switching is instant once loading completes.
+
+Clicking a year triggers an animated transition:
+
+- Nodes present in **both** years glide from their old position to the new one.
+- Nodes **leaving** the graph shrink toward the new year's centroid as they disappear.
+- Nodes **entering** the graph grow from the centroid into their final position.
+- The camera smoothly pans and zooms to fit the new layout.
+- Edges are hidden during the transition and replaced with the new year's edges once the animation settles.
+
+The currently selected community coloring and node-size measure are preserved across year switches. Clicking another year button while a transition is in progress cancels the current animation and starts the new one from wherever the nodes are at that moment.
+
+### Animated timeline player (`graph_timeline.html`)
+
+The timeline player is a dedicated full-screen view optimised for presenting the network's evolution:
+
+- **Transport bar** (bottom): first / previous / play / stop / next / last buttons, a year label, and a row of scrubber dots — one per year — that can be clicked directly.
+- **Playback speeds**: SLOW (4 s/year), NORM (2 s/year), FAST (0.8 s/year).
+- **Year overlay**: large semi-transparent year number centered on the canvas.
+- The player links back to `graph.html` (static full-range view) and `index.html`.
+
+The player is independent of the main graph; it always loads the full sequence of years in order and does not share the year switcher's preloading logic.
+
+### CLI
+
+```sh
+python manage.py export_network --2dgraph --timeline-step year
+python manage.py export_network --2dgraph --html --timeline-step year
+python manage.py export_network --2dgraph --html --xlsx --timeline-step year
+```
+
+`--timeline-step year` is the only supported value (the default `none` disables the feature). The option is silently ignored if no messages are found in the database.
+
+> **Performance note.** Each year runs the full layout pipeline including ForceAtlas2. For large graphs or many years, total run time increases proportionally. Reduce `--fa2-iterations` if speed is a concern.
+
+## 6c. Compare two networks
 
 **Operations panel** (`/operations/`) → **Compare Networks** → set **Project directory** → click **Run**.
 
