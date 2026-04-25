@@ -16,14 +16,20 @@ function el(id) { return document.getElementById(id); }
 // State
 // =============================================================================
 
-var loading_modal_bs       = null;
-var accessory_data         = null;
-var active_strategy        = null;
-var community_color_maps    = {};      // { strategyKey: { communityLabel: hexColor } }
-var community_strategy_data = {};     // { strategyKey: { groups: [...] } }
-var graph_loaded           = false;
-var accessory_loaded       = false;
+var loading_modal_bs            = null;
+var accessory_data              = null;
+var active_strategy             = null;
+var community_color_maps        = {};      // { strategyKey: { communityLabel: hexColor } }
+var community_strategy_data     = {};     // { strategyKey: { groups: [...] } }
+var graph_loaded                = false;
+var accessory_loaded            = false;
 var is_graph_completely_rendered = false;
+var current_data_dir            = window.DATA_DIR || 'data/';
+var is_year_switch              = false;
+var active_year                 = null;
+var animation_frame_id          = null;
+var year_cache                  = {};  // data_dir → { pos, ch, comm }
+var year_cache_pend             = {};  // data_dir → true while fetch is in flight
 
 // =============================================================================
 // Sigma and graph instances
@@ -251,8 +257,14 @@ function apply_strategy_colors(strategy) {
 }
 
 function maybe_apply_initial_colors() {
-    if (graph_loaded && accessory_loaded && active_strategy)
+    if (graph_loaded && accessory_loaded && active_strategy) {
         apply_strategy_colors(active_strategy);
+        if (is_year_switch) {
+            var metric = el('size-select').value;
+            if (metric) apply_node_size(metric);
+            is_year_switch = false;
+        }
+    }
 }
 
 // =============================================================================
@@ -376,10 +388,10 @@ function click_node(nodeId) {
 // Graph loading
 // =============================================================================
 
-function get_data() {
-    Promise.all([
-        fetch((window.DATA_DIR||'data/')+'channel_position.json').then(function(r) { return r.json(); }),
-        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
+function get_data(data_dir) {
+    return Promise.all([
+        fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         var pos_data = results[0];
         var ch_data  = results[1];
@@ -417,23 +429,301 @@ function get_data() {
         });
 
         sigma_instance.refresh();
-        el('loading_message').innerHTML = 'Done!';
-        if (loading_modal_bs) loading_modal_bs.hide();
         el('about_graph_stats').innerHTML =
             graph.nodes().length + ' channels, ' +
             graph.edges().length + ' connections';
 
         graph_loaded = true;
         maybe_apply_initial_colors();
-
-        sigma_instance.on('clickNode', function(event) {
-            click_node(event.node);
-        });
-
-        sigma_instance.on('clickStage', function() {
-            if (!is_graph_completely_rendered) reset_colors();
-        });
     });
+}
+
+function _apply_accessory(ch_data, comm_data, prev_strategy, prev_size) {
+    accessory_data          = ch_data;
+    community_strategy_data = comm_data.strategies;
+    community_color_maps    = build_community_color_maps(comm_data.strategies);
+
+    var strategies  = Object.keys(comm_data.strategies);
+    active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1)
+        ? prev_strategy : (strategies[0] || null);
+
+    build_strategy_selector(comm_data.strategies);
+    if (active_strategy) {
+        var sel = el('community-strategy-select');
+        if (sel) sel.value = active_strategy;
+        build_legend(comm_data.strategies[active_strategy]);
+    }
+
+    var size_items = ch_data.measures.map(function(m) {
+        return '<option value="' + m[0] + '">' + m[1] + '</option>';
+    });
+    el('size-select').innerHTML = size_items.join('');
+    if (prev_size) {
+        var opts = el('size-select').options;
+        for (var i = 0; i < opts.length; i++) {
+            if (opts[i].value === prev_size) { el('size-select').value = prev_size; break; }
+        }
+    }
+
+    var tpc = el('total_pages_count');
+    if (tpc) tpc.innerHTML = ch_data.total_pages_count;
+
+    accessory_loaded = true;
+    maybe_apply_initial_colors();
+}
+
+function load_accessory(data_dir) {
+    var prev_strategy = active_strategy;
+    var prev_size     = el('size-select') ? el('size-select').value : '';
+
+    var c = year_cache[data_dir];
+    if (c) {
+        _apply_accessory(c.ch, c.comm, prev_strategy, prev_size);
+        return;
+    }
+
+    Promise.all([
+        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        _apply_accessory(results[0], results[1], prev_strategy, prev_size);
+    });
+}
+
+// =============================================================================
+// Year data preloading
+// =============================================================================
+
+function preload_year(data_dir) {
+    if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
+    year_cache_pend[data_dir] = true;
+    return Promise.all([
+        fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        delete year_cache_pend[data_dir];
+        year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
+    }).catch(function() {
+        delete year_cache_pend[data_dir];
+    });
+}
+
+// =============================================================================
+// Year switcher
+// =============================================================================
+
+function update_year_buttons_active(year_str) {
+    active_year = String(year_str);
+    var container = el('year-switcher');
+    if (!container) return;
+    container.querySelectorAll('.year-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.year === active_year);
+    });
+}
+
+function init_year_switcher(timeline) {
+    var years_with_graph = (timeline.years || []).filter(function(y) { return y.has_graph; });
+    if (!years_with_graph.length) return;
+    var container = el('year-switcher');
+    if (!container) return;
+
+    var btns = ['<button class="year-btn" data-year="all">All</button>'];
+    years_with_graph.forEach(function(entry) {
+        btns.push('<button class="year-btn" data-year="' + entry.year + '">' + entry.year + '</button>');
+    });
+    container.innerHTML = btns.join('');
+    container.style.display = 'flex';
+
+    var init_year = 'all';
+    if (window.DATA_DIR) {
+        var m = window.DATA_DIR.match(/data_(\d+)\//);
+        if (m) init_year = m[1];
+    }
+    update_year_buttons_active(init_year);
+
+    container.addEventListener('click', function(e) {
+        var btn = e.target.closest('.year-btn');
+        if (!btn) return;
+        var year = btn.dataset.year;
+        if (year === active_year) return;
+        update_year_buttons_active(year);
+        reload_graph(year === 'all' ? 'data/' : 'data_' + year + '/');
+    });
+}
+
+function _lerp(a, b, t) { return a + (b - a) * t; }
+function _ease(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+
+
+function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
+    if (animation_frame_id) { cancelAnimationFrame(animation_frame_id); animation_frame_id = null; }
+
+    // Build lookup maps
+    var new_pos_map = {}, new_ch_map = {};
+    new_pos_data.nodes.forEach(function(n) { new_pos_map[n.id] = n; });
+    new_ch_data.nodes.forEach(function(n) { new_ch_map[n.id] = n; });
+
+    // Target sizes (in_deg-based, same formula as get_data)
+    var in_deg_vals = new_pos_data.nodes.map(function(n) { return (new_ch_map[n.id] || {}).in_deg || 0; });
+    var min_in_deg  = in_deg_vals.length ? Math.min.apply(null, in_deg_vals) : 0;
+    var in_deg_rng  = ((in_deg_vals.length ? Math.max.apply(null, in_deg_vals) : 0) - min_in_deg) || 1;
+    var target_size = {};
+    new_pos_data.nodes.forEach(function(n) {
+        target_size[n.id] = 1.5 + (((new_ch_map[n.id] || {}).in_deg || 0) - min_in_deg) / in_deg_rng * 13.5;
+    });
+
+    // Centre of current graph (spawn point for new nodes)
+    var old_ids = graph.nodes().slice();
+    var cx = 0, cy = 0;
+    if (old_ids.length) {
+        old_ids.forEach(function(id) { cx += graph.getNodeAttribute(id, 'x'); cy += graph.getNodeAttribute(id, 'y'); });
+        cx /= old_ids.length; cy /= old_ids.length;
+    }
+
+    // Centre of new year's graph — departing nodes drift here as they shrink,
+    // keeping them inside the new bounding box so dropping them causes no normalization jump.
+    var new_cx = 0, new_cy = 0;
+    if (new_pos_data.nodes.length) {
+        new_pos_data.nodes.forEach(function(n) { new_cx += n.x; new_cy += n.y; });
+        new_cx /= new_pos_data.nodes.length;
+        new_cy /= new_pos_data.nodes.length;
+    }
+
+    // Snapshot current positions and sizes
+    var snap = {};
+    old_ids.forEach(function(id) {
+        snap[id] = {
+            x:    graph.getNodeAttribute(id, 'x'),
+            y:    graph.getNodeAttribute(id, 'y'),
+            size: graph.getNodeAttribute(id, 'size'),
+        };
+    });
+
+    var old_only = old_ids.filter(function(id) { return !new_pos_map[id]; });
+    var both     = old_ids.filter(function(id) { return !!new_pos_map[id]; });
+    var new_only = new_pos_data.nodes.map(function(n) { return n.id; }).filter(function(id) { return !graph.hasNode(id); });
+
+    // Animate camera toward Sigma's "show everything" state: (0.5, 0.5, ratio=1).
+    // This is valid under any normalization, so it never flies off-screen.
+    var start_cam  = sigma_instance.getCamera().getState();
+    var target_cam = { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
+
+    // Hide all edges via a single renderer setting — avoids O(E) attribute writes on large graphs
+    sigma_instance.setSetting('edgeReducer', function(edge, data) { return Object.assign({}, data, { hidden: true }); });
+
+    // Add arriving nodes at the centre with size 0 so they can grow into place
+    new_only.forEach(function(id) {
+        var m = new_ch_map[id] || {};
+        var c = 'rgb(' + (m.color || '128,128,128') + ')';
+        graph.addNode(id, Object.assign({}, m, { id: id, x: cx, y: cy, size: 0, color: c, originalColor: c }));
+    });
+
+    var SKIP_ATTRS = { id: 1, x: 1, y: 1, size: 1, color: 1, originalColor: 1 };
+    var start_ts = null;
+
+    function step(ts) {
+        if (!start_ts) start_ts = ts;
+        var raw = Math.min((ts - start_ts) / duration_ms, 1);
+        var e   = _ease(raw);
+
+        // Nodes in both years: glide to new position, adjust size
+        both.forEach(function(id) {
+            var s = snap[id], n = new_pos_map[id], sz = target_size[id] || s.size;
+            graph.setNodeAttribute(id, 'x',    _lerp(s.x,    n.x, e));
+            graph.setNodeAttribute(id, 'y',    _lerp(s.y,    n.y, e));
+            graph.setNodeAttribute(id, 'size', _lerp(s.size, sz,  e));
+        });
+        // Nodes leaving this year: shrink and drift toward new graph centre so they
+        // stay inside the new bounding box — prevents a normalization jump when dropped.
+        old_only.forEach(function(id) {
+            var s = snap[id];
+            graph.setNodeAttribute(id, 'x',    _lerp(s.x, new_cx, e));
+            graph.setNodeAttribute(id, 'y',    _lerp(s.y, new_cy, e));
+            graph.setNodeAttribute(id, 'size', s.size * (1 - e));
+        });
+        // Nodes entering this year: grow from centre to their final position
+        new_only.forEach(function(id) {
+            var n = new_pos_map[id], sz = target_size[id] || 2;
+            graph.setNodeAttribute(id, 'x',    _lerp(cx, n.x, e));
+            graph.setNodeAttribute(id, 'y',    _lerp(cy, n.y, e));
+            graph.setNodeAttribute(id, 'size', sz * e);
+        });
+
+        // Pan and zoom the camera gradually toward the new year's bounding box
+        sigma_instance.getCamera().setState({
+            x:     _lerp(start_cam.x,     target_cam.x,     e),
+            y:     _lerp(start_cam.y,     target_cam.y,     e),
+            ratio: _lerp(start_cam.ratio, target_cam.ratio, e),
+            angle: 0,
+        });
+
+        sigma_instance.refresh();
+
+        if (raw < 1) {
+            animation_frame_id = requestAnimationFrame(step);
+        } else {
+            animation_frame_id = null;
+            // Defer the heavy cleanup to the next frame so the last animation
+            // frame is painted before any synchronous work blocks the thread.
+            requestAnimationFrame(function() {
+                // Drop departing nodes (now at new_cx/new_cy, so no bbox jump)
+                old_only.forEach(function(id) { if (graph.hasNode(id)) graph.dropNode(id); });
+
+                // Swap in the new year's edges
+                graph.clearEdges();
+                new_pos_data.edges.forEach(function(e) {
+                    if (!graph.hasNode(e.source) || !graph.hasNode(e.target)) return;
+                    var col = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
+                    var attrs = Object.assign({}, e, { color: col, originalColor: col });
+                    delete attrs.source; delete attrs.target; delete attrs.id;
+                    try { graph.addEdge(e.source, e.target, attrs); } catch(_) {}
+                });
+
+                // Update node metadata (measures, communities, label, etc.)
+                graph.nodes().forEach(function(id) {
+                    var m = new_ch_map[id];
+                    if (!m) return;
+                    Object.keys(m).forEach(function(k) { if (!SKIP_ATTRS[k]) graph.setNodeAttribute(id, k, m[k]); });
+                });
+
+                el('about_graph_stats').innerHTML =
+                    graph.nodes().length + ' channels, ' + graph.edges().length + ' connections';
+                sigma_instance.setSetting('edgeReducer', null);
+                graph_loaded = true;
+                maybe_apply_initial_colors();
+            });
+        }
+    }
+
+    animation_frame_id = requestAnimationFrame(step);
+}
+
+function reload_graph(data_dir) {
+    if (animation_frame_id) { cancelAnimationFrame(animation_frame_id); animation_frame_id = null; }
+
+    is_year_switch           = true;
+    current_data_dir         = data_dir;
+    graph_loaded             = false;
+    accessory_loaded         = false;
+    is_graph_completely_rendered = false;
+    el('infobar').style.display      = 'none';
+    el('node_details').style.display = 'none';
+
+    var c = year_cache[data_dir];
+    if (c) {
+        // Data already in cache — start animation immediately, no network wait
+        animate_year_transition(c.pos, c.ch, 700);
+    } else {
+        Promise.all([
+            fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
+            fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        ]).then(function(results) {
+            animate_year_transition(results[0], results[1], 700);
+        });
+    }
+
+    load_accessory(data_dir);
 }
 
 // =============================================================================
@@ -443,36 +733,50 @@ function get_data() {
 document.addEventListener('DOMContentLoaded', function() {
     var loading_el = document.getElementById('loading_modal');
     loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
-    loading_el.addEventListener('shown.bs.modal', function() { get_data(); }, { once: true });
+
+    // Kick off graph + accessory loads in parallel; keep spinner open until all
+    // year data is preloaded, updating the message for each year as it loads.
+    var graph_promise = new Promise(function(resolve) {
+        loading_el.addEventListener('shown.bs.modal', function() {
+            get_data(current_data_dir).then(resolve);
+        }, { once: true });
+    });
+
     loading_modal_bs.show();
     el('loading_message').innerHTML = 'Loading…<br>Please wait.';
+    load_accessory(current_data_dir);
 
-    Promise.all([
-        fetch((window.DATA_DIR||'data/')+'channels.json').then(function(r) { return r.json(); }),
-        fetch((window.DATA_DIR||'data/')+'communities.json').then(function(r) { return r.json(); }),
-    ]).then(function(results) {
-        var ch_data   = results[0];
-        var comm_data = results[1];
-
-        accessory_data = ch_data;
-
-        community_strategy_data = comm_data.strategies;
-
-        community_color_maps = build_community_color_maps(comm_data.strategies);
-        var strategies       = Object.keys(comm_data.strategies);
-        active_strategy      = strategies[0] || null;
-
-        build_strategy_selector(comm_data.strategies);
-        if (active_strategy) build_legend(comm_data.strategies[active_strategy]);
-
-        var size_items = ch_data.measures.map(function(m) {
-            return '<option value="' + m[0] + '">' + m[1] + '</option>';
+    // Fetch timeline and preload ALL year data in parallel with the graph build,
+    // so everything is cached by the time the spinner closes.
+    var years_promise = fetch('data/timeline.json')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function() { return null; })
+        .then(function(timeline) {
+            if (!timeline) return;
+            init_year_switcher(timeline);
+            var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
+            var dirs  = ['data/'].concat(years.map(function(y) { return 'data_' + y.year + '/'; }));
+            var total = dirs.length, done = 0;
+            return Promise.all(dirs.map(function(dir) {
+                return preload_year(dir).then(function() {
+                    done++;
+                    var m = dir.match(/data_(\d+)\//);
+                    el('loading_message').innerHTML =
+                        (m ? m[1] : 'All') + ' (' + done + ' / ' + total + ')';
+                });
+            }));
         });
-        el('size-select').innerHTML = size_items.join('');
-        var tpc = el('total_pages_count'); if (tpc) tpc.innerHTML = ch_data.total_pages_count;
 
-        accessory_loaded = true;
-        maybe_apply_initial_colors();
+    // Keep spinner open until both the graph and all year caches are ready
+    Promise.all([graph_promise, years_promise])
+        .then(function() { loading_modal_bs.hide(); });
+
+    // Sigma click handlers registered once here (not inside get_data to avoid duplicates on reload)
+    sigma_instance.on('clickNode', function(event) {
+        click_node(event.node);
+    });
+    sigma_instance.on('clickStage', function() {
+        if (!is_graph_completely_rendered) reset_colors();
     });
 
     el('community-strategy-select').addEventListener('change', function() {

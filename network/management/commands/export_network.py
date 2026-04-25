@@ -1,13 +1,18 @@
 import datetime
 import os
+import shutil
+import tempfile
 from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Max, Min
+from django.template.loader import render_to_string
 
 from network import community, community_stats, exporter, graph_builder, layout, measures, tables
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
+from webapp.models import Message
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 
 import networkx as nx
@@ -238,6 +243,18 @@ class Command(BaseCommand):
                 "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting."
             ),
         )
+        parser.add_argument(
+            "--timeline-step",
+            dest="timeline_step",
+            default="none",
+            choices=["none", "year"],
+            help=(
+                "Repeat the export for each calendar year found in the data. "
+                "'none' disables this (default); 'year' generates per-year outputs "
+                "(graph_YYYY.html, channel_table_YYYY.html, data_YYYY/, etc.) alongside "
+                "the full-range export, and adds a Timeline section to the index."
+            ),
+        )
 
     def _validate_settings(
         self,
@@ -456,6 +473,217 @@ class Command(BaseCommand):
 
         return measures_labels
 
+    def _run_year_export(
+        self,
+        year: int,
+        root_target: str,
+        options: dict,
+        selected_measures: set[str],
+        bridging_token: str | None,
+        communities_strategy: list[str],
+        strategies: list[str],
+        do_graph: bool,
+        do_3dgraph: bool,
+        do_html: bool,
+        do_xlsx: bool,
+        do_consensus_matrix: bool,
+        channel_types: list[str],
+        edge_weight_strategy: str,
+        fa2_iterations: int,
+        target_layout: str,
+        seo: bool,
+        project_title: str,
+    ) -> dict | None:
+        """Run the full export pipeline for a single calendar year and write per-year files."""
+        start_date = datetime.date(year, 1, 1)
+        end_date = datetime.date(year, 12, 31)
+
+        self.stdout.write(f"\n  {year} … ", ending="")
+        self.stdout.flush()
+
+        try:
+            graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
+                draw_dead_leaves=options["draw_dead_leaves"],
+                start_date=start_date,
+                end_date=end_date,
+                recency_weights=options["recency_weights"],
+                channel_types=channel_types,
+                edge_weight_strategy=edge_weight_strategy,
+            )
+        except ValueError as e:
+            self.stdout.write(self.style.WARNING(f"skipped ({e})"))
+            return None
+
+        if not graph.nodes:
+            self.stdout.write(self.style.WARNING("skipped (empty graph)"))
+            return None
+
+        n_nodes, n_edges = len(graph.nodes), len(graph.edges)
+        self.stdout.write(f"{n_nodes} nodes, {n_edges} edges")
+
+        strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
+        positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
+        graph_data = exporter.build_graph_data(graph, channel_dict, positions)
+        measures_labels = self._compute_measures(
+            graph,
+            graph_data,
+            channel_dict,
+            selected_measures,
+            bridging_token,
+            start_date,
+            end_date,
+            do_graph,
+            do_3dgraph,
+            options["spreading_runs"],
+        )
+
+        communities_data = community.build_communities_payload(communities_strategy, strategy_results)
+        need_metrics = do_html or do_xlsx or do_consensus_matrix
+        community_table_data = None
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exporter.write_graph_files(
+                graph_data,
+                communities_data,
+                measures_labels,
+                channel_qs,
+                graph_dir=tmp_dir,
+                include_positions=do_graph or do_3dgraph,
+                positions_3d=positions_3d,
+            )
+            exporter.write_meta_json(
+                graph_dir=tmp_dir,
+                project_title=project_title,
+                reversed_edges=settings.REVERSED_EDGES,
+                edge_weight_strategy=edge_weight_strategy,
+                start_date=start_date,
+                end_date=end_date,
+                total_nodes=n_nodes,
+                total_edges=n_edges,
+                community_distribution_threshold=options["community_distribution_threshold"],
+                has_consensus_matrix=do_consensus_matrix,
+            )
+            if need_metrics:
+                community_table_data = community_stats.compute_community_metrics(
+                    graph_data,
+                    communities_data,
+                    graph,
+                    strategies,
+                    measures_labels=measures_labels,
+                    status_callback=None,
+                    channel_qs=channel_qs,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
+                tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
+
+            year_data_dst = os.path.join(root_target, f"data_{year}")
+            if os.path.exists(year_data_dst):
+                shutil.rmtree(year_data_dst)
+            shutil.move(os.path.join(tmp_dir, "data"), year_data_dst)
+
+        def _mk_ctx(title_part: str, *, description: str = "") -> dict:
+            full_title = f"{project_title} | {title_part}" if project_title else title_part
+            return {
+                "title": full_title,
+                "robots_meta": "index, follow" if seo else "noindex, nofollow",
+                "description": description,
+            }
+
+        has_graph = has_graph3d = False
+        has_channel_html = has_channel_xlsx = False
+        has_network_html = has_network_xlsx = False
+        has_community_html = has_community_xlsx = False
+        has_consensus_matrix_html = False
+
+        if do_graph:
+            src = os.path.join(root_target, "graph.html")
+            if os.path.isfile(src):
+                with open(src) as fh:
+                    content = fh.read()
+                with open(os.path.join(root_target, f"graph_{year}.html"), "w") as fh:
+                    fh.write(tables._patch_timeline_html(content, year))
+                has_graph = True
+
+        if do_3dgraph:
+            src = os.path.join(root_target, "graph3d.html")
+            if os.path.isfile(src):
+                with open(src) as fh:
+                    content = fh.read()
+                with open(os.path.join(root_target, f"graph3d_{year}.html"), "w") as fh:
+                    fh.write(tables._patch_timeline_html(content, year))
+                has_graph3d = True
+
+        if do_html:
+            ctx = _mk_ctx(
+                f"Channels ({year})",
+                description=f"Network data for {n_nodes} channels in {year}.",
+            )
+            content = render_to_string("network/channel_table.html", ctx)
+            with open(os.path.join(root_target, f"channel_table_{year}.html"), "w") as fh:
+                fh.write(tables._patch_timeline_html(content, year))
+            has_channel_html = True
+
+            ctx = _mk_ctx(f"Network ({year})")
+            content = render_to_string("network/network_table.html", ctx)
+            with open(os.path.join(root_target, f"network_table_{year}.html"), "w") as fh:
+                fh.write(tables._patch_timeline_html(content, year))
+            has_network_html = True
+
+            ctx = _mk_ctx(f"Communities ({year})")
+            content = render_to_string("network/community_table.html", ctx)
+            with open(os.path.join(root_target, f"community_table_{year}.html"), "w") as fh:
+                fh.write(tables._patch_timeline_html(content, year))
+            has_community_html = True
+
+        if do_xlsx:
+            tables.write_table_xlsx(
+                graph_data,
+                measures_labels,
+                strategies,
+                os.path.join(root_target, f"channel_table_{year}.xlsx"),
+                project_title=project_title,
+            )
+            has_channel_xlsx = True
+            if community_table_data is not None:
+                tables.write_network_table_xlsx(
+                    community_table_data,
+                    strategies,
+                    os.path.join(root_target, f"network_table_{year}.xlsx"),
+                    project_title=project_title,
+                )
+                has_network_xlsx = True
+                tables.write_community_table_xlsx(
+                    community_table_data,
+                    strategies,
+                    os.path.join(root_target, f"community_table_{year}.xlsx"),
+                    project_title=project_title,
+                )
+                has_community_xlsx = True
+
+        if do_consensus_matrix:
+            ctx = _mk_ctx(f"Consensus matrix ({year})")
+            content = render_to_string("network/consensus_matrix.html", ctx)
+            with open(os.path.join(root_target, f"consensus_matrix_{year}.html"), "w") as fh:
+                fh.write(tables._patch_timeline_html(content, year))
+            has_consensus_matrix_html = True
+
+        return {
+            "year": year,
+            "nodes": n_nodes,
+            "edges": n_edges,
+            "has_graph": has_graph,
+            "has_graph3d": has_graph3d,
+            "has_channel_html": has_channel_html,
+            "has_channel_xlsx": has_channel_xlsx,
+            "has_network_html": has_network_html,
+            "has_network_xlsx": has_network_xlsx,
+            "has_community_html": has_community_html,
+            "has_community_xlsx": has_community_xlsx,
+            "has_consensus_matrix_html": has_consensus_matrix_html,
+        }
+
     def handle(self, *args: Any, **options: Any) -> None:
         raw_community_strategies = _parse_csv(options["community_strategies"])
         communities_strategy = (
@@ -654,6 +882,40 @@ class Command(BaseCommand):
             os.makedirs(root_target, exist_ok=True)
             exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
 
+        timeline_entries: list[dict] = []
+        if options["timeline_step"] == "year":
+            year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
+            min_date, max_date = year_agg["min_date"], year_agg["max_date"]
+            if min_date is None:
+                self.stdout.write(self.style.WARNING("\nTimeline: no messages found, skipping."))
+            else:
+                self.stdout.write(f"\nTimeline export ({min_date.year}–{max_date.year})")
+                for yr in range(min_date.year, max_date.year + 1):
+                    entry = self._run_year_export(
+                        yr,
+                        root_target,
+                        options,
+                        selected_measures,
+                        bridging_token,
+                        communities_strategy,
+                        strategies,
+                        do_graph,
+                        do_3dgraph,
+                        do_html,
+                        do_xlsx,
+                        do_consensus_matrix,
+                        channel_types,
+                        edge_weight_strategy,
+                        fa2_iterations,
+                        target_layout,
+                        seo,
+                        project_title,
+                    )
+                    if entry is not None:
+                        timeline_entries.append(entry)
+                if timeline_entries:
+                    tables.write_timeline_json(timeline_entries, graph_dir=root_target)
+
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)
         tables.write_index_html(
@@ -672,6 +934,7 @@ class Command(BaseCommand):
             compare_files=set(),
             strategies=strategies,
             include_consensus_matrix_html=do_consensus_matrix,
+            timeline_entries=timeline_entries or None,
         )
 
         self.stdout.write(self.style.SUCCESS("\nDone."))

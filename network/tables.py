@@ -233,6 +233,17 @@ def _patch_compare_html(content: str) -> str:
     return content
 
 
+def _patch_timeline_html(content: str, year: int) -> str:
+    """Inject a DATA_DIR override for a per-year timeline export."""
+    injection = f'<script>window.DATA_DIR = "data_{year}/";</script>\n'
+    for marker in ('<script src="js/', '<script type="module" src="js/'):
+        idx = content.find(marker)
+        if idx != -1:
+            content = content[:idx] + injection + content[idx:]
+            break
+    return content
+
+
 def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
     """Copy files from a compare graph/ directory into graph/, renaming with _2 suffix.
 
@@ -264,6 +275,13 @@ def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
         copied.add(dst_name)
 
     return copied
+
+
+def write_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "timeline.json"), "w") as f:
+        f.write(json.dumps({"years": timeline_entries}))
 
 
 def write_network_compare_table_html(
@@ -451,6 +469,7 @@ def write_index_html(
     include_compare_html: bool = False,
     compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
+    timeline_entries: list[dict] | None = None,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -475,6 +494,7 @@ def write_index_html(
         "include_compare_html": include_compare_html,
         "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],
+        "timeline_entries": timeline_entries or [],
     }
     content = render_to_string("network/index.html", context)
     with open(output_filename, "w") as f:

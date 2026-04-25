@@ -9,7 +9,7 @@ html, body {
     margin: 0px;
     padding: 0px;
     font-size: 14.4px;
-    font-family: Inter, system-ui, sans-serif;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
     line-height: 1.25em;
     overflow-x: hidden;
 }
@@ -135,6 +135,7 @@ html, body {
 }
 
 #infobar #node_label {
+    font-family: "IBM Plex Serif", Georgia, serif;
     font-size: 1.1em;
     font-weight: 700;
     letter-spacing: 0.01em;
@@ -178,16 +179,18 @@ html, body {
 
 .metric-label {
     display: block;
-    font-size: 0.72em;
-    letter-spacing: 0.05em;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 0.65em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     color: rgba(255,255,255,0.45);
 }
 
 .metric-value {
     display: block;
+    font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
     font-size: 0.95em;
-    font-weight: 600;
+    font-weight: 500;
     color: #fff;
 }
 
@@ -245,6 +248,41 @@ html, body {
 }
 
 
+
+#year-switcher {
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.4rem;
+}
+
+.year-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.55);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    padding: .18rem .45rem;
+    border-radius: .28rem;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1;
+    transition: color .1s, border-color .1s, background .1s;
+}
+
+.year-btn:hover,
+.year-btn:focus {
+    color: rgba(255,255,255,0.85);
+    border-color: rgba(255,255,255,0.42);
+    outline: none;
+}
+
+.year-btn.active {
+    color: #fff;
+    border-color: rgba(255,255,255,0.65);
+    background: rgba(255,255,255,0.10);
+}
 
 #search {
     padding: 1em .25em;
