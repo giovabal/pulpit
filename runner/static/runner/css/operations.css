@@ -261,9 +261,9 @@
 /* ---- two-column flag grid (measures / community strategies) ---- */
 .ops-flags--grid {
   display: grid;
-  grid-template-columns: repeat(2, auto);
-  justify-content: start;
+  grid-template-columns: repeat(2, 1fr);
 }
+.ops-flags--grid .ops-flag { width: 100%; }
 .ops-dir {
   font-size: 1rem;
   flex-shrink: 0;
