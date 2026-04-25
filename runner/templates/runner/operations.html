@@ -306,46 +306,46 @@
           <fieldset class="ops-fieldset">
             <legend>Measures
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Centrality measures to compute. &#x2192; = uses edge direction. &#x2194; = graph is symmetrised."></i>
+                 title="Centrality measures to compute. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
             </legend>
             <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag"><input type="checkbox" name="measures" value="PAGERANK" checked><span class="ops-dir" title="Directional">→</span>PAGERANK</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSHUB" checked><span class="ops-dir" title="Directional">→</span>HITSHUB</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSAUTH" checked><span class="ops-dir" title="Directional">→</span>HITSAUTH</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="BETWEENNESS" checked><span class="ops-dir" title="Directional">→</span>BETWEENNESS</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="FLOWBETWEENNESS" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>FLOWBETWEENNESS</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="INDEGCENTRALITY" checked><span class="ops-dir" title="Directional">→</span>INDEGCENTRALITY</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="OUTDEGCENTRALITY" checked><span class="ops-dir" title="Directional">→</span>OUTDEGCENTRALITY</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="HARMONICCENTRALITY" checked><span class="ops-dir" title="Directional">→</span>HARMONICCENTRALITY</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="KATZ" checked><span class="ops-dir" title="Directional">→</span>KATZ</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="SPREADING" checked><span class="ops-dir" title="Directional">→</span>SPREADING</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="BRIDGING" checked><span class="ops-dir" title="Directional">→</span>BRIDGING</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="BURTCONSTRAINT" checked><span class="ops-dir" title="Directional">→</span>BURTCONSTRAINT</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" checked><span class="ops-dir" title="Directional">→</span>AMPLIFICATION</label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="CONTENTORIGINALITY" checked><span class="ops-dir" title="Undirectional — no graph structure used">↔</span>CONTENTORIGINALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="PAGERANK" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>PAGERANK</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSHUB" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>HITSHUB</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HITSAUTH" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>HITSAUTH</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BETWEENNESS" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>BETWEENNESS</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="FLOWBETWEENNESS" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>FLOWBETWEENNESS</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="INDEGCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>INDEGCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="OUTDEGCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>OUTDEGCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="HARMONICCENTRALITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>HARMONICCENTRALITY</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="KATZ" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>KATZ</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="SPREADING" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>SPREADING</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BRIDGING" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>BRIDGING</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="BURTCONSTRAINT" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>BURTCONSTRAINT</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>AMPLIFICATION</label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="CONTENTORIGINALITY" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — no graph structure used"></i>CONTENTORIGINALITY</label>
             </div>
           </fieldset>
 
           <fieldset class="ops-fieldset">
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Community detection algorithms to run. &#x2192; = uses edge direction. &#x2194; = graph is symmetrised."></i>
+                 title="Community detection algorithms to run. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" checked>ORGANIZATION</label>
 
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LEIDEN</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" checked><span class="ops-dir" title="Directional">→</span>LEIDEN_DIRECTED</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LEIDEN_CPM_COARSE</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_FINE" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LEIDEN_CPM_FINE</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LOUVAIN" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LOUVAIN</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="KCORE" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>KCORE</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP" checked><span class="ops-dir" title="Directional">→</span>INFOMAP</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP_MEMORY" checked><span class="ops-dir" title="Directional">→</span>INFOMAP_MEMORY</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="MCL" checked><span class="ops-dir" title="Directional">→</span>MCL</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WALKTRAP" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>WALKTRAP</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WEAKCC" checked><span class="ops-dir" title="Undirectional — ignores edge direction">↔</span>WEAKCC</label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" checked><span class="ops-dir" title="Directional">→</span>STRONGCC</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>LEIDEN_DIRECTED</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN_CPM_COARSE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_FINE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LEIDEN_CPM_FINE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LOUVAIN" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>LOUVAIN</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="KCORE" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>KCORE</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>INFOMAP</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP_MEMORY" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>INFOMAP_MEMORY</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="MCL" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>MCL</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WALKTRAP" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — graph symmetrised"></i>WALKTRAP</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WEAKCC" checked><i class="bi bi-arrow-left-right ops-dir" title="Undirectional — ignores edge direction"></i>WEAKCC</label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>STRONGCC</label>
             </div>
           </fieldset>
           </div>

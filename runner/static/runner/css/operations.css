@@ -266,10 +266,8 @@
 }
 .ops-dir {
   font-size: 1rem;
-  font-weight: 700;
   flex-shrink: 0;
   pointer-events: none;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
   color: var(--muted);
 }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
