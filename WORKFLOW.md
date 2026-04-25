@@ -149,19 +149,18 @@ In addition to the regular `graph/` output, the exporter repeats the full pipeli
 
 | Path | Description |
 | :--- | :---------- |
-| `graph/data_YYYY/` | Per-year data files (`channel_position.json`, `channels.json`, `communities.json`, `community_metrics.json`, `meta.json`) |
-| `graph/graph_YYYY.html` | Stand-alone 2D graph for that year (same layout and controls as `graph.html`) |
+| `graph/data_YYYY/` | Per-year data files (`channel_position.json`, `channels.json`, `communities.json`, `meta.json`) |
+| `graph/data/timeline.json` | Index listing all generated years and their node/edge counts |
+| `graph/graph_timeline.html` | Animated timeline player (see below) |
 | `graph/channel_table_YYYY.html` | Per-year channel table *(requires `--html`)* |
 | `graph/network_table_YYYY.html` | Per-year network metrics table *(requires `--html`)* |
 | `graph/community_table_YYYY.html` | Per-year community statistics table *(requires `--html`)* |
-| `graph/data/timeline.json` | Index listing all generated years and their node/edge counts |
-| `graph/graph_timeline.html` | Animated timeline player (see below) |
 
 Years with no messages in the database are silently skipped.
 
 ### Year switcher in the 2D graph
 
-When `data/timeline.json` is present, `graph.html` automatically shows a row of compact year buttons in the bottom navigation bar (`All · 2020 · 2021 · 2022 …`). All year datasets are preloaded in the background while the initial spinner is active, so switching is instant once loading completes.
+When `data/timeline.json` is present, `graph.html` automatically shows a row of compact year buttons in the bottom navigation bar (`All · 2020 · 2021 · 2022 …`). All year datasets (`data_YYYY/`) are preloaded during the initial spinner so switching is instant once loading completes. No separate per-year graph HTML files are generated — the year switcher in `graph.html` is the entry point for all year views.
 
 Clicking a year triggers an animated transition:
 

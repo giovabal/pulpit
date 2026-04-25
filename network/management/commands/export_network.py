@@ -591,29 +591,10 @@ class Command(BaseCommand):
                 "description": description,
             }
 
-        has_graph = has_graph3d = False
         has_channel_html = has_channel_xlsx = False
         has_network_html = has_network_xlsx = False
         has_community_html = has_community_xlsx = False
         has_consensus_matrix_html = False
-
-        if do_graph:
-            src = os.path.join(root_target, "graph.html")
-            if os.path.isfile(src):
-                with open(src) as fh:
-                    content = fh.read()
-                with open(os.path.join(root_target, f"graph_{year}.html"), "w") as fh:
-                    fh.write(tables._patch_timeline_html(content, year))
-                has_graph = True
-
-        if do_3dgraph:
-            src = os.path.join(root_target, "graph3d.html")
-            if os.path.isfile(src):
-                with open(src) as fh:
-                    content = fh.read()
-                with open(os.path.join(root_target, f"graph3d_{year}.html"), "w") as fh:
-                    fh.write(tables._patch_timeline_html(content, year))
-                has_graph3d = True
 
         if do_html:
             ctx = _mk_ctx(
@@ -673,8 +654,7 @@ class Command(BaseCommand):
             "year": year,
             "nodes": n_nodes,
             "edges": n_edges,
-            "has_graph": has_graph,
-            "has_graph3d": has_graph3d,
+            "has_graph": True,
             "has_channel_html": has_channel_html,
             "has_channel_xlsx": has_channel_xlsx,
             "has_network_html": has_network_html,
