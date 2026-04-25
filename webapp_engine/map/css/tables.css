@@ -1,10 +1,13 @@
 body {
-  font-family: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   color: #1a1a1a;
   background: #fff;
   font-size: 0.9rem;
 }
-h2, h3, h4, h5, h6 { font-family: inherit; }
+h2, h3, h4, h5, h6 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-weight: 700;
+}
 .table {
   border-top: 2px solid #1a1a1a;
   border-bottom: 2px solid #1a1a1a;
@@ -18,10 +21,11 @@ h2, h3, h4, h5, h6 { font-family: inherit; }
 }
 .table thead th {
   border-bottom: none !important;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -34,7 +38,7 @@ h2, h3, h4, h5, h6 { font-family: inherit; }
 .table-responsive { max-height: 78vh; overflow-y: auto; }
 td.number, th.number {
   text-align: right;
-  font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, 'SFMono-Regular', Consolas, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   font-size: 0.84rem;
@@ -65,7 +69,7 @@ th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; op
 .color-swatch--lg { width: 12px; height: 12px; margin-right: 5px; }
 .color-swatch--sm { width: 10px; height: 10px; margin-right: 4px; }
 
-/* Table preamble (proposal 16) */
+/* Table preamble */
 .table-preamble {
   font-size: 0.82rem;
   color: #555;
@@ -78,7 +82,9 @@ th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; op
 /* Channel-table tfoot stats row */
 .table:has(tfoot) tbody tr:last-child td { border-bottom: none !important; }
 .table tfoot td {
+  font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
   font-style: italic;
+  font-size: 0.82rem;
   color: #555;
   background: #f8f9fb;
   border-top: 2px solid #1a1a1a !important;
@@ -88,10 +94,11 @@ th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; op
 
 /* Network-table group sub-header rows */
 tr.summary-group-header td {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
   font-size: 0.67rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-weight: 700;
+  font-weight: 600;
   color: #888;
   background: #f5f6f8;
   padding-top: 0.7rem;

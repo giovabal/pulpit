@@ -167,6 +167,8 @@ def _build_args(task: str, post: Any) -> list[str]:
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]
+        if post.get("timeline_step"):
+            args += ["--timeline-step", "year"]
 
     elif task == "compare_networks":
         project_dir = post.get("project_dir", "").strip()
