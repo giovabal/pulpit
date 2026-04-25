@@ -4,7 +4,7 @@
 *Layout improvements. Year-by-year timeline export with animated transitions.*
 
 ### New features
-- **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`), stand-alone graph pages (`graph_YYYY.html`), and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
+- **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`) and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
 - **Year switcher in `graph.html`**: when `data/timeline.json` is present, a row of compact year buttons appears in the bottom navigation bar. All year datasets are preloaded during the initial spinner so transitions are instant. Switching years triggers an animated morph: shared nodes glide to their new positions, departing nodes shrink toward the new centroid, arriving nodes grow into place, and the camera smoothly pans and zooms to fit the new layout. The selected community coloring and node-size measure are preserved across switches.
 - **Animated timeline player** (`graph_timeline.html`): a dedicated full-screen view with a transport bar (first/previous/play/stop/next/last), a scrubber-dot track, three playback speeds (slow/normal/fast), and a large year overlay. Linked from `index.html` when timeline data is present.
 

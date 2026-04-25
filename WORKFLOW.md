@@ -177,7 +177,7 @@ The currently selected community coloring and node-size measure are preserved ac
 The timeline player is a dedicated full-screen view optimised for presenting the network's evolution:
 
 - **Transport bar** (bottom): first / previous / play / stop / next / last buttons, a year label, and a row of scrubber dots — one per year — that can be clicked directly.
-- **Playback speeds**: SLOW (4 s/year), NORM (2 s/year), FAST (0.8 s/year).
+- **Playback speeds**: SLOW (~5 s/year), NORM (~2.5 s/year), FAST (~1 s/year).
 - **Year overlay**: large semi-transparent year number centered on the canvas.
 - The player links back to `graph.html` (static full-range view) and `index.html`.
 
