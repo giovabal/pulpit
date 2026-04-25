@@ -30,6 +30,7 @@ var active_year                 = null;
 var animation_frame_id          = null;
 var year_cache                  = {};  // data_dir → { pos, ch, comm }
 var year_cache_pend             = {};  // data_dir → true while fetch is in flight
+var year_sequence               = [];  // ['all', '2021', '2022', …] built by init_year_switcher
 
 // =============================================================================
 // Sigma and graph instances
@@ -286,11 +287,31 @@ function apply_node_size(metric) {
 // UI builders
 // =============================================================================
 
+var STRATEGY_LABELS = {
+    organization:     'Organization',
+    leiden:           'Leiden',
+    leiden_directed:  'Leiden directed',
+    leiden_cpm_coarse:'Leiden CPM coarse',
+    leiden_cpm_fine:  'Leiden CPM fine',
+    louvain:          'Louvain',
+    kcore:            'K-core',
+    infomap:          'Infomap',
+    infomap_memory:   'Infomap memory',
+    mcl:              'MCL',
+    walktrap:         'Walktrap',
+    weakcc:           'Weak connected components',
+    strongcc:         'Strong connected components',
+};
+
+function strategy_label(key) {
+    return STRATEGY_LABELS[key.toLowerCase()] || (key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, ' '));
+}
+
 function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);
     if (strategies.length <= 1) { el('community-strategy-group').style.display = 'none'; return; }
     var items = strategies.map(function(s) {
-        return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '</option>';
+        return '<option value="' + s + '">' + strategy_label(s) + '</option>';
     });
     el('community-strategy-select').innerHTML = items.join('');
     el('community-strategy-group').style.display = '';
@@ -517,9 +538,37 @@ function update_year_buttons_active(year_str) {
     active_year = String(year_str);
     var container = el('year-switcher');
     if (!container) return;
-    container.querySelectorAll('.year-btn').forEach(function(btn) {
+
+    // All button
+    var all_btn = container.querySelector('.year-btn--all');
+    if (all_btn) all_btn.classList.toggle('active', active_year === 'all');
+
+    // Dropdown toggle label and drop-item highlights
+    var lbl = el('year-drop-label');
+    if (lbl) lbl.textContent = (active_year === 'all') ? '—' : active_year;
+    container.querySelectorAll('.year-drop-item').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.year === active_year);
     });
+
+    // Prev / next disabled state
+    var idx  = year_sequence.indexOf(active_year);
+    var prev = el('year-prev');
+    var next = el('year-next');
+    if (prev) prev.disabled = (idx <= 0);
+    if (next) next.disabled = (idx < 0 || idx >= year_sequence.length - 1);
+}
+
+function _go_year(year) {
+    if (year === active_year) return;
+    update_year_buttons_active(year);
+    reload_graph(year === 'all' ? 'data/' : 'data_' + year + '/');
+}
+
+function _year_drop_close() {
+    var menu = el('year-drop-menu');
+    var btn  = el('year-drop-btn');
+    if (menu) menu.classList.remove('open');
+    if (btn)  btn.setAttribute('aria-expanded', 'false');
 }
 
 function init_year_switcher(timeline) {
@@ -528,11 +577,28 @@ function init_year_switcher(timeline) {
     var container = el('year-switcher');
     if (!container) return;
 
-    var btns = ['<button class="year-btn" data-year="all">All</button>'];
-    years_with_graph.forEach(function(entry) {
-        btns.push('<button class="year-btn" data-year="' + entry.year + '">' + entry.year + '</button>');
-    });
-    container.innerHTML = btns.join('');
+    year_sequence = ['all'].concat(years_with_graph.map(function(y) { return String(y.year); }));
+
+    var drop_items = years_with_graph.map(function(entry) {
+        return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
+    }).join('');
+
+    container.innerHTML = [
+        '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
+        '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
+        '<button class="year-btn year-btn--all" data-year="all">All</button>',
+        '<span class="year-sep" aria-hidden="true"></span>',
+        '<div class="year-drop-wrap">',
+        '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
+        '<span id="year-drop-label">—</span>',
+        '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i>',
+        '</button>',
+        '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
+        '</div>',
+        '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
+        '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
+    ].join('');
+
     container.style.display = 'flex';
 
     var init_year = 'all';
@@ -542,14 +608,37 @@ function init_year_switcher(timeline) {
     }
     update_year_buttons_active(init_year);
 
-    container.addEventListener('click', function(e) {
-        var btn = e.target.closest('.year-btn');
-        if (!btn) return;
-        var year = btn.dataset.year;
-        if (year === active_year) return;
-        update_year_buttons_active(year);
-        reload_graph(year === 'all' ? 'data/' : 'data_' + year + '/');
+    container.querySelector('.year-btn--all').addEventListener('click', function() {
+        _go_year('all');
+        _year_drop_close();
     });
+
+    el('year-prev').addEventListener('click', function() {
+        var idx = year_sequence.indexOf(active_year);
+        if (idx > 0) { _go_year(year_sequence[idx - 1]); _year_drop_close(); }
+    });
+
+    el('year-next').addEventListener('click', function() {
+        var idx = year_sequence.indexOf(active_year);
+        if (idx >= 0 && idx < year_sequence.length - 1) { _go_year(year_sequence[idx + 1]); _year_drop_close(); }
+    });
+
+    el('year-drop-btn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var menu = el('year-drop-menu');
+        var open = menu.classList.toggle('open');
+        this.setAttribute('aria-expanded', String(open));
+    });
+
+    el('year-drop-menu').addEventListener('click', function(e) {
+        e.stopPropagation();  // keep menu open after selecting a year
+        var btn = e.target.closest('.year-drop-item');
+        if (!btn) return;
+        _go_year(btn.dataset.year);
+    });
+
+    // Close dropdown when clicking anywhere outside it
+    document.addEventListener('click', function() { _year_drop_close(); });
 }
 
 function _lerp(a, b, t) { return a + (b - a) * t; }

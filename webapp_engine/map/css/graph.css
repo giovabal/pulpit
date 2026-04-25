@@ -251,16 +251,19 @@ html, body {
 
 #year-switcher {
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.2rem;
     padding: 0 0.4rem;
 }
+
+/* Contain icon size — overrides the global #menu_container .bi { 2rem } rule */
+#year-switcher .bi { font-size: .7rem; }
 
 .year-btn {
     background: none;
     border: 1px solid rgba(255,255,255,0.18);
     color: rgba(255,255,255,0.55);
     font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: .6rem;
+    font-size: .72rem;
     font-weight: 600;
     letter-spacing: .04em;
     padding: .18rem .45rem;
@@ -271,8 +274,8 @@ html, body {
     transition: color .1s, border-color .1s, background .1s;
 }
 
-.year-btn:hover,
-.year-btn:focus {
+.year-btn:hover:not(:disabled),
+.year-btn:focus:not(:disabled) {
     color: rgba(255,255,255,0.85);
     border-color: rgba(255,255,255,0.42);
     outline: none;
@@ -283,6 +286,77 @@ html, body {
     border-color: rgba(255,255,255,0.65);
     background: rgba(255,255,255,0.10);
 }
+
+.year-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+/* Nav arrow buttons — slightly narrower */
+.year-btn--nav { padding: .18rem .32rem; }
+
+/* Thin separator between All and the year dropdown */
+.year-sep {
+    display: inline-block;
+    width: 1px;
+    height: .9rem;
+    background: rgba(255,255,255,0.15);
+    margin: 0 .1rem;
+    flex-shrink: 0;
+}
+
+/* Dropdown toggle shows current year + chevron */
+.year-drop-wrap { position: relative; }
+
+.year-drop-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    min-width: 3.6rem;
+    justify-content: center;
+}
+
+.year-chevron {
+    font-size: .55rem;
+    transition: transform .15s;
+}
+
+#year-drop-btn[aria-expanded="true"] .year-chevron { transform: rotate(180deg); }
+
+/* Dropup panel — opens upward from the nav bar */
+.year-drop-menu {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + .5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: column;
+    gap: .15rem;
+    padding: .25rem;
+    min-width: 5rem;
+    max-height: 40vh;
+    overflow-y: auto;
+    background: rgba(8, 24, 40, 0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: .4rem;
+    box-shadow: 0 -6px 20px rgba(0,0,0,0.5);
+    z-index: 2000;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+.year-drop-menu.open { display: flex; }
+
+.year-drop-item {
+    width: 100%;
+    text-align: center;
+    border-color: transparent;
+}
+
+.year-drop-item:hover:not(:disabled),
+.year-drop-item:focus:not(:disabled) { border-color: rgba(255,255,255,0.3); }
 
 #search {
     padding: 1em .25em;

@@ -159,17 +159,27 @@ Years with no messages in the database are silently skipped.
 
 ### Year switcher in the 2D graph
 
-When `data/timeline.json` is present, `graph.html` automatically shows a row of compact year buttons in the bottom navigation bar (`All · 2020 · 2021 · 2022 …`). All year datasets (`data_YYYY/`) are preloaded during the initial spinner so switching is instant once loading completes. No separate per-year graph HTML files are generated — the year switcher in `graph.html` is the entry point for all year views.
+When `data/timeline.json` is present, `graph.html` automatically shows a compact year navigator in the bottom navigation bar. No separate per-year graph HTML files are generated — the switcher is the sole entry point for all year views.
 
-Clicking a year triggers an animated transition:
+The navigator has four controls:
+
+| Control | Action |
+|---|---|
+| **[←]** | Step to the previous year (or *All* if on the first year); disabled on *All* |
+| **[All]** | Return to the full-range view |
+| **[YYYY ▲]** | Show current year; click to open a scrollable dropup list of all available years |
+| **[→]** | Step to the next year; disabled on the last year |
+
+All year datasets (`data_YYYY/`) are preloaded during the initial spinner so every switch is instant. Selecting a year triggers an animated transition:
 
 - Nodes present in **both** years glide from their old position to the new one.
-- Nodes **leaving** the graph shrink toward the new year's centroid as they disappear.
-- Nodes **entering** the graph grow from the centroid into their final position.
+- Nodes **entering** the graph grow from the old centroid into their final position.
 - The camera smoothly pans and zooms to fit the new layout.
-- Edges are hidden during the transition and replaced with the new year's edges once the animation settles.
+- Edges are removed before the animation and rebuilt with the new year's edges once it settles.
 
-The currently selected community coloring and node-size measure are preserved across year switches. Clicking another year button while a transition is in progress cancels the current animation and starts the new one from wherever the nodes are at that moment.
+The currently selected community coloring and node-size measure are preserved across year switches. Clicking a year while a transition is in progress cancels the current animation and starts the new one immediately.
+
+Per-year layouts are seeded from the full-range positions and corrected via best-matching 90° rotation alignment, keeping node positions stable across years.
 
 ### CLI
 
