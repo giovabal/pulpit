@@ -259,14 +259,17 @@
 .ops-log .line-error   { color: #f7768e; }
 
 /* ---- two-column flag grid (measures / community strategies) ---- */
-.ops-flags--grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+.ops-flags--grid {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-content: start;
+}
 .ops-dir {
   font-size: .9rem;
-  opacity: .75;
+  opacity: .8;
   flex-shrink: 0;
   pointer-events: none;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-weight: 600;
 }
 
 /* ---- last-run footer ---- */
