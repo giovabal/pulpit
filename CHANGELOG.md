@@ -5,11 +5,16 @@
 
 ### New features
 - **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`) and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
-- **Year switcher in `graph.html`**: when `data/timeline.json` is present, a compact year navigator appears in the bottom navigation bar: **[←]** / **[→]** step through years in order, **[All]** returns to the full-range view, and the current-year button opens a scrollable dropup list for direct access to any year.
+- **Year switcher in `graph.html` and `graph3d.html`**: when `data/timeline.json` is present, a compact year navigator appears in the bottom navigation bar of both the 2D and 3D graphs: **[←]** / **[→]** step through years in order, **[All]** returns to the full-range view, and the current-year button opens a scrollable dropup list for direct access to any year. All year datasets are preloaded during the initial spinner; switching is instant. The 3D graph animates the camera smoothly to the new year's bounding box alongside the node transition.
 
 ### Improvements
 - New fonts and reworked details for most of the webapp and HTML output.
 - Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.
+- Per-year 3D layouts are now seeded from the full-range 3D positions (Kamada-Kawai only for nodes absent from the reference), matching the existing behaviour for 2D.
+
+### Fixes
+- **3D graph — stale labels after year switch**: `scene.remove(mesh)` does not guarantee the CSS2DRenderer purges orphaned DOM elements before the next frame; labels from departing nodes remained visible. Fixed by explicitly detaching the CSS2DObject from its mesh and removing its DOM element.
+- **3D graph — camera zoom-then-snap on year switch**: OrbitControls held the camera position while nodes glided to a tighter cluster, making the graph appear to zoom in; `reset_camera()` then snapped abruptly at the end. Fixed by pre-computing the target camera state from the new year's bounding box and lerping the camera alongside the nodes throughout the animation.
 
 
 ## [0.13] - 2026-04-20

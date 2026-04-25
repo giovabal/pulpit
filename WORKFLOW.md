@@ -141,7 +141,7 @@ python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31
 
 ## 6b. Timeline export (year-by-year animation)
 
-Enable **Timeline by year** in the Operations panel (or pass `--timeline-step year` on the CLI) together with **2D graph** to generate a full per-year breakdown of the network alongside the normal full-range export.
+Enable **Timeline by year** in the Operations panel (or pass `--timeline-step year` on the CLI) together with **2D graph** (and optionally **3D graph**) to generate a full per-year breakdown of the network alongside the normal full-range export.
 
 ### What is produced
 
@@ -149,7 +149,7 @@ In addition to the regular `graph/` output, the exporter repeats the full pipeli
 
 | Path | Description |
 | :--- | :---------- |
-| `graph/data_YYYY/` | Per-year data files (`channel_position.json`, `channels.json`, `communities.json`, `meta.json`) |
+| `graph/data_YYYY/` | Per-year data files (`channel_position.json`, `channels.json`, `communities.json`, `meta.json`; also `channel_position_3d.json` when `--3dgraph` is used) |
 | `graph/data/timeline.json` | Index listing all generated years and their node/edge counts |
 | `graph/channel_table_YYYY.html` | Per-year channel table *(requires `--html`)* |
 | `graph/network_table_YYYY.html` | Per-year network metrics table *(requires `--html`)* |
@@ -157,9 +157,9 @@ In addition to the regular `graph/` output, the exporter repeats the full pipeli
 
 Years with no messages in the database are silently skipped.
 
-### Year switcher in the 2D graph
+### Year switcher in the 2D and 3D graphs
 
-When `data/timeline.json` is present, `graph.html` automatically shows a compact year navigator in the bottom navigation bar. No separate per-year graph HTML files are generated — the switcher is the sole entry point for all year views.
+When `data/timeline.json` is present, both `graph.html` and `graph3d.html` automatically show a compact year navigator in the bottom navigation bar. No separate per-year graph HTML files are generated — the switcher is the sole entry point for all year views.
 
 The navigator has four controls:
 
@@ -179,12 +179,13 @@ All year datasets (`data_YYYY/`) are preloaded during the initial spinner so eve
 
 The currently selected community coloring and node-size measure are preserved across year switches. Clicking a year while a transition is in progress cancels the current animation and starts the new one immediately.
 
-Per-year layouts are seeded from the full-range positions and corrected via best-matching 90° rotation alignment, keeping node positions stable across years.
+Per-year 2D layouts are seeded from the full-range positions and corrected via best-matching 90° rotation alignment, keeping node positions stable across years. Per-year 3D layouts are similarly seeded from the full-range 3D positions (Kamada-Kawai is run only for nodes absent from the reference).
 
 ### CLI
 
 ```sh
 python manage.py export_network --2dgraph --timeline-step year
+python manage.py export_network --2dgraph --3dgraph --timeline-step year
 python manage.py export_network --2dgraph --html --timeline-step year
 python manage.py export_network --2dgraph --html --xlsx --timeline-step year
 ```
