@@ -302,6 +302,7 @@
             </fieldset>
           </div>
 
+          <div class="ops-fieldset-row">
           <fieldset class="ops-fieldset">
             <legend>Measures
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -332,6 +333,7 @@
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" checked>ORGANIZATION</label>
+
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LEIDEN</label>
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" checked><span class="ops-dir" title="Directional">→</span>LEIDEN_DIRECTED</label>
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" checked><span class="ops-dir" title="Undirectional — graph symmetrised">↔</span>LEIDEN_CPM_COARSE</label>
@@ -346,6 +348,7 @@
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" checked><span class="ops-dir" title="Directional">→</span>STRONGCC</label>
             </div>
           </fieldset>
+          </div>
 
           {% elif task.name == "compare_networks" %}
           <fieldset class="ops-fieldset">
