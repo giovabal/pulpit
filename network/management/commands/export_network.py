@@ -348,13 +348,15 @@ class Command(BaseCommand):
         fa2_iterations: int,
         target_layout: str,
         reference_positions: "dict | None" = None,
+        reference_positions_3d: "dict | None" = None,
     ) -> tuple[dict, dict | None]:
         """Compute 2D (and optionally 3D) ForceAtlas2 positions.
 
-        When *reference_positions* is supplied (full-range layout) the per-year
-        export skips an independent Kamada-Kawai run and instead seeds FA2 from
-        the reference, then corrects the orientation via discrete 90°-rotation
-        alignment rather than the aspect-ratio heuristic.
+        When *reference_positions* / *reference_positions_3d* are supplied
+        (full-range layout) the per-year export skips the independent
+        Kamada-Kawai run and seeds FA2 from the reference instead, running KK
+        only for nodes absent from the reference.  For 2D the orientation is
+        also corrected via discrete 90°-rotation alignment.
         """
         positions_3d: dict | None = None
         if not (do_graph or do_3dgraph):
@@ -405,10 +407,22 @@ class Command(BaseCommand):
                 positions = layout.rotate_positions(positions)
 
         if do_3dgraph:
-            self.stdout.write("- Kamada-Kawai 3D … ", ending="")
-            self.stdout.flush()
-            initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
-            self.stdout.write("done")
+            if reference_positions_3d is not None:
+                new_nodes_3d = [n for n in graph.nodes() if n not in reference_positions_3d]
+                if new_nodes_3d:
+                    self.stdout.write(f"- Kamada-Kawai 3D ({len(new_nodes_3d)} new nodes) … ", ending="")
+                    self.stdout.flush()
+                    kk_pos_3d = layout.kamada_kawai_positions_3d(graph)
+                    initial_pos_3d = {n: reference_positions_3d.get(n, kk_pos_3d[n]) for n in graph.nodes()}
+                    self.stdout.write("done")
+                else:
+                    self.stdout.write("- seeding 3D from reference layout")
+                    initial_pos_3d = {n: reference_positions_3d[n] for n in graph.nodes()}
+            else:
+                self.stdout.write("- Kamada-Kawai 3D … ", ending="")
+                self.stdout.flush()
+                initial_pos_3d = layout.kamada_kawai_positions_3d(graph)
+                self.stdout.write("done")
             self.stdout.write(f"- ForceAtlas2 3D ({fa2_iterations} iterations) … ", ending="")
             self.stdout.flush()
             positions_3d = layout.forceatlas2_positions_3d(graph, initial_pos_3d, fa2_iterations)
@@ -526,6 +540,7 @@ class Command(BaseCommand):
         seo: bool,
         project_title: str,
         reference_positions: dict | None = None,
+        reference_positions_3d: dict | None = None,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
@@ -556,7 +571,13 @@ class Command(BaseCommand):
 
         strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
         positions, positions_3d = self._compute_layout(
-            graph, do_graph, do_3dgraph, fa2_iterations, target_layout, reference_positions
+            graph,
+            do_graph,
+            do_3dgraph,
+            fa2_iterations,
+            target_layout,
+            reference_positions,
+            reference_positions_3d,
         )
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
         measures_labels = self._compute_measures(
@@ -926,6 +947,7 @@ class Command(BaseCommand):
                         seo,
                         project_title,
                         reference_positions=positions if do_graph else None,
+                        reference_positions_3d=positions_3d if do_3dgraph else None,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
