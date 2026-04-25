@@ -1,13 +1,11 @@
 # Changelog
 
 ## [0.14] - To be announced
-*Layout improvements. Year-by-year timeline export with animated transitions.*
+*Layout improvements. Year-by-year timeline export with animated year switcher.*
 
 ### New features
 - **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`) and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
 - **Year switcher in `graph.html`**: when `data/timeline.json` is present, a row of compact year buttons appears in the bottom navigation bar. All year datasets are preloaded during the initial spinner so transitions are instant. Switching years triggers an animated morph: shared nodes glide to their new positions, departing nodes shrink toward the new centroid, arriving nodes grow into place, and the camera smoothly pans and zooms to fit the new layout. The selected community coloring and node-size measure are preserved across switches.
-- **Animated timeline player** (`graph_timeline.html`): a dedicated full-screen view with a transport bar (first/previous/play/stop/next/last), a scrubber-dot track, three playback speeds (slow/normal/fast), and a large year overlay. Linked from `index.html` when timeline data is present.
-
 ### Improvements
 - New fonts and reworked details for most of the webapp and HTML output.
 - Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.

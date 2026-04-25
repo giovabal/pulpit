@@ -258,20 +258,6 @@
 <hr class="my-4">
 <h5 class="mb-3 text-muted"><i class="bi bi-calendar-range me-2" aria-hidden="true"></i>Timeline — by year</h5>
 
-{% if include_graph %}
-<div class="row g-4 mb-4">
-  <div class="col-md-6 col-xl-4">
-    <div class="card h-100 border-primary">
-      <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-play-circle text-primary me-2" aria-hidden="true"></i>Animated timeline</h5>
-        <p class="card-text text-muted small">Force-directed graph animated year by year. Play, pause, or step through each year to watch the network evolve over time.</p>
-        <a href="graph_timeline.html" class="btn btn-primary btn-sm">Open animation</a>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
 <div class="row g-3">
   {% for entry in timeline_entries %}
   <div class="col-sm-6 col-lg-4 col-xl-3">
