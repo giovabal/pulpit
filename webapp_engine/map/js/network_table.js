@@ -77,10 +77,9 @@ Promise.all([
         var summaryTable = document.createElement("table");
         summaryTable.className = "table table-sm table-hover";
         var sThead = document.createElement("thead"); var sTr = document.createElement("tr");
-        var _headers = has_tl ? ["Metric", "", "Value"] : ["Metric", "Value"];
-        _headers.forEach(function(label, i) {
+        ["Metric", "Value"].forEach(function(label, i) {
             var th = document.createElement("th"); th.scope = "col";
-            if (i === _headers.length - 1) th.className = "number";
+            if (i === 1) th.className = "number";
             th.textContent = label; sTr.appendChild(th);
         });
         sThead.appendChild(sTr); summaryTable.appendChild(sThead);
@@ -112,7 +111,7 @@ Promise.all([
             if (row.group && row.group !== currentGroup) {
                 currentGroup = row.group;
                 var gtr = document.createElement("tr"); gtr.className = "summary-group-header";
-                var gtd = document.createElement("td"); gtd.colSpan = has_tl ? 3 : 2; gtd.textContent = row.group;
+                var gtd = document.createElement("td"); gtd.colSpan = 2; gtd.textContent = row.group;
                 gtr.appendChild(gtd); sTbody.appendChild(gtr);
             }
             var tr = document.createElement("tr");
@@ -125,15 +124,19 @@ Promise.all([
                 if (centrMatch) tip = "Freeman (1978) graph-level centralization for " + centrMatch[1] + "; 0 = uniform distribution, 1 = star graph.";
             }
             if (tip) td1.title = tip;
-            var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = row.value;
-            tr.appendChild(td1);
+            var td2 = document.createElement("td"); td2.className = "number";
             if (has_tl) {
-                var td_hist = document.createElement("td");
-                td_hist.style.cssText = "padding:2px 8px;vertical-align:middle;white-space:nowrap";
+                var inner = document.createElement("span");
+                inner.style.cssText = "display:inline-flex;align-items:flex-end;justify-content:flex-end;gap:5px;width:100%";
                 var hist = _mini_hist(all_map[row.label], yr_map[row.label], current_year);
-                if (hist) td_hist.appendChild(hist);
-                tr.appendChild(td_hist);
+                if (hist) inner.appendChild(hist);
+                var vspan = document.createElement("span"); vspan.textContent = row.value;
+                inner.appendChild(vspan);
+                td2.appendChild(inner);
+            } else {
+                td2.textContent = row.value;
             }
+            tr.appendChild(td1);
             tr.appendChild(td2);
             sTbody.appendChild(tr);
         });
