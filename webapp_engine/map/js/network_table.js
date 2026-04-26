@@ -2,438 +2,384 @@ import { strategy_label as _strat_label } from './labels.js';
 import { build_year_nav } from './year_nav.js';
 
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d+)\//);
-var current_year = _ym ? parseInt(_ym[1]) : "all";
+var _ym = _dd.match(/data_(\d{4,})\//);
+var _base_dd = _ym ? "data/" : _dd;
 
-Promise.all([
-    fetch(_dd + "network_metrics.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch("data/network_metrics.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-]).then(function(results) {
-    var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
+// ── Sparkline data — loaded once at startup, never changes ─────────────────────
+var _all_map = {}, _yr_map = {}, _all_mod_map = {}, _yr_mod_map = {}, _all_years = [];
+var _ty = [], _has_tl = false;
 
-    var _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_network_html; }) : [];
-    var has_tl = _ty.length > 0;
+// ── Per-year state — updated on every year switch ──────────────────────────────
+var _current_year = _ym ? parseInt(_ym[1]) : "all";
+var _nodes = [], _measures = [], _labelOf = {};
+var _cache = {};
+var _loading = false;
 
-    return (has_tl
-        ? Promise.all(_ty.map(function(y) {
-            return fetch("data_" + y.year + "/network_metrics.json")
-                .then(function(r) { return r.json(); })
-                .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
-                .catch(function() { return null; });
-          })).then(function(list) { return list.filter(Boolean); })
-        : Promise.resolve([])
-    ).then(function(year_metrics) {
+// ── Chart object references — built once, data updated on switch ───────────────
+var _distChart = null, _distInitialized = false, _distSel = null;
+var _scatterChart = null, _xSel = null, _ySel = null, _countNote = null;
 
-        // Build metric lookups for histograms
-        var all_map = {};  // label → value string (full-range)
-        if (all_metrics && all_metrics.summary_rows) {
-            all_metrics.summary_rows.forEach(function(r) { all_map[r.label] = r.value; });
+// ── Data fetching ──────────────────────────────────────────────────────────────
+function _fetch_year(year) {
+    if (_cache[year]) return Promise.resolve(_cache[year]);
+    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    return Promise.all([
+        fetch(dd + "network_metrics.json").then(function(r) { return r.json(); }),
+        fetch(dd + "channels.json").then(function(r) { return r.json(); }),
+        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    ]).then(function(res) {
+        var d = { data: res[0], channels: res[1], meta: res[2] };
+        _cache[year] = d;
+        return d;
+    });
+}
+
+// ── Chart helpers — use module-scope _nodes ────────────────────────────────────
+function _build_dist_data(key) {
+    var vals = _nodes.map(function(n) { return n[key] || 0; });
+    var maxVal = Math.max.apply(null, vals);
+    var binSize = 10;
+    var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
+    var counts = new Array(numBins).fill(0);
+    vals.forEach(function(v) { counts[Math.floor(v / binSize)]++; });
+    while (counts.length > 1 && counts[counts.length - 1] === 0) counts.pop();
+    return {
+        labels: counts.map(function(_, i) { return (i * binSize) + "–" + (i * binSize + binSize - 1); }),
+        counts: counts,
+    };
+}
+
+function _power_law_fit(pts) {
+    if (pts.length < 2) return null;
+    var n = pts.length, sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    pts.forEach(function(p) { var lx = Math.log(p.x), ly = Math.log(p.y); sumX += lx; sumY += ly; sumXY += lx * ly; sumX2 += lx * lx; });
+    var d = n * sumX2 - sumX * sumX;
+    if (!d) return null;
+    var slope = (n * sumXY - sumX * sumY) / d;
+    return { slope: slope, intercept: (sumY - slope * sumX) / n };
+}
+
+function _build_scatter_data(xKey, yKey) {
+    var pts = _nodes.filter(function(n) { return n[xKey] > 0 && n[yKey] > 0; })
+        .map(function(n) { return { x: n[xKey], y: n[yKey], label: n.label || n.id, fans: n.fans || 0, msgs: n.messages_count || 0 }; });
+    var fit = _power_law_fit(pts);
+    var regData = [];
+    if (fit) {
+        var xs = pts.map(function(p) { return p.x; });
+        var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+        regData = [{ x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
+                   { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }];
+    }
+    return { pts: pts, regData: regData };
+}
+
+function _update_dist_chart() {
+    if (!_distChart || !_distSel) return;
+    var dd = _build_dist_data(_distSel.value);
+    _distChart.data.labels = dd.labels;
+    _distChart.data.datasets[0].data = dd.counts;
+    _distChart.update();
+}
+
+function _update_scatter_chart() {
+    if (!_scatterChart || !_xSel) return;
+    var xKey = _xSel.value, yKey = _ySel.value;
+    var ds = _build_scatter_data(xKey, yKey);
+    _scatterChart.data.datasets[0].data = ds.pts;
+    _scatterChart.data.datasets[1].data = ds.regData;
+    _scatterChart.options.scales.x.title.text = _labelOf[xKey];
+    _scatterChart.options.scales.y.title.text = _labelOf[yKey];
+    _scatterChart.resetZoom();
+    _scatterChart.update();
+    if (_countNote) _countNote.textContent = ds.pts.length + " nodes (zero values excluded from log scale)";
+}
+
+// ── Table renders — re-run on every year switch ────────────────────────────────
+var METRIC_TOOLTIPS = {
+    "Nodes": "Total number of nodes (channels) in the graph.",
+    "Edges": "Total number of directed edges (links) between channels.",
+    "Edges / Nodes": "Mean degree — average links per node; a rough indicator of overall connectivity.",
+    "Density": "Fraction of all possible directed edges that are present; 0 = sparse, 1 = fully connected.",
+    "Reciprocity": "Proportion of edges that have a reciprocal edge; 0 = unidirectional, 1 = fully bidirectional.",
+    "Avg Clustering": "Mean probability that two neighbours of a node are also connected to each other.",
+    "Avg Path Length": "Average shortest-path distance between nodes in the largest weakly connected component.",
+    "Diameter": "Longest shortest path (maximum eccentricity) in the largest weakly connected component.",
+    "WCC count": "Number of weakly connected components; 1 = all nodes reachable ignoring edge direction.",
+    "Largest WCC fraction": "Share of all nodes that belong to the largest weakly connected component.",
+    "SCC count": "Number of strongly connected components; 1 = every node can reach every other following directed edges.",
+    "Largest SCC fraction": "Share of all nodes that belong to the largest strongly connected component.",
+    "Assortativity in→in": "Pearson correlation of in-degree between source and target nodes across all edges; +1 = hubs connect to hubs.",
+    "Assortativity in→out": "Correlation between in-degree of the source node and out-degree of the target node.",
+    "Assortativity out→in": "Correlation between out-degree of the source node and in-degree of the target node.",
+    "Assortativity out→out": "Pearson correlation of out-degree between source and target nodes; +1 = high-senders link to high-senders.",
+    "Mean Burt's Constraint": "Network-average Burt constraint; lower = more structural-hole brokerage on average.",
+    "Content Originality": "Share of messages that are not forwards; higher = more original content production.",
+    "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
+};
+
+function _render_preamble(meta) {
+    var el = document.getElementById("network-preamble");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!meta) return;
+    var pEl = document.createElement("p"); pEl.className = "table-preamble";
+    var parts = ["Whole-network structural metrics for a graph of "
+        + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
+    parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
+    if (meta.start_date || meta.end_date)
+        parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
+    parts.push("Exported " + meta.export_date + ".");
+    pEl.textContent = parts.join(" ");
+    el.appendChild(pEl);
+}
+
+function _render_summary(data) {
+    var section = document.getElementById("summary-section");
+    section.innerHTML = "";
+    var h5 = document.createElement("h5"); h5.className = "mb-2"; h5.textContent = "Whole-network metrics";
+    section.appendChild(h5);
+    var table = document.createElement("table"); table.className = "table table-sm table-hover";
+    var thead = document.createElement("thead"); var htr = document.createElement("tr");
+    ["Metric", "Value"].forEach(function(lbl, i) {
+        var th = document.createElement("th"); th.scope = "col"; if (i === 1) th.className = "number";
+        th.textContent = lbl; htr.appendChild(th);
+    });
+    thead.appendChild(htr); table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    var curGroup = null;
+    data.summary_rows.forEach(function(row) {
+        if (row.group && row.group !== curGroup) {
+            curGroup = row.group;
+            var gtr = document.createElement("tr"); gtr.className = "summary-group-header";
+            var gtd = document.createElement("td"); gtd.colSpan = 2; gtd.textContent = row.group;
+            gtr.appendChild(gtd); tbody.appendChild(gtr);
         }
-        var yr_map = {};   // label → [{year, value}]
-        year_metrics.forEach(function(ym) {
-            ym.rows.forEach(function(row) {
-                (yr_map[row.label] = yr_map[row.label] || []).push({ year: ym.year, value: row.value });
-            });
-        });
-
-        // Modularity lookups
-        var all_mod_map = {};  // strategy → value string (full-range)
-        if (all_metrics && all_metrics.modularity_rows) {
-            all_metrics.modularity_rows.forEach(function(r) { all_mod_map[r.strategy] = r.value; });
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td"); td1.textContent = row.label;
+        var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*†\s*$/, "").trim();
+        var tip = METRIC_TOOLTIPS[baseLabel];
+        if (!tip) {
+            var m = baseLabel.match(/^(.*)\s+Centralization$/);
+            if (m) tip = "Freeman (1978) graph-level centralization for " + m[1] + "; 0 = uniform distribution, 1 = star graph.";
         }
-        var yr_mod_map = {};   // strategy → [{year, value}]
-        year_metrics.forEach(function(ym) {
-            (ym.mod_rows || []).forEach(function(row) {
-                (yr_mod_map[row.strategy] = yr_mod_map[row.strategy] || []).push({ year: ym.year, value: row.value });
-            });
-        });
+        if (tip) td1.title = tip;
+        var td2 = document.createElement("td"); td2.className = "number";
+        if (_has_tl) {
+            var inner = document.createElement("span");
+            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            var hist = _mini_hist(_all_map[row.label], _yr_map[row.label], _current_year, _all_years);
+            if (hist) inner.appendChild(hist);
+            var vspan = document.createElement("span");
+            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.textContent = row.value;
+            inner.appendChild(vspan); td2.appendChild(inner);
+        } else { td2.textContent = row.value; }
+        tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); section.appendChild(table);
+    if (data.wcc_note_visible) {
+        var note = document.createElement("p"); note.className = "text-muted small mt-1";
+        note.textContent = "† Computed on the largest weakly connected component (undirected)";
+        section.appendChild(note);
+    }
+}
 
-        // Ordered year numbers — passed to _mini_hist so every chart has
-        // identical width regardless of which years have data for each metric.
-        var all_years = _ty.map(function(y) { return y.year; });
+function _render_modularity(data) {
+    var section = document.getElementById("modularity-section");
+    section.innerHTML = "";
+    if (!data.modularity_rows || !data.modularity_rows.length) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+    var h5 = document.createElement("h5"); h5.className = "mb-2"; h5.textContent = "Modularity by strategy";
+    section.appendChild(h5);
+    var table = document.createElement("table"); table.className = "table table-sm table-hover sortable";
+    var thead = document.createElement("thead"); var htr = document.createElement("tr");
+    ["Strategy", "Modularity"].forEach(function(lbl, i) {
+        var th = document.createElement("th"); th.scope = "col"; if (i === 1) th.className = "number";
+        th.textContent = lbl; htr.appendChild(th);
+    });
+    thead.appendChild(htr); table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    data.modularity_rows.forEach(function(row) {
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td"); td1.textContent = _strat_label(row.strategy);
+        var td2 = document.createElement("td"); td2.className = "number";
+        if (_has_tl) {
+            var inner = document.createElement("span");
+            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            var hist = _mini_hist(_all_mod_map[row.strategy], _yr_mod_map[row.strategy], _current_year, _all_years);
+            if (hist) inner.appendChild(hist);
+            var vspan = document.createElement("span");
+            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.textContent = row.value;
+            inner.appendChild(vspan); td2.appendChild(inner);
+            td2.dataset.sort = row.value;
+        } else { td2.textContent = row.value; }
+        tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); section.appendChild(table);
+    initSortableTables();
+}
 
-        // Year nav
-        if (has_tl) build_year_nav(_ty, current_year, "network_table");
+// ── Build degree-distribution section (once on initial load) ───────────────────
+function _build_dist_section() {
+    var distSection = document.getElementById("degree-dist-section");
+    var controls = document.createElement("div"); controls.className = "d-flex align-items-end gap-3 mb-3";
+    var dirWrap = document.createElement("div");
+    var dirLbl = document.createElement("label");
+    dirLbl.className = "form-label mb-1 d-block fw-semibold small"; dirLbl.htmlFor = "deg-dir-select"; dirLbl.textContent = "Direction";
+    _distSel = document.createElement("select"); _distSel.className = "form-select form-select-sm"; _distSel.id = "deg-dir-select"; _distSel.style.width = "auto";
+    [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) { _distSel.appendChild(new Option(opt[1], opt[0])); });
+    dirWrap.appendChild(dirLbl); dirWrap.appendChild(_distSel); controls.appendChild(dirWrap);
+    distSection.appendChild(controls);
 
-        // ── Preamble ───────────────────────────────────────────────────────────
-        if (meta) {
-            var preambleTarget = document.getElementById("network-preamble");
-            if (preambleTarget) {
-                var pEl = document.createElement("p"); pEl.className = "table-preamble";
-                var parts = ["Whole-network structural metrics for a graph of "
-                    + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
-                parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
-                if (meta.start_date || meta.end_date) {
-                    parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
-                }
-                parts.push("Exported " + meta.export_date + ".");
-                pEl.textContent = parts.join(" ");
-                preambleTarget.appendChild(pEl);
-            }
-        }
-        var nodes = channels.nodes;
-        var measures = channels.measures || [];
+    var canvasWrap = document.createElement("div"); canvasWrap.style.cssText = "height:280px;position:relative;";
+    var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas); distSection.appendChild(canvasWrap);
 
-        // ── Summary table ──────────────────────────────────────────────────────
-        var summarySection = document.getElementById("summary-section");
-        var h5s = document.createElement("h5"); h5s.className = "mb-2"; h5s.textContent = "Whole-network metrics";
-        summarySection.appendChild(h5s);
-        var summaryTable = document.createElement("table");
-        summaryTable.className = "table table-sm table-hover";
-        var sThead = document.createElement("thead"); var sTr = document.createElement("tr");
-        ["Metric", "Value"].forEach(function(label, i) {
-            var th = document.createElement("th"); th.scope = "col";
-            if (i === 1) th.className = "number";
-            th.textContent = label; sTr.appendChild(th);
-        });
-        sThead.appendChild(sTr); summaryTable.appendChild(sThead);
-        var METRIC_TOOLTIPS = {
-            "Nodes": "Total number of nodes (channels) in the graph.",
-            "Edges": "Total number of directed edges (links) between channels.",
-            "Edges / Nodes": "Mean degree — average links per node; a rough indicator of overall connectivity.",
-            "Density": "Fraction of all possible directed edges that are present; 0 = sparse, 1 = fully connected.",
-            "Reciprocity": "Proportion of edges that have a reciprocal edge; 0 = unidirectional, 1 = fully bidirectional.",
-            "Avg Clustering": "Mean probability that two neighbours of a node are also connected to each other.",
-            "Avg Path Length": "Average shortest-path distance between nodes in the largest weakly connected component.",
-            "Diameter": "Longest shortest path (maximum eccentricity) in the largest weakly connected component.",
-            "WCC count": "Number of weakly connected components; 1 = all nodes reachable ignoring edge direction.",
-            "Largest WCC fraction": "Share of all nodes that belong to the largest weakly connected component.",
-            "SCC count": "Number of strongly connected components; 1 = every node can reach every other following directed edges.",
-            "Largest SCC fraction": "Share of all nodes that belong to the largest strongly connected component.",
-            "Assortativity in→in": "Pearson correlation of in-degree between source and target nodes across all edges; +1 = hubs connect to hubs.",
-            "Assortativity in→out": "Correlation between in-degree of the source node and out-degree of the target node.",
-            "Assortativity out→in": "Correlation between out-degree of the source node and in-degree of the target node.",
-            "Assortativity out→out": "Pearson correlation of out-degree between source and target nodes; +1 = high-senders link to high-senders.",
-            "Mean Burt’s Constraint": "Network-average Burt constraint; lower = more structural-hole brokerage on average.",
-            "Content Originality": "Share of messages that are not forwards; higher = more original content production.",
-            "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
-        };
+    _distSel.addEventListener("change", _update_dist_chart);
 
-        var sTbody = document.createElement("tbody");
-        var currentGroup = null;
-        data.summary_rows.forEach(function(row) {
-            if (row.group && row.group !== currentGroup) {
-                currentGroup = row.group;
-                var gtr = document.createElement("tr"); gtr.className = "summary-group-header";
-                var gtd = document.createElement("td"); gtd.colSpan = 2; gtd.textContent = row.group;
-                gtr.appendChild(gtd); sTbody.appendChild(gtr);
-            }
-            var tr = document.createElement("tr");
-            var td1 = document.createElement("td");
-            td1.textContent = row.label;
-            var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*†\s*$/, "").trim();
-            var tip = METRIC_TOOLTIPS[baseLabel];
-            if (!tip) {
-                var centrMatch = baseLabel.match(/^(.*)\s+Centralization$/);
-                if (centrMatch) tip = "Freeman (1978) graph-level centralization for " + centrMatch[1] + "; 0 = uniform distribution, 1 = star graph.";
-            }
-            if (tip) td1.title = tip;
-            var td2 = document.createElement("td"); td2.className = "number";
-            if (has_tl) {
-                var inner = document.createElement("span");
-                inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
-                var hist = _mini_hist(all_map[row.label], yr_map[row.label], current_year, all_years);
-                if (hist) inner.appendChild(hist);
-                var vspan = document.createElement("span");
-                vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
-                vspan.textContent = row.value;
-                inner.appendChild(vspan);
-                td2.appendChild(inner);
-            } else {
-                td2.textContent = row.value;
-            }
-            tr.appendChild(td1);
-            tr.appendChild(td2);
-            sTbody.appendChild(tr);
-        });
-        summaryTable.appendChild(sTbody); summarySection.appendChild(summaryTable);
-        if (data.wcc_note_visible) {
-            var note = document.createElement("p"); note.className = "text-muted small mt-1";
-            note.textContent = "† Computed on the largest weakly connected component (undirected)";
-            summarySection.appendChild(note);
-        }
-
-        // ── Modularity table ───────────────────────────────────────────────────
-        if (data.modularity_rows && data.modularity_rows.length) {
-            var modSection = document.getElementById("modularity-section");
-            modSection.classList.remove("d-none");
-            var h5m = document.createElement("h5"); h5m.className = "mb-2"; h5m.textContent = "Modularity by strategy";
-            modSection.appendChild(h5m);
-            var modTable = document.createElement("table"); modTable.className = "table table-sm table-hover sortable";
-            var mThead = document.createElement("thead"); var mTr = document.createElement("tr");
-            ["Strategy", "Modularity"].forEach(function(label, i) {
-                var th = document.createElement("th"); th.scope = "col";
-                if (i === 1) th.className = "number";
-                th.textContent = label; mTr.appendChild(th);
-            });
-            mThead.appendChild(mTr); modTable.appendChild(mThead);
-            var mTbody = document.createElement("tbody");
-            data.modularity_rows.forEach(function(row) {
-                var tr = document.createElement("tr");
-                var td1 = document.createElement("td"); td1.textContent = _strat_label(row.strategy);
-                var td2 = document.createElement("td"); td2.className = "number";
-                if (has_tl) {
-                    var inner = document.createElement("span");
-                    inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
-                    var hist = _mini_hist(all_mod_map[row.strategy], yr_mod_map[row.strategy], current_year, all_years);
-                    if (hist) inner.appendChild(hist);
-                    var vspan = document.createElement("span");
-                    vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
-                    vspan.textContent = row.value;
-                    inner.appendChild(vspan);
-                    td2.appendChild(inner);
-                    td2.dataset.sort = row.value;
-                } else {
-                    td2.textContent = row.value;
-                }
-                tr.appendChild(td1); tr.appendChild(td2); mTbody.appendChild(tr);
-            });
-            modTable.appendChild(mTbody); modSection.appendChild(modTable);
-        }
-
-        initSortableTables();
-
-        // ── Degree distribution ────────────────────────────────────────────────
-        var distSection = document.getElementById("degree-dist-section");
-        var distControls = document.createElement("div");
-        distControls.className = "d-flex align-items-end gap-3 mb-3";
-        var dirWrap = document.createElement("div");
-        var dirLbl = document.createElement("label");
-        dirLbl.className = "form-label mb-1 d-block fw-semibold small";
-        dirLbl.htmlFor = "deg-dir-select";
-        dirLbl.textContent = "Direction";
-        var dirSel = document.createElement("select");
-        dirSel.className = "form-select form-select-sm";
-        dirSel.id = "deg-dir-select";
-        dirSel.style.width = "auto";
-        [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) {
-            dirSel.appendChild(new Option(opt[1], opt[0]));
-        });
-        dirWrap.appendChild(dirLbl);
-        dirWrap.appendChild(dirSel);
-        distControls.appendChild(dirWrap);
-        distSection.appendChild(distControls);
-
-        var distCanvasWrap = document.createElement("div");
-        distCanvasWrap.style.cssText = "height:280px;position:relative;";
-        var distCanvas = document.createElement("canvas");
-        distCanvasWrap.appendChild(distCanvas);
-        distSection.appendChild(distCanvasWrap);
-
-        function buildDistData(key) {
-            var vals = nodes.map(function(n) { return n[key] || 0; });
-            var maxVal = Math.max.apply(null, vals);
-            var binSize = 10;
-            var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
-            var counts = new Array(numBins).fill(0);
-            vals.forEach(function(v) { counts[Math.floor(v / binSize)]++; });
-            while (counts.length > 1 && counts[counts.length - 1] === 0) counts.pop();
-            var labels = counts.map(function(_, i) {
-                return (i * binSize) + "–" + (i * binSize + binSize - 1);
-            });
-            return { labels: labels, counts: counts };
-        }
-
-        var distChart = null;
-        var distInitialized = false;
-
-        function initDistChart() {
-            if (distInitialized) return;
-            distInitialized = true;
-            var dd = buildDistData(dirSel.value);
-            distChart = new Chart(distCanvas, {
-                type: "bar",
-                data: {
-                    labels: dd.labels,
-                    datasets: [{ label: "Nodes", data: dd.counts, backgroundColor: "rgba(30,41,59,0.7)", borderRadius: 3 }]
-                },
-                options: {
-                    animation: false,
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
-                        y: { title: { display: true, text: "Nodes", font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 }, precision: 0 } }
-                    }
-                }
-            });
-        }
-
-        dirSel.addEventListener("change", function() {
-            if (!distChart) return;
-            var dd = buildDistData(dirSel.value);
-            distChart.data.labels = dd.labels;
-            distChart.data.datasets[0].data = dd.counts;
-            distChart.update();
-        });
-
-        if ("IntersectionObserver" in window) {
-            var distObs = new IntersectionObserver(function(entries, obs) {
-                if (entries[0].isIntersecting) { obs.disconnect(); initDistChart(); }
-            }, { threshold: 0.1 });
-            distObs.observe(distSection);
-        } else {
-            initDistChart();
-        }
-
-        // ── Scatter plot ───────────────────────────────────────────────────────
-        if (measures.length < 2) return;
-
-        var scatterSection = document.getElementById("scatter-section");
-        var labelOf = {};
-        measures.forEach(function(m) { labelOf[m[0]] = m[1]; });
-
-        var controls = document.createElement("div");
-        controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
-
-        function makeSelect(id, labelText) {
-            var wrap = document.createElement("div");
-            var lbl = document.createElement("label"); lbl.className = "form-label mb-1 d-block fw-semibold small"; lbl.htmlFor = id; lbl.textContent = labelText;
-            var sel = document.createElement("select"); sel.className = "form-select form-select-sm scatter-select"; sel.id = id;
-            measures.forEach(function(m) { sel.appendChild(new Option(m[1], m[0])); });
-            wrap.appendChild(lbl); wrap.appendChild(sel);
-            controls.appendChild(wrap);
-            return sel;
-        }
-
-        var xSelect = makeSelect("x-axis-select", "X axis");
-        var ySelect = makeSelect("y-axis-select", "Y axis");
-
-        var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
-        var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
-        resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
-
-        var countNote = document.createElement("div"); countNote.className = "text-muted small ms-auto scatter-count-note";
-        controls.appendChild(countNote);
-
-        scatterSection.appendChild(controls);
-
-        var canvasWrap = document.createElement("div"); canvasWrap.className = "scatter-canvas-wrap";
-        var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas);
-        scatterSection.appendChild(canvasWrap);
-
-        var defaultX = measures[0][0], defaultY = measures[1][0];
-        measures.forEach(function(m) { if (m[0] === "in_deg") defaultX = m[0]; });
-        measures.forEach(function(m) { if (m[0] === "pagerank") defaultY = m[0]; });
-        if (defaultX === defaultY) defaultY = measures.find(function(m) { return m[0] !== defaultX; })[0];
-        xSelect.value = defaultX; ySelect.value = defaultY;
-
-        function powerLawFit(pts) {
-            if (pts.length < 2) return null;
-            var n = pts.length, sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-            pts.forEach(function(p) { var lx = Math.log(p.x), ly = Math.log(p.y); sumX += lx; sumY += ly; sumXY += lx * ly; sumX2 += lx * lx; });
-            var d = n * sumX2 - sumX * sumX;
-            if (!d) return null;
-            var slope = (n * sumXY - sumX * sumY) / d;
-            return { slope: slope, intercept: (sumY - slope * sumX) / n };
-        }
-
-        function buildDatasets(xKey, yKey) {
-            var pts = nodes.filter(function(n) { return n[xKey] > 0 && n[yKey] > 0; })
-                .map(function(n) { return { x: n[xKey], y: n[yKey], label: n.label || n.id, fans: n.fans || 0, msgs: n.messages_count || 0 }; });
-            var regData = [];
-            var fit = powerLawFit(pts);
-            if (fit) {
-                var xs = pts.map(function(p) { return p.x; });
-                var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
-                regData = [{ x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) }, { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }];
-            }
-            return { pts: pts, regData: regData };
-        }
-
-        var initial = buildDatasets(xSelect.value, ySelect.value);
-        countNote.textContent = initial.pts.length + " nodes (zero values excluded from log scale)";
-
-        var chart = new Chart(canvas, {
-            type: "scatter",
-            data: {
-                datasets: [
-                    { label: "Channels", data: initial.pts, backgroundColor: "rgba(30,41,59,0.55)", pointRadius: 5, pointHoverRadius: 7 },
-                    { label: "Trend", data: initial.regData, type: "line", borderColor: "#ef4444", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
-                ],
-            },
+    function _init() {
+        if (_distInitialized) return;
+        _distInitialized = true;
+        var dd = _build_dist_data(_distSel.value);
+        _distChart = new Chart(canvas, {
+            type: "bar",
+            data: { labels: dd.labels, datasets: [{ label: "Nodes", data: dd.counts, backgroundColor: "rgba(30,41,59,0.7)", borderRadius: 3 }] },
             options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false,
+                animation: false, responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
                 scales: {
-                    x: { type: "logarithmic", title: { display: true, text: labelOf[xSelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
-                    y: { type: "logarithmic", title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+                    x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { title: { display: true, text: "Nodes", font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 }, precision: 0 } },
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        filter: function(item) { return item.datasetIndex === 0; },
-                        callbacks: {
-                            label: function(ctx) {
-                                var d = ctx.raw, xLbl = chart.options.scales.x.title.text, yLbl = chart.options.scales.y.title.text;
-                                return ["Channel: " + d.label, xLbl + ": " + d.x.toFixed(4), yLbl + ": " + d.y.toFixed(4), "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
-                            },
+            },
+        });
+    }
+
+    if ("IntersectionObserver" in window) {
+        var obs = new IntersectionObserver(function(entries, o) { if (entries[0].isIntersecting) { o.disconnect(); _init(); } }, { threshold: 0.1 });
+        obs.observe(distSection);
+    } else { _init(); }
+}
+
+// ── Build scatter section (once on initial load) ───────────────────────────────
+function _build_scatter_section() {
+    if (_measures.length < 2) return;
+    var scatterSection = document.getElementById("scatter-section");
+
+    var controls = document.createElement("div"); controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+    function makeSelect(id, labelText) {
+        var wrap = document.createElement("div");
+        var lbl = document.createElement("label"); lbl.className = "form-label mb-1 d-block fw-semibold small"; lbl.htmlFor = id; lbl.textContent = labelText;
+        var sel = document.createElement("select"); sel.className = "form-select form-select-sm scatter-select"; sel.id = id;
+        _measures.forEach(function(m) { sel.appendChild(new Option(m[1], m[0])); });
+        wrap.appendChild(lbl); wrap.appendChild(sel); controls.appendChild(wrap);
+        return sel;
+    }
+    _xSel = makeSelect("x-axis-select", "X axis");
+    _ySel = makeSelect("y-axis-select", "Y axis");
+
+    var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
+    var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
+    resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
+
+    _countNote = document.createElement("div"); _countNote.className = "text-muted small ms-auto scatter-count-note";
+    controls.appendChild(_countNote);
+    scatterSection.appendChild(controls);
+
+    var canvasWrap = document.createElement("div"); canvasWrap.className = "scatter-canvas-wrap";
+    var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas); scatterSection.appendChild(canvasWrap);
+
+    var defaultX = _measures[0][0], defaultY = _measures[1][0];
+    _measures.forEach(function(m) { if (m[0] === "in_deg") defaultX = m[0]; });
+    _measures.forEach(function(m) { if (m[0] === "pagerank") defaultY = m[0]; });
+    if (defaultX === defaultY) defaultY = _measures.find(function(m) { return m[0] !== defaultX; })[0];
+    _xSel.value = defaultX; _ySel.value = defaultY;
+
+    var initial = _build_scatter_data(defaultX, defaultY);
+    _countNote.textContent = initial.pts.length + " nodes (zero values excluded from log scale)";
+
+    _scatterChart = new Chart(canvas, {
+        type: "scatter",
+        data: {
+            datasets: [
+                { label: "Channels", data: initial.pts, backgroundColor: "rgba(30,41,59,0.55)", pointRadius: 5, pointHoverRadius: 7 },
+                { label: "Trend", data: initial.regData, type: "line", borderColor: "#ef4444", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
+            ],
+        },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { type: "logarithmic", title: { display: true, text: _labelOf[defaultX], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+                y: { type: "logarithmic", title: { display: true, text: _labelOf[defaultY], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    filter: function(item) { return item.datasetIndex === 0; },
+                    callbacks: {
+                        label: function(ctx) {
+                            var d = ctx.raw, xLbl = _scatterChart.options.scales.x.title.text, yLbl = _scatterChart.options.scales.y.title.text;
+                            return ["Channel: " + d.label, xLbl + ": " + d.x.toFixed(4), yLbl + ": " + d.y.toFixed(4), "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
                         },
                     },
-                    zoom: { pan: { enabled: true, mode: "xy" }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "xy" } },
                 },
+                zoom: { pan: { enabled: true, mode: "xy" }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "xy" } },
             },
-        });
+        },
+    });
 
-        function updateChart() {
-            var xKey = xSelect.value, yKey = ySelect.value;
-            var ds = buildDatasets(xKey, yKey);
-            chart.data.datasets[0].data = ds.pts;
-            chart.data.datasets[1].data = ds.regData;
-            chart.options.scales.x.title.text = labelOf[xKey];
-            chart.options.scales.y.title.text = labelOf[yKey];
-            chart.resetZoom();
-            chart.update();
-            countNote.textContent = ds.pts.length + " nodes (zero values excluded from log scale)";
-        }
+    function _updateChart() { _update_scatter_chart(); }
+    _xSel.addEventListener("change", _updateChart);
+    _ySel.addEventListener("change", _updateChart);
+    resetBtn.addEventListener("click", function() { _scatterChart.resetZoom(); });
+}
 
-        xSelect.addEventListener("change", updateChart);
-        ySelect.addEventListener("change", updateChart);
-        resetBtn.addEventListener("click", function() { chart.resetZoom(); });
-
-    }); // year_metrics chain
-}); // outer Promise.all
-
+// ── Year switching ─────────────────────────────────────────────────────────────
+function _switch_year(year) {
+    if (year === _current_year || _loading) return;
+    _current_year = year;
+    _loading = true;
+    build_year_nav(_ty, _current_year, _switch_year);
+    _fetch_year(year).then(function(d) {
+        _nodes = d.channels.nodes;
+        _measures = d.channels.measures || [];
+        _labelOf = {};
+        _measures.forEach(function(m) { _labelOf[m[0]] = m[1]; });
+        _render_preamble(d.meta);
+        _render_summary(d.data);
+        _render_modularity(d.data);
+        _update_dist_chart();
+        _update_scatter_chart();
+        _loading = false;
+    });
+}
 
 // ── Mini histogram SVG ─────────────────────────────────────────────────────────
-// all_years: ordered array of year numbers covering the full timeline.
-// Every chart gets 1 + all_years.length bar slots so all SVGs share the same
-// width and align horizontally. Missing-data slots are empty (space reserved,
-// no rect). Scale anchored at zero: positive bars up, negative bars down.
 function _mini_hist(all_val_str, yr_vals, cur, all_years) {
     var BAR_W = 7, GAP = 2, H = 20, ns = "http://www.w3.org/2000/svg";
-
     var yr_val_map = {};
     (yr_vals || []).forEach(function(y) { yr_val_map[y.year] = y.value; });
-
     var bars = [{ year: "all", raw: all_val_str }]
         .concat((all_years || []).map(function(yr) {
             return { year: yr, raw: yr_val_map[yr] !== undefined ? yr_val_map[yr] : null };
         }));
-
     var valid = bars.map(function(b) { return parseFloat(b.raw); }).filter(isFinite);
     if (!valid.length) return null;
-
-    var lo   = Math.min(0, Math.min.apply(null, valid));
-    var hi   = Math.max(0, Math.max.apply(null, valid));
+    var lo = Math.min(0, Math.min.apply(null, valid));
+    var hi = Math.max(0, Math.max.apply(null, valid));
     var span = hi - lo;
     if (!span) return null;
-
     var base = Math.round(hi / span * H);
-    var W    = bars.length * (BAR_W + GAP) - GAP;
-
+    var W = bars.length * (BAR_W + GAP) - GAP;
     var svg = document.createElementNS(ns, "svg");
     svg.setAttribute("width", W); svg.setAttribute("height", H);
     svg.style.cssText = "display:block;flex-shrink:0";
-
     bars.forEach(function(b, i) {
         var v = parseFloat(b.raw);
-        if (!isFinite(v)) return;  // empty slot — space reserved, no rect
+        if (!isFinite(v)) return;
         var bh = Math.max(1, Math.round(Math.abs(v) / span * H));
         var by = v >= 0 ? base - bh : base;
         var is_all = b.year === "all";
@@ -446,7 +392,6 @@ function _mini_hist(all_val_str, yr_vals, cur, all_years) {
         t.textContent = (is_all ? "All" : b.year) + ": " + b.raw;
         r.appendChild(t); svg.appendChild(r);
     });
-
     if (lo < 0 && hi > 0) {
         var line = document.createElementNS(ns, "line");
         line.setAttribute("x1", 0); line.setAttribute("y1", base);
@@ -454,6 +399,56 @@ function _mini_hist(all_val_str, yr_vals, cur, all_years) {
         line.setAttribute("stroke", "#94a3b8"); line.setAttribute("stroke-width", "0.5");
         svg.appendChild(line);
     }
-
     return svg;
 }
+
+// ── Initial load ───────────────────────────────────────────────────────────────
+Promise.all([
+    fetch(_dd + "network_metrics.json").then(function(r) { return r.json(); }),
+    fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetch("data/network_metrics.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+]).then(function(results) {
+    var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
+
+    _cache[_current_year] = { data: data, channels: channels, meta: meta };
+    _nodes = channels.nodes;
+    _measures = channels.measures || [];
+    _measures.forEach(function(m) { _labelOf[m[0]] = m[1]; });
+
+    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_network_html; }) : [];
+    _has_tl = _ty.length > 0;
+    _all_years = _ty.map(function(y) { return y.year; });
+
+    if (all_metrics && all_metrics.summary_rows)
+        all_metrics.summary_rows.forEach(function(r) { _all_map[r.label] = r.value; });
+    if (all_metrics && all_metrics.modularity_rows)
+        all_metrics.modularity_rows.forEach(function(r) { _all_mod_map[r.strategy] = r.value; });
+
+    return (_has_tl
+        ? Promise.all(_ty.map(function(y) {
+            return fetch("data_" + y.year + "/network_metrics.json")
+                .then(function(r) { return r.json(); })
+                .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
+                .catch(function() { return null; });
+          })).then(function(list) { return list.filter(Boolean); })
+        : Promise.resolve([])
+    ).then(function(year_metrics) {
+        year_metrics.forEach(function(ym) {
+            ym.rows.forEach(function(row) {
+                (_yr_map[row.label] = _yr_map[row.label] || []).push({ year: ym.year, value: row.value });
+            });
+            (ym.mod_rows || []).forEach(function(row) {
+                (_yr_mod_map[row.strategy] = _yr_mod_map[row.strategy] || []).push({ year: ym.year, value: row.value });
+            });
+        });
+
+        if (_has_tl) build_year_nav(_ty, _current_year, _switch_year);
+        _render_preamble(meta);
+        _render_summary(data);
+        _render_modularity(data);
+        _build_dist_section();
+        _build_scatter_section();
+    });
+});

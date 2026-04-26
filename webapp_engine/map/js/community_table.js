@@ -1,12 +1,7 @@
 import { build_year_nav } from './year_nav.js';
 
-var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d+)\//);
-var current_year = _ym ? parseInt(_ym[1]) : "all";
-
+// ── Hungarian matching (column ordering for cross-tabs) ─────────────────────────
 function _hungarianMaxAssign(mat) {
-    // Optimal maximum-weight assignment for a rectangular matrix (rows × cols).
-    // Returns col index (0-based) for each row; -1 if the row is unmatched (nR > nC).
     var nR = mat.length;
     if (!nR) return [];
     var nC = mat[0] ? mat[0].length : 0;
@@ -15,7 +10,7 @@ function _hungarianMaxAssign(mat) {
     var INF = 1e15;
     var u = new Array(n + 1).fill(0);
     var v = new Array(n + 1).fill(0);
-    var p = new Array(n + 1).fill(0);   // p[j] = row (1-indexed) assigned to col j
+    var p = new Array(n + 1).fill(0);
     var way = new Array(n + 1).fill(0);
     function getCost(i, j) {
         return (i < nR && j < nC && mat[i][j] != null) ? -mat[i][j] : 0;
@@ -41,11 +36,7 @@ function _hungarianMaxAssign(mat) {
             }
             j0 = j1;
         } while (p[j0] !== 0);
-        do {
-            var jPrev = way[j0];
-            p[j0] = p[jPrev];
-            j0 = jPrev;
-        } while (j0);
+        do { var jPrev = way[j0]; p[j0] = p[jPrev]; j0 = jPrev; } while (j0);
     }
     var ans = new Array(nR).fill(-1);
     for (var j = 1; j <= n; j++) {
@@ -55,71 +46,67 @@ function _hungarianMaxAssign(mat) {
 }
 
 function _hungarianColPerm(matrix, nCols) {
-    // Column permutation that puts Hungarian-assigned cols first (in row order),
-    // then any unassigned cols, for near-diagonal table layout.
     var assign = _hungarianMaxAssign(matrix);
     var used = new Array(nCols).fill(false);
     var perm = [];
-    assign.forEach(function(j) {
-        if (j >= 0 && j < nCols && !used[j]) { perm.push(j); used[j] = true; }
-    });
+    assign.forEach(function(j) { if (j >= 0 && j < nCols && !used[j]) { perm.push(j); used[j] = true; } });
     for (var j = 0; j < nCols; j++) { if (!used[j]) perm.push(j); }
     return perm;
 }
 
-Promise.all([
-    fetch(_dd+"communities.json").then(function(r) { return r.json(); }),
-    fetch(_dd+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-]).then(function(results) {
-    var data = results[0], meta = results[1], timeline = results[2];
+// ── Module-level state ─────────────────────────────────────────────────────────
+var _dd = window.DATA_DIR || "data/";
+var _ym = _dd.match(/data_(\d{4,})\//);
+var _current_year = _ym ? parseInt(_ym[1]) : "all";
+var _base_dd = _ym ? "data/" : _dd;
+var _ty = [];
+var _cache = {};
+var _loading = false;
+
+// ── Data fetching ──────────────────────────────────────────────────────────────
+function _fetch_year(year) {
+    if (_cache[year]) return Promise.resolve(_cache[year]);
+    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    return Promise.all([
+        fetch(dd + "communities.json").then(function(r) { return r.json(); }),
+        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    ]).then(function(res) {
+        var d = { data: res[0], meta: res[1] };
+        _cache[year] = d;
+        return d;
+    });
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function _render(d) {
+    var data = d.data, meta = d.meta;
     var container = document.getElementById("community-tables");
+    container.innerHTML = "";
     var strategies = Object.keys(data.strategies);
 
-    // Preamble (proposal 16)
+    // Preamble
     if (meta) {
         var pEl = document.createElement("p"); pEl.className = "table-preamble";
         var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
         parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
-        if (meta.start_date || meta.end_date) {
-            parts.push("Data range: " + (meta.start_date || "\u2013") + " to " + (meta.end_date || "present") + ".");
-        }
+        if (meta.start_date || meta.end_date)
+            parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
         parts.push("Exported " + meta.export_date + ".");
         pEl.textContent = parts.join(" ");
         container.appendChild(pEl);
-    }
-
-    if (timeline) {
-        var _ty = (timeline.years || []).filter(function(y) { return y.has_community_html; });
-        build_year_nav(_ty, current_year, "community_table");
-    }
-
-    if (meta && meta.has_consensus_matrix) {
-        var nav = document.querySelector(".d-flex.gap-2");
-        if (nav) {
-            var cmLink = document.createElement("a");
-            var _cmpSuffix = (window.DATA_DIR || "").indexOf("_2") !== -1 ? "_2" : "";
-            cmLink.href = "consensus_matrix" + _cmpSuffix + ".html";
-            cmLink.className = "btn btn-outline-secondary btn-sm";
-            cmLink.innerHTML = '<i class="bi bi-grid" aria-hidden="true"></i> Consensus matrix';
-            nav.insertBefore(cmLink, nav.firstChild);
-        }
     }
 
     strategies.forEach(function(strategyKey) {
         var stratData = data.strategies[strategyKey];
         var rows = stratData.rows;
 
-        // Default sort by node_count descending (proposal 14)
         rows.sort(function(a, b) { return (b.node_count || 0) - (a.node_count || 0); });
 
-        // Pre-compute external fraction for each row (proposal 13)
         rows.forEach(function(r) {
             var total = r.metrics.external_edges + 2 * r.metrics.internal_edges;
             r._ext_frac = total > 0 ? r.metrics.external_edges / total : 0;
         });
 
-        // Heatmap ranges
         var hmKeys = ["node_count", "internal_edges", "external_edges", "_ext_frac", "density",
                       "reciprocity", "avg_clustering", "avg_path_length", "diameter", "modularity_contribution"];
         var hmRanges = {};
@@ -127,39 +114,34 @@ Promise.all([
             var mn = Infinity, mx = -Infinity, hasVal = false;
             rows.forEach(function(r) {
                 var v = key === "node_count" ? r.node_count : key === "_ext_frac" ? r._ext_frac : r.metrics[key];
-                if (v !== null && v !== undefined) {
-                    if (v < mn) mn = v; if (v > mx) mx = v; hasVal = true;
-                }
+                if (v !== null && v !== undefined) { if (v < mn) mn = v; if (v > mx) mx = v; hasVal = true; }
             });
             if (hasVal) hmRanges[key] = [mn, mx];
         });
 
-        // Check if any row has modularity_contribution
         var hasMod = rows.some(function(r) {
             return r.metrics && r.metrics.modularity_contribution !== null && r.metrics.modularity_contribution !== undefined;
         });
 
-        // Column definitions (proposals 12, 13, 15, 18)
         var COL_DEFS = [
-            {key: null,                   label: "Community",              cls: "",       fmt: null,      tip: "Community name and color swatch"},
-            {key: "node_count",           label: "Nodes",                  cls: "number", fmt: "int",     tip: "Number of channels in this community"},
-            {key: "internal_edges",       label: "Internal Edges",         cls: "number", fmt: "int",     tip: "Directed edges between channels within this community"},
-            {key: "external_edges",       label: "Ext. Edges",             cls: "number", fmt: "int",     tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)"},
-            {key: "_ext_frac",            label: "Ext. Fraction (0\u20131)", cls: "number", fmt: "sig3", tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral"},
-            {key: "density",              label: "Int. Density (0\u20131)", cls: "number", fmt: "sig3",   tip: "Fraction of possible directed within-community edges that exist"},
-            {key: "reciprocity",          label: "Reciprocity (0\u20131)",  cls: "number", fmt: "sig3",   tip: "Proportion of within-community directed edges that are bidirectional"},
-            {key: "avg_clustering",       label: "Avg Clustering (0\u20131)", cls: "number", fmt: "sig3", tip: "Mean local clustering coefficient of community nodes"},
-            {key: "avg_path_length",      label: "Avg Path Length",        cls: "number", fmt: "sig3",   tip: "Average shortest path in the largest weakly connected component (undirected)"},
-            {key: "diameter",             label: "Diameter",               cls: "number", fmt: "int",    tip: "Longest shortest path in the largest weakly connected component (undirected)"},
+            {key: null,                   label: "Community",               cls: "",       fmt: null,    tip: "Community name and color swatch"},
+            {key: "node_count",           label: "Nodes",                   cls: "number", fmt: "int",   tip: "Number of channels in this community"},
+            {key: "internal_edges",       label: "Internal Edges",          cls: "number", fmt: "int",   tip: "Directed edges between channels within this community"},
+            {key: "external_edges",       label: "Ext. Edges",              cls: "number", fmt: "int",   tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)"},
+            {key: "_ext_frac",            label: "Ext. Fraction (0–1)",     cls: "number", fmt: "sig3",  tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral"},
+            {key: "density",              label: "Int. Density (0–1)",      cls: "number", fmt: "sig3",  tip: "Fraction of possible directed within-community edges that exist"},
+            {key: "reciprocity",          label: "Reciprocity (0–1)",       cls: "number", fmt: "sig3",  tip: "Proportion of within-community directed edges that are bidirectional"},
+            {key: "avg_clustering",       label: "Avg Clustering (0–1)",    cls: "number", fmt: "sig3",  tip: "Mean local clustering coefficient of community nodes"},
+            {key: "avg_path_length",      label: "Avg Path Length",         cls: "number", fmt: "sig3",  tip: "Average shortest path in the largest weakly connected component (undirected)"},
+            {key: "diameter",             label: "Diameter",                cls: "number", fmt: "int",   tip: "Longest shortest path in the largest weakly connected component (undirected)"},
         ];
         if (hasMod) {
             COL_DEFS.push({
                 key: "modularity_contribution", label: "Mod. Contribution", cls: "number", fmt: "sig3",
-                tip: "Community\u2019s contribution to network modularity (Leicht \u0026 Newman 2008 directed formula)",
+                tip: "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)",
             });
         }
 
-        // Heading
         var h3 = document.createElement("h3");
         h3.id = "strategy-" + strategyKey;
         h3.className = "mt-4 mb-1";
@@ -170,12 +152,11 @@ Promise.all([
         stratNote.className = "text-muted small mb-2";
         var nComm = rows.length;
         var modStr = (stratData.modularity !== null && stratData.modularity !== undefined)
-            ? " Network modularity Q\u2009=\u2009" + sigFig(stratData.modularity, 3) + "." : "";
+            ? " Network modularity Q = " + sigFig(stratData.modularity, 3) + "." : "";
         stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr
             + " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
         container.appendChild(stratNote);
 
-        // Table
         var tableDiv = document.createElement("div"); tableDiv.className = "table-responsive";
         var table = document.createElement("table");
         table.className = "table table-hover table-sm sortable";
@@ -196,17 +177,14 @@ Promise.all([
         var tbodyFrag = document.createDocumentFragment();
         rows.forEach(function(row) {
             var tr = document.createElement("tr");
-
             function getVal(col) {
                 if (col.key === null) return null;
                 if (col.key === "node_count") return row.node_count;
                 if (col.key === "_ext_frac") return row._ext_frac;
                 return row.metrics[col.key];
             }
-
             COL_DEFS.forEach(function(col) {
                 if (col.key === null) {
-                    // Community name cell
                     var nameTd = document.createElement("td");
                     nameTd.setAttribute("data-sort-value", row.label);
                     var swatch = document.createElement("span");
@@ -226,7 +204,6 @@ Promise.all([
                 td.textContent = col.fmt === "int" ? fmtInt(val) : sigFig(val, 3);
                 tr.appendChild(td);
             });
-
             tbodyFrag.appendChild(tr);
         });
         tbody.appendChild(tbodyFrag);
@@ -241,7 +218,6 @@ Promise.all([
         summary.className = "text-muted small";
         summary.textContent = "Channel list";
         details.appendChild(summary);
-
         rows.forEach(function(row) {
             if (!row.channels || !row.channels.length) return;
             var group = document.createElement("div"); group.className = "community-channels-group mt-2";
@@ -260,23 +236,21 @@ Promise.all([
             });
             listSpan.appendChild(chipsFrag); group.appendChild(listSpan); details.appendChild(group);
         });
-
         container.appendChild(details);
 
-        // Organisation × community cross-tab (skip for ORGANIZATION strategy: it is trivially org×org)
+        // Organisation × community cross-tab
         var orgCross = stratData.org_cross_tab;
         if (strategyKey !== "ORGANIZATION" && orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
             var crossDetails = document.createElement("details");
             crossDetails.className = "community-channels mt-2 mb-4";
             var crossSummary = document.createElement("summary");
             crossSummary.className = "text-muted small";
-            crossSummary.textContent = "Organisation \u00d7 community distribution";
+            crossSummary.textContent = "Organisation × community distribution";
             crossDetails.appendChild(crossSummary);
 
             var crossWrapper = document.createElement("div");
             crossWrapper.style.cssText = "display:flex;flex-direction:column;gap:1.5rem;margin-top:.75rem;";
 
-            // Reorder columns via Hungarian algorithm for near-diagonal legibility
             var colPerm = _hungarianColPerm(orgCross.pct_by_org, orgCross.communities.length);
             var crossComm = colPerm.map(function(j) { return orgCross.communities[j]; });
             var crossColors = colPerm.map(function(j) { return orgCross.comm_colors[j]; });
@@ -287,7 +261,6 @@ Promise.all([
             var crossPctByCommunity = reorderCols(orgCross.pct_by_community);
 
             var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
-                // Keep only columns where at least one row reaches ≥ threshold%
                 var distThreshold = (meta && meta.community_distribution_threshold != null) ? meta.community_distribution_threshold : 10;
                 var visCols = crossComm.reduce(function(acc, _, ci) {
                     if (matrix.some(function(row) { return row[ci] !== null && row[ci] !== undefined && row[ci] >= distThreshold; }))
@@ -295,7 +268,6 @@ Promise.all([
                     return acc;
                 }, []);
                 var hiddenCount = crossComm.length - visCols.length;
-
                 var outerDiv = document.createElement("div");
                 outerDiv.style.cssText = "overflow-x:auto;";
                 var titleP = document.createElement("p");
@@ -331,9 +303,7 @@ Promise.all([
                         if (val !== null && val !== undefined && val >= 5) {
                             td.setAttribute("style", heatmapBg(val, 0, 100));
                             td.textContent = val.toFixed(1) + "%";
-                        } else {
-                            td.textContent = "\u2014";
-                        }
+                        } else { td.textContent = "—"; }
                         tr.appendChild(td);
                     });
                     frag.appendChild(tr);
@@ -344,7 +314,7 @@ Promise.all([
                     var hiddenNote = document.createElement("p");
                     hiddenNote.className = "small text-muted mt-1 mb-0";
                     hiddenNote.textContent = hiddenCount + " communit" + (hiddenCount === 1 ? "y" : "ies") +
-                        " hidden \u2014 all values < " + distThreshold + "%.";
+                        " hidden — all values < " + distThreshold + "%.";
                     outerDiv.appendChild(hiddenNote);
                 }
                 return outerDiv;
@@ -367,4 +337,41 @@ Promise.all([
     });
 
     initSortableTables();
+}
+
+// ── Year switching ─────────────────────────────────────────────────────────────
+function _switch_year(year) {
+    if (year === _current_year || _loading) return;
+    _current_year = year;
+    _loading = true;
+    build_year_nav(_ty, _current_year, _switch_year);
+    _fetch_year(year).then(function(d) { _render(d); _loading = false; });
+}
+
+// ── Initial load ───────────────────────────────────────────────────────────────
+Promise.all([
+    fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+]).then(function(results) {
+    _cache[_current_year] = { data: results[0], meta: results[1] };
+    var timeline = results[2];
+    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_community_html; }) : [];
+
+    _render(_cache["all"]);
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+
+    // Consensus matrix button — injected once based on full-range meta
+    var meta = results[1];
+    if (meta && meta.has_consensus_matrix) {
+        var nav = document.querySelector(".d-flex.gap-2");
+        if (nav) {
+            var cmLink = document.createElement("a");
+            var _cmpSuffix = (window.DATA_DIR || "").indexOf("_2") !== -1 ? "_2" : "";
+            cmLink.href = "consensus_matrix" + _cmpSuffix + ".html";
+            cmLink.className = "btn btn-outline-secondary btn-sm";
+            cmLink.innerHTML = '<i class="bi bi-grid" aria-hidden="true"></i> Consensus matrix';
+            nav.insertBefore(cmLink, nav.firstChild);
+        }
+    }
 });

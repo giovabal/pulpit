@@ -159,7 +159,7 @@ Years with no messages in the database are silently skipped.
 
 ### Year navigator in HTML tables
 
-When `data/timeline.json` is present, all three HTML table pages (`channel_table.html`, `network_table.html`, `community_table.html`) automatically show a row of pill buttons at the top: **All** returns to the full-range table; one button per year links directly to the matching per-year table (`channel_table_YYYY.html`, etc.). The active view is highlighted in blue.
+When `data/timeline.json` is present, all three HTML table pages (`channel_table.html`, `network_table.html`, `community_table.html`) automatically show a row of pill buttons at the top. Clicking a button re-fetches and re-renders the page content for that year without a page reload — the same single-page approach used by the graph views. **All** returns to the full-range view; the active year is highlighted in blue. Fetched data is cached in memory, so revisiting a year is instant.
 
 ### Year switcher in the 2D and 3D graphs
 
