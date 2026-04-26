@@ -48,6 +48,10 @@ Promise.all([
             });
         });
 
+        // Ordered year numbers — passed to _mini_hist so every chart has
+        // identical width regardless of which years have data for each metric.
+        var all_years = _ty.map(function(y) { return y.year; });
+
         // Year nav
         if (has_tl) _build_year_nav(_ty, current_year);
 
@@ -128,9 +132,11 @@ Promise.all([
             if (has_tl) {
                 var inner = document.createElement("span");
                 inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
-                var hist = _mini_hist(all_map[row.label], yr_map[row.label], current_year);
+                var hist = _mini_hist(all_map[row.label], yr_map[row.label], current_year, all_years);
                 if (hist) inner.appendChild(hist);
-                var vspan = document.createElement("span"); vspan.textContent = row.value;
+                var vspan = document.createElement("span");
+                vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+                vspan.textContent = row.value;
                 inner.appendChild(vspan);
                 td2.appendChild(inner);
             } else {
@@ -167,15 +173,16 @@ Promise.all([
                 var td1 = document.createElement("td"); td1.textContent = _strat_label(row.strategy);
                 var td2 = document.createElement("td"); td2.className = "number";
                 if (has_tl) {
-                    // Histogram placed inline in the value cell, right-aligned next to the number
                     var inner = document.createElement("span");
                     inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
-                    var hist = _mini_hist(all_mod_map[row.strategy], yr_mod_map[row.strategy], current_year);
+                    var hist = _mini_hist(all_mod_map[row.strategy], yr_mod_map[row.strategy], current_year, all_years);
                     if (hist) inner.appendChild(hist);
-                    var vspan = document.createElement("span"); vspan.textContent = row.value;
+                    var vspan = document.createElement("span");
+                    vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+                    vspan.textContent = row.value;
                     inner.appendChild(vspan);
                     td2.appendChild(inner);
-                    td2.dataset.sort = row.value;  // keep sortable working on the raw value
+                    td2.dataset.sort = row.value;
                 } else {
                     td2.textContent = row.value;
                 }
@@ -424,33 +431,39 @@ function _build_year_nav(years, cur) {
 }
 
 // ── Mini histogram SVG ─────────────────────────────────────────────────────────
-// Scale is always anchored at zero: positive bars grow upward, negative bars
-// grow downward. A baseline is drawn when values span both sides of zero.
-function _mini_hist(all_val_str, yr_vals, cur) {
+// all_years: ordered array of year numbers covering the full timeline.
+// Every chart gets 1 + all_years.length bar slots so all SVGs share the same
+// width and align horizontally. Missing-data slots are empty (space reserved,
+// no rect). Scale anchored at zero: positive bars up, negative bars down.
+function _mini_hist(all_val_str, yr_vals, cur, all_years) {
     var BAR_W = 7, GAP = 2, H = 20, ns = "http://www.w3.org/2000/svg";
+
+    var yr_val_map = {};
+    (yr_vals || []).forEach(function(y) { yr_val_map[y.year] = y.value; });
+
     var bars = [{ year: "all", raw: all_val_str }]
-        .concat((yr_vals || []).map(function(y) { return { year: y.year, raw: y.value }; }));
+        .concat((all_years || []).map(function(yr) {
+            return { year: yr, raw: yr_val_map[yr] !== undefined ? yr_val_map[yr] : null };
+        }));
 
     var valid = bars.map(function(b) { return parseFloat(b.raw); }).filter(isFinite);
     if (!valid.length) return null;
 
-    // Anchor range at zero so bar height is proportional to absolute magnitude
     var lo   = Math.min(0, Math.min.apply(null, valid));
     var hi   = Math.max(0, Math.max.apply(null, valid));
     var span = hi - lo;
     if (!span) return null;
 
-    // Y coordinate of the zero baseline (pixels from top)
     var base = Math.round(hi / span * H);
+    var W    = bars.length * (BAR_W + GAP) - GAP;
 
-    var W = bars.length * (BAR_W + GAP) - GAP;
     var svg = document.createElementNS(ns, "svg");
     svg.setAttribute("width", W); svg.setAttribute("height", H);
     svg.style.cssText = "display:block;flex-shrink:0";
 
     bars.forEach(function(b, i) {
         var v = parseFloat(b.raw);
-        if (!isFinite(v)) return;
+        if (!isFinite(v)) return;  // empty slot — space reserved, no rect
         var bh = Math.max(1, Math.round(Math.abs(v) / span * H));
         var by = v >= 0 ? base - bh : base;
         var is_all = b.year === "all";
@@ -464,7 +477,6 @@ function _mini_hist(all_val_str, yr_vals, cur) {
         r.appendChild(t); svg.appendChild(r);
     });
 
-    // Baseline separating positive and negative regions
     if (lo < 0 && hi > 0) {
         var line = document.createElementNS(ns, "line");
         line.setAttribute("x1", 0); line.setAttribute("y1", base);
