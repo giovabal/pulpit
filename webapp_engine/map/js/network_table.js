@@ -18,7 +18,7 @@ Promise.all([
         ? Promise.all(_ty.map(function(y) {
             return fetch("data_" + y.year + "/network_metrics.json")
                 .then(function(r) { return r.json(); })
-                .then(function(d) { return { year: y.year, rows: d.summary_rows }; })
+                .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
                 .catch(function() { return null; });
           })).then(function(list) { return list.filter(Boolean); })
         : Promise.resolve([])
@@ -33,6 +33,18 @@ Promise.all([
         year_metrics.forEach(function(ym) {
             ym.rows.forEach(function(row) {
                 (yr_map[row.label] = yr_map[row.label] || []).push({ year: ym.year, value: row.value });
+            });
+        });
+
+        // Modularity lookups
+        var all_mod_map = {};  // strategy → value string (full-range)
+        if (all_metrics && all_metrics.modularity_rows) {
+            all_metrics.modularity_rows.forEach(function(r) { all_mod_map[r.strategy] = r.value; });
+        }
+        var yr_mod_map = {};   // strategy → [{year, value}]
+        year_metrics.forEach(function(ym) {
+            (ym.mod_rows || []).forEach(function(row) {
+                (yr_mod_map[row.strategy] = yr_mod_map[row.strategy] || []).push({ year: ym.year, value: row.value });
             });
         });
 
@@ -150,7 +162,20 @@ Promise.all([
             data.modularity_rows.forEach(function(row) {
                 var tr = document.createElement("tr");
                 var td1 = document.createElement("td"); td1.textContent = row.strategy;
-                var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = row.value;
+                var td2 = document.createElement("td"); td2.className = "number";
+                if (has_tl) {
+                    // Histogram placed inline in the value cell, right-aligned next to the number
+                    var inner = document.createElement("span");
+                    inner.style.cssText = "display:inline-flex;align-items:flex-end;justify-content:flex-end;gap:5px;width:100%";
+                    var hist = _mini_hist(all_mod_map[row.strategy], yr_mod_map[row.strategy], current_year);
+                    if (hist) inner.appendChild(hist);
+                    var vspan = document.createElement("span"); vspan.textContent = row.value;
+                    inner.appendChild(vspan);
+                    td2.appendChild(inner);
+                    td2.dataset.sort = row.value;  // keep sortable working on the raw value
+                } else {
+                    td2.textContent = row.value;
+                }
                 tr.appendChild(td1); tr.appendChild(td2); mTbody.appendChild(tr);
             });
             modTable.appendChild(mTbody); modSection.appendChild(modTable);
