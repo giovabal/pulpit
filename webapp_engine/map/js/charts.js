@@ -33,7 +33,7 @@ export function mini_hist(all_val_str, yr_vals, cur, all_years) {
         var r = document.createElementNS(ns, "rect");
         r.setAttribute("x", i * (BAR_W + GAP)); r.setAttribute("y", by);
         r.setAttribute("width", BAR_W); r.setAttribute("height", bh);
-        r.setAttribute("fill", is_cur ? "#1d4ed8" : (is_all ? "#bfdbfe" : "#cbd5e1"));
+        r.setAttribute("fill", is_cur ? "#1d4ed8" : (is_all ? "#60a5fa" : "#94a3b8"));
         var t = document.createElementNS(ns, "title");
         t.textContent = (is_all ? "All" : b.year) + ": " + b.raw;
         r.appendChild(t); svg.appendChild(r);

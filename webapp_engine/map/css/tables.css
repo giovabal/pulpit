@@ -113,26 +113,16 @@ td.col-group-start, th.col-group-start {
   border-left: 2px solid #ccc !important;
 }
 
-/* Channel-table per-row sparkline toggle */
-th.channel-toggle-col, td.channel-toggle-col { width: 1.5rem; padding: 0 .25rem !important; }
+/* Channel-table per-row sparkline toggle — sits inside the channel name cell */
+.channel-name-wrap {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem; white-space: nowrap;
+}
 .channel-toggle {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: #adb5bd; line-height: 1; transition: color .15s, transform .2s;
+  background: none; border: none; padding: 0 0 0 .25rem; cursor: pointer; flex-shrink: 0;
+  color: #adb5bd; line-height: 1; transition: color .15s;
 }
 .channel-toggle:hover { color: #495057; }
-.channel-toggle.open { transform: rotate(90deg); color: #1d4ed8; }
-
-/* Channel-table detail row */
-.channel-detail-row td.channel-detail-cell {
-  padding: .5rem .75rem .75rem 2rem;
-  background: #f8f9fa;
-  border-top: none;
-}
-.channel-spark-grid {
-  display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: flex-end;
-}
-.channel-spark-item { display: flex; flex-direction: column; align-items: center; gap: .2rem; }
-.channel-spark-label { font-size: .65rem; color: #6c757d; white-space: nowrap; }
+.channel-toggle.open { color: #1d4ed8; }
 
 /* Scatter plot (network table) */
 .scatter-select { min-width: 200px; }

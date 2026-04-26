@@ -66,40 +66,39 @@ function _load_year_channels() {
     return _yr_channels_promise;
 }
 
-function _render_detail(td, node, cols) {
-    td.innerHTML = "";
-    var grid = document.createElement("div");
-    grid.className = "channel-spark-grid";
-    cols.forEach(function(col) {
-        var all_node = _yr_channels["all"] && _yr_channels["all"][node.id];
-        var all_val = all_node ? all_node[col.key] : null;
-        var yr_vals = _all_years.map(function(yr) {
-            var yn = _yr_channels[yr] && _yr_channels[yr][node.id];
-            var v = yn ? yn[col.key] : null;
-            return { year: yr, value: v != null ? String(v) : null };
-        });
-        var svg = mini_hist(all_val != null ? String(all_val) : null, yr_vals, _current_year, _all_years);
-        if (!svg) return;
-        var item = document.createElement("div");
-        item.className = "channel-spark-item";
-        var lbl = document.createElement("div");
-        lbl.className = "channel-spark-label";
-        lbl.textContent = col.label;
-        item.appendChild(lbl); item.appendChild(svg);
-        grid.appendChild(item);
-    });
-    td.appendChild(grid.children.length ? grid : document.createTextNode("No timeline data for this channel."));
-}
+// Columns that have no meaningful per-year data and are excluded from sparklines.
+var _SPARK_SKIP = { fans: true };
 
-function _toggle_detail(btn, detail_tr, node, cols) {
-    if (detail_tr.style.display !== "none") {
-        detail_tr.style.display = "none";
+function _toggle_row(btn, tr, node) {
+    if (btn.classList.contains("open")) {
+        tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
+            td.innerHTML = "";
+            td.textContent = td.dataset.displayVal;
+        });
         btn.classList.remove("open");
         return;
     }
     _load_year_channels().then(function() {
-        _render_detail(detail_tr.querySelector("td"), node, cols);
-        detail_tr.style.display = "";
+        tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
+            var key = td.dataset.colKey;
+            var all_node = _yr_channels["all"] && _yr_channels["all"][node.id];
+            var all_val = all_node ? all_node[key] : null;
+            var yr_vals = _all_years.map(function(yr) {
+                var yn = _yr_channels[yr] && _yr_channels[yr][node.id];
+                var v = yn ? yn[key] : null;
+                return { year: yr, value: v != null ? String(v) : null };
+            });
+            var svg = mini_hist(all_val != null ? String(all_val) : null, yr_vals, _current_year, _all_years);
+            td.innerHTML = "";
+            var inner = document.createElement("span");
+            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            if (svg) inner.appendChild(svg);
+            var vspan = document.createElement("span");
+            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.textContent = td.dataset.displayVal;
+            inner.appendChild(vspan);
+            td.appendChild(inner);
+        });
         btn.classList.add("open");
     });
 }
@@ -211,9 +210,7 @@ function _render(d) {
         stratGroupStart = false;
     });
     addTh("Activity", "", true, "Date range of channel activity in the crawled dataset (start–end)");
-    if (has_spark) addTh("", "channel-toggle-col", false, "Expand year-by-year sparklines for this channel");
     thead.appendChild(htr);
-    var totalCols = htr.cells.length;
 
     // tbody
     var fragment = document.createDocumentFragment();
@@ -229,18 +226,41 @@ function _render(d) {
             if (link) { var a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = display; td.appendChild(a); }
             else { td.textContent = display; }
             tr.appendChild(td);
+            return td;
         }
         var rank = String(idx + 1);
         addTd(rank, "number", rank, "", "", false);
-        addTd(node.label || node.id, "", "", "", node.url || "", false);
+
+        // Channel name cell — button inside when timeline is present
+        var nameTd = document.createElement("td");
+        if (has_spark) {
+            nameTd.style.cssText = "white-space:nowrap";
+            var nameWrap = document.createElement("span");
+            nameWrap.className = "channel-name-wrap";
+            if (node.url) {
+                var a = document.createElement("a"); a.href = node.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = node.label || node.id; nameWrap.appendChild(a);
+            } else { nameWrap.appendChild(document.createTextNode(node.label || node.id)); }
+            var btn = document.createElement("button");
+            btn.type = "button"; btn.className = "channel-toggle"; btn.title = "Year-by-year charts";
+            btn.innerHTML = '<i class="bi bi-bar-chart-steps" aria-hidden="true"></i>';
+            (function(b, row, n) { b.addEventListener("click", function() { _toggle_row(b, row, n); }); })(btn, tr, node);
+            nameWrap.appendChild(btn);
+            nameTd.appendChild(nameWrap);
+        } else {
+            if (node.url) { var a2 = document.createElement("a"); a2.href = node.url; a2.target = "_blank"; a2.rel = "noopener noreferrer"; a2.textContent = node.label || node.id; nameTd.appendChild(a2); }
+            else { nameTd.textContent = node.label || node.id; }
+        }
+        tr.appendChild(nameTd);
+
         cols.forEach(function(col) {
             var val = node[col.key];
-            addTd(
-                col.isBase ? fmtInt(val) : sigFig(val, 3),
-                "number",
-                col.isBase ? (val !== null && val !== undefined ? String(val) : "") : numSortVal(val),
-                colBg(col, val), "", col.groupStart || false
-            );
+            var displayStr = col.isBase ? fmtInt(val) : sigFig(val, 3);
+            var sortV = col.isBase ? (val !== null && val !== undefined ? String(val) : "") : numSortVal(val);
+            var td = addTd(displayStr, "number", sortV, colBg(col, val), "", col.groupStart || false);
+            if (has_spark && !_SPARK_SKIP[col.key]) {
+                td.dataset.colKey = col.key;
+                td.dataset.displayVal = displayStr;
+            }
         });
         var firstStrategy = true;
         strategies.forEach(function(s) {
@@ -251,31 +271,7 @@ function _render(d) {
         var start = node.activity_start || "", end = node.activity_end || "";
         addTd(start && end ? start + "–" + end : start || end || "—", "", start || end || "", "", "", true);
 
-        var detail_tr = null;
-        if (has_spark) {
-            var toggle_td = document.createElement("td");
-            toggle_td.className = "channel-toggle-col";
-            var btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "channel-toggle";
-            btn.title = "Show year-by-year charts";
-            btn.innerHTML = '<i class="bi bi-chevron-right" aria-hidden="true"></i>';
-            detail_tr = document.createElement("tr");
-            detail_tr.className = "channel-detail-row";
-            detail_tr.style.display = "none";
-            var detail_td = document.createElement("td");
-            detail_td.className = "channel-detail-cell";
-            detail_td.colSpan = totalCols;
-            detail_tr.appendChild(detail_td);
-            (function(b, dtr, n, c) {
-                b.addEventListener("click", function() { _toggle_detail(b, dtr, n, c); });
-            })(btn, detail_tr, node, cols);
-            toggle_td.appendChild(btn);
-            tr.appendChild(toggle_td);
-        }
-
         fragment.appendChild(tr);
-        if (detail_tr) fragment.appendChild(detail_tr);
     });
     tbody.appendChild(fragment);
 
@@ -303,7 +299,6 @@ function _render(d) {
     var firstStratFoot = true;
     strategies.forEach(function(s) { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);
-    if (has_spark) addFtd("", "", false);
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
 
