@@ -1,3 +1,6 @@
+import { strategy_label as _strat_label } from './labels.js';
+import { build_year_nav } from './year_nav.js';
+
 var _dd = window.DATA_DIR || "data/";
 var _ym = _dd.match(/data_(\d+)\//);
 var current_year = _ym ? parseInt(_ym[1]) : "all";
@@ -53,7 +56,7 @@ Promise.all([
         var all_years = _ty.map(function(y) { return y.year; });
 
         // Year nav
-        if (has_tl) _build_year_nav(_ty, current_year);
+        if (has_tl) build_year_nav(_ty, current_year, "network_table");
 
         // ── Preamble ───────────────────────────────────────────────────────────
         if (meta) {
@@ -396,39 +399,6 @@ Promise.all([
     }); // year_metrics chain
 }); // outer Promise.all
 
-// ── Strategy label lookup ──────────────────────────────────────────────────────
-var _STRAT_LABELS = {
-    organization: "Organization", leiden: "Leiden", leiden_directed: "Leiden directed",
-    leiden_cpm_coarse: "Leiden CPM coarse", leiden_cpm_fine: "Leiden CPM fine",
-    louvain: "Louvain", kcore: "K-core", infomap: "Infomap",
-    infomap_memory: "Infomap memory", mcl: "MCL", walktrap: "Walktrap",
-    weakcc: "Weak connected components", strongcc: "Strong connected components",
-};
-function _strat_label(key) {
-    return _STRAT_LABELS[key.toLowerCase()] ||
-        key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, " ");
-}
-
-// ── Year nav ───────────────────────────────────────────────────────────────────
-function _build_year_nav(years, cur) {
-    var target = document.getElementById("timeline-nav");
-    if (!target) return;
-    var wrap = document.createElement("div");
-    wrap.className = "d-flex flex-wrap gap-1";
-    var all_a = document.createElement("a");
-    all_a.href = "network_table.html";
-    all_a.className = "btn btn-sm " + (cur === "all" ? "btn-primary" : "btn-outline-secondary");
-    all_a.textContent = "All";
-    wrap.appendChild(all_a);
-    years.forEach(function(y) {
-        var a = document.createElement("a");
-        a.href = "network_table_" + y.year + ".html";
-        a.className = "btn btn-sm " + (cur === y.year ? "btn-primary" : "btn-outline-secondary");
-        a.textContent = y.year;
-        wrap.appendChild(a);
-    });
-    target.appendChild(wrap);
-}
 
 // ── Mini histogram SVG ─────────────────────────────────────────────────────────
 // all_years: ordered array of year numbers covering the full timeline.

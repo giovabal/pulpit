@@ -1,3 +1,9 @@
+import { build_year_nav } from './year_nav.js';
+
+var _dd = window.DATA_DIR || "data/";
+var _ym = _dd.match(/data_(\d+)\//);
+var current_year = _ym ? parseInt(_ym[1]) : "all";
+
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 
 // Column group membership — keys not listed here go into "other"
@@ -32,11 +38,12 @@ var COL_TOOLTIPS = {
 };
 
 Promise.all([
-    fetch((window.DATA_DIR||"data/")+"channels.json").then(function(r) { return r.json(); }),
-    fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }),
-    fetch((window.DATA_DIR||"data/")+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd+"channels.json").then(function(r) { return r.json(); }),
+    fetch(_dd+"communities.json").then(function(r) { return r.json(); }),
+    fetch(_dd+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
-    var channels = results[0], communities = results[1], meta = results[2];
+    var channels = results[0], communities = results[1], meta = results[2], timeline = results[3];
     var nodes = channels.nodes;
     var strategies = Object.keys(communities.strategies);
 
@@ -52,6 +59,11 @@ Promise.all([
         preambleEl.textContent = parts.join(" ");
         var preambleTarget = document.getElementById("channel-preamble");
         if (preambleTarget) preambleTarget.appendChild(preambleEl);
+    }
+
+    if (timeline) {
+        var _ty = (timeline.years || []).filter(function(y) { return y.has_channel_html; });
+        build_year_nav(_ty, current_year, "channel_table");
     }
 
     // Sort by in_deg descending (determines initial rank)

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { strategy_label } from './labels.js';
 
 // =============================================================================
 // Constants
@@ -587,16 +588,6 @@ function reset_camera() {
 // UI builders
 // =============================================================================
 
-var STRATEGY_LABELS = {
-    organization: 'Organization', leiden: 'Leiden', leiden_directed: 'Leiden directed',
-    leiden_cpm_coarse: 'Leiden CPM coarse', leiden_cpm_fine: 'Leiden CPM fine',
-    louvain: 'Louvain', kcore: 'K-core', infomap: 'Infomap', infomap_memory: 'Infomap memory',
-    mcl: 'MCL', walktrap: 'Walktrap', weakcc: 'Weak connected components', strongcc: 'Strong connected components',
-};
-function strategy_label(key) {
-    return STRATEGY_LABELS[key.toLowerCase()] ||
-        (key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, ' '));
-}
 
 function build_strategy_selector(communities) {
     var strategies = Object.keys(communities);

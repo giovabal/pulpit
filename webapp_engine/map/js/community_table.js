@@ -1,3 +1,9 @@
+import { build_year_nav } from './year_nav.js';
+
+var _dd = window.DATA_DIR || "data/";
+var _ym = _dd.match(/data_(\d+)\//);
+var current_year = _ym ? parseInt(_ym[1]) : "all";
+
 function _hungarianMaxAssign(mat) {
     // Optimal maximum-weight assignment for a rectangular matrix (rows × cols).
     // Returns col index (0-based) for each row; -1 if the row is unmatched (nR > nC).
@@ -62,10 +68,11 @@ function _hungarianColPerm(matrix, nCols) {
 }
 
 Promise.all([
-    fetch((window.DATA_DIR||"data/")+"communities.json").then(function(r) { return r.json(); }),
-    fetch((window.DATA_DIR||"data/")+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd+"communities.json").then(function(r) { return r.json(); }),
+    fetch(_dd+"meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
-    var data = results[0], meta = results[1];
+    var data = results[0], meta = results[1], timeline = results[2];
     var container = document.getElementById("community-tables");
     var strategies = Object.keys(data.strategies);
 
@@ -80,6 +87,11 @@ Promise.all([
         parts.push("Exported " + meta.export_date + ".");
         pEl.textContent = parts.join(" ");
         container.appendChild(pEl);
+    }
+
+    if (timeline) {
+        var _ty = (timeline.years || []).filter(function(y) { return y.has_community_html; });
+        build_year_nav(_ty, current_year, "community_table");
     }
 
     if (meta && meta.has_consensus_matrix) {

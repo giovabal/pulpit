@@ -157,6 +157,10 @@ In addition to the regular `graph/` output, the exporter repeats the full pipeli
 
 Years with no messages in the database are silently skipped.
 
+### Year navigator in HTML tables
+
+When `data/timeline.json` is present, all three HTML table pages (`channel_table.html`, `network_table.html`, `community_table.html`) automatically show a row of pill buttons at the top: **All** returns to the full-range table; one button per year links directly to the matching per-year table (`channel_table_YYYY.html`, etc.). The active view is highlighted in blue.
+
 ### Year switcher in the 2D and 3D graphs
 
 When `data/timeline.json` is present, both `graph.html` and `graph3d.html` automatically show a compact year navigator in the bottom navigation bar. No separate per-year graph HTML files are generated — the switcher is the sole entry point for all year views.
