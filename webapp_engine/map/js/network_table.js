@@ -164,7 +164,7 @@ Promise.all([
             var mTbody = document.createElement("tbody");
             data.modularity_rows.forEach(function(row) {
                 var tr = document.createElement("tr");
-                var td1 = document.createElement("td"); td1.textContent = row.strategy;
+                var td1 = document.createElement("td"); td1.textContent = _strat_label(row.strategy);
                 var td2 = document.createElement("td"); td2.className = "number";
                 if (has_tl) {
                     // Histogram placed inline in the value cell, right-aligned next to the number
@@ -388,6 +388,19 @@ Promise.all([
 
     }); // year_metrics chain
 }); // outer Promise.all
+
+// ── Strategy label lookup ──────────────────────────────────────────────────────
+var _STRAT_LABELS = {
+    organization: "Organization", leiden: "Leiden", leiden_directed: "Leiden directed",
+    leiden_cpm_coarse: "Leiden CPM coarse", leiden_cpm_fine: "Leiden CPM fine",
+    louvain: "Louvain", kcore: "K-core", infomap: "Infomap",
+    infomap_memory: "Infomap memory", mcl: "MCL", walktrap: "Walktrap",
+    weakcc: "Weak connected components", strongcc: "Strong connected components",
+};
+function _strat_label(key) {
+    return _STRAT_LABELS[key.toLowerCase()] ||
+        key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, " ");
+}
 
 // ── Year nav ───────────────────────────────────────────────────────────────────
 function _build_year_nav(years, cur) {
