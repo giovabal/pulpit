@@ -273,6 +273,16 @@
 }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
 
+/* ---- linked-param indicator (pushed to right edge of chip) ---- */
+.ops-tip.ops-flag-param {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: .4;
+  pointer-events: auto;
+}
+.ops-flag:has(input:checked) .ops-tip.ops-flag-param { color: var(--accent); opacity: .65; }
+.ops-tip.ops-flag-param:hover { opacity: .9; }
+
 /* ---- disabled computation param ---- */
 .ops-param--disabled { opacity: .35; pointer-events: none; }
 
