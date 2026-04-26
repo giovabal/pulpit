@@ -127,7 +127,7 @@ Promise.all([
             var td2 = document.createElement("td"); td2.className = "number";
             if (has_tl) {
                 var inner = document.createElement("span");
-                inner.style.cssText = "display:inline-flex;align-items:flex-end;justify-content:flex-end;gap:5px;width:100%";
+                inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
                 var hist = _mini_hist(all_map[row.label], yr_map[row.label], current_year);
                 if (hist) inner.appendChild(hist);
                 var vspan = document.createElement("span"); vspan.textContent = row.value;
@@ -169,7 +169,7 @@ Promise.all([
                 if (has_tl) {
                     // Histogram placed inline in the value cell, right-aligned next to the number
                     var inner = document.createElement("span");
-                    inner.style.cssText = "display:inline-flex;align-items:flex-end;justify-content:flex-end;gap:5px;width:100%";
+                    inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
                     var hist = _mini_hist(all_mod_map[row.strategy], yr_mod_map[row.strategy], current_year);
                     if (hist) inner.appendChild(hist);
                     var vspan = document.createElement("span"); vspan.textContent = row.value;
@@ -411,32 +411,54 @@ function _build_year_nav(years, cur) {
 }
 
 // ── Mini histogram SVG ─────────────────────────────────────────────────────────
+// Scale is always anchored at zero: positive bars grow upward, negative bars
+// grow downward. A baseline is drawn when values span both sides of zero.
 function _mini_hist(all_val_str, yr_vals, cur) {
     var BAR_W = 7, GAP = 2, H = 20, ns = "http://www.w3.org/2000/svg";
     var bars = [{ year: "all", raw: all_val_str }]
         .concat((yr_vals || []).map(function(y) { return { year: y.year, raw: y.value }; }));
-    var maxV = bars.reduce(function(m, b) {
-        var v = parseFloat(b.raw); return (isFinite(v) && v > m) ? v : m;
-    }, 0);
-    if (!maxV) return null;
+
+    var valid = bars.map(function(b) { return parseFloat(b.raw); }).filter(isFinite);
+    if (!valid.length) return null;
+
+    // Anchor range at zero so bar height is proportional to absolute magnitude
+    var lo   = Math.min(0, Math.min.apply(null, valid));
+    var hi   = Math.max(0, Math.max.apply(null, valid));
+    var span = hi - lo;
+    if (!span) return null;
+
+    // Y coordinate of the zero baseline (pixels from top)
+    var base = Math.round(hi / span * H);
+
     var W = bars.length * (BAR_W + GAP) - GAP;
     var svg = document.createElementNS(ns, "svg");
     svg.setAttribute("width", W); svg.setAttribute("height", H);
     svg.style.cssText = "display:block;flex-shrink:0";
+
     bars.forEach(function(b, i) {
         var v = parseFloat(b.raw);
-        if (!isFinite(v) || v < 0) return;
-        var bh = Math.max(1, Math.round(v / maxV * H));
+        if (!isFinite(v)) return;
+        var bh = Math.max(1, Math.round(Math.abs(v) / span * H));
+        var by = v >= 0 ? base - bh : base;
         var is_all = b.year === "all";
         var is_cur = is_all ? cur === "all" : cur === b.year;
-        var fill = is_cur ? "#1d4ed8" : (is_all ? "#bfdbfe" : "#cbd5e1");
         var r = document.createElementNS(ns, "rect");
-        r.setAttribute("x", i * (BAR_W + GAP)); r.setAttribute("y", H - bh);
+        r.setAttribute("x", i * (BAR_W + GAP)); r.setAttribute("y", by);
         r.setAttribute("width", BAR_W); r.setAttribute("height", bh);
-        r.setAttribute("fill", fill);
+        r.setAttribute("fill", is_cur ? "#1d4ed8" : (is_all ? "#bfdbfe" : "#cbd5e1"));
         var t = document.createElementNS(ns, "title");
         t.textContent = (is_all ? "All" : b.year) + ": " + b.raw;
         r.appendChild(t); svg.appendChild(r);
     });
+
+    // Baseline separating positive and negative regions
+    if (lo < 0 && hi > 0) {
+        var line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", 0); line.setAttribute("y1", base);
+        line.setAttribute("x2", W); line.setAttribute("y2", base);
+        line.setAttribute("stroke", "#94a3b8"); line.setAttribute("stroke-width", "0.5");
+        svg.appendChild(line);
+    }
+
     return svg;
 }
