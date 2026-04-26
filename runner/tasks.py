@@ -164,7 +164,12 @@ def launch(task: str, args: list[str]) -> None:
         }
         meta_path.write_text(json.dumps(meta))
 
-        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONWARNINGS": "ignore::DeprecationWarning"}
+        env = {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONWARNINGS": "ignore::DeprecationWarning",
+            "MPLBACKEND": "Agg",
+        }
         cmd = [sys.executable, _MANAGE_PY, task, *args]
         log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
         try:
