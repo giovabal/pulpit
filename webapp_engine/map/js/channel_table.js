@@ -1,4 +1,5 @@
 import { build_year_nav } from './year_nav.js';
+import { mini_hist } from './charts.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
@@ -34,8 +35,74 @@ var _ym = _dd.match(/data_(\d{4,})\//);   // 4+ digit = calendar year, not compa
 var _current_year = _ym ? parseInt(_ym[1]) : "all";
 var _base_dd = _ym ? "data/" : _dd;        // "all" always resolves to the full-range dir
 var _ty = [];
+var _all_years = [];          // ordered year numbers, derived from _ty
 var _cache = {};
 var _loading = false;
+
+// ── Per-channel timeline data (lazy, loaded on first expand) ───────────────────
+var _yr_channels = {};        // year (int or "all") → { nodeId: nodeObj }
+var _yr_channels_promise = null;
+
+function _load_year_channels() {
+    if (_yr_channels_promise) return _yr_channels_promise;
+    // Seed "all" from the already-loaded full-range cache (free, no extra fetch).
+    if (!_yr_channels["all"] && _cache["all"] && _cache["all"].channels) {
+        var m = {};
+        (_cache["all"].channels.nodes || []).forEach(function(n) { m[n.id] = n; });
+        _yr_channels["all"] = m;
+    }
+    if (!_all_years.length) { _yr_channels_promise = Promise.resolve(); return _yr_channels_promise; }
+    _yr_channels_promise = Promise.all(_all_years.map(function(yr) {
+        if (_yr_channels[yr]) return Promise.resolve();
+        return fetch("data_" + yr + "/channels.json")
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var m = {};
+                (d.nodes || []).forEach(function(n) { m[n.id] = n; });
+                _yr_channels[yr] = m;
+            })
+            .catch(function() { _yr_channels[yr] = {}; });
+    }));
+    return _yr_channels_promise;
+}
+
+function _render_detail(td, node, cols) {
+    td.innerHTML = "";
+    var grid = document.createElement("div");
+    grid.className = "channel-spark-grid";
+    cols.forEach(function(col) {
+        var all_node = _yr_channels["all"] && _yr_channels["all"][node.id];
+        var all_val = all_node ? all_node[col.key] : null;
+        var yr_vals = _all_years.map(function(yr) {
+            var yn = _yr_channels[yr] && _yr_channels[yr][node.id];
+            var v = yn ? yn[col.key] : null;
+            return { year: yr, value: v != null ? String(v) : null };
+        });
+        var svg = mini_hist(all_val != null ? String(all_val) : null, yr_vals, _current_year, _all_years);
+        if (!svg) return;
+        var item = document.createElement("div");
+        item.className = "channel-spark-item";
+        var lbl = document.createElement("div");
+        lbl.className = "channel-spark-label";
+        lbl.textContent = col.label;
+        item.appendChild(lbl); item.appendChild(svg);
+        grid.appendChild(item);
+    });
+    td.appendChild(grid.children.length ? grid : document.createTextNode("No timeline data for this channel."));
+}
+
+function _toggle_detail(btn, detail_tr, node, cols) {
+    if (detail_tr.style.display !== "none") {
+        detail_tr.style.display = "none";
+        btn.classList.remove("open");
+        return;
+    }
+    _load_year_channels().then(function() {
+        _render_detail(detail_tr.querySelector("td"), node, cols);
+        detail_tr.style.display = "";
+        btn.classList.add("open");
+    });
+}
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -122,6 +189,8 @@ function _render(d) {
     var existingFoot = table.querySelector("tfoot");
     if (existingFoot) table.removeChild(existingFoot);
 
+    var has_spark = _all_years.length > 0;
+
     // thead
     var htr = document.createElement("tr");
     function addTh(label, cls, isGroupStart, tip) {
@@ -142,7 +211,9 @@ function _render(d) {
         stratGroupStart = false;
     });
     addTh("Activity", "", true, "Date range of channel activity in the crawled dataset (start–end)");
+    if (has_spark) addTh("", "channel-toggle-col", false, "Expand year-by-year sparklines for this channel");
     thead.appendChild(htr);
+    var totalCols = htr.cells.length;
 
     // tbody
     var fragment = document.createDocumentFragment();
@@ -179,7 +250,32 @@ function _render(d) {
         });
         var start = node.activity_start || "", end = node.activity_end || "";
         addTd(start && end ? start + "–" + end : start || end || "—", "", start || end || "", "", "", true);
+
+        var detail_tr = null;
+        if (has_spark) {
+            var toggle_td = document.createElement("td");
+            toggle_td.className = "channel-toggle-col";
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "channel-toggle";
+            btn.title = "Show year-by-year charts";
+            btn.innerHTML = '<i class="bi bi-chevron-right" aria-hidden="true"></i>';
+            detail_tr = document.createElement("tr");
+            detail_tr.className = "channel-detail-row";
+            detail_tr.style.display = "none";
+            var detail_td = document.createElement("td");
+            detail_td.className = "channel-detail-cell";
+            detail_td.colSpan = totalCols;
+            detail_tr.appendChild(detail_td);
+            (function(b, dtr, n, c) {
+                b.addEventListener("click", function() { _toggle_detail(b, dtr, n, c); });
+            })(btn, detail_tr, node, cols);
+            toggle_td.appendChild(btn);
+            tr.appendChild(toggle_td);
+        }
+
         fragment.appendChild(tr);
+        if (detail_tr) fragment.appendChild(detail_tr);
     });
     tbody.appendChild(fragment);
 
@@ -207,6 +303,7 @@ function _render(d) {
     var firstStratFoot = true;
     strategies.forEach(function(s) { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);
+    if (has_spark) addFtd("", "", false);
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
 
@@ -234,6 +331,7 @@ Promise.all([
     _cache[_current_year] = { channels: results[0], communities: results[1], meta: results[2] };
     var timeline = results[3];
     _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_channel_html; }) : [];
-    _render(_cache["all"]);
+    _all_years = _ty.map(function(y) { return y.year; });
+    _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
 });
