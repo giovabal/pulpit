@@ -674,30 +674,8 @@ class Command(BaseCommand):
                 fh.write(tables._patch_timeline_html(content, year))
             has_community_html = True
 
-        if do_xlsx:
-            tables.write_table_xlsx(
-                graph_data,
-                measures_labels,
-                strategies,
-                os.path.join(root_target, f"channel_table_{year}.xlsx"),
-                project_title=project_title,
-            )
-            has_channel_xlsx = True
-            if community_table_data is not None:
-                tables.write_network_table_xlsx(
-                    community_table_data,
-                    strategies,
-                    os.path.join(root_target, f"network_table_{year}.xlsx"),
-                    project_title=project_title,
-                )
-                has_network_xlsx = True
-                tables.write_community_table_xlsx(
-                    community_table_data,
-                    strategies,
-                    os.path.join(root_target, f"community_table_{year}.xlsx"),
-                    project_title=project_title,
-                )
-                has_community_xlsx = True
+        # Per-year XLSX files are not written individually; data is returned so the
+        # caller can assemble a single multi-sheet workbook for each table type.
 
         if do_consensus_matrix:
             ctx = _mk_ctx(f"Consensus matrix ({year})")
@@ -718,6 +696,9 @@ class Command(BaseCommand):
             "has_community_html": has_community_html,
             "has_community_xlsx": has_community_xlsx,
             "has_consensus_matrix_html": has_consensus_matrix_html,
+            # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
+            "_xlsx_graph_data": graph_data if do_xlsx else None,
+            "_xlsx_community_data": community_table_data if do_xlsx else None,
         }
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -872,29 +853,7 @@ class Command(BaseCommand):
                 seo=seo,
                 project_title=project_title,
             )
-        if do_xlsx:
-            self.stdout.write("- table (xlsx)")
-            tables.write_table_xlsx(
-                graph_data,
-                measures_labels,
-                strategies,
-                output_filename=os.path.join(root_target, "channel_table.xlsx"),
-                project_title=project_title,
-            )
-            self.stdout.write("- network table (xlsx)")
-            tables.write_network_table_xlsx(
-                community_table_data,
-                strategies,
-                output_filename=os.path.join(root_target, "network_table.xlsx"),
-                project_title=project_title,
-            )
-            self.stdout.write("- community table (xlsx)")
-            tables.write_community_table_xlsx(
-                community_table_data,
-                strategies,
-                output_filename=os.path.join(root_target, "community_table.xlsx"),
-                project_title=project_title,
-            )
+        # XLSX written after the timeline loop so year sheets can be included.
 
         if do_consensus_matrix:
             self.stdout.write("- consensus matrix (html)")
@@ -953,6 +912,40 @@ class Command(BaseCommand):
                         timeline_entries.append(entry)
                 if timeline_entries:
                     tables.write_timeline_json(timeline_entries, graph_dir=root_target)
+
+        if do_xlsx:
+            year_xlsx = [
+                (e["year"], e["_xlsx_graph_data"], e["_xlsx_community_data"])
+                for e in timeline_entries
+                if e.get("_xlsx_graph_data") is not None
+            ]
+            channel_years = [(yr, gd) for yr, gd, _ in year_xlsx] or None
+            network_years = [(yr, ctd) for yr, _, ctd in year_xlsx if ctd is not None] or None
+            self.stdout.write("- table (xlsx)")
+            tables.write_table_xlsx(
+                graph_data,
+                measures_labels,
+                strategies,
+                output_filename=os.path.join(root_target, "channel_table.xlsx"),
+                project_title=project_title,
+                year_data=channel_years,
+            )
+            self.stdout.write("- network table (xlsx)")
+            tables.write_network_table_xlsx(
+                community_table_data,
+                strategies,
+                output_filename=os.path.join(root_target, "network_table.xlsx"),
+                project_title=project_title,
+                year_data=network_years,
+            )
+            self.stdout.write("- community table (xlsx)")
+            tables.write_community_table_xlsx(
+                community_table_data,
+                strategies,
+                output_filename=os.path.join(root_target, "community_table.xlsx"),
+                project_title=project_title,
+                year_data=network_years,
+            )
 
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)

@@ -61,18 +61,11 @@ def write_table_xlsx(
     strategies: list[str],
     output_filename: str,
     project_title: str = "",
+    year_data: "list[tuple[int, GraphData]] | None" = None,
 ) -> None:
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    nodes = sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True)
-
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    ws = wb.active
-    ws.title = "Channels"
 
     headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
@@ -80,29 +73,42 @@ def write_table_xlsx(
     headers += [lbl for _, lbl in other_extra]
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
 
-    for node in nodes:
-        communities = node.get("communities") or {}
-        row: list[Any] = [
-            node.get("label") or node["id"],
-            node.get("url") or "",
-            node.get("fans"),
-            node.get("messages_count"),
-            node.get("in_deg"),
-            node.get("out_deg"),
-        ]
-        if pagerank_col:
-            row.append(node.get(pagerank_col[0]))
-        for key, _ in other_extra:
-            row.append(node.get(key))
-        for s in strategies:
-            row.append(communities.get(s, ""))
-        row.append(node.get("activity_start") or "")
-        row.append(node.get("activity_end") or "")
-        ws.append(row)
+    def _fill(ws: Any, gd: GraphData) -> None:
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for node in sorted(gd["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True):
+            communities = node.get("communities") or {}
+            row: list[Any] = [
+                node.get("label") or node["id"],
+                node.get("url") or "",
+                node.get("fans"),
+                node.get("messages_count"),
+                node.get("in_deg"),
+                node.get("out_deg"),
+            ]
+            if pagerank_col:
+                row.append(node.get(pagerank_col[0]))
+            for key, _ in other_extra:
+                row.append(node.get(key))
+            for s in strategies:
+                row.append(communities.get(s, ""))
+            row.append(node.get("activity_start") or "")
+            row.append(node.get("activity_end") or "")
+            ws.append(row)
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    ws = wb.active
+    ws.title = "All" if year_data else "Channels"
+    _fill(ws, graph_data)
+
+    if year_data:
+        for yr, yr_gd in year_data:
+            _fill(wb.create_sheet(title=str(yr)), yr_gd)
 
     wb.save(output_filename)
 
@@ -165,31 +171,37 @@ def write_network_table_xlsx(
     strategies: list[str],
     output_filename: str,
     project_title: str = "",
+    year_data: "list[tuple[int, CommunityTableData]] | None" = None,
 ) -> None:
-    summary = community_table_data["network_summary"]
+    def _fill(ws: Any, ctd: CommunityTableData) -> None:
+        summary = ctd["network_summary"]
+        ws.append(["Metric", "Value"])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for label, value, _group in network_summary_rows(summary):
+            ws.append([label, value])
+        if not summary["path_on_full"]:
+            ws.append([])
+            ws.append(["† Computed on the largest weakly connected component (undirected)"])
+        ws.append([])
+        ws.append(["Strategy", "Modularity"])
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+        for strategy_key in strategies:
+            entry = ctd["strategies"].get(strategy_key)
+            ws.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+
     wb = openpyxl.Workbook()
     wb.properties.creator = "Pulpit"
     if project_title:
         wb.properties.title = project_title
-
     ws = wb.active
-    ws.title = "Network"
-    ws.append(["Metric", "Value"])
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for label, value, _group in network_summary_rows(summary):
-        ws.append([label, value])
-    if not summary["path_on_full"]:
-        ws.append([])
-        ws.append(["† Computed on the largest weakly connected component (undirected)"])
+    ws.title = "All" if year_data else "Network"
+    _fill(ws, community_table_data)
 
-    ws.append([])
-    ws.append(["Strategy", "Modularity"])
-    for cell in ws[ws.max_row]:
-        cell.font = Font(bold=True)
-    for strategy_key in strategies:
-        entry = community_table_data["strategies"].get(strategy_key)
-        ws.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+    if year_data:
+        for yr, yr_ctd in year_data:
+            _fill(wb.create_sheet(title=str(yr)), yr_ctd)
 
     wb.save(output_filename)
 
@@ -307,6 +319,7 @@ def write_community_table_xlsx(
     strategies: list[str],
     output_filename: str,
     project_title: str = "",
+    year_data: "list[tuple[int, CommunityTableData]] | None" = None,
 ) -> None:
     _HEADERS = [
         "Community",
@@ -322,23 +335,19 @@ def write_community_table_xlsx(
         "Channels",
     ]
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)  # no default sheet needed
-
-    # One sheet per strategy
-    for strategy_key in strategies:
-        strategy_entry = community_table_data["strategies"].get(strategy_key)
+    def _fill_strategy(ws: Any, strategy_key: str, ctd: CommunityTableData, first: bool = True) -> None:
+        strategy_entry = ctd["strategies"].get(strategy_key)
         if not strategy_entry:
-            continue
-        rows = strategy_entry["rows"]
-        ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
+            return
+        if not first:
+            ws.append([])  # blank separator between strategies
+        heading_row = ws.max_row + 1
+        ws.append([strategy_key.capitalize()])
+        ws.cell(row=heading_row, column=1).font = Font(bold=True)
         ws.append(_HEADERS)
-        for cell in ws[1]:
+        for cell in ws[ws.max_row]:
             cell.font = Font(bold=True)
-        for entry in rows:
+        for entry in strategy_entry["rows"]:
             _community_id, _count, label, hex_color = entry["group"]
             hex_color = str(hex_color).lstrip("#")
             metrics = entry["metrics"]
@@ -363,6 +372,27 @@ def write_community_table_xlsx(
                 ws.cell(row=ws.max_row, column=1).fill = fill
             except Exception:
                 pass
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+
+    if year_data:
+        # One sheet per year; each sheet lists all strategies sequentially
+        ws_all = wb.create_sheet(title="All")
+        for i, sk in enumerate(strategies):
+            _fill_strategy(ws_all, sk, community_table_data, first=(i == 0))
+        for yr, yr_ctd in year_data:
+            ws_yr = wb.create_sheet(title=str(yr))
+            for i, sk in enumerate(strategies):
+                _fill_strategy(ws_yr, sk, yr_ctd, first=(i == 0))
+    else:
+        # One sheet per strategy (original format)
+        for strategy_key in strategies:
+            ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
+            _fill_strategy(ws, strategy_key, community_table_data)
 
     wb.save(output_filename)
 
