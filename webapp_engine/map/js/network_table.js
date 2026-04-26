@@ -407,8 +407,8 @@ Promise.all([
     fetch(_dd + "network_metrics.json").then(function(r) { return r.json(); }),
     fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
     fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch("data/network_metrics.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetch(_base_dd + "network_metrics.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
 ]).then(function(results) {
     var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
 

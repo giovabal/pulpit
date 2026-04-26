@@ -352,7 +352,7 @@ function _switch_year(year) {
 Promise.all([
     fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
     fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };
     var timeline = results[2];

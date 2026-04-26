@@ -229,7 +229,7 @@ Promise.all([
     fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
     fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
     fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch("data/timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
     _cache[_current_year] = { channels: results[0], communities: results[1], meta: results[2] };
     var timeline = results[3];
