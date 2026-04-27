@@ -244,6 +244,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--channel-groups",
+            dest="channel_groups",
+            default=None,
+            metavar="GROUPS",
+            help=(
+                "Comma-separated list of ChannelGroup names. "
+                "When provided, only channels belonging to at least one of these groups are included in the graph. "
+                "Leave unset to include all interesting channels regardless of group membership."
+            ),
+        )
+        parser.add_argument(
             "--timeline-step",
             dest="timeline_step",
             default="none",
@@ -534,6 +545,7 @@ class Command(BaseCommand):
         do_xlsx: bool,
         do_consensus_matrix: bool,
         channel_types: list[str],
+        channel_groups: list[str],
         edge_weight_strategy: str,
         fa2_iterations: int,
         target_layout: str,
@@ -556,6 +568,7 @@ class Command(BaseCommand):
                 end_date=end_date,
                 recency_weights=options["recency_weights"],
                 channel_types=channel_types,
+                channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
             )
         except ValueError as e:
@@ -712,6 +725,8 @@ class Command(BaseCommand):
         channel_types = (
             _parse_csv(channel_types_raw) if channel_types_raw is not None else settings.DEFAULT_CHANNEL_TYPES
         )
+        channel_groups_raw = options["channel_groups"]
+        channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
         edge_weight_strategy: str = options["edge_weight_strategy"]
         bridging_token = self._validate_settings(
             communities_strategy, network_measures, channel_types, edge_weight_strategy
@@ -743,6 +758,7 @@ class Command(BaseCommand):
                 end_date=end_date,
                 recency_weights=options["recency_weights"],
                 channel_types=channel_types,
+                channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
             )
         except ValueError as e:
@@ -899,6 +915,7 @@ class Command(BaseCommand):
                         do_xlsx,
                         do_consensus_matrix,
                         channel_types,
+                        channel_groups,
                         edge_weight_strategy,
                         fa2_iterations,
                         target_layout,

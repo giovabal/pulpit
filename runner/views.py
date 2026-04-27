@@ -8,7 +8,7 @@ from django.shortcuts import render
 from django.views import View
 
 from runner import tasks
-from webapp.models import SearchTerm
+from webapp.models import ChannelGroup, SearchTerm
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "get_channels": {
@@ -40,10 +40,15 @@ class OperationsView(View):
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
+        channel_groups = list(ChannelGroup.objects.values_list("name", flat=True))
         return render(
             request,
             "runner/operations.html",
-            {"tasks": task_info, "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES)},
+            {
+                "tasks": task_info,
+                "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
+                "channel_groups": channel_groups,
+            },
         )
 
 
@@ -163,6 +168,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]
+        channel_groups = post.getlist("channel_groups")
+        if channel_groups:
+            args += ["--channel-groups", ",".join(channel_groups)]
 
     elif task == "search_channels":
         amount = post.get("amount", "").strip()
@@ -233,6 +241,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
         if channel_types:
             args += ["--channel-types", ",".join(channel_types)]
+        channel_groups = post.getlist("channel_groups")
+        if channel_groups:
+            args += ["--channel-groups", ",".join(channel_groups)]
         if post.get("timeline_step"):
             args += ["--timeline-step", "year"]
 

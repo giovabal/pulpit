@@ -3,7 +3,7 @@ from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpRequest
 from django.utils.html import format_html
 
-from .models import Channel, Message, MessagePicture, Organization, ProfilePicture, SearchTerm
+from .models import Channel, ChannelGroup, Message, MessagePicture, Organization, ProfilePicture, SearchTerm
 
 
 @admin.register(Channel)
@@ -21,7 +21,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "organization",
     )
     list_editable = ("organization",)
-    list_filter = ("organization__is_interesting", "broadcast", "organization")
+    list_filter = ("organization__is_interesting", "broadcast", "organization", "groups")
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
@@ -93,6 +93,17 @@ class MessageAdmin(admin.ModelAdmin):
 class SearchTermAdmin(admin.ModelAdmin):
     list_display = ("word", "last_check")
     fieldsets = ((None, {"fields": ("word",)}),)
+
+
+@admin.register(ChannelGroup)
+class ChannelGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "channel_count", "description")
+    search_fields = ("name",)
+    filter_horizontal = ("channels",)
+
+    @admin.display(description="Channels")
+    def channel_count(self, obj: ChannelGroup) -> int:
+        return obj.channels.count()
 
 
 @admin.register(Organization)

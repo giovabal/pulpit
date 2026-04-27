@@ -112,6 +112,7 @@ def build_graph(
     end_date: datetime.date | None = None,
     recency_weights: int | None = None,
     channel_types: list[str] | None = None,
+    channel_groups: list[str] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
@@ -136,6 +137,8 @@ def build_graph(
             )
         )
     )
+    if channel_groups:
+        channel_qs = channel_qs.filter(groups__name__in=channel_groups).distinct()
 
     _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()

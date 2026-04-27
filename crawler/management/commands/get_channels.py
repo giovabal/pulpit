@@ -175,6 +175,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--channel-groups",
+            dest="channel_groups",
+            default=None,
+            metavar="GROUPS",
+            help=(
+                "Comma-separated list of ChannelGroup names. "
+                "When provided, only channels belonging to at least one of these groups are crawled. "
+                "Leave unset to crawl all interesting channels regardless of group membership."
+            ),
+        )
+        parser.add_argument(
             "--fix-missing-media",
             action="store_true",
             default=False,
@@ -407,6 +418,10 @@ class Command(BaseCommand):
             .exclude(is_lost=True)
             .exclude(is_private=True)
         )
+        channel_groups_raw = options.get("channel_groups")
+        channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
+        if channel_groups:
+            interesting_qs = interesting_qs.filter(groups__name__in=channel_groups).distinct()
         messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
