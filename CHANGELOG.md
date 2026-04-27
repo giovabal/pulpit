@@ -9,10 +9,16 @@
 - **Timeline sparklines in `network_table.html`**: when a year-by-year timeline has been exported, each row in the Network Statistics table shows a mini bar chart between the metric label and its value. The first bar represents the full-range ("All") value in blue; subsequent bars show each year's value in gray. The active view's bar is highlighted in solid blue. Hovering a bar shows the exact value.
 - **In-page year switcher for all three HTML tables**: `channel_table.html`, `network_table.html`, and `community_table.html` now share a single-page year navigator identical in spirit to the graph views. Clicking a year button re-fetches and re-renders the page content without a reload; fetched data is cached so revisiting a year is instant. The degree-distribution and scatter charts on the Network Statistics page update in place when the year changes.
 - **Timeline XLSX as multi-sheet workbooks**: when a year-by-year timeline is exported, the three spreadsheet files (`channel_table.xlsx`, `network_table.xlsx`, `community_table.xlsx`) now contain one sheet per time range — **All** for the full-range view plus one sheet per calendar year — instead of producing separate per-year files. The community table uses one sheet per year, with all strategies listed sequentially within each sheet.
+- **In-page year switcher for `consensus_matrix.html`**: the consensus matrix page now follows the same single-page year-switching pattern as the other table pages.
+- **On-demand per-channel sparklines in `channel_table.html`**: each channel row gains a small bar-chart button (visible when a timeline is present). Clicking it lazily fetches all per-year `channels.json` files in parallel (cached after the first load) and expands inline mini bar charts next to every numeric measure cell, showing how that channel's metrics evolved year by year. The Users column is excluded (subscriber counts are not per-year). Open rows survive year switches — charts re-render with the newly selected year highlighted.
+- **Compare Networks directory scanner**: the *Project directory* field in the Compare Networks panel now has a **Find exports** button. It queries a new `/operations/graph-dirs/` endpoint that scans sibling directories for valid graph exports, reading `data/meta.json` to surface project title, export date, and node count. Results appear as a scrollable picker; clicking a row fills the path input.
 
 ### Improvements
 - New fonts and reworked details for most of the webapp and HTML output.
 - Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.
+
+### Fixes
+- **MCL verbose stderr**: `markov_clustering` prints "Matplotlib not present" and "Visualization not supported" to stderr on headless systems when its optional drawing module fails to import. Fixed by setting `MPLBACKEND=Agg` in the subprocess environment so the import succeeds silently.
 
 
 ## [0.13] - 2026-04-20
