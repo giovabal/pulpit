@@ -138,8 +138,7 @@
             /* name */
             var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
             var nameWrap = document.createElement("div");
-            var nameEl = document.createElement("a"); nameEl.className = "bo-ch-name";
-            nameEl.href = "/manage/channels/" + ch.id + "/";
+            var nameEl = document.createElement("div"); nameEl.className = "bo-ch-name";
             nameEl.textContent = ch.title || ("ID " + ch.id);
             nameWrap.appendChild(nameEl);
             if (ch.username) {
