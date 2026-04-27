@@ -44,7 +44,7 @@ function showToast(message, type) {
 }
 
 function confirmDelete(name) {
-    return Promise.resolve(confirm("Delete "" + name + ""? This cannot be undone."));
+    return Promise.resolve(confirm('Delete "' + name + '"? This cannot be undone.'));
 }
 
 function fmtInt(n) {
