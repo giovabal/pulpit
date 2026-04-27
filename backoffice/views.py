@@ -23,6 +23,15 @@ class ChannelsView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/channels.html"
 
 
+class ChannelUpdateView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/channel_update.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["channel_pk"] = self.kwargs["pk"]
+        return ctx
+
+
 class OrganizationsView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/organizations.html"
 

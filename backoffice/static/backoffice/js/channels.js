@@ -131,12 +131,15 @@
 
             /* id */
             var tdId = document.createElement("td"); tdId.className = "bo-td--num bo-td--id";
-            tdId.textContent = ch.id; tr.appendChild(tdId);
+            var idLink = document.createElement("a"); idLink.href = "/manage/channels/" + ch.id + "/";
+            idLink.textContent = ch.id;
+            tdId.appendChild(idLink); tr.appendChild(tdId);
 
             /* name */
             var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
             var nameWrap = document.createElement("div");
-            var nameEl = document.createElement("div"); nameEl.className = "bo-ch-name";
+            var nameEl = document.createElement("a"); nameEl.className = "bo-ch-name";
+            nameEl.href = "/manage/channels/" + ch.id + "/";
             nameEl.textContent = ch.title || ("ID " + ch.id);
             nameWrap.appendChild(nameEl);
             if (ch.username) {

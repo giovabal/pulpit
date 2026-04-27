@@ -1,0 +1,16 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<script>var CHANNEL_PK = {{ channel_pk }};</script>
+
+<div class="bo-ch-update" id="bo-ch-update">
+  <div class="bo-ch-update-loading">Loading…</div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/channel_update.js' %}"></script>
+{% endblock extra_scripts %}

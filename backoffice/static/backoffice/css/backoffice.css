@@ -185,7 +185,8 @@
 /* ── Channel name cell ──────────────────────────────────────────────────── */
 
 .bo-ch-cell { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.bo-ch-name { font-weight: 500; }
+.bo-ch-name { font-weight: 500; color: var(--text); text-decoration: none; }
+.bo-ch-name:hover { color: var(--accent); text-decoration: underline; }
 .bo-ch-username { font-size: .8125rem; color: var(--muted); font-family: var(--font-mono); text-decoration: none; }
 .bo-ch-username:hover { color: var(--accent); text-decoration: underline; }
 .bo-ch-pic { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -395,6 +396,58 @@
   border-radius: var(--radius);
   padding: var(--space-4);
 }
+
+/* ── Channel update page ────────────────────────────────────────────────── */
+
+.bo-ch-update { max-width: 680px; }
+.bo-ch-update-loading { color: var(--muted); padding: var(--space-5); }
+
+.bo-ch-update-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.bo-ch-update-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.bo-ch-update-pic {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.bo-ch-update-name { font-size: 1.25rem; font-weight: 700; margin: 0 0 .25rem; }
+
+.bo-ch-update-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.bo-info-cell { min-width: 6rem; }
+.bo-info-label { font-size: .75rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .125rem; }
+.bo-info-value { font-size: .9375rem; font-weight: 500; }
+
+.bo-ch-update-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.bo-field-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.bo-field-label { font-size: .875rem; font-weight: 600; color: var(--text); }
+
+.bo-ch-update-groups { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+
+.bo-ch-update-btns { display: flex; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); margin-top: var(--space-2); }
 
 /* ── Toast ──────────────────────────────────────────────────────────────── */
 
