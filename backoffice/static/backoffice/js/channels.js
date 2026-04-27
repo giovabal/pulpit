@@ -140,7 +140,9 @@
             nameEl.textContent = ch.title || ("ID " + ch.id);
             nameWrap.appendChild(nameEl);
             if (ch.username) {
-                var unEl = document.createElement("div"); unEl.className = "bo-ch-username";
+                var unEl = document.createElement("a"); unEl.className = "bo-ch-username";
+                unEl.href = "https://t.me/" + ch.username;
+                unEl.target = "_blank"; unEl.rel = "noopener noreferrer";
                 unEl.textContent = "@" + ch.username;
                 nameWrap.appendChild(unEl);
             }
