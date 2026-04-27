@@ -218,13 +218,13 @@ function _switch_year(year) {
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year);
-    _fetch_year(year).then(function(d) { _render(d); _loading = false; });
+    _fetch_year(year).then(function(d) { _render(d); _loading = false; }).catch(function() { _loading = false; });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };

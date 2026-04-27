@@ -37,7 +37,7 @@ def apply_base_node_measures(
     }
     activity_bounds: dict[int, dict] = {
         item["channel_id"]: {"min_date": item["min_date"], "max_date": item["max_date"]}
-        for item in Message.objects.filter(channel_id__in=channel_pks, date__isnull=False)
+        for item in Message.objects.filter(msg_q, date__isnull=False)
         .values("channel_id")
         .annotate(min_date=Min("date"), max_date=Max("date"))
     }

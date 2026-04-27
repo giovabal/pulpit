@@ -1,5 +1,7 @@
 # Proposals for Pulpit: New Features and Improvements
 
+- Organization change overtime
+- Custom admin
 
 ## 3. Content & Semantic Analysis
 
@@ -68,16 +70,6 @@ Telegram messages have emoji reactions. Store `Message.reactions` as a JSON fiel
 ### 7.2 — Channel health dashboard
 
 New Django admin view showing, for each channel: days since last crawl, message gap density (holes), whether `is_lost` is set, days since last subscriber count update. Lets operators quickly identify stale data.
-
----
-
-## 8. Community Detection Enhancements
-
-### 8.2 — CPM (Constant Potts Model) for Leiden
-
-The Leiden algorithm in `leidenalg` supports multiple quality functions. Standard modularity has a resolution limit: it fails to find small communities in large networks. CPM does not. Adding a `LEIDEN_CPM` strategy alongside `LEIDEN` lets researchers compare and identify small communities that modularity-based detection merges into larger ones.
-
-**Academic basis:** Traag et al. (2019) introduced CPM as a resolution-limit-free alternative to modularity within the Leiden framework.
 
 ---
 

@@ -216,7 +216,7 @@ function _render_modularity(data) {
             vspan.className = "spark-val";
             vspan.textContent = row.value;
             inner.appendChild(vspan); td2.appendChild(inner);
-            td2.dataset.sort = row.value;
+            td2.setAttribute("data-sort-value", row.value);
         } else { td2.textContent = row.value; }
         tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
     });
@@ -332,9 +332,8 @@ function _build_scatter_section() {
         },
     });
 
-    function _updateChart() { _update_scatter_chart(); }
-    _xSel.addEventListener("change", _updateChart);
-    _ySel.addEventListener("change", _updateChart);
+    _xSel.addEventListener("change", _update_scatter_chart);
+    _ySel.addEventListener("change", _update_scatter_chart);
     resetBtn.addEventListener("click", function() { _scatterChart.resetZoom(); });
 }
 
@@ -355,16 +354,16 @@ function _switch_year(year) {
         _update_dist_chart();
         _update_scatter_chart();
         _loading = false;
-    });
+    }).catch(function() { _loading = false; });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "network_metrics.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_base_dd + "network_metrics.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_base_dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }).catch(function() { return null; }),
 ]).then(function(results) {
     var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
 

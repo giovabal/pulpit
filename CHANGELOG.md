@@ -1,7 +1,7 @@
 # Changelog
 
-## [0.14] - To be announced
-*Year-by-year timeline export with animated year switcher in 2D and 3D graph. Layout improvements.*
+## [0.14] - 2026-04-27
+*Year-by-year timeline export. Layout improvements.*
 
 ### New features
 - **Timeline export** (`--timeline-step year` / *Timeline by year* in the Operations panel): repeats the full export pipeline for each calendar year present in the message data. Produces per-year data directories (`data_YYYY/`) and optional per-year HTML tables and spreadsheets. A `data/timeline.json` index is written listing every generated year.
@@ -16,10 +16,6 @@
 ### Improvements
 - New fonts and reworked details for most of the webapp and HTML output.
 - Operations panel: measures and community strategies now rendered as chip checkboxes instead of a multi-select list. Each chip carries a directional (`→`) or undirectional (`↔`) icon indicating whether the algorithm uses edge direction or symmetrises the graph first. ORGANIZATION carries no icon as it is metadata-based.
-
-### Fixes
-- **MCL verbose stderr**: `markov_clustering` prints "Matplotlib not present" and "Visualization not supported" to stderr on headless systems when its optional drawing module fails to import. Fixed by setting `MPLBACKEND=Agg` in the subprocess environment so the import succeeds silently.
-
 
 ## [0.13] - 2026-04-20
 *New community detection algorithms. Consensus matrix. Events timeline.*

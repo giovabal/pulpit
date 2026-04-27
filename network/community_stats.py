@@ -271,7 +271,7 @@ def _compute_strategy_entry(
     label_to_nodes: dict[str, set[str]] = defaultdict(set)
     for node in graph_data["nodes"]:
         lbl = (node.get("communities") or {}).get(strategy_key)
-        if lbl:
+        if lbl is not None:
             label_to_nodes[lbl].add(node["id"])
 
     rows = []

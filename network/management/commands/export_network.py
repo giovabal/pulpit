@@ -830,7 +830,6 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
             )
-        if need_community_metrics:
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
         if do_html:

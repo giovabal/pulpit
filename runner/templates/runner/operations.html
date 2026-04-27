@@ -618,13 +618,13 @@
   function syncLinkedInputs() {
     document.querySelectorAll('[data-requires-measure]').forEach(function (input) {
       var cb = document.querySelector('input[name="measures"][value="' + input.dataset.requiresMeasure + '"]');
-      var on = !cb || cb.checked;
+      var on = cb ? cb.checked : false;
       input.disabled = !on;
       input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
     });
     document.querySelectorAll('[data-requires-strategy]').forEach(function (input) {
       var cb = document.querySelector('input[name="community_strategies"][value="' + input.dataset.requiresStrategy + '"]');
-      var on = !cb || cb.checked;
+      var on = cb ? cb.checked : false;
       input.disabled = !on;
       input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
     });
@@ -633,57 +633,61 @@
   document.querySelectorAll('input[name="measures"], input[name="community_strategies"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
   });
-})();
 
-function opsGraphDirScan(btn) {
-  var resultsEl = document.getElementById('graph-dir-results');
-  var input = document.getElementById('project_dir');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning…';
-  fetch('{% url "operations-graph-dirs" %}')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      resultsEl.innerHTML = '';
-      var dirs = data.dirs || [];
-      if (!dirs.length) {
-        resultsEl.textContent = 'No exported graph directories found.';
-        resultsEl.style.display = '';
-        return;
-      }
-      dirs.forEach(function(d) {
-        var item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'ops-dir-item';
-        var pathSpan = document.createElement('span');
-        pathSpan.className = 'ops-dir-path';
-        pathSpan.textContent = d.path;
-        item.appendChild(pathSpan);
-        var meta = [];
-        if (d.title) meta.push(d.title);
-        if (d.export_date) meta.push(d.export_date);
-        if (d.total_nodes != null) meta.push(d.total_nodes + ' nodes');
-        if (meta.length) {
-          var metaSpan = document.createElement('span');
-          metaSpan.className = 'ops-dir-meta';
-          metaSpan.textContent = meta.join(' · ');
-          item.appendChild(metaSpan);
+  var _graphDirScanning = false;
+  window.opsGraphDirScan = function (btn) {
+    if (_graphDirScanning) return;
+    _graphDirScanning = true;
+    var resultsEl = document.getElementById('graph-dir-results');
+    var input = document.getElementById('project_dir');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning…';
+    fetch('{% url "operations-graph-dirs" %}')
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+      .then(function(data) {
+        resultsEl.innerHTML = '';
+        var dirs = data.dirs || [];
+        if (!dirs.length) {
+          resultsEl.textContent = 'No exported graph directories found.';
+          resultsEl.style.display = '';
+          return;
         }
-        item.addEventListener('click', function() {
-          input.value = d.path;
-          resultsEl.style.display = 'none';
+        dirs.forEach(function(d) {
+          var item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'ops-dir-item';
+          var pathSpan = document.createElement('span');
+          pathSpan.className = 'ops-dir-path';
+          pathSpan.textContent = d.path;
+          item.appendChild(pathSpan);
+          var meta = [];
+          if (d.title) meta.push(d.title);
+          if (d.export_date) meta.push(d.export_date);
+          if (d.total_nodes != null) meta.push(d.total_nodes + ' nodes');
+          if (meta.length) {
+            var metaSpan = document.createElement('span');
+            metaSpan.className = 'ops-dir-meta';
+            metaSpan.textContent = meta.join(' · ');
+            item.appendChild(metaSpan);
+          }
+          item.addEventListener('click', function() {
+            input.value = d.path;
+            resultsEl.style.display = 'none';
+          });
+          resultsEl.appendChild(item);
         });
-        resultsEl.appendChild(item);
+        resultsEl.style.display = '';
+      })
+      .catch(function() {
+        resultsEl.textContent = 'Scan failed.';
+        resultsEl.style.display = '';
+      })
+      .finally(function() {
+        _graphDirScanning = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-folder-symlink"></i> Find exports';
       });
-      resultsEl.style.display = '';
-    })
-    .catch(function() {
-      resultsEl.textContent = 'Scan failed.';
-      resultsEl.style.display = '';
-    })
-    .finally(function() {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-folder-symlink"></i> Find exports';
-    });
-}
+  };
+})();
 </script>
 {% endblock extra_scripts %}

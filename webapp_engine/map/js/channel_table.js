@@ -3,9 +3,9 @@ import { mini_hist } from './charts.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
-var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_auth":1,"katz":1,"harmonic_centrality":1,"in_deg_centrality":1,"out_deg_centrality":1};
-var STRUCTURAL_KEYS = {"betweenness":1,"flow_betweenness":1,"bridging":1,"burt_constraint":1};
-var CONTENT_KEYS = {"content_originality":1,"amplification":1,"spreading":1};
+var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"katz_centrality":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
+var STRUCTURAL_KEYS = {"betweenness":1,"flow_betweenness":1,"bridging_centrality":1,"burt_constraint":1};
+var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"Inbound","out_deg":"Outbound","fans":"Users","messages_count":"Messages"};
 var COL_TOOLTIPS = {
@@ -15,18 +15,18 @@ var COL_TOOLTIPS = {
     "messages_count":     "Number of messages collected in the analysis period",
     "pagerank":           "PageRank: steady-state visit probability in a random walk; higher → more central",
     "hits_hub":           "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
-    "hits_auth":          "HITS authority score: propensity to be cited by hub channels; high → important source",
-    "betweenness":        "Betweenness centrality (normalized): fraction of shortest paths passing through this node",
-    "flow_betweenness":   "Random-walk betweenness centrality; less sensitive to specific path structure",
-    "in_deg_centrality":  "Normalized in-degree centrality: in-degree / (n−1)",
-    "out_deg_centrality": "Normalized out-degree centrality: out-degree / (n−1)",
-    "harmonic_centrality":"Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
-    "katz":               "Katz centrality: counts all directed paths with exponential penalization for length",
-    "bridging":           "Bridging centrality: betweenness × cross-community Shannon entropy; high → information broker",
-    "burt_constraint":    "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
-    "content_originality":"Content originality (0–1): share of messages that are not forwards",
-    "amplification":      "Amplification factor: forwards received from tracked channels per own message",
-    "spreading":          "Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
+    "hits_authority":      "HITS authority score: propensity to be cited by hub channels; high → important source",
+    "betweenness":         "Betweenness centrality (normalized): fraction of shortest paths passing through this node",
+    "flow_betweenness":    "Random-walk betweenness centrality; less sensitive to specific path structure",
+    "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
+    "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
+    "harmonic_centrality": "Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
+    "katz_centrality":     "Katz centrality: counts all directed paths with exponential penalization for length",
+    "bridging_centrality": "Bridging centrality: betweenness × cross-community Shannon entropy; high → information broker",
+    "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
+    "content_originality": "Content originality (0–1): share of messages that are not forwards",
+    "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
+    "spreading_efficiency":"Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
 };
 
 // ── Module-level state ─────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ var _SPARK_SKIP = { fans: true };
 var _open_nodes = {};
 
 function _expand_row(btn, tr, node) {
-    _load_year_channels().then(function() {
+    return _load_year_channels().then(function() {
         tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
             var key = td.dataset.colKey;
             var all_node = _yr_channels["all"] && _yr_channels["all"][node.id];
@@ -287,18 +287,7 @@ function _render(d) {
     });
     tbody.appendChild(fragment);
 
-    // Re-expand rows that were open before this render (year switch keeps sparklines alive)
-    if (has_spark && Object.keys(_open_nodes).length) {
-        tbody.querySelectorAll("tr[data-node-id]").forEach(function(tr) {
-            var nid = tr.dataset.nodeId;
-            if (_open_nodes[nid] && nodeById[nid]) {
-                var btn = tr.querySelector(".channel-toggle");
-                if (btn) _expand_row(btn, tr, nodeById[nid]);
-            }
-        });
-    }
-
-    // tfoot
+    // tfoot — Mean ± SD per numeric column
     function colMeanSd(key) {
         var vals = nodes.map(function(n) { return n[key]; }).filter(function(v) { return v !== null && v !== undefined; });
         if (!vals.length) return "—";
@@ -328,6 +317,20 @@ function _render(d) {
     document.getElementById("channel-count").textContent =
         nodes.length + " channel" + (nodes.length !== 1 ? "s" : "") + ". Click column headers to sort.";
     initSortableTables();
+
+    // Re-expand rows that were open before this render (year switch keeps sparklines alive).
+    // Collect promises so _switch_year can wait for all re-expansions before clearing _loading.
+    var reexpand = [];
+    if (has_spark && Object.keys(_open_nodes).length) {
+        tbody.querySelectorAll("tr[data-node-id]").forEach(function(tr) {
+            var nid = tr.dataset.nodeId;
+            if (_open_nodes[nid] && nodeById[nid]) {
+                var btn = tr.querySelector(".channel-toggle");
+                if (btn) reexpand.push(_expand_row(btn, tr, nodeById[nid]));
+            }
+        });
+    }
+    return Promise.all(reexpand);
 }
 
 // ── Year switching ─────────────────────────────────────────────────────────────
@@ -336,14 +339,14 @@ function _switch_year(year) {
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year);
-    _fetch_year(year).then(function(d) { _render(d); _loading = false; });
+    _fetch_year(year).then(function(d) { return _render(d); }).then(function() { _loading = false; }).catch(function() { _loading = false; });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "channels.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
     _cache[_current_year] = { channels: results[0], communities: results[1], meta: results[2] };

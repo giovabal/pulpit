@@ -173,14 +173,18 @@ def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, C
 
     undirected = graph.to_undirected(reciprocal=False)
     ig_graph = ig.Graph(n=len(node_ids), directed=False)
-    edges = [(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()]
-    weights = [undirected.edges[s, t].get("weight", 1.0) for s, t in undirected.edges()]
+    edges, weights = [], []
+    for s, t in undirected.edges():
+        edges.append((node_id_map[s], node_id_map[t]))
+        weights.append(undirected.edges[s, t].get("weight", 1.0))
     ig_graph.add_edges(edges)
+    if weights:
+        ig_graph.es["weight"] = weights
 
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.ModularityVertexPartition,
-        weights=weights if weights else None,
+        weights="weight" if weights else None,
         seed=0,
     )
 
@@ -236,8 +240,10 @@ def _build_undirected_igraph(
     """Build an undirected igraph from a NetworkX DiGraph, symmetrising edges."""
     undirected = graph.to_undirected(reciprocal=False)
     ig_graph = ig.Graph(n=len(node_ids), directed=False)
-    edges = [(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()]
-    weights = [undirected.edges[s, t].get("weight", 1.0) for s, t in undirected.edges()]
+    edges, weights = [], []
+    for s, t in undirected.edges():
+        edges.append((node_id_map[s], node_id_map[t]))
+        weights.append(undirected.edges[s, t].get("weight", 1.0))
     ig_graph.add_edges(edges)
     return ig_graph, weights
 

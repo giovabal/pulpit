@@ -137,7 +137,7 @@ def write_network_metrics_json(
     for strategy_key in strategies:
         entry = community_table_data["strategies"].get(strategy_key)
         mod = entry["modularity"] if entry else None
-        modularity_rows.append({"strategy": strategy_key.capitalize(), "value": _fmt(mod) if mod is not None else "—"})
+        modularity_rows.append({"strategy": strategy_key, "value": _fmt(mod) if mod is not None else "—"})
 
     payload = {
         "wcc_note_visible": not summary["path_on_full"],
@@ -301,12 +301,8 @@ def write_network_compare_table_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    if seo:
-        title = f"{project_title} | Network comparison" if project_title else "Network comparison"
-        robots_meta = "index, follow"
-    else:
-        title = f"{project_title} | Network comparison" if project_title else "Network comparison"
-        robots_meta = "noindex, nofollow"
+    title = f"{project_title} | Network comparison" if project_title else "Network comparison"
+    robots_meta = "index, follow" if seo else "noindex, nofollow"
 
     context = {"title": title, "robots_meta": robots_meta}
     content = render_to_string("network/network_compare_table.html", context)
@@ -321,7 +317,7 @@ def write_community_table_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, CommunityTableData]] | None" = None,
 ) -> None:
-    _HEADERS = [
+    headers = [
         "Community",
         "Color",
         "Nodes",
@@ -344,7 +340,7 @@ def write_community_table_xlsx(
         heading_row = ws.max_row + 1
         ws.append([strategy_key.capitalize()])
         ws.cell(row=heading_row, column=1).font = Font(bold=True)
-        ws.append(_HEADERS)
+        ws.append(headers)
         for cell in ws[ws.max_row]:
             cell.font = Font(bold=True)
         for entry in strategy_entry["rows"]:
@@ -370,7 +366,7 @@ def write_community_table_xlsx(
             try:
                 fill = PatternFill(start_color=hex_color.upper(), end_color=hex_color.upper(), fill_type="solid")
                 ws.cell(row=ws.max_row, column=1).fill = fill
-            except Exception:
+            except (ValueError, TypeError):
                 pass
 
     wb = openpyxl.Workbook()
@@ -395,14 +391,6 @@ def write_community_table_xlsx(
             _fill_strategy(ws, strategy_key, community_table_data)
 
     wb.save(output_filename)
-
-
-def _metric_cell_dict(val: float | int | None, decimals: int, bg: str) -> dict:
-    if val is None:
-        return {"display": "N/A", "sort_value": "", "style": bg}
-    if decimals == 0:
-        return {"display": str(int(val)), "sort_value": str(int(val)), "style": bg}
-    return {"display": f"{val:.{decimals}f}", "sort_value": str(val), "style": bg}
 
 
 def write_community_metrics_json(
@@ -470,12 +458,8 @@ def write_consensus_matrix_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    if seo:
-        title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
-        robots_meta = "index, follow"
-    else:
-        title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
-        robots_meta = "noindex, nofollow"
+    title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
+    robots_meta = "index, follow" if seo else "noindex, nofollow"
 
     context = {"title": title, "robots_meta": robots_meta}
     content = render_to_string("network/consensus_matrix.html", context)

@@ -1,3 +1,5 @@
+import { strategy_label } from './labels.js';
+
 Promise.all([
     fetch("data/network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     fetch("data_2/network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
@@ -52,7 +54,7 @@ Promise.all([
 
     if (dataA.wcc_note_visible || dataB.wcc_note_visible) {
         var note = document.createElement("p"); note.className = "text-muted small mt-1";
-        note.textContent = "* Computed on the largest weakly connected component (undirected)";
+        note.textContent = "† Computed on the largest weakly connected component (undirected)";
         tablesSection.appendChild(note);
     }
 
@@ -84,7 +86,7 @@ Promise.all([
         var mTbody = document.createElement("tbody");
         allStrategies.forEach(function(strategy) {
             var tr3 = document.createElement("tr");
-            var td1 = document.createElement("td"); td1.textContent = strategy;
+            var td1 = document.createElement("td"); td1.textContent = strategy_label(strategy);
             var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = aMod[strategy] !== undefined ? aMod[strategy] : "N/A";
             var td3 = document.createElement("td"); td3.className = "number"; td3.textContent = bMod[strategy] !== undefined ? bMod[strategy] : "N/A";
             tr3.appendChild(td1); tr3.appendChild(td2); tr3.appendChild(td3);
@@ -354,7 +356,7 @@ Promise.all([
     normalizeChk.addEventListener("change", updateChart);
     resetBtn.addEventListener("click", function() { chart.resetZoom(); });
 }).catch(function(err) {
-    var el = document.getElementById("compare-container") || document.body;
+    var el = document.getElementById("compare-tables-section") || document.body;
     var p = document.createElement("p"); p.textContent = "Failed to load comparison data.";
     el.insertBefore(p, el.firstChild);
     console.error("network_compare_table:", err);

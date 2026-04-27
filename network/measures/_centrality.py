@@ -176,7 +176,7 @@ def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) 
 
     try:
         values: dict[str, float] = nx.current_flow_betweenness_centrality(subgraph, weight="weight")
-    except Exception as exc:
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
         logger.warning("flow_betweenness: computation failed (%s)", exc)
         return []
 

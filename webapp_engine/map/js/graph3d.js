@@ -978,12 +978,15 @@ function reload_graph_3d(data_dir) {
         animate_year_transition_3d(c.pos, c.ch, 700);
     } else {
         Promise.all([
-            fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
-            fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
-            fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+            fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+            fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+            fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
         ]).then(function(results) {
             _apply_accessory_3d(results[1], results[2]);
             animate_year_transition_3d(results[0], results[1], 700);
+        }).catch(function(err) {
+            controls.enabled = true;
+            console.error('reload_graph_3d fetch failed for', data_dir, err);
         });
     }
 }

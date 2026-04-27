@@ -503,7 +503,7 @@ function preload_year(data_dir) {
     return Promise.all([
         fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
         fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
@@ -781,10 +781,12 @@ function reload_graph(data_dir) {
         animate_year_transition(c.pos, c.ch, 700);
     } else {
         Promise.all([
-            fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
-            fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+            fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+            fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
         ]).then(function(results) {
             animate_year_transition(results[0], results[1], 700);
+        }).catch(function(err) {
+            console.error('reload_graph fetch failed for', data_dir, err);
         });
     }
 

@@ -230,9 +230,18 @@ function _render(d) {
             var listSpan = document.createElement("span"); listSpan.className = "community-channels-list";
             var chipsFrag = document.createDocumentFragment();
             row.channels.forEach(function(ch) {
-                var a = document.createElement("a"); a.href = ch.url || "#";
-                a.className = "community-channel-chip"; a.textContent = ch.label;
-                chipsFrag.appendChild(a);
+                var chip;
+                if (ch.url) {
+                    chip = document.createElement("a");
+                    chip.href = ch.url;
+                    chip.target = "_blank";
+                    chip.rel = "noopener noreferrer";
+                } else {
+                    chip = document.createElement("span");
+                }
+                chip.className = "community-channel-chip";
+                chip.textContent = ch.label;
+                chipsFrag.appendChild(chip);
             });
             listSpan.appendChild(chipsFrag); group.appendChild(listSpan); details.appendChild(group);
         });
@@ -280,9 +289,9 @@ function _render(d) {
                 tbl.style.cssText = "font-size:.8rem;white-space:nowrap;";
                 var thead = document.createElement("thead");
                 var htr = document.createElement("tr");
-                var th0 = document.createElement("th"); th0.textContent = "Organisation"; htr.appendChild(th0);
+                var th0 = document.createElement("th"); th0.scope = "col"; th0.textContent = "Organisation"; htr.appendChild(th0);
                 visCols.forEach(function(ci) {
-                    var th = document.createElement("th"); th.className = "number";
+                    var th = document.createElement("th"); th.scope = "col"; th.className = "number";
                     var sw = document.createElement("span");
                     sw.className = "color-swatch color-swatch--sm";
                     sw.style.background = crossColors[ci];
@@ -345,7 +354,7 @@ function _switch_year(year) {
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year);
-    _fetch_year(year).then(function(d) { _render(d); _loading = false; });
+    _fetch_year(year).then(function(d) { _render(d); _loading = false; }).catch(function() { _loading = false; });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────
@@ -367,7 +376,7 @@ Promise.all([
         var nav = document.querySelector(".d-flex.gap-2");
         if (nav) {
             var cmLink = document.createElement("a");
-            var _cmpSuffix = (window.DATA_DIR || "").indexOf("_2") !== -1 ? "_2" : "";
+            var _cmpSuffix = (window.DATA_DIR || "").match(/^data_\d{1,3}\/$/) ? "_2" : "";
             cmLink.href = "consensus_matrix" + _cmpSuffix + ".html";
             cmLink.className = "btn btn-outline-secondary btn-sm";
             cmLink.innerHTML = '<i class="bi bi-grid" aria-hidden="true"></i> Consensus matrix';
