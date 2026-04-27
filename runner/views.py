@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import Any
 
 from django.conf import settings
@@ -74,6 +76,61 @@ class TaskStatusView(View):
         status = tasks.get_status(task)
         lines, new_offset = tasks.get_log_lines(task, offset)
         return JsonResponse({**status, "lines": lines, "next_offset": new_offset})
+
+
+class GraphDirsView(View):
+    """Scan for valid graph/ export directories usable as compare-network targets."""
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        current_graph = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
+        found: list[dict] = []
+        seen: set[str] = set()
+
+        def _check(path: Path) -> None:
+            key = str(path.resolve())
+            if key in seen:
+                return
+            seen.add(key)
+            if not (path / "index.html").exists():
+                return
+            entry: dict = {
+                "path": str(path),
+                "is_current": path.resolve() == current_graph.resolve(),
+                "title": None,
+                "export_date": None,
+                "total_nodes": None,
+                "total_edges": None,
+            }
+            meta_path = path / "data" / "meta.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                    entry["title"] = meta.get("project_title") or None
+                    entry["export_date"] = meta.get("export_date") or None
+                    entry["total_nodes"] = meta.get("total_nodes")
+                    entry["total_edges"] = meta.get("total_edges")
+                except (json.JSONDecodeError, OSError):
+                    pass
+            found.append(entry)
+
+        # Always include the current project's graph (labelled as current).
+        _check(current_graph)
+
+        # Scan sibling directories of BASE_DIR for other Pulpit projects.
+        parent = Path(settings.BASE_DIR).parent
+        try:
+            for item in sorted(parent.iterdir()):
+                if not item.is_dir():
+                    continue
+                # Direct graph/ dir (e.g. sibling_project/graph/)
+                _check(item / settings.GRAPH_OUTPUT_DIR)
+                # Or the directory itself if it looks like a graph export
+                _check(item)
+        except (PermissionError, OSError):
+            pass
+
+        found.sort(key=lambda d: (d.get("export_date") or "", d["path"]), reverse=True)
+        return JsonResponse({"dirs": found})
 
 
 def _build_args(task: str, post: Any) -> list[str]:

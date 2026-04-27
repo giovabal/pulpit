@@ -286,6 +286,46 @@
 /* ---- disabled computation param ---- */
 .ops-param--disabled { opacity: .35; pointer-events: none; }
 
+/* ---- compare-network directory picker ---- */
+.ops-dir-picker {
+  margin-top: .5rem;
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  max-height: 14rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-dir-item {
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  text-align: left;
+  padding: .45rem .75rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  transition: background .1s;
+}
+.ops-dir-item:last-child { border-bottom: none; }
+.ops-dir-item:hover { background: var(--accent-bg); }
+.ops-dir-item--current { opacity: .55; cursor: default; }
+.ops-dir-item--current:hover { background: none; }
+
+.ops-dir-path {
+  font-size: .78rem;
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--text);
+  word-break: break-all;
+}
+.ops-dir-meta {
+  font-size: .7rem;
+  color: var(--muted);
+}
+
 /* ---- last-run footer ---- */
 .ops-last-run {
   font-size: .72rem;

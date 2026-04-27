@@ -7,4 +7,5 @@ urlpatterns = [
     path("run/<str:task>/", views.RunTaskView.as_view(), name="operations-run"),
     path("abort/<str:task>/", views.AbortTaskView.as_view(), name="operations-abort"),
     path("status/<str:task>/", views.TaskStatusView.as_view(), name="operations-status"),
+    path("graph-dirs/", views.GraphDirsView.as_view(), name="operations-graph-dirs"),
 ]

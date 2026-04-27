@@ -68,16 +68,10 @@ function _load_year_channels() {
 
 // Columns that have no meaningful per-year data and are excluded from sparklines.
 var _SPARK_SKIP = { fans: true };
+// IDs of channels whose sparkline row is currently expanded (survives year switches).
+var _open_nodes = {};
 
-function _toggle_row(btn, tr, node) {
-    if (btn.classList.contains("open")) {
-        tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
-            td.innerHTML = "";
-            td.textContent = td.dataset.displayVal;
-        });
-        btn.classList.remove("open");
-        return;
-    }
+function _expand_row(btn, tr, node) {
     _load_year_channels().then(function() {
         tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
             var key = td.dataset.colKey;
@@ -101,6 +95,20 @@ function _toggle_row(btn, tr, node) {
         });
         btn.classList.add("open");
     });
+}
+
+function _toggle_row(btn, tr, node) {
+    if (btn.classList.contains("open")) {
+        tr.querySelectorAll("td[data-col-key]").forEach(function(td) {
+            td.innerHTML = "";
+            td.textContent = td.dataset.displayVal;
+        });
+        btn.classList.remove("open");
+        delete _open_nodes[node.id];
+        return;
+    }
+    _open_nodes[node.id] = true;
+    _expand_row(btn, tr, node);
 }
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
@@ -214,8 +222,12 @@ function _render(d) {
 
     // tbody
     var fragment = document.createDocumentFragment();
+    var nodeById = {};
+    nodes.forEach(function(n) { nodeById[n.id] = n; });
+
     nodes.forEach(function(node, idx) {
         var tr = document.createElement("tr");
+        if (has_spark) tr.dataset.nodeId = node.id;
         function addTd(display, cls, sortVal, bg, link, isGroupStart) {
             var td = document.createElement("td");
             var c = cls || "";
@@ -274,6 +286,17 @@ function _render(d) {
         fragment.appendChild(tr);
     });
     tbody.appendChild(fragment);
+
+    // Re-expand rows that were open before this render (year switch keeps sparklines alive)
+    if (has_spark && Object.keys(_open_nodes).length) {
+        tbody.querySelectorAll("tr[data-node-id]").forEach(function(tr) {
+            var nid = tr.dataset.nodeId;
+            if (_open_nodes[nid] && nodeById[nid]) {
+                var btn = tr.querySelector(".channel-toggle");
+                if (btn) _expand_row(btn, tr, nodeById[nid]);
+            }
+        });
+    }
 
     // tfoot
     function colMeanSd(key) {

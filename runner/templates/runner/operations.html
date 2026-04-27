@@ -380,12 +380,19 @@
           <fieldset class="ops-fieldset">
             <legend>Compare directory</legend>
             <div class="ops-params">
-              <div class="ops-param">
+              <div class="ops-param" style="width:100%">
                 <label for="project_dir">Project directory
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Path to a previously exported graph/ directory (must contain index.html). Its data/, graph files, *_table.html, and *.xlsx are copied with _2 suffixes and a side-by-side comparison page is generated."></i>
                 </label>
-                <input type="text" name="project_dir" id="project_dir" placeholder="path/to/graph/" data-width="lg">
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                  <input type="text" name="project_dir" id="project_dir" placeholder="path/to/graph/" data-width="lg" style="flex:1;min-width:14rem;">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="graph-dir-scan-btn"
+                          onclick="opsGraphDirScan(this)">
+                    <i class="bi bi-folder-symlink"></i> Find exports
+                  </button>
+                </div>
+                <div id="graph-dir-results" class="ops-dir-picker" style="display:none"></div>
               </div>
             </div>
           </fieldset>
@@ -627,5 +634,57 @@
     cb.addEventListener('change', syncLinkedInputs);
   });
 })();
+
+function opsGraphDirScan(btn) {
+  var resultsEl = document.getElementById('graph-dir-results');
+  var input = document.getElementById('project_dir');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning…';
+  fetch('{% url "operations-graph-dirs" %}')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      resultsEl.innerHTML = '';
+      var dirs = data.dirs || [];
+      if (!dirs.length) {
+        resultsEl.textContent = 'No exported graph directories found.';
+        resultsEl.style.display = '';
+        return;
+      }
+      dirs.forEach(function(d) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'ops-dir-item' + (d.is_current ? ' ops-dir-item--current' : '');
+        var pathSpan = document.createElement('span');
+        pathSpan.className = 'ops-dir-path';
+        pathSpan.textContent = d.path;
+        item.appendChild(pathSpan);
+        var meta = [];
+        if (d.title) meta.push(d.title);
+        if (d.export_date) meta.push(d.export_date);
+        if (d.total_nodes != null) meta.push(d.total_nodes + ' nodes');
+        if (d.is_current) meta.push('current');
+        if (meta.length) {
+          var metaSpan = document.createElement('span');
+          metaSpan.className = 'ops-dir-meta';
+          metaSpan.textContent = meta.join(' · ');
+          item.appendChild(metaSpan);
+        }
+        item.addEventListener('click', function() {
+          input.value = d.path;
+          resultsEl.style.display = 'none';
+        });
+        resultsEl.appendChild(item);
+      });
+      resultsEl.style.display = '';
+    })
+    .catch(function() {
+      resultsEl.textContent = 'Scan failed.';
+      resultsEl.style.display = '';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-folder-symlink"></i> Find exports';
+    });
+}
 </script>
 {% endblock extra_scripts %}
