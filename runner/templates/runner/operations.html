@@ -653,7 +653,7 @@ function opsGraphDirScan(btn) {
       dirs.forEach(function(d) {
         var item = document.createElement('button');
         item.type = 'button';
-        item.className = 'ops-dir-item' + (d.is_current ? ' ops-dir-item--current' : '');
+        item.className = 'ops-dir-item';
         var pathSpan = document.createElement('span');
         pathSpan.className = 'ops-dir-path';
         pathSpan.textContent = d.path;
@@ -662,7 +662,6 @@ function opsGraphDirScan(btn) {
         if (d.title) meta.push(d.title);
         if (d.export_date) meta.push(d.export_date);
         if (d.total_nodes != null) meta.push(d.total_nodes + ' nodes');
-        if (d.is_current) meta.push('current');
         if (meta.length) {
           var metaSpan = document.createElement('span');
           metaSpan.className = 'ops-dir-meta';

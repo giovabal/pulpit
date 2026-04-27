@@ -91,11 +91,12 @@ class GraphDirsView(View):
             if key in seen:
                 return
             seen.add(key)
+            if path.resolve() == current_graph.resolve():
+                return  # cannot compare a network with itself
             if not (path / "index.html").exists():
                 return
             entry: dict = {
                 "path": str(path),
-                "is_current": path.resolve() == current_graph.resolve(),
                 "title": None,
                 "export_date": None,
                 "total_nodes": None,
@@ -112,9 +113,6 @@ class GraphDirsView(View):
                 except (json.JSONDecodeError, OSError):
                     pass
             found.append(entry)
-
-        # Always include the current project's graph (labelled as current).
-        _check(current_graph)
 
         # Scan sibling directories of BASE_DIR for other Pulpit projects.
         parent = Path(settings.BASE_DIR).parent

@@ -312,8 +312,6 @@
 }
 .ops-dir-item:last-child { border-bottom: none; }
 .ops-dir-item:hover { background: var(--accent-bg); }
-.ops-dir-item--current { opacity: .55; cursor: default; }
-.ops-dir-item--current:hover { background: none; }
 
 .ops-dir-path {
   font-size: .78rem;
