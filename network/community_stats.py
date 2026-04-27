@@ -215,9 +215,16 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
         d_out = sum(graph.out_degree(nd) for nd in nodes_set)
         d_in = sum(graph.in_degree(nd) for nd in nodes_set)
         modularity_contribution = round(internal_edges / m - (d_out * d_in) / (m * m), 6)
+    # ── E-I Index — Krackhardt & Stern (1988) ────────────────────────────────
+    # (external_ties − internal_ties) / (external_ties + internal_ties)
+    # Range −1 (fully cohesive) to +1 (fully competitive/peripheral).
+    ei_denom = external_edges + internal_edges
+    ei_index = round((external_edges - internal_edges) / ei_denom, 4) if ei_denom > 0 else None
+
     return {
         "internal_edges": internal_edges,
         "external_edges": external_edges,
+        "ei_index": ei_index,
         "density": density,
         "reciprocity": reciprocity,
         "avg_clustering": avg_clustering,
@@ -360,6 +367,7 @@ def _compute_strategy_entry(
             else {
                 "internal_edges": 0,
                 "external_edges": 0,
+                "ei_index": None,
                 "density": 0.0,
                 "reciprocity": 0.0,
                 "avg_clustering": None,
@@ -385,7 +393,37 @@ def _compute_strategy_entry(
         except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError, ValueError) as exc:
             logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
 
-    entry: dict[str, Any] = {"modularity": modularity, "rows": rows}
+    # ── Inter-community edge ratio ────────────────────────────────────────────
+    # Fraction of all directed edges whose source and target belong to different
+    # communities (or are unassigned).  High = fragmented; low = cohesive.
+    total_edges = graph.number_of_edges()
+    inter_community_edge_ratio: float | None = None
+    if total_edges > 0 and label_to_nodes:
+        node_to_community: dict[str, str] = {}
+        for lbl, nodes in label_to_nodes.items():
+            for nd in nodes:
+                node_to_community[nd] = str(lbl)
+        cross = sum(1 for u, v in graph.edges() if node_to_community.get(u) != node_to_community.get(v))
+        inter_community_edge_ratio = round(cross / total_edges, 4)
+
+    # ── Mean E-I index (weighted by community connection volume) ─────────────
+    mean_ei_index: float | None = None
+    ei_weights = [
+        (row["metrics"]["ei_index"], row["metrics"]["internal_edges"] + row["metrics"]["external_edges"])
+        for row in rows
+        if row["metrics"].get("ei_index") is not None
+    ]
+    if ei_weights:
+        total_w = sum(w for _, w in ei_weights)
+        if total_w > 0:
+            mean_ei_index = round(sum(ei * w for ei, w in ei_weights) / total_w, 4)
+
+    entry: dict[str, Any] = {
+        "modularity": modularity,
+        "inter_community_edge_ratio": inter_community_edge_ratio,
+        "mean_ei_index": mean_ei_index,
+        "rows": rows,
+    }
     if pk_to_org:
         cross_tab = _compute_org_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
         if cross_tab is not None:

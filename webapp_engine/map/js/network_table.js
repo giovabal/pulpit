@@ -125,6 +125,12 @@ var METRIC_TOOLTIPS = {
     "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
 };
 
+var STRATEGY_COL_TOOLTIPS = {
+    "Modularity": "Newman & Girvan (2004): fraction of edges within communities minus the expected fraction under a random null model. Range −0.5–1; >0.3 is conventionally considered meaningful community structure.",
+    "Inter-comm. Ratio": "Fraction of all directed edges whose endpoints belong to different communities. 0 = all edges internal; 1 = all edges cross community boundaries. High values indicate fragmented, competitive structure.",
+    "Mean E-I Index": "Weighted mean of community E-I indices (Krackhardt & Stern 1988): (external − internal) / (external + internal) per community, aggregated by connection volume. Range −1 (fully cohesive) to +1 (fully competitive).",
+};
+
 function _render_preamble(meta) {
     var el = document.getElementById("network-preamble");
     if (!el) return;
@@ -209,9 +215,13 @@ function _render_modularity(data) {
     section.appendChild(h5);
     var table = document.createElement("table"); table.className = "table table-sm table-hover sortable";
     var thead = document.createElement("thead"); var htr = document.createElement("tr");
-    ["Strategy", "Modularity"].forEach(function(lbl, i) {
-        var th = document.createElement("th"); th.scope = "col"; if (i === 1) th.className = "number";
-        th.textContent = lbl; htr.appendChild(th);
+    ["Strategy", "Modularity", "Inter-comm. Ratio", "Mean E-I Index"].forEach(function(lbl, i) {
+        var th = document.createElement("th"); th.scope = "col";
+        if (i > 0) th.className = "number";
+        th.textContent = lbl;
+        var tip = STRATEGY_COL_TOOLTIPS[lbl];
+        if (tip) th.title = tip;
+        htr.appendChild(th);
     });
     thead.appendChild(htr); table.appendChild(thead);
     var tbody = document.createElement("tbody");
@@ -226,11 +236,14 @@ function _render_modularity(data) {
             if (hist) inner.appendChild(hist);
             var vspan = document.createElement("span");
             vspan.className = "spark-val";
-            vspan.textContent = row.value;
+            vspan.textContent = row.modularity;
             inner.appendChild(vspan); td2.appendChild(inner);
-            td2.setAttribute("data-sort-value", row.value);
-        } else { td2.textContent = row.value; }
-        tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+            td2.setAttribute("data-sort-value", row.modularity);
+        } else { td2.textContent = row.modularity; }
+        var td3 = document.createElement("td"); td3.className = "number"; td3.textContent = row.inter_community_ratio || "—";
+        var td4 = document.createElement("td"); td4.className = "number"; td4.textContent = row.mean_ei || "—";
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+        tbody.appendChild(tr);
     });
     table.appendChild(tbody); section.appendChild(table);
     initSortableTables();
@@ -391,7 +404,7 @@ Promise.all([
     if (all_metrics && all_metrics.summary_rows)
         all_metrics.summary_rows.forEach(function(r) { _all_map[r.label] = r.value; });
     if (all_metrics && all_metrics.modularity_rows)
-        all_metrics.modularity_rows.forEach(function(r) { _all_mod_map[r.strategy] = r.value; });
+        all_metrics.modularity_rows.forEach(function(r) { _all_mod_map[r.strategy] = r.modularity; });
 
     return (_has_tl
         ? Promise.all(_ty.map(function(y) {
@@ -407,7 +420,7 @@ Promise.all([
                 (_yr_map[row.label] = _yr_map[row.label] || []).push({ year: ym.year, value: row.value });
             });
             (ym.mod_rows || []).forEach(function(row) {
-                (_yr_mod_map[row.strategy] = _yr_mod_map[row.strategy] || []).push({ year: ym.year, value: row.value });
+                (_yr_mod_map[row.strategy] = _yr_mod_map[row.strategy] || []).push({ year: ym.year, value: row.modularity });
             });
         });
 

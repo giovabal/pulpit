@@ -627,6 +627,35 @@ Modularity is reported for each active community detection strategy in `network_
 
 ---
 
+### Inter-community Edge Ratio (per strategy)
+
+The fraction of all directed edges whose source and target belong to different communities under a given partition. Formally: (edges crossing community boundaries) / (total edges). Range 0–1.
+
+Reported alongside modularity in the strategy table in `network_table.html` and `network_table.xlsx`.
+
+**In practice:** while modularity measures partition quality relative to a random null model, the inter-community edge ratio is a raw, directly interpretable quantity. A ratio near 0 means almost all links stay within communities — a tightly cohesive ecosystem where groups amplify each other internally. A ratio near 1 means most links cross boundaries — a fragmented or competitive structure where channels reference opponents or different circles more than their own. Comparing this ratio across snapshots or between networks reveals whether cross-community interaction is growing or shrinking over time. Comparing it across strategies tells you whether your manual Organisation partition produces more or less boundary-crossing than the algorithmic one.
+
+---
+
+### E-I Index (per community and strategy)
+
+Krackhardt & Stern (1988) defined the E-I Index for a group as:
+
+> E-I = (E − I) / (E + I)
+
+where E = external ties (connections from community members to non-members) and I = internal ties (connections between community members). Range −1 (fully cohesive: no external ties) to +1 (fully competitive: no internal ties).
+
+Per-community E-I is shown in `community_table.html` and `community_table.xlsx`. The **Mean E-I Index** in the strategy table (`network_table.html`) is a weighted average across communities, using each community's total connection volume as the weight.
+
+**In practice:** the E-I index directly captures the cohesion-versus-competition distinction at the community level. A community with E-I ≈ −1 is self-referential: its members primarily cite and forward each other, consistent with a tight ideological or organisational cluster. A community with E-I ≈ +1 is outward-facing: its members mainly reference channels outside the group, which can indicate peripheral actors, cross-ideological bridges, or monitoring behaviour. The mean E-I across all communities summarises the overall balance: a network of tightly inward-looking groups has a strongly negative mean E-I; a network of loosely affiliated channels that mostly cite rivals or external sources has a near-zero or positive mean E-I.
+
+Use E-I index together with reciprocity and inter-community edge ratio for a composite reading:
+- **High reciprocity + negative mean E-I**: peer-like mutual amplification within cohesive camps.
+- **Low reciprocity + positive mean E-I**: hierarchical cross-community citation, typical of competitive or monitoring dynamics.
+- **Mixed**: intermediate communities with both internal amplification and active external engagement.
+
+---
+
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Changelog](CHANGELOG.md) · [Screenshots](SCREENSHOTS.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

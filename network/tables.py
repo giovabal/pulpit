@@ -137,7 +137,16 @@ def write_network_metrics_json(
     for strategy_key in strategies:
         entry = community_table_data["strategies"].get(strategy_key)
         mod = entry["modularity"] if entry else None
-        modularity_rows.append({"strategy": strategy_key, "value": _fmt(mod) if mod is not None else "—"})
+        icr = entry.get("inter_community_edge_ratio") if entry else None
+        mei = entry.get("mean_ei_index") if entry else None
+        modularity_rows.append(
+            {
+                "strategy": strategy_key,
+                "modularity": _fmt(mod) if mod is not None else "—",
+                "inter_community_ratio": _fmt(icr) if icr is not None else "—",
+                "mean_ei": _fmt(mei) if mei is not None else "—",
+            }
+        )
 
     payload = {
         "wcc_note_visible": not summary["path_on_full"],
@@ -329,6 +338,7 @@ def write_community_table_xlsx(
         "Nodes",
         "Internal Edges",
         "External Edges",
+        "E-I Index",
         "Density",
         "Reciprocity",
         "Avg Clustering",
@@ -361,6 +371,7 @@ def write_community_table_xlsx(
                     entry["node_count"],
                     metrics["internal_edges"],
                     metrics["external_edges"],
+                    metrics.get("ei_index"),
                     metrics["density"],
                     metrics["reciprocity"],
                     metrics["avg_clustering"],
@@ -433,6 +444,10 @@ def write_community_metrics_json(
             strategy_entry["rows"] = rows_out
             mod = entry.get("modularity")
             strategy_entry["modularity"] = round(mod, 6) if mod is not None else None
+            icr = entry.get("inter_community_edge_ratio")
+            strategy_entry["inter_community_edge_ratio"] = round(icr, 6) if icr is not None else None
+            mei = entry.get("mean_ei_index")
+            strategy_entry["mean_ei_index"] = round(mei, 6) if mei is not None else None
             cross_tab = entry.get("org_cross_tab")
             if cross_tab is not None:
                 strategy_entry["org_cross_tab"] = cross_tab

@@ -107,7 +107,7 @@ function _render(d) {
             r._ext_frac = total > 0 ? r.metrics.external_edges / total : 0;
         });
 
-        var hmKeys = ["node_count", "internal_edges", "external_edges", "_ext_frac", "density",
+        var hmKeys = ["node_count", "internal_edges", "external_edges", "ei_index", "_ext_frac", "density",
                       "reciprocity", "avg_clustering", "avg_path_length", "diameter", "modularity_contribution"];
         var hmRanges = {};
         hmKeys.forEach(function(key) {
@@ -128,6 +128,7 @@ function _render(d) {
             {key: "node_count",           label: "Nodes",                   cls: "number", fmt: "int",   tip: "Number of channels in this community"},
             {key: "internal_edges",       label: "Internal Edges",          cls: "number", fmt: "int",   tip: "Directed edges between channels within this community"},
             {key: "external_edges",       label: "Ext. Edges",              cls: "number", fmt: "int",   tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)"},
+            {key: "ei_index",             label: "E-I Index (−1–1)",        cls: "number", fmt: "sig3",  tip: "Krackhardt & Stern (1988): (external − internal) / (external + internal). −1 = fully cohesive (no external ties); +1 = fully competitive (no internal ties)"},
             {key: "_ext_frac",            label: "Ext. Fraction (0–1)",     cls: "number", fmt: "sig3",  tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral"},
             {key: "density",              label: "Int. Density (0–1)",      cls: "number", fmt: "sig3",  tip: "Fraction of possible directed within-community edges that exist"},
             {key: "reciprocity",          label: "Reciprocity (0–1)",       cls: "number", fmt: "sig3",  tip: "Proportion of within-community directed edges that are bidirectional"},
