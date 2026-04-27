@@ -17,7 +17,7 @@
             tdN.appendChild(nameInput); tr.appendChild(tdN);
 
             var tdD = document.createElement("td");
-            var descInput = document.createElement("textarea"); descInput.className = "bo-input bo-input--wide"; descInput.rows = 4; descInput.value = grp.description || "";
+            var descInput = document.createElement("textarea"); descInput.className = "bo-input bo-input--wide bo-input--full"; descInput.rows = 4; descInput.value = grp.description || "";
             tdD.appendChild(descInput); tr.appendChild(tdD);
 
             var tdCnt = document.createElement("td"); tdCnt.className = "bo-td--num"; tdCnt.textContent = fmtInt(grp.channel_count); tr.appendChild(tdCnt);

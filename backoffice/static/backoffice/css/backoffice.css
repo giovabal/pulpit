@@ -348,6 +348,7 @@
 }
 .bo-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,56,202,.12); }
 .bo-input--wide { flex: 1 1 200px; }
+.bo-input--full { flex: 0 0 100%; width: 100%; }
 .bo-input--color { width: 2.5rem; height: 2.125rem; padding: .125rem .25rem; cursor: pointer; }
 
 .bo-check-label {
