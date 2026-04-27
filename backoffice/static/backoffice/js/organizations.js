@@ -1,19 +1,30 @@
 (function () {
     "use strict";
     var API = "/manage/api/organizations/";
-    var _orgs = [];
+    var _offset = 0;
+    var _total  = 0;
 
-    var $tbody    = document.getElementById("org-tbody");
-    var $addBtn   = document.getElementById("org-add-btn");
-    var $addForm  = document.getElementById("org-add-form");
-    var $addCancel= document.getElementById("org-add-cancel");
+    var $tbody       = document.getElementById("org-tbody");
+    var $count       = document.getElementById("org-count");
+    var $paginTop    = document.getElementById("org-pagination-top");
+    var $paginBottom = document.getElementById("org-pagination-bottom");
+    var $addBtn      = document.getElementById("org-add-btn");
+    var $addForm     = document.getElementById("org-add-form");
+    var $addCancel   = document.getElementById("org-add-cancel");
+
+    function _goToPage(offset) { _offset = offset; loadOrgs(); }
+
+    function _renderPagination() {
+        renderPagination($paginTop, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
+        renderPagination($paginBottom, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
+        $count.textContent = _total + " organization" + (_total !== 1 ? "s" : "");
+    }
 
     function renderRow(org, editing) {
         var tr = document.createElement("tr");
         tr.dataset.id = org.id;
 
         if (editing) {
-            /* inline edit */
             var tdColor = document.createElement("td");
             var colorInput = document.createElement("input");
             colorInput.type = "color"; colorInput.className = "bo-input bo-input--color";
@@ -40,18 +51,13 @@
                 apiFetch(API + org.id + "/", { method: "PATCH", body: { name: nameInput.value.trim(), color: colorInput.value, is_interesting: intChk.checked } })
                     .then(function (updated) {
                         Object.assign(org, updated);
-                        var newTr = renderRow(org, false);
-                        $tbody.replaceChild(newTr, tr);
+                        $tbody.replaceChild(renderRow(org, false), tr);
                         showToast("Saved.");
                     }).catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
-            cancelBtn.addEventListener("click", function () {
-                var newTr = renderRow(org, false);
-                $tbody.replaceChild(newTr, tr);
-            });
+            cancelBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(org, false), tr); });
             tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn); tr.appendChild(tdAct);
         } else {
-            /* display */
             var tdC = document.createElement("td");
             var dot = document.createElement("span"); dot.className = "bo-org-dot"; dot.style.background = org.color || "#ccc";
             tdC.appendChild(dot); tr.appendChild(tdC);
@@ -68,16 +74,13 @@
 
             var tdA = document.createElement("td");
             var editBtn = makeEditBtn();
-            editBtn.addEventListener("click", function () {
-                var newTr = renderRow(org, true);
-                $tbody.replaceChild(newTr, tr);
-            });
+            editBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(org, true), tr); });
             var delBtn = makeDeleteBtn(org.name);
             delBtn.addEventListener("click", function () {
                 confirmDelete(org.name).then(function (ok) {
                     if (!ok) return;
                     apiFetch(API + org.id + "/", { method: "DELETE" })
-                        .then(function () { tr.remove(); showToast("Deleted."); })
+                        .then(function () { tr.remove(); _total--; _renderPagination(); showToast("Deleted."); })
                         .catch(function (e) { showToast("Error: " + e.message, "error"); });
                 });
             });
@@ -87,12 +90,13 @@
     }
 
     function loadOrgs() {
-        apiFetch(API + "?limit=500")
+        apiFetch(API + "?limit=" + BACKOFFICE_PAGE_SIZE + "&offset=" + _offset)
             .then(function (data) {
-                _orgs = data.results;
+                _total = data.count;
                 $tbody.innerHTML = "";
-                if (!_orgs.length) { $tbody.innerHTML = '<tr><td colspan="5" class="bo-empty">No organizations yet.</td></tr>'; return; }
-                _orgs.forEach(function (org) { $tbody.appendChild(renderRow(org, false)); });
+                if (!data.results.length) { $tbody.innerHTML = '<tr><td colspan="5" class="bo-empty">No organizations yet.</td></tr>'; }
+                else { data.results.forEach(function (org) { $tbody.appendChild(renderRow(org, false)); }); }
+                _renderPagination();
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
 
@@ -105,6 +109,8 @@
             .then(function (org) {
                 org.channel_count = 0;
                 $tbody.appendChild(renderRow(org, false));
+                _total++;
+                _renderPagination();
                 $addForm.reset(); $addForm.classList.add("d-none"); $addBtn.classList.remove("d-none");
                 showToast("Organization created.");
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });

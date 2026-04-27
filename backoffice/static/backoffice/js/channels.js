@@ -2,7 +2,7 @@
     "use strict";
 
     var API_BASE = "/manage/api/";
-    var PAGE_SIZE = 100;
+    var PAGE_SIZE = BACKOFFICE_PAGE_SIZE;
 
     /* ── State ──────────────────────────────────────────────────────────── */
     var _orgs = [];
@@ -19,7 +19,8 @@
     var $orgFilter  = document.getElementById("ch-org-filter");
     var $groupFilter= document.getElementById("ch-group-filter");
     var $count      = document.getElementById("ch-count");
-    var $pagination = document.getElementById("ch-pagination");
+    var $pagination       = document.getElementById("ch-pagination");
+    var $paginationBottom = document.getElementById("ch-pagination-bottom");
     var $tbody      = document.getElementById("ch-tbody");
     var $selectAll  = document.getElementById("ch-select-all");
     var $bulkBar    = document.getElementById("ch-bulk-bar");
@@ -331,21 +332,10 @@
     }
 
     /* ── Pagination ─────────────────────────────────────────────────────── */
-    function renderPagination() {
-        $pagination.innerHTML = "";
-        var prevBtn = document.createElement("button"); prevBtn.textContent = "←";
-        prevBtn.disabled = _offset === 0;
-        prevBtn.addEventListener("click", function () { _offset = Math.max(0, _offset - PAGE_SIZE); loadChannels(); });
-        var nextBtn = document.createElement("button"); nextBtn.textContent = "→";
-        nextBtn.disabled = _offset + PAGE_SIZE >= _total;
-        nextBtn.addEventListener("click", function () { _offset += PAGE_SIZE; loadChannels(); });
-        var info = document.createElement("span");
-        var from = _total ? _offset + 1 : 0;
-        var to = Math.min(_offset + PAGE_SIZE, _total);
-        info.textContent = from + "–" + to + " of " + _total;
-        $pagination.appendChild(prevBtn);
-        $pagination.appendChild(info);
-        $pagination.appendChild(nextBtn);
+    function _goToPage(newOffset) { _offset = newOffset; loadChannels(); }
+    function _renderPagination() {
+        renderPagination($pagination, _offset, _total, PAGE_SIZE, _goToPage);
+        renderPagination($paginationBottom, _offset, _total, PAGE_SIZE, _goToPage);
     }
 
     /* ── Data loading ───────────────────────────────────────────────────── */
@@ -362,7 +352,7 @@
                 _total = data.count;
                 $count.textContent = _total + " channel" + (_total !== 1 ? "s" : "");
                 renderTable(_channels);
-                renderPagination();
+                _renderPagination();
             })
             .catch(function (err) {
                 $tbody.innerHTML = '<tr><td colspan="7" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";

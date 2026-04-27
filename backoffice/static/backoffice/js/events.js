@@ -95,10 +95,22 @@
     });
 
     /* ── Events ───────────────────────────────────────────────────────── */
-    var $evTbody   = document.getElementById("ev-tbody");
-    var $evAddBtn  = document.getElementById("ev-add-btn");
-    var $evAddForm = document.getElementById("ev-add-form");
-    var $evCancel  = document.getElementById("ev-add-cancel");
+    var $evTbody      = document.getElementById("ev-tbody");
+    var $evAddBtn     = document.getElementById("ev-add-btn");
+    var $evAddForm    = document.getElementById("ev-add-form");
+    var $evCancel     = document.getElementById("ev-add-cancel");
+    var $evPaginTop   = document.getElementById("ev-pagination-top");
+    var $evPaginBottom= document.getElementById("ev-pagination-bottom");
+    var $evCount      = document.getElementById("ev-count");
+    var _evOffset = 0;
+    var _evTotal  = 0;
+
+    function _evGoToPage(offset) { _evOffset = offset; loadEvents(); }
+    function _evRenderPagination() {
+        renderPagination($evPaginTop, _evOffset, _evTotal, BACKOFFICE_PAGE_SIZE, _evGoToPage);
+        renderPagination($evPaginBottom, _evOffset, _evTotal, BACKOFFICE_PAGE_SIZE, _evGoToPage);
+        $evCount.textContent = _evTotal + " event" + (_evTotal !== 1 ? "s" : "");
+    }
 
     function renderEventRow(ev) {
         var tr = document.createElement("tr"); tr.dataset.id = ev.id;
@@ -112,7 +124,7 @@
             confirmDelete(ev.subject).then(function (ok) {
                 if (!ok) return;
                 apiFetch(API_EV + ev.id + "/", { method: "DELETE" })
-                    .then(function () { tr.remove(); showToast("Deleted."); })
+                    .then(function () { tr.remove(); _evTotal--; _evRenderPagination(); showToast("Deleted."); })
                     .catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
         });
@@ -121,21 +133,28 @@
     }
 
     function loadEvents() {
-        var params = new URLSearchParams({ limit: 200 });
+        var params = new URLSearchParams({ limit: BACKOFFICE_PAGE_SIZE, offset: _evOffset });
         var t = $evTypeFilter.value; if (t) params.set("type", t);
         var y = $evYearFilter.value; if (y) params.set("year", y);
         apiFetch(API_EV + "?" + params.toString()).then(function (data) {
+            _evTotal = data.count;
             $evTbody.innerHTML = "";
-            if (!data.results.length) { $evTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No events found.</td></tr>'; return; }
-            /* Populate year filter from results */
-            var years = new Set(data.results.map(function (e) { return e.date.slice(0, 4); }));
-            while ($evYearFilter.options.length > 1) $evYearFilter.remove(1);
-            Array.from(years).sort().reverse().forEach(function (y) { $evYearFilter.appendChild(new Option(y, y)); });
-            data.results.forEach(function (ev) { $evTbody.appendChild(renderEventRow(ev)); });
+            if (!data.results.length) { $evTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No events found.</td></tr>'; }
+            else {
+                /* Populate year filter from full result set first time */
+                if ($evYearFilter.options.length <= 1) {
+                    var years = new Set(data.results.map(function (e) { return e.date.slice(0, 4); }));
+                    Array.from(years).sort().reverse().forEach(function (y) { $evYearFilter.appendChild(new Option(y, y)); });
+                }
+                data.results.forEach(function (ev) { $evTbody.appendChild(renderEventRow(ev)); });
+            }
+            _evRenderPagination();
         }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
 
-    [$evTypeFilter, $evYearFilter].forEach(function (el) { el.addEventListener("change", loadEvents); });
+    [$evTypeFilter, $evYearFilter].forEach(function (el) {
+        el.addEventListener("change", function () { _evOffset = 0; loadEvents(); });
+    });
 
     $evAddBtn.addEventListener("click", function () { $evAddForm.classList.remove("d-none"); $evAddBtn.classList.add("d-none"); });
     $evCancel.addEventListener("click", function () { $evAddForm.classList.add("d-none"); $evAddBtn.classList.remove("d-none"); $evAddForm.reset(); });

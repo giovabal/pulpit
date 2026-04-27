@@ -1,5 +1,25 @@
 /* Shared backoffice utilities */
 
+var BACKOFFICE_PAGE_SIZE = 100;
+
+function renderPagination(container, offset, total, pageSize, onPageChange) {
+    container.innerHTML = "";
+    if (total <= pageSize) return;
+    var prevBtn = document.createElement("button"); prevBtn.textContent = "←";
+    prevBtn.disabled = offset === 0;
+    prevBtn.addEventListener("click", function () { onPageChange(Math.max(0, offset - pageSize)); });
+    var nextBtn = document.createElement("button"); nextBtn.textContent = "→";
+    nextBtn.disabled = offset + pageSize >= total;
+    nextBtn.addEventListener("click", function () { onPageChange(offset + pageSize); });
+    var info = document.createElement("span");
+    var from = total ? offset + 1 : 0;
+    var to = Math.min(offset + pageSize, total);
+    info.textContent = from + "–" + to + " of " + total;
+    container.appendChild(prevBtn);
+    container.appendChild(info);
+    container.appendChild(nextBtn);
+}
+
 function getCsrfToken() {
     var m = document.cookie.match(/csrftoken=([^;]+)/);
     return m ? m[1] : "";

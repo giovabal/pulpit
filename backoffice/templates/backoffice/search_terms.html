@@ -11,6 +11,10 @@
   <button type="submit" class="bo-btn">Add</button>
 </form>
 
+<div class="bo-toolbar">
+  <span class="bo-count" id="st-count"></span>
+  <div class="bo-pagination" id="st-pagination-top"></div>
+</div>
 <div class="table-responsive">
   <table class="bo-table" id="st-table">
     <thead>
@@ -25,6 +29,7 @@
     </tbody>
   </table>
 </div>
+<div class="bo-pagination bo-pagination--bottom" id="st-pagination-bottom"></div>
 {% endblock bo_content %}
 
 {% block extra_scripts %}

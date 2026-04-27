@@ -126,6 +126,8 @@
   font-size: .8125rem;
 }
 
+.bo-pagination--bottom { margin-top: var(--space-3); }
+
 .bo-pagination button {
   padding: .25rem .5rem;
   border: 1px solid var(--border);

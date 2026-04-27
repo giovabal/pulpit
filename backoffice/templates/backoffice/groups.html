@@ -14,6 +14,10 @@
   <button type="button" class="bo-btn bo-btn--ghost" id="grp-add-cancel">Cancel</button>
 </form>
 
+<div class="bo-toolbar">
+  <span class="bo-count" id="grp-count"></span>
+  <div class="bo-pagination" id="grp-pagination-top"></div>
+</div>
 <div class="table-responsive">
   <table class="bo-table" id="grp-table">
     <thead>
@@ -29,6 +33,7 @@
     </tbody>
   </table>
 </div>
+<div class="bo-pagination bo-pagination--bottom" id="grp-pagination-bottom"></div>
 {% endblock bo_content %}
 
 {% block extra_scripts %}

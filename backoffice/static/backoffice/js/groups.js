@@ -1,11 +1,24 @@
 (function () {
     "use strict";
     var API = "/manage/api/groups/";
+    var _offset = 0;
+    var _total  = 0;
 
-    var $tbody    = document.getElementById("grp-tbody");
-    var $addBtn   = document.getElementById("grp-add-btn");
-    var $addForm  = document.getElementById("grp-add-form");
-    var $addCancel= document.getElementById("grp-add-cancel");
+    var $tbody       = document.getElementById("grp-tbody");
+    var $count       = document.getElementById("grp-count");
+    var $paginTop    = document.getElementById("grp-pagination-top");
+    var $paginBottom = document.getElementById("grp-pagination-bottom");
+    var $addBtn      = document.getElementById("grp-add-btn");
+    var $addForm     = document.getElementById("grp-add-form");
+    var $addCancel   = document.getElementById("grp-add-cancel");
+
+    function _goToPage(offset) { _offset = offset; loadGroups(); }
+
+    function _renderPagination() {
+        renderPagination($paginTop, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
+        renderPagination($paginBottom, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
+        $count.textContent = _total + " group" + (_total !== 1 ? "s" : "");
+    }
 
     function renderRow(grp, editing) {
         var tr = document.createElement("tr");
@@ -48,7 +61,7 @@
                 confirmDelete(grp.name).then(function (ok) {
                     if (!ok) return;
                     apiFetch(API + grp.id + "/", { method: "DELETE" })
-                        .then(function () { tr.remove(); showToast("Deleted."); })
+                        .then(function () { tr.remove(); _total--; _renderPagination(); showToast("Deleted."); })
                         .catch(function (e) { showToast("Error: " + e.message, "error"); });
                 });
             });
@@ -57,11 +70,16 @@
         return tr;
     }
 
-    apiFetch(API + "?limit=500").then(function (data) {
-        $tbody.innerHTML = "";
-        if (!data.results.length) { $tbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No groups yet.</td></tr>'; return; }
-        data.results.forEach(function (g) { $tbody.appendChild(renderRow(g, false)); });
-    }).catch(function (e) { showToast("Error: " + e.message, "error"); });
+    function loadGroups() {
+        apiFetch(API + "?limit=" + BACKOFFICE_PAGE_SIZE + "&offset=" + _offset)
+            .then(function (data) {
+                _total = data.count;
+                $tbody.innerHTML = "";
+                if (!data.results.length) { $tbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No groups yet.</td></tr>'; }
+                else { data.results.forEach(function (g) { $tbody.appendChild(renderRow(g, false)); }); }
+                _renderPagination();
+            }).catch(function (e) { showToast("Error: " + e.message, "error"); });
+    }
 
     $addBtn.addEventListener("click", function () { $addForm.classList.remove("d-none"); $addBtn.classList.add("d-none"); });
     $addCancel.addEventListener("click", function () { $addForm.classList.add("d-none"); $addBtn.classList.remove("d-none"); $addForm.reset(); });
@@ -72,8 +90,12 @@
             .then(function (grp) {
                 grp.channel_count = 0;
                 $tbody.appendChild(renderRow(grp, false));
+                _total++;
+                _renderPagination();
                 $addForm.reset(); $addForm.classList.add("d-none"); $addBtn.classList.remove("d-none");
                 showToast("Group created.");
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     });
+
+    loadGroups();
 })();
