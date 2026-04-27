@@ -38,8 +38,8 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "communities.json").then(function(r) { return r.json(); }),
-        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+        fetch(dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ]).then(function(res) {
         var d = { data: res[0], meta: res[1] };
         _cache[year] = d;
@@ -232,4 +232,8 @@ Promise.all([
     _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_consensus_matrix_html; }) : [];
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+}).catch(function(err) {
+    var el = document.getElementById("consensus-matrix-container");
+    if (el) el.textContent = "Failed to load data.";
+    console.error("consensus_matrix:", err);
 });

@@ -47,7 +47,11 @@ function initSortableTables() {
         }
     }
 }
-initSortableTables();
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSortableTables);
+} else {
+    initSortableTables();
+}
 function sortTableFunction(table) {
     return function(ev) {
         if (ev.target.tagName.toLowerCase() == 'a') {

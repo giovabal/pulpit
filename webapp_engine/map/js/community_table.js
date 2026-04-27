@@ -68,8 +68,8 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "communities.json").then(function(r) { return r.json(); }),
-        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+        fetch(dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ]).then(function(res) {
         var d = { data: res[0], meta: res[1] };
         _cache[year] = d;
@@ -350,15 +350,15 @@ function _switch_year(year) {
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "communities.json").then(function(r) { return r.json(); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };
     var timeline = results[2];
     _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_community_html; }) : [];
 
-    _render(_cache["all"]);
+    _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
 
     // Consensus matrix button — injected once based on full-range meta
@@ -374,4 +374,8 @@ Promise.all([
             nav.insertBefore(cmLink, nav.firstChild);
         }
     }
+}).catch(function(err) {
+    var el = document.getElementById("community-tables");
+    if (el) el.textContent = "Failed to load data.";
+    console.error("community_table:", err);
 });

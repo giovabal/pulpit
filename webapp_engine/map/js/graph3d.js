@@ -637,9 +637,9 @@ function apply_group_filter(group) {
 
 function get_data() {
     return Promise.all([
-        fetch(current_data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
-        fetch(current_data_dir + 'channels.json').then(function(r) { return r.json(); }),
-        fetch(current_data_dir + 'communities.json').then(function(r) { return r.json(); }),
+        fetch(current_data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(current_data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(current_data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         var pos_data  = results[0];
         var ch_data   = results[1];
@@ -680,13 +680,13 @@ function preload_year_3d(data_dir) {
     if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
     year_cache_pend[data_dir] = true;
     return Promise.all([
-        fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.json(); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
-    }).catch(function() { delete year_cache_pend[data_dir]; });
+    }).catch(function(err) { delete year_cache_pend[data_dir]; console.warn('preload_year_3d failed for', data_dir, err); });
 }
 
 function _apply_accessory_3d(ch_data, comm_data) {
@@ -906,7 +906,7 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
             var SKIP = { x:1, y:1, z:1, size:1, mesh:1, orig_color:1 };
             Object.keys(m).forEach(function(k) { if (!SKIP[k]) node[k] = m[k]; });
             var lbl = label_objects[np.id];
-            if (lbl) lbl.element.textContent = m.label || np.id;
+            if (lbl && lbl.element) lbl.element.textContent = m.label || np.id;
         }
     });
 

@@ -393,8 +393,8 @@ function click_node(nodeId) {
 
 function get_data(data_dir) {
     return Promise.all([
-        fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         var pos_data = results[0];
         var ch_data  = results[1];
@@ -486,8 +486,8 @@ function load_accessory(data_dir) {
     }
 
     Promise.all([
-        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         _apply_accessory(results[0], results[1], prev_strategy, prev_size);
     });
@@ -501,14 +501,15 @@ function preload_year(data_dir) {
     if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
     year_cache_pend[data_dir] = true;
     return Promise.all([
-        fetch(data_dir + 'channel_position.json').then(function(r) { return r.json(); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.json(); }),
+        fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
         fetch(data_dir + 'communities.json').then(function(r) { return r.json(); }),
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
-    }).catch(function() {
+    }).catch(function(err) {
         delete year_cache_pend[data_dir];
+        console.warn('preload_year failed for', data_dir, err);
     });
 }
 

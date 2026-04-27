@@ -9,6 +9,8 @@ export function build_year_nav(years, cur, onSelect) {
     target.innerHTML = "";
     var wrap = document.createElement("div");
     wrap.className = "d-flex flex-wrap gap-1";
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", "Year navigator");
     var all_btn = document.createElement("button");
     all_btn.type = "button";
     all_btn.className = "btn btn-sm " + (cur === "all" ? "btn-primary" : "btn-outline-secondary");

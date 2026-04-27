@@ -25,9 +25,9 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "network_metrics.json").then(function(r) { return r.json(); }),
-        fetch(dd + "channels.json").then(function(r) { return r.json(); }),
-        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+        fetch(dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ]).then(function(res) {
         var d = { data: res[0], channels: res[1], meta: res[2] };
         _cache[year] = d;
@@ -167,11 +167,11 @@ function _render_summary(data) {
         var td2 = document.createElement("td"); td2.className = "number";
         if (_has_tl) {
             var inner = document.createElement("span");
-            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            inner.className = "spark-cell";
             var hist = _mini_hist(_all_map[row.label], _yr_map[row.label], _current_year, _all_years);
             if (hist) inner.appendChild(hist);
             var vspan = document.createElement("span");
-            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.className = "spark-val";
             vspan.textContent = row.value;
             inner.appendChild(vspan); td2.appendChild(inner);
         } else { td2.textContent = row.value; }
@@ -209,11 +209,11 @@ function _render_modularity(data) {
         var td2 = document.createElement("td"); td2.className = "number";
         if (_has_tl) {
             var inner = document.createElement("span");
-            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            inner.className = "spark-cell";
             var hist = _mini_hist(_all_mod_map[row.strategy], _yr_mod_map[row.strategy], _current_year, _all_years);
             if (hist) inner.appendChild(hist);
             var vspan = document.createElement("span");
-            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.className = "spark-val";
             vspan.textContent = row.value;
             inner.appendChild(vspan); td2.appendChild(inner);
             td2.dataset.sort = row.value;
@@ -385,7 +385,7 @@ Promise.all([
     return (_has_tl
         ? Promise.all(_ty.map(function(y) {
             return fetch("data_" + y.year + "/network_metrics.json")
-                .then(function(r) { return r.json(); })
+                .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
                 .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
                 .catch(function() { return null; });
           })).then(function(list) { return list.filter(Boolean); })
@@ -407,4 +407,8 @@ Promise.all([
         _build_dist_section();
         _build_scatter_section();
     });
+}).catch(function(err) {
+    var el = document.getElementById("network-preamble");
+    if (el) el.textContent = "Failed to load data.";
+    console.error("network_table:", err);
 });

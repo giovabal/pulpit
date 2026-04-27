@@ -55,7 +55,7 @@ function _load_year_channels() {
     _yr_channels_promise = Promise.all(_all_years.map(function(yr) {
         if (_yr_channels[yr]) return Promise.resolve();
         return fetch("data_" + yr + "/channels.json")
-            .then(function(r) { return r.json(); })
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
             .then(function(d) {
                 var m = {};
                 (d.nodes || []).forEach(function(n) { m[n.id] = n; });
@@ -85,10 +85,10 @@ function _expand_row(btn, tr, node) {
             var svg = mini_hist(all_val != null ? String(all_val) : null, yr_vals, _current_year, _all_years);
             td.innerHTML = "";
             var inner = document.createElement("span");
-            inner.style.cssText = "display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%";
+            inner.className = "spark-cell";
             if (svg) inner.appendChild(svg);
             var vspan = document.createElement("span");
-            vspan.style.cssText = "min-width:4.5em;text-align:right;display:inline-block";
+            vspan.className = "spark-val";
             vspan.textContent = td.dataset.displayVal;
             inner.appendChild(vspan);
             td.appendChild(inner);
@@ -116,9 +116,9 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "channels.json").then(function(r) { return r.json(); }),
-        fetch(dd + "communities.json").then(function(r) { return r.json(); }),
-        fetch(dd + "meta.json").then(function(r) { return r.json(); }).catch(function() { return null; }),
+        fetch(dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ]).then(function(res) {
         var d = { channels: res[0], communities: res[1], meta: res[2] };
         _cache[year] = d;
@@ -352,4 +352,8 @@ Promise.all([
     _all_years = _ty.map(function(y) { return y.year; });
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+}).catch(function(err) {
+    var el = document.getElementById("channel-preamble");
+    if (el) el.textContent = "Failed to load data.";
+    console.error("channel_table:", err);
 });

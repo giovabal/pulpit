@@ -124,6 +124,15 @@ td.col-group-start, th.col-group-start {
 .channel-toggle:hover { color: #495057; }
 .channel-toggle.open { color: #1d4ed8; }
 
+/* Inline sparkline cell layout (network_table + channel_table expanded rows) */
+.spark-cell {
+  display: inline-flex; align-items: center; justify-content: flex-end;
+  gap: 5px; width: 100%;
+}
+.spark-val {
+  min-width: 4.5em; text-align: right; display: inline-block;
+}
+
 /* Scatter plot (network table) */
 .scatter-select { min-width: 200px; }
 .scatter-reset-wrap { padding-bottom: 2px; }
