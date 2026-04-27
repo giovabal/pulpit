@@ -1,8 +1,8 @@
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Organization, SearchTerm
+from webapp.models import Channel, ChannelGroup, Organization, ProfilePicture, SearchTerm
 
 from .serializers import (
     ChannelGroupSerializer,
@@ -58,7 +58,18 @@ class ChannelViewSet(
     http_method_names = ["get", "patch", "post", "head", "options"]
 
     def get_queryset(self):
-        qs = Channel.objects.select_related("organization").prefetch_related("groups").order_by("title")
+        qs = (
+            Channel.objects.select_related("organization")
+            .prefetch_related(
+                "groups",
+                Prefetch(
+                    "profilepicture_set",
+                    queryset=ProfilePicture.objects.order_by("-date")[:1],
+                    to_attr="_prefetched_profile_pics",
+                ),
+            )
+            .order_by("title")
+        )
 
         search = self.request.query_params.get("search", "").strip()
         if search:

@@ -89,14 +89,23 @@
             tdChk.appendChild(chk); tr.appendChild(tdChk);
 
             /* name */
-            var tdName = document.createElement("td");
+            var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
+            var nameWrap = document.createElement("div");
             var nameEl = document.createElement("div"); nameEl.className = "bo-ch-name";
             nameEl.textContent = ch.title || ("ID " + ch.id);
-            tdName.appendChild(nameEl);
+            nameWrap.appendChild(nameEl);
             if (ch.username) {
                 var unEl = document.createElement("div"); unEl.className = "bo-ch-username";
                 unEl.textContent = "@" + ch.username;
-                tdName.appendChild(unEl);
+                nameWrap.appendChild(unEl);
+            }
+            tdName.appendChild(nameWrap);
+            if (ch.profile_picture_url) {
+                var img = document.createElement("img");
+                img.className = "bo-ch-pic";
+                img.src = ch.profile_picture_url;
+                img.alt = "";
+                tdName.appendChild(img);
             }
             tr.appendChild(tdName);
 

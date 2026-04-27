@@ -36,6 +36,13 @@ class ChannelSerializer(serializers.ModelSerializer):
         required=False,
     )
     channel_type = serializers.CharField(read_only=True)
+    profile_picture_url = serializers.SerializerMethodField()
+
+    def get_profile_picture_url(self, obj):
+        pic = obj.profile_picture
+        if pic and pic.picture:
+            return pic.picture.url
+        return None
 
     class Meta:
         model = Channel
@@ -44,6 +51,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "title",
             "username",
             "channel_type",
+            "profile_picture_url",
             "organization_id",
             "organization_name",
             "organization_color",
@@ -60,6 +68,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "title",
             "username",
             "channel_type",
+            "profile_picture_url",
             "participants_count",
             "in_degree",
             "out_degree",
