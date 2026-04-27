@@ -42,6 +42,9 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
     wcc_fraction = None
     scc_count = None
     scc_fraction = None
+    avg_path_length_directed = None
+    diameter_directed = None
+    scc_path_on_full = False
     if n >= 2:
         try:
             wccs = list(nx.weakly_connected_components(graph))
@@ -60,8 +63,73 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
             largest_scc = max(sccs, key=len)
             scc_count = len(sccs)
             scc_fraction = len(largest_scc) / n
+            scc_path_on_full = len(largest_scc) == n
+            if len(largest_scc) >= 2:
+                scc_sub = graph.subgraph(largest_scc)
+                avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
+                diameter_directed = nx.diameter(scc_sub)
         except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("scc unavailable: %s", exc)
+
+    # ── Transitivity — fraction of closed triads (O(m)) ───────────────────────
+    # Global clustering coefficient in the sense of Luce & Perry (1949) and
+    # Watts & Strogatz (1998): counts all closed triangles / all connected triples.
+    # Complements avg_clustering (which averages per-node local coefficients).
+    transitivity: float | None = None
+    try:
+        transitivity = round(nx.transitivity(graph), 6)
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError) as exc:
+        logger.debug("transitivity unavailable: %s", exc)
+
+    # ── Global Efficiency — mean reciprocal path length (O(n*(n+m))) ──────────
+    # Latora & Marchiori (2001): E = (1/n(n-1)) * Σ_{i≠j} 1/d(i,j), where
+    # unreachable pairs contribute 0.  Works on disconnected graphs; uses
+    # directed shortest paths (edge direction respected).
+    # nx.global_efficiency is undirected-only; directed version computed manually.
+    global_efficiency: float | None = None
+    if n >= 2:
+        try:
+            total_inv_dist = 0.0
+            for source in graph.nodes():
+                lengths = nx.single_source_shortest_path_length(graph, source)
+                total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
+            global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+            logger.debug("global_efficiency unavailable: %s", exc)
+
+    # ── Algebraic Connectivity — Fiedler value (O(n²) approx.) ───────────────
+    # Fiedler (1973): second-smallest eigenvalue λ₂ of the graph Laplacian.
+    # λ₂ = 0 for disconnected graphs; larger values signal stronger cohesion and
+    # greater resistance to fragmentation.  Computed on the undirected projection;
+    # approximated via LOBPCG to avoid full eigendecomposition.
+    algebraic_connectivity: float | None = None
+    if n >= 2:
+        try:
+            ug_ac = graph.to_undirected()
+            if nx.is_connected(ug_ac):
+                algebraic_connectivity = round(nx.algebraic_connectivity(ug_ac, method="tracemin_pcg", seed=42), 6)
+            else:
+                algebraic_connectivity = 0.0  # disconnected → λ₂ = 0 by definition
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+            logger.debug("algebraic_connectivity unavailable: %s", exc)
+
+    # ── Degree CV — coefficient of variation σ/μ of degree distributions ─────
+    # Pastor-Satorras & Vespignani (2001): CV quantifies hub concentration.
+    # Low values mean citations/forwards are spread evenly; high values mean a few
+    # channels dominate the degree distribution.  Reported separately for in- and
+    # out-degree.  None when mean is zero (fully isolated graph).
+    in_degree_cv: float | None = None
+    out_degree_cv: float | None = None
+    if n >= 2:
+        in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
+        out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
+        in_mean = float(in_arr.mean())
+        out_mean = float(out_arr.mean())
+        if in_mean > 0:
+            in_degree_cv = round(float(in_arr.std() / in_mean), 4)
+        if out_mean > 0:
+            out_degree_cv = round(float(out_arr.std() / out_mean), 4)
+
     assortativity: dict[str, float | None] = {
         "in_in": None,
         "in_out": None,
@@ -99,6 +167,14 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
         "wcc_fraction": wcc_fraction,
         "scc_count": scc_count,
         "scc_fraction": scc_fraction,
+        "avg_path_length_directed": avg_path_length_directed,
+        "diameter_directed": diameter_directed,
+        "scc_path_on_full": scc_path_on_full,
+        "transitivity": transitivity,
+        "global_efficiency": global_efficiency,
+        "algebraic_connectivity": algebraic_connectivity,
+        "in_degree_cv": in_degree_cv,
+        "out_degree_cv": out_degree_cv,
         "assortativity": assortativity,
     }
 
@@ -385,6 +461,8 @@ _CHANNEL_TYPE_LABELS: dict[str, str] = {
 def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
     """Return (label, value, group) rows for all whole-network metrics."""
     path_marker = " †" if not summary["path_on_full"] else ""
+    scc_has_directed = summary.get("avg_path_length_directed") is not None
+    scc_path_marker = " ‡" if (scc_has_directed and not summary.get("scc_path_on_full", True)) else ""
     rows: list[tuple[str, Any, str]] = [
         ("Nodes", summary["n"], "Size"),
     ]
@@ -398,6 +476,13 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
         ("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths"),
         (f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths"),
         (f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths"),
+        (f"Directed Avg Path Length{scc_path_marker}", summary.get("avg_path_length_directed"), "Transitivity & paths"),
+        (f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths"),
+        ("Transitivity (0–1)", summary.get("transitivity"), "Cohesion"),
+        ("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion"),
+        ("Algebraic Connectivity", summary.get("algebraic_connectivity"), "Cohesion"),
+        ("In-degree CV", summary.get("in_degree_cv"), "Cohesion"),
+        ("Out-degree CV", summary.get("out_degree_cv"), "Cohesion"),
         ("WCC count", summary["wcc_count"], "Component structure"),
         ("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure"),
         ("SCC count", summary["scc_count"], "Component structure"),

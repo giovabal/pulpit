@@ -57,6 +57,11 @@ Promise.all([
         note.textContent = "† Computed on the largest weakly connected component (undirected)";
         tablesSection.appendChild(note);
     }
+    if (dataA.scc_note_visible || dataB.scc_note_visible) {
+        var note2 = document.createElement("p"); note2.className = "text-muted small mt-1";
+        note2.textContent = "‡ Computed on the largest strongly connected component (directed)";
+        tablesSection.appendChild(note2);
+    }
 
     // --- Modularity comparison ---
     if ((dataA.modularity_rows && dataA.modularity_rows.length) || (dataB.modularity_rows && dataB.modularity_rows.length)) {

@@ -103,8 +103,10 @@ var METRIC_TOOLTIPS = {
     "Density": "Fraction of all possible directed edges that are present; 0 = sparse, 1 = fully connected.",
     "Reciprocity": "Proportion of edges that have a reciprocal edge; 0 = unidirectional, 1 = fully bidirectional.",
     "Avg Clustering": "Mean probability that two neighbours of a node are also connected to each other.",
-    "Avg Path Length": "Average shortest-path distance between nodes in the largest weakly connected component.",
-    "Diameter": "Longest shortest path (maximum eccentricity) in the largest weakly connected component.",
+    "Avg Path Length": "Average undirected shortest-path distance between nodes in the largest weakly connected component.",
+    "Diameter": "Longest undirected shortest path (maximum eccentricity) in the largest weakly connected component.",
+    "Directed Avg Path Length": "Average directed shortest-path distance following edge direction; computed on the largest strongly connected component.",
+    "Directed Diameter": "Longest directed shortest path (maximum eccentricity); computed on the largest strongly connected component.",
     "WCC count": "Number of weakly connected components; 1 = all nodes reachable ignoring edge direction.",
     "Largest WCC fraction": "Share of all nodes that belong to the largest weakly connected component.",
     "SCC count": "Number of strongly connected components; 1 = every node can reach every other following directed edges.",
@@ -113,6 +115,11 @@ var METRIC_TOOLTIPS = {
     "Assortativity in→out": "Correlation between in-degree of the source node and out-degree of the target node.",
     "Assortativity out→in": "Correlation between out-degree of the source node and in-degree of the target node.",
     "Assortativity out→out": "Pearson correlation of out-degree between source and target nodes; +1 = high-senders link to high-senders.",
+    "Transitivity": "Fraction of all connected triples that form closed triangles — the global clustering coefficient. Complements Avg Clustering (which averages local per-node coefficients). Luce & Perry 1949; Watts & Strogatz 1998.",
+    "Global Efficiency": "Mean reciprocal directed shortest-path length over all ordered node pairs; unreachable pairs contribute 0. Measures how efficiently information can flow between any two channels without restricting to a component. Latora & Marchiori 2001.",
+    "Algebraic Connectivity": "Second-smallest eigenvalue of the undirected graph Laplacian (Fiedler value). Zero for disconnected graphs; larger values signal stronger structural cohesion and greater resistance to fragmentation. Fiedler 1973.",
+    "In-degree CV": "Coefficient of variation (σ/μ) of the in-degree distribution. Low = citations spread evenly; high = a few hubs absorb most incoming references.",
+    "Out-degree CV": "Coefficient of variation (σ/μ) of the out-degree distribution. Low = all channels equally active forwarders; high = a few channels drive most references.",
     "Mean Burt's Constraint": "Network-average Burt constraint; lower = more structural-hole brokerage on average.",
     "Content Originality": "Share of messages that are not forwards; higher = more original content production.",
     "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
@@ -157,7 +164,7 @@ function _render_summary(data) {
         }
         var tr = document.createElement("tr");
         var td1 = document.createElement("td"); td1.textContent = row.label;
-        var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*†\s*$/, "").trim();
+        var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*[†‡]\s*$/, "").trim();
         var tip = METRIC_TOOLTIPS[baseLabel];
         if (!tip) {
             var m = baseLabel.match(/^(.*)\s+Centralization$/);
@@ -182,6 +189,11 @@ function _render_summary(data) {
         var note = document.createElement("p"); note.className = "text-muted small mt-1";
         note.textContent = "† Computed on the largest weakly connected component (undirected)";
         section.appendChild(note);
+    }
+    if (data.scc_note_visible) {
+        var note2 = document.createElement("p"); note2.className = "text-muted small mt-1";
+        note2.textContent = "‡ Computed on the largest strongly connected component (directed)";
+        section.appendChild(note2);
     }
 }
 

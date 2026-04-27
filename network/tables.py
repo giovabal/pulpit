@@ -141,6 +141,9 @@ def write_network_metrics_json(
 
     payload = {
         "wcc_note_visible": not summary["path_on_full"],
+        "scc_note_visible": (
+            summary.get("avg_path_length_directed") is not None and not summary.get("scc_path_on_full", True)
+        ),
         "summary_rows": summary_rows,
         "modularity_rows": modularity_rows,
     }
@@ -183,6 +186,9 @@ def write_network_table_xlsx(
         if not summary["path_on_full"]:
             ws.append([])
             ws.append(["† Computed on the largest weakly connected component (undirected)"])
+        if summary.get("avg_path_length_directed") is not None and not summary.get("scc_path_on_full", True):
+            ws.append([])
+            ws.append(["‡ Computed on the largest strongly connected component (directed)"])
         ws.append([])
         ws.append(["Strategy", "Modularity"])
         for cell in ws[ws.max_row]:

@@ -469,6 +469,22 @@ The longest shortest path in the network — the maximum number of hops required
 
 ---
 
+### Directed Avg Path Length
+
+The mean of all directed shortest-path distances between node pairs in the **largest strongly connected component** (SCC), following edge direction. Where path length and diameter use the undirected LCC, this metric respects the arrow of citation: the distance from A to B is the minimum number of directed hops needed to reach B from A, not just any path ignoring direction. A footnote (‡) is shown when the SCC is smaller than the full graph.
+
+**In practice:** the directed path length answers the question *how many forwarding steps does content need to travel between two arbitrary channels?* A short directed path length means information can reach most channels quickly via the citation graph; a long one means propagation paths are stretched. Comparing this to the undirected average path length reveals how much directionality constrains information flow: a large gap between the two suggests many edges are one-way bridges that slow directed propagation significantly.
+
+---
+
+### Directed Diameter
+
+The longest directed shortest path in the largest strongly connected component — the worst-case number of directed hops between any two reachable channels within that component.
+
+**In practice:** the directed diameter bounds the delay for content to traverse the network's core along the citation graph. Because the SCC is by definition fully mutually reachable, a large directed diameter indicates that the core contains some long directed chains despite overall mutual connectivity.
+
+---
+
 ### WCC count (Weakly Connected Components)
 
 The total number of weakly connected components in the graph — groups of channels that are connected to each other by some path ignoring edge direction, with no path to channels outside the group.
@@ -498,6 +514,53 @@ The total number of strongly connected components — groups where every channel
 The share of all nodes in the largest strongly connected component.
 
 **In practice:** the largest SCC is the network's mutually reinforcing core — the set of channels that all ultimately cite each other through directed chains. A large SCC fraction indicates strong circular amplification at the heart of the network; a small fraction means influence is predominantly one-directional. Comparing this to the largest WCC fraction reveals the ratio of the network that is connected but asymmetric versus genuinely mutually reinforcing.
+
+---
+
+### Transitivity
+
+The fraction of all connected triples in the graph that form closed triangles: triples where A→B, A→C, and B→C (or B→A, etc.) all exist. Also called the *global clustering coefficient*. Ranges from 0 (no triangles) to 1 (every triple is closed). Computed by NetworkX's `transitivity()` on the directed graph (Luce & Perry 1949; Watts & Strogatz 1998).
+
+Unlike **Avg Clustering**, which averages the local clustering coefficient of each node separately, transitivity is a single global fraction that gives more weight to high-degree nodes — it answers *what fraction of all potential triangles in the network actually close?* rather than *how triangulated is the typical node's neighbourhood?* The two measures can diverge substantially in heterogeneous networks.
+
+**In practice:** high transitivity means channels that both reference a third channel tend to reference each other as well — information loops are closed, ideas circulate within the same group, and the network is echo-chamber-like. Low transitivity indicates a more open, tree-like structure where connections radiate outward without looping back. Tracking transitivity alongside reciprocity reveals whether closure is symmetric (mutual citation loops) or hierarchical (closed chains in one direction).
+
+---
+
+### Global Efficiency
+
+The mean reciprocal directed shortest-path length over all ordered pairs of nodes in the graph, following edge direction. Unreachable pairs contribute 0, so the measure handles disconnected graphs without restricting to a component. Ranges from 0 (every pair unreachable) to 1 (all pairs at distance 1). Defined by Latora & Marchiori (2001, *Physical Review Letters* 87).
+
+*E = (1 / n(n−1)) × Σ_{i≠j} 1/d(i,j)*
+
+**In practice:** global efficiency is the single most direct summary of how well information can flow across the entire network, including its disconnected parts. A high value means content can travel from any channel to most others in few hops; a low value means the network is fragmented or contains long detours. Because it averages *inverse* distances, it is dominated by short paths rather than long ones — a few very short connections raise the score substantially. Global efficiency is particularly useful for comparing network snapshots over time: a rising value indicates the ecosystem is becoming better integrated and information can spread more widely; a falling value signals fragmentation or the emergence of isolated sub-communities.
+
+Note: computation requires all-pairs shortest paths (O(n*(n+m))); for large graphs (n > 3 000) this is the most expensive metric in the summary.
+
+---
+
+### Algebraic Connectivity (Fiedler value)
+
+The second-smallest eigenvalue λ₂ of the graph Laplacian, computed on the undirected projection. This is the *Fiedler value* (Fiedler 1973, *Czechoslovak Mathematical Journal* 23). It equals 0 exactly when the graph is disconnected (multiple components each contribute a zero eigenvalue to the Laplacian). For connected graphs it is strictly positive; larger values indicate stronger, more robust cohesion. Approximated using the LOBPCG algorithm to avoid full eigendecomposition.
+
+Two fundamental relationships make λ₂ particularly meaningful:
+- **Cheeger inequality**: λ₂/2 ≤ edge expansion ≤ √(2λ₂). It lower-bounds the edge connectivity (minimum cut) of the graph.
+- **Spectral gap**: λ₂ determines the mixing time of a random walk on the graph — how quickly a random walker forgets its starting position. Larger λ₂ → faster mixing → faster diffusion of information.
+
+**In practice:** algebraic connectivity answers the question *how robustly cohesive is this network?* A value near 0 means the network is on the verge of fragmentation — a small number of edge removals would disconnect it. A high value means the network has many redundant pathways and is hard to partition. Unlike component counts (which detect existing disconnection), λ₂ detects *imminent* fragmentation: a network can have a single component yet be close to breaking apart, which the Fiedler value reveals while WCC count does not. Comparing λ₂ across time or across network snapshots reveals whether an information ecosystem is consolidating or developing structural fault lines.
+
+---
+
+### Degree CV (In-degree and Out-degree Coefficient of Variation)
+
+The coefficient of variation (σ/μ) of the in-degree and out-degree distributions, computed separately. CV = standard deviation / mean; it normalises the spread of the distribution by its centre so that networks of different sizes or densities can be compared directly (Pastor-Satorras & Vespignani 2001, *Physical Review Letters* 86).
+
+- **In-degree CV**: measures how unevenly citations are distributed. Low values mean all channels attract roughly equal attention; high values mean a few channels dominate incoming reference traffic (hub concentration).
+- **Out-degree CV**: measures how unevenly forwarding/citing activity is distributed. Low values mean all channels are roughly equally active forwarders; high values mean a few channels are responsible for most of the network's references.
+
+Scale-free networks (CV >> 1) have a few super-hubs that attract disproportionate traffic; random or lattice-like networks (CV ≈ 0) have uniform degree distributions.
+
+**In practice:** degree CV is the quickest diagnostic for the presence of hub structure. In political Telegram networks, high in-degree CV reveals a few central channels that are cited by many others — potential amplification bottlenecks or agenda-setters. High out-degree CV reveals a few channels that drive most of the citation activity — potential coordinating accounts or news aggregators. Comparing in- and out-degree CV together characterises the asymmetry of influence: if in-degree CV >> out-degree CV, the network has a receptive core but a distributed citation base; the reverse indicates a few dominant forwarders pointing at many diverse targets.
 
 ---
 
