@@ -2,7 +2,7 @@
     "use strict";
 
     var API_BASE = "/manage/api/";
-    var PAGE_SIZE = 50;
+    var PAGE_SIZE = 100;
 
     /* ── State ──────────────────────────────────────────────────────────── */
     var _orgs = [];
