@@ -286,6 +286,27 @@
 /* ---- disabled computation param ---- */
 .ops-param--disabled { opacity: .35; pointer-events: none; }
 
+/* ---- full-width param (textarea row) ---- */
+.ops-param--full { flex: 0 0 100%; }
+.ops-param textarea {
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .32rem .6rem;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+  resize: vertical;
+  width: 100%;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+.ops-param textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(67,56,202,.15);
+}
+.ops-param textarea::placeholder { color: var(--muted); opacity: .6; }
+
 /* ---- compare-network directory picker ---- */
 .ops-dir-picker {
   margin-top: .5rem;

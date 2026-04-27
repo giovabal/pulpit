@@ -23,13 +23,26 @@ class Command(BaseCommand):
             "--amount",
             type=int,
             default=None,
-            help="Number of search terms to process (default: all)",
+            help="Number of database search terms to process (default: all).",
+        )
+        parser.add_argument(
+            "--extra-term",
+            dest="extra_terms",
+            action="append",
+            default=[],
+            metavar="TERM",
+            help=(
+                "Additional search term to process alongside database terms. "
+                "Can be repeated. Terms are not persisted unless the Operations "
+                "panel 'Save to database' checkbox was checked before launching."
+            ),
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
         qs = SearchTerm.objects.all().order_by(F("last_check").asc(nulls_first=True))
         if options["amount"] is not None:
             qs = qs[: options["amount"]]
+        extra_terms = [t for t in (options.get("extra_terms") or []) if t]
         total_found = 0
         total_new = 0
         with TelegramClient(
@@ -53,4 +66,11 @@ class Command(BaseCommand):
                 total_new += new
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])
+            for word in extra_terms:
+                self.stdout.write(f'Searching (extra): "{word}" … ', ending="")
+                self.stdout.flush()
+                found, new = crawler.search_channel(word)
+                self.stdout.write(f"{found} found, {new} new")
+                total_found += found
+                total_new += new
         self.stdout.write(self.style.SUCCESS(f"\nSearch complete. {total_found} channels found, {total_new} new."))

@@ -65,6 +65,24 @@
                 <input type="number" name="amount" id="amount_sc" placeholder="–" min="1">
               </div>
             </div>
+            <div class="ops-params mt-2">
+              <div class="ops-param ops-param--full">
+                <label for="extra_terms_sc">Extra search terms
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="One term per line. Searched in addition to any terms stored in the database. Terms are temporary unless 'Save to database' is checked."></i>
+                </label>
+                <textarea name="extra_terms" id="extra_terms_sc" rows="3"
+                          placeholder="One term per line…"></textarea>
+              </div>
+              <div class="ops-flags">
+                <label class="ops-flag">
+                  <input type="checkbox" name="save_terms" id="save_terms_sc" disabled>
+                  Save to database
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="If checked, each term above is added as a new SearchTerm in the database (lowercased, deduplicated). Only available when extra terms are present."></i>
+                </label>
+              </div>
+            </div>
           </fieldset>
 
           {% elif task.name == "get_channels" %}
@@ -633,6 +651,19 @@
   document.querySelectorAll('input[name="measures"], input[name="community_strategies"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
   });
+
+  // Enable "Save to database" checkbox only when the extra-terms textarea has content.
+  var _extraTermsEl = document.getElementById('extra_terms_sc');
+  var _saveTermsEl  = document.getElementById('save_terms_sc');
+  if (_extraTermsEl && _saveTermsEl) {
+    function _syncSaveTerms() {
+      var hasTerms = _extraTermsEl.value.trim().length > 0;
+      _saveTermsEl.disabled = !hasTerms;
+      if (!hasTerms) _saveTermsEl.checked = false;
+    }
+    _extraTermsEl.addEventListener('input', _syncSaveTerms);
+    _syncSaveTerms();
+  }
 
   var _graphDirScanning = false;
   window.opsGraphDirScan = function (btn) {

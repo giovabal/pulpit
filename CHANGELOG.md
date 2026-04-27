@@ -1,12 +1,12 @@
 # Changelog
 
 ## [0.15] - To be announced
-*Cohesion measures. Directed path length.*
+*Cohesion measures.*
 
 ### New features
 - **Network cohesion metrics** — four new academically validated measures appear in a dedicated *Cohesion* group in the Network Statistics table and XLSX: **Transitivity** (global clustering coefficient, fraction of closed triads; Luce & Perry 1949 / Watts & Strogatz 1998), **Global Efficiency** (mean reciprocal directed path length over all node pairs, handles disconnected graphs gracefully; Latora & Marchiori 2001), **Algebraic Connectivity** (Fiedler value λ₂ of the graph Laplacian, zero for disconnected graphs, larger for more robust networks; Fiedler 1973), and **In/Out-degree CV** (coefficient of variation of the degree distributions, quantifies hub concentration; Pastor-Satorras & Vespignani 2001). All four are documented in `ANALYSIS.md`.
 - **Directed Avg Path Length and Directed Diameter** — the mean and maximum directed shortest-path distances computed on the largest strongly connected component (SCC), following edge direction. Complement the existing undirected path metrics. A ‡ footnote appears when the SCC is smaller than the full graph.
-
+- **Ad-hoc search terms in the Operations panel**: the Search Channels card now has an *Extra search terms* textarea (one term per line). Terms entered there are searched alongside the database terms for the current run only. A *Save to database* checkbox (enabled only when the textarea has content) persists the terms as new `SearchTerm` records (lowercased, deduplicated) before the task launches. The `search_channels` management command gains a corresponding `--extra-term` flag that can be repeated.
 
 ## [0.14] - 2026-04-27
 *Year-by-year timeline export. Layout improvements.*

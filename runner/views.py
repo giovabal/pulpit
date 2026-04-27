@@ -8,6 +8,7 @@ from django.shortcuts import render
 from django.views import View
 
 from runner import tasks
+from webapp.models import SearchTerm
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "get_channels": {
@@ -52,6 +53,12 @@ class RunTaskView(View):
             return JsonResponse({"error": "Unknown task"}, status=404)
         if tasks.get_status(task)["status"] == "running":
             return JsonResponse({"error": "Task already running"}, status=409)
+        if task == "search_channels" and request.POST.get("save_terms"):
+            extra_raw = request.POST.get("extra_terms", "")
+            for line in extra_raw.splitlines():
+                word = " ".join(line.split()).lower()
+                if word:
+                    SearchTerm.objects.get_or_create(word=word)
         args = _build_args(task, request.POST)
         try:
             tasks.launch(task, args)
@@ -161,6 +168,10 @@ def _build_args(task: str, post: Any) -> list[str]:
         amount = post.get("amount", "").strip()
         if amount:
             args += ["--amount", amount]
+        for line in post.get("extra_terms", "").splitlines():
+            word = " ".join(line.split()).lower()
+            if word:
+                args += ["--extra-term", word]
 
     elif task == "export_network":
         if post.get("graph_3d"):
