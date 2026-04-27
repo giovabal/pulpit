@@ -1,0 +1,65 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-two-col">
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Event Types</h2>
+      <button class="bo-btn" id="et-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add type</button>
+    </div>
+    <form class="bo-add-form d-none" id="et-add-form" autocomplete="off">
+      <input class="bo-input bo-input--wide" name="name" placeholder="Name" required>
+      <input class="bo-input bo-input--color" type="color" name="color" value="#4338ca">
+      <button type="submit" class="bo-btn">Save</button>
+      <button type="button" class="bo-btn bo-btn--ghost" id="et-add-cancel">Cancel</button>
+    </form>
+    <table class="bo-table" id="et-table">
+      <thead>
+        <tr><th>Color</th><th>Name</th><th class="bo-th--num">Events</th><th></th></tr>
+      </thead>
+      <tbody id="et-tbody">
+        <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Events</h2>
+      <button class="bo-btn" id="ev-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add event</button>
+    </div>
+    <form class="bo-add-form d-none" id="ev-add-form" autocomplete="off">
+      <input class="bo-input" type="date" name="date" required>
+      <input class="bo-input bo-input--wide" name="subject" placeholder="Subject" required>
+      <select class="bo-select" name="action_id" id="ev-type-select" required></select>
+      <button type="submit" class="bo-btn">Save</button>
+      <button type="button" class="bo-btn bo-btn--ghost" id="ev-add-cancel">Cancel</button>
+    </form>
+    <div class="bo-toolbar bo-toolbar--compact">
+      <select class="bo-select bo-select--sm" id="ev-type-filter">
+        <option value="">All types</option>
+      </select>
+      <select class="bo-select bo-select--sm" id="ev-year-filter">
+        <option value="">All years</option>
+      </select>
+    </div>
+    <table class="bo-table" id="ev-table">
+      <thead>
+        <tr><th>Date</th><th>Type</th><th>Subject</th><th></th></tr>
+      </thead>
+      <tbody id="ev-tbody">
+        <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/events.js' %}"></script>
+{% endblock extra_scripts %}

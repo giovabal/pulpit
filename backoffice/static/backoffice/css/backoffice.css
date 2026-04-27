@@ -1,0 +1,414 @@
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.bo-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 56px);
+}
+
+.bo-subnav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0 var(--space-5);
+  overflow-x: auto;
+}
+
+.bo-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+
+.bo-subnav-link:hover { color: var(--text); }
+.bo-subnav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.bo-content {
+  flex: 1;
+  padding: var(--space-5);
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Section header ─────────────────────────────────────────────────────── */
+
+.bo-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.bo-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
+
+.bo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.bo-toolbar--compact { margin-bottom: var(--space-2); }
+
+.bo-search {
+  flex: 1 1 220px;
+  max-width: 340px;
+  padding: .375rem .75rem;
+  font-size: .875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+.bo-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,56,202,.12); }
+
+.bo-select {
+  padding: .375rem .625rem;
+  font-size: .875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.bo-select:focus { outline: none; border-color: var(--accent); }
+.bo-select--sm { padding: .25rem .5rem; font-size: .8125rem; }
+
+.bo-count {
+  font-size: .8125rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── Bulk action bar ────────────────────────────────────────────────────── */
+
+.bo-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--accent-bg);
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: .875rem;
+}
+
+.bo-bulk-count { font-weight: 600; color: var(--accent); }
+.bo-bulk-sep { color: var(--border); font-size: 1rem; }
+.bo-bulk-label { color: var(--muted); }
+
+/* ── Pagination ─────────────────────────────────────────────────────────── */
+
+.bo-pagination {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  font-size: .8125rem;
+}
+
+.bo-pagination button {
+  padding: .25rem .5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  font-size: .8125rem;
+  cursor: pointer;
+  color: var(--text);
+}
+.bo-pagination button:disabled { opacity: .4; cursor: default; }
+.bo-pagination button:not(:disabled):hover { background: var(--hover); }
+.bo-pagination span { color: var(--muted); }
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+
+.bo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
+
+.bo-table th {
+  padding: .5rem .75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: .8125rem;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.bo-th--check { width: 2rem; }
+.bo-th--num { text-align: right; }
+.bo-th--center { text-align: center; }
+
+.bo-table td {
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.bo-table tbody tr:hover { background: var(--hover); }
+.bo-table tbody tr.bo-row--selected { background: var(--accent-bg); }
+
+.bo-td--num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bo-td--center { text-align: center; }
+
+.bo-empty { text-align: center; color: var(--muted); padding: var(--space-6) !important; }
+
+/* ── Channel name cell ──────────────────────────────────────────────────── */
+
+.bo-ch-name { font-weight: 500; }
+.bo-ch-username { font-size: .8125rem; color: var(--muted); font-family: var(--font-mono); }
+.bo-type-badge {
+  display: inline-block;
+  padding: .125rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 500;
+  background: var(--hover);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Org cell ───────────────────────────────────────────────────────────── */
+
+.bo-org-cell { cursor: pointer; }
+.bo-org-cell:hover .bo-org-name { text-decoration: underline; }
+
+.bo-org-dot {
+  display: inline-block;
+  width: .625rem;
+  height: .625rem;
+  border-radius: 50%;
+  margin-right: .375rem;
+  flex-shrink: 0;
+}
+
+.bo-org-name { font-size: .875rem; }
+.bo-org-unassigned { color: #dc2626; font-size: .875rem; }
+
+.bo-org-select {
+  width: 100%;
+  padding: .25rem .5rem;
+  font-size: .875rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+/* ── Group chips ────────────────────────────────────────────────────────── */
+
+.bo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  align-items: center;
+}
+
+.bo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .125rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--surface);
+  white-space: nowrap;
+}
+
+.bo-chip-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  opacity: .7;
+  font-size: .75rem;
+}
+.bo-chip-remove:hover { opacity: 1; }
+
+.bo-chip-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 1px dashed var(--muted);
+  background: none;
+  cursor: pointer;
+  font-size: .75rem;
+  color: var(--muted);
+  padding: 0;
+}
+.bo-chip-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.bo-chip-dropdown {
+  position: absolute;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 160px;
+  padding: var(--space-1) 0;
+  font-size: .875rem;
+}
+.bo-chip-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: .375rem .75rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: .875rem;
+}
+.bo-chip-dropdown button:hover { background: var(--hover); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.bo-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: .375rem .875rem;
+  font-size: .875rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.bo-btn:hover { background: var(--hover); }
+.bo-btn--sm { padding: .25rem .625rem; font-size: .8125rem; }
+.bo-btn--ghost { border-color: transparent; color: var(--muted); }
+.bo-btn--ghost:hover { background: var(--hover); color: var(--text); }
+.bo-btn--danger { color: #dc2626; border-color: #fecaca; }
+.bo-btn--danger:hover { background: #fef2f2; }
+.bo-btn--icon {
+  padding: .25rem .375rem;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+.bo-btn--icon:hover { background: var(--hover); color: var(--text); }
+
+/* ── Forms ──────────────────────────────────────────────────────────────── */
+
+.bo-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  background: var(--accent-bg);
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.bo-add-form--inline { background: none; border: none; padding: 0; margin-bottom: var(--space-3); }
+
+.bo-input {
+  padding: .375rem .75rem;
+  font-size: .875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+.bo-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,56,202,.12); }
+.bo-input--wide { flex: 1 1 200px; }
+.bo-input--color { width: 2.5rem; height: 2.125rem; padding: .125rem .25rem; cursor: pointer; }
+
+.bo-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  font-size: .875rem;
+  cursor: pointer;
+}
+
+/* ── Inline edit row ────────────────────────────────────────────────────── */
+
+.bo-inline-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Two-column layout (events page) ────────────────────────────────────── */
+
+.bo-two-col {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 900px) { .bo-two-col { grid-template-columns: 1fr; } }
+
+.bo-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+
+.bo-toast-container {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 9999;
+}
+
+.bo-toast {
+  padding: .625rem 1rem;
+  border-radius: var(--radius);
+  font-size: .875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  animation: bo-toast-in .2s ease;
+  max-width: 320px;
+}
+.bo-toast--success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.bo-toast--error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+@keyframes bo-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

@@ -1,0 +1,68 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block extra_styles %}
+{{ block.super }}
+{% endblock extra_styles %}
+
+{% block bo_content %}
+<div class="bo-toolbar" id="ch-toolbar">
+  <input class="bo-search" id="ch-search" type="search" placeholder="Search by title or username…" autocomplete="off">
+  <select class="bo-select" id="ch-status">
+    <option value="">All channels</option>
+    <option value="unassigned">Unassigned</option>
+    <option value="interesting">Interesting</option>
+    <option value="lost">Lost</option>
+    <option value="private">Private</option>
+  </select>
+  <select class="bo-select" id="ch-org-filter">
+    <option value="">All organizations</option>
+  </select>
+  <select class="bo-select" id="ch-group-filter">
+    <option value="">All groups</option>
+  </select>
+  <span class="bo-count" id="ch-count"></span>
+  <div class="bo-pagination" id="ch-pagination"></div>
+</div>
+
+<div class="bo-bulk-bar d-none" id="ch-bulk-bar">
+  <span class="bo-bulk-count" id="ch-bulk-count"></span>
+  <span class="bo-bulk-sep">|</span>
+  <label class="bo-bulk-label">Assign to org</label>
+  <select class="bo-select bo-select--sm" id="ch-bulk-org"></select>
+  <button class="bo-btn bo-btn--sm" id="ch-bulk-org-apply">Apply</button>
+  <span class="bo-bulk-sep">|</span>
+  <label class="bo-bulk-label">Add to group</label>
+  <select class="bo-select bo-select--sm" id="ch-bulk-add-group"></select>
+  <button class="bo-btn bo-btn--sm" id="ch-bulk-add-group-apply">Apply</button>
+  <span class="bo-bulk-sep">|</span>
+  <label class="bo-bulk-label">Remove from group</label>
+  <select class="bo-select bo-select--sm" id="ch-bulk-rm-group"></select>
+  <button class="bo-btn bo-btn--sm bo-btn--danger" id="ch-bulk-rm-group-apply">Apply</button>
+</div>
+
+<div class="table-responsive">
+  <table class="bo-table" id="ch-table">
+    <thead>
+      <tr>
+        <th class="bo-th--check"><input type="checkbox" id="ch-select-all" title="Select all"></th>
+        <th>Channel</th>
+        <th>Type</th>
+        <th>Organization</th>
+        <th>Groups</th>
+        <th class="bo-th--num">Subscribers</th>
+        <th class="bo-th--num">In-degree</th>
+      </tr>
+    </thead>
+    <tbody id="ch-tbody">
+      <tr><td colspan="7" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/channels.js' %}"></script>
+{% endblock extra_scripts %}

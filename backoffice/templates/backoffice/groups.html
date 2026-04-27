@@ -1,0 +1,38 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-section-header">
+  <h2 class="bo-section-title">Channel Groups</h2>
+  <button class="bo-btn" id="grp-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add group</button>
+</div>
+
+<form class="bo-add-form d-none" id="grp-add-form" autocomplete="off">
+  <input class="bo-input" name="name" placeholder="Name" required>
+  <input class="bo-input bo-input--wide" name="description" placeholder="Description (optional)">
+  <button type="submit" class="bo-btn">Save</button>
+  <button type="button" class="bo-btn bo-btn--ghost" id="grp-add-cancel">Cancel</button>
+</form>
+
+<div class="table-responsive">
+  <table class="bo-table" id="grp-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+        <th class="bo-th--num">Channels</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="grp-tbody">
+      <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/groups.js' %}"></script>
+{% endblock extra_scripts %}

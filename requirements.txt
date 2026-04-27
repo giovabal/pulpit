@@ -4,6 +4,7 @@
 # mysqlclient>=2.2
 # Oracle support (optional — install manually when DB_ENGINE=oracle)
 # oracledb>=2.0
+djangorestframework==3.17.1
 fa2==1.1.2
 django==6.0.4
 beautifulsoup4==4.14.3

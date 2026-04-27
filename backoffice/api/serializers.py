@@ -1,0 +1,104 @@
+from events.models import Event, EventType
+from webapp.models import Channel, ChannelGroup, Organization, SearchTerm
+
+from rest_framework import serializers
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    channel_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = ["id", "name", "color", "is_interesting", "channel_count"]
+
+
+class ChannelGroupSerializer(serializers.ModelSerializer):
+    channel_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = ChannelGroup
+        fields = ["id", "name", "description", "channel_count"]
+
+
+class ChannelSerializer(serializers.ModelSerializer):
+    organization_id = serializers.PrimaryKeyRelatedField(
+        source="organization",
+        queryset=Organization.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    organization_name = serializers.CharField(source="organization.name", read_only=True, default=None)
+    organization_color = serializers.CharField(source="organization.color", read_only=True, default=None)
+    group_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        source="groups",
+        queryset=ChannelGroup.objects.all(),
+        required=False,
+    )
+    channel_type = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Channel
+        fields = [
+            "id",
+            "title",
+            "username",
+            "channel_type",
+            "organization_id",
+            "organization_name",
+            "organization_color",
+            "group_ids",
+            "participants_count",
+            "in_degree",
+            "out_degree",
+            "is_lost",
+            "is_private",
+            "date",
+        ]
+        read_only_fields = [
+            "id",
+            "title",
+            "username",
+            "channel_type",
+            "participants_count",
+            "in_degree",
+            "out_degree",
+            "date",
+        ]
+
+    def update(self, instance, validated_data):
+        groups = validated_data.pop("groups", None)
+        instance = super().update(instance, validated_data)
+        if groups is not None:
+            instance.groups.set(groups)
+        return instance
+
+
+class SearchTermSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SearchTerm
+        fields = ["id", "word", "last_check"]
+        read_only_fields = ["last_check"]
+
+    def create(self, validated_data):
+        # Reuse the model's lowercasing/dedup via get_or_create.
+        obj, _ = SearchTerm.objects.get_or_create(word=validated_data["word"].strip().lower())
+        return obj
+
+
+class EventTypeSerializer(serializers.ModelSerializer):
+    event_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = EventType
+        fields = ["id", "name", "description", "color", "event_count"]
+
+
+class EventSerializer(serializers.ModelSerializer):
+    action_id = serializers.PrimaryKeyRelatedField(source="action", queryset=EventType.objects.all())
+    action_name = serializers.CharField(source="action.name", read_only=True)
+    action_color = serializers.CharField(source="action.color", read_only=True)
+
+    class Meta:
+        model = Event
+        fields = ["id", "date", "subject", "action_id", "action_name", "action_color"]

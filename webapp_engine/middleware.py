@@ -31,9 +31,9 @@ class WebAccessMiddleware:
         if any(path.startswith(p) for p in self._ALWAYS_EXEMPT):
             return self.get_response(request)
 
-        is_ops = path.startswith("/operations/")
+        is_staff_only = path.startswith("/operations/") or path.startswith("/manage/")
 
-        if is_ops:
+        if is_staff_only:
             if not request.user.is_authenticated:
                 return redirect_to_login(request.get_full_path())
             if not request.user.is_staff:

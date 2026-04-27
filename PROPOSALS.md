@@ -2,6 +2,7 @@
 
 - Organization change overtime
 - Custom admin
+- the crawl options in operations should be vertical, in order of what happens when. options should be numbered
 
 ## 3. Content & Semantic Analysis
 

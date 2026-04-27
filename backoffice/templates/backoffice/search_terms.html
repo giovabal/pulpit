@@ -1,0 +1,34 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-section-header">
+  <h2 class="bo-section-title">Search Terms</h2>
+</div>
+
+<form class="bo-add-form bo-add-form--inline" id="st-add-form" autocomplete="off">
+  <input class="bo-input bo-input--wide" id="st-input" name="word" placeholder="New search term… (press Enter to add)" required>
+  <button type="submit" class="bo-btn">Add</button>
+</form>
+
+<div class="table-responsive">
+  <table class="bo-table" id="st-table">
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>Last check</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="st-tbody">
+      <tr><td colspan="3" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/search_terms.js' %}"></script>
+{% endblock extra_scripts %}

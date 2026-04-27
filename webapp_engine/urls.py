@@ -47,5 +47,6 @@ urlpatterns = [
         else []
     ),
     path("operations/", include("runner.urls")),
+    path("manage/", include("backoffice.urls", namespace="backoffice")),
     path("", include("webapp.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

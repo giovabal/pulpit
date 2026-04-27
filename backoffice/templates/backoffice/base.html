@@ -1,0 +1,37 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{% static 'backoffice/css/backoffice.css' %}">
+{% endblock extra_styles %}
+
+{% block content %}
+<div class="bo-page">
+  <nav class="bo-subnav">
+    <a href="{% url 'backoffice:channels' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'channels' %} active{% endif %}">
+      <i class="bi bi-broadcast me-1" aria-hidden="true"></i>Channels
+    </a>
+    <a href="{% url 'backoffice:organizations' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'organizations' %} active{% endif %}">
+      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Organizations
+    </a>
+    <a href="{% url 'backoffice:groups' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'groups' %} active{% endif %}">
+      <i class="bi bi-collection me-1" aria-hidden="true"></i>Groups
+    </a>
+    <a href="{% url 'backoffice:search-terms' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'search-terms' %} active{% endif %}">
+      <i class="bi bi-search me-1" aria-hidden="true"></i>Search Terms
+    </a>
+    <a href="{% url 'backoffice:events' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'events' %} active{% endif %}">
+      <i class="bi bi-calendar-event me-1" aria-hidden="true"></i>Events
+    </a>
+  </nav>
+
+  <div class="bo-content">
+    {% block bo_content %}{% endblock bo_content %}
+  </div>
+</div>
+{% endblock content %}
