@@ -46,12 +46,13 @@
     <thead>
       <tr>
         <th class="bo-th--check"><input type="checkbox" id="ch-select-all" title="Select all"></th>
-        <th>Channel</th>
+        <th class="bo-th--num bo-th--sortable" id="ch-th-id">#<span class="bo-sort-icon"> ⇅</span></th>
+        <th class="bo-th--sortable" id="ch-th-name">Channel<span class="bo-sort-icon"> ▲</span></th>
         <th>Type</th>
         <th>Organization</th>
         <th>Groups</th>
-        <th class="bo-th--num">Subscribers</th>
-        <th class="bo-th--num">In-degree</th>
+        <th class="bo-th--num bo-th--sortable" id="ch-th-subscribers">Subscribers<span class="bo-sort-icon"> ⇅</span></th>
+        <th class="bo-th--num bo-th--sortable" id="ch-th-indegree">In-degree<span class="bo-sort-icon"> ⇅</span></th>
       </tr>
     </thead>
     <tbody id="ch-tbody">

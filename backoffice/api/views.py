@@ -15,6 +15,7 @@ from .serializers import (
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
 
@@ -56,19 +57,18 @@ class ChannelViewSet(
 ):
     serializer_class = ChannelSerializer
     http_method_names = ["get", "patch", "post", "head", "options"]
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["id", "title", "participants_count", "in_degree"]
+    ordering = ["title"]
 
     def get_queryset(self):
-        qs = (
-            Channel.objects.select_related("organization")
-            .prefetch_related(
-                "groups",
-                Prefetch(
-                    "profilepicture_set",
-                    queryset=ProfilePicture.objects.order_by("-date")[:1],
-                    to_attr="_prefetched_profile_pics",
-                ),
-            )
-            .order_by("title")
+        qs = Channel.objects.select_related("organization").prefetch_related(
+            "groups",
+            Prefetch(
+                "profilepicture_set",
+                queryset=ProfilePicture.objects.order_by("-date")[:1],
+                to_attr="_prefetched_profile_pics",
+            ),
         )
 
         search = self.request.query_params.get("search", "").strip()

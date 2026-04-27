@@ -161,6 +161,12 @@
 .bo-th--check { width: 2rem; }
 .bo-th--num { text-align: right; }
 .bo-th--center { text-align: center; }
+.bo-th--sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.bo-th--sortable:hover { color: var(--text); }
+.bo-th--sorted { color: var(--accent); }
+.bo-sort-icon { font-size: .75rem; opacity: .6; }
+.bo-th--sorted .bo-sort-icon { opacity: 1; }
+.bo-td--id { color: var(--muted); font-size: .8125rem; font-family: var(--font-mono); width: 4rem; }
 
 .bo-table td {
   padding: .5rem .75rem;

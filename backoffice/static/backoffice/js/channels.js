@@ -12,6 +12,8 @@
     var _offset = 0;
     var _loading = false;
     var _searchTimer = null;
+    var _sortField = "title";
+    var _sortDir   = "asc";
 
     /* ── DOM refs ───────────────────────────────────────────────────────── */
     var $search     = document.getElementById("ch-search");
@@ -41,7 +43,45 @@
         if (org) params.set("organization", org);
         var grp = $groupFilter.value;
         if (grp) params.set("group", grp);
+        params.set("ordering", (_sortDir === "desc" ? "-" : "") + _sortField);
         return API_BASE + "channels/?" + params.toString();
+    }
+
+    /* ── Sort helpers ───────────────────────────────────────────────────── */
+    var _SORT_COLS = {
+        "ch-th-id":          "id",
+        "ch-th-name":        "title",
+        "ch-th-subscribers": "participants_count",
+        "ch-th-indegree":    "in_degree",
+    };
+
+    function _updateSortHeaders() {
+        Object.keys(_SORT_COLS).forEach(function (id) {
+            var th = document.getElementById(id);
+            if (!th) return;
+            var field = _SORT_COLS[id];
+            var indicator = th.querySelector(".bo-sort-icon");
+            if (!indicator) return;
+            if (field === _sortField) {
+                indicator.textContent = _sortDir === "asc" ? " ▲" : " ▼";
+                th.classList.add("bo-th--sorted");
+            } else {
+                indicator.textContent = " ⇅";
+                th.classList.remove("bo-th--sorted");
+            }
+        });
+    }
+
+    function _onSortClick(field) {
+        if (_sortField === field) {
+            _sortDir = _sortDir === "asc" ? "desc" : "asc";
+        } else {
+            _sortField = field;
+            _sortDir = "asc";
+        }
+        _offset = 0;
+        _updateSortHeaders();
+        loadChannels();
     }
 
     function selectedIds() {
@@ -74,7 +114,7 @@
     function renderTable(channels) {
         $tbody.innerHTML = "";
         if (!channels.length) {
-            $tbody.innerHTML = '<tr><td colspan="7" class="bo-empty">No channels found.</td></tr>';
+            $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">No channels found.</td></tr>';
             return;
         }
         var frag = document.createDocumentFragment();
@@ -88,6 +128,10 @@
             chk.type = "checkbox"; chk.dataset.id = ch.id;
             chk.addEventListener("change", updateBulkBar);
             tdChk.appendChild(chk); tr.appendChild(tdChk);
+
+            /* id */
+            var tdId = document.createElement("td"); tdId.className = "bo-td--num bo-td--id";
+            tdId.textContent = ch.id; tr.appendChild(tdId);
 
             /* name */
             var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
@@ -386,4 +430,9 @@
     document.getElementById("ch-bulk-org-apply").addEventListener("click", bulkApplyOrg);
     document.getElementById("ch-bulk-add-group-apply").addEventListener("click", function () { bulkApplyGroup("add"); });
     document.getElementById("ch-bulk-rm-group-apply").addEventListener("click", function () { bulkApplyGroup("remove"); });
+    Object.keys(_SORT_COLS).forEach(function (id) {
+        var th = document.getElementById(id);
+        if (th) th.addEventListener("click", function () { _onSortClick(_SORT_COLS[id]); });
+    });
+    _updateSortHeaders();
 })();
