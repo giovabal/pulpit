@@ -11,6 +11,14 @@
 - **ChannelGroup model** — channels can now be assigned to one or more named groups via Django admin. Groups appear as checkbox filters in the Get Channels and Export Network Operations panel cards; selecting one or more groups restricts the run to channels in those groups. CLI flags `--channel-groups` (comma-separated) are added to both `get_channels` and `export_network`.
 - **Ad-hoc search terms in the Operations panel**: the Search Channels card now has an *Extra search terms* textarea (one term per line). Terms entered there are searched alongside the database terms for the current run only. A *Save to database* checkbox (enabled only when the textarea has content) persists the terms as new `SearchTerm` records (lowercased, deduplicated) before the task launches. The `search_channels` management command gains a corresponding `--extra-term` flag that can be repeated.
 
+### Improvements
+- **Backoffice — accent-insensitive channel search**: the search box in `/manage/channels/` now matches across diacritics (é → e, ç → c, ñ → n, etc.). A Python `UNACCENT_LOWER` function is registered with the SQLite connection at startup via `AppConfig.ready()` and wrapped in a custom Django `Func` so both the stored value and the query term are normalised before comparison.
+- **Backoffice — sortable channel list**: clicking the *#*, *Channel*, *Subscribers*, or *In-degree* column headers sorts ascending/descending; the active direction is shown by an arrow indicator.
+- **Backoffice — URL-based list state**: sort field, sort direction, page offset, and all filter values are reflected in the browser URL via `pushState`/`replaceState`. Navigating back and forward with the browser restores the exact list view; links to filtered/sorted pages can be shared directly.
+- **Backoffice — profile picture modal**: clicking the avatar in the channel list opens a full-size carousel modal with ← / → navigation across all historical profile pictures fetched from `/manage/api/channels/<pk>/pictures/`.
+- **Backoffice — channel detail page** (`/manage/channels/<pk>/`): dedicated update page showing all channel metadata, a clickable profile picture with a badge indicating the total picture count (shown when ≥ 2), and an edit form for organisation, groups, is_lost, and is_private.
+- **Backoffice — default ordering**: channels list defaults to newest-first (id descending); organisations, groups, and search terms default to alphabetical ascending.
+
 ## [0.14] - 2026-04-27
 *Year-by-year timeline export. Layout improvements.*
 

@@ -106,10 +106,10 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
     if n >= 2:
         try:
             ug_ac = graph.to_undirected()
-            if nx.is_connected(ug_ac):
-                algebraic_connectivity = round(nx.algebraic_connectivity(ug_ac, method="tracemin_pcg", seed=42), 6)
-            else:
-                algebraic_connectivity = 0.0  # disconnected → λ₂ = 0 by definition
+            lcc_nodes = max(nx.connected_components(ug_ac), key=len)
+            lcc_ac = ug_ac.subgraph(lcc_nodes)
+            if len(lcc_ac) >= 2:
+                algebraic_connectivity = round(nx.algebraic_connectivity(lcc_ac, method="tracemin_pcg", seed=42), 6)
         except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("algebraic_connectivity unavailable: %s", exc)
 
@@ -518,7 +518,7 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
         (f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths"),
         ("Transitivity (0–1)", summary.get("transitivity"), "Cohesion"),
         ("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion"),
-        ("Algebraic Connectivity", summary.get("algebraic_connectivity"), "Cohesion"),
+        (f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion"),
         ("In-degree CV", summary.get("in_degree_cv"), "Cohesion"),
         ("Out-degree CV", summary.get("out_degree_cv"), "Cohesion"),
         ("WCC count", summary["wcc_count"], "Component structure"),
