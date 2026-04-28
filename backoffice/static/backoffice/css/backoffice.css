@@ -189,6 +189,9 @@
 .bo-ch-username { display: block; font-size: .8125rem; color: var(--muted); font-family: var(--font-mono); text-decoration: none; }
 .bo-ch-username:hover { color: var(--accent); text-decoration: underline; }
 .bo-ch-pic { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.bo-ch-pic--clickable { cursor: pointer; transition: opacity .15s; }
+.bo-ch-pic--clickable:hover { opacity: .75; }
+.bo-pic-modal-img { max-width: 100%; max-height: 70vh; border-radius: var(--radius); object-fit: contain; }
 .bo-type-badge {
   display: inline-block;
   padding: .125rem .5rem;

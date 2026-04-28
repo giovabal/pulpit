@@ -151,9 +151,11 @@
             tdName.appendChild(nameWrap);
             if (ch.profile_picture_url) {
                 var img = document.createElement("img");
-                img.className = "bo-ch-pic";
+                img.className = "bo-ch-pic bo-ch-pic--clickable";
                 img.src = ch.profile_picture_url;
                 img.alt = "";
+                img.title = "View profile pictures";
+                img.addEventListener("click", function (e) { e.stopPropagation(); _openPicModal(ch); });
                 tdName.appendChild(img);
             }
             tr.appendChild(tdName);
@@ -439,4 +441,63 @@
         if (th) th.addEventListener("click", function () { _onSortClick(_SORT_COLS[id]); });
     });
     _updateSortHeaders();
+
+    /* ── Picture modal ──────────────────────────────────────────────────── */
+    var _picUrls   = [];
+    var _picIndex  = 0;
+    var _picModal  = null;
+    var _picCache  = {};   /* channel id → urls array */
+
+    var $picModalEl  = document.getElementById("pic-modal");
+    var $picImg      = document.getElementById("pic-modal-img");
+    var $picTitle    = document.getElementById("pic-modal-title");
+    var $picCounter  = document.getElementById("pic-modal-counter");
+    var $picFooter   = document.getElementById("pic-modal-footer");
+    var $picPrev     = document.getElementById("pic-modal-prev");
+    var $picNext     = document.getElementById("pic-modal-next");
+
+    if ($picModalEl && typeof bootstrap !== "undefined") {
+        _picModal = new bootstrap.Modal($picModalEl);
+    }
+
+    function _showPic(index) {
+        _picIndex = index;
+        $picImg.src = _picUrls[_picIndex];
+        $picCounter.textContent = (_picUrls.length > 1) ? (_picIndex + 1) + " / " + _picUrls.length : "";
+        $picPrev.disabled = _picIndex === 0;
+        $picNext.disabled = _picIndex === _picUrls.length - 1;
+        $picFooter.style.display = _picUrls.length > 1 ? "" : "none";
+    }
+
+    function _openPicModal(ch) {
+        if (!_picModal) return;
+        $picTitle.textContent = ch.title || ("Channel #" + ch.id);
+        $picImg.src = ch.profile_picture_url;  /* show thumbnail immediately */
+        $picCounter.textContent = "";
+        $picFooter.style.display = "none";
+        _picModal.show();
+
+        if (_picCache[ch.id]) {
+            _picUrls = _picCache[ch.id];
+            _showPic(0);
+            return;
+        }
+        apiFetch("/manage/api/channels/" + ch.id + "/pictures/")
+            .then(function (data) {
+                _picCache[ch.id] = data.pictures.length ? data.pictures : [ch.profile_picture_url];
+                _picUrls = _picCache[ch.id];
+                _showPic(0);
+            })
+            .catch(function () {
+                _picUrls = [ch.profile_picture_url];
+                _showPic(0);
+            });
+    }
+
+    $picPrev.addEventListener("click", function () { if (_picIndex > 0) _showPic(_picIndex - 1); });
+    $picNext.addEventListener("click", function () { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); });
+    $picModalEl.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowLeft")  { if (_picIndex > 0) _showPic(_picIndex - 1); }
+        if (e.key === "ArrowRight") { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); }
+    });
 })();

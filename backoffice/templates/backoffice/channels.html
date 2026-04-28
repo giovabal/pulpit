@@ -61,6 +61,25 @@
   </table>
 </div>
 <div class="bo-pagination bo-pagination--bottom" id="ch-pagination-bottom"></div>
+
+<div class="modal fade" id="pic-modal" tabindex="-1" aria-labelledby="pic-modal-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <span class="modal-title fw-semibold" id="pic-modal-title"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-3">
+        <img id="pic-modal-img" src="" alt="" class="bo-pic-modal-img">
+      </div>
+      <div class="modal-footer py-2 justify-content-between" id="pic-modal-footer">
+        <button class="bo-btn bo-btn--sm" id="pic-modal-prev" aria-label="Previous">←</button>
+        <span class="text-muted small" id="pic-modal-counter"></span>
+        <button class="bo-btn bo-btn--sm" id="pic-modal-next" aria-label="Next">→</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock bo_content %}
 
 {% block extra_scripts %}

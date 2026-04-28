@@ -95,6 +95,12 @@ class ChannelViewSet(
 
         return qs
 
+    @action(detail=True, methods=["get"], url_path="pictures")
+    def pictures(self, request, pk=None):
+        channel = self.get_object()
+        urls = [pic.picture.url for pic in channel.profilepicture_set.order_by("-date") if pic.picture]
+        return Response({"pictures": urls})
+
     @action(detail=False, methods=["post"], url_path="bulk-assign")
     def bulk_assign(self, request):
         ids = request.data.get("ids", [])
