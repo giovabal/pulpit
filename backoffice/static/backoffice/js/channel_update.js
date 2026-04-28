@@ -6,6 +6,56 @@
     var API_GRP = "/manage/api/groups/?limit=500";
 
     var $root = document.getElementById("bo-ch-update");
+    var _picUrls  = [];
+    var _picIndex = 0;
+    var _picModal = null;
+    var $picModalEl, $picImg, $picCounter, $picFooter, $picPrev, $picNext;
+
+    function _showPic(index) {
+        _picIndex = index;
+        $picImg.src = _picUrls[_picIndex];
+        $picCounter.textContent = _picUrls.length > 1 ? (_picIndex + 1) + " / " + _picUrls.length : "";
+        $picPrev.disabled = _picIndex === 0;
+        $picNext.disabled = _picIndex === _picUrls.length - 1;
+        $picFooter.style.display = _picUrls.length > 1 ? "" : "none";
+    }
+
+    function _openPicModal() {
+        if (_picModal) _picModal.show();
+    }
+
+    function _buildPicModal() {
+        $picModalEl = document.createElement("div");
+        $picModalEl.className = "modal fade"; $picModalEl.tabIndex = -1; $picModalEl.setAttribute("aria-hidden", "true");
+        $picModalEl.innerHTML =
+            '<div class="modal-dialog modal-dialog-centered">' +
+              '<div class="modal-content">' +
+                '<div class="modal-header py-2">' +
+                  '<span class="modal-title fw-semibold" id="cu-pic-title"></span>' +
+                  '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+                '</div>' +
+                '<div class="modal-body text-center p-3"><img id="cu-pic-img" src="" alt="" class="bo-pic-modal-img"></div>' +
+                '<div class="modal-footer py-2 justify-content-between" id="cu-pic-footer">' +
+                  '<button class="bo-btn bo-btn--sm" id="cu-pic-prev">←</button>' +
+                  '<span class="text-muted small" id="cu-pic-counter"></span>' +
+                  '<button class="bo-btn bo-btn--sm" id="cu-pic-next">→</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        document.body.appendChild($picModalEl);
+        $picImg     = document.getElementById("cu-pic-img");
+        $picCounter = document.getElementById("cu-pic-counter");
+        $picFooter  = document.getElementById("cu-pic-footer");
+        $picPrev    = document.getElementById("cu-pic-prev");
+        $picNext    = document.getElementById("cu-pic-next");
+        $picPrev.addEventListener("click", function () { if (_picIndex > 0) _showPic(_picIndex - 1); });
+        $picNext.addEventListener("click", function () { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); });
+        $picModalEl.addEventListener("keydown", function (e) {
+            if (e.key === "ArrowLeft" && _picIndex > 0) _showPic(_picIndex - 1);
+            if (e.key === "ArrowRight" && _picIndex < _picUrls.length - 1) _showPic(_picIndex + 1);
+        });
+        if (typeof bootstrap !== "undefined") _picModal = new bootstrap.Modal($picModalEl);
+    }
 
     function render(ch, orgs, groups) {
         $root.innerHTML = "";
@@ -19,9 +69,24 @@
 
         var titleWrap = document.createElement("div"); titleWrap.className = "bo-ch-update-title";
         if (ch.profile_picture_url) {
+            var picWrap = document.createElement("div"); picWrap.className = "bo-ch-update-pic-wrap";
             var pic = document.createElement("img");
-            pic.className = "bo-ch-update-pic"; pic.src = ch.profile_picture_url; pic.alt = "";
-            titleWrap.appendChild(pic);
+            pic.className = "bo-ch-update-pic bo-ch-pic--clickable"; pic.src = ch.profile_picture_url; pic.alt = "";
+            pic.addEventListener("click", function () {
+                _showPic(0);
+                _openPicModal();
+            });
+            picWrap.appendChild(pic);
+            /* fetch all pictures to show count badge */
+            apiFetch("/manage/api/channels/" + ch.id + "/pictures/").then(function (data) {
+                _picUrls = data.pictures.length ? data.pictures : [ch.profile_picture_url];
+                if (_picUrls.length > 1) {
+                    var badge = document.createElement("span"); badge.className = "bo-pic-badge";
+                    badge.textContent = _picUrls.length;
+                    picWrap.appendChild(badge);
+                }
+            }).catch(function () { _picUrls = [ch.profile_picture_url]; });
+            titleWrap.appendChild(picWrap);
         }
         var nameBlock = document.createElement("div");
         var h2 = document.createElement("h2"); h2.className = "bo-ch-update-name";
@@ -130,12 +195,18 @@
             .catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
 
+    _buildPicModal();
+
     Promise.all([
         apiFetch(API_CH),
         apiFetch(API_ORG),
         apiFetch(API_GRP),
     ]).then(function (res) {
-        render(res[0], res[1].results, res[2].results);
+        var ch = res[0];
+        /* set modal title */
+        var titleEl = document.getElementById("cu-pic-title");
+        if (titleEl) titleEl.textContent = ch.title || ("Channel #" + ch.id);
+        render(ch, res[1].results, res[2].results);
     }).catch(function (e) {
         $root.innerHTML = '<p class="bo-empty">Error loading channel: ' + e.message + '</p>';
     });
