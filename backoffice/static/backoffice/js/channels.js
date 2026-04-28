@@ -12,8 +12,8 @@
     var _offset = 0;
     var _loading = false;
     var _searchTimer = null;
-    var _sortField = "title";
-    var _sortDir   = "asc";
+    var _sortField = "id";
+    var _sortDir   = "desc";
 
     /* ── DOM refs ───────────────────────────────────────────────────────── */
     var $search     = document.getElementById("ch-search");
@@ -91,8 +91,8 @@
         var st = $status.value; if (st) p.set("status", st);
         var org = $orgFilter.value; if (org) p.set("org", org);
         var grp = $groupFilter.value; if (grp) p.set("group", grp);
-        if (_sortField !== "title") p.set("sort", _sortField);
-        if (_sortDir !== "asc") p.set("dir", _sortDir);
+        if (_sortField !== "id") p.set("sort", _sortField);
+        if (_sortDir !== "desc") p.set("dir", _sortDir);
         var page = Math.floor(_offset / PAGE_SIZE) + 1; if (page > 1) p.set("page", page);
         var qs = p.toString();
         return qs ? window.location.pathname + "?" + qs : window.location.pathname;
@@ -104,8 +104,8 @@
         $status.value = p.get("status") || "";
         $orgFilter.value = p.get("org") || "";
         $groupFilter.value = p.get("group") || "";
-        _sortField = p.get("sort") || "title";
-        _sortDir = p.get("dir") || "asc";
+        _sortField = p.get("sort") || "id";
+        _sortDir = p.get("dir") || "desc";
         var page = parseInt(p.get("page") || "1");
         _offset = (isNaN(page) || page < 1 ? 0 : page - 1) * PAGE_SIZE;
         _updateSortHeaders();

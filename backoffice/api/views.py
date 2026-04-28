@@ -59,7 +59,7 @@ class ChannelViewSet(
     http_method_names = ["get", "patch", "post", "head", "options"]
     filter_backends = [OrderingFilter]
     ordering_fields = ["id", "title", "participants_count", "in_degree"]
-    ordering = ["title"]
+    ordering = ["-id"]
 
     def get_queryset(self):
         qs = Channel.objects.select_related("organization").prefetch_related(
