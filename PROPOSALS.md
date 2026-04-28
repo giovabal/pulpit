@@ -63,17 +63,6 @@ When `--compare` is used, enhance `network_compare_table.html` with a Sankey dia
 
 Supergroups (`megagroup=True`) store discussion replies. Currently, these are crawled as channels but their replies (comments) are not fetched. Fetching replies would reveal which channels' posts generate discussion and who participates. New `Message.reply_to` field and `--crawl-replies` option.
 
-### 6.4 — Reaction counts
-
-Telegram messages have emoji reactions. Store `Message.reactions` as a JSON field (reaction emoji → count). Expose total reaction count as a new column in `channel_table`, and a reaction-weighted engagement measure. Reactions are already available in the Telethon API via `message.reactions`.
-
----
-
-## 7. Organization & Workflow
-
-### 7.2 — Channel health dashboard
-
-New Django admin view showing, for each channel: days since last crawl, message gap density (holes), whether `is_lost` is set, days since last subscriber count update. Lets operators quickly identify stale data.
 
 ---
 

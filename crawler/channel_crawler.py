@@ -12,13 +12,32 @@ from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel, Message, MessagePicture, MessageVideo
+from webapp.models import Channel, Message, MessagePicture, MessageReaction, MessageVideo
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
 from telethon.tl.types import InputChannel, MessageService
 
 logger = logging.getLogger(__name__)
+
+
+def _save_reactions(message_pk: int, telegram_message: Any) -> None:
+    """Persist the current emoji reactions for *message_pk* from a Telethon message object.
+
+    Replaces any existing reactions — always reflects the current Telegram state.
+    Custom-emoji reactions (non-standard stickers) are skipped; only plain emoji are stored.
+    """
+    MessageReaction.objects.filter(message_id=message_pk).delete()
+    reactions_obj = getattr(telegram_message, "reactions", None)
+    if not reactions_obj:
+        return
+    to_create = [
+        MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count)
+        for rc in (getattr(reactions_obj, "results", None) or [])
+        if hasattr(rc.reaction, "emoticon")
+    ]
+    if to_create:
+        MessageReaction.objects.bulk_create(to_create)
 
 
 class ChannelCrawler:
@@ -260,6 +279,7 @@ class ChannelCrawler:
                 )
 
         message.save()
+        _save_reactions(message.pk, telegram_message)
         return downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:
@@ -369,6 +389,13 @@ class ChannelCrawler:
             ).update(**update_kwargs)
             if rows:
                 updated += 1
+                msg_pk = (
+                    Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
+                    .values_list("pk", flat=True)
+                    .first()
+                )
+                if msg_pk is not None:
+                    _save_reactions(msg_pk, telegram_message)
                 if telegram_message.media:
                     if (
                         hasattr(telegram_message.media, "photo")

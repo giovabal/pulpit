@@ -9,7 +9,7 @@ from django.views.generic import ListView, TemplateView
 
 from webapp.paginator import DiggPaginator
 
-from .models import Channel, Message, Organization
+from .models import Channel, Message, MessageReaction, Organization
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date
 
@@ -399,7 +399,7 @@ class ChannelDetailView(ListView):
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
-            .prefetch_related("references")
+            .prefetch_related("references", "reactions")
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -447,6 +447,17 @@ class ChannelDetailView(ListView):
                 "note": "from other channels",
             },
         ]
+        top_reactions_qs = (
+            MessageReaction.objects.filter(message__channel=ch)
+            .values("emoji")
+            .annotate(total=Sum("count"))
+            .order_by("-total")[:10]
+        )
+        top_reactions = [{"emoji": r["emoji"], "total": f"{r['total']:,}"} for r in top_reactions_qs]
+        total_reactions = sum(int(r["total"].replace(",", "")) for r in top_reactions)
+        if total_reactions:
+            summary.append({"icon": "bi-emoji-smile", "label": "Total reactions", "value": f"{total_reactions:,}"})
+
         if not is_interesting:
             for card in summary[:-1]:
                 card["dim"] = True
@@ -509,6 +520,12 @@ class ChannelDetailView(ListView):
             panels = [p for p in panels if p["id"] == "ch-cross-refs"]
 
         context_data.update(
-            {"selected_channel": ch, "summary": summary, "panels": panels, "is_interesting": is_interesting}
+            {
+                "selected_channel": ch,
+                "summary": summary,
+                "panels": panels,
+                "is_interesting": is_interesting,
+                "top_reactions": top_reactions,
+            }
         )
         return context_data

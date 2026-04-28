@@ -248,3 +248,18 @@ class Message(TelegramBaseModel):
     @property
     def telegram_url(self) -> str:
         return f"{self.channel.telegram_url}/{self.telegram_id}"
+
+
+class MessageReaction(models.Model):
+    """Aggregated reaction count for a single emoji on a single message."""
+
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="reactions")
+    emoji = models.CharField(max_length=64)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = [("message", "emoji")]
+        ordering = ["-count"]
+
+    def __str__(self) -> str:
+        return f"{self.emoji} ×{self.count} on message {self.message_id}"

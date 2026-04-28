@@ -62,6 +62,17 @@
   {% endfor %}
 </div>
 
+{% if top_reactions %}
+<div class="ch-reactions-block">
+  <span class="ch-reactions-label">Reactions</span>
+  <div class="ch-reactions-pills">
+    {% for r in top_reactions %}
+    <span class="reaction-pill">{{ r.emoji }} <span class="reaction-pill-count">{{ r.total }}</span></span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% for panel in panels %}
 <div class="stats-panel">
   <div class="stats-toggle-wrap">
@@ -317,6 +328,9 @@
           <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
           <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+          {% for reaction in post.reactions.all %}
+          <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
+          {% endfor %}
         </div>
         <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>

@@ -576,6 +576,54 @@ body {
 .ch-summary-grid .sc-value { font-size: 1.1rem; }
 .ch-summary-grid ~ .stats-panel { max-width: none; }
 
+/* ---------- Channel reactions summary ---------- */
+.ch-reactions-block {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.ch-reactions-label {
+  font-size: .72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ch-reactions-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .55rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: .8rem;
+  line-height: 1;
+}
+
+.reaction-pill-count {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Per-message reaction chips ---------- */
+.post-reaction {
+  font-size: .78rem;
+  opacity: .85;
+}
+
 /* ---------- Search ---------- */
 .search-header { max-width: 52rem; margin-left: auto; margin-right: auto; margin-bottom: 1.25rem; }
 
