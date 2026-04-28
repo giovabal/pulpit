@@ -81,7 +81,34 @@
         }
         _offset = 0;
         _updateSortHeaders();
-        loadChannels();
+        loadChannels("push");
+    }
+
+    /* ── URL state ──────────────────────────────────────────────────────── */
+    function _buildQueryString() {
+        var p = new URLSearchParams();
+        var s = $search.value.trim(); if (s) p.set("search", s);
+        var st = $status.value; if (st) p.set("status", st);
+        var org = $orgFilter.value; if (org) p.set("org", org);
+        var grp = $groupFilter.value; if (grp) p.set("group", grp);
+        if (_sortField !== "title") p.set("sort", _sortField);
+        if (_sortDir !== "asc") p.set("dir", _sortDir);
+        var page = Math.floor(_offset / PAGE_SIZE) + 1; if (page > 1) p.set("page", page);
+        var qs = p.toString();
+        return qs ? window.location.pathname + "?" + qs : window.location.pathname;
+    }
+
+    function _syncFormFromUrl() {
+        var p = new URLSearchParams(window.location.search);
+        $search.value = p.get("search") || "";
+        $status.value = p.get("status") || "";
+        $orgFilter.value = p.get("org") || "";
+        $groupFilter.value = p.get("group") || "";
+        _sortField = p.get("sort") || "title";
+        _sortDir = p.get("dir") || "asc";
+        var page = parseInt(p.get("page") || "1");
+        _offset = (isNaN(page) || page < 1 ? 0 : page - 1) * PAGE_SIZE;
+        _updateSortHeaders();
     }
 
     function selectedIds() {
@@ -361,7 +388,7 @@
             body: { ids: ids, organization_id: orgId },
         }).then(function (data) {
             showToast("Updated " + data.updated + " channels.");
-            loadChannels();
+            loadChannels(null);
         }).catch(function (err) { showToast("Error: " + err.message, "error"); });
     }
 
@@ -382,17 +409,17 @@
     }
 
     /* ── Pagination ─────────────────────────────────────────────────────── */
-    function _goToPage(newOffset) { _offset = newOffset; loadChannels(); }
+    function _goToPage(newOffset) { _offset = newOffset; loadChannels("push"); }
     function _renderPagination() {
         renderPagination($pagination, _offset, _total, PAGE_SIZE, _goToPage);
         renderPagination($paginationBottom, _offset, _total, PAGE_SIZE, _goToPage);
     }
 
     /* ── Data loading ───────────────────────────────────────────────────── */
-    function loadChannels() {
+    function loadChannels(updateUrl) {
         if (_loading) return;
         _loading = true;
-        $tbody.innerHTML = '<tr><td colspan="7" class="bo-empty">Loading…</td></tr>';
+        $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Loading…</td></tr>';
         $selectAll.checked = false;
         $bulkBar.classList.add("d-none");
 
@@ -403,9 +430,11 @@
                 $count.textContent = _total + " channel" + (_total !== 1 ? "s" : "");
                 renderTable(_channels);
                 _renderPagination();
+                if (updateUrl === "push")    history.pushState(null, "", _buildQueryString());
+                if (updateUrl === "replace") history.replaceState(null, "", _buildQueryString());
             })
             .catch(function (err) {
-                $tbody.innerHTML = '<tr><td colspan="7" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";
+                $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";
             })
             .finally(function () { _loading = false; });
     }
@@ -418,16 +447,21 @@
         _orgs = results[0].results;
         _groups = results[1].results;
         renderFilters();
-        loadChannels();
+        _syncFormFromUrl();
+        loadChannels("replace");
     }).catch(function (err) { showToast("Error loading data: " + err.message, "error"); });
 
     /* ── Event listeners ────────────────────────────────────────────────── */
     $search.addEventListener("input", function () {
         clearTimeout(_searchTimer);
-        _searchTimer = setTimeout(function () { _offset = 0; loadChannels(); }, 300);
+        _searchTimer = setTimeout(function () { _offset = 0; loadChannels("push"); }, 300);
     });
     [$status, $orgFilter, $groupFilter].forEach(function (el) {
-        el.addEventListener("change", function () { _offset = 0; loadChannels(); });
+        el.addEventListener("change", function () { _offset = 0; loadChannels("push"); });
+    });
+    window.addEventListener("popstate", function () {
+        _syncFormFromUrl();
+        loadChannels(null);
     });
     $selectAll.addEventListener("change", function () {
         $tbody.querySelectorAll("input[type=checkbox]").forEach(function (cb) { cb.checked = $selectAll.checked; });
