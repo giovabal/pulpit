@@ -141,7 +141,7 @@
     function renderTable(channels) {
         $tbody.innerHTML = "";
         if (!channels.length) {
-            $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">No channels found.</td></tr>';
+            $tbody.innerHTML = '<tr><td colspan="9" class="bo-empty">No channels found.</td></tr>';
             return;
         }
         var frag = document.createDocumentFragment();
@@ -209,6 +209,9 @@
             tr.appendChild(tdGrp);
 
             /* subscribers */
+            var tdMsg = document.createElement("td"); tdMsg.className = "bo-td--num";
+            tdMsg.textContent = fmtInt(ch.messages_count); tr.appendChild(tdMsg);
+
             var tdSub = document.createElement("td"); tdSub.className = "bo-td--num";
             tdSub.textContent = fmtInt(ch.participants_count); tr.appendChild(tdSub);
 
@@ -419,7 +422,7 @@
     function loadChannels(updateUrl) {
         if (_loading) return;
         _loading = true;
-        $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Loading…</td></tr>';
+        $tbody.innerHTML = '<tr><td colspan="9" class="bo-empty">Loading…</td></tr>';
         $selectAll.checked = false;
         $bulkBar.classList.add("d-none");
 
@@ -434,7 +437,7 @@
                 if (updateUrl === "replace") history.replaceState(null, "", _buildQueryString());
             })
             .catch(function (err) {
-                $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";
+                $tbody.innerHTML = '<tr><td colspan="9" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";
             })
             .finally(function () { _loading = false; });
     }
