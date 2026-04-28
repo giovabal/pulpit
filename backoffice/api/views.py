@@ -12,6 +12,7 @@ from .serializers import (
     OrganizationSerializer,
     SearchTermSerializer,
 )
+from .utils import UnaccentLower, _normalize
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -77,7 +78,11 @@ class ChannelViewSet(
 
         search = self.request.query_params.get("search", "").strip()
         if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(username__icontains=search))
+            norm = _normalize(search)
+            qs = qs.annotate(
+                _title_norm=UnaccentLower("title"),
+                _username_norm=UnaccentLower("username"),
+            ).filter(Q(_title_norm__contains=norm) | Q(_username_norm__contains=norm))
 
         org_id = self.request.query_params.get("organization", "").strip()
         if org_id:
