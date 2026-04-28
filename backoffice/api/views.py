@@ -63,17 +63,13 @@ class ChannelViewSet(
     ordering = ["-id"]
 
     def get_queryset(self):
-        qs = (
-            Channel.objects.select_related("organization")
-            .prefetch_related(
-                "groups",
-                Prefetch(
-                    "profilepicture_set",
-                    queryset=ProfilePicture.objects.order_by("-date")[:1],
-                    to_attr="_prefetched_profile_pics",
-                ),
-            )
-            .annotate(messages_count=Count("message_set", distinct=True))
+        qs = Channel.objects.select_related("organization").prefetch_related(
+            "groups",
+            Prefetch(
+                "profilepicture_set",
+                queryset=ProfilePicture.objects.order_by("-date")[:1],
+                to_attr="_prefetched_profile_pics",
+            ),
         )
 
         search = self.request.query_params.get("search", "").strip()

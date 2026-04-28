@@ -36,7 +36,6 @@ class ChannelSerializer(serializers.ModelSerializer):
         required=False,
     )
     channel_type = serializers.CharField(read_only=True)
-    messages_count = serializers.IntegerField(read_only=True)
     profile_picture_url = serializers.SerializerMethodField()
 
     def get_profile_picture_url(self, obj):
@@ -58,7 +57,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "organization_color",
             "group_ids",
             "participants_count",
-            "messages_count",
             "in_degree",
             "out_degree",
             "is_lost",
@@ -72,7 +70,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "channel_type",
             "profile_picture_url",
             "participants_count",
-            "messages_count",
             "in_degree",
             "out_degree",
             "date",
