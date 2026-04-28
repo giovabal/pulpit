@@ -215,6 +215,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         community_strategies_val = ",".join(post.getlist("community_strategies"))
         if community_strategies_val:
             args += ["--community-strategies", community_strategies_val]
+        network_stat_groups_val = ",".join(post.getlist("network_stat_groups"))
+        if network_stat_groups_val:
+            args += ["--network-stat-groups", network_stat_groups_val]
         edge_weight_strategy_val = post.get("edge_weight_strategy", "").strip()
         if edge_weight_strategy_val:
             args += ["--edge-weight-strategy", edge_weight_strategy_val]

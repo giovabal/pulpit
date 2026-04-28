@@ -133,6 +133,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--network-stat-groups",
+            dest="network_stat_groups",
+            default="ALL",
+            metavar="GROUPS",
+            help=(
+                "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
+                "--consensus-matrix). Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, "
+                "CENTRALIZATION, CONTENT, ALL. Default: ALL."
+            ),
+        )
+        parser.add_argument(
             "--edge-weight-strategy",
             dest="edge_weight_strategy",
             default="PARTIAL_REFERENCES",
@@ -271,6 +282,7 @@ class Command(BaseCommand):
         self,
         communities_strategy: list[str],
         network_measures: list[str],
+        network_stat_groups: list[str],
         channel_types: list[str],
         edge_weight_strategy: str,
     ) -> str | None:
@@ -298,6 +310,12 @@ class Command(BaseCommand):
                     f"BRIDGING community basis {bstrategy!r} is not in --community-strategies. "
                     f"Add it or change the BRIDGING strategy."
                 )
+        invalid_stat_groups = [g for g in network_stat_groups if g not in measures.VALID_NETWORK_STAT_GROUPS]
+        if invalid_stat_groups:
+            valid_display = sorted(measures.VALID_NETWORK_STAT_GROUPS) + ["ALL"]
+            raise CommandError(
+                f"Invalid --network-stat-groups value(s): {invalid_stat_groups!r}. Choose from {valid_display}."
+            )
         invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(
@@ -551,6 +569,7 @@ class Command(BaseCommand):
         target_layout: str,
         seo: bool,
         project_title: str,
+        selected_network_groups: "frozenset[str]",
         reference_positions: dict | None = None,
         reference_positions_3d: dict | None = None,
     ) -> dict | None:
@@ -643,6 +662,7 @@ class Command(BaseCommand):
                     channel_qs=channel_qs,
                     start_date=start_date,
                     end_date=end_date,
+                    selected_network_groups=selected_network_groups,
                 )
                 tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
                 tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
@@ -721,6 +741,10 @@ class Command(BaseCommand):
         )
         raw_network_measures = _parse_csv(options["measures"])
         network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
+        raw_network_stat_groups = _parse_csv(options["network_stat_groups"])
+        network_stat_groups = (
+            measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
+        )
         channel_types_raw = options["channel_types"]
         channel_types = (
             _parse_csv(channel_types_raw) if channel_types_raw is not None else settings.DEFAULT_CHANNEL_TYPES
@@ -729,9 +753,10 @@ class Command(BaseCommand):
         channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
         edge_weight_strategy: str = options["edge_weight_strategy"]
         bridging_token = self._validate_settings(
-            communities_strategy, network_measures, channel_types, edge_weight_strategy
+            communities_strategy, network_measures, network_stat_groups, channel_types, edge_weight_strategy
         )
         selected_measures = set(network_measures)
+        selected_network_groups = frozenset(network_stat_groups)
 
         do_graph = options["graph"]
         do_3dgraph = options["graph_3d"]
@@ -845,6 +870,7 @@ class Command(BaseCommand):
                 channel_qs=channel_qs,
                 start_date=start_date,
                 end_date=end_date,
+                selected_network_groups=selected_network_groups,
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
@@ -921,6 +947,7 @@ class Command(BaseCommand):
                         target_layout,
                         seo,
                         project_title,
+                        selected_network_groups,
                         reference_positions=positions if do_graph else None,
                         reference_positions_3d=positions_3d if do_3dgraph else None,
                     )

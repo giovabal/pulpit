@@ -20,123 +20,132 @@ logger = logging.getLogger(__name__)
 _PATH_LENGTH_MIN_NODES = 3
 
 
-def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
-    """Compute structural metrics for the whole graph."""
+def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None" = None) -> dict[str, Any]:
+    """Compute structural metrics for the whole graph.
+
+    ``selected_groups`` controls which metric groups are computed.
+    ``None`` means all groups (backward-compatible default).
+    """
+
+    def _sel(key: str) -> bool:
+        return selected_groups is None or key in selected_groups
+
     n = graph.number_of_nodes()
     e = graph.number_of_edges()
     density = nx.density(graph)
-    try:
-        reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-        logger.debug("reciprocity unavailable: %s", exc)
-        reciprocity = None
-    try:
-        avg_clustering = nx.average_clustering(graph)
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-        logger.debug("avg_clustering unavailable: %s", exc)
-        avg_clustering = None
-    avg_path_length = None
-    diameter = None
-    path_on_full = False
-    wcc_count = None
-    wcc_fraction = None
-    scc_count = None
-    scc_fraction = None
-    avg_path_length_directed = None
-    diameter_directed = None
-    scc_path_on_full = False
-    if n >= 2:
+
+    # ── PATHS — reciprocity, clustering, WCC/SCC path lengths ─────────────────
+    reciprocity: float | None = None
+    avg_clustering: float | None = None
+    avg_path_length: float | None = None
+    diameter: int | None = None
+    path_on_full = True  # True = no footnote dagger when paths not computed
+    wcc_count: int | None = None
+    wcc_fraction: float | None = None
+    scc_count: int | None = None
+    scc_fraction: float | None = None
+    avg_path_length_directed: float | None = None
+    diameter_directed: int | None = None
+    scc_path_on_full = True
+
+    if _sel("PATHS"):
+        try:
+            reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+            logger.debug("reciprocity unavailable: %s", exc)
+        try:
+            avg_clustering = nx.average_clustering(graph)
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+            logger.debug("avg_clustering unavailable: %s", exc)
+
+    need_wcc = _sel("PATHS") or _sel("COMPONENTS")
+    need_scc = _sel("PATHS") or _sel("COMPONENTS")
+    if n >= 2 and need_wcc:
         try:
             wccs = list(nx.weakly_connected_components(graph))
             largest_wcc = max(wccs, key=len)
-            path_on_full = len(largest_wcc) == n
-            wcc_count = len(wccs)
-            wcc_fraction = len(largest_wcc) / n
-            if len(largest_wcc) >= 2:
-                ug = graph.subgraph(largest_wcc).to_undirected()
-                avg_path_length = nx.average_shortest_path_length(ug)
-                diameter = nx.diameter(ug)
+            if _sel("COMPONENTS"):
+                wcc_count = len(wccs)
+                wcc_fraction = len(largest_wcc) / n
+            if _sel("PATHS"):
+                path_on_full = len(largest_wcc) == n
+                if len(largest_wcc) >= 2:
+                    ug = graph.subgraph(largest_wcc).to_undirected()
+                    avg_path_length = nx.average_shortest_path_length(ug)
+                    diameter = nx.diameter(ug)
         except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("wcc/path_length/diameter unavailable: %s", exc)
+    if n >= 2 and need_scc:
         try:
             sccs = list(nx.strongly_connected_components(graph))
             largest_scc = max(sccs, key=len)
-            scc_count = len(sccs)
-            scc_fraction = len(largest_scc) / n
-            scc_path_on_full = len(largest_scc) == n
-            if len(largest_scc) >= 2:
-                scc_sub = graph.subgraph(largest_scc)
-                avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
-                diameter_directed = nx.diameter(scc_sub)
+            if _sel("COMPONENTS"):
+                scc_count = len(sccs)
+                scc_fraction = len(largest_scc) / n
+            if _sel("PATHS"):
+                scc_path_on_full = len(largest_scc) == n
+                if len(largest_scc) >= 2:
+                    scc_sub = graph.subgraph(largest_scc)
+                    avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
+                    diameter_directed = nx.diameter(scc_sub)
         except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
             logger.debug("scc unavailable: %s", exc)
 
-    # ── Transitivity — fraction of closed triads (O(m)) ───────────────────────
-    # Global clustering coefficient in the sense of Luce & Perry (1949) and
-    # Watts & Strogatz (1998): counts all closed triangles / all connected triples.
-    # Complements avg_clustering (which averages per-node local coefficients).
+    # ── COHESION — transitivity, global efficiency, algebraic connectivity ─────
+    # Transitivity — fraction of closed triads (O(m))
+    # Global clustering coefficient (Watts & Strogatz 1998): closed triangles /
+    # connected triples.  Complements avg_clustering (per-node average).
     transitivity: float | None = None
-    try:
-        transitivity = round(nx.transitivity(graph), 6)
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError) as exc:
-        logger.debug("transitivity unavailable: %s", exc)
-
-    # ── Global Efficiency — mean reciprocal path length (O(n*(n+m))) ──────────
-    # Latora & Marchiori (2001): E = (1/n(n-1)) * Σ_{i≠j} 1/d(i,j), where
-    # unreachable pairs contribute 0.  Works on disconnected graphs; uses
-    # directed shortest paths (edge direction respected).
-    # nx.global_efficiency is undirected-only; directed version computed manually.
+    # Global Efficiency — mean reciprocal path length (O(n*(n+m)))
+    # Latora & Marchiori (2001): E = (1/n(n-1)) * Σ_{i≠j} 1/d(i,j).
+    # Directed BFS, unreachable pairs contribute 0.
     global_efficiency: float | None = None
-    if n >= 2:
-        try:
-            total_inv_dist = 0.0
-            for source in graph.nodes():
-                lengths = nx.single_source_shortest_path_length(graph, source)
-                total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
-            global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("global_efficiency unavailable: %s", exc)
-
-    # ── Algebraic Connectivity — Fiedler value (O(n²) approx.) ───────────────
-    # Fiedler (1973): second-smallest eigenvalue λ₂ of the graph Laplacian.
-    # λ₂ = 0 for disconnected graphs; larger values signal stronger cohesion and
-    # greater resistance to fragmentation.  Computed on the undirected projection;
-    # approximated via LOBPCG to avoid full eigendecomposition.
+    # Algebraic Connectivity — Fiedler value (O(n²) approx.)
+    # Fiedler (1973): second-smallest eigenvalue λ₂ of the Laplacian.
+    # λ₂ = 0 for disconnected graphs; larger = stronger cohesion.
     algebraic_connectivity: float | None = None
-    if n >= 2:
-        try:
-            ug_ac = graph.to_undirected()
-            lcc_nodes = max(nx.connected_components(ug_ac), key=len)
-            lcc_ac = ug_ac.subgraph(lcc_nodes)
-            if len(lcc_ac) >= 2:
-                algebraic_connectivity = round(nx.algebraic_connectivity(lcc_ac, method="tracemin_pcg", seed=42), 6)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("algebraic_connectivity unavailable: %s", exc)
-
-    # ── Degree CV — coefficient of variation σ/μ of degree distributions ─────
-    # Pastor-Satorras & Vespignani (2001): CV quantifies hub concentration.
-    # Low values mean citations/forwards are spread evenly; high values mean a few
-    # channels dominate the degree distribution.  Reported separately for in- and
-    # out-degree.  None when mean is zero (fully isolated graph).
+    # Degree CV — coefficient of variation σ/μ (Pastor-Satorras & Vespignani 2001)
     in_degree_cv: float | None = None
     out_degree_cv: float | None = None
-    if n >= 2:
-        in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
-        out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
-        in_mean = float(in_arr.mean())
-        out_mean = float(out_arr.mean())
-        if in_mean > 0:
-            in_degree_cv = round(float(in_arr.std() / in_mean), 4)
-        if out_mean > 0:
-            out_degree_cv = round(float(out_arr.std() / out_mean), 4)
+    if _sel("COHESION"):
+        try:
+            transitivity = round(nx.transitivity(graph), 6)
+        except (nx.NetworkXError, nx.NetworkXAlgorithmError) as exc:
+            logger.debug("transitivity unavailable: %s", exc)
+        if n >= 2:
+            try:
+                total_inv_dist = 0.0
+                for source in graph.nodes():
+                    lengths = nx.single_source_shortest_path_length(graph, source)
+                    total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
+                global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
+            except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+                logger.debug("global_efficiency unavailable: %s", exc)
+            try:
+                ug_ac = graph.to_undirected()
+                lcc_nodes = max(nx.connected_components(ug_ac), key=len)
+                lcc_ac = ug_ac.subgraph(lcc_nodes)
+                if len(lcc_ac) >= 2:
+                    algebraic_connectivity = round(nx.algebraic_connectivity(lcc_ac, method="tracemin_pcg", seed=42), 6)
+            except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
+                logger.debug("algebraic_connectivity unavailable: %s", exc)
+            in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
+            out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
+            in_mean = float(in_arr.mean())
+            out_mean = float(out_arr.mean())
+            if in_mean > 0:
+                in_degree_cv = round(float(in_arr.std() / in_mean), 4)
+            if out_mean > 0:
+                out_degree_cv = round(float(out_arr.std() / out_mean), 4)
 
+    # ── DEGCORRELATION — directed degree assortativity ─────────────────────────
     assortativity: dict[str, float | None] = {
         "in_in": None,
         "in_out": None,
         "out_in": None,
         "out_out": None,
     }
-    if e >= 2:
+    if _sel("DEGCORRELATION") and e >= 2:
         try:
             in_deg = dict(graph.in_degree())
             out_deg = dict(graph.out_degree())
@@ -154,6 +163,7 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
                     assortativity[key] = float(np.corrcoef(x, y)[0, 1])
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
             logger.debug("assortativity unavailable: %s", exc)
+
     return {
         "n": n,
         "e": e,
@@ -176,6 +186,7 @@ def _network_summary(graph: nx.DiGraph) -> dict[str, Any]:
         "in_degree_cv": in_degree_cv,
         "out_degree_cv": out_degree_cv,
         "assortativity": assortativity,
+        "_selected_groups": selected_groups,
     }
 
 
@@ -441,6 +452,7 @@ def compute_community_metrics(
     channel_qs: "QuerySet | None" = None,
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    selected_network_groups: "frozenset[str] | None" = None,
 ) -> CommunityTableData:
     """Pre-compute all structural metrics needed for community table outputs.
 
@@ -449,21 +461,36 @@ def compute_community_metrics(
     ``status_callback`` is called with a short label after each step completes
     so the caller can emit progress output between steps.
     ``channel_qs`` enables whole-network content originality and amplification ratio metrics.
+    ``selected_network_groups`` restricts which whole-network stat groups are computed;
+    ``None`` means all groups (backward-compatible default).
     """
-    network_summary = _network_summary(graph)
+
+    def _grp(key: str) -> bool:
+        return selected_network_groups is None or key in selected_network_groups
+
+    network_summary = _network_summary(graph, selected_network_groups)
+
     centralizations: dict[str, tuple[float | None, str]] = {}
-    if measures_labels:
+    if _grp("CENTRALIZATION") and measures_labels:
         for key, label in measures_labels:
             values = [node[key] for node in graph_data["nodes"] if key in node]
             centralizations[key] = (_freeman_centralization(values), label)
     network_summary["centralizations"] = centralizations
-    constraint_vals = [
-        node["burt_constraint"] for node in graph_data["nodes"] if node.get("burt_constraint") is not None
-    ]
-    network_summary["mean_burt_constraint"] = sum(constraint_vals) / len(constraint_vals) if constraint_vals else None
+
+    if _grp("CENTRALIZATION"):
+        constraint_vals = [
+            node["burt_constraint"] for node in graph_data["nodes"] if node.get("burt_constraint") is not None
+        ]
+        network_summary["mean_burt_constraint"] = (
+            sum(constraint_vals) / len(constraint_vals) if constraint_vals else None
+        )
+    else:
+        network_summary["mean_burt_constraint"] = None
+
     pk_to_org: dict[str, str] = {}
     if channel_qs is not None:
-        network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
+        if _grp("CONTENT"):
+            network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
         type_counts = _count_channel_types(channel_qs)
         types_present = {k: v for k, v in type_counts.items() if v > 0}
         if len(types_present) > 1:
@@ -495,50 +522,88 @@ _CHANNEL_TYPE_LABELS: dict[str, str] = {
     "USER": "User accounts",
 }
 
+# Maps display group labels (used in row tuples) to network stat group keys.
+_DISPLAY_GROUP_TO_KEY: dict[str, str] = {
+    "Size": "SIZE",
+    "Transitivity & paths": "PATHS",
+    "Cohesion": "COHESION",
+    "Component structure": "COMPONENTS",
+    "Degree correlation": "DEGCORRELATION",
+    "Centralization": "CENTRALIZATION",
+    "Content": "CONTENT",
+}
+
 
 def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
-    """Return (label, value, group) rows for all whole-network metrics."""
+    """Return (label, value, group) rows for whole-network metrics.
+
+    Rows belonging to groups absent from ``summary["_selected_groups"]`` are
+    omitted.  When ``_selected_groups`` is absent or ``None`` all rows are returned.
+    """
+    sel: "frozenset[str] | None" = summary.get("_selected_groups")
+
+    def _include(display_group: str) -> bool:
+        if sel is None:
+            return True
+        return _DISPLAY_GROUP_TO_KEY.get(display_group) in sel
+
     path_marker = " †" if not summary["path_on_full"] else ""
     scc_has_directed = summary.get("avg_path_length_directed") is not None
     scc_path_marker = " ‡" if (scc_has_directed and not summary.get("scc_path_on_full", True)) else ""
-    rows: list[tuple[str, Any, str]] = [
-        ("Nodes", summary["n"], "Size"),
-    ]
-    for type_name, count in summary.get("channel_type_counts", {}).items():
-        rows.append((_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size"))
-    rows += [
-        ("Edges", summary["e"], "Size"),
-        ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),
-        ("Density (0–1)", summary["density"], "Size"),
-        ("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths"),
-        ("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths"),
-        (f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths"),
-        (f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths"),
-        (f"Directed Avg Path Length{scc_path_marker}", summary.get("avg_path_length_directed"), "Transitivity & paths"),
-        (f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths"),
-        ("Transitivity (0–1)", summary.get("transitivity"), "Cohesion"),
-        ("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion"),
-        (f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion"),
-        ("In-degree CV", summary.get("in_degree_cv"), "Cohesion"),
-        ("Out-degree CV", summary.get("out_degree_cv"), "Cohesion"),
-        ("WCC count", summary["wcc_count"], "Component structure"),
-        ("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure"),
-        ("SCC count", summary["scc_count"], "Component structure"),
-        ("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure"),
-    ]
-    for assort_key, assort_label in [
-        ("in_in", "Assortativity in→in (−1–1)"),
-        ("in_out", "Assortativity in→out (−1–1)"),
-        ("out_in", "Assortativity out→in (−1–1)"),
-        ("out_out", "Assortativity out→out (−1–1)"),
-    ]:
-        rows.append((assort_label, summary.get("assortativity", {}).get(assort_key), "Degree correlation"))
-    if summary.get("mean_burt_constraint") is not None:
-        rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
-    if summary.get("network_originality") is not None:
-        rows.append(("Content Originality (0–1)", summary["network_originality"], "Content"))
-    if summary.get("network_amplification") is not None:
-        rows.append(("Amplification Ratio", summary["network_amplification"], "Content"))
-    for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
-        rows.append((f"{c_label} Centralization (0–1)", c_val, "Centralization"))
+    rows: list[tuple[str, Any, str]] = []
+    if _include("Size"):
+        rows.append(("Nodes", summary["n"], "Size"))
+        for type_name, count in summary.get("channel_type_counts", {}).items():
+            rows.append((_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size"))
+        rows += [
+            ("Edges", summary["e"], "Size"),
+            ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),
+            ("Density (0–1)", summary["density"], "Size"),
+        ]
+    if _include("Transitivity & paths"):
+        rows += [
+            ("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths"),
+            ("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths"),
+            (f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths"),
+            (f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths"),
+            (
+                f"Directed Avg Path Length{scc_path_marker}",
+                summary.get("avg_path_length_directed"),
+                "Transitivity & paths",
+            ),
+            (f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths"),
+        ]
+    if _include("Cohesion"):
+        rows += [
+            ("Transitivity (0–1)", summary.get("transitivity"), "Cohesion"),
+            ("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion"),
+            (f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion"),
+            ("In-degree CV", summary.get("in_degree_cv"), "Cohesion"),
+            ("Out-degree CV", summary.get("out_degree_cv"), "Cohesion"),
+        ]
+    if _include("Component structure"):
+        rows += [
+            ("WCC count", summary["wcc_count"], "Component structure"),
+            ("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure"),
+            ("SCC count", summary["scc_count"], "Component structure"),
+            ("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure"),
+        ]
+    if _include("Degree correlation"):
+        for assort_key, assort_label in [
+            ("in_in", "Assortativity in→in (−1–1)"),
+            ("in_out", "Assortativity in→out (−1–1)"),
+            ("out_in", "Assortativity out→in (−1–1)"),
+            ("out_out", "Assortativity out→out (−1–1)"),
+        ]:
+            rows.append((assort_label, summary.get("assortativity", {}).get(assort_key), "Degree correlation"))
+    if _include("Centralization"):
+        if summary.get("mean_burt_constraint") is not None:
+            rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
+        for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
+            rows.append((f"{c_label} Centralization (0–1)", c_val, "Centralization"))
+    if _include("Content"):
+        if summary.get("network_originality") is not None:
+            rows.append(("Content Originality (0–1)", summary["network_originality"], "Content"))
+        if summary.get("network_amplification") is not None:
+            rows.append(("Amplification Ratio", summary["network_amplification"], "Content"))
     return rows

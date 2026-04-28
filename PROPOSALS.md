@@ -1,7 +1,6 @@
 # Proposals for Pulpit: New Features and Improvements
 
 - Organization changes overtime
-- whole network measures should be selectable
 - the crawl options in operations should be vertical, in order of what happens when. options should be numbered
 - how the disappearing of a channel impacts the network? new channels born after that lost are replacing it?
 - group analysis, similar to whole network analysis

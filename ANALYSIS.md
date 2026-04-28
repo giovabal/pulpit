@@ -421,6 +421,8 @@ A legend shows one circle per distinct agreement level (1/K … K/K, where K is 
 
 Whole-network measures summarise the structure of the entire graph as a single number. They do not score individual channels; they characterise the network as a system. These values appear in the **Whole network** summary panel at the top of `community_table.html` and in the **Network Summary** sheet of `community_table.xlsx`.
 
+The measures are organised into selectable groups controlled by `--network-stat-groups` (CLI) or the **Network stat groups** checkboxes in the Operations panel. Available groups: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`; default `ALL`. Deselecting `PATHS` and `COHESION` skips the expensive O(n·m) path-length and eigendecomposition calculations, which can be slow on large networks.
+
 ---
 
 ### Nodes and Edges

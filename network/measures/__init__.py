@@ -15,9 +15,11 @@ from network.measures._centrality import (
 from network.measures._content import apply_amplification_factor, apply_content_originality
 from network.measures._registry import (
     ALL_MEASURES,
+    ALL_NETWORK_STAT_GROUPS,
     ALL_STRATEGIES,
     MEASURE_STEPS,
     VALID_MEASURES,
+    VALID_NETWORK_STAT_GROUPS,
     bridging_strategy,
     find_bridging_token,
     is_valid_measure,
@@ -26,6 +28,7 @@ from network.measures._spreading import apply_spreading_efficiency
 
 __all__ = [
     "ALL_MEASURES",
+    "ALL_NETWORK_STAT_GROUPS",
     "ALL_STRATEGIES",
     "MEASURE_STEPS",
     "VALID_MEASURES",
@@ -47,4 +50,5 @@ __all__ = [
     "compute_betweenness",
     "find_bridging_token",
     "is_valid_measure",
+    "VALID_NETWORK_STAT_GROUPS",
 ]

@@ -108,6 +108,7 @@ Optional (expand **Options** to set):
 - **Channel types** — which Telegram entity types to include: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
 - **Measures** — comma-separated list of centrality measures: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `FLOWBETWEENNESS`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `HARMONICCENTRALITY`, `KATZ`, `SPREADING`, `BRIDGING` or `BRIDGING(STRATEGY)`, `BURTCONSTRAINT`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `ALL`; default `PAGERANK`
 - **Community strategies** — comma-separated list of community detection algorithms: `ORGANIZATION`, `LEIDEN`, `LEIDEN_DIRECTED`, `LOUVAIN`, `KCORE`, `INFOMAP`, `ALL`; default `ORGANIZATION`
+- **Network stat groups** — comma-separated list of whole-network metric groups to compute (only when HTML tables, Excel, or consensus matrix is enabled): `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`, `ALL`; default `ALL`. Deselect `PATHS` and `COHESION` to skip the expensive O(n·m) path-length and eigendecomposition calculations on large networks.
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded
 
 **CLI alternative:**
@@ -130,6 +131,8 @@ python manage.py export_network --measures PAGERANK,BETWEENNESS,BRIDGING
 python manage.py export_network --measures ALL
 python manage.py export_network --community-strategies LEIDEN,LOUVAIN
 python manage.py export_network --community-strategies ALL
+python manage.py export_network --html --network-stat-groups SIZE,COMPONENTS,CENTRALIZATION
+python manage.py export_network --html --network-stat-groups ALL
 python manage.py export_network --edge-weight-strategy TOTAL
 python manage.py export_network --recency-weights 30
 python manage.py export_network --spreading-runs 500

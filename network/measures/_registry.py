@@ -22,6 +22,20 @@ _BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
 _BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
 
 ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
+
+VALID_NETWORK_STAT_GROUPS: frozenset[str] = frozenset(
+    {
+        "SIZE",
+        "PATHS",
+        "COHESION",
+        "COMPONENTS",
+        "DEGCORRELATION",
+        "CENTRALIZATION",
+        "CONTENT",
+    }
+)
+ALL_NETWORK_STAT_GROUPS: list[str] = sorted(VALID_NETWORK_STAT_GROUPS)
+
 ALL_STRATEGIES: list[str] = [
     "ORGANIZATION",
     "LEIDEN",

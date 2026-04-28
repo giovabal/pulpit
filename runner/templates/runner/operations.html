@@ -420,6 +420,22 @@
           </fieldset>
           </div>
 
+          <fieldset class="ops-fieldset">
+            <legend>Network stat groups
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Whole-network structural metric groups to compute (applies when HTML tables, Excel, or consensus matrix is enabled). Deselect expensive groups to speed up exports on large networks."></i>
+            </legend>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="SIZE" checked>Size<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Node count, edge count, density. Always cheap."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="PATHS" checked>Paths<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Reciprocity, average clustering, average path length and diameter on the largest WCC and SCC. Expensive on large networks (O(n·m) BFS)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COHESION" checked>Cohesion<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Transitivity, global efficiency, algebraic connectivity (Fiedler value), and degree CV. Global efficiency and algebraic connectivity are expensive on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COMPONENTS" checked>Components<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Weakly and strongly connected component counts and largest-component fractions. Fast (O(n+m))."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="DEGCORRELATION" checked>Degree correlation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed degree assortativity (in→in, in→out, out→in, out→out Pearson correlations). Measures whether high-degree nodes preferentially connect to other high-degree nodes."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CENTRALIZATION" checked>Centralization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Freeman graph centralization for each computed node measure, plus mean Burt's constraint. Derived from node-level measures — no extra graph computation required."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CONTENT" checked>Content<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Network-wide content originality (1 − forwarded/total) and amplification ratio (received forwards / total messages). Requires DB queries."></i></label>
+            </div>
+          </fieldset>
+
           {% elif task.name == "compare_networks" %}
           <fieldset class="ops-fieldset">
             <legend>Compare directory</legend>
