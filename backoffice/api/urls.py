@@ -3,7 +3,6 @@ from .views import (
     ChannelViewSet,
     EventTypeViewSet,
     EventViewSet,
-    MessageViewSet,
     OrganizationViewSet,
     SearchTermViewSet,
     UserViewSet,
@@ -19,6 +18,5 @@ router.register("search-terms", SearchTermViewSet, basename="api-search-terms")
 router.register("event-types", EventTypeViewSet, basename="api-event-types")
 router.register("events", EventViewSet, basename="api-events")
 router.register("users", UserViewSet, basename="api-users")
-router.register("messages", MessageViewSet, basename="api-messages")
 
 urlpatterns = router.urls

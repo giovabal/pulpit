@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Message, Organization, SearchTerm
+from webapp.models import Channel, ChannelGroup, Organization, SearchTerm
 
 from rest_framework import serializers
 
@@ -143,31 +143,3 @@ class UserSerializer(serializers.ModelSerializer):
             instance.set_password(password)
         instance.save()
         return instance
-
-
-class MessageSerializer(serializers.ModelSerializer):
-    channel_id = serializers.IntegerField(source="channel.pk", read_only=True)
-    channel_title = serializers.CharField(source="channel.title", read_only=True)
-    forwarded_from_id = serializers.IntegerField(source="forwarded_from.pk", read_only=True, default=None)
-    forwarded_from_title = serializers.CharField(source="forwarded_from.title", read_only=True, default=None)
-    telegram_url = serializers.CharField(read_only=True)
-    text = serializers.SerializerMethodField()
-
-    def get_text(self, obj):
-        return obj.message[:200] if obj.message else ""
-
-    class Meta:
-        model = Message
-        fields = [
-            "id",
-            "channel_id",
-            "channel_title",
-            "date",
-            "text",
-            "forwarded_from_id",
-            "forwarded_from_title",
-            "views",
-            "forwards",
-            "media_type",
-            "telegram_url",
-        ]
