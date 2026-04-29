@@ -322,6 +322,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         project_dir = post.get("project_dir", "").strip()
         if project_dir:
             args.append(project_dir)
+        target_val = post.get("compare_target", "").strip()
+        if target_val:
+            args += ["--target", target_val]
         if post.get("seo"):
             args.append("--seo")
 

@@ -284,9 +284,9 @@ class Command(BaseCommand):
             dest="name",
             default="",
             help=(
-                "Name for this export. If set, output is written to exports/<name>/ "
-                "instead of GRAPH_OUTPUT_DIR, so multiple exports can coexist without "
-                "overwriting each other. Name is slug-sanitized (alphanumeric, hyphens, underscores)."
+                "Name for this export. Output is written to exports/<name>/. "
+                "If omitted, a YYYYMMDD-HHMMSS timestamp is used. "
+                "Name is slug-sanitized (alphanumeric, hyphens, underscores)."
             ),
         )
 

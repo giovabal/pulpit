@@ -1,4 +1,6 @@
 import os
+import re
+from pathlib import Path
 from typing import Any
 
 from django.conf import settings
@@ -30,6 +32,15 @@ class Command(BaseCommand):
                 "Without this flag the output actively discourages indexing."
             ),
         )
+        parser.add_argument(
+            "--target",
+            dest="target",
+            default="",
+            help=(
+                "Name of the export to write comparison files into (exports/<name>/). "
+                "If omitted, falls back to GRAPH_OUTPUT_DIR."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         compare_dir = os.path.abspath(options["project_dir"])
@@ -41,7 +52,11 @@ class Command(BaseCommand):
                 "(no index.html found). Point to the directory that contains index.html."
             )
 
-        root_target = settings.GRAPH_OUTPUT_DIR
+        target_name = re.sub(r"[^\w\-]", "-", (options.get("target") or "").strip()).strip("-")
+        if target_name:
+            root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
+        else:
+            root_target = settings.GRAPH_OUTPUT_DIR
         project_title: str = settings.PROJECT_TITLE
         seo = options["seo"]
 
