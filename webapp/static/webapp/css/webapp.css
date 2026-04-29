@@ -1046,6 +1046,32 @@ body {
   margin-bottom: .75rem;
 }
 
+.data-export-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-bottom: 1.75rem;
+}
+
+.data-export-item {
+  display: flex;
+  flex-direction: column;
+  padding: .5rem .875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-size: .8125rem;
+  transition: border-color .15s, background .15s;
+  cursor: pointer;
+}
+.data-export-item:hover { border-color: var(--accent); background: var(--hover); color: var(--text); }
+.data-export-item.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+
+.data-export-name { font-weight: 600; }
+.data-export-meta { color: var(--muted); font-size: .75rem; margin-top: .1rem; }
+
 /* ---------- Login page ---------- */
 .login-body {
   min-height: 100vh;

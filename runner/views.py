@@ -126,6 +126,15 @@ class GraphDirsView(View):
                     pass
             found.append(entry)
 
+        # Scan named exports in BASE_DIR/exports/
+        exports_root = Path(settings.BASE_DIR) / "exports"
+        try:
+            for item in sorted(exports_root.iterdir()):
+                if item.is_dir():
+                    _check(item)
+        except (PermissionError, OSError):
+            pass
+
         # Scan sibling directories of BASE_DIR for other Pulpit projects.
         parent = Path(settings.BASE_DIR).parent
         try:
@@ -141,6 +150,62 @@ class GraphDirsView(View):
 
         found.sort(key=lambda d: (d.get("export_date") or "", d["path"]), reverse=True)
         return JsonResponse({"dirs": found})
+
+
+class ExportsListView(View):
+    """List all named exports (BASE_DIR/exports/*/summary.json) plus the default graph/ export."""
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        exports: list[dict] = []
+
+        def _read(path: Path, name: str) -> None:
+            summary_path = path / "summary.json"
+            if not summary_path.exists():
+                return
+            try:
+                data = json.loads(summary_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                return
+            exports.append(
+                {
+                    "name": name,
+                    "created_at": data.get("created_at"),
+                    "nodes": data.get("nodes"),
+                    "edges": data.get("edges"),
+                }
+            )
+
+        # Named exports
+        exports_root = Path(settings.BASE_DIR) / "exports"
+        try:
+            for item in sorted(exports_root.iterdir()):
+                if item.is_dir():
+                    _read(item, item.name)
+        except (PermissionError, OSError):
+            pass
+
+        # Default (unnamed) export
+        _read(Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR, "__default__")
+
+        exports.sort(key=lambda e: e.get("created_at") or "", reverse=True)
+        return JsonResponse({"exports": exports})
+
+
+class ExportDetailView(View):
+    """Return the full summary.json for a named export (or '__default__' for graph/)."""
+
+    def get(self, request: HttpRequest, name: str) -> JsonResponse:
+        if name == "__default__":
+            path = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR / "summary.json"
+        else:
+            path = Path(settings.BASE_DIR) / "exports" / name / "summary.json"
+        if not path.exists():
+            return JsonResponse({"error": "not found"}, status=404)
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return JsonResponse({"error": "unreadable"}, status=500)
+        return JsonResponse(data)
 
 
 def _build_args(task: str, post: Any) -> list[str]:
@@ -182,6 +247,9 @@ def _build_args(task: str, post: Any) -> list[str]:
                 args += ["--extra-term", word]
 
     elif task == "export_network":
+        name_val = post.get("export_name", "").strip()
+        if name_val:
+            args += ["--name", name_val]
         if post.get("graph_3d"):
             args.append("--3dgraph")
         if post.get("xlsx"):
