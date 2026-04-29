@@ -49,7 +49,11 @@ See WORKFLOW.md for all flags and options.
 - **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
 - **`runner/tasks.py`** — Task manager for Operations panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
 - **`runner/views.py`** — Operations panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
-- **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/operations/`), `PROTECTED` (login required everywhere; staff required for `/operations/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
+- **`backoffice/views.py`** — Staff-only section views for `/manage/`: Channels, Organizations, Groups, Search Terms, Events, Users, Messages.
+- **`backoffice/api/views.py`** — DRF viewsets backing each section: `ChannelViewSet` (list/retrieve/update + bulk-assign), `OrganizationViewSet`, `ChannelGroupViewSet`, `SearchTermViewSet`, `EventTypeViewSet`, `EventViewSet`, `UserViewSet` (full CRUD; email = username), `MessageViewSet` (list/destroy with channel, forwarded-only, and text filters).
+- **`backoffice/api/serializers.py`** — Serializers for all backoffice viewsets.
+- **`backoffice/api/permissions.py`** (`BackofficePermission`) — Allows all requests when `WEB_ACCESS=ALL`; requires `is_staff` otherwise.
+- **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/operations/` and `/manage/`), `PROTECTED` (login required everywhere; staff required for `/operations/` and `/manage/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
 - **`webapp/context_processors.py`** — Exposes `WEB_ACCESS` to all templates.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models.
 - **`events/models.py`** — `EventType` (name, description, hex color; default red) and `Event` (date, subject, FK to `EventType`). Both registered in Django admin.

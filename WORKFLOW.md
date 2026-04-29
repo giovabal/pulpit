@@ -17,7 +17,7 @@ Open [http://localhost:8000](http://localhost:8000). The browser interface handl
 
 ## 2. Add search terms
 
-Go to **Admin** (`/admin/`) → **Search Terms** and add keywords. These are used to discover channels by name.
+Go to **Manage** (`/manage/search-terms/`) and add keywords. These are used to discover channels by name.
 
 ## 3. Discover channels
 
@@ -36,7 +36,7 @@ python manage.py search_channels --amount 15  # process at most 15 terms
 
 ## 4. Organise channels
 
-In the **Admin** (`/admin/`), open **Channels** and assign each channel you want to analyse to an **Organization**. Mark the organization as `is_interesting = True`. Channels without an interesting organization are ignored during crawling and graph export.
+In **Manage** (`/manage/channels/`), assign each channel you want to analyse to an **Organization**. Mark the organization as `is_interesting = True` in `/manage/organizations/`. Channels without an interesting organization are ignored during crawling and graph export.
 
 ## 5. Crawl channels
 
