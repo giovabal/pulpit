@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.15] - To be announced
+## [0.15] - 2026-04-29
 *Competition vs. cohesion metrics. Custom backoffice admin. Reactions.*
 
 ### New features
