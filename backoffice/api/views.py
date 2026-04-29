@@ -1,16 +1,19 @@
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Organization, ProfilePicture, SearchTerm
+from webapp.models import Channel, ChannelGroup, Message, Organization, ProfilePicture, SearchTerm
 
 from .serializers import (
     ChannelGroupSerializer,
     ChannelSerializer,
     EventSerializer,
     EventTypeSerializer,
+    MessageSerializer,
     OrganizationSerializer,
     SearchTermSerializer,
+    UserSerializer,
 )
 from .utils import UnaccentLower, _normalize
 
@@ -164,4 +167,38 @@ class EventViewSet(viewsets.ModelViewSet):
         year = self.request.query_params.get("year", "").strip()
         if year:
             qs = qs.filter(date__year=year)
+        return qs
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        return User.objects.order_by("username")
+
+
+class MessageViewSet(
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = MessageSerializer
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["id", "date", "views", "forwards"]
+    ordering = ["-date"]
+
+    def get_queryset(self):
+        qs = Message.objects.select_related("channel", "forwarded_from")
+
+        channel_id = self.request.query_params.get("channel", "").strip()
+        if channel_id:
+            qs = qs.filter(channel_id=channel_id)
+
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(message__icontains=search)
+
+        if self.request.query_params.get("forwarded"):
+            qs = qs.filter(forwarded_from__isnull=False)
+
         return qs

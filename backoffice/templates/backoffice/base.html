@@ -28,6 +28,14 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'events' %} active{% endif %}">
       <i class="bi bi-calendar-event me-1" aria-hidden="true"></i>Events
     </a>
+    <a href="{% url 'backoffice:users' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'users' %} active{% endif %}">
+      <i class="bi bi-people me-1" aria-hidden="true"></i>Users
+    </a>
+    <a href="{% url 'backoffice:messages' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'messages' %} active{% endif %}">
+      <i class="bi bi-chat-text me-1" aria-hidden="true"></i>Messages
+    </a>
   </nav>
 
   <div class="bo-content">
