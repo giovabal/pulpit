@@ -2,6 +2,16 @@
 
 ## [0.16] - To be announced
 
+### New features
+- **Named exports** — `export_network` now writes to `exports/<name>/` instead of a single shared `graph/` directory, so multiple exports can coexist without overwriting each other. The `--name` flag sets the export name; if omitted, a `YYYYMMDD-HHMMSS` timestamp is used. A `summary.json` is written to every export root capturing the name, timestamp, node/edge counts, and all CLI options used.
+- **Options import from previous exports** — the Export Network card in the Operations panel has a *Previous exports* picker that lists all exports by name and date. Selecting one restores every form control (measures, community strategies, filters, layout options, etc.) from that export's `summary.json`, making it easy to replicate or tweak a past run.
+- **Export name field with timestamp default** — the *Export name* input in the Operations panel is pre-filled with the current timestamp on page load so every run is named without manual input.
+- **Multi-export `/data/` page** — `/data/` detects all exports in `exports/*/` and, when more than one exists, shows a pill-style picker at the top of the page. Selecting an export via `?export=<name>` updates all graph, table, and comparison card links to point to that export's files, served at `/exports/<name>/`.
+- **Compare Networks `--target`** — `compare_networks` gains a required `--target <name>` flag that specifies which named export to write comparison files into (`exports/<name>/`). The Operations panel Compare Networks card gains a matching *Target export* field with a picker.
+
+### Removed
+- The `graph/` output directory is no longer used. All exports go to `exports/`. The `/graph/` static route has been removed.
+
 
 ## [0.15] - 2026-04-29
 *Competition vs. cohesion metrics. Custom backoffice admin. Reactions.*
