@@ -18,6 +18,9 @@
 - **Multi-export `/data/` page** — `/data/` detects all exports in `exports/*/` and, when more than one exists, shows a pill-style picker at the top of the page. Selecting an export via `?export=<name>` updates all graph, table, and comparison card links to point to that export's files, served at `/exports/<name>/`.
 - **Compare Networks `--target`** — `compare_networks` gains a required `--target <name>` flag that specifies which named export to write comparison files into (`exports/<name>/`). The Operations panel Compare Networks card gains a matching *Target export* field with a picker.
 
+### Improvements
+- **Atomic export writes** — `export_network` now writes to a `<name>.tmp` staging directory and renames it to `<name>` only after every output file, including `summary.json`, has been written successfully. Aborting or crashing an in-progress export leaves the previous export with the same name untouched (or nothing, on the first run). A stale `.tmp` directory from a previous interrupted run is removed automatically at the start of the next export. `GraphDirsView` and `ExportsListView` in the Operations panel skip `.tmp` and `.old` directories, so staging and backup artefacts never appear as selectable exports.
+
 ### Backward incompatibility
 - The `graph/` output directory is no longer used. All exports go to `exports/`. The `/graph/` static route has been removed.
 

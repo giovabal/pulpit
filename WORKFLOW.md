@@ -79,16 +79,18 @@ python manage.py get_channels --channel-types CHANNEL,GROUP
 
 **Operations panel** (`/operations/`) → **Export Network** → click **Run**.
 
-Builds the graph, applies community detection and layout, and writes the result to `graph/`.
-By default only the data files (`graph/data/*.json`) are written. Enable additional outputs with the options below.
+Builds the graph, applies community detection and layout, and writes the result to `exports/<name>/`.
+By default only the data files (`data/*.json`) are written. Enable additional outputs with the options below.
 
 When **2D graph** is enabled, the output also includes:
 
-- `graph/channel_table.html` — one row per channel with all computed measures
-- `graph/network_table.html` — whole-network structural metrics (density, reciprocity, clustering, path length, WCC/SCC fractions, directed assortativity, Freeman centralization, modularity per strategy) plus an interactive scatter plot for comparing any two measures
-- `graph/community_table.html` — one table per community detection strategy with structural metrics per community (node count, internal/external edges, density, reciprocity, clustering coefficient, path length, diameter)
+- `channel_table.html` — one row per channel with all computed measures
+- `network_table.html` — whole-network structural metrics (density, reciprocity, clustering, path length, WCC/SCC fractions, directed assortativity, Freeman centralization, modularity per strategy) plus an interactive scatter plot for comparing any two measures
+- `community_table.html` — one table per community detection strategy with structural metrics per community (node count, internal/external edges, density, reciprocity, clustering coefficient, path length, diameter)
 
-All HTML outputs load their data at page load time from `graph/data/*.json`; they work from any HTTP server.
+All HTML outputs load their data at page load time from `data/*.json`; they work from any HTTP server.
+
+**Interruption safety** — exports are written atomically. All output goes to a `<name>.tmp` staging directory; only once every file including `summary.json` has been written is the staging directory renamed to `<name>`. Aborting an in-progress export (via the **Abort** button or Ctrl-C) leaves any previous export with the same name untouched. A stale `<name>.tmp` directory from a crashed run is cleaned up automatically at the start of the next export.
 
 Optional (expand **Options** to set):
 

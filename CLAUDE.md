@@ -44,9 +44,9 @@ See WORKFLOW.md for all flags and options.
 - **`network/measures/`** — All centrality and influence measures; `apply_*` functions split across `_centrality.py`, `_content.py`, `_spreading.py`; registry in `_registry.py`.
 - **`network/community.py`** — Community detection: ORGANIZATION, LOUVAIN, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
 - **`network/layout.py`** — Spatial layout: Kamada-Kawai seed → ForceAtlas2 (`pyforceatlas2`).
-- **`network/exporter.py`** — Builds `GraphData`; writes `graph/data.json` and config; GEXF export.
+- **`network/exporter.py`** — Builds `GraphData`; writes `data/*.json`, config, and GEXF/GraphML exports.
 - **`network/tables.py`** — Writes channel, network, and community HTML/XLSX tables.
-- **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline.
+- **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline. Writes atomically: all output goes to `exports/<name>.tmp/`, which is renamed to `exports/<name>/` only after `summary.json` is written as the final step. A stale `.tmp` directory from an interrupted run is removed at the start of the next export with the same name.
 - **`runner/tasks.py`** — Task manager for Operations panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
 - **`runner/views.py`** — Operations panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
 - **`backoffice/views.py`** — Staff-only section views for `/manage/`: Channels, Organizations, Groups, Search Terms, Events, Users, Messages.
