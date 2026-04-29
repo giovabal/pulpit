@@ -103,6 +103,8 @@ class GraphDirsView(View):
             if key in seen:
                 return
             seen.add(key)
+            if path.name.endswith((".tmp", ".old")):
+                return  # staging or backup directory from an in-progress / interrupted export
             if path.resolve() == current_graph.resolve():
                 return  # cannot compare a network with itself
             if not (path / "index.html").exists():
@@ -160,7 +162,7 @@ class ExportsListView(View):
         exports_root = Path(settings.BASE_DIR) / "exports"
         try:
             for item in sorted(exports_root.iterdir()):
-                if not item.is_dir():
+                if not item.is_dir() or item.name.endswith((".tmp", ".old")):
                     continue
                 summary_path = item / "summary.json"
                 if not summary_path.exists():
