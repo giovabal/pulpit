@@ -20,8 +20,6 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
-from django.views.generic import RedirectView
-from django.views.static import serve
 
 from webapp.views import serve_export
 
@@ -32,8 +30,6 @@ if settings.WEB_ACCESS == "ALL":
 
     admin.site.has_permission = lambda r: setattr(r, "user", AccessUser()) or True
 
-_graph_root = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("login/", auth_views.LoginView.as_view(template_name="webapp/login.html"), name="login"),
@@ -42,8 +38,6 @@ urlpatterns = [
     path("events/", include("events.urls")),
     *(
         [
-            path("graph/", RedirectView.as_view(url="/graph/index.html", permanent=False)),
-            re_path(r"^graph/(?P<path>.*)$", serve, {"document_root": _graph_root}),
             path("exports/<str:name>/", serve_export, {"path": ""}),
             re_path(r"^exports/(?P<name>[^/]+)/(?P<path>.+)$", serve_export),
         ]

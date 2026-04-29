@@ -219,25 +219,20 @@ class ChannelListView(ListView):
 
 
 def _find_exports() -> list[dict]:
-    """Return all available exports (named + default graph/), newest first."""
+    """Return all available exports from BASE_DIR/exports/*/, newest first."""
     exports: list[dict] = []
-
-    def _read_summary(path: Path) -> dict:
-        summary = path / "summary.json"
-        if not summary.exists():
-            return {}
-        try:
-            return json.loads(summary.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-
-    # Named exports from BASE_DIR/exports/*/
     exports_root = Path(settings.BASE_DIR) / "exports"
     try:
         for item in sorted(exports_root.iterdir()):
             if not item.is_dir() or not (item / "index.html").exists():
                 continue
-            data = _read_summary(item)
+            data: dict = {}
+            summary = item / "summary.json"
+            if summary.exists():
+                try:
+                    data = json.loads(summary.read_text())
+                except (json.JSONDecodeError, OSError):
+                    pass
             exports.append(
                 {
                     "name": item.name,
@@ -251,23 +246,6 @@ def _find_exports() -> list[dict]:
             )
     except (PermissionError, OSError):
         pass
-
-    # Default graph/ export
-    default_path = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
-    if (default_path / "index.html").exists():
-        data = _read_summary(default_path)
-        exports.append(
-            {
-                "name": "__default__",
-                "label": "Default",
-                "created_at": data.get("created_at"),
-                "nodes": data.get("nodes"),
-                "edges": data.get("edges"),
-                "path": default_path,
-                "url_prefix": f"/{settings.GRAPH_OUTPUT_DIR}/",
-            }
-        )
-
     exports.sort(key=lambda e: e.get("created_at") or "", reverse=True)
     return exports
 
@@ -298,12 +276,8 @@ class DataView(TemplateView):
         if current is None and all_exports:
             current = all_exports[0]
 
-        if current:
-            graph_dir: Path = current["path"]
-            prefix: str = current["url_prefix"]
-        else:
-            graph_dir = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
-            prefix = f"/{settings.GRAPH_OUTPUT_DIR}/"
+        graph_dir: Path = current["path"] if current else Path(settings.BASE_DIR) / "exports"
+        prefix: str = current["url_prefix"] if current else ""
 
         maps = []
         if (graph_dir / "graph.html").exists():
