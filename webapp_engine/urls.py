@@ -23,6 +23,8 @@ from django.urls import include, path, re_path
 from django.views.generic import RedirectView
 from django.views.static import serve
 
+from webapp.views import serve_export
+
 if settings.WEB_ACCESS == "ALL":
 
     class AccessUser:
@@ -42,6 +44,8 @@ urlpatterns = [
         [
             path("graph/", RedirectView.as_view(url="/graph/index.html", permanent=False)),
             re_path(r"^graph/(?P<path>.*)$", serve, {"document_root": _graph_root}),
+            path("exports/<str:name>/", serve_export, {"path": ""}),
+            re_path(r"^exports/(?P<name>[^/]+)/(?P<path>.+)$", serve_export),
         ]
         if settings.DEBUG
         else []

@@ -1,11 +1,15 @@
+import json
+import re as _re
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.db.models import Count, Max, Min, Q, QuerySet, Sum
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
+from django.views.static import serve as _static_serve
 
 from webapp.paginator import DiggPaginator
 
@@ -214,13 +218,92 @@ class ChannelListView(ListView):
         return ctx
 
 
+def _find_exports() -> list[dict]:
+    """Return all available exports (named + default graph/), newest first."""
+    exports: list[dict] = []
+
+    def _read_summary(path: Path) -> dict:
+        summary = path / "summary.json"
+        if not summary.exists():
+            return {}
+        try:
+            return json.loads(summary.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    # Named exports from BASE_DIR/exports/*/
+    exports_root = Path(settings.BASE_DIR) / "exports"
+    try:
+        for item in sorted(exports_root.iterdir()):
+            if not item.is_dir() or not (item / "index.html").exists():
+                continue
+            data = _read_summary(item)
+            exports.append(
+                {
+                    "name": item.name,
+                    "label": item.name,
+                    "created_at": data.get("created_at"),
+                    "nodes": data.get("nodes"),
+                    "edges": data.get("edges"),
+                    "path": item,
+                    "url_prefix": f"/exports/{item.name}/",
+                }
+            )
+    except (PermissionError, OSError):
+        pass
+
+    # Default graph/ export
+    default_path = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
+    if (default_path / "index.html").exists():
+        data = _read_summary(default_path)
+        exports.append(
+            {
+                "name": "__default__",
+                "label": "Default",
+                "created_at": data.get("created_at"),
+                "nodes": data.get("nodes"),
+                "edges": data.get("edges"),
+                "path": default_path,
+                "url_prefix": f"/{settings.GRAPH_OUTPUT_DIR}/",
+            }
+        )
+
+    exports.sort(key=lambda e: e.get("created_at") or "", reverse=True)
+    return exports
+
+
+def serve_export(request: HttpRequest, name: str, path: str = "") -> HttpResponse:
+    """Serve static files from BASE_DIR/exports/{name}/ (development only)."""
+    if not _re.match(r"^[\w\-]+$", name):
+        raise Http404
+    doc_root = Path(settings.BASE_DIR) / "exports" / name
+    if not doc_root.is_dir():
+        raise Http404
+    return _static_serve(request, path or "index.html", document_root=str(doc_root))
+
+
 class DataView(TemplateView):
     template_name = "webapp/data.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
-        graph_dir = settings.BASE_DIR / settings.GRAPH_OUTPUT_DIR
         docs_base = "https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md"
+
+        all_exports = _find_exports()
+
+        requested = self.request.GET.get("export", "")
+        current: dict | None = None
+        if requested:
+            current = next((e for e in all_exports if e["name"] == requested), None)
+        if current is None and all_exports:
+            current = all_exports[0]
+
+        if current:
+            graph_dir: Path = current["path"]
+            prefix: str = current["url_prefix"]
+        else:
+            graph_dir = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
+            prefix = f"/{settings.GRAPH_OUTPUT_DIR}/"
 
         maps = []
         if (graph_dir / "graph.html").exists():
@@ -229,7 +312,7 @@ class DataView(TemplateView):
                     "title": "2D Network map",
                     "icon": "bi-map",
                     "description": "Interactive force-directed graph. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.",
-                    "url": "/graph/graph.html",
+                    "url": f"{prefix}graph.html",
                     "action": "Open map",
                 }
             )
@@ -239,7 +322,7 @@ class DataView(TemplateView):
                     "title": "3D Network map",
                     "icon": "bi-box",
                     "description": "3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.",
-                    "url": "/graph/graph3d.html",
+                    "url": f"{prefix}graph3d.html",
                     "action": "Open 3D map",
                 }
             )
@@ -251,7 +334,7 @@ class DataView(TemplateView):
                     "title": "Channels",
                     "icon": "bi-table",
                     "description": "One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments.",
-                    "url": "/graph/channel_table.html",
+                    "url": f"{prefix}channel_table.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#network-measures",
                 }
@@ -262,7 +345,7 @@ class DataView(TemplateView):
                     "title": "Community statistics",
                     "icon": "bi-diagram-3",
                     "description": "Structural metrics per detected community: size, internal/external edges, density, reciprocity, clustering, path length.",
-                    "url": "/graph/community_table.html",
+                    "url": f"{prefix}community_table.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#community-detection-strategies",
                 }
@@ -273,7 +356,7 @@ class DataView(TemplateView):
                     "title": "Network statistics",
                     "icon": "bi-bar-chart",
                     "description": "Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy.",
-                    "url": "/graph/network_table.html",
+                    "url": f"{prefix}network_table.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#whole-network-measures",
                 }
@@ -286,7 +369,7 @@ class DataView(TemplateView):
                     "title": "2D Network map (comparison)",
                     "icon": "bi-map",
                     "description": "Interactive force-directed graph for the comparison dataset.",
-                    "url": "/graph/graph_2.html",
+                    "url": f"{prefix}graph_2.html",
                     "action": "Open map",
                 }
             )
@@ -296,7 +379,7 @@ class DataView(TemplateView):
                     "title": "3D Network map (comparison)",
                     "icon": "bi-box",
                     "description": "3D force-directed graph for the comparison dataset.",
-                    "url": "/graph/graph3d_2.html",
+                    "url": f"{prefix}graph3d_2.html",
                     "action": "Open 3D map",
                 }
             )
@@ -308,7 +391,7 @@ class DataView(TemplateView):
                     "title": "Network comparison",
                     "icon": "bi-intersect",
                     "description": "Side-by-side whole-network metrics for the two datasets.",
-                    "url": "/graph/network_compare_table.html",
+                    "url": f"{prefix}network_compare_table.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#whole-network-measures",
                 }
@@ -321,7 +404,7 @@ class DataView(TemplateView):
                     "title": "Channels (comparison)",
                     "icon": "bi-table",
                     "description": "Per-channel measures and community assignments for the comparison dataset.",
-                    "url": "/graph/channel_table_2.html",
+                    "url": f"{prefix}channel_table_2.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#network-measures",
                 }
@@ -332,7 +415,7 @@ class DataView(TemplateView):
                     "title": "Community statistics (comparison)",
                     "icon": "bi-diagram-3",
                     "description": "Structural metrics per community for the comparison dataset.",
-                    "url": "/graph/community_table_2.html",
+                    "url": f"{prefix}community_table_2.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#community-detection-strategies",
                 }
@@ -343,12 +426,14 @@ class DataView(TemplateView):
                     "title": "Network statistics (comparison)",
                     "icon": "bi-bar-chart",
                     "description": "Whole-network structural metrics for the comparison dataset.",
-                    "url": "/graph/network_table_2.html",
+                    "url": f"{prefix}network_table_2.html",
                     "action": "Open table",
                     "docs_url": f"{docs_base}#whole-network-measures",
                 }
             )
 
+        ctx["all_exports"] = all_exports
+        ctx["current_export"] = current
         ctx["maps"] = maps
         ctx["tables"] = tables
         ctx["compare_highlight"] = compare_highlight

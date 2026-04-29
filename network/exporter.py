@@ -306,6 +306,63 @@ def write_meta_json(
         f.write(json.dumps(payload))
 
 
+def write_summary_json(
+    graph_dir: str,
+    name: "str | None",
+    options: dict,
+    nodes: int,
+    edges: int,
+) -> None:
+    """Write summary.json at the export root with name, timestamp, result counts, and all CLI options."""
+    _OPTION_KEYS = (
+        "graph",
+        "graph_3d",
+        "html",
+        "xlsx",
+        "gexf",
+        "graphml",
+        "seo",
+        "vertical_layout",
+        "consensus_matrix",
+        "draw_dead_leaves",
+        "timeline_step",
+        "startdate",
+        "enddate",
+        "fa2_iterations",
+        "recency_weights",
+        "spreading_runs",
+        "community_distribution_threshold",
+        "leiden_coarse_resolution",
+        "leiden_fine_resolution",
+        "mcl_inflation",
+        "measures",
+        "community_strategies",
+        "network_stat_groups",
+        "edge_weight_strategy",
+        "channel_types",
+        "channel_groups",
+    )
+    opts: dict = {}
+    for key in _OPTION_KEYS:
+        val = options.get(key)
+        if val is None:
+            opts[key] = None
+        elif isinstance(val, bool):
+            opts[key] = val
+        else:
+            opts[key] = val if val != "" else None
+    payload = {
+        "name": name,
+        "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "nodes": nodes,
+        "edges": edges,
+        "options": opts,
+    }
+    os.makedirs(graph_dir, exist_ok=True)
+    with open(os.path.join(graph_dir, "summary.json"), "w") as f:
+        f.write(json.dumps(payload, indent=2))
+
+
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
     for username, telegram_id in channel_qs.values_list("username", "telegram_id"):
         channel_dir = username or str(telegram_id)

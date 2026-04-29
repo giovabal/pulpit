@@ -15,6 +15,20 @@
     </a>
   </div>
 
+  {% if all_exports|length > 1 %}
+  <div class="data-export-picker">
+    {% for export in all_exports %}
+    <a href="?export={{ export.name }}"
+       class="data-export-item{% if export.name == current_export.name %} active{% endif %}">
+      <span class="data-export-name">{{ export.label }}</span>
+      <span class="data-export-meta">
+        {% if export.created_at %}{{ export.created_at|slice:":10" }}{% endif %}{% if export.created_at and export.nodes %} · {% endif %}{% if export.nodes %}{{ export.nodes }} nodes{% endif %}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if not graph_available %}
   <div class="alert alert-secondary" role="alert">
     <i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>

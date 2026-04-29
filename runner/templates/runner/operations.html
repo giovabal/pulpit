@@ -177,6 +177,26 @@
           {% elif task.name == "export_network" %}
 
           <fieldset class="ops-fieldset">
+            <legend>Name</legend>
+            <div class="ops-params">
+              <div class="ops-param" style="width:100%">
+                <label for="export_name">Export name
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Optional. If set, output goes to exports/&lt;name&gt;/ instead of graph/, so multiple exports can coexist. Leave blank to overwrite the default graph/ export."></i>
+                </label>
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                  <input type="text" name="export_name" id="export_name" placeholder="e.g. baseline, filtered-2023" data-width="lg" style="flex:1;min-width:14rem;">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="export-load-btn"
+                          onclick="opsExportsList(this)">
+                    <i class="bi bi-clock-history"></i> Previous exports
+                  </button>
+                </div>
+                <div id="export-load-results" class="ops-dir-picker" style="display:none"></div>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="ops-fieldset">
             <legend>Outputs</legend>
             <div class="ops-flags">
               <label class="ops-flag"><input type="checkbox" name="graph" checked>2D graph
@@ -761,6 +781,148 @@
         btn.innerHTML = '<i class="bi bi-folder-symlink"></i> Find exports';
       });
   };
+
+  /* ── Previous exports picker ──────────────────────────────────────── */
+  var _exportsLoading = false;
+  window.opsExportsList = function (btn) {
+    if (_exportsLoading) return;
+    _exportsLoading = true;
+    var resultsEl = document.getElementById('export-load-results');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading…';
+    fetch('{% url "operations-exports" %}')
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+      .then(function(data) {
+        resultsEl.innerHTML = '';
+        var exports = data.exports || [];
+        if (!exports.length) {
+          resultsEl.textContent = 'No previous exports found.';
+          resultsEl.style.display = '';
+          return;
+        }
+        exports.forEach(function(e) {
+          var item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'ops-dir-item';
+          var nameSpan = document.createElement('span');
+          nameSpan.className = 'ops-dir-path';
+          nameSpan.textContent = e.name === '__default__' ? 'Default (graph/)' : e.name;
+          item.appendChild(nameSpan);
+          var meta = [];
+          if (e.created_at) meta.push(e.created_at.slice(0, 10));
+          if (e.nodes != null) meta.push(e.nodes + ' nodes');
+          if (e.edges != null) meta.push(e.edges + ' edges');
+          if (meta.length) {
+            var metaSpan = document.createElement('span');
+            metaSpan.className = 'ops-dir-meta';
+            metaSpan.textContent = meta.join(' · ');
+            item.appendChild(metaSpan);
+          }
+          item.addEventListener('click', function() {
+            resultsEl.style.display = 'none';
+            opsLoadExportOptions(e.name);
+          });
+          resultsEl.appendChild(item);
+        });
+        resultsEl.style.display = '';
+      })
+      .catch(function() {
+        resultsEl.textContent = 'Failed to load exports.';
+        resultsEl.style.display = '';
+      })
+      .finally(function() {
+        _exportsLoading = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-clock-history"></i> Previous exports';
+      });
+  };
+
+  window.opsLoadExportOptions = function (name) {
+    fetch('{% url "operations-exports" %}' + encodeURIComponent(name) + '/')
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+      .then(function(data) {
+        var opts = data.options || {};
+        var form = document.getElementById('form-export_network');
+        if (!form) return;
+
+        function setCheck(name, val) {
+          var el = form.querySelector('[name="' + name + '"]');
+          if (el) el.checked = !!val;
+        }
+        function setVal(name, val) {
+          var el = form.querySelector('[name="' + name + '"]');
+          if (el && val != null) el.value = val;
+        }
+        function setMulti(name, csv) {
+          var vals = csv ? csv.split(',').map(function(s) { return s.trim().toUpperCase(); }) : [];
+          form.querySelectorAll('[name="' + name + '"]').forEach(function(el) {
+            el.checked = vals.indexOf(el.value.toUpperCase()) !== -1;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+        }
+        function setRadio(name, val) {
+          form.querySelectorAll('[name="' + name + '"]').forEach(function(el) {
+            if (el.value === val) { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }
+          });
+        }
+
+        // Boolean flags
+        setCheck('graph',            opts.graph);
+        setCheck('graph_3d',         opts.graph_3d);
+        setCheck('html',             opts.html);
+        setCheck('xlsx',             opts.xlsx);
+        setCheck('gexf',             opts.gexf);
+        setCheck('graphml',          opts.graphml);
+        setCheck('seo',              opts.seo);
+        setCheck('vertical_layout',  opts.vertical_layout);
+        setCheck('consensus_matrix', opts.consensus_matrix);
+        setCheck('draw_dead_leaves', opts.draw_dead_leaves);
+        setCheck('timeline_step',    opts.timeline_step === 'year');
+
+        // Text / number fields
+        setVal('startdate',                      opts.startdate || '');
+        setVal('enddate',                        opts.enddate   || '');
+        setVal('fa2_iterations',                 opts.fa2_iterations);
+        setVal('recency_weights',                opts.recency_weights || '');
+        setVal('spreading_runs',                 opts.spreading_runs);
+        setVal('community_distribution_threshold', opts.community_distribution_threshold);
+        setVal('leiden_coarse_resolution',       opts.leiden_coarse_resolution);
+        setVal('leiden_fine_resolution',         opts.leiden_fine_resolution);
+        setVal('mcl_inflation',                  opts.mcl_inflation);
+
+        // Multi-checkbox groups
+        setMulti('measures',           opts.measures);
+        setMulti('community_strategies', opts.community_strategies);
+        setMulti('network_stat_groups',  opts.network_stat_groups);
+
+        // Channel type checkboxes have names like channel_type_channel
+        var ctypes = opts.channel_types ? opts.channel_types.split(',') : [];
+        ['CHANNEL', 'GROUP', 'USER'].forEach(function(ct) {
+          var el = form.querySelector('[name="channel_type_' + ct.toLowerCase() + '"]');
+          if (el) el.checked = ctypes.indexOf(ct) !== -1;
+        });
+
+        // Edge weight radio
+        if (opts.edge_weight_strategy) setRadio('edge_weight_strategy', opts.edge_weight_strategy);
+
+        showToast('Options loaded from "' + (name === '__default__' ? 'graph/' : name) + '".');
+      })
+      .catch(function(e) { showToast('Failed to load options: ' + e.message, 'error'); });
+  };
+
+  function showToast(msg, type) {
+    type = type || 'success';
+    var c = document.getElementById('ops-toast-container');
+    if (!c) { c = document.createElement('div'); c.id = 'ops-toast-container'; c.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;'; document.body.appendChild(c); }
+    var t = document.createElement('div');
+    t.style.cssText = 'padding:.5rem 1rem;border-radius:.375rem;font-size:.875rem;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.15);';
+    t.style.background = type === 'error' ? '#fef2f2' : '#dcfce7';
+    t.style.color      = type === 'error' ? '#991b1b'  : '#166534';
+    t.style.border     = '1px solid ' + (type === 'error' ? '#fecaca' : '#bbf7d0');
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3200);
+  }
 })();
 </script>
 {% endblock extra_scripts %}

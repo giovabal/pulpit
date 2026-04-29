@@ -1,7 +1,9 @@
 import datetime
 import os
+import re
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from django.conf import settings
@@ -275,6 +277,16 @@ class Command(BaseCommand):
                 "'none' disables this (default); 'year' generates per-year outputs "
                 "(graph_YYYY.html, channel_table_YYYY.html, data_YYYY/, etc.) alongside "
                 "the full-range export, and adds a Timeline section to the index."
+            ),
+        )
+        parser.add_argument(
+            "--name",
+            dest="name",
+            default="",
+            help=(
+                "Name for this export. If set, output is written to exports/<name>/ "
+                "instead of GRAPH_OUTPUT_DIR, so multiple exports can coexist without "
+                "overwriting each other. Name is slug-sanitized (alphanumeric, hyphens, underscores)."
             ),
         )
 
@@ -807,7 +819,11 @@ class Command(BaseCommand):
             options["spreading_runs"],
         )
 
-        root_target = settings.GRAPH_OUTPUT_DIR
+        export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
+        if export_name:
+            root_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
+        else:
+            root_target = settings.GRAPH_OUTPUT_DIR
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         strategies = [s.lower() for s in communities_strategy]
@@ -1010,5 +1026,7 @@ class Command(BaseCommand):
             include_consensus_matrix_html=do_consensus_matrix,
             timeline_entries=timeline_entries or None,
         )
+
+        exporter.write_summary_json(root_target, export_name or None, options, len(graph.nodes), len(graph.edges))
 
         self.stdout.write(self.style.SUCCESS("\nDone."))
