@@ -119,12 +119,31 @@
               </label>
               <label class="ops-flag">
                 <span class="ops-flag-step">5</span>
+                <input type="checkbox" name="do_refresh">Refresh message stats
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
+                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Refresh limit"></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">6</span>
+                <input type="checkbox" name="mine_about_texts">Mine about texts
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Scan the 'about' field of all channels in the database for t.me/ links and fetch any referenced channels not yet in the database. Zero extra API calls for already-known channels."></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">7</span>
+                <input type="checkbox" name="refresh_degrees">Refresh degrees
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Skipping leaves cached degree values stale."></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">8</span>
                 <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
               </label>
               <label class="ops-flag">
-                <span class="ops-flag-step">6</span>
+                <span class="ops-flag-step">9</span>
                 <input type="checkbox" name="fix_missing_media">Fix missing media
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
@@ -158,19 +177,11 @@
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset">
               <legend>Stats refresh</legend>
-              <div class="ops-flags">
-                <label class="ops-flag">
-                  <input type="checkbox" name="do_refresh">Refresh message stats
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
-                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Refresh limit"></i>
-                </label>
-              </div>
               <div class="ops-params">
                 <div class="ops-param">
                   <label for="refresh_value">Refresh limit
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when Refresh message stats is checked."></i>
+                       title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when step 5 (Refresh message stats) is checked."></i>
                   </label>
                   <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md" data-requires-flag="do_refresh">
                 </div>
