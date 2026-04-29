@@ -3,7 +3,6 @@
 - Organization changes overtime.
 - how the disappearing of a channel impacts the network? new channels born after that lost are replacing it?
 - group analysis, similar to whole network analysis
-- tests for runner and backoffice
 - events can be linked to a group, a channel, to an organization. or general.
 
 ## 3. Content & Semantic Analysis
