@@ -1,7 +1,16 @@
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from .views import ChannelsView, ChannelUpdateView, EventsView, GroupsView, OrganizationsView, SearchTermsView
+from .views import (
+    ChannelsView,
+    ChannelUpdateView,
+    EventsView,
+    GroupsView,
+    MessagesView,
+    OrganizationsView,
+    SearchTermsView,
+    UsersView,
+)
 
 app_name = "backoffice"
 
@@ -13,5 +22,7 @@ urlpatterns = [
     path("groups/", GroupsView.as_view(), name="groups"),
     path("search-terms/", SearchTermsView.as_view(), name="search-terms"),
     path("events/", EventsView.as_view(), name="events"),
+    path("users/", UsersView.as_view(), name="users"),
+    path("messages/", MessagesView.as_view(), name="messages"),
     path("api/", include("backoffice.api.urls")),
 ]

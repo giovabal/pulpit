@@ -1,0 +1,44 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Users</h2>
+    <button class="bo-btn" id="usr-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add user</button>
+  </div>
+  <form class="bo-add-form d-none" id="usr-add-form" autocomplete="off">
+    <input class="bo-input" type="email" name="email" placeholder="Email" required>
+    <input class="bo-input" type="password" name="password" placeholder="Password" required autocomplete="new-password">
+    <label class="bo-check-label"><input type="checkbox" name="is_staff"> Staff</label>
+    <label class="bo-check-label"><input type="checkbox" name="is_active" checked> Active</label>
+    <button type="submit" class="bo-btn">Save</button>
+    <button type="button" class="bo-btn bo-btn--ghost" id="usr-add-cancel">Cancel</button>
+  </form>
+  <div class="bo-toolbar bo-toolbar--compact">
+    <span class="bo-count" id="usr-count"></span>
+    <div class="bo-pagination" id="usr-pagination-top"></div>
+  </div>
+  <table class="bo-table" id="usr-table">
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th class="bo-th--center">Staff</th>
+        <th class="bo-th--center">Active</th>
+        <th>Joined</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="usr-tbody">
+      <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+  <div class="bo-pagination bo-pagination--bottom" id="usr-pagination-bottom"></div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/users.js' %}"></script>
+{% endblock extra_scripts %}

@@ -1,0 +1,45 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Messages</h2>
+  </div>
+  <div class="bo-toolbar bo-toolbar--compact">
+    <select class="bo-select bo-select--sm" id="msg-channel-filter">
+      <option value="">All channels</option>
+    </select>
+    <label class="bo-check-label" style="font-size:.8125rem">
+      <input type="checkbox" id="msg-fwd-filter"> Forwarded only
+    </label>
+    <input class="bo-search" type="search" id="msg-search" placeholder="Search text…">
+    <span class="bo-count" id="msg-count"></span>
+    <div class="bo-pagination" id="msg-pagination-top"></div>
+  </div>
+  <table class="bo-table" id="msg-table">
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Date</th>
+        <th>Text</th>
+        <th>Forwarded from</th>
+        <th class="bo-th--num">Views</th>
+        <th class="bo-th--num">Fwds</th>
+        <th>Media</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="msg-tbody">
+      <tr><td colspan="8" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+  <div class="bo-pagination bo-pagination--bottom" id="msg-pagination-bottom"></div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/messages.js' %}"></script>
+{% endblock extra_scripts %}

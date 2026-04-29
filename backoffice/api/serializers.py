@@ -1,5 +1,7 @@
+from django.contrib.auth.models import User
+
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Organization, SearchTerm
+from webapp.models import Channel, ChannelGroup, Message, Organization, SearchTerm
 
 from rest_framework import serializers
 
@@ -111,3 +113,61 @@ class EventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = ["id", "date", "subject", "action_id", "action_name", "action_color"]
+
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, style={"input_type": "password"})
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "is_staff", "is_active", "date_joined", "password"]
+        read_only_fields = ["id", "username", "date_joined"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        if not password:
+            raise serializers.ValidationError({"password": "Password is required when creating a user."})
+        validated_data["username"] = validated_data.get("email", "")
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        if "email" in validated_data:
+            validated_data["username"] = validated_data["email"]
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    channel_id = serializers.IntegerField(source="channel.pk", read_only=True)
+    channel_title = serializers.CharField(source="channel.title", read_only=True)
+    forwarded_from_id = serializers.IntegerField(source="forwarded_from.pk", read_only=True, default=None)
+    forwarded_from_title = serializers.CharField(source="forwarded_from.title", read_only=True, default=None)
+    telegram_url = serializers.CharField(read_only=True)
+    text = serializers.SerializerMethodField()
+
+    def get_text(self, obj):
+        return obj.message[:200] if obj.message else ""
+
+    class Meta:
+        model = Message
+        fields = [
+            "id",
+            "channel_id",
+            "channel_title",
+            "date",
+            "text",
+            "forwarded_from_id",
+            "forwarded_from_title",
+            "views",
+            "forwards",
+            "media_type",
+            "telegram_url",
+        ]

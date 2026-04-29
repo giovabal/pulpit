@@ -179,6 +179,9 @@
 
 .bo-td--num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bo-td--center { text-align: center; }
+.bo-td--text { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bo-td--text a { color: inherit; text-decoration: none; }
+.bo-td--text a:hover { text-decoration: underline; color: var(--accent); }
 
 .bo-empty { text-align: center; color: var(--muted); padding: var(--space-6) !important; }
 
