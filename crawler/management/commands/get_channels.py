@@ -196,6 +196,27 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--mine-about-texts",
+            action="store_true",
+            default=False,
+            help=(
+                "After crawling, scan the 'about' field of all channels in the database for t.me/ links "
+                "and fetch any referenced channels not yet in the database. "
+                "New channels are added but not crawled until marked as interesting."
+            ),
+        )
+        parser.add_argument(
+            "--refresh-degrees",
+            action="store_true",
+            default=False,
+            help=(
+                "After crawling, recompute and store the in-degree and out-degree for all interesting "
+                "channels, and the citation degree for non-interesting channels that are forwarded or "
+                "mentioned by interesting ones. Skipping this leaves cached degree values stale until "
+                "the next run that includes this flag."
+            ),
+        )
+        parser.add_argument(
             "--fix-missing-media",
             action="store_true",
             default=False,
@@ -406,6 +427,8 @@ class Command(BaseCommand):
         fetch_recommended: bool = options["fetch_recommended_channels"]
         retry_references: bool = options["retry_references"]
         force_retry: bool = options["force_retry_unresolved_references"]
+        mine_about_texts: bool = options["mine_about_texts"]
+        refresh_degrees: bool = options["refresh_degrees"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
         except ValueError as exc:
@@ -527,50 +550,51 @@ class Command(BaseCommand):
                         self.stdout.write("", ending="\n")
 
                 # ---- mine Channel.about for t.me/ references ----
-                about_refs: set[str] = set()
-                for about_text in interesting_qs.exclude(about="").values_list("about", flat=True):
-                    for m in _ABOUT_REF_RE.finditer(about_text):
-                        ref = m.group(1).strip().lower()
-                        if ref and ref not in SKIPPABLE_REFERENCES:
-                            about_refs.add(ref)
+                if mine_about_texts:
+                    about_refs: set[str] = set()
+                    for about_text in interesting_qs.exclude(about="").values_list("about", flat=True):
+                        for m in _ABOUT_REF_RE.finditer(about_text):
+                            ref = m.group(1).strip().lower()
+                            if ref and ref not in SKIPPABLE_REFERENCES:
+                                about_refs.add(ref)
 
-                if about_refs:
-                    known_lower = {
-                        u.lower() for u in Channel.objects.exclude(username="").values_list("username", flat=True)
-                    }
-                    new_about_refs = sorted(about_refs - known_lower)
-                    if new_about_refs:
-                        n_about = len(new_about_refs)
-                        self.stdout.write(f"\nFetching {n_about} channels referenced in about texts", ending="")
-                        self.stdout.flush()
-                        _about_len: list[int] = [0]
-                        fetched_about = 0
-                        for i, ref in enumerate(new_about_refs, start=1):
-                            line = printer._fit(f"About texts [{i}/{n_about}] {ref}")
-                            padding = " " * max(0, _about_len[0] - len(line))
-                            self.stdout.write(f"\r{line}{padding}", ending="")
+                    if about_refs:
+                        known_lower = {
+                            u.lower() for u in Channel.objects.exclude(username="").values_list("username", flat=True)
+                        }
+                        new_about_refs = sorted(about_refs - known_lower)
+                        if new_about_refs:
+                            n_about = len(new_about_refs)
+                            self.stdout.write(f"\nFetching {n_about} channels referenced in about texts", ending="")
                             self.stdout.flush()
-                            _about_len[0] = len(line)
-                            try:
-                                channel, _ = crawler.get_basic_channel(ref)
-                                if channel:
-                                    fetched_about += 1
-                            except errors.FloodWaitError as exc:
-                                self.stdout.write("", ending="\n")
-                                self.stdout.write(
-                                    self.style.WARNING(f"Flood wait while fetching about references: {exc}")
-                                )
-                                if not settings.IGNORE_FLOODWAIT:
-                                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-                                break
-                            except ValueError:
-                                pass  # user account, not a channel
-                            except Exception as exc:
-                                logger.warning("Error fetching about reference %s: %s", ref, exc)
-                        self.stdout.write("", ending="\n")
-                        self.stdout.write(f"About texts: {fetched_about}/{n_about} new channels fetched.")
-                    else:
-                        self.stdout.write("\nAbout texts: all referenced channels already in DB.")
+                            _about_len: list[int] = [0]
+                            fetched_about = 0
+                            for i, ref in enumerate(new_about_refs, start=1):
+                                line = printer._fit(f"About texts [{i}/{n_about}] {ref}")
+                                padding = " " * max(0, _about_len[0] - len(line))
+                                self.stdout.write(f"\r{line}{padding}", ending="")
+                                self.stdout.flush()
+                                _about_len[0] = len(line)
+                                try:
+                                    channel, _ = crawler.get_basic_channel(ref)
+                                    if channel:
+                                        fetched_about += 1
+                                except errors.FloodWaitError as exc:
+                                    self.stdout.write("", ending="\n")
+                                    self.stdout.write(
+                                        self.style.WARNING(f"Flood wait while fetching about references: {exc}")
+                                    )
+                                    if not settings.IGNORE_FLOODWAIT:
+                                        sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                                    break
+                                except ValueError:
+                                    pass  # user account, not a channel
+                                except Exception as exc:
+                                    logger.warning("Error fetching about reference %s: %s", ref, exc)
+                            self.stdout.write("", ending="\n")
+                            self.stdout.write(f"About texts: {fetched_about}/{n_about} new channels fetched.")
+                        else:
+                            self.stdout.write("\nAbout texts: all referenced channels already in DB.")
 
                 # ---- fetch Telegram-recommended channels ----
                 if fetch_recommended:
@@ -617,125 +641,126 @@ class Command(BaseCommand):
                 logging.getLogger().removeHandler(warning_handler)
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
-        interesting_pks = set(interesting_qs.values_list("pk", flat=True))
+        if refresh_degrees:
+            interesting_pks = set(interesting_qs.values_list("pk", flat=True))
 
-        # Non-interesting channels cited by interesting channels: via forwards or t.me/username references.
-        cited_pks = (
-            set(
-                Message.objects.filter(
-                    channel__organization__is_interesting=True,
-                    forwarded_from__isnull=False,
-                ).values_list("forwarded_from_id", flat=True)
-            )
-            | set(
-                Message.references.through.objects.filter(
-                    message__channel__organization__is_interesting=True,
-                ).values_list("channel_id", flat=True)
-            )
-        ) - interesting_pks
-
-        if interesting_pks:
-            # Build (message_id, target_channel_id) pairs for all citations toward interesting channels,
-            # taking the union of forward-from and reference links so each message counts once per target.
-            fwd_cited_by = set(
-                Message.objects.filter(
-                    channel__organization__is_interesting=True,
-                    forwarded_from_id__in=interesting_pks,
+            # Non-interesting channels cited by interesting channels: via forwards or t.me/username references.
+            cited_pks = (
+                set(
+                    Message.objects.filter(
+                        channel__organization__is_interesting=True,
+                        forwarded_from__isnull=False,
+                    ).values_list("forwarded_from_id", flat=True)
                 )
-                .exclude(channel_id=F("forwarded_from_id"))
-                .values_list("id", "forwarded_from_id")
-            )
-            ref_cited_by = set(
-                Message.references.through.objects.filter(
-                    message__channel__organization__is_interesting=True,
-                    channel_id__in=interesting_pks,
+                | set(
+                    Message.references.through.objects.filter(
+                        message__channel__organization__is_interesting=True,
+                    ).values_list("channel_id", flat=True)
                 )
-                .exclude(message__channel_id=F("channel_id"))
-                .values_list("message_id", "channel_id")
-            )
-            cited_by_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited_by | ref_cited_by)
+            ) - interesting_pks
 
-            # Outgoing: messages from each interesting channel that cite another interesting channel.
-            fwd_cites = set(
-                Message.objects.filter(
-                    channel_id__in=interesting_pks,
-                    forwarded_from_id__in=interesting_pks,
+            if interesting_pks:
+                # Build (message_id, target_channel_id) pairs for all citations toward interesting channels,
+                # taking the union of forward-from and reference links so each message counts once per target.
+                fwd_cited_by = set(
+                    Message.objects.filter(
+                        channel__organization__is_interesting=True,
+                        forwarded_from_id__in=interesting_pks,
+                    )
+                    .exclude(channel_id=F("forwarded_from_id"))
+                    .values_list("id", "forwarded_from_id")
                 )
-                .exclude(channel_id=F("forwarded_from_id"))
-                .values_list("channel_id", "id")
-            )
-            ref_cites = set(
-                Message.references.through.objects.filter(
-                    message__channel_id__in=interesting_pks,
-                    channel_id__in=interesting_pks,
+                ref_cited_by = set(
+                    Message.references.through.objects.filter(
+                        message__channel__organization__is_interesting=True,
+                        channel_id__in=interesting_pks,
+                    )
+                    .exclude(message__channel_id=F("channel_id"))
+                    .values_list("message_id", "channel_id")
                 )
-                .exclude(message__channel_id=F("channel_id"))
-                .values_list("message__channel_id", "message_id")
-            )
-            cites_counts: Counter[int] = Counter(src for src, _ in fwd_cites | ref_cites)
+                cited_by_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited_by | ref_cited_by)
 
-            channels_to_update = list(Channel.objects.filter(pk__in=interesting_pks))
-            for ch in channels_to_update:
-                cited_by = cited_by_counts.get(ch.pk, 0)
-                cites = cites_counts.get(ch.pk, 0)
-                if settings.REVERSED_EDGES:
-                    ch.in_degree, ch.out_degree = cited_by, cites
-                else:
-                    ch.in_degree, ch.out_degree = cites, cited_by
+                # Outgoing: messages from each interesting channel that cite another interesting channel.
+                fwd_cites = set(
+                    Message.objects.filter(
+                        channel_id__in=interesting_pks,
+                        forwarded_from_id__in=interesting_pks,
+                    )
+                    .exclude(channel_id=F("forwarded_from_id"))
+                    .values_list("channel_id", "id")
+                )
+                ref_cites = set(
+                    Message.references.through.objects.filter(
+                        message__channel_id__in=interesting_pks,
+                        channel_id__in=interesting_pks,
+                    )
+                    .exclude(message__channel_id=F("channel_id"))
+                    .values_list("message__channel_id", "message_id")
+                )
+                cites_counts: Counter[int] = Counter(src for src, _ in fwd_cites | ref_cites)
 
-            total = len(channels_to_update)
-            _len: list[int] = [0]
-            self.stdout.write(f"\nRefreshing degrees for {total} interesting channels", ending="")
-            self.stdout.flush()
-            for i in range(0, total, 100):
-                Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
-                done = min(i + 100, total)
-                line = printer._fit(f"Refreshing degrees for {total} interesting channels [{done}/{total}]")
-                padding = " " * max(0, _len[0] - len(line))
-                self.stdout.write(f"\r{line}{padding}", ending="")
+                channels_to_update = list(Channel.objects.filter(pk__in=interesting_pks))
+                for ch in channels_to_update:
+                    cited_by = cited_by_counts.get(ch.pk, 0)
+                    cites = cites_counts.get(ch.pk, 0)
+                    if settings.REVERSED_EDGES:
+                        ch.in_degree, ch.out_degree = cited_by, cites
+                    else:
+                        ch.in_degree, ch.out_degree = cites, cited_by
+
+                total = len(channels_to_update)
+                _len: list[int] = [0]
+                self.stdout.write(f"\nRefreshing degrees for {total} interesting channels", ending="")
                 self.stdout.flush()
-                _len[0] = len(line)
-            self.stdout.write("", ending="\n")
+                for i in range(0, total, 100):
+                    Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
+                    done = min(i + 100, total)
+                    line = printer._fit(f"Refreshing degrees for {total} interesting channels [{done}/{total}]")
+                    padding = " " * max(0, _len[0] - len(line))
+                    self.stdout.write(f"\r{line}{padding}", ending="")
+                    self.stdout.flush()
+                    _len[0] = len(line)
+                self.stdout.write("", ending="\n")
 
-        if cited_pks:
-            fwd_cited = set(
-                Message.objects.filter(
-                    channel__organization__is_interesting=True,
-                    forwarded_from_id__in=cited_pks,
+            if cited_pks:
+                fwd_cited = set(
+                    Message.objects.filter(
+                        channel__organization__is_interesting=True,
+                        forwarded_from_id__in=cited_pks,
+                    )
+                    .exclude(channel_id=F("forwarded_from_id"))
+                    .values_list("id", "forwarded_from_id")
                 )
-                .exclude(channel_id=F("forwarded_from_id"))
-                .values_list("id", "forwarded_from_id")
-            )
-            ref_cited = set(
-                Message.references.through.objects.filter(
-                    message__channel__organization__is_interesting=True,
-                    channel_id__in=cited_pks,
+                ref_cited = set(
+                    Message.references.through.objects.filter(
+                        message__channel__organization__is_interesting=True,
+                        channel_id__in=cited_pks,
+                    )
+                    .exclude(message__channel_id=F("channel_id"))
+                    .values_list("message_id", "channel_id")
                 )
-                .exclude(message__channel_id=F("channel_id"))
-                .values_list("message_id", "channel_id")
-            )
-            citations_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited | ref_cited)
+                citations_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited | ref_cited)
 
-            cited_channels = list(Channel.objects.filter(pk__in=cited_pks))
-            for ch in cited_channels:
-                citations = citations_counts.get(ch.pk, 0)
-                if settings.REVERSED_EDGES:
-                    ch.in_degree, ch.out_degree = citations, 0
-                else:
-                    ch.in_degree, ch.out_degree = 0, citations
+                cited_channels = list(Channel.objects.filter(pk__in=cited_pks))
+                for ch in cited_channels:
+                    citations = citations_counts.get(ch.pk, 0)
+                    if settings.REVERSED_EDGES:
+                        ch.in_degree, ch.out_degree = citations, 0
+                    else:
+                        ch.in_degree, ch.out_degree = 0, citations
 
-            total = len(cited_channels)
-            _len2: list[int] = [0]
-            self.stdout.write(f"Refreshing citation degree for {total} referenced channels", ending="")
-            self.stdout.flush()
-            for i in range(0, total, 100):
-                Channel.objects.bulk_update(cited_channels[i : i + 100], ["in_degree", "out_degree"])
-                done = min(i + 100, total)
-                line = printer._fit(f"Refreshing citation degree for {total} referenced channels [{done}/{total}]")
-                padding = " " * max(0, _len2[0] - len(line))
-                self.stdout.write(f"\r{line}{padding}", ending="")
+                total = len(cited_channels)
+                _len2: list[int] = [0]
+                self.stdout.write(f"Refreshing citation degree for {total} referenced channels", ending="")
                 self.stdout.flush()
-                _len2[0] = len(line)
-            self.stdout.write("", ending="\n")
+                for i in range(0, total, 100):
+                    Channel.objects.bulk_update(cited_channels[i : i + 100], ["in_degree", "out_degree"])
+                    done = min(i + 100, total)
+                    line = printer._fit(f"Refreshing citation degree for {total} referenced channels [{done}/{total}]")
+                    padding = " " * max(0, _len2[0] - len(line))
+                    self.stdout.write(f"\r{line}{padding}", ending="")
+                    self.stdout.flush()
+                    _len2[0] = len(line)
+                self.stdout.write("", ending="\n")
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))

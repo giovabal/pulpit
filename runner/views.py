@@ -211,6 +211,10 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--retry-references")
         if post.get("force_retry_unresolved_references"):
             args.append("--force-retry-unresolved-references")
+        if post.get("mine_about_texts"):
+            args.append("--mine-about-texts")
+        if post.get("refresh_degrees"):
+            args.append("--refresh-degrees")
         if post.get("fix_missing_media"):
             args.append("--fix-missing-media")
         if post.get("do_refresh"):

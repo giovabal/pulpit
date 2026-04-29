@@ -44,20 +44,17 @@ In **Manage** (`/manage/channels/`), assign each channel you want to analyse to 
 
 Downloads messages for all interesting channels and resolves cross-channel references. Re-run at any time to fetch new messages.
 
-After crawling, `get_channels` automatically runs two follow-up passes:
+All steps are opt-in (expand **Options** to set):
 
-1. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. Zero extra API calls for already-known channels; new ones are added to the database but not crawled until marked as interesting.
-2. **Refresh degrees** — updates the in-degree and out-degree counters for all interesting channels and the citation degree for non-interesting channels that are forwarded or mentioned.
-
-Optional (expand **Options** to set):
-
-- **Get new messages** — fetch new messages from Telegram for each interesting channel; uncheck to skip message crawling and run only post-processing steps
-- **Fix message holes** — fill gaps in message history (messages deleted or missed on a previous run)
-- **Retry unresolved references** — re-attempt `t.me/` usernames from message text that could not be resolved in earlier runs (e.g. due to a temporary flood wait); references that fail permanently are marked dead and skipped on future runs
-- **Force-retry dead references** — also re-attempt references already marked as permanently unresolvable (e.g. deleted channels); only applies when **Retry unresolved references** is enabled
-- **Fetch recommended channels** — after crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database; new channels are not crawled automatically
-- **Fix missing media** — re-download photo and video files that are absent from disk or were never fetched
+- **Get new messages** — fetch new messages from Telegram for each interesting channel; uncheck to run only post-processing steps
+- **Fix message holes** — fill gaps in message history (messages missed or deleted on a previous run)
+- **Retry unresolved references** — re-attempt `t.me/` usernames from message text that could not be resolved in earlier runs; references that fail permanently are marked dead and skipped on future runs
+- **Force-retry dead references** — also re-attempt references already marked permanently unresolvable (e.g. deleted channels); only applies when **Retry unresolved references** is enabled
 - **Refresh message stats** — update view counts, forward counts, and pinned status; combine with **Refresh limit** to restrict to the N most recent messages per channel, or messages from a given date
+- **Mine about texts** — scan the `about` field of all channels in the database for `t.me/` links and fetch any referenced channels not yet in the database; zero extra API calls for already-known channels
+- **Refresh degrees** — recompute and store the in-degree and out-degree for all interesting channels, and the citation degree for non-interesting channels that are forwarded or mentioned by interesting ones
+- **Fetch recommended channels** — call the Telegram "recommended channels" API for each interesting channel and add new suggestions to the database; new channels are not crawled automatically
+- **Fix missing media** — re-download photo and video files that are absent from disk or were never fetched
 - **Channel types** — which Telegram entity types to crawl: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
 - **DB id filter** — comma-separated IDs and ranges, e.g. `5, 10-20, 50-` (from 50 upward), `-30` (up to 30); restricts the crawl to matching channels
 
@@ -68,12 +65,14 @@ python manage.py get_channels --get-new-messages
 python manage.py get_channels --get-new-messages --fixholes
 python manage.py get_channels --get-new-messages --retry-references
 python manage.py get_channels --get-new-messages --retry-references --force-retry-unresolved-references
+python manage.py get_channels --get-new-messages --refresh-messages-stats        # refresh all messages
+python manage.py get_channels --get-new-messages --refresh-messages-stats 200    # N most recent per channel
+python manage.py get_channels --get-new-messages --refresh-messages-stats 2024-01-01
+python manage.py get_channels --mine-about-texts
+python manage.py get_channels --refresh-degrees
 python manage.py get_channels --fetch-recommended-channels
 python manage.py get_channels --ids "-30, 50-80, 99"
 python manage.py get_channels --channel-types CHANNEL,GROUP
-python manage.py get_channels --refresh-messages-stats               # refresh all messages
-python manage.py get_channels --refresh-messages-stats 200           # refresh only the 200 most recent per channel
-python manage.py get_channels --refresh-messages-stats 2024-01-01    # refresh all messages from that date to present
 ```
 
 ## 6. Export the graph
