@@ -6,7 +6,6 @@ from .views import (
     ChannelUpdateView,
     EventsView,
     GroupsView,
-    MessagesView,
     OrganizationsView,
     SearchTermsView,
     UsersView,
@@ -23,6 +22,5 @@ urlpatterns = [
     path("search-terms/", SearchTermsView.as_view(), name="search-terms"),
     path("events/", EventsView.as_view(), name="events"),
     path("users/", UsersView.as_view(), name="users"),
-    path("messages/", MessagesView.as_view(), name="messages"),
     path("api/", include("backoffice.api.urls")),
 ]

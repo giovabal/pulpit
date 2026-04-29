@@ -40,19 +40,13 @@
             </li>
           </ul>
           {% if WEB_ACCESS == "ALL" %}
-          <a href="{% url 'backoffice:channels' %}" class="btn btn-sm btn-outline-secondary me-1">
+          <a href="{% url 'backoffice:channels' %}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Manage
-          </a>
-          <a href="/admin/" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
           </a>
           {% elif request.user.is_authenticated %}
           {% if request.user.is_staff %}
-          <a href="{% url 'backoffice:channels' %}" class="btn btn-sm btn-outline-secondary me-1">
+          <a href="{% url 'backoffice:channels' %}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Manage
-          </a>
-          <a href="/admin/" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-gear me-1" aria-hidden="true"></i>Admin
           </a>
           {% endif %}
           <span class="topnav-user">{{ request.user.username }}</span>
