@@ -458,15 +458,34 @@
 
           {% elif task.name == "compare_networks" %}
           <fieldset class="ops-fieldset">
+            <legend>Target export</legend>
+            <div class="ops-params">
+              <div class="ops-param" style="width:100%">
+                <label for="compare_target">Export to write into
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Name of the export that will receive the comparison files (exports/&lt;name&gt;/). Leave blank to write into the legacy graph/ directory."></i>
+                </label>
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                  <input type="text" name="compare_target" id="compare_target" placeholder="export name (e.g. baseline)" data-width="lg" style="flex:1;min-width:14rem;">
+                  <button type="button" class="btn btn-outline-secondary btn-sm"
+                          onclick="opsExportsList(this, 'compare_target')">
+                    <i class="bi bi-clock-history"></i> Pick export
+                  </button>
+                </div>
+                <div id="export-load-results-compare" class="ops-dir-picker" style="display:none"></div>
+              </div>
+            </div>
+          </fieldset>
+          <fieldset class="ops-fieldset">
             <legend>Compare directory</legend>
             <div class="ops-params">
               <div class="ops-param" style="width:100%">
                 <label for="project_dir">Project directory
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Path to a previously exported graph/ directory (must contain index.html). Its data/, graph files, *_table.html, and *.xlsx are copied with _2 suffixes and a side-by-side comparison page is generated."></i>
+                     title="Path to a previously exported directory (must contain index.html). Its data/, graph files, *_table.html, and *.xlsx are copied with _2 suffixes and a side-by-side comparison page is generated."></i>
                 </label>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                  <input type="text" name="project_dir" id="project_dir" placeholder="path/to/graph/" data-width="lg" style="flex:1;min-width:14rem;">
+                  <input type="text" name="project_dir" id="project_dir" placeholder="path/to/exports/name/" data-width="lg" style="flex:1;min-width:14rem;">
                   <button type="button" class="btn btn-outline-secondary btn-sm" id="graph-dir-scan-btn"
                           onclick="opsGraphDirScan(this)">
                     <i class="bi bi-folder-symlink"></i> Find exports
@@ -794,10 +813,11 @@
 
   /* ── Previous exports picker ──────────────────────────────────────── */
   var _exportsLoading = false;
-  window.opsExportsList = function (btn) {
+  window.opsExportsList = function (btn, targetInputId) {
     if (_exportsLoading) return;
     _exportsLoading = true;
-    var resultsEl = document.getElementById('export-load-results');
+    var resultsId = targetInputId ? 'export-load-results-' + targetInputId : 'export-load-results';
+    var resultsEl = document.getElementById(resultsId);
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading…';
     fetch('{% url "operations-exports" %}')
@@ -830,7 +850,12 @@
           }
           item.addEventListener('click', function() {
             resultsEl.style.display = 'none';
-            opsLoadExportOptions(e.name);
+            if (targetInputId) {
+              var inp = document.getElementById(targetInputId);
+              if (inp) inp.value = e.name === '__default__' ? '' : e.name;
+            } else {
+              opsLoadExportOptions(e.name);
+            }
           });
           resultsEl.appendChild(item);
         });
@@ -843,7 +868,9 @@
       .finally(function() {
         _exportsLoading = false;
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-clock-history"></i> Previous exports';
+        btn.innerHTML = targetInputId
+          ? '<i class="bi bi-clock-history"></i> Pick export'
+          : '<i class="bi bi-clock-history"></i> Previous exports';
       });
   };
 
