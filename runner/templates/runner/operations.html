@@ -836,7 +836,7 @@
           item.className = 'ops-dir-item';
           var nameSpan = document.createElement('span');
           nameSpan.className = 'ops-dir-path';
-          nameSpan.textContent = e.name === '__default__' ? 'Default (graph/)' : e.name;
+          nameSpan.textContent = e.name;
           item.appendChild(nameSpan);
           var meta = [];
           if (e.created_at) meta.push(e.created_at.slice(0, 10));
@@ -852,7 +852,7 @@
             resultsEl.style.display = 'none';
             if (targetInputId) {
               var inp = document.getElementById(targetInputId);
-              if (inp) inp.value = e.name === '__default__' ? '' : e.name;
+              if (inp) inp.value = e.name;
             } else {
               opsLoadExportOptions(e.name);
             }
@@ -942,7 +942,7 @@
         // Edge weight radio
         if (opts.edge_weight_strategy) setRadio('edge_weight_strategy', opts.edge_weight_strategy);
 
-        showToast('Options loaded from "' + (name === '__default__' ? 'graph/' : name) + '".');
+        showToast('Options loaded from "' + name + '".');
       })
       .catch(function(e) { showToast('Failed to load options: ' + e.message, 'error'); });
   };

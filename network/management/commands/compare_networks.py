@@ -36,10 +36,7 @@ class Command(BaseCommand):
             "--target",
             dest="target",
             default="",
-            help=(
-                "Name of the export to write comparison files into (exports/<name>/). "
-                "If omitted, falls back to GRAPH_OUTPUT_DIR."
-            ),
+            help=("Name of the export to write comparison files into (exports/<name>/). Required."),
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -53,10 +50,9 @@ class Command(BaseCommand):
             )
 
         target_name = re.sub(r"[^\w\-]", "-", (options.get("target") or "").strip()).strip("-")
-        if target_name:
-            root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
-        else:
-            root_target = settings.GRAPH_OUTPUT_DIR
+        if not target_name:
+            raise CommandError("--target is required: specify the name of the export to write comparison files into.")
+        root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
         project_title: str = settings.PROJECT_TITLE
         seo = options["seo"]
 

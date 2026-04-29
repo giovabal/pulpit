@@ -153,52 +153,41 @@ class GraphDirsView(View):
 
 
 class ExportsListView(View):
-    """List all named exports (BASE_DIR/exports/*/summary.json) plus the default graph/ export."""
+    """List all named exports (BASE_DIR/exports/*/summary.json)."""
 
     def get(self, request: HttpRequest) -> JsonResponse:
         exports: list[dict] = []
-
-        def _read(path: Path, name: str) -> None:
-            summary_path = path / "summary.json"
-            if not summary_path.exists():
-                return
-            try:
-                data = json.loads(summary_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                return
-            exports.append(
-                {
-                    "name": name,
-                    "created_at": data.get("created_at"),
-                    "nodes": data.get("nodes"),
-                    "edges": data.get("edges"),
-                }
-            )
-
-        # Named exports
         exports_root = Path(settings.BASE_DIR) / "exports"
         try:
             for item in sorted(exports_root.iterdir()):
-                if item.is_dir():
-                    _read(item, item.name)
+                if not item.is_dir():
+                    continue
+                summary_path = item / "summary.json"
+                if not summary_path.exists():
+                    continue
+                try:
+                    data = json.loads(summary_path.read_text())
+                except (json.JSONDecodeError, OSError):
+                    continue
+                exports.append(
+                    {
+                        "name": item.name,
+                        "created_at": data.get("created_at"),
+                        "nodes": data.get("nodes"),
+                        "edges": data.get("edges"),
+                    }
+                )
         except (PermissionError, OSError):
             pass
-
-        # Default (unnamed) export
-        _read(Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR, "__default__")
-
         exports.sort(key=lambda e: e.get("created_at") or "", reverse=True)
         return JsonResponse({"exports": exports})
 
 
 class ExportDetailView(View):
-    """Return the full summary.json for a named export (or '__default__' for graph/)."""
+    """Return the full summary.json for a named export."""
 
     def get(self, request: HttpRequest, name: str) -> JsonResponse:
-        if name == "__default__":
-            path = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR / "summary.json"
-        else:
-            path = Path(settings.BASE_DIR) / "exports" / name / "summary.json"
+        path = Path(settings.BASE_DIR) / "exports" / name / "summary.json"
         if not path.exists():
             return JsonResponse({"error": "not found"}, status=404)
         try:
