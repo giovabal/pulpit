@@ -44,31 +44,32 @@ In **Manage** (`/manage/channels/`), assign each channel you want to analyse to 
 
 Downloads messages for all interesting channels and resolves cross-channel references. Re-run at any time to fetch new messages.
 
-After crawling, `get_channels` runs three additional discovery and maintenance steps automatically:
+After crawling, `get_channels` automatically runs two follow-up passes:
 
-1. **Retry unresolved message references** — re-attempts `t.me/` usernames from message text that previously could not be resolved to a channel (e.g. due to a temporary flood wait). References that fail permanently (deleted or invalid channels) are marked as dead and skipped on future runs; use **Force-retry dead references** to override this.
-2. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. This is a zero-cost discovery pass using data already stored locally; new channels are added to the database but not crawled until you mark them as interesting.
-3. **Fetch recommended channels** *(opt-in, pass `--fetch-recommended-channels`)* — calls the Telegram "recommended channels" API for each interesting channel and adds any suggestions not yet in the database.
-
-`get_channels` also automatically refreshes the in-degree and out-degree counters for all interesting channels and the citation degree for non-interesting channels that are forwarded or mentioned — so the graph correctly shows how much each referenced channel is cited even if it was never crawled.
+1. **Mine `about` texts** — scans the `about` field of every channel already in the database for `t.me/` links and fetches any channels not yet known. Zero extra API calls for already-known channels; new ones are added to the database but not crawled until marked as interesting.
+2. **Refresh degrees** — updates the in-degree and out-degree counters for all interesting channels and the citation degree for non-interesting channels that are forwarded or mentioned.
 
 Optional (expand **Options** to set):
 
+- **Get new messages** — fetch new messages from Telegram for each interesting channel; uncheck to skip message crawling and run only post-processing steps
 - **Fix message holes** — fill gaps in message history (messages deleted or missed on a previous run)
+- **Retry unresolved references** — re-attempt `t.me/` usernames from message text that could not be resolved in earlier runs (e.g. due to a temporary flood wait); references that fail permanently are marked dead and skipped on future runs
+- **Force-retry dead references** — also re-attempt references already marked as permanently unresolvable (e.g. deleted channels); only applies when **Retry unresolved references** is enabled
 - **Fetch recommended channels** — after crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database; new channels are not crawled automatically
-- **Force-retry dead references** — re-attempt `t.me/` references previously marked as permanently unresolvable (e.g. deleted channels); by default these are skipped to avoid redundant API calls
+- **Fix missing media** — re-download photo and video files that are absent from disk or were never fetched
 - **Refresh message stats** — update view counts, forward counts, and pinned status; combine with **Refresh limit** to restrict to the N most recent messages per channel, or messages from a given date
 - **Channel types** — which Telegram entity types to crawl: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
-- **From DB id ≤** — crawl only channels whose database id is at most this value; useful to resume or target a specific subset
+- **DB id filter** — comma-separated IDs and ranges, e.g. `5, 10-20, 50-` (from 50 upward), `-30` (up to 30); restricts the crawl to matching channels
 
 **CLI alternative:**
 
 ```sh
-python manage.py get_channels
-python manage.py get_channels --fixholes
+python manage.py get_channels --get-new-messages
+python manage.py get_channels --get-new-messages --fixholes
+python manage.py get_channels --get-new-messages --retry-references
+python manage.py get_channels --get-new-messages --retry-references --force-retry-unresolved-references
 python manage.py get_channels --fetch-recommended-channels
-python manage.py get_channels --force-retry-unresolved-references
-python manage.py get_channels --fromid 42
+python manage.py get_channels --ids "-30, 50-80, 99"
 python manage.py get_channels --channel-types CHANNEL,GROUP
 python manage.py get_channels --refresh-messages-stats               # refresh all messages
 python manage.py get_channels --refresh-messages-stats 200           # refresh only the 200 most recent per channel
@@ -106,7 +107,7 @@ Optional (expand **Options** to set):
 - **Spreading runs** — Monte Carlo SIR simulations per node for the `SPREADING` measure; default 200
 - **Edge weight strategy** — how edge weights are computed: `PARTIAL_REFERENCES` (default), `PARTIAL_MESSAGES`, `TOTAL`, or `NONE` (unweighted)
 - **Channel types** — which Telegram entity types to include: `CHANNEL` (default), `GROUP`, `USER` (comma-separated)
-- **Measures** — comma-separated list of centrality measures: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `FLOWBETWEENNESS`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `HARMONICCENTRALITY`, `KATZ`, `SPREADING`, `BRIDGING` or `BRIDGING(STRATEGY)`, `BURTCONSTRAINT`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `ALL`; default `PAGERANK`
+- **Measures** — comma-separated list of centrality measures: `PAGERANK`, `HITSHUB`, `HITSAUTH`, `BETWEENNESS`, `FLOWBETWEENNESS`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `HARMONICCENTRALITY`, `KATZ`, `SPREADING`, `BRIDGING` or `BRIDGING(STRATEGY)`, `BURTCONSTRAINT`, `EGODENSITY`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `ALL`; default `PAGERANK`
 - **Community strategies** — comma-separated list of community detection algorithms: `ORGANIZATION`, `LEIDEN`, `LEIDEN_DIRECTED`, `LOUVAIN`, `KCORE`, `INFOMAP`, `ALL`; default `ORGANIZATION`
 - **Network stat groups** — comma-separated list of whole-network metric groups to compute (only when HTML tables, Excel, or consensus matrix is enabled): `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`, `ALL`; default `ALL`. Deselect `PATHS` and `COHESION` to skip the expensive O(n·m) path-length and eigendecomposition calculations on large networks.
 - **Start date / End date** — restrict the graph to a date range; channels with no messages in the period are excluded

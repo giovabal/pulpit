@@ -1,15 +1,22 @@
 # Changelog
 
 ## [0.16] - To be announced
+*Multiple and reproducible exports. Operations panel improvements. New ego-network density measure.*
 
 ### New features
+- **Ego network density** (`EGODENSITY`) — new node measure for `export_network`. For each channel, computes the density of directed edges among its immediate neighbours (predecessors ∪ successors, ego excluded): 0 means none of the neighbours connect to each other (the channel is a hub between disconnected sources); 1 means they form a fully connected clique (echo chamber). `null` for nodes with fewer than two neighbours. Directional (uses edge direction in the neighbour subgraph). Available in `--measures` and the Operations panel Measures grid.
+- **Operations panel pipeline ordering** — the four task cards (Search Channels, Get Channels, Export Network, Compare Networks) are now displayed in workflow order and numbered 1–4 with a badge on each card icon. Faint arrow connectors between cards make the sequential nature explicit.
+- **Get Channels numbered crawl steps** — the options in the Crawl fieldset are now listed vertically in execution order and numbered 1–6: Get new messages, Fix message holes, Retry unresolved references, Force-retry dead references, Fetch recommended channels, Fix missing media.
+- **Retry unresolved references as a selectable option** — the reference-resolution step (`get_missing_references`) is now opt-in via a new **Retry unresolved references** checkbox (Operations panel step 3) and `--retry-references` CLI flag. Previously it ran unconditionally on every `get_channels` invocation. Force-retry dead references (step 4) is now visually linked to it: the chip greys out and its checkbox is disabled when Retry unresolved references is unchecked.
+- **Linked-parameter pattern extended to flag chips** — the `data-requires-flag` dependency wiring that disables inputs when a controlling checkbox is off now also works for flag chips (checkbox labels), not just text/number inputs. Used by Force-retry dead references depending on Retry unresolved references.
+- **Refresh message stats linked parameter** — the Refresh limit input in Get Channels is now wired as a linked parameter of the Refresh message stats checkbox: the input greys out when the checkbox is off. The checkbox also gains a sliders icon indicating it has a linked parameter, consistent with the pattern used in Measures and Community strategies.
 - **Named exports** — `export_network` now writes to `exports/<name>/` instead of a single shared `graph/` directory, so multiple exports can coexist without overwriting each other. The `--name` flag sets the export name; if omitted, a `YYYYMMDD-HHMMSS` timestamp is used. A `summary.json` is written to every export root capturing the name, timestamp, node/edge counts, and all CLI options used.
 - **Options import from previous exports** — the Export Network card in the Operations panel has a *Previous exports* picker that lists all exports by name and date. Selecting one restores every form control (measures, community strategies, filters, layout options, etc.) from that export's `summary.json`, making it easy to replicate or tweak a past run.
 - **Export name field with timestamp default** — the *Export name* input in the Operations panel is pre-filled with the current timestamp on page load so every run is named without manual input.
 - **Multi-export `/data/` page** — `/data/` detects all exports in `exports/*/` and, when more than one exists, shows a pill-style picker at the top of the page. Selecting an export via `?export=<name>` updates all graph, table, and comparison card links to point to that export's files, served at `/exports/<name>/`.
 - **Compare Networks `--target`** — `compare_networks` gains a required `--target <name>` flag that specifies which named export to write comparison files into (`exports/<name>/`). The Operations panel Compare Networks card gains a matching *Target export* field with a picker.
 
-### Removed
+### Backward incompatibility
 - The `graph/` output directory is no longer used. All exports go to `exports/`. The `/graph/` static route has been removed.
 
 

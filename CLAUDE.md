@@ -41,7 +41,7 @@ See WORKFLOW.md for all flags and options.
 - **`crawler/media_handler.py`** — Media download and storage.
 - **`crawler/reference_resolver.py`** — Resolves `t.me/` references to `Channel` records.
 - **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
-- **`network/measures.py`** — All centrality and influence measures; `apply_*` functions called from `export_network`.
+- **`network/measures/`** — All centrality and influence measures; `apply_*` functions split across `_centrality.py`, `_content.py`, `_spreading.py`; registry in `_registry.py`.
 - **`network/community.py`** — Community detection: ORGANIZATION, LOUVAIN, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
 - **`network/layout.py`** — Spatial layout: Kamada-Kawai seed → ForceAtlas2 (`pyforceatlas2`).
 - **`network/exporter.py`** — Builds `GraphData`; writes `graph/data.json` and config; GEXF export.
@@ -77,6 +77,7 @@ Configured via `--measures` on `export_network` (comma-separated).
 | `KATZ` | Katz centrality |
 | `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `--community-strategies` |
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
+| `EGODENSITY` | Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = fully connected clique (echo chamber); `null` for fewer than 2 neighbours |
 | `AMPLIFICATION` | Forwards received from interesting channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
 | `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `--spreading-runs` (default 200) |

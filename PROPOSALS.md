@@ -1,7 +1,6 @@
 # Proposals for Pulpit: New Features and Improvements
 
-- Organization changes overtime
-- the crawl options in operations should be vertical, in order of what happens when. options should be numbered
+- Organization changes overtime.
 - how the disappearing of a channel impacts the network? new channels born after that lost are replacing it?
 - group analysis, similar to whole network analysis
 
@@ -22,10 +21,6 @@ Rather than just detecting topics, track which narrative frames appear in messag
 ---
 
 ## 4. New Network Measures
-
-### 4.3 — Ego network density
-
-For each channel, compute the density of connections among its immediate neighbors. High ego-network density = channel embedded in a cohesive echo chamber. Low = channel serves as a hub for otherwise disconnected sources. Complementary to `BURTCONSTRAINT`.
 
 ### 4.4 — Narrative diffusion lag
 
