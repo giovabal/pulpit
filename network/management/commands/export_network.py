@@ -822,7 +822,12 @@ class Command(BaseCommand):
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
         if not export_name:
             export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        root_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
+        _final_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
+        # All writes go to the staging directory; it is renamed to _final_target only after
+        # write_summary_json completes, making every live export atomically consistent.
+        root_target = _final_target + ".tmp"
+        shutil.rmtree(root_target, ignore_errors=True)  # clean up any interrupted previous run
+        shutil.rmtree(_final_target + ".old", ignore_errors=True)  # clean up any orphaned backup
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         strategies = [s.lower() for s in communities_strategy]
@@ -1027,5 +1032,15 @@ class Command(BaseCommand):
         )
 
         exporter.write_summary_json(root_target, export_name or None, options, len(graph.nodes), len(graph.edges))
+
+        # Atomic swap: two-step rename so there is never a window where neither the old
+        # nor the new export exists.  On POSIX, os.rename is atomic per inode, but cannot
+        # replace a non-empty directory in a single call, hence the intermediate .old step.
+        _old = _final_target + ".old"
+        if os.path.isdir(_final_target):
+            os.rename(_final_target, _old)
+        os.rename(root_target, _final_target)
+        if os.path.isdir(_old):
+            shutil.rmtree(_old, ignore_errors=True)
 
         self.stdout.write(self.style.SUCCESS("\nDone."))
