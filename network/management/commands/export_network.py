@@ -820,10 +820,9 @@ class Command(BaseCommand):
         )
 
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
-        if export_name:
-            root_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
-        else:
-            root_target = settings.GRAPH_OUTPUT_DIR
+        if not export_name:
+            export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        root_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
         project_title: str = settings.PROJECT_TITLE
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         strategies = [s.lower() for s in communities_strategy]
