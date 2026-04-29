@@ -17,7 +17,10 @@
 
     <div class="ops-card-header">
       <div class="ops-card-info">
-        <div class="ops-card-icon"><i class="bi {{ task.icon }}" aria-hidden="true"></i></div>
+        <div class="ops-card-icon-wrap">
+          <div class="ops-card-icon"><i class="bi {{ task.icon }}" aria-hidden="true"></i></div>
+          <span class="ops-step-num" aria-label="Step {{ forloop.counter }}">{{ forloop.counter }}</span>
+        </div>
         <div>
           <div class="ops-card-title">{{ task.title }}</div>
           <div class="ops-card-desc">{{ task.description }}</div>
@@ -88,28 +91,40 @@
           {% elif task.name == "get_channels" %}
           <fieldset class="ops-fieldset">
             <legend>Crawl</legend>
-            <div class="ops-flags">
+            <div class="ops-flags ops-flags--pipeline">
               <label class="ops-flag">
+                <span class="ops-flag-step">1</span>
                 <input type="checkbox" name="get_new_messages" checked>Get new messages
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Fetch new messages for each interesting channel. Uncheck to skip message crawling and only run post-processing steps (reference resolution, about-text mining, etc.)."></i>
               </label>
               <label class="ops-flag">
+                <span class="ops-flag-step">2</span>
                 <input type="checkbox" name="fix_holes">Fix message holes
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
               </label>
               <label class="ops-flag">
+                <span class="ops-flag-step">3</span>
+                <input type="checkbox" name="retry_references">Retry unresolved references
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="After crawling, retry all pending t.me/ references that could not be resolved in a previous run. Without this, the reference-resolution step is skipped entirely."></i>
+                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Force-retry dead references"></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">4</span>
+                <input type="checkbox" name="force_retry_unresolved_references" data-requires-flag="retry_references">Force-retry dead references
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="When retrying references, also re-attempt those already marked as permanently unresolvable (e.g. deleted channels). Only applies when Retry unresolved references is enabled."></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">5</span>
                 <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="force_retry_unresolved_references">Force-retry dead references
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Re-attempt references already marked as permanently unresolvable (e.g. deleted channels). By default these are skipped to avoid redundant API calls."></i>
-              </label>
-              <label class="ops-flag">
+                <span class="ops-flag-step">6</span>
                 <input type="checkbox" name="fix_missing_media">Fix missing media
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
@@ -148,6 +163,7 @@
                   <input type="checkbox" name="do_refresh">Refresh message stats
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Refresh limit"></i>
                 </label>
               </div>
               <div class="ops-params">
@@ -156,7 +172,7 @@
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when Refresh message stats is checked."></i>
                   </label>
-                  <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md">
+                  <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md" data-requires-flag="do_refresh">
                 </div>
               </div>
             </fieldset>
@@ -412,6 +428,7 @@
               <label class="ops-flag"><input type="checkbox" name="measures" value="SPREADING" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Spreading<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="SIR spreading efficiency — Monte Carlo estimate of the fraction of the network infected when this channel seeds a cascade. Run count set in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Spreading runs (Linked parameters)"></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="BRIDGING" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Bridging<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Bridging centrality — betweenness × community-boundary entropy; high = broker between communities. Community basis is selected in Linked parameters."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="BURTCONSTRAINT" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Burt's Constraint<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Burt's structural constraint (0–1) — how constrained a channel's ego network is; low = structural-hole broker with diverse, non-redundant ties."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="EGODENSITY" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Ego Network Density<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = neighbours form a fully connected clique (echo chamber). null for fewer than 2 neighbours."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Amplification<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Amplification factor — forwards received from interesting channels divided by the channel's own message count."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="CONTENTORIGINALITY" checked><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i>Content Originality<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Content originality — share of messages that are not forwards; 1 = fully original, 0 = fully reposted."></i></label>
             </div>
@@ -531,6 +548,9 @@
     {% endif %}
 
   </div>
+  {% if not forloop.last %}
+  <div class="ops-pipeline-connector" aria-hidden="true"><i class="bi bi-arrow-down-short"></i></div>
+  {% endif %}
   {% endfor %}
 </div>
 {% endblock content %}
@@ -727,10 +747,33 @@
       input.disabled = !on;
       input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
     });
+    document.querySelectorAll('[data-requires-flag]').forEach(function (input) {
+      var form = input.closest('form');
+      var cb = form ? form.querySelector('[name="' + input.dataset.requiresFlag + '"]') : null;
+      var on = cb ? cb.checked : false;
+      input.disabled = !on;
+      var paramEl = input.closest('.ops-param');
+      if (paramEl) {
+        paramEl.classList.toggle('ops-param--disabled', !on);
+      } else {
+        var flagEl = input.closest('.ops-flag');
+        if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
+      }
+    });
   }
   syncLinkedInputs();
   document.querySelectorAll('input[name="measures"], input[name="community_strategies"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
+  });
+  // Register listeners for any checkbox referenced by data-requires-flag.
+  var _linkedFlagNames = new Set();
+  document.querySelectorAll('[data-requires-flag]').forEach(function (inp) {
+    _linkedFlagNames.add(inp.dataset.requiresFlag);
+  });
+  _linkedFlagNames.forEach(function (name) {
+    document.querySelectorAll('[name="' + name + '"]').forEach(function (cb) {
+      cb.addEventListener('change', syncLinkedInputs);
+    });
   });
 
   // Enable "Save to database" checkbox only when the extra-terms textarea has content.

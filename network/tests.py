@@ -42,6 +42,7 @@ from network.measures import (
     apply_bridging_centrality,
     apply_burt_constraint,
     apply_content_originality,
+    apply_ego_network_density,
     apply_flow_betweenness_centrality,
     apply_harmonic_centrality,
     apply_hits,
@@ -1747,6 +1748,104 @@ class ApplyBridgingCentralityTests(TestCase):
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
         # "bridge" connects both communities; "a" connects only within X
         self.assertGreater(node_map["bridge"]["bridging_centrality"], node_map["a"]["bridging_centrality"])
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_ego_network_density
+# ---------------------------------------------------------------------------
+
+
+class ApplyEgoNetworkDensityTests(TestCase):
+    def test_adds_ego_network_density_key(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edges_from([("v", "a"), ("v", "b"), ("a", "b")])
+        gd: dict = {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}
+        apply_ego_network_density(gd, graph)
+        for node in gd["nodes"]:
+            self.assertIn("ego_network_density", node)
+
+    def test_returns_label(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edges_from([("v", "a"), ("v", "b")])
+        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
+        labels = apply_ego_network_density(gd, graph)
+        self.assertEqual(labels, [("ego_network_density", "Ego Network Density")])
+
+    def test_hub_with_disconnected_neighbours_gets_zero(self) -> None:
+        # hub → a, b, c; a, b, c share no edges → density 0.0
+        graph = nx.DiGraph()
+        graph.add_edges_from([("hub", "a"), ("hub", "b"), ("hub", "c")])
+        gd: dict = {"nodes": [{"id": "hub"}], "edges": []}
+        apply_ego_network_density(gd, graph)
+        self.assertAlmostEqual(gd["nodes"][0]["ego_network_density"], 0.0)
+
+    def test_echo_with_fully_connected_neighbours_gets_one(self) -> None:
+        # echo → a, b, c; a, b, c have all 6 directed edges between them → density 1.0
+        graph = nx.DiGraph()
+        graph.add_edges_from(
+            [
+                ("echo", "a"),
+                ("echo", "b"),
+                ("echo", "c"),
+                ("a", "b"),
+                ("b", "a"),
+                ("b", "c"),
+                ("c", "b"),
+                ("a", "c"),
+                ("c", "a"),
+            ]
+        )
+        gd: dict = {"nodes": [{"id": "echo"}], "edges": []}
+        apply_ego_network_density(gd, graph)
+        self.assertAlmostEqual(gd["nodes"][0]["ego_network_density"], 1.0)
+
+    def test_isolated_node_gets_none(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_node("isolated")
+        gd: dict = {"nodes": [{"id": "isolated"}], "edges": []}
+        apply_ego_network_density(gd, graph)
+        self.assertIsNone(gd["nodes"][0]["ego_network_density"])
+
+    def test_single_neighbour_gets_none(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edge("v", "x")
+        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
+        apply_ego_network_density(gd, graph)
+        self.assertIsNone(gd["nodes"][0]["ego_network_density"])
+
+    def test_echo_scores_higher_than_hub(self) -> None:
+        hub_graph = nx.DiGraph()
+        hub_graph.add_edges_from([("hub", "a"), ("hub", "b"), ("hub", "c")])
+        hub_gd: dict = {"nodes": [{"id": "hub"}], "edges": []}
+        apply_ego_network_density(hub_gd, hub_graph)
+
+        echo_graph = nx.DiGraph()
+        echo_graph.add_edges_from(
+            [
+                ("echo", "a"),
+                ("echo", "b"),
+                ("echo", "c"),
+                ("a", "b"),
+                ("b", "a"),
+                ("b", "c"),
+                ("c", "b"),
+                ("a", "c"),
+                ("c", "a"),
+            ]
+        )
+        echo_gd: dict = {"nodes": [{"id": "echo"}], "edges": []}
+        apply_ego_network_density(echo_gd, echo_graph)
+
+        self.assertGreater(echo_gd["nodes"][0]["ego_network_density"], hub_gd["nodes"][0]["ego_network_density"])
+
+    def test_values_in_unit_interval(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edges_from([("v", "a"), ("v", "b"), ("a", "b")])
+        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
+        apply_ego_network_density(gd, graph)
+        val = gd["nodes"][0]["ego_network_density"]
+        self.assertGreaterEqual(val, 0.0)
+        self.assertLessEqual(val, 1.0)
 
 
 # ---------------------------------------------------------------------------

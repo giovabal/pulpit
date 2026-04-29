@@ -155,12 +155,22 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--retry-references",
+            action="store_true",
+            default=False,
+            help=(
+                "After crawling, retry all pending unresolved message references (t.me/ links that have not "
+                "yet been resolved to a Channel). Without this flag the reference-resolution step is skipped."
+            ),
+        )
+        parser.add_argument(
             "--force-retry-unresolved-references",
             action="store_true",
             default=False,
             help=(
-                "Retry all unresolved message references, including those already marked as permanently "
-                "unresolvable (e.g. deleted channels). By default, permanently dead references are skipped."
+                "When retrying references (requires --retry-references), also re-attempt those already "
+                "marked as permanently unresolvable (e.g. deleted channels). "
+                "By default, permanently dead references are skipped."
             ),
         )
         parser.add_argument(
@@ -394,6 +404,7 @@ class Command(BaseCommand):
         fix_holes: bool = options["fixholes"]
         fix_missing_media: bool = options["fix_missing_media"]
         fetch_recommended: bool = options["fetch_recommended_channels"]
+        retry_references: bool = options["retry_references"]
         force_retry: bool = options["force_retry_unresolved_references"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
@@ -491,28 +502,29 @@ class Command(BaseCommand):
 
                     printer.newline()
 
-                if force_retry:
-                    n_missing = Message.objects.exclude(missing_references="").count()
-                else:
-                    n_missing = Message.objects.filter(
-                        missing_references__regex=r"(^|[|])[^" + DEAD_PREFIX + r"]"
-                    ).count()
-                if n_missing == 0:
-                    self.stdout.write("\nNo unresolved message references to retry.")
-                else:
-                    _ref_len = [0]
+                if retry_references:
+                    if force_retry:
+                        n_missing = Message.objects.exclude(missing_references="").count()
+                    else:
+                        n_missing = Message.objects.filter(
+                            missing_references__regex=r"(^|[|])[^" + DEAD_PREFIX + r"]"
+                        ).count()
+                    if n_missing == 0:
+                        self.stdout.write("\nNo unresolved message references to retry.")
+                    else:
+                        _ref_len = [0]
 
-                    def _ref_progress(done: int, total: int) -> None:
-                        line = printer._fit(f"Retrying unresolved message references [{done}/{total}]")
-                        padding = " " * max(0, _ref_len[0] - len(line))
-                        self.stdout.write(f"\r{line}{padding}", ending="")
+                        def _ref_progress(done: int, total: int) -> None:
+                            line = printer._fit(f"Retrying unresolved message references [{done}/{total}]")
+                            padding = " " * max(0, _ref_len[0] - len(line))
+                            self.stdout.write(f"\r{line}{padding}", ending="")
+                            self.stdout.flush()
+                            _ref_len[0] = len(line)
+
+                        self.stdout.write(f"\nRetrying {n_missing} unresolved message references", ending="")
                         self.stdout.flush()
-                        _ref_len[0] = len(line)
-
-                    self.stdout.write(f"\nRetrying {n_missing} unresolved message references", ending="")
-                    self.stdout.flush()
-                    crawler.get_missing_references(status_callback=_ref_progress, force_retry=force_retry)
-                    self.stdout.write("", ending="\n")
+                        crawler.get_missing_references(status_callback=_ref_progress, force_retry=force_retry)
+                        self.stdout.write("", ending="\n")
 
                 # ---- mine Channel.about for t.me/ references ----
                 about_refs: set[str] = set()

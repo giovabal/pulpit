@@ -11,15 +11,15 @@ from runner import tasks
 from webapp.models import ChannelGroup, SearchTerm
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
-    "get_channels": {
-        "title": "Get Channels",
-        "description": "Crawl all interesting channels and resolve cross-channel references.",
-        "icon": "bi-cloud-download",
-    },
     "search_channels": {
         "title": "Search Channels",
         "description": "Search Telegram for channels matching each SearchTerm in the database.",
         "icon": "bi-search",
+    },
+    "get_channels": {
+        "title": "Get Channels",
+        "description": "Crawl all interesting channels and resolve cross-channel references.",
+        "icon": "bi-cloud-download",
     },
     "export_network": {
         "title": "Export Network",
@@ -207,6 +207,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--fixholes")
         if post.get("fetch_recommended_channels"):
             args.append("--fetch-recommended-channels")
+        if post.get("retry_references"):
+            args.append("--retry-references")
         if post.get("force_retry_unresolved_references"):
             args.append("--force-retry-unresolved-references")
         if post.get("fix_missing_media"):

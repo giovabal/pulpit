@@ -120,7 +120,7 @@ class Command(BaseCommand):
                 "Comma-separated list of centrality measures to compute. "
                 "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, FLOWBETWEENNESS, INDEGCENTRALITY, "
                 "OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, SPREADING, BRIDGING or BRIDGING(STRATEGY), "
-                "BURTCONSTRAINT, AMPLIFICATION, CONTENTORIGINALITY, ALL. Default: PAGERANK."
+                "BURTCONSTRAINT, EGODENSITY, AMPLIFICATION, CONTENTORIGINALITY, ALL. Default: PAGERANK."
             ),
         )
         parser.add_argument(

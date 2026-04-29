@@ -15,6 +15,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "AMPLIFICATION",
         "CONTENTORIGINALITY",
         "SPREADING",
+        "EGODENSITY",
     }
 )
 
@@ -63,6 +64,7 @@ MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("HARMONICCENTRALITY", "harmonic centrality", "apply_harmonic_centrality"),
     ("KATZ", "Katz centrality", "apply_katz_centrality"),
     ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
+    ("EGODENSITY", "ego network density", "apply_ego_network_density"),
 ]
 
 

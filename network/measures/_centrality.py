@@ -193,3 +193,30 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
         val = values.get(node["id"])
         node[key] = None if (val is None or isnan(val)) else round(val, 6)
     return [(key, "Burt's Constraint")]
+
+
+def apply_ego_network_density(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add ego network density to each node.
+
+    For each node, the density of the directed subgraph induced by its immediate neighbours
+    (predecessors ∪ successors, ego excluded) is computed as:
+
+        actual directed edges among alters / (k × (k − 1))
+
+    where k is the number of alters.  A value near 1 means every neighbour is connected to
+    every other — the node is embedded in a cohesive echo chamber or mutual-citation clique.
+    A value near 0 means the neighbours are largely disconnected from one another — the node
+    acts as a hub or structural bridge between otherwise separate sources.
+
+    ``None`` is returned for nodes with fewer than two neighbours (density is undefined when
+    fewer than two alters exist).
+    """
+    key = "ego_network_density"
+    for node in graph_data["nodes"]:
+        node_id = node["id"]
+        neighbors = (set(graph.predecessors(node_id)) | set(graph.successors(node_id))) - {node_id}
+        if len(neighbors) < 2:
+            node[key] = None
+        else:
+            node[key] = round(nx.density(graph.subgraph(neighbors)), 6)
+    return [(key, "Ego Network Density")]
