@@ -634,7 +634,7 @@ class BuildArgsExportNetworkTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class BuildArgsCompareNetworksTests(TestCase):
+class BuildArgsCompareAnalysisTests(TestCase):
     def test_project_dir_is_positional(self):
         args = _build_args("compare_analysis", FakePost({"project_dir": "/path/to/export"}))
         self.assertEqual(args[0], "/path/to/export")

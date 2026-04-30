@@ -28,7 +28,7 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     },
     "compare_analysis": {
         "title": "Compare Analysis",
-        "description": "Copy a previously exported network and generate side-by-side comparison tables and scatter plots.",
+        "description": "Compare this structural analysis with a previous one and generate side-by-side comparison tables and scatter plots.",
         "icon": "bi-intersect",
     },
 }
@@ -91,7 +91,7 @@ class TaskStatusView(View):
 
 
 class GraphDirsView(View):
-    """Scan for valid graph/ export directories usable as compare-network targets."""
+    """Scan for valid export directories usable as compare-analysis targets."""
 
     def get(self, request: HttpRequest) -> JsonResponse:
         current_graph = Path(settings.BASE_DIR) / settings.GRAPH_OUTPUT_DIR
