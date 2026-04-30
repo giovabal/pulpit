@@ -201,7 +201,7 @@
             </fieldset>
           </div>
 
-          {% elif task.name == "export_network" %}
+          {% elif task.name == "structural_analysis" %}
 
           <fieldset class="ops-fieldset">
             <legend>Name</legend>
@@ -933,7 +933,7 @@
       .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
       .then(function(data) {
         var opts = data.options || {};
-        var form = document.getElementById('form-export_network');
+        var form = document.getElementById('form-structural_analysis');
         if (!form) return;
 
         function setCheck(name, val) {

@@ -46,8 +46,8 @@ pip install oracledb           # Oracle
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `export_network` (`graph.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
-| `GRAPH_OUTPUT_DIR` | Directory where `export_network` writes all output files. Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/` regardless of this setting. | `graph` |
+| `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `structural_analysis` (`graph.html`, `channel_table.html`, `network_table.html`, `community_table.html`) | `Pulpit project` |
+| `GRAPH_OUTPUT_DIR` | Directory where `structural_analysis` writes all output files. Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/` regardless of this setting. | `graph` |
 | `WEB_ACCESS` | Access control for the web interface. `ALL` — no login required anywhere (default, suitable for local use). `OPEN` — all pages are public except `/admin/`, `/operations/`, and `/manage/`, which require a staff account. `PROTECTED` — all pages require login; `/admin/`, `/operations/`, and `/manage/` additionally require a staff account. Staff accounts are Django users with `is_staff = True`, created via `python manage.py createsuperuser` or in the backoffice. | `ALL` |
 
 > **User accounts:** `WEB_ACCESS=ALL` requires no accounts. For `OPEN` or `PROTECTED`, create a staff account first with `python manage.py createsuperuser`. Staff accounts (`is_staff=True`) can reach `/admin/`, `/operations/`, and `/manage/`; regular accounts can reach everything else in `PROTECTED` mode but are blocked from those paths. The login form is always served at `/login/` regardless of mode. After logging in, a **Log out** button appears in the top navigation bar next to the user's name; the **Manage** button is shown only to staff.
@@ -57,7 +57,7 @@ pip install oracledb           # Oracle
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y → X edge (i.e. influence flows toward the source) | `True` |
-| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Used as the default for `get_channels --channel-types`, `export_network --channel-types`, and the definition of "interesting" channels throughout the app. | `CHANNEL` |
+| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Used as the default for `get_channels --channel-types`, `structural_analysis --channel-types`, and the definition of "interesting" channels throughout the app. | `CHANNEL` |
 
 
 ## Community detection

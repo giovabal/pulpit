@@ -71,16 +71,16 @@ class GetStatusTerminalTests(_TmpMixin, TestCase):
     def test_exit_zero_is_done(self):
         from runner.tasks import get_status
 
-        _write_meta(self.tmp_dir, "export_network", pid=1, exit_code=0, end_time="2026-01-01T01:00:00+00:00")
-        s = get_status("export_network")
+        _write_meta(self.tmp_dir, "structural_analysis", pid=1, exit_code=0, end_time="2026-01-01T01:00:00+00:00")
+        s = get_status("structural_analysis")
         self.assertEqual(s["status"], "done")
         self.assertEqual(s["exit_code"], 0)
 
     def test_nonzero_exit_is_failed(self):
         from runner.tasks import get_status
 
-        _write_meta(self.tmp_dir, "export_network", pid=1, exit_code=2)
-        self.assertEqual(get_status("export_network")["status"], "failed")
+        _write_meta(self.tmp_dir, "structural_analysis", pid=1, exit_code=2)
+        self.assertEqual(get_status("structural_analysis")["status"], "failed")
 
     def test_returns_stored_args(self):
         from runner.tasks import get_status
@@ -125,48 +125,48 @@ class GetLogLinesTests(_TmpMixin, TestCase):
     def test_plain_lines_returned(self):
         from runner.tasks import get_log_lines
 
-        self._write_log("export_network", b"line one\nline two\nline three\n")
-        lines, offset = get_log_lines("export_network")
+        self._write_log("structural_analysis", b"line one\nline two\nline three\n")
+        lines, offset = get_log_lines("structural_analysis")
         self.assertEqual(lines, ["line one", "line two", "line three"])
         self.assertGreater(offset, 0)
 
     def test_ansi_escapes_stripped(self):
         from runner.tasks import get_log_lines
 
-        self._write_log("export_network", b"\x1b[32mGreen text\x1b[0m\n")
-        lines, _ = get_log_lines("export_network")
+        self._write_log("structural_analysis", b"\x1b[32mGreen text\x1b[0m\n")
+        lines, _ = get_log_lines("structural_analysis")
         self.assertEqual(lines, ["Green text"])
 
     def test_carriage_return_keeps_last_segment(self):
         from runner.tasks import get_log_lines
 
         # Progress-bar style: earlier content overwritten by CR; only final segment shown.
-        self._write_log("export_network", b"loading\rprogress 50%\rprogress 100%\n")
-        lines, _ = get_log_lines("export_network")
+        self._write_log("structural_analysis", b"loading\rprogress 50%\rprogress 100%\n")
+        lines, _ = get_log_lines("structural_analysis")
         self.assertEqual(lines, ["progress 100%"])
 
     def test_python_warning_lines_dropped(self):
         from runner.tasks import get_log_lines
 
         content = b"/home/user/app.py:42: DeprecationWarning: old api\n  old_function()\nnormal output\n"
-        self._write_log("export_network", content)
-        lines, _ = get_log_lines("export_network")
+        self._write_log("structural_analysis", content)
+        lines, _ = get_log_lines("structural_analysis")
         self.assertEqual(lines, ["normal output"])
 
     def test_offset_resumes_from_byte_position(self):
         from runner.tasks import get_log_lines
 
-        self._write_log("export_network", b"first\nsecond\n")
-        _, offset = get_log_lines("export_network")
-        self._write_log("export_network", b"first\nsecond\nthird\n")
-        lines, _ = get_log_lines("export_network", offset)
+        self._write_log("structural_analysis", b"first\nsecond\n")
+        _, offset = get_log_lines("structural_analysis")
+        self._write_log("structural_analysis", b"first\nsecond\nthird\n")
+        lines, _ = get_log_lines("structural_analysis", offset)
         self.assertEqual(lines, ["third"])
 
     def test_empty_file_returns_empty_list(self):
         from runner.tasks import get_log_lines
 
-        self._write_log("export_network", b"")
-        lines, offset = get_log_lines("export_network")
+        self._write_log("structural_analysis", b"")
+        lines, offset = get_log_lines("structural_analysis")
         self.assertEqual(lines, [])
 
 
@@ -213,8 +213,8 @@ class AbortGuardsTests(_TmpMixin, TestCase):
     def test_not_running_task_returns_false(self):
         from runner.tasks import abort
 
-        _write_meta(self.tmp_dir, "export_network", exit_code=0)
-        self.assertFalse(abort("export_network"))
+        _write_meta(self.tmp_dir, "structural_analysis", exit_code=0)
+        self.assertFalse(abort("structural_analysis"))
 
     def test_running_task_sends_sigterm(self):
         import os
@@ -254,15 +254,15 @@ class OperationsViewTests(TestCase):
         names = [t["name"] for t in resp.context["tasks"]]
         self.assertIn("search_channels", names)
         self.assertIn("get_channels", names)
-        self.assertIn("export_network", names)
+        self.assertIn("structural_analysis", names)
         self.assertIn("compare_networks", names)
 
     def test_tasks_in_workflow_order(self):
         resp = self.client.get(reverse("operations"))
         names = [t["name"] for t in resp.context["tasks"]]
         self.assertLess(names.index("search_channels"), names.index("get_channels"))
-        self.assertLess(names.index("get_channels"), names.index("export_network"))
-        self.assertLess(names.index("export_network"), names.index("compare_networks"))
+        self.assertLess(names.index("get_channels"), names.index("structural_analysis"))
+        self.assertLess(names.index("structural_analysis"), names.index("compare_networks"))
 
     def test_context_contains_channel_groups(self):
         ChannelGroup.objects.create(name="Alpha")
@@ -282,7 +282,7 @@ class RunTaskViewTests(TestCase):
 
     def test_already_running_returns_409(self):
         with patch("runner.views.tasks.get_status", return_value={"status": "running"}):
-            resp = self.client.post(reverse("operations-run", args=["export_network"]))
+            resp = self.client.post(reverse("operations-run", args=["structural_analysis"]))
         self.assertEqual(resp.status_code, 409)
 
     def test_launch_error_returns_500(self):
@@ -290,7 +290,7 @@ class RunTaskViewTests(TestCase):
             patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
             patch("runner.views.tasks.launch", side_effect=RuntimeError("boom")),
         ):
-            resp = self.client.post(reverse("operations-run", args=["export_network"]))
+            resp = self.client.post(reverse("operations-run", args=["structural_analysis"]))
         self.assertEqual(resp.status_code, 500)
 
     def test_successful_launch_returns_started(self):
@@ -298,7 +298,7 @@ class RunTaskViewTests(TestCase):
             patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
             patch("runner.views.tasks.launch"),
         ):
-            resp = self.client.post(reverse("operations-run", args=["export_network"]))
+            resp = self.client.post(reverse("operations-run", args=["structural_analysis"]))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["status"], "started")
 
@@ -340,12 +340,12 @@ class AbortTaskViewTests(TestCase):
 
     def test_abort_not_running_returns_sent_false(self):
         with patch("runner.views.tasks.abort", return_value=False):
-            resp = self.client.post(reverse("operations-abort", args=["export_network"]))
+            resp = self.client.post(reverse("operations-abort", args=["structural_analysis"]))
         self.assertFalse(resp.json()["sent"])
 
     def test_abort_running_returns_sent_true(self):
         with patch("runner.views.tasks.abort", return_value=True):
-            resp = self.client.post(reverse("operations-abort", args=["export_network"]))
+            resp = self.client.post(reverse("operations-abort", args=["structural_analysis"]))
         self.assertTrue(resp.json()["sent"])
 
 
@@ -374,7 +374,7 @@ class TaskStatusViewTests(TestCase):
             ),
             patch("runner.views.tasks.get_log_lines", return_value=(["hello"], 5)),
         ):
-            resp = self.client.get(reverse("operations-status", args=["export_network"]))
+            resp = self.client.get(reverse("operations-status", args=["structural_analysis"]))
         data = resp.json()
         self.assertEqual(data["lines"], ["hello"])
         self.assertEqual(data["next_offset"], 5)
@@ -395,8 +395,8 @@ class TaskStatusViewTests(TestCase):
             ),
             patch("runner.views.tasks.get_log_lines", return_value=([], 20)) as mock_log,
         ):
-            self.client.get(reverse("operations-status", args=["export_network"]) + "?offset=20")
-        mock_log.assert_called_once_with("export_network", 20)
+            self.client.get(reverse("operations-status", args=["structural_analysis"]) + "?offset=20")
+        mock_log.assert_called_once_with("structural_analysis", 20)
 
 
 # ---------------------------------------------------------------------------
@@ -566,13 +566,13 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# runner/views.py — _build_args: export_network
+# runner/views.py — _build_args: structural_analysis
 # ---------------------------------------------------------------------------
 
 
 class BuildArgsExportNetworkTests(TestCase):
     def test_export_name_appended(self):
-        args = _build_args("export_network", FakePost({"export_name": "baseline"}))
+        args = _build_args("structural_analysis", FakePost({"export_name": "baseline"}))
         self.assertEqual(args, ["--name", "baseline"])
 
     def test_boolean_output_flags(self):
@@ -590,43 +590,43 @@ class BuildArgsExportNetworkTests(TestCase):
             ("timeline_step", "--timeline-step"),
         ]:
             with self.subTest(field=field):
-                args = _build_args("export_network", FakePost({field: "1"}))
+                args = _build_args("structural_analysis", FakePost({field: "1"}))
                 self.assertIn(flag, args)
 
     def test_measures_csv(self):
         post = FakePost({"measures": ["PAGERANK", "BETWEENNESS"]})
-        args = _build_args("export_network", post)
+        args = _build_args("structural_analysis", post)
         idx = args.index("--measures")
         self.assertIn("PAGERANK", args[idx + 1])
         self.assertIn("BETWEENNESS", args[idx + 1])
 
     def test_date_filters(self):
         post = FakePost({"startdate": "2024-01-01", "enddate": "2024-12-31"})
-        args = _build_args("export_network", post)
+        args = _build_args("structural_analysis", post)
         self.assertIn("--startdate", args)
         self.assertIn("--enddate", args)
 
     def test_numeric_params(self):
         post = FakePost({"fa2_iterations": "1000", "spreading_runs": "50", "recency_weights": "90"})
-        args = _build_args("export_network", post)
+        args = _build_args("structural_analysis", post)
         self.assertIn("--fa2-iterations", args)
         self.assertIn("--spreading-runs", args)
         self.assertIn("--recency-weights", args)
 
     def test_community_strategies_csv(self):
         post = FakePost({"community_strategies": ["LEIDEN", "LOUVAIN"]})
-        args = _build_args("export_network", post)
+        args = _build_args("structural_analysis", post)
         idx = args.index("--community-strategies")
         self.assertIn("LEIDEN", args[idx + 1])
 
     def test_timeline_step_year(self):
-        args = _build_args("export_network", FakePost({"timeline_step": "1"}))
+        args = _build_args("structural_analysis", FakePost({"timeline_step": "1"}))
         idx = args.index("--timeline-step")
         self.assertEqual(args[idx + 1], "year")
 
     def test_empty_strings_not_added(self):
         post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": ""})
-        self.assertEqual(_build_args("export_network", post), [])
+        self.assertEqual(_build_args("structural_analysis", post), [])
 
 
 # ---------------------------------------------------------------------------

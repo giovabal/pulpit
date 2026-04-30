@@ -116,32 +116,32 @@ Optional (expand **Options** to set):
 **CLI alternative:**
 
 ```sh
-python manage.py export_network
-python manage.py export_network --2dgraph
-python manage.py export_network --html
-python manage.py export_network --2dgraph --html
-python manage.py export_network --2dgraph --3dgraph
-python manage.py export_network --2dgraph --xlsx
-python manage.py export_network --html --xlsx
-python manage.py export_network --gexf
-python manage.py export_network --graphml
-python manage.py export_network --seo
-python manage.py export_network --2dgraph --vertical-layout
-python manage.py export_network --2dgraph --fa2-iterations 10000
-python manage.py export_network --draw-dead-leaves
-python manage.py export_network --measures PAGERANK,BETWEENNESS,BRIDGING
-python manage.py export_network --measures ALL
-python manage.py export_network --community-strategies LEIDEN,LOUVAIN
-python manage.py export_network --community-strategies ALL
-python manage.py export_network --html --network-stat-groups SIZE,COMPONENTS,CENTRALIZATION
-python manage.py export_network --html --network-stat-groups ALL
-python manage.py export_network --edge-weight-strategy TOTAL
-python manage.py export_network --recency-weights 30
-python manage.py export_network --spreading-runs 500
-python manage.py export_network --channel-types CHANNEL,GROUP
-python manage.py export_network --startdate 2023-01-01
-python manage.py export_network --enddate 2023-12-31
-python manage.py export_network --startdate 2023-01-01 --enddate 2023-12-31
+python manage.py structural_analysis
+python manage.py structural_analysis --2dgraph
+python manage.py structural_analysis --html
+python manage.py structural_analysis --2dgraph --html
+python manage.py structural_analysis --2dgraph --3dgraph
+python manage.py structural_analysis --2dgraph --xlsx
+python manage.py structural_analysis --html --xlsx
+python manage.py structural_analysis --gexf
+python manage.py structural_analysis --graphml
+python manage.py structural_analysis --seo
+python manage.py structural_analysis --2dgraph --vertical-layout
+python manage.py structural_analysis --2dgraph --fa2-iterations 10000
+python manage.py structural_analysis --draw-dead-leaves
+python manage.py structural_analysis --measures PAGERANK,BETWEENNESS,BRIDGING
+python manage.py structural_analysis --measures ALL
+python manage.py structural_analysis --community-strategies LEIDEN,LOUVAIN
+python manage.py structural_analysis --community-strategies ALL
+python manage.py structural_analysis --html --network-stat-groups SIZE,COMPONENTS,CENTRALIZATION
+python manage.py structural_analysis --html --network-stat-groups ALL
+python manage.py structural_analysis --edge-weight-strategy TOTAL
+python manage.py structural_analysis --recency-weights 30
+python manage.py structural_analysis --spreading-runs 500
+python manage.py structural_analysis --channel-types CHANNEL,GROUP
+python manage.py structural_analysis --startdate 2023-01-01
+python manage.py structural_analysis --enddate 2023-12-31
+python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 ```
 
 ## 6b. Timeline export (year-by-year animation)
@@ -193,10 +193,10 @@ Per-year 2D layouts are seeded from the full-range positions and corrected via b
 ### CLI
 
 ```sh
-python manage.py export_network --2dgraph --timeline-step year
-python manage.py export_network --2dgraph --3dgraph --timeline-step year
-python manage.py export_network --2dgraph --html --timeline-step year
-python manage.py export_network --2dgraph --html --xlsx --timeline-step year
+python manage.py structural_analysis --2dgraph --timeline-step year
+python manage.py structural_analysis --2dgraph --3dgraph --timeline-step year
+python manage.py structural_analysis --2dgraph --html --timeline-step year
+python manage.py structural_analysis --2dgraph --html --xlsx --timeline-step year
 ```
 
 `--timeline-step year` is the only supported value (the default `none` disables the feature). The option is silently ignored if no messages are found in the database.
@@ -207,7 +207,7 @@ python manage.py export_network --2dgraph --html --xlsx --timeline-step year
 
 **Operations panel** (`/operations/`) → **Compare Networks** → set **Project directory** → click **Run**.
 
-Copies a previously exported `graph/` directory into the current one with `_2` suffixes and generates a side-by-side comparison page. Run this after `export_network` whenever you want to compare the current network with an earlier snapshot or a different dataset.
+Copies a previously exported `graph/` directory into the current one with `_2` suffixes and generates a side-by-side comparison page. Run this after `structural_analysis` whenever you want to compare the current network with an earlier snapshot or a different dataset.
 
 The command:
 
@@ -226,7 +226,7 @@ python manage.py compare_networks /path/to/other/graph
 python manage.py compare_networks /path/to/other/graph --seo
 ```
 
-The argument must be the `graph/` output directory of a previous `export_network` run — the directory that contains `index.html`.
+The argument must be the `graph/` output directory of a previous `structural_analysis` run — the directory that contains `index.html`.
 
 ## 7. Add events (optional)
 

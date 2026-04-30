@@ -27,7 +27,7 @@ def _parse_csv(value: str) -> list[str]:
 
 class Command(BaseCommand):
     args = ""
-    help = "write file"
+    help = "Build the network graph, compute measures, detect communities, and export output files."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(

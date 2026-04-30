@@ -16,7 +16,7 @@ python manage.py migrate
 python manage.py runserver           # Web UI at localhost:8000
 python manage.py search_channels     # Find channels via search terms
 python manage.py get_channels        # Crawl channels and resolve references
-python manage.py export_network      # Build graph, detect communities, export
+python manage.py structural_analysis      # Build graph, detect communities, export
 ```
 
 See WORKFLOW.md for all flags and options.
@@ -31,7 +31,7 @@ See WORKFLOW.md for all flags and options.
 2. Operations panel (`/operations/`) or `search_channels` finds channels via Telegram API → `Channel` records
 3. User assigns channels to `Organization` objects, marks `is_interesting=True`
 4. Operations panel or `get_channels` fetches messages and resolves cross-channel references
-5. Operations panel or `export_network` builds the graph, detects communities, runs layout, writes output to `graph/`
+5. Operations panel or `structural_analysis` builds the graph, detects communities, runs layout, writes output to `graph/`
 
 ### Key modules
 
@@ -46,7 +46,7 @@ See WORKFLOW.md for all flags and options.
 - **`network/layout.py`** — Spatial layout: Kamada-Kawai seed → ForceAtlas2 (`pyforceatlas2`).
 - **`network/exporter.py`** — Builds `GraphData`; writes `data/*.json`, config, and GEXF/GraphML exports.
 - **`network/tables.py`** — Writes channel, network, and community HTML/XLSX tables.
-- **`network/management/commands/export_network.py`** — Orchestrates the full export pipeline. Writes atomically: all output goes to `exports/<name>.tmp/`, which is renamed to `exports/<name>/` only after `summary.json` is written as the final step. A stale `.tmp` directory from an interrupted run is removed at the start of the next export with the same name.
+- **`network/management/commands/structural_analysis.py`** — Orchestrates the full export pipeline. Writes atomically: all output goes to `exports/<name>.tmp/`, which is renamed to `exports/<name>/` only after `summary.json` is written as the final step. A stale `.tmp` directory from an interrupted run is removed at the start of the next export with the same name.
 - **`runner/tasks.py`** — Task manager for Operations panel: launch management commands as subprocesses, stream log output, track status (idle/running/done/failed), abort via SIGTERM.
 - **`runner/views.py`** — Operations panel views: `OpsView`, `RunTaskView`, `AbortTaskView`, `TaskStatusView`.
 - **`backoffice/views.py`** — Staff-only section views for `/manage/`: Channels, Organizations, Groups, Search Terms, Events, Users, Messages.
@@ -62,7 +62,7 @@ See WORKFLOW.md for all flags and options.
 
 ### Network measures
 
-Configured via `--measures` on `export_network` (comma-separated).
+Configured via `--measures` on `structural_analysis` (comma-separated).
 
 | Key | Description |
 | :-- | :---------- |
@@ -99,4 +99,4 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `get_channels` and `export_network`; see WORKFLOW.md.
+Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `get_channels` and `structural_analysis`; see WORKFLOW.md.
