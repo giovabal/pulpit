@@ -1089,6 +1089,8 @@ function init_year_switcher(timeline) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
+
     init_three();
 
     var loading_el       = el('loading_modal');

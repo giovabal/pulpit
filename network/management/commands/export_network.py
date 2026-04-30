@@ -836,7 +836,9 @@ class Command(BaseCommand):
             self.stdout.write("\nGenerate map")
             exporter.ensure_graph_root(root_target)
             self.stdout.write("- config files")
-            exporter.apply_robots_to_graph_html(root_target, seo, project_title=project_title, include_3d=do_3dgraph)
+            exporter.apply_robots_to_graph_html(
+                root_target, seo, project_title=project_title, include_3d=do_3dgraph, vertical_layout=vertical_layout
+            )
             exporter.write_robots_txt(root_target, seo)
 
         self.stdout.write("- data files")

@@ -1,9 +1,11 @@
 # Changelog
 
 ## [0.16] - To be announced
-*Multiple and reproducible exports. Operations panel improvements. New ego-network density measure.*
+*Multiple, atomic and reproducible exports. Operations panel improvements. New ego-network density measure.*
 
 ### New features
+- **Lateral navigation menu in horizontal graph layout** — when a graph is exported with the default horizontal layout (`--vertical-layout` not set), the navigation bar in `graph.html` and `graph3d.html` is now a vertical pill docked to the left edge of the screen, vertically centred. When `--vertical-layout` is used the bar remains at the bottom centre as before. The layout flag is injected as `window.VERTICAL_LAYOUT` into each HTML file at export time so the correct layout is applied without a network round-trip.
+- **ChannelGroup `note` field** — channel groups gain a free-text `note` field (in addition to the existing `description`). Visible and editable in the backoffice Groups section as an inline column in the table and a textarea in both the add form and the inline edit row. Exposed by the `/manage/api/groups/` API.
 - **Ego network density** (`EGODENSITY`) — new node measure for `export_network`. For each channel, computes the density of directed edges among its immediate neighbours (predecessors ∪ successors, ego excluded): 0 means none of the neighbours connect to each other (the channel is a hub between disconnected sources); 1 means they form a fully connected clique (echo chamber). `null` for nodes with fewer than two neighbours. Directional (uses edge direction in the neighbour subgraph). Available in `--measures` and the Operations panel Measures grid.
 - **Operations panel pipeline ordering** — the four task cards (Search Channels, Get Channels, Export Network, Compare Networks) are now displayed in workflow order and numbered 1–4 with a badge on each card icon. Faint arrow connectors between cards make the sequential nature explicit.
 - **Get Channels numbered crawl steps** — the options in the Crawl fieldset are now listed vertically in execution order and numbered 1–9: Get new messages, Fix message holes, Retry unresolved references, Force-retry dead references, Refresh message stats, Mine about texts, Refresh degrees, Fetch recommended channels, Fix missing media.
@@ -16,10 +18,8 @@
 - **Options import from previous exports** — the Export Network card in the Operations panel has a *Previous exports* picker that lists all exports by name and date. Selecting one restores every form control (measures, community strategies, filters, layout options, etc.) from that export's `summary.json`, making it easy to replicate or tweak a past run.
 - **Export name field with timestamp default** — the *Export name* input in the Operations panel is pre-filled with the current timestamp on page load so every run is named without manual input.
 - **Multi-export `/data/` page** — `/data/` detects all exports in `exports/*/` and, when more than one exists, shows a pill-style picker at the top of the page. Selecting an export via `?export=<name>` updates all graph, table, and comparison card links to point to that export's files, served at `/exports/<name>/`.
-- **Compare Networks `--target`** — `compare_networks` gains a required `--target <name>` flag that specifies which named export to write comparison files into (`exports/<name>/`). The Operations panel Compare Networks card gains a matching *Target export* field with a picker.
-
-### Improvements
 - **Atomic export writes** — `export_network` now writes to a `<name>.tmp` staging directory and renames it to `<name>` only after every output file, including `summary.json`, has been written successfully. Aborting or crashing an in-progress export leaves the previous export with the same name untouched (or nothing, on the first run). A stale `.tmp` directory from a previous interrupted run is removed automatically at the start of the next export. `GraphDirsView` and `ExportsListView` in the Operations panel skip `.tmp` and `.old` directories, so staging and backup artefacts never appear as selectable exports.
+- **Compare Networks `--target`** — `compare_networks` gains a required `--target <name>` flag that specifies which named export to write comparison files into (`exports/<name>/`). The Operations panel Compare Networks card gains a matching *Target export* field with a picker.
 
 ### Backward incompatibility
 - The `graph/` output directory is no longer used. All exports go to `exports/`. The `/graph/` static route has been removed.

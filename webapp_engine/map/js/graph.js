@@ -798,6 +798,8 @@ function reload_graph(data_dir) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
+
     var loading_el = document.getElementById('loading_modal');
     loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
 

@@ -379,3 +379,34 @@ html, body {
     width: 205px;
     color: #000;
 }
+
+/* ── Lateral menu — horizontal layout ───────────────────────── */
+@media screen {
+    #menu_container.menu--lateral {
+        bottom: auto;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        flex-direction: column;
+        width: fit-content;
+        padding: 0.5em 0;
+    }
+
+    #menu_container.menu--lateral .ms-auto {
+        margin-left: 0 !important;
+        margin-top: auto;
+    }
+
+    #menu_container.menu--lateral #year-switcher {
+        flex-direction: column;
+        padding: 0.4rem 0;
+    }
+
+    #menu_container.menu--lateral .year-drop-menu {
+        bottom: auto;
+        left: calc(100% + 0.5rem);
+        top: 50%;
+        transform: translateY(-50%);
+        flex-direction: column;
+    }
+}

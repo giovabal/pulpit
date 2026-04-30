@@ -58,6 +58,7 @@
             {% endif %}
           </span>
         </span>
+        {% with pic=channel.profile_picture %}{% if pic and pic.picture %}<img src="{{ pic.picture.url }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}
       </a>
     </li>
     {% empty %}
