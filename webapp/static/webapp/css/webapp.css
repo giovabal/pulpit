@@ -931,6 +931,16 @@ body {
 
 .channel-row-body { min-width: 0; flex: 1; }
 
+.channel-row-pic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  align-self: center;
+  opacity: .88;
+}
+
 .channel-row-title {
   display: block;
   font-size: .8rem;

@@ -19,7 +19,7 @@ class ChannelGroupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChannelGroup
-        fields = ["id", "name", "description", "channel_count"]
+        fields = ["id", "name", "description", "note", "channel_count"]
 
 
 class ChannelSerializer(serializers.ModelSerializer):

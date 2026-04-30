@@ -5,7 +5,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, Q, QuerySet, Sum
+from django.db.models import Count, Max, Min, Prefetch, Q, QuerySet, Sum
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, TemplateView
@@ -13,7 +13,7 @@ from django.views.static import serve as _static_serve
 
 from webapp.paginator import DiggPaginator
 
-from .models import Channel, Message, MessageReaction, Organization
+from .models import Channel, Message, MessageReaction, Organization, ProfilePicture
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date
 
@@ -175,10 +175,17 @@ class ChannelListView(ListView):
     model = Channel
     context_object_name = "channel_list"
 
+    _pic_prefetch = Prefetch(
+        "profilepicture_set",
+        queryset=ProfilePicture.objects.order_by("-date")[:1],
+        to_attr="_prefetched_profile_pics",
+    )
+
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.interesting()
             .select_related("organization")
+            .prefetch_related(self._pic_prefetch)
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -192,6 +199,7 @@ class ChannelListView(ListView):
         _status_qs = (
             Channel.objects.filter(organization__is_interesting=True)
             .select_related("organization")
+            .prefetch_related(self._pic_prefetch)
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -205,6 +213,7 @@ class ChannelListView(ListView):
             .exclude(is_lost=True)
             .exclude(is_private=True)
             .select_related("organization")
+            .prefetch_related(self._pic_prefetch)
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),

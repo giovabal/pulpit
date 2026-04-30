@@ -107,8 +107,8 @@ def ensure_graph_root(root_target: str) -> None:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
-def _patch_html_file(path: str, seo: bool, project_title: str) -> None:
-    """Patch the robots meta tag and title in a static HTML file in-place."""
+def _patch_html_file(path: str, seo: bool, project_title: str, vertical_layout: bool = False) -> None:
+    """Patch the robots meta tag, title, and layout flag in a static HTML file in-place."""
     if not os.path.exists(path):
         return
     with open(path) as f:
@@ -126,15 +126,24 @@ def _patch_html_file(path: str, seo: bool, project_title: str) -> None:
             rf"\g<1>{escaped}\g<2>",
             content,
         )
+    vl_value = "true" if vertical_layout else "false"
+    injection = f"<script>window.VERTICAL_LAYOUT = {vl_value};</script>\n"
+    for marker in ('<script src="js/', '<script type="module" src="js/'):
+        idx = content.find(marker)
+        if idx != -1:
+            content = content[:idx] + injection + content[idx:]
+            break
     with open(path, "w") as f:
         f.write(content)
 
 
-def apply_robots_to_graph_html(root_target: str, seo: bool, project_title: str = "", include_3d: bool = False) -> None:
-    """Patch the robots meta tag and title in the static graph HTML files after they are copied."""
-    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title)
+def apply_robots_to_graph_html(
+    root_target: str, seo: bool, project_title: str = "", include_3d: bool = False, vertical_layout: bool = False
+) -> None:
+    """Patch the robots meta tag, title, and layout flag in the static graph HTML files after they are copied."""
+    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout)
     if include_3d:
-        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title)
+        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title, vertical_layout)
 
 
 _EXPORT_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})

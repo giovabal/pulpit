@@ -10,6 +10,7 @@
 <form class="bo-add-form d-none" id="grp-add-form" autocomplete="off">
   <input class="bo-input" name="name" placeholder="Name" required>
   <textarea class="bo-input bo-input--wide bo-input--full" name="description" rows="4" placeholder="Description (optional)"></textarea>
+  <textarea class="bo-input bo-input--wide bo-input--full" name="note" rows="4" placeholder="Note (optional)"></textarea>
   <button type="submit" class="bo-btn">Save</button>
   <button type="button" class="bo-btn bo-btn--ghost" id="grp-add-cancel">Cancel</button>
 </form>
@@ -24,12 +25,13 @@
       <tr>
         <th>Name</th>
         <th>Description</th>
+        <th>Note</th>
         <th class="bo-th--num">Channels</th>
         <th></th>
       </tr>
     </thead>
     <tbody id="grp-tbody">
-      <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+      <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
     </tbody>
   </table>
 </div>
