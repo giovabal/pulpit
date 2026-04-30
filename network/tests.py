@@ -1181,15 +1181,15 @@ class CopyChannelMediaTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# export_network management command
+# structural_analysis management command
 # ---------------------------------------------------------------------------
 
 
-_EXPORT_CMD = "network.management.commands.export_network"
+_EXPORT_CMD = "network.management.commands.structural_analysis"
 
 
 def _patch_export_pipeline() -> list:
-    """Return a list of patch decorators for all export_network submodule calls."""
+    """Return a list of patch decorators for all structural_analysis submodule calls."""
     targets = [
         f"{_EXPORT_CMD}.graph_builder.build_graph",
         f"{_EXPORT_CMD}.community.detect",
@@ -1244,14 +1244,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("export_network", startdate="not-a-date")
+            call_command("structural_analysis", startdate="not-a-date")
 
     def test_raises_command_error_on_invalid_enddate(self) -> None:
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("export_network", enddate="2023-13-01")
+            call_command("structural_analysis", enddate="2023-13-01")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1279,7 +1279,7 @@ class ExportNetworkCommandTests(TestCase):
 
         mock_build.side_effect = ValueError("There are no relationships between channels.")
         with self.assertRaises(CommandError):
-            call_command("export_network")
+            call_command("structural_analysis")
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1328,7 +1328,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", graph=True, html=True)
+        call_command("structural_analysis", graph=True, html=True)
 
         mock_build.assert_called_once()
         mock_detect.assert_called()
@@ -1393,7 +1393,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", html=False)
+        call_command("structural_analysis", html=False)
         mock_table_html.assert_not_called()
         mock_table_xls.assert_not_called()
 
@@ -1444,7 +1444,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", html=False, xlsx=True)
+        call_command("structural_analysis", html=False, xlsx=True)
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
 
@@ -1495,7 +1495,7 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("export_network", html=True, xlsx=True)
+        call_command("structural_analysis", html=True, xlsx=True)
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
 

@@ -21,8 +21,8 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
         "description": "Crawl all interesting channels and resolve cross-channel references.",
         "icon": "bi-cloud-download",
     },
-    "export_network": {
-        "title": "Export Network",
+    "structural_analysis": {
+        "title": "Structural Analysis",
         "description": "Build the graph, compute measures, detect communities, and write output files.",
         "icon": "bi-diagram-3",
     },
@@ -243,7 +243,7 @@ def _build_args(task: str, post: Any) -> list[str]:
             if word:
                 args += ["--extra-term", word]
 
-    elif task == "export_network":
+    elif task == "structural_analysis":
         name_val = post.get("export_name", "").strip()
         if name_val:
             args += ["--name", name_val]

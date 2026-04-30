@@ -8,7 +8,7 @@ This document explains the analytical tools available in Pulpit — what they me
 
 ### Measures
 
-Configured via `--measures` on `export_network`. Use `ALL` to enable everything.
+Configured via `--measures` on `structural_analysis`. Use `ALL` to enable everything.
 
 | Measure | Key | Question it answers |
 | :------ | :-- | :------------------ |
@@ -29,7 +29,7 @@ Configured via `--measures` on `export_network`. Use `ALL` to enable everything.
 
 ### Community detection strategies
 
-Configured via `--community-strategies` on `export_network`. Use `ALL` to run everything simultaneously.
+Configured via `--community-strategies` on `structural_analysis`. Use `ALL` to run everything simultaneously.
 
 | Strategy | Key | What it reveals |
 | :------- | :-- | :-------------- |
@@ -402,7 +402,7 @@ Columns are sorted so that each organisation's dominant community falls as close
 
 ### Consensus matrix
 
-Generated with `export_network --consensus-matrix` (or the matching checkbox in the Operations panel). Requires at least one non-ORGANIZATION community detection strategy to be active.
+Generated with `structural_analysis --consensus-matrix` (or the matching checkbox in the Operations panel). Requires at least one non-ORGANIZATION community detection strategy to be active.
 
 The consensus matrix (`consensus_matrix.html`) answers: **across all non-ORGANIZATION strategies, how consistently is each pair of channels placed in the same community?** For every pair of channels, the count of strategies that co-assign them to the same community is computed. The result is displayed as a lower-triangle balloon plot where:
 

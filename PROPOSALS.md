@@ -4,6 +4,14 @@
 - how the disappearing of a channel impacts the network? new channels born after that lost are replacing it?
 - group analysis, similar to whole network analysis
 - events can be linked to a group, a channel, to an organization. or general.
+- Normalized Mutual Information between community strategies: a new entry in `network_table` could show NMI between every pair of strategies (LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP, etc.). This answers: does the algorithmic partition agree with the analyst's manual grouping? High NMI means your Organizations map well onto structural clusters; low NMI means the network's topology cuts across your labels.
+- pairwise structural similarity matrix (cosine similarity of node feature vectors across all measures)
+
+
+Before major release (/plan)
+- review documentation
+- aria attributes
+
 
 ## 3. Content & Semantic Analysis
 
@@ -25,9 +33,6 @@ Rather than just detecting topics, track which narrative frames appear in messag
 
 Measure how quickly a channel adopts content that originated elsewhere (via forwards). Early adopters vs. late amplifiers. Implementable as a per-node measure: average `(message.date - message.forwarded_from.original_date)` for all forwarded messages. Requires storing the original post date of the forwarded message.
 
-### 4.5 — Normalized Mutual Information between community strategies
-
-Currently, community tables are shown per-strategy. A new entry in `network_table` could show NMI between every pair of strategies (LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP, etc.). This answers: does the algorithmic partition agree with the analyst's manual grouping? High NMI means your Organizations map well onto structural clusters; low NMI means the network's topology cuts across your labels.
 
 ---
 
@@ -65,10 +70,6 @@ Supergroups (`megagroup=True`) store discussion replies. Currently, these are cr
 ### 9.1 — Influence operation risk score
 
 Composite measure combining: low content originality + high amplification + high HITS hub + high posting tempo synchrony with other channels. Produces a single `IO_RISK` score per channel. Not a definitive verdict (clearly documented as such), but a useful triage tool for analysts. Based on the framework from Sharma et al. (2021) and Nizzoli et al. (2021).
-
-### 9.2 — Structural similarity matrix export
-
-Export a pairwise structural similarity matrix (cosine similarity of node feature vectors across all measures) as a CSV. Enables researchers to import into R or Python for further analysis — clustering, regression, ML — outside the Pulpit pipeline.
 
 ---
 

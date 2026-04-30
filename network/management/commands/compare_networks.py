@@ -17,7 +17,7 @@ class Command(BaseCommand):
             "project_dir",
             metavar="PROJECT_DIR",
             help=(
-                "Path to a graph/ output directory from a previous export_network run "
+                "Path to a graph/ output directory from a previous structural_analysis run "
                 "(the directory that contains index.html). "
                 "Its data/, graph files, *_table.html, and *.xlsx files are copied with _2 suffixes; "
                 "network_compare_table.html is generated with side-by-side metrics tables and scatter plots."
