@@ -205,7 +205,7 @@ python manage.py structural_analysis --2dgraph --html --xlsx --timeline-step yea
 
 ## 6c. Compare two networks
 
-**Operations panel** (`/operations/`) → **Compare Networks** → set **Project directory** → click **Run**.
+**Operations panel** (`/operations/`) → **Compare Analysis** → set **Project directory** → click **Run**.
 
 Copies a previously exported `graph/` directory into the current one with `_2` suffixes and generates a side-by-side comparison page. Run this after `structural_analysis` whenever you want to compare the current network with an earlier snapshot or a different dataset.
 
@@ -222,8 +222,8 @@ Optional (expand **Options** to set):
 **CLI alternative:**
 
 ```sh
-python manage.py compare_networks /path/to/other/graph
-python manage.py compare_networks /path/to/other/graph --seo
+python manage.py compare_analysis /path/to/other/graph
+python manage.py compare_analysis /path/to/other/graph --seo
 ```
 
 The argument must be the `graph/` output directory of a previous `structural_analysis` run — the directory that contains `index.html`.

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-TASK_NAMES = ("get_channels", "search_channels", "structural_analysis", "compare_networks")
+TASK_NAMES = ("get_channels", "search_channels", "structural_analysis", "compare_analysis")
 
 _MANAGE_PY = str(settings.BASE_DIR / "manage.py")
 _TMP_DIR = settings.BASE_DIR / "tmp"
