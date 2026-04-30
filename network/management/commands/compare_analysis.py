@@ -10,7 +10,7 @@ from network import tables
 
 
 class Command(BaseCommand):
-    help = "Compare this network with a previously exported one."
+    help = "Compare this structural analysis with a previous one and generate side-by-side comparison tables."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
@@ -59,9 +59,9 @@ class Command(BaseCommand):
         def exists(name: str) -> bool:
             return os.path.isfile(os.path.join(root_target, name))
 
-        self.stdout.write("- compare network files")
+        self.stdout.write("- compare analysis files")
         compare_files = tables.copy_compare_project(compare_dir, root_target)
-        self.stdout.write("- network compare table (html)")
+        self.stdout.write("- comparison table (html)")
         tables.write_network_compare_table_html(
             output_filename=os.path.join(root_target, "network_compare_table.html"),
             seo=seo,
