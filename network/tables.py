@@ -307,8 +307,11 @@ def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
 def write_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
+    # Strip private implementation keys (e.g. _xlsx_graph_data, _xlsx_community_data)
+    # that are passed through timeline_entries for XLSX assembly but must not appear in JSON output.
+    clean = [{k: v for k, v in e.items() if not k.startswith("_")} for e in timeline_entries]
     with open(os.path.join(data_dir, "timeline.json"), "w") as f:
-        f.write(json.dumps({"years": timeline_entries}))
+        f.write(json.dumps({"years": clean}))
 
 
 def write_network_compare_table_html(
