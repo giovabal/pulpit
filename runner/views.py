@@ -26,8 +26,8 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
         "description": "Build the graph, compute measures, detect communities, and write output files.",
         "icon": "bi-diagram-3",
     },
-    "compare_networks": {
-        "title": "Compare Networks",
+    "compare_analysis": {
+        "title": "Compare Analysis",
         "description": "Copy a previously exported network and generate side-by-side comparison tables and scatter plots.",
         "icon": "bi-intersect",
     },
@@ -315,7 +315,7 @@ def _build_args(task: str, post: Any) -> list[str]:
         if post.get("timeline_step"):
             args += ["--timeline-step", "year"]
 
-    elif task == "compare_networks":
+    elif task == "compare_analysis":
         project_dir = post.get("project_dir", "").strip()
         if project_dir:
             args.append(project_dir)

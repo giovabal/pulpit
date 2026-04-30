@@ -255,14 +255,14 @@ class OperationsViewTests(TestCase):
         self.assertIn("search_channels", names)
         self.assertIn("get_channels", names)
         self.assertIn("structural_analysis", names)
-        self.assertIn("compare_networks", names)
+        self.assertIn("compare_analysis", names)
 
     def test_tasks_in_workflow_order(self):
         resp = self.client.get(reverse("operations"))
         names = [t["name"] for t in resp.context["tasks"]]
         self.assertLess(names.index("search_channels"), names.index("get_channels"))
         self.assertLess(names.index("get_channels"), names.index("structural_analysis"))
-        self.assertLess(names.index("structural_analysis"), names.index("compare_networks"))
+        self.assertLess(names.index("structural_analysis"), names.index("compare_analysis"))
 
     def test_context_contains_channel_groups(self):
         ChannelGroup.objects.create(name="Alpha")
@@ -630,23 +630,23 @@ class BuildArgsExportNetworkTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# runner/views.py — _build_args: compare_networks
+# runner/views.py — _build_args: compare_analysis
 # ---------------------------------------------------------------------------
 
 
 class BuildArgsCompareNetworksTests(TestCase):
     def test_project_dir_is_positional(self):
-        args = _build_args("compare_networks", FakePost({"project_dir": "/path/to/export"}))
+        args = _build_args("compare_analysis", FakePost({"project_dir": "/path/to/export"}))
         self.assertEqual(args[0], "/path/to/export")
 
     def test_target_appended(self):
-        args = _build_args("compare_networks", FakePost({"compare_target": "baseline"}))
+        args = _build_args("compare_analysis", FakePost({"compare_target": "baseline"}))
         self.assertIn("--target", args)
         self.assertIn("baseline", args)
 
     def test_seo_flag(self):
-        args = _build_args("compare_networks", FakePost({"seo": "1"}))
+        args = _build_args("compare_analysis", FakePost({"seo": "1"}))
         self.assertIn("--seo", args)
 
     def test_empty_project_dir_not_added(self):
-        self.assertEqual(_build_args("compare_networks", FakePost({"project_dir": ""})), [])
+        self.assertEqual(_build_args("compare_analysis", FakePost({"project_dir": ""})), [])
