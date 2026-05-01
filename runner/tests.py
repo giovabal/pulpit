@@ -54,7 +54,7 @@ class GetStatusIdleTests(_TmpMixin, TestCase):
     def test_no_meta_file_returns_idle(self):
         from runner.tasks import get_status
 
-        s = get_status("get_channels")
+        s = get_status("crawl_channels")
         self.assertEqual(s["status"], "idle")
         self.assertIsNone(s["pid"])
         self.assertIsNone(s["exit_code"])
@@ -63,8 +63,8 @@ class GetStatusIdleTests(_TmpMixin, TestCase):
     def test_corrupt_meta_returns_idle(self):
         from runner.tasks import get_status
 
-        (self.tmp_dir / "runner_get_channels.meta.json").write_text("NOT JSON{")
-        self.assertEqual(get_status("get_channels")["status"], "idle")
+        (self.tmp_dir / "runner_crawl_channels.meta.json").write_text("NOT JSON{")
+        self.assertEqual(get_status("crawl_channels")["status"], "idle")
 
 
 class GetStatusTerminalTests(_TmpMixin, TestCase):
@@ -95,15 +95,15 @@ class GetStatusRunningTests(_TmpMixin, TestCase):
 
         from runner.tasks import get_status
 
-        _write_meta(self.tmp_dir, "get_channels", pid=os.getpid())
-        self.assertEqual(get_status("get_channels")["status"], "running")
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
+        self.assertEqual(get_status("crawl_channels")["status"], "running")
 
     def test_dead_pid_no_exit_code_is_failed(self):
         from runner.tasks import get_status
 
-        _write_meta(self.tmp_dir, "get_channels", pid=99999)
+        _write_meta(self.tmp_dir, "crawl_channels", pid=99999)
         with patch("runner.tasks._is_running", return_value=False):
-            self.assertEqual(get_status("get_channels")["status"], "failed")
+            self.assertEqual(get_status("crawl_channels")["status"], "failed")
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ class GetLogLinesTests(_TmpMixin, TestCase):
     def test_no_file_returns_empty(self):
         from runner.tasks import get_log_lines
 
-        lines, offset = get_log_lines("get_channels")
+        lines, offset = get_log_lines("crawl_channels")
         self.assertEqual(lines, [])
         self.assertEqual(offset, 0)
 
@@ -187,9 +187,9 @@ class LaunchGuardsTests(_TmpMixin, TestCase):
 
         from runner.tasks import launch
 
-        _write_meta(self.tmp_dir, "get_channels", pid=os.getpid())
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
         with self.assertRaises(RuntimeError):
-            launch("get_channels", [])
+            launch("crawl_channels", [])
 
     def test_launch_writes_meta_with_pid(self):
         from runner.tasks import launch
@@ -222,9 +222,9 @@ class AbortGuardsTests(_TmpMixin, TestCase):
 
         from runner.tasks import abort
 
-        _write_meta(self.tmp_dir, "get_channels", pid=os.getpid())
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
         with patch("runner.tasks.os.kill") as mock_kill:
-            result = abort("get_channels")
+            result = abort("crawl_channels")
         self.assertTrue(result)
         # os.kill is also called with signal 0 inside _is_running; assert SIGTERM was sent.
         mock_kill.assert_any_call(os.getpid(), signal.SIGTERM)
@@ -234,9 +234,9 @@ class AbortGuardsTests(_TmpMixin, TestCase):
 
         from runner.tasks import abort
 
-        _write_meta(self.tmp_dir, "get_channels", pid=os.getpid())
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
         with patch("runner.tasks.os.kill", side_effect=ProcessLookupError):
-            self.assertFalse(abort("get_channels"))
+            self.assertFalse(abort("crawl_channels"))
 
 
 # ---------------------------------------------------------------------------
@@ -253,15 +253,15 @@ class OperationsViewTests(TestCase):
         resp = self.client.get(reverse("operations"))
         names = [t["name"] for t in resp.context["tasks"]]
         self.assertIn("search_channels", names)
-        self.assertIn("get_channels", names)
+        self.assertIn("crawl_channels", names)
         self.assertIn("structural_analysis", names)
         self.assertIn("compare_analysis", names)
 
     def test_tasks_in_workflow_order(self):
         resp = self.client.get(reverse("operations"))
         names = [t["name"] for t in resp.context["tasks"]]
-        self.assertLess(names.index("search_channels"), names.index("get_channels"))
-        self.assertLess(names.index("get_channels"), names.index("structural_analysis"))
+        self.assertLess(names.index("search_channels"), names.index("crawl_channels"))
+        self.assertLess(names.index("crawl_channels"), names.index("structural_analysis"))
         self.assertLess(names.index("structural_analysis"), names.index("compare_analysis"))
 
     def test_context_contains_channel_groups(self):
@@ -482,13 +482,13 @@ class ExportDetailViewTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# runner/views.py — _build_args: get_channels
+# runner/views.py — _build_args: crawl_channels
 # ---------------------------------------------------------------------------
 
 
 class BuildArgsGetChannelsTests(TestCase):
     def test_empty_post_produces_no_args(self):
-        self.assertEqual(_build_args("get_channels", FakePost()), [])
+        self.assertEqual(_build_args("crawl_channels", FakePost()), [])
 
     def test_each_boolean_flag_mapped(self):
         flags = {
@@ -503,37 +503,37 @@ class BuildArgsGetChannelsTests(TestCase):
         }
         for field, expected_flag in flags.items():
             with self.subTest(field=field):
-                args = _build_args("get_channels", FakePost({field: "1"}))
+                args = _build_args("crawl_channels", FakePost({field: "1"}))
                 self.assertIn(expected_flag, args)
 
     def test_do_refresh_without_value(self):
-        args = _build_args("get_channels", FakePost({"do_refresh": "1", "refresh_value": ""}))
+        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": ""}))
         self.assertIn("--refresh-messages-stats", args)
         self.assertNotIn("200", args)
 
     def test_do_refresh_with_limit_value(self):
-        args = _build_args("get_channels", FakePost({"do_refresh": "1", "refresh_value": "200"}))
+        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": "200"}))
         self.assertEqual(args, ["--refresh-messages-stats", "200"])
 
     def test_do_refresh_with_date_value(self):
-        args = _build_args("get_channels", FakePost({"do_refresh": "1", "refresh_value": "2024-01-01"}))
+        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": "2024-01-01"}))
         self.assertIn("2024-01-01", args)
 
     def test_ids_appended(self):
-        args = _build_args("get_channels", FakePost({"ids": "-30, 50-80"}))
+        args = _build_args("crawl_channels", FakePost({"ids": "-30, 50-80"}))
         self.assertIn("--ids", args)
         self.assertIn("-30, 50-80", args)
 
     def test_channel_types_comma_joined(self):
         post = FakePost({"channel_type_channel": "1", "channel_type_group": "1"})
-        args = _build_args("get_channels", post)
+        args = _build_args("crawl_channels", post)
         idx = args.index("--channel-types")
         self.assertIn("CHANNEL", args[idx + 1])
         self.assertIn("GROUP", args[idx + 1])
 
     def test_channel_groups_comma_joined(self):
         post = FakePost({"channel_groups": ["GroupA", "GroupB"]})
-        args = _build_args("get_channels", post)
+        args = _build_args("crawl_channels", post)
         self.assertIn("--channel-groups", args)
         val = args[args.index("--channel-groups") + 1]
         self.assertIn("GroupA", val)

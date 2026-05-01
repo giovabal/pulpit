@@ -19,7 +19,7 @@ Pulpit is configured through a `.env` file in the project root. Copy `env.exampl
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `False` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos attached to messages | `False` |
 
-> **Message statistics note:** view counts, forward counts, and pinned status are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `get_channels` to re-fetch them: omit a value to refresh all messages, pass an integer N to refresh the N most recent per channel, or pass a date (`YYYY-MM-DD`) to refresh from that date forward.
+> **Message statistics note:** view counts, forward counts, and pinned status are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `crawl_channels` to re-fetch them: omit a value to refresh all messages, pass an integer N to refresh the N most recent per channel, or pass a date (`YYYY-MM-DD`) to refresh from that date forward.
 
 ---
 
@@ -63,7 +63,7 @@ pip install oracledb           # Oracle
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `True` |
-| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Used as the default for `get_channels` and `structural_analysis`. | `CHANNEL` |
+| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Used as the default for `crawl_channels` and `structural_analysis`. | `CHANNEL` |
 
 ---
 

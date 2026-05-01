@@ -459,7 +459,7 @@ class Command(BaseCommand):
         messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
-        download_temp_dir = tempfile.mkdtemp(prefix="get_channels_", dir=temp_root)
+        download_temp_dir = tempfile.mkdtemp(prefix="crawl_channels_", dir=temp_root)
 
         warning_handler: _WarningLogHandler | None = None
         try:
@@ -524,6 +524,52 @@ class Command(BaseCommand):
                             )
 
                     printer.newline()
+
+                    # Channels excluded by the type filter still need fresh pictures and metadata.
+                    all_interesting_base = (
+                        Channel.objects.filter(organization__is_interesting=True)
+                        .exclude(is_lost=True)
+                        .exclude(is_private=True)
+                    )
+                    excluded_by_type = all_interesting_base.exclude(channel_type_filter(channel_types)).order_by("-id")
+                    if channel_groups:
+                        excluded_by_type = excluded_by_type.filter(groups__name__in=channel_groups).distinct()
+                    if ids_str:
+                        excluded_by_type = excluded_by_type.filter(parse_id_ranges(ids_str))
+                    n_excluded = excluded_by_type.count()
+                    if n_excluded:
+                        _meta_len: list[int] = [0]
+                        self.stdout.write(f"\nUpdating metadata for {n_excluded} type-excluded channel(s)", ending="")
+                        self.stdout.flush()
+                        for i, meta_ch in enumerate(excluded_by_type.iterator(chunk_size=10), start=1):
+                            line = printer._fit(f"Metadata [{i}/{n_excluded}] {meta_ch}")
+                            padding = " " * max(0, _meta_len[0] - len(line))
+                            self.stdout.write(f"\r{line}{padding}", ending="")
+                            self.stdout.flush()
+                            _meta_len[0] = len(line)
+                            try:
+                                ch_obj, tg_ch = crawler.get_basic_channel(meta_ch.telegram_id)
+                            except errors.FloodWaitError as flood_err:
+                                self.stdout.write("", ending="\n")
+                                self.stdout.write(self.style.WARNING(f"Flood wait for {meta_ch}: {flood_err}"))
+                                if not settings.IGNORE_FLOODWAIT:
+                                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                                continue
+                            except errors.rpcerrorlist.ChannelPrivateError:
+                                Channel.objects.filter(pk=meta_ch.pk).update(is_private=True, is_lost=False)
+                                continue
+                            except Exception as resolve_err:
+                                logger.warning("Could not resolve entity for %s: %s", meta_ch, resolve_err)
+                                continue
+                            if tg_ch is None:
+                                Channel.objects.filter(pk=meta_ch.pk).update(is_lost=True, is_private=False)
+                                continue
+                            crawler.media_handler.download_profile_picture(tg_ch)
+                            try:
+                                crawler.set_more_channel_details(ch_obj, tg_ch)
+                            except Exception as detail_err:
+                                logger.warning("Could not fetch full details for %s: %s", meta_ch, detail_err)
+                        self.stdout.write("", ending="\n")
 
                 if retry_references:
                     if force_retry:

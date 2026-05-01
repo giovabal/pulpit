@@ -13,7 +13,7 @@ The pipeline has four stages:
 ```
 1. Find channels     →  search_channels
 2. Organise          →  admin interface: assign to organisations
-3. Crawl messages    →  get_channels
+3. Crawl messages    →  crawl_channels
 4. Export network    →  structural_analysis
 ```
 
@@ -102,18 +102,18 @@ All steps are opt-in — expand **Options** to configure:
 **CLI alternative:**
 
 ```sh
-python manage.py get_channels --get-new-messages
-python manage.py get_channels --get-new-messages --fixholes
-python manage.py get_channels --get-new-messages --retry-references
-python manage.py get_channels --get-new-messages --retry-references --force-retry-unresolved-references
-python manage.py get_channels --get-new-messages --refresh-messages-stats        # all messages
-python manage.py get_channels --get-new-messages --refresh-messages-stats 200    # N most recent per channel
-python manage.py get_channels --get-new-messages --refresh-messages-stats 2024-01-01
-python manage.py get_channels --mine-about-texts
-python manage.py get_channels --refresh-degrees
-python manage.py get_channels --fetch-recommended-channels
-python manage.py get_channels --ids "-30, 50-80, 99"
-python manage.py get_channels --channel-types CHANNEL,GROUP
+python manage.py crawl_channels --get-new-messages
+python manage.py crawl_channels --get-new-messages --fixholes
+python manage.py crawl_channels --get-new-messages --retry-references
+python manage.py crawl_channels --get-new-messages --retry-references --force-retry-unresolved-references
+python manage.py crawl_channels --get-new-messages --refresh-messages-stats        # all messages
+python manage.py crawl_channels --get-new-messages --refresh-messages-stats 200    # N most recent per channel
+python manage.py crawl_channels --get-new-messages --refresh-messages-stats 2024-01-01
+python manage.py crawl_channels --mine-about-texts
+python manage.py crawl_channels --refresh-degrees
+python manage.py crawl_channels --fetch-recommended-channels
+python manage.py crawl_channels --ids "-30, 50-80, 99"
+python manage.py crawl_channels --channel-types CHANNEL,GROUP
 ```
 
 ---

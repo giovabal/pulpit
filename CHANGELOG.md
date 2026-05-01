@@ -1,8 +1,9 @@
 # Changelog
 
 ## [0.17] - To be announced
+*Documentation rewrite*
 
-### Documentation
+### Improvements
 - Full documentation rewrite: new `docs/` directory with nine interconnected Markdown files ([Getting started](docs/getting-started.md), [Workflow](docs/workflow.md), [Network measures](docs/network-measures.md), [Community detection](docs/community-detection.md), [Whole-network statistics](docs/whole-network-statistics.md), [Vacancy analysis](docs/vacancy-analysis.md), [Web interface](docs/web-interface.md), [Export formats](docs/export-formats.md), [Roadmap](docs/roadmap.md)); README rewritten as a landing page for researchers, journalists, and activists; academic references hyperlinked throughout; image placeholders for up to 20 screenshots.
 
 ## [0.16] - 2026-05-01
@@ -17,9 +18,9 @@
 - **`compare_networks` renamed to `compare_analysis`** — the management command and Operations panel card are now called `compare_analysis` / **Compare Analysis**.
 - **Operations panel pipeline ordering** — the four task cards (Search Channels, Get Channels, Structural Analysis, Compare Analysis) are now displayed in workflow order and numbered 1–4 with a badge on each card icon. Faint arrow connectors between cards make the sequential nature explicit.
 - **Get Channels numbered crawl steps** — the options in the Crawl fieldset are now listed vertically in execution order and numbered 1–9: Get new messages, Fix message holes, Retry unresolved references, Force-retry dead references, Refresh message stats, Mine about texts, Refresh degrees, Fetch recommended channels, Fix missing media.
-- **Mine about texts and Refresh degrees as selectable options** — two steps that previously ran unconditionally after every `get_channels` call are now opt-in: **Mine about texts** (scan `about` fields for `t.me/` links and fetch unknown channels, `--mine-about-texts`) and **Refresh degrees** (recompute stored in-degree and out-degree for all interesting and cited channels, `--refresh-degrees`). Both appear as numbered steps in the Operations panel Crawl list.
+- **Mine about texts and Refresh degrees as selectable options** — two steps that previously ran unconditionally after every `crawl_channels` call are now opt-in: **Mine about texts** (scan `about` fields for `t.me/` links and fetch unknown channels, `--mine-about-texts`) and **Refresh degrees** (recompute stored in-degree and out-degree for all interesting and cited channels, `--refresh-degrees`). Both appear as numbered steps in the Operations panel Crawl list.
 - **Refresh message stats moved into the pipeline** — the Refresh message stats checkbox is now step 5 in the numbered crawl pipeline rather than a separate fieldset, and the Refresh limit input remains visually connected to it via the linked-parameter pattern.
-- **Retry unresolved references as a selectable option** — the reference-resolution step (`get_missing_references`) is now opt-in via a new **Retry unresolved references** checkbox (Operations panel step 3) and `--retry-references` CLI flag. Previously it ran unconditionally on every `get_channels` invocation. Force-retry dead references (step 4) is now visually linked to it: the chip greys out and its checkbox is disabled when Retry unresolved references is unchecked.
+- **Retry unresolved references as a selectable option** — the reference-resolution step (`get_missing_references`) is now opt-in via a new **Retry unresolved references** checkbox (Operations panel step 3) and `--retry-references` CLI flag. Previously it ran unconditionally on every `crawl_channels` invocation. Force-retry dead references (step 4) is now visually linked to it: the chip greys out and its checkbox is disabled when Retry unresolved references is unchecked.
 - **Linked-parameter pattern extended to flag chips** — the `data-requires-flag` dependency wiring that disables inputs when a controlling checkbox is off now also works for flag chips (checkbox labels), not just text/number inputs. Used by Force-retry dead references depending on Retry unresolved references.
 - **Refresh message stats linked parameter** — the Refresh limit input in Get Channels is now wired as a linked parameter of the Refresh message stats checkbox: the input greys out when the checkbox is off. The checkbox also gains a sliders icon indicating it has a linked parameter, consistent with the pattern used in Measures and Community strategies.
 - **Named exports** — `structural_analysis` now writes to `exports/<name>/` instead of a single shared `graph/` directory, so multiple exports can coexist without overwriting each other. The `--name` flag sets the export name; if omitted, a `YYYYMMDD-HHMMSS` timestamp is used. A `summary.json` is written to every export root capturing the name, timestamp, node/edge counts, and all CLI options used.
@@ -45,7 +46,7 @@
 - **Backoffice admin** (`/manage/`) — new staff-only app replacing Django admin for day-to-day data management. Powered by a Django REST Framework JSON API (`/manage/api/`). Six sections: **Channels** (searchable/filterable table with inline org assignment, group chip management, and bulk assign/group operations for hundreds of channels at once), **Organizations** (inline CRUD with color picker and is_interesting toggle), **Groups** (inline CRUD), **Search Terms** (add-by-Enter list), **Events** (event types + events with date and type filters), **Users** (create/edit/delete Django users; email is used as the username). A *Manage* button appears in the top navigation for staff users.
 - **Message reactions** — emoji reactions are now collected for every message during crawling (initial fetch and stats refresh) and stored in a new `MessageReaction` model. Per-message reactions appear as inline chips in the channel detail message list. A channel-level breakdown of the top 10 emoji reactions by total count is shown just above the stats graphs, and a *Total reactions* summary card is added when reactions are present.
 - **Selectable whole-network stat groups** (`--network-stat-groups` / *Network stat groups* in the Operations panel): the seven groups of whole-network structural metrics (`SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`) can now be selected independently, mirroring how `--measures` and `--community-strategies` work. Default is `ALL`. Each group gates both the computation and the table output; deselecting `PATHS` (path lengths, reciprocity, clustering) and `COHESION` (global efficiency, algebraic connectivity) skips the expensive O(n·m) BFS and eigendecomposition steps on large networks.
-- **ChannelGroup model** — channels can now be assigned to one or more named groups via Django admin. Groups appear as checkbox filters in the Get Channels and Export Network Operations panel cards; selecting one or more groups restricts the run to channels in those groups. CLI flags `--channel-groups` (comma-separated) are added to both `get_channels` and `export_network`.
+- **ChannelGroup model** — channels can now be assigned to one or more named groups via Django admin. Groups appear as checkbox filters in the Get Channels and Export Network Operations panel cards; selecting one or more groups restricts the run to channels in those groups. CLI flags `--channel-groups` (comma-separated) are added to both `crawl_channels` and `export_network`.
 - **Ad-hoc search terms in the Operations panel**: the Search Channels card now has an *Extra search terms* textarea (one term per line). Terms entered there are searched alongside the database terms for the current run only. A *Save to database* checkbox (enabled only when the textarea has content) persists the terms as new `SearchTerm` records (lowercased, deduplicated) before the task launches. The `search_channels` management command gains a corresponding `--extra-term` flag that can be repeated.
 
 ## [0.14] - 2026-04-27
@@ -93,15 +94,15 @@
 - Channel list: date range filter to show only channels active in a given period.
 - Channel list: two new filter toggles — **Show lost** and **Show private** — reveal channels marked `is_lost` or `is_private` in dedicated sections (both hidden by default); each row carries an inline badge for quick identification.
 - Channel detail: **Lost** (red) and **Private** (yellow) badges now appear alongside the existing Verified / Scam / Fake / Restricted badges when the channel has those flags set.
-- `get_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
-- `get_channels`: new `--ids` flag replaces the old `--fromid`. Accepts comma-separated IDs and ranges (e.g. `-30, 50-80, 99, 120-`): exact IDs, inclusive ranges, open-ended lower/upper bounds. Tokens are OR-ed; the Operations panel Scope field has been updated to a single text input matching this syntax.
+- `crawl_channels`: new `--get-new-messages` flag; message fetching is now opt-in (on by default in the webapp).
+- `crawl_channels`: new `--ids` flag replaces the old `--fromid`. Accepts comma-separated IDs and ranges (e.g. `-30, 50-80, 99, 120-`): exact IDs, inclusive ranges, open-ended lower/upper bounds. Tokens are OR-ed; the Operations panel Scope field has been updated to a single text input matching this syntax.
 - New `TELEGRAM_SESSION_NAME` setting (default: `anon`) replaces the previously hard-coded Telethon session file name; set it to match an existing `.session` file when running multiple instances.
 - New `IGNORE_FLOODWAIT` setting (default: `True`). When set to `False`, any `FloodWaitError` above the auto-sleep threshold causes the crawler to pause for `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` (default: `900`) before continuing instead of immediately skipping to the next item.
 
 ### Improvements
 - `ChannelCrawler`: when Telethon's session has lost the `access_hash` for a channel, the fallback now first tries a direct `GetChannels` lookup using the `access_hash` stored in the DB before falling back to username resolution. This avoids `ResolveUsernameRequest` flood waits for channels that have no stored username, and reduces unnecessary username lookups for those that do.
 - `set_more_channel_details` and `refresh_message_stats` now clear `is_lost` and `is_private` on the channel when they succeed, since a reachable channel is by definition neither lost nor private.
-- `Channel` model: new `is_private` boolean field distinguishes channels that returned a `ChannelPrivateError` (marked `is_private=True`) from channels that could not be found at all (marked `is_lost=True`). Both are excluded from all downstream queries — `Channel.objects.interesting()`, the graph builder, `get_channels` crawl targets — so private channels are never re-crawled or included in the network.
+- `Channel` model: new `is_private` boolean field distinguishes channels that returned a `ChannelPrivateError` (marked `is_private=True`) from channels that could not be found at all (marked `is_lost=True`). Both are excluded from all downstream queries — `Channel.objects.interesting()`, the graph builder, `crawl_channels` crawl targets — so private channels are never re-crawled or included in the network.
 - `TelegramAPIClient.wait()` now adds a random jitter of up to 0.5 s to each grace-time sleep, reducing the risk of synchronised API bursts across consecutive requests.
 - `hole_fixer`: missing IDs are now streamed lazily via a new `iter_hole_ranges()` generator instead of being materialised as a full list, keeping memory usage flat even for channels with very large gaps in their message history.
 - `ChannelCrawler`: deferred forwarded-channel lookups (`_pending_forwards`) are now persisted to a new `Message.pending_forward_telegram_id` DB field instead of held only in memory. A hard crash mid-crawl no longer silently discards those links; `_resolve_pending_forwards()` reads from the DB and picks up any leftover entries from previous runs automatically.
@@ -109,15 +110,15 @@
 ### Fixes
 - SQLite: enabled WAL journal mode via a `connection_created` signal in `WebappConfig.ready()` and raised the busy-timeout to 30 s. Previously, a concurrent admin save during a crawl could immediately raise `database is locked`; with WAL + timeout the lock contention window shrinks to milliseconds and the write retries automatically before giving up.
 - `ChannelCrawler.get_message`: `forwarded_from` and `pending_forward_telegram_id` are now written to the DB immediately after they are determined, before any further processing. Previously they were only persisted by the final `message.save()`; a process kill in that window would leave the message in DB with no forward data and no recovery path (since the message is already within the known ID range and skipped on rerun).
-- `get_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
-- `get_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
+- `crawl_channels`: unresolvable PeerUser entities no longer print a full traceback; a clean warning is emitted instead.
+- `crawl_channels` / `ChannelCrawler`: when a numeric Telegram ID cannot be resolved because Telethon has no cached `access_hash`, resolution now falls back to the stored username (via `ResolveUsername`) before giving up; channels are only marked `is_user_account` or `is_lost` after both attempts fail.
 - `ChannelCrawler`: `get_entity()` calls for previously-unseen forwarded channels are no longer issued inline during message iteration. They are deferred to a post-crawl pass (`_resolve_pending_forwards`) where each lookup is spaced by the configured grace time, eliminating the burst of API requests that triggered flood waits on channels with many novel forward sources.
-- `get_channels`: if crawling a channel raises `FloodWaitError`, `_resolve_pending_forwards()` is now guaranteed to run via `try/finally`, preventing deferred forwarded-channel lookups from being silently lost on interruption.
+- `crawl_channels`: if crawling a channel raises `FloodWaitError`, `_resolve_pending_forwards()` is now guaranteed to run via `try/finally`, preventing deferred forwarded-channel lookups from being silently lost on interruption.
 - `ReferenceResolver`: `resolve_message_references()` now collects all references into a set before resolving, eliminating duplicate API calls when the same username appears in both the message text and a `t.me/` entity URL.
 - `MediaHandler`: `download_message_picture()` and `download_message_video()` now catch `FileMigrateError`, `FileReferenceExpiredError`, `FileReferenceInvalidError`, and `Message.DoesNotExist`; these transient Telegram errors are logged as warnings instead of interrupting the crawl.
 - `MediaHandler._download_media`: file downloads are now wrapped with `asyncio.wait_for` (120 s timeout) run via `client.loop.run_until_complete`, using `inspect.unwrap` to reach the raw async coroutine beneath Telethon's sync shim. Previously, a stalled Telegram CDN transfer would cause Telethon's asyncio event loop to spin at 100% CPU and hang the entire crawl indefinitely.
 - Operations panel command output now always shows a subtle vertical scrollbar.
-- `get_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
+- `crawl_channels` and `search_channels` no longer inherit from `AsyncBaseCommand`; they use plain `BaseCommand` since both commands are fully synchronous. This eliminates spurious `Task was destroyed but it is pending!` and `ResourceWarning: unclosed StreamWriter` noise caused by `AsyncBaseCommand` creating an event loop that conflicted with Telethon's internal async cleanup.
 
 ## [0.11] - 2026-04-11
 *Reworking commands options. Reworking tables presentation.*
@@ -127,15 +128,15 @@
 - Channel detail page now includes a lazy-loaded **Channel connections** panel with two tables: channels mentioned by this channel (forwards sent + t.me references) and channels that mention it (forwards received + t.me references from interesting channels), each row linking to the internal page and to Telegram.
 - Network Statistics table now includes a lazy-loaded **degree distribution** bar chart (bins of 10 links), switchable between forwards received and forwards sent.
 - Network Comparison table now includes the same degree distribution chart showing both networks side by side, and power-law trend lines for each network in the measure comparison scatter plot.
-- New `DEFAULT_CHANNEL_TYPES` `.env` option (comma-separated; default `CHANNEL`): sets which Telegram entity types are considered monitored throughout the app — used as the default for `get_channels --channel-types` and `export_network --channel-types`, and applied by `Channel.objects.interesting()` everywhere channels are filtered by monitoring status. Operations panel channel-type checkboxes reflect the setting on page load.
-- `get_channels` now accepts `--channel-types` (same values and default as `export_network`).
-- `get_channels --fix-missing-media`: after crawling, identifies photo and video messages whose media file is absent from disk or was never downloaded, and re-fetches them from Telegram. Available as a checkbox in the Operations panel.
+- New `DEFAULT_CHANNEL_TYPES` `.env` option (comma-separated; default `CHANNEL`): sets which Telegram entity types are considered monitored throughout the app — used as the default for `crawl_channels --channel-types` and `export_network --channel-types`, and applied by `Channel.objects.interesting()` everywhere channels are filtered by monitoring status. Operations panel channel-type checkboxes reflect the setting on page load.
+- `crawl_channels` now accepts `--channel-types` (same values and default as `export_network`).
+- `crawl_channels --fix-missing-media`: after crawling, identifies photo and video messages whose media file is absent from disk or was never downloaded, and re-fetches them from Telegram. Available as a checkbox in the Operations panel.
 
 ### Improvements
 - Generated HTML tables overhauled for scientific rigor: metric grouping with labeled sub-headers, normalization range annotations (e.g. "Density (0–1)"), interpretive tooltips on all column headers, em-dash for undefined values, `†` footnote symbol for WCC-only metrics, column reordering with group separators (Network position / Influence / Structural / Content / Communities), merged Activity column, rank column (#), 3 significant figures for continuous measures, diverging heatmap for Burt's Constraint, mean ± SD footer row, default sort by size in community table, External Fraction and Modularity Contribution columns in community table, table preambles populated from a new `data/meta.json` export artifact, and locale-aware thousands separators.
 - Network Statistics and Network Comparison tables: added **Edges / Nodes** row after Edges in the whole-network metrics summary.
 - Generated table pages footer now shows the Pulpit logo instead of plain text.
-- `get_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
+- `crawl_channels` now permanently marks unresolvable message references (deleted or invalid channels) with a dead flag so they are skipped on subsequent runs, avoiding redundant Telegram API calls. A new `--force-retry-unresolved-references` flag (and matching Operations panel checkbox) overrides this and retries all references including dead ones.
 
 ### Fixes
 - `refresh_degrees` and `refresh_cited_degree` now filter citing channels through `Channel.objects.interesting()` so `DEFAULT_CHANNEL_TYPES` is respected when computing stored degree values.
@@ -148,7 +149,7 @@
 - Network comparison extracted into a dedicated `compare_networks` command; `export_network --compare` is removed. Run `python manage.py compare_networks /path/to/graph` (or use the new **Compare Networks** card in the Operations panel) after exporting to generate the side-by-side comparison page.
 - `export_network --graph` renamed to `--2dgraph`; `--3d` renamed to `--3dgraph`. Update any scripts or aliases accordingly.
 - `export_network` output is now fully opt-in: `--no-graph` and `--no-html` are replaced by `--2dgraph` and `--html`. Running `export_network` with no flags only writes the data JSON files; add `--2dgraph` and/or `--html` to generate the interactive graph and HTML tables.
-- `FETCH_RECOMMENDED_CHANNELS` `.env` option removed; use `get_channels --fetch-recommended-channels` instead.
+- `FETCH_RECOMMENDED_CHANNELS` `.env` option removed; use `crawl_channels --fetch-recommended-channels` instead.
 - `FA2_ITERATIONS` and `LAYOUT` `.env` options removed; use `export_network --fa2-iterations N` and `export_network --vertical-layout` instead.
 - `NETWORK_MEASURES`, `COMMUNITY_STRATEGIES`, `EDGE_WEIGHT_STRATEGY`, `RECENCY_WEIGHTS`, `SPREADING_RUNS`, `DRAW_DEAD_LEAVES`, and `CHANNEL_TYPES` `.env` options removed; pass them as `export_network` flags instead. Defaults are unchanged: `--measures PAGERANK`, `--community-strategies ORGANIZATION`, `--edge-weight-strategy PARTIAL_REFERENCES`, `--channel-types CHANNEL`; `--recency-weights`, `--spreading-runs`, and `--draw-dead-leaves` are opt-in.
 
@@ -156,7 +157,7 @@
 *Commands management. Access control. Multiple database support.*
 
 ### New features
-- New **Operations panel** (`/operations/`) in the webapp for launching and monitoring management commands (`get_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
+- New **Operations panel** (`/operations/`) in the webapp for launching and monitoring management commands (`crawl_channels`, `search_channels`, `export_network`) directly from the browser. Each task runs as a background subprocess; live output streams into a terminal-style log panel with 1-second polling. Commands can be aborted via SIGTERM.
 - New `WEB_ACCESS` setting with three modes: `ALL` (default, no auth required), `OPEN` (admin and operations require a staff account), `PROTECTED` (all pages require login; admin and operations require staff). Includes a login form styled consistently with the rest of the webapp. Staff accounts are managed through Django's user system (`python manage.py createsuperuser`).
 - PostgreSQL, MySQL, MariaDB, and Oracle support via `DB_ENGINE` in `.env`. SQLite remains the default. Each backend requires its own driver installed separately (`psycopg2-binary`, `mysqlclient`, or `oracledb`). MySQL/MariaDB connections use `utf8mb4` charset.
 - `export_network --graphml` writes `graph/network.graphml` with all computed measures and community assignments embedded as node attributes, compatible with R/igraph, NetworkX, yEd, and any GraphML-aware tool.
@@ -164,8 +165,8 @@
 ### Improvements
 - Message options (sort / content-type filter) for the search bar.
 - Channels page: organization filter select and 4-column grid layout.
-- `get_channels` now mines the `about` field of all channels in the DB for `t.me/` links after the main crawl loop, fetching any referenced channels not yet in the database (zero extra API calls for already-known channels).
-- `get_channels` optionally fetches Telegram-recommended channels for each interesting channel (`FETCH_RECOMMENDED_CHANNELS=True` in `.env`).
+- `crawl_channels` now mines the `about` field of all channels in the DB for `t.me/` links after the main crawl loop, fetching any referenced channels not yet in the database (zero extra API calls for already-known channels).
+- `crawl_channels` optionally fetches Telegram-recommended channels for each interesting channel (`FETCH_RECOMMENDED_CHANNELS=True` in `.env`).
 - Hardened SQLite concurrency.
 
 ### Fixes
@@ -206,7 +207,7 @@
 *3D graph and network comparison. Fixes.*
 
 ### New features
-- After each `get_channels` run, in-degree and out-degree are refreshed for all interesting channels. The citation degree is now also refreshed for non-interesting channels that are forwarded or mentioned (via `t.me/` links) by interesting ones — previously only channels reached via forwards were updated, and t.me/username references were missed. The field that receives the citation count is `in_degree` when `REVERSED_EDGES=True` (citations arrive as incoming graph edges) or `out_degree` when `REVERSED_EDGES=False` (citations leave as outgoing edges).
+- After each `crawl_channels` run, in-degree and out-degree are refreshed for all interesting channels. The citation degree is now also refreshed for non-interesting channels that are forwarded or mentioned (via `t.me/` links) by interesting ones — previously only channels reached via forwards were updated, and t.me/username references were missed. The field that receives the citation count is `in_degree` when `REVERSED_EDGES=True` (citations arrive as incoming graph edges) or `out_degree` when `REVERSED_EDGES=False` (citations leave as outgoing edges).
 - New `EDGE_WEIGHT_STRATEGY` option controls how edge weights are computed from forward and citation counts. `NONE` = all edges have equal weight (unweighted graph); `TOTAL` = raw count of forwards + citations; `PARTIAL_MESSAGES` = raw count divided by the total number of messages posted by the channel; `PARTIAL_REFERENCES` = raw count divided by the number of messages that are either forwarded from another source or contain at least one citation (default).
 - `export_network --3dgraph` generates `graph/graph3d.html`: a Three.js 3D graph alongside the regular 2D Sigma.js map. Supports mouse rotation, zoom, pan, and node click to inspect connections. ForceAtlas2 runs in 3D using the vectorised O(n²) back-end. Spheres are shaded with Lambert lighting for improved depth readability.
 - `export_network --compare PROJECT_DIR` accepts the `graph/` output directory of a previous export (the one containing `index.html`) and produces a full side-by-side comparison:
@@ -216,7 +217,7 @@
 
 ### Improvements
 - `search_channels` now prints progress and results (was fully silent): each search term with found/new counts, and a summary on completion.
-- `get_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
+- `crawl_channels` and `export_network` now use colour to distinguish section headers (cyan) from step detail lines (plain), warnings (yellow), and final success (green).
 - New `GRAPH_OUTPUT_DIR` option sets the directory where `export_network` writes all output files (default: `graph`). Relative paths are resolved from the project root. When the Django development server is running, the output is also served at `http://localhost:8000/graph/`, so a separate HTTP server is no longer needed for local preview.
 - Various performance improvements across the backend and frontend.
 
@@ -258,7 +259,7 @@
 
 ### New features
 - New chart on the homepage and channel detail pages: **Average involvement per month** — shows the average views per message for each month, with 0 for months with no messages.
-- `get_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
+- `crawl_channels` now accepts `--fromid ID` to restrict crawling to channels whose database id is less than or equal to `ID`.
 - `export_network` now generates `community_table.html` and `community_table.xlsx`: a whole-network structural summary (nodes, edges, density, reciprocity, average clustering coefficient, average shortest path length, diameter) followed by per-community metrics for each active detection strategy. The HTML table is sortable; the Excel file has a Network Summary sheet plus one sheet per strategy.
 - Graph mini-site: **Data** button in the menu bar opens a dialog linking to `channel_table.html` and `community_table.html`.
 - `PROJECT_TITLE` option sets a title shown in all output files.
@@ -271,15 +272,15 @@
 - New `scripts/delete_unused_messages.py`: removes messages belonging to channels outside the active crawl scope; run before `VACUUM` to reclaim disk space.
 - `COMMUNITIES_PALETTE` renamed `COMMUNITY_PALETTE` for consistency.
 - Tabular export files renamed: `table.html` to `channel_table.html`, `table.xlsx` to `channel_table.xlsx`.
-- Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `get_channels --refresh-messages-stats` will delete any already-stored service messages.
+- Telegram service messages (inactivity notices, pin events, etc.) are no longer saved during crawling. Running `crawl_channels --refresh-messages-stats` will delete any already-stored service messages.
 - `--table-format` option values renamed from `xls` / `html+xls` to `xlsx` / `html+xlsx` for consistency with the actual file extension.
 - Improved semantic and accessibility for all HTML output.
 - Improved appearance for all HTML table output.
 - Organization admin list now shows and allows inline editing of the `is_interesting` flag.
-- `get_channels` with `--refresh-messages-stats` now skips messages that were freshly crawled in the same run.
+- `crawl_channels` with `--refresh-messages-stats` now skips messages that were freshly crawled in the same run.
 
 ### Fixes
-- `get_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
+- `crawl_channels` with `--refresh-messages-stats` option was overwriting some of its own output.
 
 
 ## [0.5] - 2026-03-18
@@ -292,7 +293,7 @@
 - New option for `NETWORK_MEASURES`: `ALL` (expands to all available measures).
 - New option for `COMMUNITY_STRATEGIES`: `ALL` (runs all available detection algorithms simultaneously).
 - New `--seo` flag for `export_network`: makes the output mini-site search-engine friendly (sets `index, follow` robots tags, writes a permissive `robots.txt`). Without the flag, the output actively discourages indexing. Meta descriptions are always written regardless of this flag.
-- `get_channels` now accepts `--refresh-messages-stats` to update view counts, forward counts, and pinned status on already-crawled messages. Accepts an integer (refresh the N most recent messages per channel) or a date in `YYYY-MM-DD` format (refresh all messages from that date to the present). Omitting a value refreshes all messages.
+- `crawl_channels` now accepts `--refresh-messages-stats` to update view counts, forward counts, and pinned status on already-crawled messages. Accepts an integer (refresh the N most recent messages per channel) or a date in `YYYY-MM-DD` format (refresh all messages from that date to the present). Omitting a value refreshes all messages.
 - Graph mini-site: social sharing section added to the About dialog, with a copyable URL and direct share buttons for major platforms.
 - Webapp channel detail page: collapsible, lazily loaded charts for message history, views, forwards sent, and forwards received per month; summary cards showing message count, total views, date range, forwards sent, and forwards received.
 - Webapp stats page: summary cards for total channels, messages collected, total subscribers, date range, and total forwards; additional charts for forwards per month, views per month, and cumulative subscribers.
@@ -364,11 +365,11 @@
 
 ### New features
 - Stats page showing month-by-month global channel activity.
-- `get_channels` gained a `--fixholes` option to detect and fill gaps in message history.
+- `crawl_channels` gained a `--fixholes` option to detect and fill gaps in message history.
 
 ### Improvements
-- `get_channels` output is more detailed and informative.
-- `get_channels` now resolves previously unresolved channel references.
+- `crawl_channels` output is more detailed and informative.
+- `crawl_channels` now resolves previously unresolved channel references.
 - Profile pictures are downloaded only once.
 - `FloodWaitError` handling in the crawler is more robust.
 

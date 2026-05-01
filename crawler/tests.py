@@ -1423,10 +1423,10 @@ class SearchChannelsCommandTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# get_channels management command
+# crawl_channels management command
 # ---------------------------------------------------------------------------
 
-_GET_CMD = "crawler.management.commands.get_channels"
+_GET_CMD = "crawler.management.commands.crawl_channels"
 
 
 class GetChannelsCommandTests(TestCase):
@@ -1455,7 +1455,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("get_channels", get_new_messages=True)
+            call_command("crawl_channels", get_new_messages=True)
 
             telegram_ids_crawled = {c.args[0] for c in mock_crawler.get_channel.call_args_list}
             self.assertIn(self.ch1.telegram_id, telegram_ids_crawled)
@@ -1476,7 +1476,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("get_channels")
+            call_command("crawl_channels")
 
             mock_crawler.get_missing_references.assert_called_once()
 
@@ -1495,7 +1495,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
             # Should not raise — FloodWaitError is caught and the channel is skipped
-            call_command("get_channels")
+            call_command("crawl_channels")
 
     def test_clean_leftovers_called_after_crawl(self) -> None:
         from django.core.management import call_command
@@ -1509,6 +1509,6 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("get_channels")
+            call_command("crawl_channels")
 
             mock_media.clean_leftovers.assert_called_once()

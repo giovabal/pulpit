@@ -108,6 +108,12 @@ class HomeView(ListView):
         )
         date_agg = interesting_msgs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
         total_forwards = interesting_msgs.filter(forwarded_from__isnull=False).count()
+        total_forward_edges = (
+            interesting_msgs.filter(forwarded_from__in=interesting_qs.values("pk"))
+            .values("channel_id", "forwarded_from_id")
+            .distinct()
+            .count()
+        )
 
         ctx["summary"] = [
             {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
@@ -124,6 +130,7 @@ class HomeView(ListView):
                 "label": "Forwards",
                 "value": f"{total_forwards:,}",
                 "note": "cross-channel amplifications",
+                "secondary": {"value": f"{total_forward_edges:,}", "label": "distinct connections"},
             },
         ]
         ctx["panels"] = [
