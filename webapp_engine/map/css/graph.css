@@ -398,8 +398,26 @@ html, body {
     }
 
     #menu_container.menu--lateral #year-switcher {
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
         padding: 0.4rem 0;
+        width: fit-content;
+    }
+
+    #menu_container.menu--lateral #year-switcher > * {
+        flex: 1 0 100%;
+        text-align: center;
+    }
+
+    #menu_container.menu--lateral #year-switcher .year-sep {
+        display: none;
+    }
+
+    #menu_container.menu--lateral #year-switcher #year-prev,
+    #menu_container.menu--lateral #year-switcher #year-next {
+        flex: 1 0 auto;
+        order: 10;
     }
 
     #menu_container.menu--lateral .year-drop-menu {

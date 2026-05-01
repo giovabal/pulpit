@@ -83,7 +83,7 @@
   <ol class="post-list list-unstyled mt-2">
     {% for post in page_obj %}
     <li>
-      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}">
+      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from %} is-forwarded{% endif %}">
         <div class="search-result-channel">
           <a href="{{ post.channel.get_absolute_url }}">
             <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>

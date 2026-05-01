@@ -15,15 +15,25 @@
   <link rel="stylesheet" href="css/tables.css" type="text/css">
 </head>
 <body>
-  <div class="container-fluid py-3">
+  <nav class="export-topnav" aria-label="Site navigation">
+    <div class="export-topnav-inner">
+      <a href="index.html" class="export-topnav-brand">
+        <img src="pulpit_logo.svg" alt="Pulpit">
+      </a>
+    </div>
+  </nav>
+  <div class="export-wrap">
     {% block content %}{% endblock %}
   </div>
   <script src="js/tables_sort.js"></script>
-  <footer class="text-center text-muted small py-3 mt-4 border-top">
-    Analyzed with<br>
-    <a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:.35rem;">
-      <img src="pulpit_logo.svg" alt="Pulpit" style="height:2.2rem;width:auto;opacity:.75;">
-    </a>
+  <footer class="export-footer">
+    <span class="export-footer-title">{{ title }}</span>
+    <span class="export-footer-credit">
+      Analyzed with
+      <a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer">
+        <img src="pulpit_logo.svg" alt="Pulpit" class="export-footer-logo">
+      </a>
+    </span>
   </footer>
 </body>
 </html>
