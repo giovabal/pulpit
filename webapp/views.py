@@ -33,8 +33,8 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 }
 
 
-def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
-    sort = params.get("sort", "asc")
+def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc") -> QuerySet:
+    sort = params.get("sort", default_sort)
     qs = qs.order_by("date" if sort == "asc" else "-date")
     selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
     if selected and set(selected) != set(_CONTENT_TYPES):
@@ -45,17 +45,17 @@ def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
     return qs
 
 
-def _message_options_context(params: Any) -> dict[str, Any]:
-    sort = params.get("sort", "asc")
+def _message_options_context(params: Any, default_sort: str = "desc") -> dict[str, Any]:
+    sort = params.get("sort", default_sort)
     selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
     if not selected:
         selected = list(_CONTENT_TYPES)
-    options_active = sort != "asc" or set(selected) != set(_CONTENT_TYPES)
+    options_active = sort != default_sort or set(selected) != set(_CONTENT_TYPES)
 
     extra: dict[str, Any] = {}
     if params.get("q"):
         extra["q"] = params["q"]
-    if sort != "asc":
+    if sort != default_sort:
         extra["sort"] = sort
     if set(selected) != set(_CONTENT_TYPES):
         extra["type"] = selected
@@ -154,13 +154,6 @@ class HomeView(ListView):
                 "icon": "bi-eye",
                 "url": reverse("views-history-data"),
                 "description": "Sum of view counts across all messages posted by monitored channels each month.",
-            },
-            {
-                "id": "subscribers-history",
-                "title": "Cumulative subscribers",
-                "icon": "bi-people",
-                "url": reverse("subscribers-history-data"),
-                "description": "Total subscriber count across all monitored channels, accumulated over time. Each channel is counted from its first observed subscriber figure.",
             },
             {
                 "id": "avg-involvement-history",
@@ -396,6 +389,14 @@ class ChannelDetailView(ListView):
                 "icon": "bi-graph-up",
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
                 "description": "Average number of views per message for this channel each month. A proxy for audience engagement intensity.",
+            },
+            {
+                "id": "ch-reactions-history",
+                "title": "Reactions per month",
+                "icon": "bi-emoji-smile",
+                "url": reverse("channel-reactions-history", kwargs={"pk": ch.pk}),
+                "type": "reactions-chart",
+                "description": "Monthly breakdown of the top emoji reactions on this channel's messages.",
             },
             {
                 "id": "ch-cross-refs",

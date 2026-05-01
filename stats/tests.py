@@ -233,56 +233,6 @@ class AvgInvolvementHistoryDataViewTests(TestCase):
         self.assertEqual(data["values"], [0])
 
 
-class SubscribersHistoryDataViewTests(TestCase):
-    def setUp(self):
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
-
-    def test_empty_db_returns_empty_response(self):
-        response = self.client.get(reverse("subscribers-history-data"))
-        data = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["labels"], [])
-        self.assertEqual(data["values"], [])
-        self.assertEqual(data["y_label"], "total subscribers")
-
-    def test_cumulative_subscribers_by_first_message_month(self):
-        ch1 = Channel.objects.create(telegram_id=1, title="C1", organization=self.org, participants_count=1000)
-        ch2 = Channel.objects.create(telegram_id=2, title="C2", organization=self.org, participants_count=500)
-        Message.objects.create(telegram_id=1, channel=ch1, date="2024-01-01T00:00:00Z")
-        Message.objects.create(telegram_id=2, channel=ch2, date="2024-02-01T00:00:00Z")
-        response = self.client.get(reverse("subscribers-history-data"))
-        data = json.loads(response.content)
-        self.assertEqual(data["labels"], ["2024-01", "2024-02"])
-        self.assertEqual(data["values"], [1000, 1500])
-
-    def test_excludes_channels_without_participants_count(self):
-        ch = Channel.objects.create(telegram_id=1, title="C1", organization=self.org, participants_count=None)
-        Message.objects.create(telegram_id=1, channel=ch, date="2024-01-01T00:00:00Z")
-        response = self.client.get(reverse("subscribers-history-data"))
-        data = json.loads(response.content)
-        self.assertEqual(data["labels"], [])
-        self.assertEqual(data["values"], [])
-
-    def test_excludes_non_interesting_channels(self):
-        non_org = Organization.objects.create(name="Non", is_interesting=False)
-        ch = Channel.objects.create(telegram_id=1, title="C1", organization=non_org, participants_count=1000)
-        Message.objects.create(telegram_id=1, channel=ch, date="2024-01-01T00:00:00Z")
-        response = self.client.get(reverse("subscribers-history-data"))
-        data = json.loads(response.content)
-        self.assertEqual(data["labels"], [])
-        self.assertEqual(data["values"], [])
-
-    def test_two_channels_same_month_combined(self):
-        ch1 = Channel.objects.create(telegram_id=1, title="C1", organization=self.org, participants_count=400)
-        ch2 = Channel.objects.create(telegram_id=2, title="C2", organization=self.org, participants_count=600)
-        Message.objects.create(telegram_id=1, channel=ch1, date="2024-03-01T00:00:00Z")
-        Message.objects.create(telegram_id=2, channel=ch2, date="2024-03-15T00:00:00Z")
-        response = self.client.get(reverse("subscribers-history-data"))
-        data = json.loads(response.content)
-        self.assertEqual(data["labels"], ["2024-03"])
-        self.assertEqual(data["values"], [1000])
-
-
 # ---------------------------------------------------------------------------
 # Channel-specific time-series views
 # ---------------------------------------------------------------------------

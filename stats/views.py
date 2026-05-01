@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.views import View
 
 from stats.queries import channel_month_spine, global_month_spine, reindex_to_spine
-from webapp.models import Channel, Message
+from webapp.models import Channel, Message, MessageReaction
 
 import pandas as pd
 
@@ -90,50 +90,6 @@ class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
 
     def get_annotation(self) -> Avg:
         return Avg("views", default=0)
-
-
-class SubscribersHistoryDataView(View):
-    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        spine = global_month_spine()
-        if not spine:
-            return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
-        channels = (
-            Channel.objects.interesting()
-            .filter(participants_count__isnull=False)
-            .annotate(first_message=models.Min("message_set__date"))
-            .filter(first_message__isnull=False)
-            .values("participants_count", "first_message")
-        )
-        df = pd.DataFrame(
-            [
-                {
-                    "month": entry["first_message"].strftime("%Y-%m"),
-                    "participants_count": entry["participants_count"],
-                }
-                for entry in channels
-            ]
-        )
-        if df.empty:
-            return JsonResponse({"labels": [], "values": [], "y_label": "total subscribers"})
-        monthly = df.groupby("month")["participants_count"].sum().reset_index()
-        monthly = monthly.sort_values("month")
-        monthly["cumulative"] = monthly["participants_count"].cumsum()
-        monthly = (
-            monthly.set_index("month")[["cumulative"]]
-            .reindex(spine)
-            .ffill()
-            .fillna(0)
-            .astype(int)
-            .reset_index()
-            .rename(columns={"index": "month"})
-        )
-        return JsonResponse(
-            {
-                "labels": list(monthly["month"]),
-                "values": list(monthly["cumulative"]),
-                "y_label": "total subscribers",
-            }
-        )
 
 
 class _ChannelTimeSeriesBase(View):
@@ -290,6 +246,48 @@ class ChannelCrossRefsView(View):
             ]
 
         return JsonResponse({"mentioned": serialize(mentioned), "mentioning": serialize(mentioning)})
+
+
+class ChannelReactionsHistoryView(View):
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        spine = channel_month_spine(channel)
+        if not spine:
+            return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
+
+        top_emojis_qs = (
+            MessageReaction.objects.filter(message__channel=channel)
+            .values("emoji")
+            .annotate(total=Sum("count"))
+            .order_by("-total")[:8]
+        )
+        top_emojis = [r["emoji"] for r in top_emojis_qs]
+        if not top_emojis:
+            return JsonResponse({"labels": spine, "series": [], "y_label": "reactions"})
+
+        monthly = (
+            MessageReaction.objects.filter(
+                message__channel=channel,
+                message__date__isnull=False,
+                emoji__in=top_emojis,
+            )
+            .annotate(month=TruncMonth("message__date"))
+            .values("month", "emoji")
+            .annotate(total=Sum("count"))
+            .order_by("month", "emoji")
+        )
+        rows = [{"month": r["month"].strftime("%Y-%m"), "emoji": r["emoji"], "total": r["total"]} for r in monthly]
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            pivot = df.pivot_table(index="month", columns="emoji", values="total", aggfunc="sum", fill_value=0)
+            pivot = pivot.reindex(spine, fill_value=0)
+            pivot = pivot.reindex(columns=top_emojis, fill_value=0)
+        else:
+            pivot = pd.DataFrame(0, index=spine, columns=top_emojis)
+            pivot.index.name = "month"
+
+        series = [{"emoji": emoji, "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis]
+        return JsonResponse({"labels": spine, "series": series, "y_label": "reactions"})
 
 
 class ChannelContactInfoView(View):
