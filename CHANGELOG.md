@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.16] - To be announced
+## [0.16] - 2026-05-01
 *Vacancy Analysis. Multiple, atomic and reproducible exports.*
 
 ### New features

@@ -10,9 +10,9 @@ syntax: glob
 *.aux
 tmp/
 media/*
-graph/*
 channels/*
 static/*
+exports/*
 .env
 *.sqlite3*
 *.session
