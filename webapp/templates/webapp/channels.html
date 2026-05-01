@@ -184,6 +184,10 @@
     var lostCountEl = document.getElementById("lost-count");
     var privateCountEl = document.getElementById("private-count");
 
+    function norm(s) {
+      return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    }
+
     function visible(rows) {
       return rows.filter(function (r) { return r.style.display !== "none"; }).length;
     }
@@ -196,12 +200,12 @@
     }
 
     function matchesFilters(row) {
-      var q = input.value.toLowerCase();
+      var q = norm(input.value.toLowerCase());
       var org = orgSelect ? orgSelect.value : "";
       var grp = groupSelect ? groupSelect.value : "";
       var from = dateFrom.value;
       var to = dateTo.value;
-      if (!row.dataset.title.includes(q)) return false;
+      if (!norm(row.dataset.title).includes(q)) return false;
       if (org && row.dataset.org !== org) return false;
       if (grp && !(row.dataset.groups || "").split(" ").includes(grp)) return false;
       if (from || to) {

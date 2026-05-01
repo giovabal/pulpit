@@ -38,9 +38,6 @@
             <li class="nav-item">
               <a class="nav-link{% if url_name == 'analysis' %} active{% endif %}" href="{% url 'analysis' %}">Analysis</a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>
-            </li>
           </ul>
           {% if WEB_ACCESS == "ALL" %}
           <a href="{% url 'backoffice:channels' %}" class="btn btn-sm btn-outline-secondary">
