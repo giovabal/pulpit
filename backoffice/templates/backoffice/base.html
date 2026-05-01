@@ -32,6 +32,10 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'users' %} active{% endif %}">
       <i class="bi bi-people me-1" aria-hidden="true"></i>Users
     </a>
+    <a href="{% url 'backoffice:vacancies' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'vacancies' %} active{% endif %}">
+      <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Vacancies
+    </a>
   </nav>
 
   <div class="bo-content">

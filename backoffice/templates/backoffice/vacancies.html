@@ -1,0 +1,52 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-section-header">
+  <h2 class="bo-section-title">Vacancies</h2>
+  <button class="bo-btn" id="vac-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add vacancy</button>
+</div>
+
+<form class="bo-add-form d-none" id="vac-add-form" autocomplete="off">
+  <div class="bo-add-field" style="flex: 3 1 27rem">
+    <label class="bo-add-label">Channel</label>
+    <div style="position:relative">
+      <input class="bo-input bo-input--full" id="vac-ch-search" placeholder="Search channel by name…" autocomplete="off">
+      <div class="bo-typeahead" id="vac-ch-dropdown" style="display:none"></div>
+    </div>
+    <input type="hidden" id="vac-ch-id">
+  </div>
+  <div class="bo-add-field">
+    <label class="bo-add-label">Death date</label>
+    <input class="bo-input" type="date" id="vac-death-date" required>
+  </div>
+  <textarea class="bo-input bo-input--wide bo-input--full" id="vac-note" rows="3" placeholder="Note (optional)"></textarea>
+  <button type="submit" class="bo-btn">Save</button>
+  <button type="button" class="bo-btn bo-btn--ghost" id="vac-add-cancel">Cancel</button>
+</form>
+
+<div class="bo-toolbar">
+  <span class="bo-count" id="vac-count"></span>
+</div>
+<div class="table-responsive">
+  <table class="bo-table" id="vac-table">
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Death date</th>
+        <th>Note</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="vac-tbody">
+      <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/vacancies.js' %}"></script>
+{% endblock extra_scripts %}

@@ -50,3 +50,7 @@ class EventsView(StaffRequiredMixin, TemplateView):
 
 class UsersView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/users.html"
+
+
+class VacanciesManageView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/vacancies.html"
