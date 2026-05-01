@@ -31,7 +31,9 @@ def channel_network_data(
         "color": ",".join(
             map(str, hex_to_rgb(channel.organization.color if channel.organization else settings.DEAD_LEAVES_COLOR))
         ),
-        "pic": channel.profile_picture.picture.url[1:] if channel.profile_picture else "",
+        "pic": channel.profile_picture.picture.url[1:]
+        if channel.profile_picture and channel.profile_picture.picture
+        else "",
         "url": channel.telegram_url,
         "activity_period": "" if "activity_period" in skip else channel.activity_period,
         "fans": channel.participants_count,

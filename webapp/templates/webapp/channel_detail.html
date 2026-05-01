@@ -251,6 +251,8 @@
             renderContactTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
           } else if (collapse.dataset.panelType === 'cross-refs') {
             renderCrossRefsTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
+          } else if (collapse.dataset.panelType === 'reactions-chart') {
+            renderReactionsChart(collapse.querySelector('canvas'), results[0], results[1]);
           } else {
             renderChart(collapse.querySelector('canvas'), results[0], results[1]);
           }
@@ -353,6 +355,52 @@
         section.appendChild(table);
       }
       wrap.appendChild(section);
+    });
+  }
+
+  function renderReactionsChart(canvas, data, events) {
+    var PALETTE = [
+      '#4338ca','#0891b2','#16a34a','#d97706',
+      '#dc2626','#7c3aed','#db2777','#65a30d'
+    ];
+    var css = getComputedStyle(document.documentElement);
+    var chartGrid  = css.getPropertyValue('--chart-grid').trim();
+    var chartLabel = css.getPropertyValue('--chart-label').trim();
+    var datasets = (data.series || []).map(function(s, i) {
+      return {
+        label: s.emoji,
+        data: s.values,
+        backgroundColor: PALETTE[i % PALETTE.length],
+        borderWidth: 0,
+        stack: 'reactions',
+      };
+    });
+    new Chart(canvas, {
+      type: 'bar',
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { font: { size: 11 }, color: chartLabel, boxWidth: 14 } },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) { return ctx.dataset.label + ': ' + ctx.raw.toLocaleString(); },
+            },
+          },
+          annotation: { annotations: buildEventAnnotations(data.labels, events) },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, color: chartLabel } },
+          y: {
+            stacked: true,
+            title: { display: true, text: data.y_label, font: { size: 11 }, color: chartLabel },
+            grid: { color: chartGrid },
+            ticks: { font: { size: 11 }, color: chartLabel },
+          },
+        },
+      },
     });
   }
 </script>

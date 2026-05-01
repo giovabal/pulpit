@@ -31,7 +31,6 @@ urlpatterns = [
     ),
     path("data/forwards_history/", views.ForwardsHistoryDataView.as_view(), name="forwards-history-data"),
     path("data/views_history/", views.ViewsHistoryDataView.as_view(), name="views-history-data"),
-    path("data/subscribers_history/", views.SubscribersHistoryDataView.as_view(), name="subscribers-history-data"),
     path(
         "data/avg_involvement_history/",
         views.AvgInvolvementHistoryDataView.as_view(),
@@ -51,5 +50,10 @@ urlpatterns = [
         "data/channel/<int:pk>/contact_info/",
         views.ChannelContactInfoView.as_view(),
         name="channel-contact-info",
+    ),
+    path(
+        "data/channel/<int:pk>/reactions_history/",
+        views.ChannelReactionsHistoryView.as_view(),
+        name="channel-reactions-history",
     ),
 ]
