@@ -658,6 +658,96 @@ Use E-I index together with reciprocity and inter-community edge ratio for a com
 
 ---
 
+---
+
+## Vacancy Analysis
+
+Vacancy Analysis addresses a different class of question: not *how is this network structured right now?* but *who replaced this channel after it disappeared?* When a channel goes silent or is deleted it leaves a structural hole — a set of channels that previously relied on it as a source are now missing an input. Vacancy Analysis identifies which newly active channels are filling that hole.
+
+---
+
+### Registering a vacancy
+
+A vacancy is not inferred automatically. An analyst manually designates a channel as a vacancy in **Manage → Vacancies**, providing a **death date** — the point in time when the channel ceased to be active. The death date is the analytical boundary: the period before it is used to characterise the vacancy channel's structural role; the period after it is searched for replacement candidates.
+
+All channels registered as vacancies are listed at **Channels → Vacancies**, which shows each channel's last-known in-degree, out-degree, and the count of orphaned amplifiers.
+
+---
+
+### How replacement candidates are found
+
+On the channel detail page, any channel with a vacancy record gains a **Vacancy Analysis** card. The analyst sets three parameters:
+
+| Parameter | Default | Meaning |
+| :-------- | :------ | :------ |
+| **Months before** | 12 | How far back before the death date to look when identifying the vacancy's structural role |
+| **Months after** | 24 | How far forward after the death date to search for replacement activity |
+| **Only after vacancy** | On | When on, restricts candidates to channels whose first message ever is on or after the death date — ensuring they are genuinely new rather than pre-existing channels that happened to start being forwarded by the same amplifiers |
+
+The analysis proceeds in two steps:
+
+1. **Identify orphaned amplifiers.** Find all monitored channels that forwarded content from the vacancy channel in the *before* window. These are the channels whose source has disappeared — the structural gap they now need to fill from somewhere else.
+
+2. **Find replacement candidates.** Look at what those same orphaned amplifiers began forwarding from in the *after* window. Channels that appear as new forwarding targets for multiple orphaned amplifiers are replacement candidates — the network's answer to the vacancy. Candidates are ranked and scored by how structurally similar they are to the vacancy.
+
+---
+
+### Scoring metrics
+
+Each replacement candidate receives two scores that measure different aspects of structural similarity to the vacancy channel.
+
+---
+
+#### Structural equivalence
+
+*Lorrain & White (1971), "Structural equivalence of individuals in social networks", Journal of Mathematical Sociology 1(1).*
+
+Two channels are structurally equivalent if they occupy the same position in the network — the same channels forward them and they forward from the same sources. A perfect replacement would be structurally identical to the channel it replaces.
+
+The score is the average of two cosine similarities computed over binary adjacency vectors:
+
+- **In-similarity** — how much of the vacancy channel's amplifier set (channels that forwarded it before) overlaps with the candidate's amplifier set (channels forwarding it after), normalised by both set sizes. Because the candidate's amplifiers are drawn from the orphaned set, this simplifies to √(shared amplifiers / total orphaned amplifiers).
+- **Out-similarity** — how much the candidate forwards from the same sources as the vacancy channel did before the death date. Computed as |vacancy_sources ∩ candidate_sources| / (√|vacancy_sources| × √|candidate_sources|).
+
+The two components are averaged equally (weight 0.5 each). A score of 1.0 would mean an exact structural clone; a score of 0.0 means no overlap at all. Out-similarity will be low for vacancy channels that rarely forwarded anything (high-originality producers), in which case the score reflects primarily in-similarity.
+
+**In practice:** structural equivalence is the most direct measure of role substitution. A candidate scoring high on structural equivalence is being forwarded by the same channels as the vacancy was, and is itself drawing from the same upstream sources — it has stepped into the same editorial position in the network. Structural equivalence scores near zero are still informative: they indicate that the orphaned amplifiers have collectively dispersed toward multiple unrelated targets rather than converging on a single successor.
+
+---
+
+#### Brokerage role
+
+*Gould & Fernandez (1989), "Structures of mediation: A formal approach to brokerage in transaction networks", Sociological Methodology 19. Burt (2004), "Structural holes and good ideas", American Journal of Sociology 110(2).*
+
+Many politically significant channels function as **brokers** — they mediate between channels from distinct organisations. A nationalist aggregator that forwards from both a religious conservative outlet and an economic nationalist outlet bridges two otherwise separate communities. When that aggregator disappears, the question is not only who else gets forwarded by the same channels, but who else bridges the same organisational divide.
+
+The brokerage role score is a **Jaccard similarity** between the set of organisation-pairs the vacancy bridged and the set of organisation-pairs the candidate bridges:
+
+- For the vacancy (before window): for each message it forwarded, record the organisation of the source channel; for each channel that forwarded the vacancy, record its organisation. The vacancy's *brokerage profile* is the set of (source-organisation, amplifier-organisation) pairs it mediated.
+- For the candidate (after window): compute the same pairs — which organisation does the candidate draw from, and which organisations' channels are now forwarding it?
+- Jaccard = |intersection| / |union|.
+
+A score of 1.0 means the candidate bridges exactly the same organisational pairs as the vacancy. A score of 0.0 means it bridges entirely different organisational pairs. The score is shown as `—` when the vacancy's neighbourhood contained no channels with organisation assignments.
+
+**In practice:** brokerage role score captures something that structural equivalence misses. Two candidates may score equally on structural equivalence — both being forwarded by the same eight orphaned amplifiers — but serve completely different roles in the broader ecosystem. One may bridge two competing political communities; the other may draw from and amplify within a single community. Brokerage role score distinguishes them. A high brokerage score identifies a true structural heir: a channel that is not only being amplified by the right channels, but is itself bridging the same organisational fault lines the vacancy once mediated.
+
+---
+
+### Interpreting the results
+
+The two scores are complementary, not redundant:
+
+| Pattern | Interpretation |
+| :------ | :-------------- |
+| High structural equivalence, high brokerage | Strong structural replacement — the candidate occupies the same network position and mediates the same organisational boundaries |
+| High structural equivalence, low brokerage | The orphaned amplifiers have converged on a new source, but it serves a different ideological function — perhaps drawing from a narrower set of sources or operating within a single community |
+| Low structural equivalence, high brokerage | The network has not found a single replacement; instead brokerage between the same organisations is handled by a channel that is not yet widely forwarded by the orphaned set |
+| Low structural equivalence, low brokerage | No structural replacement has emerged; the orphaned amplifiers have diversified their sources without collectively filling the vacancy |
+
+The table is sorted by **First activity** by default — the candidate's earliest recorded message — so that genuinely new channels (born after the death date) rise to the top when *Only after vacancy* is enabled. Clicking any column header re-sorts: sorting by Structural equivalence or Brokerage role focuses the analysis on quality of fit; sorting by Amplifiers focuses on which candidate has already attracted the most of the orphaned set.
+
+---
+
 ← [README](README.md) · [Installation](INSTALLATION.md) · [Workflow](WORKFLOW.md) · [Configuration](CONFIGURATION.md) · [Changelog](CHANGELOG.md) · [Screenshots](SCREENSHOTS.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">
