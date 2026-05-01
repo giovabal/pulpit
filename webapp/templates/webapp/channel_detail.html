@@ -7,9 +7,11 @@
 
   <div class="channel-card-body">
     {% for picture in selected_channel.profilepicture_set.all|slice:":1" %}
+    {% if picture.picture %}
     <figure class="mb-0 flex-shrink-0">
       <img src="{{ picture.picture.url }}" class="channel-avatar" alt="{{ selected_channel.title }} avatar">
     </figure>
+    {% endif %}
     {% endfor %}
 
     <div class="channel-info">
@@ -407,9 +409,11 @@
       {% with pictures=post.messagepicture_set.all videos=post.messagevideo_set.all %}
       {% if pictures %}
         {% for picture in pictures %}
+        {% if picture.picture %}
         <figure class="mb-0">
           <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ selected_channel.title }}">
         </figure>
+        {% endif %}
         {% endfor %}
       {% elif post.media_type == "photo" %}
       <div class="media-placeholder">
