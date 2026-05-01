@@ -1,4 +1,6 @@
 import json
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,11 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
         "icon": "bi-intersect",
     },
 }
+
+
+class AnalysisPageView(View):
+    def get(self, request: HttpRequest) -> HttpResponse:
+        return render(request, "runner/analysis.html")
 
 
 class OperationsView(View):
@@ -177,6 +184,7 @@ class ExportsListView(View):
                         "created_at": data.get("created_at"),
                         "nodes": data.get("nodes"),
                         "edges": data.get("edges"),
+                        "options": data.get("options", {}),
                     }
                 )
         except (PermissionError, OSError):
@@ -186,7 +194,7 @@ class ExportsListView(View):
 
 
 class ExportDetailView(View):
-    """Return the full summary.json for a named export."""
+    """Return the full summary.json for a named export, or delete the export directory."""
 
     def get(self, request: HttpRequest, name: str) -> JsonResponse:
         path = Path(settings.BASE_DIR) / "exports" / name / "summary.json"
@@ -197,6 +205,22 @@ class ExportDetailView(View):
         except (json.JSONDecodeError, OSError):
             return JsonResponse({"error": "unreadable"}, status=500)
         return JsonResponse(data)
+
+    def delete(self, request: HttpRequest, name: str) -> JsonResponse:
+        if not re.match(r"^[\w\-]+$", name):
+            return JsonResponse({"error": "invalid name"}, status=400)
+        exports_root = (Path(settings.BASE_DIR) / "exports").resolve()
+        path = (exports_root / name).resolve()
+        try:
+            path.relative_to(exports_root)
+        except ValueError:
+            return JsonResponse({"error": "invalid path"}, status=400)
+        if not path.is_dir():
+            return JsonResponse({"error": "not found"}, status=404)
+        if not (path / "summary.json").exists():
+            return JsonResponse({"error": "not a valid export directory"}, status=400)
+        shutil.rmtree(path)
+        return JsonResponse({"deleted": name})
 
 
 def _build_args(task: str, post: Any) -> list[str]:

@@ -1,0 +1,146 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{% static 'runner/css/operations.css' %}">
+{% endblock extra_styles %}
+
+{% block content %}
+<div class="ops-header">
+  <h1>Analysis</h1>
+  <p>All completed structural analyses. Click an export name to open it, or delete exports you no longer need.</p>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-sm analysis-table" id="analysis-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Created</th>
+        <th class="text-end">Nodes</th>
+        <th class="text-end">Edges</th>
+        <th>Options</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="analysis-tbody">
+      <tr><td colspan="6" class="analysis-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+(function () {
+  var tbody   = document.getElementById('analysis-tbody');
+  var CSRF    = document.cookie.match(/csrftoken=([^;]+)/);
+  var csrfTok = CSRF ? CSRF[1] : '';
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function fmtNum(n) {
+    return n != null ? Number(n).toLocaleString() : '—';
+  }
+
+  function optionPills(opts) {
+    if (!opts) return '';
+    var pills = [];
+    var outputs = [];
+    if (opts.graph)     outputs.push('2D');
+    if (opts.graph_3d)  outputs.push('3D');
+    if (opts.html)      outputs.push('HTML');
+    if (opts.xlsx)      outputs.push('XLSX');
+    if (opts.gexf)      outputs.push('GEXF');
+    if (opts.graphml)   outputs.push('GraphML');
+    if (outputs.length) pills.push(outputs.join('·'));
+    if (opts.measures)  pills.push(opts.measures.split(',').length + ' measures');
+    if (opts.community_strategies) pills.push(opts.community_strategies.split(',').length + ' strategies');
+    if (opts.startdate || opts.enddate)
+      pills.push((opts.startdate || '…') + '–' + (opts.enddate || '…'));
+    if (opts.vertical_layout) pills.push('vertical');
+    if (opts.timeline_step === 'year') pills.push('timeline');
+    return pills.map(function(p) {
+      return '<span class="ch-badge ch-badge--muted">' + p + '</span>';
+    }).join(' ');
+  }
+
+  function load() {
+    fetch('/operations/exports/')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var exports = data.exports || [];
+        tbody.innerHTML = '';
+        if (!exports.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
+          return;
+        }
+        exports.forEach(function(exp) {
+          var tr = document.createElement('tr');
+
+          var tdName = document.createElement('td');
+          var link = document.createElement('a');
+          link.href = '/exports/' + encodeURIComponent(exp.name) + '/';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = exp.name;
+          tdName.appendChild(link);
+          tr.appendChild(tdName);
+
+          var tdDate = document.createElement('td');
+          tdDate.className = 'text-muted';
+          tdDate.style.fontSize = '.875rem';
+          tdDate.style.whiteSpace = 'nowrap';
+          tdDate.textContent = fmtDate(exp.created_at);
+          tr.appendChild(tdDate);
+
+          var tdNodes = document.createElement('td');
+          tdNodes.className = 'text-end';
+          tdNodes.textContent = fmtNum(exp.nodes);
+          tr.appendChild(tdNodes);
+
+          var tdEdges = document.createElement('td');
+          tdEdges.className = 'text-end';
+          tdEdges.textContent = fmtNum(exp.edges);
+          tr.appendChild(tdEdges);
+
+          var tdOpts = document.createElement('td');
+          tdOpts.innerHTML = optionPills(exp.options);
+          tr.appendChild(tdOpts);
+
+          var tdAct = document.createElement('td');
+          var delBtn = document.createElement('button');
+          delBtn.className = 'btn btn-sm btn-outline-danger';
+          delBtn.innerHTML = '<i class="bi bi-trash3" aria-hidden="true"></i> Delete';
+          delBtn.addEventListener('click', function() {
+            if (!confirm('Delete export “' + exp.name + '”?\nThis will permanently remove all files.')) return;
+            fetch('/operations/exports/' + encodeURIComponent(exp.name) + '/', {
+              method: 'DELETE',
+              headers: { 'X-CSRFToken': csrfTok },
+            }).then(function(r) {
+              if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || r.status); });
+              tr.remove();
+              if (!tbody.querySelectorAll('tr').length)
+                tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
+            }).catch(function(e) { alert('Error: ' + e.message); });
+          });
+          tdAct.appendChild(delBtn);
+          tr.appendChild(tdAct);
+
+          tbody.appendChild(tr);
+        });
+      })
+      .catch(function() {
+        tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">Failed to load exports.</td></tr>';
+      });
+  }
+
+  load();
+})();
+</script>
+{% endblock extra_scripts %}
