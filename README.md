@@ -1,87 +1,100 @@
 # Pulpit
-### Political undercurrents: linkage, propagation, influence on Telegram
 
-Telegram is home to thousands of political channels — news outlets, activist groups, propaganda outlets, and everything in between. They constantly reference each other: forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random; they reveal alliances, ideological clusters, and influence networks that are otherwise invisible.
+**Map influence, information flow, and community structure in Telegram networks.**
 
-**Pulpit** makes those networks visible. It collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different nodes.
-
-It is designed for journalists, researchers, and analysts working on political communication, disinformation, and online influence. Pulpit is actively developed and evolving — see the [changelog](CHANGELOG.md) for what is new.
-
----
+Telegram channels constantly reference each other — forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random: they reveal alliances, ideological clusters, and influence networks that are otherwise invisible. Pulpit makes those networks visible.
 
 <figure>
 
-![Example graph — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette](webapp_engine/static/example.jpg)
+![Example graph — ~400 channels, ~8,000 edges, Leiden directed community detection, vapoRwave palette](webapp_engine/static/example.jpg)
 
-<figcaption>Example output — ~400 nodes, ~8 000 edges, Louvain community detection, vapoRwave palette. More screenshots <a href="SCREENSHOTS.md">are available</a>.</figcaption>
+<figcaption>~400 channels, ~8,000 edges. Leiden directed community detection, vapoRwave palette.</figcaption>
 </figure>
 
-## How it works
+Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different actors.
 
-1. You provide search terms; Pulpit finds matching Telegram channels via the API.
-2. You review the results in the admin interface and group channels into **Organizations** — thematic clusters (e.g. by political leaning, country, topic).
-3. Pulpit crawls the selected channels, collecting messages and resolving cross-channel references (forwards and `t.me/` links).
-4. A graph is built from those references, communities are detected and colored, a ForceAtlas2 layout is applied, and the result is exported as an interactive HTML map.
+The analytical layer is built on established graph-theory methods: [PageRank](docs/network-measures.md#pagerank), [betweenness centrality](docs/network-measures.md#betweenness-centrality), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [Infomap echo-chamber detection](docs/community-detection.md#infomap), [SIR spreading simulation](docs/network-measures.md#spreading-efficiency), and more. Measures that are standard in network science are applied to the specific dynamics of Telegram forwarding networks. The software is actively developed; see the [changelog](CHANGELOG.md) for recent additions.
 
+> **[PLACEHOLDER: `docs/images/readme-pipeline.png`]** The four-step pipeline: search channels → organise → crawl messages → export network.
 
-## What you get
+---
 
-After the export completes, the `graph/` directory contains:
+## Who this is for
 
-- **`index.html`** — a landing page listing every output with descriptions and links; the starting point for sharing or publishing results
-- **`graph.html`** — the interactive 2D graph: search channels, filter by community, size nodes by any computed measure, inspect individual channels and their connections
-- **`channel_table.html`** — sortable table with one row per channel and all computed measures; download as `channel_table.xlsx`
-- **`network_table.html`** — whole-network structural metrics with an interactive scatter plot for comparing any two measures; download as `network_table.xlsx`
-- **`community_table.html`** — per-community structural metrics for each detection strategy; download as `community_table.xlsx`
+- **Investigative journalists** mapping political influence networks, disinformation ecosystems, or coordinated information campaigns
+- **Academic researchers** in political communication, network science, computational social science, and disinformation studies
+- **Activists and NGOs** monitoring specific Telegram ecosystems — far-right networks, health misinformation communities, foreign-influence operations
+- **Students** in digital methods, computational journalism, or media studies courses
 
-During development the entire output is served at `http://localhost:8000/graph/` by the Django server — no separate HTTP server needed.
-
+---
 
 ## Quick start
 
-> See [INSTALLATION.md](INSTALLATION.md) for setup and [WORKFLOW.md](WORKFLOW.md) for the complete guide including all options.
-
 ```sh
-python manage.py migrate
-python manage.py runserver   # open http://localhost:8000
+git clone https://github.com/giovabal/pulpit
+cd pulpit
+sh setup.sh
+# Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
+python manage.py migrate && python manage.py runserver
 ```
 
-Once the server is running, the whole workflow is driven from the browser:
+Open [http://localhost:8000](http://localhost:8000). The entire workflow runs from the browser from here. See [Getting started](docs/getting-started.md) for setup details, Telegram credential registration, and database configuration.
 
-1. **Admin** (`/admin/`) → add **Search Terms** to seed channel discovery.
-2. **Operations** (`/operations/`) → run **Search Channels** to find matching Telegram channels.
-3. **Admin** → assign channels to **Organizations**, mark `is_interesting = True`.
-4. **Operations** → run **Get Channels** to crawl messages and resolve cross-channel references.
-5. **Operations** → run **Structural Analysis** to build the graph and write output files.
-6. **Data** (`/data/`) → browse the exported graph and tables, or open `http://localhost:8000/graph/` directly.
+---
 
-The **Channels** tab (`/channels/`) and per-channel pages show crawled data, message history, and network statistics as you go.
+## How it works
 
-All three operations are also available as CLI commands for scripted or automated runs — see [WORKFLOW.md](WORKFLOW.md).
+1. **Find channels** — add keywords; Pulpit searches Telegram and populates a list of matching channels
+2. **Organise** — assign channels to categories (by political orientation, country, topic, or any criterion you choose)
+3. **Crawl** — collect messages and resolve every forward and `t.me/` link into a directed citation graph
+4. **Export** — run community detection and layout; export an interactive map, sortable tables, and network exchange files
 
+---
 
-## How it's built
+## What you get
 
-Pulpit is built around three stages:
+After the export completes, the output directory contains:
 
-**1. Crawling.** Pulpit uses the official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) to download messages from the channels you select. For each message it records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels appearing in the message text or as URL entities). This produces a directed, weighted graph: an edge from channel A to channel B means A regularly amplifies B's content, and its weight reflects how often, relative to A's total output.
+- **Interactive 2D graph** (`graph.html`) — search, filter by community, resize nodes by any measure, click for detail — [more](docs/export-formats.md#graphhtml--2d-interactive-graph)
+- **Interactive 3D graph** (`graph3d.html`) — Three.js, rotate/zoom/inspect — [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph)
+- **Channel table** (`channel_table.html/.xlsx`) — one row per channel with all 14 computed measures, sortable — [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics)
+- **Network statistics table** (`network_table.html/.xlsx`) — whole-network metrics, scatter plot — [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics)
+- **Community table** (`community_table.html/.xlsx`) — per-community metrics for each detection strategy — [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics)
+- **Timeline animation** — step through annual snapshots with animated transitions — [more](docs/workflow.md#timeline-export)
+- **Network comparison** (`network_compare_table.html`) — compare two exports side by side — [more](docs/workflow.md#network-comparison)
+- **GEXF and GraphML** — for downstream analysis in Gephi or Cytoscape — [more](docs/export-formats.md#networkgexf--networkgraphml--network-exchange-formats)
 
-**2. Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Several centrality measures can be computed — PageRank, HITS Hub and Authority scores, betweenness centrality, in-degree centrality, out-degree centrality, harmonic centrality, Katz centrality, bridging centrality, Burt's constraint, content originality, and amplification — to rank channels by influence, reach, or structural importance. Community detection algorithms (Louvain, Leiden, k-shell decomposition, Infomap, or your own manually defined groups) identify clusters of channels that behave as coherent ecosystems.
-
-**3. Visualisation.** The graph is laid out using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2), a force-directed algorithm that naturally pulls tightly connected clusters together. The result is exported as a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/), with controls for searching, filtering by community, changing node size by any computed measure, and inspecting individual channels. An optional 3D version (`--3dgraph`) is also available, rendered with [Three.js](https://threejs.org/).
-
+---
 
 ## Documentation
 
-| | |
-| :--- | :--- |
-| [INSTALLATION.md](INSTALLATION.md) | Requirements, setup, and database initialisation |
-| [WORKFLOW.md](WORKFLOW.md) | Complete step-by-step guide: finding channels, crawling, exporting — via the Operations panel and the CLI |
-| [CONFIGURATION.md](CONFIGURATION.md) | Full reference for all `.env` settings |
-| [ANALYSIS.md](ANALYSIS.md) | All network measures and community detection strategies — what they measure and how to read them |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [SCREENSHOTS.md](SCREENSHOTS.md) | Example output across different graph sizes, strategies, and display modes |
+| File | Contents |
+| :--- | :------- |
+| [Getting started](docs/getting-started.md) | Requirements, installation, credentials, database setup, access control |
+| [Workflow](docs/workflow.md) | Step-by-step guide: search → organise → crawl → export; all CLI options |
+| [Network measures](docs/network-measures.md) | All 14 per-channel measures with academic references and examples |
+| [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, and more |
+| [Vacancy analysis](docs/vacancy-analysis.md) | Identifying structural replacement channels after a node disappears |
+| [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
+| [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
+| [Roadmap](docs/roadmap.md) | Planned features |
+| [Configuration](CONFIGURATION.md) | All `.env` settings |
+| [Changelog](CHANGELOG.md) | Version history |
 
+---
+
+## Technical foundation
+
+Pulpit is built around three components:
+
+**Crawling.** The official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) downloads messages from the channels you select. For each message, Pulpit records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels). This produces a directed, weighted graph: an edge from channel A to channel B means A regularly amplifies B's content, with weight reflecting frequency relative to A's total output.
+
+**Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures — PageRank, HITS, betweenness, Burt's constraint, spreading efficiency, and others — rank channels by influence, reach, or structural importance. Community detection algorithms (Leiden, Louvain, Infomap, MCL, K-core, and more) identify clusters of channels that behave as coherent ecosystems. Whole-network statistics characterise the ecosystem as a system.
+
+**Visualisation.** The graph is laid out using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2), a force-directed algorithm that naturally pulls tightly connected clusters together. The result is exported as a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/), with controls for searching, filtering by community, changing node size by any computed measure, and inspecting individual channels. An optional 3D version is rendered with [Three.js](https://threejs.org/).
+
+---
 
 ## Disclaimer
 
