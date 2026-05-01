@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.17] - To be announced
+
+### Documentation
+- Full documentation rewrite: new `docs/` directory with nine interconnected Markdown files ([Getting started](docs/getting-started.md), [Workflow](docs/workflow.md), [Network measures](docs/network-measures.md), [Community detection](docs/community-detection.md), [Whole-network statistics](docs/whole-network-statistics.md), [Vacancy analysis](docs/vacancy-analysis.md), [Web interface](docs/web-interface.md), [Export formats](docs/export-formats.md), [Roadmap](docs/roadmap.md)); README rewritten as a landing page for researchers, journalists, and activists; academic references hyperlinked throughout; image placeholders for up to 20 screenshots.
+
 ## [0.16] - 2026-05-01
 *Vacancy Analysis. Multiple, atomic and reproducible exports.*
 
