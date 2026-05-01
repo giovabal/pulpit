@@ -3,11 +3,12 @@ from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Organization, ProfilePicture, SearchTerm
+from webapp.models import Channel, ChannelGroup, ChannelVacancy, Organization, ProfilePicture, SearchTerm
 
 from .serializers import (
     ChannelGroupSerializer,
     ChannelSerializer,
+    ChannelVacancySerializer,
     EventSerializer,
     EventTypeSerializer,
     OrganizationSerializer,
@@ -20,6 +21,13 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
+
+
+class ChannelVacancyViewSet(viewsets.ModelViewSet):
+    serializer_class = ChannelVacancySerializer
+
+    def get_queryset(self):
+        return ChannelVacancy.objects.select_related("channel").order_by("-death_date")
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):

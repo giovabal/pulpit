@@ -9,6 +9,7 @@
     <div class="d-flex align-items-baseline gap-2">
       <h1 class="h5 fw-semibold mb-0">Channels</h1>
       <span class="channels-count" id="channels-count"></span>
+      <a href="{% url 'channel-vacancies' %}" class="channels-vacancies-link"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Vacancies</a>
     </div>
     <div class="channel-filters">
       <div class="channel-filters-top">
@@ -17,6 +18,14 @@
           <option value="">All organizations</option>
           {% for org in organizations %}
           <option value="{{ org.pk }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        {% if groups %}
+        <select id="group-filter" class="channel-org-select" aria-label="Filter by group">
+          <option value="">All groups</option>
+          {% for grp in groups %}
+          <option value="{{ grp.pk }}">{{ grp.name }}</option>
           {% endfor %}
         </select>
         {% endif %}
@@ -43,7 +52,7 @@
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -72,7 +81,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -153,6 +162,7 @@
   (function () {
     var input = document.getElementById("channel-filter");
     var orgSelect = document.getElementById("org-filter");
+    var groupSelect = document.getElementById("group-filter");
     var dateFrom = document.getElementById("date-from");
     var dateTo = document.getElementById("date-to");
     var showLost = document.getElementById("show-lost");
@@ -188,10 +198,12 @@
     function matchesFilters(row) {
       var q = input.value.toLowerCase();
       var org = orgSelect ? orgSelect.value : "";
+      var grp = groupSelect ? groupSelect.value : "";
       var from = dateFrom.value;
       var to = dateTo.value;
       if (!row.dataset.title.includes(q)) return false;
       if (org && row.dataset.org !== org) return false;
+      if (grp && !(row.dataset.groups || "").split(" ").includes(grp)) return false;
       if (from || to) {
         var rowMin = row.dataset.dateMin || "";
         var rowMax = row.dataset.dateMax || "";
@@ -241,6 +253,7 @@
 
     input.addEventListener("input", applyFilters);
     if (orgSelect) orgSelect.addEventListener("change", applyFilters);
+    if (groupSelect) groupSelect.addEventListener("change", applyFilters);
     dateFrom.addEventListener("change", applyFilters);
     dateTo.addEventListener("change", applyFilters);
     if (showLost) showLost.addEventListener("change", applyFilters);

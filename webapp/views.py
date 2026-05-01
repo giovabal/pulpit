@@ -1,19 +1,23 @@
+import datetime
 import json
+import math
 import re as _re
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.db.models import Count, Max, Min, Prefetch, Q, QuerySet, Sum
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from webapp.paginator import DiggPaginator
 
-from .models import Channel, Message, MessageReaction, Organization, ProfilePicture
+from .models import Channel, ChannelGroup, ChannelVacancy, Message, MessageReaction, Organization, ProfilePicture
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date
 
@@ -185,7 +189,7 @@ class ChannelListView(ListView):
         return (
             Channel.objects.interesting()
             .select_related("organization")
-            .prefetch_related(self._pic_prefetch)
+            .prefetch_related(self._pic_prefetch, "groups")
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -224,6 +228,23 @@ class ChannelListView(ListView):
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
         ctx["organizations"] = Organization.objects.filter(is_interesting=True).order_by("name")
+        ctx["groups"] = (
+            ChannelGroup.objects.filter(channels__in=Channel.objects.interesting()).distinct().order_by("name")
+        )
+        return ctx
+
+
+class VacanciesView(TemplateView):
+    template_name = "webapp/vacancies.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        rows = []
+        for vac in ChannelVacancy.objects.select_related("channel__organization").order_by("-death_date"):
+            ch = vac.channel
+            orphaned_count = Channel.objects.interesting().filter(message_set__forwarded_from=ch).distinct().count()
+            rows.append({"vacancy": vac, "channel": ch, "orphaned_amplifier_count": orphaned_count})
+        ctx["vacancies"] = rows
         return ctx
 
 
@@ -587,6 +608,11 @@ class ChannelDetailView(ListView):
         if not is_interesting:
             panels = [p for p in panels if p["id"] == "ch-cross-refs"]
 
+        try:
+            vacancy = ch.vacancy
+        except ChannelVacancy.DoesNotExist:
+            vacancy = None
+
         context_data.update(
             {
                 "selected_channel": ch,
@@ -594,6 +620,205 @@ class ChannelDetailView(ListView):
                 "panels": panels,
                 "is_interesting": is_interesting,
                 "top_reactions": top_reactions,
+                "channel_groups": list(ch.groups.order_by("name")),
+                "vacancy": vacancy,
             }
         )
         return context_data
+
+
+def _shift_months(d: datetime.date, n: int) -> datetime.date:
+    import calendar
+
+    month = d.month - 1 + n
+    year = d.year + month // 12
+    month = month % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return d.replace(year=year, month=month, day=day)
+
+
+class VacancyAnalysisView(View):
+    """JSON endpoint: replacement candidates for a vacancy channel."""
+
+    def get(self, request: HttpRequest, pk: int) -> JsonResponse:
+        ch = get_object_or_404(Channel, pk=pk)
+        try:
+            vacancy = ch.vacancy
+        except ChannelVacancy.DoesNotExist:
+            return JsonResponse({"error": "no vacancy for this channel"}, status=404)
+
+        try:
+            months_before = max(1, int(request.GET.get("months_before", 12)))
+            months_after = max(1, int(request.GET.get("months_after", 12)))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "invalid parameters"}, status=400)
+        only_after_vacancy = request.GET.get("only_after_vacancy", "1") != "0"
+
+        death = vacancy.death_date
+        before_start = datetime.datetime.combine(
+            _shift_months(death, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+        )
+        death_dt = datetime.datetime.combine(death, datetime.time.min, tzinfo=datetime.timezone.utc)
+        after_end = datetime.datetime.combine(
+            _shift_months(death, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
+        )
+
+        orphaned = (
+            Channel.objects.interesting()
+            .filter(
+                message_set__forwarded_from=ch,
+                message_set__date__gte=before_start,
+                message_set__date__lt=death_dt,
+            )
+            .distinct()
+        )
+        orphaned_pks: set[int] = set(orphaned.values_list("pk", flat=True))
+        total_orphaned = len(orphaned_pks)
+
+        raw = list(
+            Message.objects.filter(
+                channel__in=orphaned_pks,
+                forwarded_from__in=Channel.objects.interesting(),
+                date__gte=death_dt,
+                date__lte=after_end,
+            )
+            .exclude(forwarded_from=ch)
+            .values("forwarded_from")
+            .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
+            .order_by("-amplifier_count")[:30]
+        )
+
+        cand_ids = [r["forwarded_from"] for r in raw]
+        cand_map = {r["forwarded_from"]: r for r in raw}
+        cand_qs = (
+            Channel.objects.filter(pk__in=cand_ids)
+            .select_related("organization")
+            .annotate(first_msg=Min("message_set__date"))
+        )
+        if only_after_vacancy:
+            cand_qs = cand_qs.filter(first_msg__gte=death_dt)
+        cand_channels = {c.pk: c for c in cand_qs}
+
+        # ── Extra queries for strategies A / B / C ────────────────────────
+        # Strategy B: vacancy's out-neighbors (sources it forwarded from) before death
+        vac_out_rows = (
+            Message.objects.filter(
+                channel=ch,
+                forwarded_from__isnull=False,
+                date__gte=before_start,
+                date__lt=death_dt,
+            )
+            .values("forwarded_from_id", "forwarded_from__organization_id")
+            .distinct()
+        )
+        vacancy_out_pks: set[int] = set()
+        vacancy_src_org_pks: set[int] = set()
+        for r in vac_out_rows:
+            vacancy_out_pks.add(r["forwarded_from_id"])
+            if r["forwarded_from__organization_id"]:
+                vacancy_src_org_pks.add(r["forwarded_from__organization_id"])
+
+        # Strategy C: vacancy's amplifier orgs (orgs of orphaned channels)
+        orphaned_org_map: dict[int, int] = dict(
+            orphaned.filter(organization__isnull=False).values_list("pk", "organization_id")
+        )
+        vacancy_amp_org_pks: set[int] = set(orphaned_org_map.values())
+        vacancy_org_pairs: frozenset[tuple[int, int]] = frozenset(
+            (s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks
+        )
+
+        # Strategy B+C: each candidate's out-neighbors with orgs (batched)
+        cand_out_rows = (
+            Message.objects.filter(
+                channel__in=list(cand_channels),
+                forwarded_from__isnull=False,
+                date__gte=death_dt,
+                date__lte=after_end,
+            )
+            .values("channel_id", "forwarded_from_id", "forwarded_from__organization_id")
+            .distinct()
+        )
+        cand_out_pks: dict[int, set[int]] = defaultdict(set)
+        cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
+        for r in cand_out_rows:
+            cand_out_pks[r["channel_id"]].add(r["forwarded_from_id"])
+            if r["forwarded_from__organization_id"]:
+                cand_src_org_pks[r["channel_id"]].add(r["forwarded_from__organization_id"])
+
+        # Strategy C: which orphaned channels forward each candidate (for amp orgs)
+        cand_amp_rows = (
+            Message.objects.filter(
+                channel__in=orphaned_pks,
+                forwarded_from__in=list(cand_channels),
+                date__gte=death_dt,
+                date__lte=after_end,
+            )
+            .values("forwarded_from_id", "channel_id")
+            .distinct()
+        )
+        cand_amp_org_pks: dict[int, set[int]] = defaultdict(set)
+        for r in cand_amp_rows:
+            org = orphaned_org_map.get(r["channel_id"])
+            if org:
+                cand_amp_org_pks[r["forwarded_from_id"]].add(org)
+
+        def _cosine(a: set, b: set) -> float:
+            if not a or not b:
+                return 0.0
+            return len(a & b) / (math.sqrt(len(a)) * math.sqrt(len(b)))
+
+        def _jaccard(a: frozenset, b: frozenset) -> float:
+            union = a | b
+            return len(a & b) / len(union) if union else 0.0
+
+        # ── Build candidate list ──────────────────────────────────────────
+        candidates = []
+        for cid in cand_ids:
+            c = cand_channels.get(cid)
+            if not c:
+                continue
+            amp_count: int = cand_map[cid]["amplifier_count"]
+            lf = cand_map[cid]["last_forwarded"]
+            fm = c.first_msg
+
+            # A — Jaccard amplifier similarity
+            score_a = round(amp_count / total_orphaned, 3) if total_orphaned else 0.0
+
+            # B — Structural equivalence (cosine in + cosine out, equal weight)
+            cos_in = math.sqrt(score_a)  # sqrt(amp_count / total_orphaned)
+            cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
+            score_b = round(0.5 * cos_in + 0.5 * cos_out, 3)
+
+            # C — Brokerage role (Jaccard of organisation-pair sets)
+            cand_org_pairs = frozenset(
+                (s, a) for s in cand_src_org_pks.get(cid, set()) for a in cand_amp_org_pks.get(cid, set())
+            )
+            score_c: float | None = round(_jaccard(vacancy_org_pairs, cand_org_pairs), 3) if vacancy_org_pairs else None
+
+            candidates.append(
+                {
+                    "pk": c.pk,
+                    "title": c.title,
+                    "url": c.get_absolute_url(),
+                    "org_color": c.organization.color if c.organization else None,
+                    "amplifier_count": amp_count,
+                    "score_a": score_a,
+                    "score_b": score_b,
+                    "score_c": score_c,
+                    "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
+                    "last_forwarded_iso": lf.date().isoformat() if lf else None,
+                    "first_activity": fm.strftime("%b %-d, %Y") if fm else None,
+                    "first_activity_iso": fm.date().isoformat() if fm else None,
+                }
+            )
+        candidates.sort(key=lambda r: r["first_activity_iso"] or "")
+
+        return JsonResponse(
+            {
+                "candidates": candidates,
+                "orphaned_count": total_orphaned,
+                "months_before": months_before,
+                "months_after": months_after,
+                "only_after_vacancy": only_after_vacancy,
+            }
+        )

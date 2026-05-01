@@ -1122,3 +1122,92 @@ body {
   font-weight: 500;
   color: var(--muted);
 }
+
+/* ---------- Vacancies page ---------- */
+.channels-vacancies-link {
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  padding: .1rem .45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  transition: color .12s, border-color .12s;
+  white-space: nowrap;
+}
+.channels-vacancies-link:hover { color: #b91c1c; border-color: #fca5a5; background: #fff1f2; }
+
+.vacancy-list-table { width: 100%; }
+
+/* ---------- Channel detail: Vacancy Analysis card ---------- */
+.vacancy-analysis-card {
+  background: var(--surface);
+  border: 1px solid #fca5a5;
+  border-left: 4px solid #b91c1c;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+.vacancy-analysis-header {
+  display: flex;
+  align-items: flex-start;
+  gap: .875rem;
+  padding: 1rem 1.25rem .75rem;
+  border-bottom: 1px solid var(--border);
+}
+.vacancy-impact-icon { font-size: 1.25rem; color: #b91c1c; flex-shrink: 0; margin-top: .1rem; }
+.vacancy-impact-title { font-size: 1rem; font-weight: 700; margin: 0 0 .2rem; color: #b91c1c; }
+.vacancy-impact-subtitle { font-size: .8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
+
+.vacancy-analysis-body { padding: 1rem 1.25rem; }
+
+.vacancy-analysis-form {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.vacancy-form-label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.vacancy-form-input {
+  width: 5rem;
+  padding: .25rem .5rem;
+  font-size: .82rem;
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.vacancy-form-input:focus { outline: none; border-color: #b91c1c; }
+.vacancy-form-btn {
+  padding: .28rem .85rem;
+  font-size: .82rem;
+  font-weight: 500;
+  border: 1px solid #b91c1c;
+  border-radius: .375rem;
+  background: #b91c1c;
+  color: #fff;
+  cursor: pointer;
+  transition: background .12s;
+}
+.vacancy-form-btn:hover { background: #991b1b; }
+.vacancy-form-check { gap: .35rem; cursor: pointer; }
+
+.vacancy-candidates-title { font-size: .875rem; font-weight: 600; margin: 0 0 .35rem; }
+.vac-sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.vac-sort-th:hover { background: var(--hover); }
+.vac-sort-idle { opacity: .3; font-size: .7em; }
+.vacancy-meta { font-size: .78rem; color: var(--text-muted); margin: 0 0 .75rem; }
+.vacancy-empty { font-size: .82rem; color: var(--text-muted); margin: 0; font-style: italic; }
+.vacancy-candidates-table { width: 100%; }

@@ -1,0 +1,53 @@
+{% extends "webapp/index.html" %}
+
+{% block content %}
+<div class="channels-header">
+  <div class="d-flex align-items-baseline gap-2">
+    <h1 class="h5 fw-semibold mb-0">
+      <a href="{% url 'channel-list' %}" class="text-decoration-none text-muted">Channels</a>
+      <span class="text-muted mx-1">/</span>Vacancies
+    </h1>
+  </div>
+  <p class="text-muted small mb-0 mt-1">
+    Channels manually designated as structural vacancies, with the analyst-assigned death date used as the reference point for replacement detection.
+  </p>
+</div>
+
+{% if vacancies %}
+<div class="table-responsive">
+  <table class="stats-table vacancy-list-table">
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Death date</th>
+        <th class="text-end">In-degree</th>
+        <th class="text-end">Out-degree</th>
+        <th class="text-end">Orphaned amplifiers</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in vacancies %}
+      <tr>
+        <td>
+          {% if row.channel.organization %}
+          <span class="org-dot" style="background: {{ row.channel.organization.color }};" aria-hidden="true"></span>
+          {% endif %}
+          <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
+          {% if row.channel.is_lost %}<span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}
+        </td>
+        <td><time datetime="{{ row.vacancy.death_date|date:'Y-m-d' }}">{{ row.vacancy.death_date|date:"N j, Y" }}</time></td>
+        <td class="text-end">{{ row.channel.in_degree|default:"—" }}</td>
+        <td class="text-end">{{ row.channel.out_degree|default:"—" }}</td>
+        <td class="text-end">{{ row.orphaned_amplifier_count }}</td>
+        <td class="text-muted small">{{ row.vacancy.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="channels-empty">No vacancies defined yet. Add them from <a href="{% url 'backoffice:vacancies' %}">Manage → Vacancies</a>.</div>
+{% endif %}
+
+{% endblock content %}

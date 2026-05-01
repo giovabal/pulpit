@@ -286,7 +286,6 @@
   color: var(--muted);
   opacity: .4;
   line-height: 1;
-  margin: -.375rem 0;
 }
 
 /* ---- vertical numbered flag list (get_channels crawl steps) ---- */
@@ -409,4 +408,21 @@
   color: var(--muted);
   padding: .5rem 1.25rem .75rem;
   border-top: 1px solid var(--border);
+}
+
+/* ---- Analysis page ---- */
+.analysis-table th {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.analysis-table td { vertical-align: middle; }
+.analysis-empty {
+  text-align: center;
+  color: var(--muted);
+  font-size: .875rem;
+  padding: 2rem 1rem;
 }

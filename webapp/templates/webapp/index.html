@@ -30,10 +30,13 @@
               <a class="nav-link{% if url_name == 'home' %} active{% endif %}" href="{% url 'home' %}">Network</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
+              <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' or url_name == 'channel-vacancies' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
             </li>
             <li class="nav-item">
               <a class="nav-link{% if url_name == 'operations' %} active{% endif %}" href="{% url 'operations' %}">Operations</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link{% if url_name == 'analysis' %} active{% endif %}" href="{% url 'analysis' %}">Analysis</a>
             </li>
             <li class="nav-item">
               <a class="nav-link{% if url_name == 'data' %} active{% endif %}" href="{% url 'data' %}">Data</a>

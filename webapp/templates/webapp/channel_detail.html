@@ -33,6 +33,7 @@
         {% if selected_channel.username %}<span class="ch-meta-item"><i class="bi bi-at" aria-hidden="true"></i>{{ selected_channel.username }}</span>{% endif %}
         <span class="ch-meta-item"><i class="bi bi-broadcast" aria-hidden="true"></i>{{ selected_channel.channel_type }}</span>
         {% if selected_channel.organization %}<span class="ch-meta-item"><span class="org-dot" style="background: {{ selected_channel.organization.color }};" aria-hidden="true"></span>{{ selected_channel.organization }}</span>{% endif %}
+        {% for grp in channel_groups %}<span class="ch-meta-item"><i class="bi bi-collection" aria-hidden="true"></i>{{ grp.name }}</span>{% endfor %}
         {% if selected_channel.participants_count %}<span class="ch-meta-item"><i class="bi bi-people" aria-hidden="true"></i>{{ selected_channel.participants_count }} subscribers</span>{% endif %}
         {% if selected_channel.date and is_interesting %}<span class="ch-meta-item"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
         {% if is_interesting %}<time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>{% endif %}
@@ -71,6 +72,125 @@
     {% endfor %}
   </div>
 </div>
+{% endif %}
+
+{% if vacancy %}
+<div class="vacancy-analysis-card">
+  <div class="vacancy-analysis-header">
+    <i class="bi bi-exclamation-circle vacancy-impact-icon" aria-hidden="true"></i>
+    <div>
+      <h2 class="vacancy-impact-title">Vacancy Analysis</h2>
+      <p class="vacancy-impact-subtitle">
+        Death date: {{ vacancy.death_date|date:"N j, Y" }}{% if vacancy.note %} — {{ vacancy.note }}{% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="vacancy-analysis-body">
+    <form class="vacancy-analysis-form" id="vacancy-analysis-form" autocomplete="off">
+      <label class="vacancy-form-label">Months before <input class="vacancy-form-input" type="number" name="months_before" value="12" min="1" max="240"></label>
+      <label class="vacancy-form-label">Months after <input class="vacancy-form-input" type="number" name="months_after" value="24" min="1" max="240"></label>
+      <label class="vacancy-form-label vacancy-form-check"><input type="checkbox" name="only_after_vacancy" checked> Only after vacancy</label>
+      <button class="vacancy-form-btn" type="submit">Analyse</button>
+    </form>
+    <div id="vacancy-analysis-results"></div>
+  </div>
+</div>
+<script>
+(function () {
+  var API = "{% url 'channel-vacancy-analysis' selected_channel.pk %}";
+  var form = document.getElementById("vacancy-analysis-form");
+  var results = document.getElementById("vacancy-analysis-results");
+
+  var _data = [];
+  var _note = '';
+  var _sortCol = 'first_activity_iso';
+  var _sortDir = 1;
+
+  var COLS = [
+    {key: 'title',               label: 'Channel',           cls: '',           numeric: false, dir: 1},
+    {key: 'first_activity_iso',  label: 'First activity',    cls: '',           numeric: false, dir: 1},
+    {key: 'score_b',             label: 'Struct. equivalence',cls: 'text-end',  numeric: true,  dir: -1},
+    {key: 'score_c',             label: 'Brokerage',         cls: 'text-end',   numeric: true,  dir: -1},
+    {key: 'amplifier_count',     label: 'Amplifiers',        cls: 'text-end',   numeric: true,  dir: -1},
+    {key: 'last_forwarded_iso',  label: 'Last forwarded',    cls: '',           numeric: false, dir: -1},
+  ];
+
+  function fmtScore(v) { return v == null ? '—' : v.toFixed(2); }
+
+  function renderTable() {
+    var sorted = _data.slice().sort(function(a, b) {
+      var va = a[_sortCol], vb = b[_sortCol];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return _sortDir * (va < vb ? -1 : va > vb ? 1 : 0);
+    });
+
+    var thead = '<tr>' + COLS.map(function(col) {
+      var arrow = col.key === _sortCol ? (_sortDir === 1 ? ' ↑' : ' ↓') : ' <span class="vac-sort-idle">↕</span>';
+      return '<th class="vac-sort-th ' + col.cls + '" data-col="' + col.key + '">' + col.label + arrow + '</th>';
+    }).join('') + '</tr>';
+
+    var tbody = sorted.map(function(c) {
+      var dot = c.org_color ? '<span class="org-dot" style="background:' + c.org_color + ';" aria-hidden="true"></span>' : '';
+      return '<tr>' +
+        '<td>' + dot + '<a href="' + c.url + '">' + c.title + '</a></td>' +
+        '<td>' + (c.first_activity || '—') + '</td>' +
+        '<td class="text-end">' + fmtScore(c.score_b) + '</td>' +
+        '<td class="text-end">' + fmtScore(c.score_c) + '</td>' +
+        '<td class="text-end">' + c.amplifier_count + '</td>' +
+        '<td>' + (c.last_forwarded || '—') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    var tableEl = document.createElement('table');
+    tableEl.className = 'stats-table vacancy-candidates-table';
+    tableEl.innerHTML = '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody>';
+    tableEl.querySelectorAll('th[data-col]').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var col = this.dataset.col;
+        if (_sortCol === col) { _sortDir = -_sortDir; }
+        else { _sortCol = col; _sortDir = COLS.find(function(c){return c.key===col;}).dir; }
+        renderTable();
+      });
+    });
+
+    results.innerHTML = '';
+    results.appendChild(document.createElement('h3')).className = 'vacancy-candidates-title';
+    results.querySelector('h3').textContent = 'Replacement candidates';
+    var p = document.createElement('p');
+    p.className = 'vacancy-meta';
+    p.textContent = _note;
+    results.appendChild(p);
+    results.appendChild(tableEl);
+  }
+
+  function render(data) {
+    _data = data.candidates || [];
+    _note = 'Based on ' + data.orphaned_count + ' amplifier' + (data.orphaned_count !== 1 ? 's' : '') +
+            ' active in the ' + data.months_before + ' months before and ' +
+            data.months_after + ' months after the death date.';
+    if (!_data.length) {
+      results.innerHTML = '<p class="vacancy-meta">' + _note + '</p><p class="vacancy-empty">No replacement candidates found for this window.</p>';
+      return;
+    }
+    renderTable();
+  }
+
+  function run() {
+    var fd = new FormData(form);
+    var url = API + '?months_before=' + encodeURIComponent(fd.get('months_before')) +
+                    '&months_after='  + encodeURIComponent(fd.get('months_after')) +
+                    '&only_after_vacancy=' + (fd.get('only_after_vacancy') ? '1' : '0');
+    results.innerHTML = '<p class="vacancy-empty">Loading…</p>';
+    fetch(url).then(function(r) { return r.json(); }).then(render)
+              .catch(function() { results.innerHTML = '<p class="vacancy-empty">Failed to load results.</p>'; });
+  }
+
+  form.addEventListener('submit', function(e) { e.preventDefault(); run(); });
+  run();
+})();
+</script>
 {% endif %}
 
 {% for panel in panels %}

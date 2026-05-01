@@ -9,6 +9,7 @@ from .views import (
     OrganizationsView,
     SearchTermsView,
     UsersView,
+    VacanciesManageView,
 )
 
 app_name = "backoffice"
@@ -22,5 +23,6 @@ urlpatterns = [
     path("search-terms/", SearchTermsView.as_view(), name="search-terms"),
     path("events/", EventsView.as_view(), name="events"),
     path("users/", UsersView.as_view(), name="users"),
+    path("vacancies/", VacanciesManageView.as_view(), name="vacancies"),
     path("api/", include("backoffice.api.urls")),
 ]
