@@ -18,7 +18,7 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
         "description": "Search Telegram for channels matching each SearchTerm in the database.",
         "icon": "bi-search",
     },
-    "get_channels": {
+    "crawl_channels": {
         "title": "Get Channels",
         "description": "Crawl all interesting channels and resolve cross-channel references.",
         "icon": "bi-cloud-download",
@@ -226,7 +226,7 @@ class ExportDetailView(View):
 def _build_args(task: str, post: Any) -> list[str]:
     args: list[str] = []
 
-    if task == "get_channels":
+    if task == "crawl_channels":
         if post.get("get_new_messages"):
             args.append("--get-new-messages")
         if post.get("fix_holes"):

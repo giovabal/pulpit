@@ -15,7 +15,7 @@ sh setup.sh                          # Create .venv and install dependencies
 python manage.py migrate
 python manage.py runserver           # Web UI at localhost:8000
 python manage.py search_channels     # Find channels via search terms
-python manage.py get_channels        # Crawl channels and resolve references
+python manage.py crawl_channels        # Crawl channels and resolve references
 python manage.py structural_analysis      # Build graph, detect communities, export
 ```
 
@@ -30,7 +30,7 @@ See WORKFLOW.md for all flags and options.
 1. User adds `SearchTerm` entries in Django admin
 2. Operations panel (`/operations/`) or `search_channels` finds channels via Telegram API → `Channel` records
 3. User assigns channels to `Organization` objects, marks `is_interesting=True`
-4. Operations panel or `get_channels` fetches messages and resolves cross-channel references
+4. Operations panel or `crawl_channels` fetches messages and resolves cross-channel references
 5. Operations panel or `structural_analysis` builds the graph, detects communities, runs layout, writes output to `graph/`
 
 ### Key modules
@@ -100,4 +100,4 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `get_channels` and `structural_analysis`; see WORKFLOW.md.
+Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see WORKFLOW.md.

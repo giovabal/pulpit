@@ -390,6 +390,8 @@ body {
 .summary-card .sc-icon { color: var(--accent); font-size: 1.1rem; margin-bottom: .25rem; }
 .summary-card .sc-label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
 .summary-card .sc-value { font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+.summary-card .sc-secondary { font-size: .78rem; color: var(--text-muted); }
+.summary-card .sc-secondary strong { color: var(--text); font-weight: 600; }
 .summary-card .sc-note { font-size: .72rem; color: var(--text-muted); }
 .summary-card--dim { opacity: .35; }
 

@@ -288,7 +288,7 @@
   line-height: 1;
 }
 
-/* ---- vertical numbered flag list (get_channels crawl steps) ---- */
+/* ---- vertical numbered flag list (crawl_channels crawl steps) ---- */
 .ops-flags--pipeline {
   flex-direction: column;
   flex-wrap: nowrap;
