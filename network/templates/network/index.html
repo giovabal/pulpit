@@ -98,20 +98,6 @@
   </div>
   {% endif %}
 
-  {% if include_consensus_matrix_html %}
-  <div class="col-md-6 col-xl-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h5>
-        <p class="card-text text-muted small">Channel-pair co-clustering agreement across all non-ORGANIZATION community detection strategies.</p>
-        <div class="d-flex gap-2 flex-wrap">
-          <a href="consensus_matrix.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
   {% if include_network_html %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
@@ -144,8 +130,7 @@
 </div>
 
 {% if include_compare_html or compare_files %}
-<hr class="my-4">
-<h5 class="mb-3 text-muted">Compare network</h5>
+<div class="export-section-sep"><span>Compare network</span></div>
 
 {% if include_compare_html %}
 <div class="row g-4 mb-4">
@@ -255,8 +240,7 @@
 {% endif %}
 
 {% if timeline_entries %}
-<hr class="my-4">
-<h5 class="mb-3 text-muted"><i class="bi bi-calendar-range me-2" aria-hidden="true"></i>Timeline — by year</h5>
+<div class="export-section-sep"><span><i class="bi bi-calendar-range me-1" aria-hidden="true"></i>Timeline — by year</span></div>
 
 <div class="row g-3">
   {% for entry in timeline_entries %}

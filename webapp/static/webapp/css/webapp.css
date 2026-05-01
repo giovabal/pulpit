@@ -245,6 +245,7 @@ body {
 .post-card:hover { border-color: #c9c5bf; }
 .post-card.is-pinned { border-left-color: #f59e0b; }
 .post-card.was-pinned { border-left-color: #c7c0b8; }
+.post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #0369a1; }
 
 .forwarded-banner {
   display: flex;
@@ -381,6 +382,7 @@ body {
 .summary-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
   border-radius: var(--radius);
   padding: 1rem 1.25rem;
   display: flex;
@@ -420,6 +422,8 @@ body {
 .stats-toggle:hover { background: var(--hover); color: var(--text); }
 
 .stats-toggle[aria-expanded="true"] {
+  border-left: 3px solid var(--accent);
+  padding-left: calc(.875rem - 2px);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
   border-bottom-color: var(--border);
