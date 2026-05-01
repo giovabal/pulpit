@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.16] - To be announced
-*Multiple, atomic and reproducible exports. Operations panel improvements. New ego-network density measure.*
+*Vacancy Analysis. Multiple, atomic and reproducible exports.*
 
 ### New features
 - **Vacancy analysis** — analysts manually designate channels as structural vacancies via a new `ChannelVacancy` model (channel, death date, note), managed from the backoffice under **Manage → Vacancies**. The **Channels → Vacancies** page (`/channels/vacancies/`) lists all vacancies with in-degree, out-degree, and orphaned-amplifier count. On the channel detail page, any channel with a vacancy record gains a **Vacancy Analysis** card: a small form with configurable *Months before* (default 12), *Months after* (default 24), and *Only after vacancy* controls; submitting re-runs the analysis and populates a sortable table of replacement candidates — channels forwarded by the orphaned amplifiers after the death date, scored by three academically validated metrics: **Structural equivalence** (cosine similarity of in- and out-neighbor vectors; Lorrain & White 1971) and **Brokerage role** (Jaccard similarity of organisation-pair sets bridged before vs. after; Gould & Fernandez 1989). All table columns — Channel, First activity, Structural equivalence, Brokerage, Amplifiers, Last forwarded — are sortable by clicking the header.

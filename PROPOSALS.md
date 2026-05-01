@@ -1,7 +1,6 @@
 # Proposals for Pulpit: New Features and Improvements
 
 - Organization changes overtime.
-- how the disappearing of a channel impacts the network? new channels born after that lost are replacing it?
 - group analysis, similar to whole network analysis
 - events can be linked to a group, a channel, to an organization. or general.
 - Normalized Mutual Information between community strategies: a new entry in `network_table` could show NMI between every pair of strategies (LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP, etc.). This answers: does the algorithmic partition agree with the analyst's manual grouping? High NMI means your Organizations map well onto structural clusters; low NMI means the network's topology cuts across your labels.
