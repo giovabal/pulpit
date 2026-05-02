@@ -406,21 +406,40 @@
 </script>
 
 {% if is_interesting %}
+<div class="ch-msg-tabs">
+  <a href="?{% if query %}q={{ query }}&{% endif %}tab=messages"
+     class="ch-msg-tab{% if active_tab != 'received' %} active{% endif %}">
+    Messages
+  </a>
+  <a href="?{% if query %}q={{ query }}&{% endif %}tab=received"
+     class="ch-msg-tab{% if active_tab == 'received' %} active{% endif %}">
+    Forwards received
+    {% if total_forwards_received %}<span class="ch-msg-tab-badge">{{ total_forwards_received }}</span>{% endif %}
+  </a>
+</div>
+
 <div class="search-header">
   <form method="get" action="" class="search-form" role="search">
+    <input type="hidden" name="tab" value="{{ active_tab }}">
     <div class="search-input-wrap">
       <i class="bi bi-search search-icon" aria-hidden="true"></i>
       <input
         type="search"
         name="q"
         value="{{ query }}"
-        placeholder="Search messages in this channel…"
+        placeholder="Search messages…"
         class="search-input"
         aria-label="Search messages"
       >
       <button type="submit" class="search-btn">Search</button>
     </div>
     {% include "webapp/message_options.html" %}
+    {% if active_tab != "received" %}
+    <label class="msg-forwards-only-toggle">
+      <input type="checkbox" name="forwards_only" {% if forwards_only %}checked{% endif %} onchange="this.form.submit()">
+      Forwards only
+    </label>
+    {% endif %}
   </form>
   {% if query %}
   <p class="search-summary">
@@ -438,8 +457,13 @@
 <ol class="post-list list-unstyled mt-2">
   {% for post in page_obj %}
   <li>
-    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from %} is-forwarded{% endif %}">
-      {% if post.forwarded_from %}
+    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and active_tab != 'received' %} is-forwarded{% endif %}">
+      {% if active_tab == "received" %}
+      <div class="forwarded-banner">
+        <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+        forwarded by <a href="{{ post.channel.get_absolute_url }}">{{ post.channel.title }}</a>
+      </div>
+      {% elif post.forwarded_from %}
       <div class="forwarded-banner">
         <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
         forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>

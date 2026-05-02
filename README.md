@@ -1,12 +1,14 @@
 # Pulpit
 
+### Political undercurrents: linkage, propagation, influence on Telegram
+
 **Map influence, information flow, and community structure in Telegram networks.**
 
 Telegram channels constantly reference each other — forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random: they reveal alliances, ideological clusters, and influence networks that are otherwise invisible. Pulpit makes those networks visible.
 
 <figure>
 
-![Example graph — ~400 channels, ~8,000 edges, Leiden directed community detection, vapoRwave palette](webapp_engine/static/example.jpg)
+![Example graph — ~400 channels, ~8,000 edges, Leiden directed community detection, vapoRwave palette](webapp_engine/static/2d_graph_example.jpg)
 
 <figcaption>~400 channels, ~8,000 edges. Leiden directed community detection, vapoRwave palette.</figcaption>
 </figure>

@@ -295,14 +295,29 @@ class ChannelDetailView(ListView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
+        tab = self.request.GET.get("tab", "messages")
+        q = self.request.GET.get("q", "").strip()
+        if tab == "received":
+            qs = (
+                Message.objects.filter(
+                    forwarded_from=self.selected_channel,
+                    channel__in=Channel.objects.interesting().values("pk"),
+                )
+                .select_related("channel", "channel__organization", "forwarded_from")
+                .prefetch_related("references", "reactions")
+            )
+            if q:
+                qs = qs.filter(message__icontains=q)
+            return _apply_message_options(qs, self.request.GET)
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
             .prefetch_related("references", "reactions")
         )
-        q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(message__icontains=q)
+        if self.request.GET.get("forwards_only"):
+            qs = qs.filter(forwarded_from__isnull=False)
         return _apply_message_options(qs, self.request.GET)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -312,7 +327,17 @@ class ChannelDetailView(ListView):
         ch = self.selected_channel
         q = self.request.GET.get("q", "").strip()
         context_data["query"] = q
+        tab = self.request.GET.get("tab", "messages")
+        context_data["active_tab"] = tab
+        context_data["forwards_only"] = bool(self.request.GET.get("forwards_only"))
         context_data.update(_message_options_context(self.request.GET))
+        # Extend original_query so pagination links preserve tab and forwards_only.
+        extra = ""
+        if tab == "received":
+            extra += "&tab=received"
+        if self.request.GET.get("forwards_only"):
+            extra += "&forwards_only=1"
+        context_data["original_query"] = context_data["original_query"] + extra
 
         is_interesting = Channel.objects.interesting().filter(pk=ch.pk).exists()
 
