@@ -355,6 +355,7 @@ def write_summary_json(
         "vacancy_months_after",
         "vacancy_max_candidates",
         "vacancy_ppr_alpha",
+        "vacancy_only_after",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:

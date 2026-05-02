@@ -47,6 +47,7 @@
       vacancies.length + " vacanc" + (vacancies.length === 1 ? "y" : "ies") +
       " · " + total + " candidate" + (total !== 1 ? "s" : "") +
       " · window: " + data.months_before + " mo before / " + data.months_after + " mo after" +
+      (data.only_after_vacancy ? " · only after vacancy" : " · including pre-existing channels") +
       " · measures: " + measures.map(function (m) { return labels[m] || m; }).join(", ");
 
     var root = document.getElementById("va-root");
