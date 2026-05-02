@@ -411,6 +411,10 @@
 }
 
 /* ---- Analysis page ---- */
+.analysis-table th,
+.analysis-table td {
+  padding: .55rem .75rem;
+}
 .analysis-table th {
   font-size: .75rem;
   font-weight: 600;

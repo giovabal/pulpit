@@ -688,6 +688,52 @@ body {
 
 .search-btn:hover { background: #3730a3; }
 
+/* ---------- Channel message tabs ---------- */
+.ch-msg-tabs {
+  display: flex;
+  gap: .125rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.ch-msg-tab {
+  padding: .5rem 1rem;
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  transition: color .12s;
+}
+
+.ch-msg-tab:hover { color: var(--text); }
+.ch-msg-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.ch-msg-tab-badge {
+  font-size: .7rem;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--muted);
+  padding: .1rem .4rem;
+  border-radius: 999px;
+}
+
+.ch-msg-tab.active .ch-msg-tab-badge { background: var(--accent-bg); color: var(--accent); }
+
+.msg-forwards-only-toggle {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .8125rem;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .search-summary {
   font-size: .8rem;
   color: var(--muted);
