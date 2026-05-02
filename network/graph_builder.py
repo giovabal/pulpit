@@ -116,6 +116,7 @@ def build_graph(
     channel_types: list[str] | None = None,
     channel_groups: list[str] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
+    include_mentions: bool = True,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -173,24 +174,32 @@ def build_graph(
             forwarded_counts[key] = forwarded_counts.get(key, 0.0) + _recency_decay(date, today, recency_weights)
 
         reference_counts: dict[tuple[int, int], float] = {}
-        for src_ch_id, ref_ch_id, msg_date in (
-            references_through.objects.filter(
-                make_date_q(start_date, end_date, field="message__date"),
-                channel_id__in=channel_ids,
-                message__channel_id__in=channel_ids,
-            )
-            .exclude(message__forwarded_from=F("channel"))
-            .values_list("message__channel_id", "channel_id", "message__date")
-        ):
-            key = (src_ch_id, ref_ch_id)
-            reference_counts[key] = reference_counts.get(key, 0.0) + _recency_decay(msg_date, today, recency_weights)
+        if include_mentions:
+            for src_ch_id, ref_ch_id, msg_date in (
+                references_through.objects.filter(
+                    make_date_q(start_date, end_date, field="message__date"),
+                    channel_id__in=channel_ids,
+                    message__channel_id__in=channel_ids,
+                )
+                .exclude(message__forwarded_from=F("channel"))
+                .values_list("message__channel_id", "channel_id", "message__date")
+            ):
+                key = (src_ch_id, ref_ch_id)
+                reference_counts[key] = reference_counts.get(key, 0.0) + _recency_decay(
+                    msg_date, today, recency_weights
+                )
 
         referencing_counts: dict[int, float] = {}
         if edge_weight_strategy == "PARTIAL_REFERENCES":
             has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
+            ref_filter = (
+                Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
+                if include_mentions
+                else Q(forwarded_from_id__isnull=False)
+            )
             for ch_id, date in (
                 Message.objects.filter(date_q, channel_id__in=channel_ids)
-                .filter(Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq)))
+                .filter(ref_filter)
                 .values_list("channel_id", "date")
             ):
                 referencing_counts[ch_id] = referencing_counts.get(ch_id, 0.0) + _recency_decay(
@@ -215,25 +224,34 @@ def build_graph(
             .annotate(total=Count("id"))
         }
 
-        reference_counts = {
-            (item["message__channel_id"], item["channel_id"]): item["total"]
-            for item in references_through.objects.filter(
-                make_date_q(start_date, end_date, field="message__date"),
-                channel_id__in=channel_ids,
-                message__channel_id__in=channel_ids,
-            )
-            .exclude(message__forwarded_from=F("channel"))
-            .values("message__channel_id", "channel_id")
-            .annotate(total=Count("id"))
-        }
+        reference_counts = (
+            {
+                (item["message__channel_id"], item["channel_id"]): item["total"]
+                for item in references_through.objects.filter(
+                    make_date_q(start_date, end_date, field="message__date"),
+                    channel_id__in=channel_ids,
+                    message__channel_id__in=channel_ids,
+                )
+                .exclude(message__forwarded_from=F("channel"))
+                .values("message__channel_id", "channel_id")
+                .annotate(total=Count("id"))
+            }
+            if include_mentions
+            else {}
+        )
 
         referencing_counts = {}
         if edge_weight_strategy == "PARTIAL_REFERENCES":
             has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
+            ref_filter = (
+                Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
+                if include_mentions
+                else Q(forwarded_from_id__isnull=False)
+            )
             referencing_counts = {
                 item["channel_id"]: item["total"]
                 for item in Message.objects.filter(date_q, channel_id__in=channel_ids)
-                .filter(Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq)))
+                .filter(ref_filter)
                 .values("channel_id")
                 .annotate(total=Count("id"))
             }

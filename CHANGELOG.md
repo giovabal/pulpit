@@ -3,8 +3,23 @@
 ## [0.17] - To be announced
 *Documentation rewrite*
 
+### New features
+- **Reset button in Operations panel** — a Reset button appears next to Abort whenever a task is in `failed` or `done` state. Clicking it clears the task status back to `idle` (deletes the meta file) and hides the log panel without reloading the page.
+- **`structural_analysis --no-mentions`** — new `--mentions`/`--no-mentions` flag (default: on). When off, t.me/ reference links are excluded from edge construction and only true message forwards are used to build the graph. Available as an **Include mentions as edges** checkbox in the Edge weights section of the Operations panel.
+- **`crawl_channels` metadata pass for type-excluded channels** — when `--get-new-messages` is run with `--channel-types` set to a subset, interesting channels excluded by type now still receive profile picture and participant count updates.
+- **Reactions per month chart** on channel detail page — stacked bar chart showing the top 8 emoji reactions month by month, loaded lazily like other channel panels.
+- **Forwards card edge count** on home page — the Forwards summary card now shows the number of distinct inter-channel connections (unique forwarded-from pairs) as secondary information.
+
 ### Improvements
 - Full documentation rewrite: new `docs/` directory with nine interconnected Markdown files ([Getting started](docs/getting-started.md), [Workflow](docs/workflow.md), [Network measures](docs/network-measures.md), [Community detection](docs/community-detection.md), [Whole-network statistics](docs/whole-network-statistics.md), [Vacancy analysis](docs/vacancy-analysis.md), [Web interface](docs/web-interface.md), [Export formats](docs/export-formats.md), [Roadmap](docs/roadmap.md)); README rewritten as a landing page for researchers, journalists, and activists; academic references hyperlinked throughout; image placeholders for up to 20 screenshots.
+- Messages are now sorted newest-first by default on all listing views (home feed, message search, channel detail).
+
+### Fixes
+- Fixed `ValueError: The 'picture' attribute has no file associated with it` in the channel detail template and graph builder when a `ProfilePicture` or `MessagePicture` row exists but its `ImageField` has no file.
+
+### Backward incompatibility
+- Removed the **Cumulative subscribers** chart from the home page; `participants_count` is a current snapshot and cannot produce meaningful historical data.
+- **`get_channels` renamed to `crawl_channels`** — the management command, Operations panel card title, runner tasks, and all documentation now use the name `crawl_channels`.
 
 ## [0.16] - 2026-05-01
 *Vacancy Analysis. Multiple, atomic and reproducible exports.*

@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import os
 import re
@@ -143,6 +144,16 @@ class Command(BaseCommand):
                 "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
                 "--consensus-matrix). Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, "
                 "CENTRALIZATION, CONTENT, ALL. Default: ALL."
+            ),
+        )
+        parser.add_argument(
+            "--mentions",
+            dest="include_mentions",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "Include t.me/ mention references as edges alongside forwards (default: on). "
+                "Use --no-mentions to build the graph from forwards only."
             ),
         )
         parser.add_argument(
@@ -601,6 +612,7 @@ class Command(BaseCommand):
                 channel_types=channel_types,
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
+                include_mentions=options["include_mentions"],
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -797,6 +809,7 @@ class Command(BaseCommand):
                 channel_types=channel_types,
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
+                include_mentions=options["include_mentions"],
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
