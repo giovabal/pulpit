@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.17] - To be announced
-*Vacancy succession batch analysis. All/None fieldset controls.*
+*Vacancy succession batch analysis. Documentation rewrite.*
 
 ### New features
 - **Vacancy succession batch export** — `structural_analysis` gains a new `--vacancy-measures` flag that scores replacement candidates for every vacancy in the database in one pass and embeds the results in the export. Six algorithms are available:
@@ -27,9 +27,9 @@
 
 ### Fixes
 - Fixed `ValueError: The 'picture' attribute has no file associated with it` in the channel detail template and graph builder when a `ProfilePicture` or `MessagePicture` row exists but its `ImageField` has no file.
+- Removed the **Cumulative subscribers** chart from the home page; `participants_count` is a current snapshot and cannot produce meaningful historical data.
 
 ### Backward incompatibility
-- Removed the **Cumulative subscribers** chart from the home page; `participants_count` is a current snapshot and cannot produce meaningful historical data.
 - **`get_channels` renamed to `crawl_channels`** — the management command, Operations panel card title, runner tasks, and all documentation now use the name `crawl_channels`.
 
 ## [0.16] - 2026-05-01
