@@ -42,17 +42,39 @@ All output first goes to a `<name>.tmp` staging directory. Only after every file
 
 ---
 
-## index.html — landing page
+### Opening the output files: HTTP server vs. direct file access
 
-The entry point for sharing or publishing results. Lists every generated file with a short description and direct link. When Compare Analysis has been run, a "Compare network" section is added automatically.
+Some files can be opened directly from the filesystem (`file://`); others require an HTTP server because they load their data via JavaScript `fetch()` calls, which browsers block under the `file://` protocol.
 
-Serve the entire `exports/<name>/` directory from any static HTTP server:
+| File | Requires HTTP server |
+| :--- | :------------------: |
+| `graph.html`, `graph3d.html` | ✓ |
+| `vacancy_analysis.html` | ✓ |
+| `channel_table.html` / `.xlsx` | — |
+| `network_table.html` / `.xlsx` | — |
+| `community_table.html` / `.xlsx` | — |
+| `consensus_matrix.html` | — |
+| `network_compare_table.html` | — |
+| `index.html` | — |
+| `network.gexf`, `network.graphml` | — |
+
+The graph and vacancy-analysis pages fetch JSON files from the `data/` subdirectory at runtime. The table pages have their data embedded at generation time and open fine as local files.
+
+**Quickest way to serve locally:**
 
 ```sh
 cd exports/<name>
 python -m http.server 8001
 # open http://localhost:8001
 ```
+
+If the Pulpit web interface is already running (`python manage.py runserver`), the export is also accessible at `http://localhost:8000/exports/<name>/graph.html` without starting a separate server.
+
+---
+
+## index.html — landing page
+
+The entry point for sharing or publishing results. Lists every generated file with a short description and direct link. When Compare Analysis has been run, a "Compare network" section is added automatically. Can be opened directly from the filesystem or served via HTTP.
 
 ---
 
@@ -63,7 +85,7 @@ python -m http.server 8001
 <figcaption>Options panel: switch community strategy, resize nodes by any computed measure.</figcaption>
 </figure>
 
-Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`.
+Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`. **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
 **Controls:**
 
@@ -84,7 +106,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`.
 
 ## graph3d.html — 3D interactive graph
 
-Powered by [Three.js](https://threejs.org/). Generated with `--3dgraph` (requires `--2dgraph`).
+Powered by [Three.js](https://threejs.org/). Generated with `--3dgraph` (requires `--2dgraph`). **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
 - Rotate, zoom, and pan the graph in three dimensions
 - Click a node to open the same detail panel as in the 2D view
@@ -132,6 +154,16 @@ A lower-triangle balloon plot where each cell shows how many active strategies c
 Hover a cell for a tooltip: "Channel A × Channel B: N/K partitions agree."
 
 See [Community detection § Consensus matrix](community-detection.md#consensus-matrix) for interpretation guidance.
+
+---
+
+## vacancy_analysis.html — vacancy succession analysis
+
+Generated when at least one `--vacancy-measures` algorithm is selected and at least one vacancy is defined in the database. **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
+
+Loads `data/vacancy_analysis.json` at runtime and renders an accordion: one panel per vacancy channel, each listing scored replacement candidates with sortable columns for every selected measure.
+
+See [Vacancy analysis](vacancy-analysis.md) for a full description of the algorithms and how to interpret the scores.
 
 ---
 
