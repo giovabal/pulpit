@@ -65,6 +65,7 @@
       pills.push((opts.startdate || '…') + '–' + (opts.enddate || '…'));
     if (opts.vertical_layout) pills.push('vertical');
     if (opts.timeline_step === 'year') pills.push('timeline');
+    if (opts.vacancy_measures) pills.push(opts.vacancy_measures.split(',').length + ' vacancy');
     return pills.map(function(p) {
       return '<span class="ch-badge ch-badge--muted">' + p + '</span>';
     }).join(' ');

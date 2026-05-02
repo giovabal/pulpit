@@ -122,6 +122,32 @@
   text-transform: uppercase;
   letter-spacing: .04em;
   padding: 0 .3rem;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: .4rem;
+}
+.ops-legend-actions {
+  display: flex;
+  gap: .2rem;
+  margin-left: auto;
+}
+.ops-legend-btn {
+  font-size: .6rem;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: .05rem .32rem;
+  border: 1px solid var(--border);
+  border-radius: .25rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ops-legend-btn:hover {
+  background: var(--bs-gray-100, #f8f9fa);
+  color: var(--bs-body-color, #212529);
 }
 .ops-fieldset .ops-flags { margin-bottom: 0; }
 .ops-fieldset .ops-flags + .ops-params { margin-top: .5rem; }

@@ -1,9 +1,19 @@
 # Changelog
 
 ## [0.17] - To be announced
-*Documentation rewrite*
+*Vacancy succession batch analysis. All/None fieldset controls.*
 
 ### New features
+- **Vacancy succession batch export** — `structural_analysis` gains a new `--vacancy-measures` flag that scores replacement candidates for every vacancy in the database in one pass and embeds the results in the export. Six algorithms are available:
+  - **`AMPLIFIER_JACCARD`** — fraction of orphaned amplifiers that forwarded from the candidate after the death date (Small 1973).
+  - **`STRUCTURAL_EQUIV`** — cosine similarity of shared in-neighbours (amplifiers) and out-neighbours (sources); measures static positional equivalence (Lorrain & White 1971).
+  - **`BROKERAGE`** — Jaccard of (source-org × amplifier-org) pairs; measures whether the candidate replicates the same inter-organisational brokerage role (Gould & Fernandez 1989).
+  - **`CASCADE_OVERLAP`** — Jaccard of SIR diffusion reach sets: who did the vacancy's content reach before its death vs. who does the candidate's content reach after? Monte Carlo, reuses `--spreading-runs`. Computationally intensive (Kermack & McKendrick 1927; Watts & Dodds 2007).
+  - **`PPR`** — Personalized PageRank on the reversed graph with teleportation concentrated on the orphaned amplifiers; scores how deeply the candidate is embedded in their upstream content supply chain (Haveliwala 2002). Damping factor tunable via `--vacancy-ppr-alpha`.
+  - **`TEMPORAL`** — coverage-weighted inverse mean days-to-first-adoption with a 30-day half-life; rewards candidates adopted quickly by many orphaned channels.
+  - `ALL` selects all six. When at least one measure is selected, `data/vacancy_analysis.json` and `vacancy_analysis.html` are written; the export `index.html` gains a **Vacancy Analysis** section linking to the page.
+- **Vacancy Analysis fieldset in Operations panel** — the Structural Analysis card now includes a **Vacancy Analysis** fieldset with six measure checkboxes, four parameter inputs (Months before, Months after, Max candidates, PPR α), and a link from Cascade Overlap to the shared **Spreading runs** parameter. All six measures are pre-checked automatically when any vacancy exists in the database; all are unchecked when none exist.
+- **All / None buttons in Operations fieldset legends** — the **Measures**, **Community strategies**, **Network stat groups**, and **Vacancy Analysis** fieldsets in the Structural Analysis card each gain two small **All** / **None** buttons inline in the legend. Clicking them toggles all checkboxes in that group in one click.
 - **Reset button in Operations panel** — a Reset button appears next to Abort whenever a task is in `failed` or `done` state. Clicking it clears the task status back to `idle` (deletes the meta file) and hides the log panel without reloading the page.
 - **`structural_analysis --no-mentions`** — new `--mentions`/`--no-mentions` flag (default: on). When off, t.me/ reference links are excluded from edge construction and only true message forwards are used to build the graph. Available as an **Include mentions as edges** checkbox in the Edge weights section of the Operations panel.
 - **`crawl_channels` metadata pass for type-excluded channels** — when `--get-new-messages` is run with `--channel-types` set to a subset, interesting channels excluded by type now still receive profile picture and participant count updates.

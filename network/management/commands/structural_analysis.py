@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Max, Min
 from django.template.loader import render_to_string
 
-from network import community, community_stats, exporter, graph_builder, layout, measures, tables
+from network import community, community_stats, exporter, graph_builder, layout, measures, tables, vacancy_analysis
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
 from webapp.models import Message
@@ -290,6 +290,57 @@ class Command(BaseCommand):
                 "the full-range export, and adds a Timeline section to the index."
             ),
         )
+        # ── Vacancy analysis ──────────────────────────────────────────────────
+        parser.add_argument(
+            "--vacancy-measures",
+            dest="vacancy_measures",
+            default="",
+            metavar="MEASURES",
+            help=(
+                "Comma-separated list of vacancy succession algorithms to compute. "
+                "Available: AMPLIFIER_JACCARD, STRUCTURAL_EQUIV, BROKERAGE, "
+                "CASCADE_OVERLAP, PPR, TEMPORAL, ALL. "
+                "When at least one is selected, data/vacancy_analysis.json and "
+                "vacancy_analysis.html are written for all vacancies in the database. "
+                "Default: none (vacancy analysis disabled)."
+            ),
+        )
+        parser.add_argument(
+            "--vacancy-months-before",
+            dest="vacancy_months_before",
+            type=int,
+            default=12,
+            metavar="N",
+            help="Look-back window (months) before each vacancy's death date. Default: 12.",
+        )
+        parser.add_argument(
+            "--vacancy-months-after",
+            dest="vacancy_months_after",
+            type=int,
+            default=24,
+            metavar="N",
+            help="Forward window (months) after each vacancy's death date. Default: 24.",
+        )
+        parser.add_argument(
+            "--vacancy-max-candidates",
+            dest="vacancy_max_candidates",
+            type=int,
+            default=30,
+            metavar="N",
+            help="Maximum replacement candidates scored per vacancy. Default: 30.",
+        )
+        parser.add_argument(
+            "--vacancy-ppr-alpha",
+            dest="vacancy_ppr_alpha",
+            type=float,
+            default=0.85,
+            metavar="α",
+            help=(
+                "Damping factor for Personalized PageRank (PPR measure). "
+                "Higher values weight long-range connections more. Default: 0.85."
+            ),
+        )
+
         parser.add_argument(
             "--name",
             dest="name",
@@ -308,6 +359,7 @@ class Command(BaseCommand):
         network_stat_groups: list[str],
         channel_types: list[str],
         edge_weight_strategy: str,
+        vacancy_measures: list[str],
     ) -> str | None:
         """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
@@ -348,6 +400,12 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --edge-weight-strategy value: {edge_weight_strategy!r}. "
                 f"Choose from {sorted(VALID_EDGE_WEIGHT_STRATEGIES)}."
+            )
+        invalid_vacancy = [m for m in vacancy_measures if m not in vacancy_analysis.VALID_VACANCY_MEASURES]
+        if invalid_vacancy:
+            valid_display = sorted(vacancy_analysis.VALID_VACANCY_MEASURES) + ["ALL"]
+            raise CommandError(
+                f"Invalid --vacancy-measures value(s): {invalid_vacancy!r}. Choose from {valid_display}."
             )
         return bridging_token
 
@@ -776,8 +834,17 @@ class Command(BaseCommand):
         channel_groups_raw = options["channel_groups"]
         channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
         edge_weight_strategy: str = options["edge_weight_strategy"]
+        raw_vacancy_measures = _parse_csv(options["vacancy_measures"]) if options["vacancy_measures"] else []
+        selected_vacancy_measures = (
+            set(vacancy_analysis.ALL_VACANCY_MEASURES) if "ALL" in raw_vacancy_measures else set(raw_vacancy_measures)
+        )
         bridging_token = self._validate_settings(
-            communities_strategy, network_measures, network_stat_groups, channel_types, edge_weight_strategy
+            communities_strategy,
+            network_measures,
+            network_stat_groups,
+            channel_types,
+            edge_weight_strategy,
+            list(selected_vacancy_measures),
         )
         selected_measures = set(network_measures)
         selected_network_groups = frozenset(network_stat_groups)
@@ -953,6 +1020,43 @@ class Command(BaseCommand):
             os.makedirs(root_target, exist_ok=True)
             exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
 
+        do_vacancy = bool(selected_vacancy_measures)
+        if do_vacancy:
+            self.stdout.write("\nVacancy analysis")
+            _vac_n = [0]
+
+            def _vac_progress(title: str) -> None:
+                if _vac_n[0] > 0:
+                    self.stdout.write("done")
+                _vac_n[0] += 1
+                self.stdout.write(f"  [{_vac_n[0]}] {title} … ", ending="")
+                self.stdout.flush()
+
+            vac_payload = vacancy_analysis.compute_vacancy_analysis(
+                graph=graph,
+                channel_dict=channel_dict,
+                selected_measures=selected_vacancy_measures,
+                months_before=options["vacancy_months_before"],
+                months_after=options["vacancy_months_after"],
+                max_candidates=options["vacancy_max_candidates"],
+                sir_runs=options["spreading_runs"],
+                ppr_alpha=options["vacancy_ppr_alpha"],
+                progress_callback=_vac_progress,
+            )
+            if _vac_n[0] > 0:
+                self.stdout.write("done")
+            else:
+                self.stdout.write("- no vacancies found")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_vacancy_analysis_json(vac_payload, root_target)
+            self.stdout.write("- vacancy_analysis.json")
+            tables.write_vacancy_analysis_html(
+                output_filename=os.path.join(root_target, "vacancy_analysis.html"),
+                seo=seo,
+                project_title=project_title,
+            )
+            self.stdout.write("- vacancy_analysis.html")
+
         timeline_entries: list[dict] = []
         if options["timeline_step"] == "year":
             year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
@@ -1044,6 +1148,7 @@ class Command(BaseCommand):
             strategies=strategies,
             include_consensus_matrix_html=do_consensus_matrix,
             timeline_entries=timeline_entries or None,
+            include_vacancy_analysis=do_vacancy,
         )
 
         exporter.write_summary_json(root_target, export_name or None, options, len(graph.nodes), len(graph.edges))

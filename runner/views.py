@@ -10,7 +10,7 @@ from django.shortcuts import render
 from django.views import View
 
 from runner import tasks
-from webapp.models import ChannelGroup, SearchTerm
+from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "search_channels": {
@@ -48,6 +48,7 @@ class OperationsView(View):
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
         channel_groups = list(ChannelGroup.objects.values_list("name", flat=True))
+        has_vacancies = ChannelVacancy.objects.exists()
         return render(
             request,
             "runner/operations.html",
@@ -55,6 +56,7 @@ class OperationsView(View):
                 "tasks": task_info,
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
+                "has_vacancies": has_vacancies,
             },
         )
 
@@ -348,6 +350,21 @@ def _build_args(task: str, post: Any) -> list[str]:
             args += ["--channel-groups", ",".join(channel_groups)]
         if post.get("timeline_step"):
             args += ["--timeline-step", "year"]
+        vacancy_measures_val = ",".join(post.getlist("vacancy_measures"))
+        if vacancy_measures_val:
+            args += ["--vacancy-measures", vacancy_measures_val]
+        vacancy_months_before_val = post.get("vacancy_months_before", "").strip()
+        if vacancy_months_before_val:
+            args += ["--vacancy-months-before", vacancy_months_before_val]
+        vacancy_months_after_val = post.get("vacancy_months_after", "").strip()
+        if vacancy_months_after_val:
+            args += ["--vacancy-months-after", vacancy_months_after_val]
+        vacancy_max_candidates_val = post.get("vacancy_max_candidates", "").strip()
+        if vacancy_max_candidates_val:
+            args += ["--vacancy-max-candidates", vacancy_max_candidates_val]
+        vacancy_ppr_alpha_val = post.get("vacancy_ppr_alpha", "").strip()
+        if vacancy_ppr_alpha_val:
+            args += ["--vacancy-ppr-alpha", vacancy_ppr_alpha_val]
 
     elif task == "compare_analysis":
         project_dir = post.get("project_dir", "").strip()
