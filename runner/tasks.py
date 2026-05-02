@@ -198,3 +198,15 @@ def abort(task: str) -> bool:
         return True
     except ProcessLookupError:
         return False
+
+
+def reset(task: str) -> bool:
+    """Delete the meta file so the task status returns to idle. Returns True if reset."""
+    if task not in TASK_NAMES:
+        return False
+    if get_status(task)["status"] == "running":
+        return False
+    meta = _meta_path(task)
+    if meta.exists():
+        meta.unlink()
+    return True
