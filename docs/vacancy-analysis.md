@@ -10,7 +10,7 @@ Channels go silent for many reasons: voluntary deletion, platform removal, legal
 
 In practice, this matters because structural heirs are often more significant than their raw metrics suggest. A new channel with few subscribers but a high structural equivalence score is already occupying the same position in the information ecosystem as the channel it replaced. Conversely, a channel with many followers that happens to attract some of the same amplifiers may be an opportunist capitalising on an audience vacuum, not a genuine continuation of the same network role.
 
-**Example.** In October 2023, a prominent pro-Kremlin aggregator with 280,000 subscribers stops posting. Over three months, the twelve channels that used to forward it start forwarding two new channels heavily. Vacancy Analysis scores both: one scores high on all three metrics — same distributors, same upstream sources, same brokerage role. It is a structural heir. The other gets forwarded by the same distributors but draws from entirely different sources — an opportunist capitalising on the audience vacuum.
+**Example.** In October 2023, a prominent pro-Kremlin aggregator with 280,000 subscribers stops posting. Over three months, the twelve channels that used to forward it start forwarding two new channels heavily. Vacancy Analysis scores both: one scores high across all metrics — same distributors, same upstream sources, same brokerage role, similar cascade reach, quickly adopted by the orphaned amplifiers. It is a structural heir. The other gets forwarded by the same distributors but draws from entirely different sources and is adopted much more slowly — an opportunist capitalising on the audience vacuum.
 
 ---
 
@@ -203,7 +203,7 @@ In the **Operations panel**, all six measures are pre-checked when any vacancy e
 
 ## Interpreting results
 
-The six scores are complementary, not redundant. The three legacy scores (A, B, C) characterise the candidate's structural position from a static, topological perspective. The three new scores (D, E, F) characterise it from dynamic, diffusion, and temporal perspectives.
+The six scores are complementary, not redundant, and fall into two analytical perspectives. Scores A–C characterise the candidate's structural position from a topological standpoint — who forwards it, what it forwards from, and what organisational boundaries it crosses. Scores D–F characterise it from a dynamical standpoint — whether information actually propagates to the same destinations, how well-embedded the candidate is in the orphaned channels' content supply chain, and how quickly it was adopted.
 
 | Pattern | Interpretation |
 | :------ | :------------- |
