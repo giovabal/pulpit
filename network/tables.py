@@ -491,6 +491,20 @@ def write_consensus_matrix_html(
         f.write(content)
 
 
+def write_vacancy_analysis_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    title = f"{project_title} | Vacancy Analysis" if project_title else "Vacancy Analysis"
+    robots_meta = "index, follow" if seo else "noindex, nofollow"
+
+    context = {"title": title, "robots_meta": robots_meta}
+    content = render_to_string("network/vacancy_analysis.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
 def write_index_html(
     output_filename: str,
     seo: bool = False,
@@ -508,6 +522,7 @@ def write_index_html(
     compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
     timeline_entries: list[dict] | None = None,
+    include_vacancy_analysis: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -533,6 +548,7 @@ def write_index_html(
         "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],
         "timeline_entries": timeline_entries or [],
+        "include_vacancy_analysis": include_vacancy_analysis,
     }
     content = render_to_string("network/index.html", context)
     with open(output_filename, "w") as f:

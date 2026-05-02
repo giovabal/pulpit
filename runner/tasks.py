@@ -86,12 +86,23 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
     with open(log_path, "rb") as f:
         f.seek(offset)
         data = f.read()
-        new_offset = offset + len(data)
 
     if not data:
-        return [], new_offset
+        return [], offset
 
-    text = data.decode("utf-8", errors="replace")
+    # Only process bytes up to and including the last newline.  Any trailing
+    # bytes without a newline are left behind the offset so they are re-read on
+    # the next poll — once the newline arrives the full line is emitted in one
+    # piece (e.g. "  [3] GUD PARIS … done" rather than two separate lines when
+    # polling catches a partial write).
+    last_nl = data.rfind(b"\n")
+    if last_nl == -1:
+        return [], offset
+
+    complete_data = data[: last_nl + 1]
+    new_offset = offset + last_nl + 1
+
+    text = complete_data.decode("utf-8", errors="replace")
     text = _ANSI_RE.sub("", text)
 
     # Simulate terminal CR behaviour: split on \n, within each segment the last

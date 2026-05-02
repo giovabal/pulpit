@@ -350,6 +350,11 @@ def write_summary_json(
         "edge_weight_strategy",
         "channel_types",
         "channel_groups",
+        "vacancy_measures",
+        "vacancy_months_before",
+        "vacancy_months_after",
+        "vacancy_max_candidates",
+        "vacancy_ppr_alpha",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -370,6 +375,14 @@ def write_summary_json(
     os.makedirs(graph_dir, exist_ok=True)
     with open(os.path.join(graph_dir, "summary.json"), "w") as f:
         f.write(json.dumps(payload, indent=2))
+
+
+def write_vacancy_analysis_json(payload: dict, graph_dir: str) -> None:
+    """Write data/vacancy_analysis.json from the compute_vacancy_analysis payload."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "vacancy_analysis.json"), "w") as f:
+        f.write(json.dumps(payload))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:

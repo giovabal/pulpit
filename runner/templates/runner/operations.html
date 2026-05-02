@@ -436,6 +436,10 @@
             <legend>Measures
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Centrality measures to compute. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="measures">All</button>
+                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="measures">None</button>
+              </span>
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="measures" value="PAGERANK" checked><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank — channels cited by high-ranked channels rank higher. Standard measure of network influence."></i></label>
@@ -460,6 +464,10 @@
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Community detection algorithms to run. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="community_strategies">All</button>
+                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="community_strategies">None</button>
+              </span>
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" checked>Organization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organisation in the database — not a detection algorithm, reflects manual categorisation."></i></label>
@@ -483,6 +491,10 @@
             <legend>Network stat groups
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Whole-network structural metric groups to compute (applies when HTML tables, Excel, or consensus matrix is enabled). Deselect expensive groups to speed up exports on large networks."></i>
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="network_stat_groups">All</button>
+                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="network_stat_groups">None</button>
+              </span>
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="SIZE" checked>Size<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Node count, edge count, density. Always cheap."></i></label>
@@ -492,6 +504,84 @@
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="DEGCORRELATION" checked>Degree correlation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed degree assortativity (in→in, in→out, out→in, out→out Pearson correlations). Measures whether high-degree nodes preferentially connect to other high-degree nodes."></i></label>
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CENTRALIZATION" checked>Centralization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Freeman graph centralization for each computed node measure, plus mean Burt's constraint. Derived from node-level measures — no extra graph computation required."></i></label>
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CONTENT" checked>Content<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Network-wide content originality (1 − forwarded/total) and amplification ratio (received forwards / total messages). Requires DB queries."></i></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="ops-fieldset">
+            <legend>Vacancy Analysis
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Score replacement candidates for each vacancy channel. Select at least one measure to generate vacancy_analysis.html and data/vacancy_analysis.json in the export.{% if not has_vacancies %} No vacancies are currently defined in the database — options are disabled until at least one is added.{% endif %}"></i>
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="vacancy_measures">All</button>
+                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="vacancy_measures">None</button>
+              </span>
+            </legend>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if has_vacancies %}checked{% endif %}>Amplifier Jaccard
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Fraction of orphaned amplifiers that forwarded from this candidate after the vacancy died (Jaccard coverage, Small 1973)."></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if has_vacancies %}checked{% endif %}>Structural Equivalence
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Cosine similarity of shared in-neighbours (amplifiers) and out-neighbours (sources) — does the candidate occupy the same structural position as the vacancy? (Lorrain &amp; White 1971)"></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if has_vacancies %}checked{% endif %}>Brokerage
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Jaccard of organisation-pair sets (source-org × amplifier-org) — does the candidate replicate the same inter-organisational brokerage role? (Gould &amp; Fernandez 1989)"></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if has_vacancies %}checked{% endif %}>Cascade Overlap
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Jaccard of SIR diffusion reach sets: vacancy content reach before death vs candidate reach after. Reuses Spreading runs from Linked parameters. Computationally intensive."></i>
+                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Tunable: Spreading runs (Linked parameters)"></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="PPR" {% if has_vacancies %}checked{% endif %}>Pers. PageRank
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Personalized PageRank on the reversed graph starting from orphaned amplifiers — scores how deeply each candidate is embedded in their upstream content supply chain. (Haveliwala 2002)"></i>
+                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Tunable: PPR α (see below)"></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if has_vacancies %}checked{% endif %}>Temporal Adoption
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Coverage-weighted inverse mean days-to-first-adoption — rewards candidates adopted quickly by many orphaned channels (30-day half-life)."></i>
+              </label>
+            </div>
+            <div class="ops-params mt-2">
+              <div class="ops-param">
+                <label for="vacancy_months_before">Months before
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Look-back window before the vacancy death date to identify orphaned channels and the vacancy's source portfolio. Default: 12."></i>
+                </label>
+                <input type="number" name="vacancy_months_before" id="vacancy_months_before" placeholder="12" min="1">
+              </div>
+              <div class="ops-param">
+                <label for="vacancy_months_after">Months after
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Forward window after the vacancy death date to observe candidate adoption. Default: 24."></i>
+                </label>
+                <input type="number" name="vacancy_months_after" id="vacancy_months_after" placeholder="24" min="1">
+              </div>
+              <div class="ops-param">
+                <label for="vacancy_max_candidates">Max candidates
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Maximum replacement candidates scored per vacancy, ranked by orphaned-amplifier count. Default: 30."></i>
+                </label>
+                <input type="number" name="vacancy_max_candidates" id="vacancy_max_candidates" placeholder="30" min="1" max="200">
+              </div>
+              <div class="ops-param">
+                <label for="vacancy_ppr_alpha">PPR α
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Damping factor for Personalized PageRank. Higher values weight long-range connections more. Only active when PPR is selected. Default: 0.85."></i>
+                </label>
+                <input type="number" name="vacancy_ppr_alpha" id="vacancy_ppr_alpha" placeholder="0.85"
+                       min="0.01" max="0.99" step="0.01" data-requires-vacancy="PPR">
+              </div>
             </div>
           </fieldset>
 
@@ -564,7 +654,7 @@
     </div>
 
     {% if task.args and task.status != "running" %}
-    <div class="ops-last-run">
+    <div class="ops-last-run" id="last-run-{{ task.name }}">
       Last run: <code>{{ task.name }}{% for a in task.args %} {{ a }}{% endfor %}</code>
     </div>
     {% endif %}
@@ -618,6 +708,7 @@
       this.logEl    = document.getElementById('log-' + name);
       this.logMeta  = document.getElementById('log-meta-' + name);
       this.form     = document.getElementById('form-' + name);
+      this.lastRunEl = document.getElementById('last-run-' + name);
 
       this.runBtn.addEventListener('click', () => this.run());
       this.abortBtn.addEventListener('click', () => this.abort());
@@ -737,6 +828,7 @@
       this._setBadge('idle');
       this._setButtons('idle');
       this.logWrap.style.display = 'none';
+      if (this.lastRunEl) this.lastRunEl.style.display = 'none';
     }
 
     /* On page load, resume monitoring if the task is already running. */
@@ -798,11 +890,42 @@
         if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
       }
     });
+    document.querySelectorAll('[data-requires-vacancy]').forEach(function (input) {
+      var cb = document.querySelector('input[name="vacancy_measures"][value="' + input.dataset.requiresVacancy + '"]');
+      var on = cb ? cb.checked : false;
+      input.disabled = !on;
+      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+    });
+    // CASCADE_OVERLAP also needs Spreading runs — override the disable if it is selected.
+    var spreadingRunsEl = document.querySelector('[name="spreading_runs"]');
+    if (spreadingRunsEl && spreadingRunsEl.disabled) {
+      var cascadeCb = document.querySelector('input[name="vacancy_measures"][value="CASCADE_OVERLAP"]');
+      if (cascadeCb && cascadeCb.checked) {
+        spreadingRunsEl.disabled = false;
+        var paramEl = spreadingRunsEl.closest('.ops-param');
+        if (paramEl) paramEl.classList.remove('ops-param--disabled');
+      }
+    }
   }
   syncLinkedInputs();
-  document.querySelectorAll('input[name="measures"], input[name="community_strategies"]').forEach(function (cb) {
+  document.querySelectorAll('input[name="measures"], input[name="community_strategies"], input[name="vacancy_measures"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
   });
+  // All / None buttons in fieldset legends.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.ops-legend-btn');
+    if (!btn) return;
+    var selectAll = btn.dataset.action === 'all';
+    var name = btn.dataset.targetName;
+    if (!name) return;
+    var fieldset = btn.closest('fieldset');
+    if (!fieldset) return;
+    fieldset.querySelectorAll('input[type="checkbox"][name="' + name + '"]').forEach(function (cb) {
+      cb.checked = selectAll;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+
   // Register listeners for any checkbox referenced by data-requires-flag.
   var _linkedFlagNames = new Set();
   document.querySelectorAll('[data-requires-flag]').forEach(function (inp) {
@@ -1023,6 +1146,13 @@
         // Edge weight radio
         if (opts.edge_weight_strategy) setRadio('edge_weight_strategy', opts.edge_weight_strategy);
         if (opts.include_mentions !== undefined) setCheck('include_mentions', opts.include_mentions);
+
+        // Vacancy analysis
+        setMulti('vacancy_measures',       opts.vacancy_measures || '');
+        setVal('vacancy_months_before',    opts.vacancy_months_before != null ? opts.vacancy_months_before : '');
+        setVal('vacancy_months_after',     opts.vacancy_months_after  != null ? opts.vacancy_months_after  : '');
+        setVal('vacancy_max_candidates',   opts.vacancy_max_candidates != null ? opts.vacancy_max_candidates : '');
+        setVal('vacancy_ppr_alpha',        opts.vacancy_ppr_alpha != null ? opts.vacancy_ppr_alpha : '');
 
         showToast('Options loaded from "' + name + '".');
       })

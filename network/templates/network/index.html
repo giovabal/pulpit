@@ -129,6 +129,21 @@
 
 </div>
 
+{% if include_vacancy_analysis %}
+<div class="export-section-sep"><span><i class="bi bi-person-dash me-1" aria-hidden="true"></i>Vacancy Analysis</span></div>
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-arrow-repeat text-secondary me-2" aria-hidden="true"></i>Vacancy succession</h5>
+        <p class="card-text text-muted small">Replacement candidates scored per dead channel using structural, diffusion and temporal algorithms: Amplifier Jaccard, Structural Equivalence, Brokerage, Cascade Overlap (SIR), Personalized PageRank, and Temporal Adoption.</p>
+        <a href="vacancy_analysis.html" class="btn btn-outline-primary btn-sm">Open analysis</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if include_compare_html or compare_files %}
 <div class="export-section-sep"><span>Compare network</span></div>
 

@@ -155,6 +155,22 @@ Builds the directed citation graph, applies community detection algorithms and t
 | **Channel types** | Telegram entity types to include: `CHANNEL` (default), `GROUP`, `USER` |
 | **Export name** | Custom name for the output directory; default is a timestamp |
 
+### Vacancy analysis options
+
+When at least one vacancy is registered in the database, `structural_analysis` can score replacement candidates for all vacancies at once and embed the results in the export as `vacancy_analysis.html` and `data/vacancy_analysis.json`.
+
+| Option | Description |
+| :----- | :---------- |
+| **Vacancy measures** | One or more scoring algorithms to run; see the [Vacancy Analysis](vacancy-analysis.md#batch-export-via-structural-analysis) documentation for the full list; pre-checked automatically when any vacancy exists |
+| **Months before** | Look-back window before each vacancy's death date; default 12 |
+| **Months after** | Forward window after each vacancy's death date; default 24 |
+| **Max candidates** | Maximum candidates scored per vacancy; default 30 |
+| **PPR α** | Damping factor for the Personalized PageRank measure; default 0.85 |
+
+The **Spreading runs** parameter in *Linked parameters* also controls the number of Monte Carlo SIR simulations used by the Cascade Overlap measure.
+
+In the Operations panel the Vacancy Analysis legend (like Measures, Community strategies, and Network stat groups) has **All** / **None** buttons to toggle all checkboxes in one click.
+
 **CLI alternative:**
 
 ```sh
@@ -181,6 +197,11 @@ python manage.py structural_analysis --startdate 2023-01-01
 python manage.py structural_analysis --enddate 2023-12-31
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export-name
+python manage.py structural_analysis --vacancy-measures ALL
+python manage.py structural_analysis --vacancy-measures AMPLIFIER_JACCARD,STRUCTURAL_EQUIV,BROKERAGE
+python manage.py structural_analysis --vacancy-measures CASCADE_OVERLAP,PPR,TEMPORAL
+python manage.py structural_analysis --vacancy-measures ALL --vacancy-months-before 6 --vacancy-months-after 18
+python manage.py structural_analysis --vacancy-measures ALL --vacancy-max-candidates 50 --vacancy-ppr-alpha 0.9
 ```
 
 For a full description of all output files, see [Export formats](export-formats.md).

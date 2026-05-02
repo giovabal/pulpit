@@ -105,21 +105,116 @@ A score of 1.0 means the candidate bridges exactly the same organisational pairs
 
 ---
 
+### Score D — Cascade overlap
+
+*Watts & Dodds (2007), "Influentials, networks, and public opinion formation", [Journal of Consumer Research 34(4)](https://doi.org/10.1086/518527). Kermack & McKendrick (1927), "A contribution to the mathematical theory of epidemics", [Proceedings of the Royal Society A 115(772)](https://doi.org/10.1098/rspa.1927.0118).*
+
+*"Does information flow through this candidate to the same nodes it used to flow through the vacancy?"*
+
+Two subgraphs are constructed from message forwards: one covering the *before* window (vacancy alive) and one the *after* window (candidate alive, vacancy excluded). For each subgraph, a Monte Carlo SIR (Susceptible–Infected–Recovered) epidemic process is seeded at the focal channel and run for `--spreading-runs` replicates. A node is counted as part of the *reach set* if it is infected in at least 25% of runs. The score is:
+
+```
+score_d = |reach(vacancy, before) ∩ reach(candidate, after)| / |reach(vacancy, before) ∪ reach(candidate, after)|
+```
+
+A high Cascade Overlap score means the candidate's content reaches the same downstream channels that used to receive the vacancy's content. Unlike Structural Equivalence, which is topological, this measure is dynamical: it captures whether information actually propagates to the same destinations, not just whether the candidates look similar in the static graph. **Computationally intensive** — run time scales with the number of candidates × SIR runs × graph size.
+
+---
+
+### Score E — Personalized PageRank
+
+*Haveliwala (2002), "Topic-sensitive PageRank", [WWW 2002](https://doi.org/10.1145/511446.511513). Page et al. (1999), "The PageRank citation ranking: bringing order to the Web", [Stanford Technical Report](http://ilpubs.stanford.edu:8090/422/).*
+
+*"How deeply is this candidate embedded in the upstream content supply chain of the orphaned channels?"*
+
+PageRank is computed on the **reversed graph** (edges reversed so the random walk travels upstream from amplifiers toward sources) with the teleportation probability concentrated on the set of orphaned amplifiers:
+
+```
+personalization[node] = 1 / |orphaned_amplifiers|  if node is an orphaned amplifier
+personalization[node] = 0                           otherwise
+```
+
+Damping factor α = 0.85 by default (tunable via `--vacancy-ppr-alpha`). The resulting PPR value for each candidate reflects how much of the random walk mass starting from orphaned channels flows upstream toward that candidate. Scores are normalised to [0, 1] relative to the maximum across all candidates for the same vacancy.
+
+A high PPR score means the candidate sits in the heart of the content ecosystem that orphaned channels draw from — well-connected to their sources of information, not just incidentally forwarded.
+
+---
+
+### Score F — Temporal adoption
+
+*"How quickly and how broadly did the orphaned channels adopt this candidate?"*
+
+For each orphaned amplifier, the first message that forwards from the candidate after the death date is recorded. The **days-to-adoption** is the gap between the death date and that first forward. The score combines coverage (fraction of orphaned channels that adopted the candidate) with adoption speed using a 30-day half-life:
+
+```
+score_f = coverage / (1 + mean_days_to_adoption / 30)
+```
+
+Where `coverage = adopting_orphans / total_orphaned`. A score of 1.0 would require every orphaned channel to have adopted the candidate on the day of the vacancy. Fast adoption by many orphaned channels indicates a channel that was already positioned to absorb the audience gap, rather than one that grew into the role gradually.
+
+---
+
+## Batch export via Structural Analysis
+
+The per-channel vacancy card (live, interactive) and the batch export (offline, reproducible) serve different purposes. The card is useful for investigating a single vacancy quickly; the batch export is designed for systematic analysis of all vacancies at once, with reproducible parameters embedded in `summary.json`.
+
+**Enable the batch export** by passing `--vacancy-measures` to `structural_analysis`:
+
+```sh
+python manage.py structural_analysis --vacancy-measures ALL
+python manage.py structural_analysis --vacancy-measures AMPLIFIER_JACCARD,STRUCTURAL_EQUIV,BROKERAGE
+python manage.py structural_analysis --vacancy-measures CASCADE_OVERLAP,PPR,TEMPORAL
+```
+
+When at least one measure is selected, two additional files are written to the export:
+
+| File | Description |
+| :--- | :---------- |
+| `data/vacancy_analysis.json` | Machine-readable payload: all vacancies, all candidates, all scores |
+| `vacancy_analysis.html` | Interactive HTML page with an accordion per vacancy and a sortable candidate table per section |
+
+The HTML page is linked from `index.html` under a **Vacancy Analysis** section that appears only when the export was produced with vacancy measures enabled.
+
+### Available measures
+
+| Token | Algorithm | Cost |
+| :---- | :-------- | :--- |
+| `AMPLIFIER_JACCARD` | Fraction of orphaned amplifiers that adopted the candidate | Cheap (DB query) |
+| `STRUCTURAL_EQUIV` | Cosine of shared amplifiers + shared sources | Cheap (DB query) |
+| `BROKERAGE` | Jaccard of (source-org × amplifier-org) pairs | Cheap (DB query) |
+| `CASCADE_OVERLAP` | SIR diffusion reach Jaccard (vacancy before vs candidate after) | **Heavy** — reuses `--spreading-runs` |
+| `PPR` | Personalized PageRank from orphaned amplifiers on the reversed graph | Moderate (one power iteration per vacancy) |
+| `TEMPORAL` | Recency-weighted coverage fraction (30-day half-life) | Cheap (DB query) |
+| `ALL` | All of the above | — |
+
+### Parameters
+
+| Flag | Default | Description |
+| :--- | :------ | :---------- |
+| `--vacancy-months-before N` | 12 | Look-back window (months) before each vacancy's death date |
+| `--vacancy-months-after N` | 24 | Forward window (months) after each vacancy's death date |
+| `--vacancy-max-candidates N` | 30 | Maximum candidates scored per vacancy (ranked by orphaned-amplifier count) |
+| `--vacancy-ppr-alpha α` | 0.85 | Damping factor for PPR; higher values weight long-range connections more |
+| `--spreading-runs N` | 200 | Monte Carlo SIR runs for `CASCADE_OVERLAP`; shared with the `SPREADING` node measure |
+
+In the **Operations panel**, all six measures are pre-checked when any vacancy exists in the database. Use the **All** / **None** buttons in the Vacancy Analysis legend to toggle the group in one click.
+
+---
+
 ## Interpreting results
 
-The three scores are complementary, not redundant:
+The six scores are complementary, not redundant. The three legacy scores (A, B, C) characterise the candidate's structural position from a static, topological perspective. The three new scores (D, E, F) characterise it from dynamic, diffusion, and temporal perspectives.
 
 | Pattern | Interpretation |
 | :------ | :------------- |
-| High A, high B, high C | Strong structural replacement — the candidate occupies the same position, is forwarded by the same distributors, and mediates the same organisational boundaries |
+| High on all six | Strong structural replacement across all dimensions — topological, diffusion, and temporal |
+| High A/B/C, low D/E/F | The candidate occupies the same structural slot but does not yet reach the same downstream audience through information cascades — possibly too new or poorly connected to established amplifiers |
+| Low A/B/C, high D/E/F | The candidate is well-connected in the broader diffusion network and was adopted quickly, but does not mirror the vacancy's immediate neighbourhood — a lateral successor rather than a direct replacement |
 | High A, high B, low C | The orphaned amplifiers have converged on a new source that serves a different ideological function — perhaps drawing from a narrower set of sources or operating within a single community |
 | Low A, low B, high C | The network has not found a single replacement; brokerage between the same organisations is handled by a channel not yet widely forwarded by the orphaned set |
-| Low A, low B, low C | No structural replacement has emerged; the orphaned amplifiers have diversified without collectively filling the vacancy |
+| Low on all six | No structural replacement has emerged; the orphaned amplifiers have diversified without collectively filling the vacancy |
 
-The table is sorted by **First activity** by default — the candidate's earliest recorded message — so that genuinely new channels appear at the top when *Only after vacancy* is enabled. Click any column header to re-sort:
-
-- **Structural equivalence** or **Brokerage role** — focus on quality of structural fit
-- **Amplifiers** — focus on how much of the orphaned audience each candidate has already captured
+The table is sorted by **First activity** by default — the candidate's earliest recorded message — so that genuinely new channels appear at the top when *Only after vacancy* is enabled. Click any column header to re-sort.
 
 ---
 

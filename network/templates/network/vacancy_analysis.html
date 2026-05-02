@@ -1,0 +1,172 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <h2 class="mb-0">Vacancy Analysis</h2>
+  <a href="index.html" class="btn btn-outline-secondary btn-sm">← Back to index</a>
+</div>
+<p class="text-muted small mb-4" id="va-summary">Loading…</p>
+
+<div id="va-root"></div>
+
+<style>
+  .va-org-dot {
+    display: inline-block;
+    width: .65em;
+    height: .65em;
+    border-radius: 50%;
+    margin-right: .3em;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .va-score-cell { font-variant-numeric: tabular-nums; }
+  .va-null { color: var(--bs-secondary-color, #6c757d); }
+  th[data-sort-direction="asc"] a::after { content: " ↑"; font-size: .75em; opacity: .6; }
+  th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: .75em; opacity: .6; }
+  .va-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
+</style>
+
+<script>
+(function () {
+  var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
+
+  fetch(dataDir + "vacancy_analysis.json")
+    .then(function (r) { return r.json(); })
+    .then(function (data) { render(data); })
+    .catch(function () {
+      document.getElementById("va-summary").textContent = "Failed to load vacancy_analysis.json.";
+    });
+
+  function render(data) {
+    var measures = data.selected_measures;
+    var labels = data.measure_labels || {};
+    var vacancies = data.vacancies || [];
+    var total = vacancies.reduce(function (n, v) { return n + v.candidates.length; }, 0);
+
+    document.getElementById("va-summary").textContent =
+      vacancies.length + " vacanc" + (vacancies.length === 1 ? "y" : "ies") +
+      " · " + total + " candidate" + (total !== 1 ? "s" : "") +
+      " · window: " + data.months_before + " mo before / " + data.months_after + " mo after" +
+      " · measures: " + measures.map(function (m) { return labels[m] || m; }).join(", ");
+
+    var root = document.getElementById("va-root");
+    if (!vacancies.length) {
+      root.innerHTML = '<p class="va-empty">No vacancies found in the database.</p>';
+      return;
+    }
+
+    var acc = document.createElement("div");
+    acc.className = "accordion";
+    acc.id = "va-accordion";
+    root.appendChild(acc);
+
+    vacancies.forEach(function (vac, i) {
+      acc.appendChild(buildItem(vac, i, measures, labels));
+    });
+
+    // Activate existing sort machinery on all rendered tables
+    if (typeof initSortableTables === "function") {
+      initSortableTables();
+    }
+  }
+
+  function buildItem(vac, i, measures, labels) {
+    var bodyId = "va-body-" + i;
+    var headId = "va-head-" + i;
+    var item = document.createElement("div");
+    item.className = "accordion-item";
+
+    var badge = '<span class="badge bg-secondary me-2">' + esc(vac.death_date) + "</span>";
+    var meta = '<span class="text-muted small">' +
+      vac.orphaned_count + " orphaned · " +
+      vac.candidates.length + " candidate" + (vac.candidates.length !== 1 ? "s" : "") +
+      "</span>";
+
+    item.innerHTML =
+      '<h2 class="accordion-header" id="' + headId + '">' +
+        '<button class="accordion-button' + (i > 0 ? " collapsed" : "") + '" type="button"' +
+          ' data-bs-toggle="collapse" data-bs-target="#' + bodyId + '"' +
+          ' aria-expanded="' + (i === 0 ? "true" : "false") + '" aria-controls="' + bodyId + '">' +
+          '<span class="fw-semibold me-2">' + esc(vac.title) + "</span>" +
+          badge + meta +
+        "</button>" +
+      "</h2>" +
+      '<div id="' + bodyId + '" class="accordion-collapse collapse' + (i === 0 ? " show" : "") + '"' +
+          ' aria-labelledby="' + headId + '">' +
+        '<div class="accordion-body">' +
+          (vac.note ? '<p class="text-muted small mb-3">' + esc(vac.note) + "</p>" : "") +
+          buildTable(vac, measures, labels) +
+        "</div>" +
+      "</div>";
+
+    return item;
+  }
+
+  function buildTable(vac, measures, labels) {
+    if (!vac.candidates.length) {
+      return '<p class="va-empty">No replacement candidates found for this vacancy.</p>';
+    }
+
+    // Collect score min/max per measure for heatmap
+    var colMin = {}, colMax = {};
+    measures.forEach(function (m) {
+      var vals = vac.candidates.map(function (c) {
+        return c.scores && c.scores[m] != null ? c.scores[m] : null;
+      }).filter(function (v) { return v !== null; });
+      colMin[m] = vals.length ? Math.min.apply(null, vals) : 0;
+      colMax[m] = vals.length ? Math.max.apply(null, vals) : 0;
+    });
+
+    var head = "<thead><tr>" +
+      '<th>Channel</th>' +
+      '<th class="date">First active</th>' +
+      measures.map(function (m) {
+        return '<th class="number">' + esc(labels[m] || m) + "</th>";
+      }).join("") +
+      '<th class="number">Amplifiers</th>' +
+      '<th class="date">Last forwarded</th>' +
+      "</tr></thead>";
+
+    var body = "<tbody>" +
+      vac.candidates.map(function (cand) {
+        var dot = cand.org_color
+          ? '<span class="va-org-dot" style="background:' + esc(cand.org_color) + '"></span>'
+          : "";
+        var titleCell = dot + '<a href="' + esc(cand.url) + '" target="_blank" rel="noopener">' + esc(cand.title) + "</a>";
+
+        var scoreCells = measures.map(function (m) {
+          var v = cand.scores ? cand.scores[m] : null;
+          var bg = (v != null && typeof heatmapBg === "function") ? heatmapBg(v, colMin[m], colMax[m]) : "";
+          var display = v != null ? v.toFixed(3) : '<span class="va-null">—</span>';
+          var sortVal = v != null ? String(v) : "";
+          return '<td class="va-score-cell"' +
+            (bg ? ' style="' + esc(bg) + '"' : "") +
+            (sortVal ? ' data-sort-value="' + esc(sortVal) + '"' : "") +
+            ">" + display + "</td>";
+        }).join("");
+
+        return "<tr>" +
+          "<td>" + titleCell + "</td>" +
+          '<td data-sort-value="' + esc(cand.first_activity_iso || "") + '">' + esc(cand.first_activity || "—") + "</td>" +
+          scoreCells +
+          "<td>" + (cand.amplifier_count != null ? cand.amplifier_count : "—") + "</td>" +
+          '<td data-sort-value="' + esc(cand.last_forwarded_iso || "") + '">' + esc(cand.last_forwarded || "—") + "</td>" +
+          "</tr>";
+      }).join("") +
+      "</tbody>";
+
+    return '<div class="table-responsive">' +
+      '<table class="table table-hover table-sm sortable">' + head + body + "</table>" +
+      "</div>";
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+})();
+</script>
+{% endblock %}
