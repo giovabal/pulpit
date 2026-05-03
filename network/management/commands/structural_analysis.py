@@ -341,17 +341,6 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--vacancy-only-after",
-            dest="vacancy_only_after",
-            action=argparse.BooleanOptionalAction,
-            default=True,
-            help=(
-                "Restrict candidates to channels whose first message is on or after the vacancy death date "
-                "(default: on). Use --no-vacancy-only-after to include pre-existing channels."
-            ),
-        )
-
-        parser.add_argument(
             "--name",
             dest="name",
             default="",
@@ -1051,7 +1040,6 @@ class Command(BaseCommand):
                 max_candidates=options["vacancy_max_candidates"],
                 sir_runs=options["spreading_runs"],
                 ppr_alpha=options["vacancy_ppr_alpha"],
-                only_after_vacancy=options["vacancy_only_after"],
                 progress_callback=_vac_progress,
             )
             if _vac_n[0] > 0:

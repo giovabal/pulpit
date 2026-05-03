@@ -397,7 +397,6 @@ def _analyze_vacancy(
     max_candidates: int,
     sir_runs: int,
     ppr_alpha: float,
-    only_after_vacancy: bool,
     rng: np.random.Generator,
 ) -> dict[str, Any]:
     ch = vac.channel
@@ -437,14 +436,12 @@ def _analyze_vacancy(
     cand_pks = [r["forwarded_from"] for r in raw_cands]
     cand_meta: dict[int, dict] = {r["forwarded_from"]: r for r in raw_cands}
 
-    cand_qs = (
-        Channel.objects.filter(pk__in=cand_pks)
+    cand_channels: dict[int, Channel] = {
+        c.pk: c
+        for c in Channel.objects.filter(pk__in=cand_pks)
         .select_related("organization")
         .annotate(first_msg=Min("message_set__date"))
-    )
-    if only_after_vacancy:
-        cand_qs = cand_qs.filter(first_msg__gte=death_dt)
-    cand_channels: dict[int, Channel] = {c.pk: c for c in cand_qs}
+    }
 
     score_map: dict[int, dict[str, float | None]] = {cid: {} for cid in cand_pks}
 
@@ -513,7 +510,6 @@ def compute_vacancy_analysis(
     max_candidates: int = 30,
     sir_runs: int = 200,
     ppr_alpha: float = 0.85,
-    only_after_vacancy: bool = True,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Score replacement candidates for all vacancies.
@@ -543,7 +539,6 @@ def compute_vacancy_analysis(
                 max_candidates,
                 sir_runs,
                 ppr_alpha,
-                only_after_vacancy,
                 rng,
             )
         )
@@ -553,6 +548,5 @@ def compute_vacancy_analysis(
         "measure_labels": {k: MEASURE_LABELS[k] for k in sorted(selected_measures)},
         "months_before": months_before,
         "months_after": months_after,
-        "only_after_vacancy": only_after_vacancy,
         "vacancies": results,
     }

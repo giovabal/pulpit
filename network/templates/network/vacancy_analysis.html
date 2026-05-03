@@ -5,7 +5,13 @@
   <h2 class="mb-0">Vacancy Analysis</h2>
   <a href="index.html" class="btn btn-outline-secondary btn-sm">← Back to index</a>
 </div>
-<p class="text-muted small mb-4" id="va-summary">Loading…</p>
+<p class="text-muted small mb-2" id="va-summary">Loading…</p>
+<div class="mb-4">
+  <label class="d-inline-flex align-items-center gap-2" style="font-size:.875rem;cursor:pointer;user-select:none">
+    <input type="checkbox" id="va-only-after" checked>
+    <span>Only after vacancy</span>
+  </label>
+</div>
 
 <div id="va-root"></div>
 
@@ -29,25 +35,39 @@
 <script>
 (function () {
   var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
+  var _data = null;
 
   fetch(dataDir + "vacancy_analysis.json")
     .then(function (r) { return r.json(); })
-    .then(function (data) { render(data); })
+    .then(function (data) { _data = data; render(data); })
     .catch(function () {
       document.getElementById("va-summary").textContent = "Failed to load vacancy_analysis.json.";
     });
+
+  document.getElementById("va-only-after").addEventListener("change", function () {
+    if (_data) render(_data);
+  });
+
+  function onlyAfter() {
+    return document.getElementById("va-only-after").checked;
+  }
 
   function render(data) {
     var measures = data.selected_measures;
     var labels = data.measure_labels || {};
     var vacancies = data.vacancies || [];
-    var total = vacancies.reduce(function (n, v) { return n + v.candidates.length; }, 0);
+    var filter = onlyAfter();
+
+    var visibleCands = vacancies.reduce(function (n, v) {
+      return n + (filter
+        ? v.candidates.filter(function (c) { return c.first_activity_iso >= v.death_date; }).length
+        : v.candidates.length);
+    }, 0);
 
     document.getElementById("va-summary").textContent =
       vacancies.length + " vacanc" + (vacancies.length === 1 ? "y" : "ies") +
-      " · " + total + " candidate" + (total !== 1 ? "s" : "") +
+      " · " + visibleCands + " candidate" + (visibleCands !== 1 ? "s" : "") +
       " · window: " + data.months_before + " mo before / " + data.months_after + " mo after" +
-      (data.only_after_vacancy ? " · only after vacancy" : " · including pre-existing channels") +
       " · measures: " + measures.map(function (m) { return labels[m] || m; }).join(", ");
 
     var root = document.getElementById("va-root");
@@ -56,22 +76,26 @@
       return;
     }
 
+    root.innerHTML = "";
     var acc = document.createElement("div");
     acc.className = "accordion";
     acc.id = "va-accordion";
     root.appendChild(acc);
 
     vacancies.forEach(function (vac, i) {
-      acc.appendChild(buildItem(vac, i, measures, labels));
+      acc.appendChild(buildItem(vac, i, measures, labels, filter));
     });
 
-    // Activate existing sort machinery on all rendered tables
     if (typeof initSortableTables === "function") {
       initSortableTables();
     }
   }
 
-  function buildItem(vac, i, measures, labels) {
+  function buildItem(vac, i, measures, labels, filter) {
+    var candidates = filter
+      ? vac.candidates.filter(function (c) { return c.first_activity_iso >= vac.death_date; })
+      : vac.candidates;
+
     var bodyId = "va-body-" + i;
     var headId = "va-head-" + i;
     var item = document.createElement("div");
@@ -80,7 +104,7 @@
     var badge = '<span class="badge bg-secondary me-2">' + esc(vac.death_date) + "</span>";
     var meta = '<span class="text-muted small">' +
       vac.orphaned_count + " orphaned · " +
-      vac.candidates.length + " candidate" + (vac.candidates.length !== 1 ? "s" : "") +
+      candidates.length + " candidate" + (candidates.length !== 1 ? "s" : "") +
       "</span>";
 
     item.innerHTML =
@@ -96,22 +120,21 @@
           ' aria-labelledby="' + headId + '">' +
         '<div class="accordion-body">' +
           (vac.note ? '<p class="text-muted small mb-3">' + esc(vac.note) + "</p>" : "") +
-          buildTable(vac, measures, labels) +
+          buildTable(candidates, vac, measures, labels) +
         "</div>" +
       "</div>";
 
     return item;
   }
 
-  function buildTable(vac, measures, labels) {
-    if (!vac.candidates.length) {
+  function buildTable(candidates, vac, measures, labels) {
+    if (!candidates.length) {
       return '<p class="va-empty">No replacement candidates found for this vacancy.</p>';
     }
 
-    // Collect score min/max per measure for heatmap
     var colMin = {}, colMax = {};
     measures.forEach(function (m) {
-      var vals = vac.candidates.map(function (c) {
+      var vals = candidates.map(function (c) {
         return c.scores && c.scores[m] != null ? c.scores[m] : null;
       }).filter(function (v) { return v !== null; });
       colMin[m] = vals.length ? Math.min.apply(null, vals) : 0;
@@ -129,7 +152,7 @@
       "</tr></thead>";
 
     var body = "<tbody>" +
-      vac.candidates.map(function (cand) {
+      candidates.map(function (cand) {
         var dot = cand.org_color
           ? '<span class="va-org-dot" style="background:' + esc(cand.org_color) + '"></span>'
           : "";
