@@ -162,8 +162,8 @@ When at least one vacancy is registered in the database, `structural_analysis` c
 | Option | Description |
 | :----- | :---------- |
 | **Vacancy measures** | One or more scoring algorithms to run; see the [Vacancy Analysis](vacancy-analysis.md#batch-export-via-structural-analysis) documentation for the full list; pre-checked automatically when any vacancy exists |
-| **Months before** | Look-back window before each vacancy's death date; default 12 |
-| **Months after** | Forward window after each vacancy's death date; default 24 |
+| **Months before** | Look-back window before each vacancy's closure date; default 12 |
+| **Months after** | Forward window after each vacancy's closure date; default 24 |
 | **Max candidates** | Maximum candidates scored per vacancy; default 30 |
 | **PPR α** | Damping factor for the Personalized PageRank measure; default 0.85 |
 

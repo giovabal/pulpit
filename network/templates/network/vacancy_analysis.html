@@ -60,7 +60,7 @@
 
     var visibleCands = vacancies.reduce(function (n, v) {
       return n + (filter
-        ? v.candidates.filter(function (c) { return c.first_activity_iso >= v.death_date; }).length
+        ? v.candidates.filter(function (c) { return c.first_activity_iso >= v.closure_date; }).length
         : v.candidates.length);
     }, 0);
 
@@ -93,7 +93,7 @@
 
   function buildItem(vac, i, measures, labels, filter) {
     var candidates = filter
-      ? vac.candidates.filter(function (c) { return c.first_activity_iso >= vac.death_date; })
+      ? vac.candidates.filter(function (c) { return c.first_activity_iso >= vac.closure_date; })
       : vac.candidates;
 
     var bodyId = "va-body-" + i;
@@ -101,7 +101,7 @@
     var item = document.createElement("div");
     item.className = "accordion-item";
 
-    var badge = '<span class="badge bg-secondary me-2">' + esc(vac.death_date) + "</span>";
+    var badge = '<span class="badge bg-secondary me-2">' + esc(vac.closure_date) + "</span>";
     var meta = '<span class="text-muted small">' +
       vac.orphaned_count + " orphaned · " +
       candidates.length + " candidate" + (candidates.length !== 1 ? "s" : "") +

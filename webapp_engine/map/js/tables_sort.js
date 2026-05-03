@@ -43,7 +43,9 @@ function initSortableTables() {
                 headers[j].setAttribute('aria-sort', 'none');
                 headers[j].innerHTML = "<a href='#'>" + headers[j].innerText + "</a>";
             }
-            thead.addEventListener("click", sortTableFunction(table));
+            if (table._sortListener) thead.removeEventListener("click", table._sortListener);
+            table._sortListener = sortTableFunction(table);
+            thead.addEventListener("click", table._sortListener);
         }
     }
 }
@@ -96,8 +98,16 @@ function sortRows(table, columnIndex, direction) {
         values.push({ value: val, row: rows[index] });
     }
     if (cls == "" && allNum) cls = "number";
-    if (cls == "number") values.sort(function(a, b) { return a.value - b.value; });
-    else if (cls == "date") values.sort(function(a, b) { return Date.parse(a.value) - Date.parse(b.value); });
+    if (cls == "number") values.sort(function(a, b) {
+        var an = typeof a.value === "number", bn = typeof b.value === "number";
+        if (an && bn) return a.value - b.value;
+        return an ? -1 : bn ? 1 : 0;
+    });
+    else if (cls == "date") values.sort(function(a, b) {
+        var an = Date.parse(a.value), bn = Date.parse(b.value);
+        if (!isNaN(an) && !isNaN(bn)) return an - bn;
+        return !isNaN(an) ? -1 : !isNaN(bn) ? 1 : 0;
+    });
     else values.sort(function(a, b) {
         var ta = (a.value + "").toUpperCase(), tb = (b.value + "").toUpperCase();
         return ta < tb ? -1 : ta > tb ? 1 : 0;

@@ -53,12 +53,12 @@ Each channel has a dedicated detail page with:
 Lists all channels registered as vacancies with:
 
 - Last-known in-degree and out-degree
-- Orphaned amplifier count (channels that forwarded this channel before its death date)
-- Death date
+- Orphaned amplifier count (channels that forwarded this channel before its closure date)
+- Closure date
 
 See [Vacancy analysis](vacancy-analysis.md) for the full documentation.
 
-> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and death date.
+> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and closure date.
 
 ---
 

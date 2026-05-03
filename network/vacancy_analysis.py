@@ -163,7 +163,7 @@ def _scores_abc(
     orphaned_pks: set[int],
     candidate_pks: list[int],
     before_start: datetime.datetime,
-    death_dt: datetime.datetime,
+    closure_dt: datetime.datetime,
     after_end: datetime.datetime,
     selected: set[str],
 ) -> dict[int, dict[str, float | None]]:
@@ -176,7 +176,7 @@ def _scores_abc(
             Message.objects.filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=candidate_pks,
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .values("forwarded_from_id")
@@ -192,7 +192,7 @@ def _scores_abc(
                 channel=vacancy_pk,
                 forwarded_from__isnull=False,
                 date__gte=before_start,
-                date__lt=death_dt,
+                date__lt=closure_dt,
             )
             .values("forwarded_from_id", "forwarded_from__organization_id")
             .distinct()
@@ -217,7 +217,7 @@ def _scores_abc(
             Message.objects.filter(
                 channel__in=candidate_pks,
                 forwarded_from__isnull=False,
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .values("channel_id", "forwarded_from_id", "forwarded_from__organization_id")
@@ -233,7 +233,7 @@ def _scores_abc(
             Message.objects.filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=candidate_pks,
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .values("forwarded_from_id", "channel_id")
@@ -272,16 +272,16 @@ def _scores_cascade(
     candidate_pks: list[int],
     all_channel_pks: list[int],
     before_start: datetime.datetime,
-    death_dt: datetime.datetime,
+    closure_dt: datetime.datetime,
     after_end: datetime.datetime,
     sir_runs: int,
     rng: np.random.Generator,
 ) -> dict[int, float]:
     """Cascade Overlap: Jaccard similarity of SIR content-reach sets (vacancy before vs candidate after)."""
     before_channels = list({*all_channel_pks, vacancy_pk})
-    before_adj, before_nodes = _build_spread_adj(before_channels, before_start, death_dt)
+    before_adj, before_nodes = _build_spread_adj(before_channels, before_start, closure_dt)
     after_channels = [pk for pk in all_channel_pks if pk != vacancy_pk]
-    after_adj, after_nodes = _build_spread_adj(after_channels, death_dt, after_end)
+    after_adj, after_nodes = _build_spread_adj(after_channels, closure_dt, after_end)
 
     v_reach = _majority_reach(before_adj, before_nodes, vacancy_pk, sir_runs, rng)
     if not v_reach:
@@ -336,7 +336,7 @@ def _scores_ppr(
 def _scores_temporal(
     orphaned_pks: set[int],
     candidate_pks: list[int],
-    death_dt: datetime.datetime,
+    closure_dt: datetime.datetime,
     after_end: datetime.datetime,
 ) -> dict[int, float]:
     """
@@ -354,14 +354,14 @@ def _scores_temporal(
         Message.objects.filter(
             channel__in=orphaned_pks,
             forwarded_from__in=candidate_pks,
-            date__gte=death_dt,
+            date__gte=closure_dt,
             date__lte=after_end,
         )
         .values("forwarded_from_id", "channel_id")
         .annotate(first_date=Min("date"))
     )
 
-    death_ts = death_dt.timestamp()
+    death_ts = closure_dt.timestamp()
     adoption_days: dict[int, list[float]] = defaultdict(list)
     for r in rows:
         fd = r["first_date"]
@@ -400,13 +400,13 @@ def _analyze_vacancy(
     rng: np.random.Generator,
 ) -> dict[str, Any]:
     ch = vac.channel
-    death = vac.death_date
+    closure_date = vac.closure_date
     before_start = datetime.datetime.combine(
-        _shift_months(death, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
     )
-    death_dt = datetime.datetime.combine(death, datetime.time.min, tzinfo=datetime.timezone.utc)
+    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=datetime.timezone.utc)
     after_end = datetime.datetime.combine(
-        _shift_months(death, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
+        _shift_months(closure_date, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
     )
 
     orphaned_pks: set[int] = set(
@@ -414,7 +414,7 @@ def _analyze_vacancy(
         .filter(
             message_set__forwarded_from=ch,
             message_set__date__gte=before_start,
-            message_set__date__lt=death_dt,
+            message_set__date__lt=closure_dt,
         )
         .distinct()
         .values_list("pk", flat=True)
@@ -424,7 +424,7 @@ def _analyze_vacancy(
         Message.objects.filter(
             channel__in=orphaned_pks,
             forwarded_from__in=Channel.objects.interesting(),
-            date__gte=death_dt,
+            date__gte=closure_dt,
             date__lte=after_end,
         )
         .exclude(forwarded_from=ch)
@@ -447,12 +447,12 @@ def _analyze_vacancy(
 
     abc_sel = selected_measures & {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE"}
     if abc_sel:
-        for cid, s in _scores_abc(ch.pk, orphaned_pks, cand_pks, before_start, death_dt, after_end, abc_sel).items():
+        for cid, s in _scores_abc(ch.pk, orphaned_pks, cand_pks, before_start, closure_dt, after_end, abc_sel).items():
             score_map[cid].update(s)
 
     if "CASCADE_OVERLAP" in selected_measures:
         for cid, s in _scores_cascade(
-            ch.pk, cand_pks, all_channel_pks, before_start, death_dt, after_end, sir_runs, rng
+            ch.pk, cand_pks, all_channel_pks, before_start, closure_dt, after_end, sir_runs, rng
         ).items():
             score_map[cid]["CASCADE_OVERLAP"] = s
 
@@ -461,7 +461,7 @@ def _analyze_vacancy(
             score_map[cid]["PPR"] = s
 
     if "TEMPORAL" in selected_measures:
-        for cid, s in _scores_temporal(orphaned_pks, cand_pks, death_dt, after_end).items():
+        for cid, s in _scores_temporal(orphaned_pks, cand_pks, closure_dt, after_end).items():
             score_map[cid]["TEMPORAL"] = s
 
     candidates = []
@@ -491,7 +491,7 @@ def _analyze_vacancy(
         "pk": ch.pk,
         "title": ch.title,
         "url": ch.get_absolute_url(),
-        "death_date": death.isoformat(),
+        "closure_date": closure_date.isoformat(),
         "note": vac.note or "",
         "orphaned_count": len(orphaned_pks),
         "candidates": candidates,
