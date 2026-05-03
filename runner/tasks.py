@@ -140,8 +140,8 @@ try:
     m["exit_code"] = exit_code
     m["end_time"] = datetime.now(timezone.utc).isoformat()
     meta_path.write_text(json.dumps(m))
-except Exception:
-    pass
+except Exception as e:
+    print(f"runner wrapper: failed to write metadata: {e}", file=sys.stderr)
 sys.exit(exit_code)
 """
 

@@ -1,6 +1,6 @@
 # Proposals for Pulpit: New Features and Improvements
 
-- vacancy needs enough data for being efficient and significant, find academically validated way to says if data are enough
+- vacancy needs enough data for being efficient and significant, find academically validated ways to say if data are enough
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)
 - Organization changes overtime.
 - group analysis, similar to whole network analysis
@@ -9,6 +9,9 @@
 
 
 Before major release (/plan)
+- Have a deep inspection of Python code, search for bugs and bad practices
+- Have a deep inspection of JS code, search for bugs and bad practices
+- Have a deep inspection of HTML and CSS code, search for bugs and bad practices
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
 - review documentation
 - aria attributes

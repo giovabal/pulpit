@@ -208,6 +208,10 @@
         if (titleEl) titleEl.textContent = ch.title || ("Channel #" + ch.id);
         render(ch, res[1].results, res[2].results);
     }).catch(function (e) {
-        $root.innerHTML = '<p class="bo-empty">Error loading channel: ' + e.message + '</p>';
+        var p = document.createElement('p');
+        p.className = 'bo-empty';
+        p.textContent = 'Error loading channel: ' + e.message;
+        $root.innerHTML = '';
+        $root.appendChild(p);
     });
 })();

@@ -234,7 +234,11 @@
 {% endfor %}
 
 <script>
-  var eventsPromise = fetch("{% url 'events-data' %}").then(function (r) { return r.json(); });
+  function fetchJson(url) {
+    return fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
+  }
+
+  var eventsPromise = fetchJson("{% url 'events-data' %}");
 
   document.querySelectorAll('.collapse[data-panel-url]').forEach(function (collapse) {
     var spinner = collapse.querySelector('.stats-spinner');
@@ -243,7 +247,7 @@
       if (!loaded) {
         loaded = true;
         var isChart = collapse.dataset.panelType !== 'table' && collapse.dataset.panelType !== 'cross-refs';
-        var fetches = [fetch(collapse.dataset.panelUrl).then(function (r) { return r.json(); })];
+        var fetches = [fetchJson(collapse.dataset.panelUrl)];
         if (isChart) fetches.push(eventsPromise);
         Promise.all(fetches).then(function (results) {
           spinner.classList.add('hidden');
@@ -256,6 +260,9 @@
           } else {
             renderChart(collapse.querySelector('canvas'), results[0], results[1]);
           }
+        }).catch(function () {
+          spinner.classList.add('hidden');
+          loaded = false;
         });
       }
     });

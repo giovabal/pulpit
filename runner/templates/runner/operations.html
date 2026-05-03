@@ -790,12 +790,12 @@
           headers: { 'X-CSRFToken': getCsrfToken() },
         });
       } catch (e) {
-        alert('Network error: ' + e);
+        showToast('Network error: ' + e, 'error');
         return;
       }
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: resp.statusText }));
-        alert('Error: ' + (err.error || resp.statusText));
+        showToast('Error: ' + (err.error || resp.statusText), 'error');
         return;
       }
       // Reset log and start monitoring.

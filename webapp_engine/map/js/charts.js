@@ -12,7 +12,7 @@ export function mini_hist(all_val_str, yr_vals, cur, all_years) {
         .concat((all_years || []).map(function(yr) {
             return { year: yr, raw: yr_val_map[yr] !== undefined ? yr_val_map[yr] : null };
         }));
-    var valid = bars.map(function(b) { return parseFloat(b.raw); }).filter(isFinite);
+    var valid = bars.map(function(b) { return parseFloat(b.raw); }).filter(Number.isFinite);
     if (!valid.length) return null;
     var lo = Math.min(0, Math.min.apply(null, valid));
     var hi = Math.max(0, Math.max.apply(null, valid));

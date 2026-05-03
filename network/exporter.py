@@ -69,7 +69,7 @@ def build_graph_data(
 
 
 def find_main_component(graph: nx.DiGraph) -> set[str]:
-    return max(nx.weakly_connected_components(graph), key=len)
+    return max(nx.weakly_connected_components(graph), key=len, default=set())
 
 
 def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -> None:

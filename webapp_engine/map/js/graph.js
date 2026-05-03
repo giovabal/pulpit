@@ -12,6 +12,11 @@ var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messag
 
 // Shorthand for document.getElementById
 function el(id) { return document.getElementById(id); }
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 // =============================================================================
 // State
@@ -32,6 +37,7 @@ var animation_frame_id          = null;
 var year_cache                  = {};  // data_dir → { pos, ch, comm }
 var year_cache_pend             = {};  // data_dir → true while fetch is in flight
 var year_sequence               = [];  // ['all', '2021', '2022', …] built by init_year_switcher
+var _year_switcher_inited       = false;
 
 // =============================================================================
 // Sigma and graph instances
@@ -160,8 +166,8 @@ function node_sort(x, y) {
 function get_anchor(node) {
     var color = node.originalColor || '#ccc';
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
-    return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + label + '"></i>'
-         + ' <a href="#" class="node-link" data="' + node.id + '">' + (node.label || node.id) + '</a>';
+    return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + escHtml(label) + '"></i>'
+         + ' <a href="#" class="node-link" data="' + escHtml(node.id) + '">' + escHtml(node.label || node.id) + '</a>';
 }
 
 function get_group(node) {
@@ -173,7 +179,7 @@ function get_group(node) {
         var color       = (label && colorMap[label]) ? colorMap[label] : '#ccc';
         var displayName = strategy.charAt(0).toUpperCase() + strategy.slice(1);
         parts.push('<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '"></i>'
-                 + ' <b>' + displayName + ':</b> ' + label);
+                 + ' <b>' + escHtml(displayName) + ':</b> ' + escHtml(label));
     }
     return parts.join('<br>');
 }
@@ -187,25 +193,25 @@ function get_neighbors_list(id_list) {
 function show_node_info(nodeId) {
     var node = graph.getNodeAttributes(nodeId);
     var key = node.url ? node.url.replace('https://t.me/', '') : '';
-    el('node_label').innerHTML = node.label || node.id;
+    el('node_label').textContent = node.label || node.id;
     var urlEl = el('node_url');
-    urlEl.innerHTML = '@' + key;
-    urlEl.href = node.url;
-    el('node_picture').innerHTML = node.pic ? "<img src='" + node.pic + "' style='max-width: 60px;' />" : '';
+    urlEl.textContent = '@' + key;
+    urlEl.href = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
+    el('node_picture').innerHTML = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width: 60px;' />" : '';
     el('node_group').innerHTML = get_group(node);
-    el('node_followers_count').innerHTML = node.fans;
+    el('node_followers_count').textContent = node.fans;
     var measures_html = '';
     if (accessory_data) {
         accessory_data.measures.forEach(function(m) {
             if (BASE_MEASURE_KEYS[m[0]]) return;
             var val = node[m[0]];
             var formatted = (val !== undefined && val !== null) ? val.toFixed(4) : 'N/A';
-            measures_html += '<br><abbr>' + m[1] + '</abbr>: ' + formatted;
+            measures_html += '<br><abbr>' + escHtml(m[1]) + '</abbr>: ' + formatted;
         });
     }
     el('node_measures').innerHTML = measures_html;
-    el('node_messages_count').innerHTML = node.messages_count;
-    el('node_activity_period').innerHTML = node.activity_period;
+    el('node_messages_count').textContent = node.messages_count;
+    el('node_activity_period').textContent = node.activity_period;
     el('node_is_lost').style.display = node.is_lost ? '' : 'none';
     el('node_details').style.display = '';
 
@@ -562,27 +568,63 @@ function init_year_switcher(timeline) {
 
     year_sequence = ['all'].concat(years_with_graph.map(function(y) { return String(y.year); }));
 
-    var drop_items = years_with_graph.map(function(entry) {
-        return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
-    }).join('');
+    if (!_year_switcher_inited) {
+        _year_switcher_inited = true;
 
-    container.innerHTML = [
-        '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
-        '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
-        '<button class="year-btn year-btn--all" data-year="all">All</button>',
-        '<span class="year-sep" aria-hidden="true"></span>',
-        '<div class="year-drop-wrap">',
-        '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
-        '<span id="year-drop-label">—</span>',
-        '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i>',
-        '</button>',
-        '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
-        '</div>',
-        '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
-        '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
-    ].join('');
+        var drop_items = years_with_graph.map(function(entry) {
+            return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
+        }).join('');
 
-    container.style.display = 'flex';
+        container.innerHTML = [
+            '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
+            '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
+            '<button class="year-btn year-btn--all" data-year="all">All</button>',
+            '<span class="year-sep" aria-hidden="true"></span>',
+            '<div class="year-drop-wrap">',
+            '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
+            '<span id="year-drop-label">—</span>',
+            '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i>',
+            '</button>',
+            '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
+            '</div>',
+            '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
+            '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
+        ].join('');
+
+        container.style.display = 'flex';
+
+        container.querySelector('.year-btn--all').addEventListener('click', function() {
+            _go_year('all');
+            _year_drop_close();
+        });
+
+        el('year-prev').addEventListener('click', function() {
+            var idx = year_sequence.indexOf(active_year);
+            if (idx > 0) { _go_year(year_sequence[idx - 1]); _year_drop_close(); }
+        });
+
+        el('year-next').addEventListener('click', function() {
+            var idx = year_sequence.indexOf(active_year);
+            if (idx >= 0 && idx < year_sequence.length - 1) { _go_year(year_sequence[idx + 1]); _year_drop_close(); }
+        });
+
+        el('year-drop-btn').addEventListener('click', function(e) {
+            e.stopPropagation();
+            var menu = el('year-drop-menu');
+            var open = menu.classList.toggle('open');
+            this.setAttribute('aria-expanded', String(open));
+        });
+
+        el('year-drop-menu').addEventListener('click', function(e) {
+            e.stopPropagation();  // keep menu open after selecting a year
+            var btn = e.target.closest('.year-drop-item');
+            if (!btn) return;
+            _go_year(btn.dataset.year);
+        });
+
+        // Close dropdown when clicking anywhere outside it
+        document.addEventListener('click', function() { _year_drop_close(); });
+    }
 
     var init_year = 'all';
     if (window.DATA_DIR) {
@@ -590,38 +632,6 @@ function init_year_switcher(timeline) {
         if (m) init_year = m[1];
     }
     update_year_buttons_active(init_year);
-
-    container.querySelector('.year-btn--all').addEventListener('click', function() {
-        _go_year('all');
-        _year_drop_close();
-    });
-
-    el('year-prev').addEventListener('click', function() {
-        var idx = year_sequence.indexOf(active_year);
-        if (idx > 0) { _go_year(year_sequence[idx - 1]); _year_drop_close(); }
-    });
-
-    el('year-next').addEventListener('click', function() {
-        var idx = year_sequence.indexOf(active_year);
-        if (idx >= 0 && idx < year_sequence.length - 1) { _go_year(year_sequence[idx + 1]); _year_drop_close(); }
-    });
-
-    el('year-drop-btn').addEventListener('click', function(e) {
-        e.stopPropagation();
-        var menu = el('year-drop-menu');
-        var open = menu.classList.toggle('open');
-        this.setAttribute('aria-expanded', String(open));
-    });
-
-    el('year-drop-menu').addEventListener('click', function(e) {
-        e.stopPropagation();  // keep menu open after selecting a year
-        var btn = e.target.closest('.year-drop-item');
-        if (!btn) return;
-        _go_year(btn.dataset.year);
-    });
-
-    // Close dropdown when clicking anywhere outside it
-    document.addEventListener('click', function() { _year_drop_close(); });
 }
 
 function _lerp(a, b, t) { return a + (b - a) * t; }

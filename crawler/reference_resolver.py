@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -103,7 +104,9 @@ class ReferenceResolver:
 
         return missing
 
-    def get_missing_references(self, status_callback=None, force_retry: bool = False) -> None:
+    def get_missing_references(
+        self, status_callback: Callable[[str], None] | None = None, force_retry: bool = False
+    ) -> None:
         qs = Message.objects.exclude(missing_references="")
         total = qs.count() if status_callback is not None else 0
         to_update: list[Message] = []
@@ -138,7 +141,7 @@ class ReferenceResolver:
                     msg.references.add(ch)
                 to_add.clear()
             if status_callback is not None:
-                status_callback(index, total)
+                status_callback(f"{index}/{total}")
         if to_update:
             Message.objects.bulk_update(to_update, ["missing_references"])
         for msg, ch in to_add:
