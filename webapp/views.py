@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, Prefetch, Q, QuerySet, Sum
+from django.db.models import Count, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -238,11 +238,19 @@ class VacanciesView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
-        rows = []
-        for vac in ChannelVacancy.objects.select_related("channel__organization").order_by("-closure_date"):
-            ch = vac.channel
-            orphaned_count = Channel.objects.interesting().filter(message_set__forwarded_from=ch).distinct().count()
-            rows.append({"vacancy": vac, "channel": ch, "orphaned_amplifier_count": orphaned_count})
+        orphaned_sub = Subquery(
+            Channel.objects.interesting()
+            .filter(message_set__forwarded_from=OuterRef("channel"))
+            .values("pk")
+            .annotate(c=Count("pk"))
+            .values("c")[:1]
+        )
+        rows = [
+            {"vacancy": vac, "channel": vac.channel, "orphaned_amplifier_count": vac.orphaned_amplifier_count or 0}
+            for vac in ChannelVacancy.objects.select_related("channel__organization")
+            .annotate(orphaned_amplifier_count=orphaned_sub)
+            .order_by("-closure_date")
+        ]
         ctx["vacancies"] = rows
         return ctx
 

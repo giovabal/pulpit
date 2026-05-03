@@ -84,9 +84,10 @@
                         drop.style.display = "block";
                     }).catch(function () {});
             });
-            document.addEventListener("click", function (e) {
+            function dropCloseHandler(e) {
                 if (!drop.contains(e.target) && e.target !== chInput) drop.style.display = "none";
-            });
+            }
+            document.addEventListener("click", dropCloseHandler);
             tdCh.appendChild(wrap); tr.appendChild(tdCh);
 
             var tdDate = document.createElement("td");
@@ -104,10 +105,18 @@
                 var body = { closure_date: dateInput.value, note: noteInput.value.trim() };
                 if (chIdInput.value) body.channel_id = parseInt(chIdInput.value, 10);
                 apiFetch(API + vac.id + "/", { method: "PATCH", body: body })
-                    .then(function (updated) { Object.assign(vac, updated); $tbody.replaceChild(renderRow(vac, false), tr); showToast("Saved."); })
+                    .then(function (updated) {
+                        document.removeEventListener("click", dropCloseHandler);
+                        Object.assign(vac, updated);
+                        $tbody.replaceChild(renderRow(vac, false), tr);
+                        showToast("Saved.");
+                    })
                     .catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
-            cancelBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(vac, false), tr); });
+            cancelBtn.addEventListener("click", function () {
+                document.removeEventListener("click", dropCloseHandler);
+                $tbody.replaceChild(renderRow(vac, false), tr);
+            });
             tdA.appendChild(saveBtn); tdA.appendChild(cancelBtn); tr.appendChild(tdA);
         } else {
             var tdChd = document.createElement("td"); tdChd.textContent = vac.channel_title || ""; tr.appendChild(tdChd);

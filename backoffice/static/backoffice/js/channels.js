@@ -106,14 +106,14 @@
         $groupFilter.value = p.get("group") || "";
         _sortField = p.get("sort") || "id";
         _sortDir = p.get("dir") || "desc";
-        var page = parseInt(p.get("page") || "1");
+        var page = parseInt(p.get("page") || "1", 10);
         _offset = (isNaN(page) || page < 1 ? 0 : page - 1) * PAGE_SIZE;
         _updateSortHeaders();
     }
 
     function selectedIds() {
         return Array.from($tbody.querySelectorAll("input[type=checkbox]:checked"))
-            .map(function (cb) { return parseInt(cb.dataset.id); });
+            .map(function (cb) { return parseInt(cb.dataset.id, 10); });
     }
 
     /* ── Render ─────────────────────────────────────────────────────────── */
@@ -249,7 +249,7 @@
         sel.focus();
 
         sel.addEventListener("change", function () {
-            var newOrgId = sel.value ? parseInt(sel.value) : null;
+            var newOrgId = sel.value ? parseInt(sel.value, 10) : null;
             assignOrg(ch, newOrgId, td);
         });
         sel.addEventListener("keydown", function (e) {
@@ -381,7 +381,7 @@
         var ids = selectedIds();
         if (!ids.length) return;
         var orgVal = $bulkOrg.value;
-        var orgId = orgVal === "null" ? null : (orgVal ? parseInt(orgVal) : undefined);
+        var orgId = orgVal === "null" ? null : (orgVal ? parseInt(orgVal, 10) : undefined);
         if (orgId === undefined) { showToast("Select an organization first.", "error"); return; }
         apiFetch(API_BASE + "channels/bulk-assign/", {
             method: "POST",
@@ -396,7 +396,7 @@
         var ids = selectedIds();
         if (!ids.length) return;
         var sel = action === "add" ? $bulkAddGrp : $bulkRmGrp;
-        var groupId = parseInt(sel.value);
+        var groupId = parseInt(sel.value, 10);
         if (!groupId) { showToast("Select a group first.", "error"); return; }
         var key = action === "add" ? "add_group_ids" : "remove_group_ids";
         var body = { ids: ids };

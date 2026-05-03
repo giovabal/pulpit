@@ -56,7 +56,7 @@ if (document.readyState === "loading") {
 }
 function sortTableFunction(table) {
     return function(ev) {
-        if (ev.target.tagName.toLowerCase() == 'a') {
+        if (ev.target.tagName.toLowerCase() === 'a') {
             var header = ev.target.parentNode;
             var currentDirection = header.getAttribute('data-sort-direction');
             var direction = currentDirection === 'desc' ? 'asc' : 'desc';
@@ -97,13 +97,13 @@ function sortRows(table, columnIndex, direction) {
         if (!Number.isNaN(numericVal) && isFinite(numericVal)) val = numericVal; else allNum = false;
         values.push({ value: val, row: rows[index] });
     }
-    if (cls == "" && allNum) cls = "number";
-    if (cls == "number") values.sort(function(a, b) {
+    if (cls === "" && allNum) cls = "number";
+    if (cls === "number") values.sort(function(a, b) {
         var an = typeof a.value === "number", bn = typeof b.value === "number";
         if (an && bn) return a.value - b.value;
         return an ? -1 : bn ? 1 : 0;
     });
-    else if (cls == "date") values.sort(function(a, b) {
+    else if (cls === "date") values.sort(function(a, b) {
         var an = Date.parse(a.value), bn = Date.parse(b.value);
         if (!isNaN(an) && !isNaN(bn)) return an - bn;
         return !isNaN(an) ? -1 : !isNaN(bn) ? 1 : 0;

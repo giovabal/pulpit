@@ -47,6 +47,7 @@ var labels_mode       = 'on_size';
 var current_data_dir      = window.DATA_DIR || 'data/';
 var active_year           = null;
 var year_sequence         = [];
+var _year_switcher_inited = false;
 var year_cache            = {};
 var year_cache_pend       = {};
 var animation_frame_id_3d = null;
@@ -71,6 +72,11 @@ var fade_color  = new THREE.Color(FADE_COLOR_HEX);
 // =============================================================================
 
 function el(id) { return document.getElementById(id); }
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 
 function parse_color(css_rgb) {
@@ -473,8 +479,8 @@ function node_anchor(id) {
     if (!node) return '';
     var color = '#' + node.orig_color.getHexString();
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
-    return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + label + '"></i>'
-         + ' <a href="#" class="node-link" data="' + id + '">' + (node.label || id) + '</a>';
+    return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + escHtml(label) + '"></i>'
+         + ' <a href="#" class="node-link" data="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
 }
 
 function get_group_html(id) {
@@ -486,7 +492,7 @@ function get_group_html(id) {
         var colorMap = community_color_maps[strategy] || {};
         var color    = (lbl && colorMap[lbl]) ? colorMap[lbl] : '#ccc';
         var name     = strategy.charAt(0).toUpperCase() + strategy.slice(1);
-        parts.push('<i class="bi bi-circle-fill" style="color:' + color + '"></i> <b>' + name + ':</b> ' + lbl);
+        parts.push('<i class="bi bi-circle-fill" style="color:' + color + '"></i> <b>' + escHtml(name) + ':</b> ' + escHtml(lbl));
     }
     return parts.join('<br>');
 }
@@ -495,14 +501,14 @@ function show_node_info(id) {
     var node = nodes_index[id];
     if (!node) return;
     var key = node.url ? node.url.replace('https://t.me/', '') : '';
-    el('node_label').innerHTML           = node.label || id;
-    el('node_url').innerHTML             = '@' + key;
-    el('node_url').href                  = node.url || '#';
-    el('node_picture').innerHTML         = node.pic ? "<img src='" + node.pic + "' style='max-width:60px'>" : '';
-    el('node_group').innerHTML           = get_group_html(id);
-    el('node_followers_count').innerHTML = node.fans || '';
-    el('node_messages_count').innerHTML  = node.messages_count || '';
-    el('node_activity_period').innerHTML = node.activity_period || '';
+    el('node_label').textContent           = node.label || id;
+    el('node_url').textContent             = '@' + key;
+    el('node_url').href                    = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
+    el('node_picture').innerHTML           = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width:60px'>" : '';
+    el('node_group').innerHTML             = get_group_html(id);
+    el('node_followers_count').textContent = node.fans || '';
+    el('node_messages_count').textContent  = node.messages_count || '';
+    el('node_activity_period').textContent = node.activity_period || '';
     el('node_is_lost').style.display     = node.is_lost ? '' : 'none';
     el('node_details').style.display     = '';
 
@@ -511,7 +517,7 @@ function show_node_info(id) {
         accessory_data.measures.forEach(function(m) {
             if (BASE_MEASURE_KEYS[m[0]]) return;
             var val = node[m[0]];
-            mhtml += '<br><abbr>' + m[1] + '</abbr>: ' + (val != null ? val.toFixed(4) : 'N/A');
+            mhtml += '<br><abbr>' + escHtml(m[1]) + '</abbr>: ' + (val != null ? val.toFixed(4) : 'N/A');
         });
     }
     el('node_measures').innerHTML = mhtml;
@@ -1030,26 +1036,55 @@ function init_year_switcher(timeline) {
 
     year_sequence = ['all'].concat(years_with_graph.map(function(y) { return String(y.year); }));
 
-    var drop_items = years_with_graph.map(function(entry) {
-        return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
-    }).join('');
+    if (!_year_switcher_inited) {
+        _year_switcher_inited = true;
 
-    container.innerHTML = [
-        '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
-        '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
-        '<button class="year-btn year-btn--all" data-year="all">All</button>',
-        '<span class="year-sep" aria-hidden="true"></span>',
-        '<div class="year-drop-wrap">',
-        '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
-        '<span id="year-drop-label">—</span>',
-        '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i></button>',
-        '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
-        '</div>',
-        '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
-        '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
-    ].join('');
+        var drop_items = years_with_graph.map(function(entry) {
+            return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
+        }).join('');
 
-    container.style.display = 'flex';
+        container.innerHTML = [
+            '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
+            '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
+            '<button class="year-btn year-btn--all" data-year="all">All</button>',
+            '<span class="year-sep" aria-hidden="true"></span>',
+            '<div class="year-drop-wrap">',
+            '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
+            '<span id="year-drop-label">—</span>',
+            '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i></button>',
+            '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
+            '</div>',
+            '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
+            '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
+        ].join('');
+
+        container.style.display = 'flex';
+
+        container.querySelector('.year-btn--all').addEventListener('click', function() {
+            _go_year_3d('all'); _year_drop_close();
+        });
+        el('year-prev').addEventListener('click', function() {
+            var idx = year_sequence.indexOf(active_year);
+            if (idx > 0) { _go_year_3d(year_sequence[idx - 1]); _year_drop_close(); }
+        });
+        el('year-next').addEventListener('click', function() {
+            var idx = year_sequence.indexOf(active_year);
+            if (idx >= 0 && idx < year_sequence.length - 1) { _go_year_3d(year_sequence[idx + 1]); _year_drop_close(); }
+        });
+        el('year-drop-btn').addEventListener('click', function(e) {
+            e.stopPropagation();
+            var menu = el('year-drop-menu');
+            var open = menu.classList.toggle('open');
+            this.setAttribute('aria-expanded', String(open));
+        });
+        el('year-drop-menu').addEventListener('click', function(e) {
+            e.stopPropagation();
+            var btn = e.target.closest('.year-drop-item');
+            if (!btn) return;
+            _go_year_3d(btn.dataset.year);
+        });
+        document.addEventListener('click', function() { _year_drop_close(); });
+    }
 
     var init_year = 'all';
     if (window.DATA_DIR) {
@@ -1057,31 +1092,6 @@ function init_year_switcher(timeline) {
         if (m) init_year = m[1];
     }
     update_year_buttons_active(init_year);
-
-    container.querySelector('.year-btn--all').addEventListener('click', function() {
-        _go_year_3d('all'); _year_drop_close();
-    });
-    el('year-prev').addEventListener('click', function() {
-        var idx = year_sequence.indexOf(active_year);
-        if (idx > 0) { _go_year_3d(year_sequence[idx - 1]); _year_drop_close(); }
-    });
-    el('year-next').addEventListener('click', function() {
-        var idx = year_sequence.indexOf(active_year);
-        if (idx >= 0 && idx < year_sequence.length - 1) { _go_year_3d(year_sequence[idx + 1]); _year_drop_close(); }
-    });
-    el('year-drop-btn').addEventListener('click', function(e) {
-        e.stopPropagation();
-        var menu = el('year-drop-menu');
-        var open = menu.classList.toggle('open');
-        this.setAttribute('aria-expanded', String(open));
-    });
-    el('year-drop-menu').addEventListener('click', function(e) {
-        e.stopPropagation();
-        var btn = e.target.closest('.year-drop-item');
-        if (!btn) return;
-        _go_year_3d(btn.dataset.year);
-    });
-    document.addEventListener('click', function() { _year_drop_close(); });
 }
 
 // =============================================================================

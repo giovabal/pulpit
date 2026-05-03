@@ -101,7 +101,10 @@ class TaskStatusView(View):
     def get(self, request: HttpRequest, task: str) -> JsonResponse:
         if task not in TASK_DEFINITIONS:
             return JsonResponse({"error": "Unknown task"}, status=404)
-        offset = int(request.GET.get("offset", 0))
+        try:
+            offset = max(0, int(request.GET.get("offset", 0)))
+        except (ValueError, TypeError):
+            return JsonResponse({"error": "invalid offset"}, status=400)
         status = tasks.get_status(task)
         lines, new_offset = tasks.get_log_lines(task, offset)
         return JsonResponse({**status, "lines": lines, "next_offset": new_offset})
@@ -207,7 +210,14 @@ class ExportDetailView(View):
     """Return the full summary.json for a named export, or delete the export directory."""
 
     def get(self, request: HttpRequest, name: str) -> JsonResponse:
-        path = Path(settings.BASE_DIR) / "exports" / name / "summary.json"
+        if not re.match(r"^[\w\-]+$", name):
+            return JsonResponse({"error": "invalid name"}, status=400)
+        exports_root = (Path(settings.BASE_DIR) / "exports").resolve()
+        path = (exports_root / name / "summary.json").resolve()
+        try:
+            path.relative_to(exports_root)
+        except ValueError:
+            return JsonResponse({"error": "invalid path"}, status=400)
         if not path.exists():
             return JsonResponse({"error": "not found"}, status=404)
         try:

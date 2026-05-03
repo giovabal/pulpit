@@ -52,7 +52,7 @@ VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_RE
 
 def _recency_decay(date: datetime.datetime | datetime.date | None, today: datetime.date, n: int) -> float:
     """Return 1.0 for messages within the last N days, then exp(-(age-N)/N) beyond that."""
-    if date is None:
+    if date is None or n <= 0:
         return 1.0
     d = date.date() if isinstance(date, datetime.datetime) else date
     excess = (today - d).days - n

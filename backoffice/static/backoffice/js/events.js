@@ -161,7 +161,7 @@
     $evAddForm.addEventListener("submit", function (e) {
         e.preventDefault();
         var fd = new FormData($evAddForm);
-        apiFetch(API_EV, { method: "POST", body: { date: fd.get("date"), subject: fd.get("subject").trim(), action_id: parseInt(fd.get("action_id")) } })
+        apiFetch(API_EV, { method: "POST", body: { date: fd.get("date"), subject: fd.get("subject").trim(), action_id: parseInt(fd.get("action_id"), 10) } })
             .then(function (ev) {
                 var empty = $evTbody.querySelector(".bo-empty");
                 if (empty) empty.parentNode.remove();

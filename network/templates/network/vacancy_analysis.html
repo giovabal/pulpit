@@ -38,7 +38,7 @@
   var _data = null;
 
   fetch(dataDir + "vacancy_analysis.json")
-    .then(function (r) { return r.json(); })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
     .then(function (data) { _data = data; render(data); })
     .catch(function () {
       document.getElementById("va-summary").textContent = "Failed to load vacancy_analysis.json.";
@@ -189,7 +189,8 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 })();
 </script>

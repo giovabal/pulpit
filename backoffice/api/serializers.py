@@ -130,13 +130,16 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "email", "is_staff", "is_active", "date_joined", "password"]
-        read_only_fields = ["id", "username", "date_joined"]
+        read_only_fields = ["id", "username", "date_joined", "is_staff", "is_active"]
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
         if not password:
             raise serializers.ValidationError({"password": "Password is required when creating a user."})
-        validated_data["username"] = validated_data.get("email", "")
+        email = validated_data.get("email", "").strip()
+        if not email:
+            raise serializers.ValidationError({"email": "Email is required."})
+        validated_data["username"] = email
         user = User(**validated_data)
         user.set_password(password)
         user.save()
