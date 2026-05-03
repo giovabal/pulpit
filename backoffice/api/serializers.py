@@ -20,7 +20,7 @@ class ChannelVacancySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChannelVacancy
-        fields = ["id", "channel_id", "channel_title", "death_date", "note"]
+        fields = ["id", "channel_id", "channel_title", "closure_date", "note"]
 
 
 class ChannelGroupSerializer(serializers.ModelSerializer):

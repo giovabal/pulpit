@@ -12,7 +12,7 @@
     var $chSearch = document.getElementById("vac-ch-search");
     var $chId     = document.getElementById("vac-ch-id");
     var $chDrop   = document.getElementById("vac-ch-dropdown");
-    var $deathDate = document.getElementById("vac-death-date");
+    var $closureDate = document.getElementById("vac-closure-date");
     var $note     = document.getElementById("vac-note");
 
     // ---- channel typeahead ----
@@ -90,7 +90,7 @@
             tdCh.appendChild(wrap); tr.appendChild(tdCh);
 
             var tdDate = document.createElement("td");
-            var dateInput = document.createElement("input"); dateInput.className = "bo-input"; dateInput.type = "date"; dateInput.value = vac.death_date || "";
+            var dateInput = document.createElement("input"); dateInput.className = "bo-input"; dateInput.type = "date"; dateInput.value = vac.closure_date || "";
             tdDate.appendChild(dateInput); tr.appendChild(tdDate);
 
             var tdNote = document.createElement("td");
@@ -101,7 +101,7 @@
             var saveBtn = document.createElement("button"); saveBtn.className = "bo-btn bo-btn--sm"; saveBtn.textContent = "Save";
             var cancelBtn = document.createElement("button"); cancelBtn.className = "bo-btn bo-btn--sm bo-btn--ghost"; cancelBtn.textContent = "Cancel";
             saveBtn.addEventListener("click", function () {
-                var body = { death_date: dateInput.value, note: noteInput.value.trim() };
+                var body = { closure_date: dateInput.value, note: noteInput.value.trim() };
                 if (chIdInput.value) body.channel_id = parseInt(chIdInput.value, 10);
                 apiFetch(API + vac.id + "/", { method: "PATCH", body: body })
                     .then(function (updated) { Object.assign(vac, updated); $tbody.replaceChild(renderRow(vac, false), tr); showToast("Saved."); })
@@ -111,7 +111,7 @@
             tdA.appendChild(saveBtn); tdA.appendChild(cancelBtn); tr.appendChild(tdA);
         } else {
             var tdChd = document.createElement("td"); tdChd.textContent = vac.channel_title || ""; tr.appendChild(tdChd);
-            var tdDd = document.createElement("td"); tdDd.textContent = vac.death_date || ""; tr.appendChild(tdDd);
+            var tdDd = document.createElement("td"); tdDd.textContent = vac.closure_date || ""; tr.appendChild(tdDd);
             var tdNd = document.createElement("td"); tdNd.className = "text-muted"; tdNd.style.fontSize = ".875rem"; tdNd.textContent = vac.note || ""; tr.appendChild(tdNd);
 
             var tdAd = document.createElement("td");
@@ -149,8 +149,8 @@
     $addForm.addEventListener("submit", function (e) {
         e.preventDefault();
         if (!$chId.value) { showToast("Select a channel from the dropdown.", "error"); return; }
-        if (!$deathDate.value) { showToast("Death date is required.", "error"); return; }
-        apiFetch(API, { method: "POST", body: { channel_id: parseInt($chId.value, 10), death_date: $deathDate.value, note: $note.value.trim() } })
+        if (!$closureDate.value) { showToast("Closure date is required.", "error"); return; }
+        apiFetch(API, { method: "POST", body: { channel_id: parseInt($chId.value, 10), closure_date: $closureDate.value, note: $note.value.trim() } })
             .then(function (vac) {
                 $tbody.insertBefore(renderRow(vac, false), $tbody.firstChild);
                 _total++;

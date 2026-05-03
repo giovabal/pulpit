@@ -520,7 +520,7 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if has_vacancies %}checked{% endif %}>Amplifier Jaccard
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Fraction of orphaned amplifiers that forwarded from this candidate after the vacancy died (Jaccard coverage, Small 1973)."></i>
+                   title="Fraction of orphaned amplifiers that forwarded from this candidate after the vacancy closed (Jaccard coverage, Small 1973)."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if has_vacancies %}checked{% endif %}>Structural Equivalence
@@ -535,7 +535,7 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if has_vacancies %}checked{% endif %}>Cascade Overlap
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Jaccard of SIR diffusion reach sets: vacancy content reach before death vs candidate reach after. Reuses Spreading runs from Linked parameters. Computationally intensive."></i>
+                   title="Jaccard of SIR diffusion reach sets: vacancy content reach before closure vs candidate reach after. Reuses Spreading runs from Linked parameters. Computationally intensive."></i>
                 <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Tunable: Spreading runs (Linked parameters)"></i>
               </label>
@@ -556,14 +556,14 @@
               <div class="ops-param">
                 <label for="vacancy_months_before">Months before
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Look-back window before the vacancy death date to identify orphaned channels and the vacancy's source portfolio. Default: 12."></i>
+                     title="Look-back window before the vacancy closure date to identify orphaned channels and the vacancy's source portfolio. Default: 12."></i>
                 </label>
                 <input type="number" name="vacancy_months_before" id="vacancy_months_before" placeholder="12" min="1">
               </div>
               <div class="ops-param">
                 <label for="vacancy_months_after">Months after
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Forward window after the vacancy death date to observe candidate adoption. Default: 24."></i>
+                     title="Forward window after the vacancy closure date to observe candidate adoption. Default: 24."></i>
                 </label>
                 <input type="number" name="vacancy_months_after" id="vacancy_months_after" placeholder="24" min="1">
               </div>

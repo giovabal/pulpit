@@ -16,15 +16,15 @@ In practice, this matters because structural heirs are often more significant th
 
 ## Registering a vacancy
 
-A vacancy is not inferred automatically. An analyst manually registers a channel as a vacancy in **Manage → Vacancies**, providing a **death date** — the point in time when the channel ceased to be active.
+A vacancy is not inferred automatically. An analyst manually registers a channel as a vacancy in **Manage → Vacancies**, providing a **closure date** — the point in time when the channel ceased to be active.
 
-The death date is the analytical boundary:
+The closure date is the analytical boundary:
 - The period **before** it is used to characterise the vacancy channel's structural role
 - The period **after** it is searched for replacement candidates
 
 All registered vacancies are listed at **Channels → Vacancies** (`/channels/vacancies/`), which shows each channel's last-known in-degree, out-degree, and the count of orphaned amplifiers.
 
-> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and death date.
+> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and closure date.
 
 ---
 
@@ -34,9 +34,9 @@ Any channel with a vacancy record gains a **Vacancy Analysis** card on its detai
 
 | Parameter | Default | Meaning |
 | :-------- | :------ | :------ |
-| **Months before** | 12 | How far back before the death date to characterise the vacancy's structural role |
-| **Months after** | 24 | How far forward after the death date to search for replacement activity |
-| **Only after vacancy** | On | When on, restricts candidates to channels whose first message is on or after the death date — ensuring they are genuinely new rather than pre-existing channels that happened to start being forwarded by the same amplifiers |
+| **Months before** | 12 | How far back before the closure date to characterise the vacancy's structural role |
+| **Months after** | 24 | How far forward after the closure date to search for replacement activity |
+| **Only after vacancy** | On | When on, restricts candidates to channels whose first message is on or after the closure date — ensuring they are genuinely new rather than pre-existing channels that happened to start being forwarded by the same amplifiers |
 
 > **[PLACEHOLDER: `images/vacancy-analysis-card.png`]** Vacancy Analysis card on a channel detail page: parameter form and ranked replacement candidate table.
 
@@ -144,7 +144,7 @@ A high PPR score means the candidate sits in the heart of the content ecosystem 
 
 *"How quickly and how broadly did the orphaned channels adopt this candidate?"*
 
-For each orphaned amplifier, the first message that forwards from the candidate after the death date is recorded. The **days-to-adoption** is the gap between the death date and that first forward. The score combines coverage (fraction of orphaned channels that adopted the candidate) with adoption speed using a 30-day half-life:
+For each orphaned amplifier, the first message that forwards from the candidate after the closure date is recorded. The **days-to-adoption** is the gap between the closure date and that first forward. The score combines coverage (fraction of orphaned channels that adopted the candidate) with adoption speed using a 30-day half-life:
 
 ```
 score_f = coverage / (1 + mean_days_to_adoption / 30)
@@ -191,8 +191,8 @@ The HTML page is linked from `index.html` under a **Vacancy Analysis** section t
 
 | Flag | Default | Description |
 | :--- | :------ | :---------- |
-| `--vacancy-months-before N` | 12 | Look-back window (months) before each vacancy's death date |
-| `--vacancy-months-after N` | 24 | Forward window (months) after each vacancy's death date |
+| `--vacancy-months-before N` | 12 | Look-back window (months) before each vacancy's closure date |
+| `--vacancy-months-after N` | 24 | Forward window (months) after each vacancy's closure date |
 | `--vacancy-max-candidates N` | 30 | Maximum candidates scored per vacancy (ranked by orphaned-amplifier count) |
 | `--vacancy-ppr-alpha α` | 0.85 | Damping factor for PPR; higher values weight long-range connections more |
 | `--spreading-runs N` | 200 | Monte Carlo SIR runs for `CASCADE_OVERLAP`; shared with the `SPREADING` node measure |

@@ -9,7 +9,7 @@
     </h1>
   </div>
   <p class="text-muted small mb-0 mt-1">
-    Channels manually designated as structural vacancies, with the analyst-assigned death date used as the reference point for replacement detection.
+    Channels manually designated as structural vacancies, with the analyst-assigned closure date used as the reference point for replacement detection.
   </p>
 </div>
 
@@ -19,7 +19,7 @@
     <thead>
       <tr>
         <th>Channel</th>
-        <th>Death date</th>
+        <th>closure date</th>
         <th class="text-end">In-degree</th>
         <th class="text-end">Out-degree</th>
         <th class="text-end">Orphaned amplifiers</th>
@@ -36,7 +36,7 @@
           <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
           {% if row.channel.is_lost %}<span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}
         </td>
-        <td><time datetime="{{ row.vacancy.death_date|date:'Y-m-d' }}">{{ row.vacancy.death_date|date:"N j, Y" }}</time></td>
+        <td><time datetime="{{ row.vacancy.closure_date|date:'Y-m-d' }}">{{ row.vacancy.closure_date|date:"N j, Y" }}</time></td>
         <td class="text-end">{{ row.channel.in_degree|default:"—" }}</td>
         <td class="text-end">{{ row.channel.out_degree|default:"—" }}</td>
         <td class="text-end">{{ row.orphaned_amplifier_count }}</td>

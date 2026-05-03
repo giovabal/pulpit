@@ -83,7 +83,7 @@
     <div>
       <h2 class="vacancy-impact-title">Vacancy Analysis</h2>
       <p class="vacancy-impact-subtitle">
-        Death date: {{ vacancy.death_date|date:"N j, Y" }}{% if vacancy.note %} — {{ vacancy.note }}{% endif %}
+        closure date: {{ vacancy.closure_date|date:"N j, Y" }}{% if vacancy.note %} — {{ vacancy.note }}{% endif %}
       </p>
     </div>
   </div>
@@ -171,7 +171,7 @@
     _data = data.candidates || [];
     _note = 'Based on ' + data.orphaned_count + ' amplifier' + (data.orphaned_count !== 1 ? 's' : '') +
             ' active in the ' + data.months_before + ' months before and ' +
-            data.months_after + ' months after the death date.';
+            data.months_after + ' months after the closure date.';
     if (!_data.length) {
       results.innerHTML = '<p class="vacancy-meta">' + _note + '</p><p class="vacancy-empty">No replacement candidates found for this window.</p>';
       return;

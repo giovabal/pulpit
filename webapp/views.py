@@ -239,7 +239,7 @@ class VacanciesView(TemplateView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
         rows = []
-        for vac in ChannelVacancy.objects.select_related("channel__organization").order_by("-death_date"):
+        for vac in ChannelVacancy.objects.select_related("channel__organization").order_by("-closure_date"):
             ch = vac.channel
             orphaned_count = Channel.objects.interesting().filter(message_set__forwarded_from=ch).distinct().count()
             rows.append({"vacancy": vac, "channel": ch, "orphaned_amplifier_count": orphaned_count})
@@ -497,13 +497,13 @@ class VacancyAnalysisView(View):
             return JsonResponse({"error": "invalid parameters"}, status=400)
         only_after_vacancy = request.GET.get("only_after_vacancy", "1") != "0"
 
-        death = vacancy.death_date
+        closure_date = vacancy.closure_date
         before_start = datetime.datetime.combine(
-            _shift_months(death, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+            _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
         )
-        death_dt = datetime.datetime.combine(death, datetime.time.min, tzinfo=datetime.timezone.utc)
+        closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=datetime.timezone.utc)
         after_end = datetime.datetime.combine(
-            _shift_months(death, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
+            _shift_months(closure_date, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
         )
 
         orphaned = (
@@ -511,7 +511,7 @@ class VacancyAnalysisView(View):
             .filter(
                 message_set__forwarded_from=ch,
                 message_set__date__gte=before_start,
-                message_set__date__lt=death_dt,
+                message_set__date__lt=closure_dt,
             )
             .distinct()
         )
@@ -522,7 +522,7 @@ class VacancyAnalysisView(View):
             Message.objects.filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=Channel.objects.interesting(),
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .exclude(forwarded_from=ch)
@@ -539,7 +539,7 @@ class VacancyAnalysisView(View):
             .annotate(first_msg=Min("message_set__date"))
         )
         if only_after_vacancy:
-            cand_qs = cand_qs.filter(first_msg__gte=death_dt)
+            cand_qs = cand_qs.filter(first_msg__gte=closure_dt)
         cand_channels = {c.pk: c for c in cand_qs}
 
         # ── Extra queries for strategies A / B / C ────────────────────────
@@ -549,7 +549,7 @@ class VacancyAnalysisView(View):
                 channel=ch,
                 forwarded_from__isnull=False,
                 date__gte=before_start,
-                date__lt=death_dt,
+                date__lt=closure_dt,
             )
             .values("forwarded_from_id", "forwarded_from__organization_id")
             .distinct()
@@ -575,7 +575,7 @@ class VacancyAnalysisView(View):
             Message.objects.filter(
                 channel__in=list(cand_channels),
                 forwarded_from__isnull=False,
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .values("channel_id", "forwarded_from_id", "forwarded_from__organization_id")
@@ -593,7 +593,7 @@ class VacancyAnalysisView(View):
             Message.objects.filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=list(cand_channels),
-                date__gte=death_dt,
+                date__gte=closure_dt,
                 date__lte=after_end,
             )
             .values("forwarded_from_id", "channel_id")

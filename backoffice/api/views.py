@@ -27,7 +27,7 @@ class ChannelVacancyViewSet(viewsets.ModelViewSet):
     serializer_class = ChannelVacancySerializer
 
     def get_queryset(self):
-        return ChannelVacancy.objects.select_related("channel").order_by("-death_date")
+        return ChannelVacancy.objects.select_related("channel").order_by("-closure_date")
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
