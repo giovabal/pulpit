@@ -161,6 +161,13 @@
         });
         fgFlags.appendChild(flagsWrap); form.appendChild(fgFlags);
 
+        /* Uninteresting after */
+        var fgCutoff = makeFieldGroup("Uninteresting after");
+        var cutoffInput = document.createElement("input");
+        cutoffInput.type = "date"; cutoffInput.name = "uninteresting_after"; cutoffInput.className = "bo-input";
+        if (ch.uninteresting_after) cutoffInput.value = ch.uninteresting_after;
+        fgCutoff.appendChild(cutoffInput); form.appendChild(fgCutoff);
+
         /* Buttons */
         var btnRow = document.createElement("div"); btnRow.className = "bo-ch-update-btns";
         var saveBtn = document.createElement("button"); saveBtn.type = "submit"; saveBtn.className = "bo-btn";
@@ -184,11 +191,13 @@
         var fd = new FormData(form);
         var orgVal = fd.get("organization_id");
         var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value); });
+        var cutoffVal = form.querySelector("input[name=uninteresting_after]").value;
         var body = {
             organization_id: orgVal ? parseInt(orgVal) : null,
             group_ids: groupIds,
             is_lost: form.querySelector("input[name=is_lost]").checked,
             is_private: form.querySelector("input[name=is_private]").checked,
+            uninteresting_after: cutoffVal || null,
         };
         apiFetch(API_CH, { method: "PATCH", body: body })
             .then(function () { showToast("Saved."); })

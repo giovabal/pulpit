@@ -73,6 +73,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "is_lost",
             "is_private",
             "date",
+            "uninteresting_after",
         ]
         read_only_fields = [
             "id",

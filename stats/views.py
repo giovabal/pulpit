@@ -31,9 +31,12 @@ class _GlobalTimeSeriesBase(View):
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
 
+        from network.utils import channel_cutoff_q
+
         interesting_pks = Channel.objects.interesting().values("pk")
         monthly_data = (
             Message.objects.filter(channel__in=interesting_pks, date__isnull=False)
+            .filter(channel_cutoff_q())
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(**{self.annotate_field: self.get_annotation()})
@@ -96,6 +99,13 @@ class _ChannelTimeSeriesBase(View):
     annotate_field: ClassVar[str]
     y_label: ClassVar[str]
 
+    def _msg_qs(self, channel: Channel, **filters):
+        """Base Message queryset for a channel, respecting uninteresting_after."""
+        qs = Message.objects.filter(channel=channel, **filters)
+        if channel.uninteresting_after:
+            qs = qs.filter(date__date__lte=channel.uninteresting_after)
+        return qs
+
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         raise NotImplementedError
 
@@ -122,7 +132,7 @@ class ChannelMessagesHistoryView(_ChannelTimeSeriesBase):
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         qs = (
-            Message.objects.filter(channel=channel, date__isnull=False)
+            self._msg_qs(channel, date__isnull=False)
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(total_messages=Count("id"))
@@ -137,7 +147,7 @@ class ChannelViewsHistoryView(_ChannelTimeSeriesBase):
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         qs = (
-            Message.objects.filter(channel=channel, date__isnull=False, views__isnull=False)
+            self._msg_qs(channel, date__isnull=False, views__isnull=False)
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(total_views=Sum("views"))
@@ -152,7 +162,7 @@ class ChannelForwardsHistoryView(_ChannelTimeSeriesBase):
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         qs = (
-            Message.objects.filter(channel=channel, date__isnull=False, forwarded_from__isnull=False)
+            self._msg_qs(channel, date__isnull=False, forwarded_from__isnull=False)
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(total_forwards=Count("id"))
@@ -167,12 +177,15 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         interesting_pks = Channel.objects.interesting().values("pk")
+        from network.utils import channel_cutoff_q
+
         qs = (
             Message.objects.filter(
                 channel__in=interesting_pks,
                 forwarded_from=channel,
                 date__isnull=False,
             )
+            .filter(channel_cutoff_q())
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(total_forwards_received=Count("id"))
@@ -189,7 +202,7 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         qs = (
-            Message.objects.filter(channel=channel, date__isnull=False)
+            self._msg_qs(channel, date__isnull=False)
             .annotate(month=TruncMonth("date"))
             .values("month")
             .annotate(avg_involvement=Avg("views", default=0))
@@ -203,25 +216,28 @@ class ChannelCrossRefsView(View):
         channel = get_object_or_404(Channel, pk=pk)
         interesting_pks = Channel.objects.interesting().values("pk")
 
+        from network.utils import channel_cutoff_q
+
         fwd_out = Counter(
-            Message.objects.filter(channel=channel, forwarded_from__isnull=False)
+            self._msg_qs(channel, forwarded_from__isnull=False)
             .exclude(forwarded_from=channel)
             .values_list("forwarded_from", flat=True)
         )
         ref_out = Counter(
             cpk
-            for cpk in Message.objects.filter(channel=channel).values_list("references", flat=True)
+            for cpk in self._msg_qs(channel).values_list("references", flat=True)
             if cpk is not None and cpk != channel.pk
         )
         mentioned = fwd_out + ref_out
 
         fwd_in = Counter(
-            Message.objects.filter(channel__in=interesting_pks, forwarded_from=channel).values_list(
-                "channel", flat=True
-            )
+            Message.objects.filter(channel__in=interesting_pks, forwarded_from=channel)
+            .filter(channel_cutoff_q())
+            .values_list("channel", flat=True)
         )
         ref_in = Counter(
             Message.objects.filter(channel__in=interesting_pks, references=channel)
+            .filter(channel_cutoff_q())
             .exclude(channel=channel)
             .values_list("channel", flat=True)
         )
@@ -255,8 +271,11 @@ class ChannelReactionsHistoryView(View):
         if not spine:
             return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
 
+        top_emojis_filter = {"message__channel": channel}
+        if channel.uninteresting_after:
+            top_emojis_filter["message__date__date__lte"] = channel.uninteresting_after
         top_emojis_qs = (
-            MessageReaction.objects.filter(message__channel=channel)
+            MessageReaction.objects.filter(**top_emojis_filter)
             .values("emoji")
             .annotate(total=Sum("count"))
             .order_by("-total")[:8]
@@ -265,11 +284,13 @@ class ChannelReactionsHistoryView(View):
         if not top_emojis:
             return JsonResponse({"labels": spine, "series": [], "y_label": "reactions"})
 
+        cutoff_kwargs = {"message__date__date__lte": channel.uninteresting_after} if channel.uninteresting_after else {}
         monthly = (
             MessageReaction.objects.filter(
                 message__channel=channel,
                 message__date__isnull=False,
                 emoji__in=top_emojis,
+                **cutoff_kwargs,
             )
             .annotate(month=TruncMonth("message__date"))
             .values("month", "emoji")
@@ -294,10 +315,7 @@ class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
         texts = (
-            Message.objects.filter(channel=channel)
-            .exclude(message__isnull=True)
-            .exclude(message="")
-            .values_list("message", flat=True)
+            self._msg_qs(channel).exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
         )
         domain_counter: Counter = Counter()
         email_counter: Counter = Counter()

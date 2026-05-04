@@ -4,6 +4,7 @@
 *Vacancy succession batch analysis. Documentation rewrite.*
 
 ### New features
+- **`uninteresting_after` date cutoff on channels** — each `Channel` gains an optional `uninteresting_after` date field. When set, messages written after that date are silently ignored everywhere: the crawler skips them during both the initial fetch and the stats-refresh pass; the graph builder, all network measures, community stats, and degree computations exclude them; channel detail panels, message lists, and all per-channel time-series charts only show messages up to the cutoff; the channel activity period is bounded accordingly. The field is settable from the channel edit page in the backoffice (`/manage/channels/<id>/`).
 - **Vacancy succession batch export** — `structural_analysis` gains a new `--vacancy-measures` flag that scores replacement candidates for every vacancy in the database in one pass and embeds the results in the export. Six algorithms are available:
   - **`AMPLIFIER_JACCARD`** — fraction of orphaned amplifiers that forwarded from the candidate after the closure date (Small 1973).
   - **`STRUCTURAL_EQUIV`** — cosine similarity of shared in-neighbours (amplifiers) and out-neighbours (sources); measures static positional equivalence (Lorrain & White 1971).

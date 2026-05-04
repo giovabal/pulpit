@@ -4,7 +4,7 @@ from typing import Any
 
 from django.db.models import Count, Q
 
-from network.utils import GraphData, make_date_q
+from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
 import networkx as nx
@@ -25,13 +25,17 @@ def apply_amplification_factor(
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
     ]
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
 
-    fwd_q = Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks) & make_date_q(start_date, end_date)
+    fwd_q = (
+        Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
+        & make_date_q(start_date, end_date)
+        & channel_cutoff_q()
+    )
     forwards_received: dict[int, int] = {
         item["forwarded_from_id"]: item["total"]
         for item in Message.objects.filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
@@ -62,7 +66,7 @@ def apply_content_originality(
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
     ]
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
         for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))

@@ -322,6 +322,8 @@ class ChannelDetailView(ListView):
             .select_related("forwarded_from")
             .prefetch_related("references", "reactions")
         )
+        if self.selected_channel.uninteresting_after:
+            qs = qs.filter(date__date__lte=self.selected_channel.uninteresting_after)
         if q:
             qs = qs.filter(message__icontains=q)
         if self.request.GET.get("forwards_only"):
@@ -355,6 +357,8 @@ class ChannelDetailView(ListView):
         )
 
         msg_qs = Message.objects.filter(channel=ch)
+        if ch.uninteresting_after:
+            msg_qs = msg_qs.filter(date__date__lte=ch.uninteresting_after)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
         total_forwards_sent = msg_qs.filter(forwarded_from__isnull=False).count()
