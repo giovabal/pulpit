@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Max, Min, Q
+from django.db.models import F, Max, Min, Q
 from django.urls import reverse
 
 from webapp.managers import ChannelManager
@@ -65,6 +65,7 @@ class Channel(TelegramBaseModel):
     access_hash = models.BigIntegerField(null=True)
     in_degree = models.PositiveIntegerField(null=True)
     out_degree = models.PositiveIntegerField(null=True)
+    uninteresting_after = models.DateField(null=True, blank=True)
 
     def __str__(self) -> str:
         return self.title or str(self.telegram_id)
@@ -98,7 +99,10 @@ class Channel(TelegramBaseModel):
     def _get_activity_bounds(
         self,
     ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:
-        agg = self.message_set.exclude(date__isnull=True).aggregate(min_date=Min("date"), max_date=Max("date"))
+        qs = self.message_set.exclude(date__isnull=True)
+        if self.uninteresting_after:
+            qs = qs.filter(date__date__lte=self.uninteresting_after)
+        agg = qs.aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]
         start_candidates = [d for d in (self.date, first_date) if d is not None]
@@ -142,19 +146,22 @@ class Channel(TelegramBaseModel):
         cited_by = (
             Message.objects.filter(channel__in=Channel.objects.interesting())
             .filter(Q(forwarded_from=self) | Q(references=self))
+            .filter(Q(channel__uninteresting_after__isnull=True) | Q(date__date__lte=F("channel__uninteresting_after")))
             .exclude(channel=self)
             .distinct()
             .count()
         )
-        cites = (
+        cites_qs = (
             Message.objects.filter(channel=self)
             .filter(
                 Q(forwarded_from__in=Channel.objects.interesting()) | Q(references__in=Channel.objects.interesting())
             )
             .exclude(forwarded_from=self)
             .distinct()
-            .count()
         )
+        if self.uninteresting_after:
+            cites_qs = cites_qs.filter(date__date__lte=self.uninteresting_after)
+        cites = cites_qs.count()
         if settings.REVERSED_EDGES:
             self._set_degrees(cited_by, cites)
         else:
@@ -173,6 +180,7 @@ class Channel(TelegramBaseModel):
         citations = (
             Message.objects.filter(channel__in=Channel.objects.interesting())
             .filter(Q(forwarded_from=self) | Q(references=self))
+            .filter(Q(channel__uninteresting_after__isnull=True) | Q(date__date__lte=F("channel__uninteresting_after")))
             .exclude(channel=self)
             .distinct()
             .count()

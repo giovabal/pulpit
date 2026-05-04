@@ -6,7 +6,7 @@ from typing import Any
 from django.conf import settings
 from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, QuerySet
 
-from network.utils import make_date_q
+from network.utils import channel_cutoff_q, make_date_q
 from webapp.models import Channel, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
@@ -151,13 +151,17 @@ def build_graph(
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]
     date_q = make_date_q(start_date, end_date)
+    cutoff_q = channel_cutoff_q()
+    ref_cutoff_q = channel_cutoff_q("message__channel", "message__date")
     references_through = Message.references.through
 
     if recency_weights is not None:
         today = datetime.date.today()
 
         messages_per_channel: dict[int, float] = {}
-        for ch_id, date in Message.objects.filter(date_q, channel_id__in=channel_ids).values_list("channel_id", "date"):
+        for ch_id, date in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids).values_list(
+            "channel_id", "date"
+        ):
             messages_per_channel[ch_id] = messages_per_channel.get(ch_id, 0.0) + _recency_decay(
                 date, today, recency_weights
             )
@@ -167,7 +171,7 @@ def build_graph(
 
         forwarded_counts: dict[tuple[int, int], float] = {}
         for ch_id, fwd_id, date in Message.objects.filter(
-            date_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids
+            date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids
         ).values_list("channel_id", "forwarded_from_id", "date"):
             key = (ch_id, fwd_id)
             forwarded_counts[key] = forwarded_counts.get(key, 0.0) + _recency_decay(date, today, recency_weights)
@@ -177,6 +181,7 @@ def build_graph(
             for src_ch_id, ref_ch_id, msg_date in (
                 references_through.objects.filter(
                     make_date_q(start_date, end_date, field="message__date"),
+                    ref_cutoff_q,
                     channel_id__in=channel_ids,
                     message__channel_id__in=channel_ids,
                 )
@@ -197,7 +202,7 @@ def build_graph(
                 else Q(forwarded_from_id__isnull=False)
             )
             for ch_id, date in (
-                Message.objects.filter(date_q, channel_id__in=channel_ids)
+                Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
                 .filter(ref_filter)
                 .values_list("channel_id", "date")
             ):
@@ -208,7 +213,7 @@ def build_graph(
     else:
         messages_per_channel = {
             item["channel_id"]: item["total"]
-            for item in Message.objects.filter(date_q, channel_id__in=channel_ids)
+            for item in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
             .values("channel_id")
             .annotate(total=Count("id"))
         }
@@ -218,7 +223,9 @@ def build_graph(
 
         forwarded_counts = {
             (item["channel_id"], item["forwarded_from_id"]): item["total"]
-            for item in Message.objects.filter(date_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+            for item in Message.objects.filter(
+                date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids
+            )
             .values("channel_id", "forwarded_from_id")
             .annotate(total=Count("id"))
         }
@@ -249,7 +256,7 @@ def build_graph(
             )
             referencing_counts = {
                 item["channel_id"]: item["total"]
-                for item in Message.objects.filter(date_q, channel_id__in=channel_ids)
+                for item in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
                 .filter(ref_filter)
                 .values("channel_id")
                 .annotate(total=Count("id"))

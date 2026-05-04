@@ -93,8 +93,8 @@ class ChannelCrawler:
         try:
             channel, telegram_channel = self.get_basic_channel(seed)
         except errors.rpcerrorlist.ChannelPrivateError:
-            update_status(f"[telegram_id={seed}] | skipped (channel is private)")
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
+            update_status(f"[telegram_id={seed}] | skipped (channel is private)")
             return 0
         except ValueError:
             # Numeric channel IDs fail when Telethon hasn't cached the access_hash.
@@ -121,19 +121,19 @@ class ChannelCrawler:
                     except (ValueError, errors.rpcerrorlist.ChannelInvalidError):
                         pass
             if is_private:
-                update_status(f"[telegram_id={seed}] | skipped (channel is private)")
                 Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
+                update_status(f"[telegram_id={seed}] | skipped (channel is private)")
                 return 0
             if channel is None:
                 logger.info("Seed is a user account not resolvable by username: %s", seed)
-                update_status(f"[telegram_id={seed}] | skipped (user account)")
                 Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
                     is_user_account=True, is_lost=False
                 )
+                update_status(f"[telegram_id={seed}] | skipped (user account)")
                 return 0
         if channel is None:
-            update_status(f"[telegram_id={seed}] | skipped (channel not found)")
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True, is_private=False)
+            update_status(f"[telegram_id={seed}] | skipped (channel not found)")
             return 0
 
         channel_label = f"[id={channel.id}] {channel}"
@@ -228,6 +228,12 @@ class ChannelCrawler:
 
     def get_message(self, channel: Channel, telegram_message: Any) -> int:
         if isinstance(telegram_message, MessageService):
+            return 0
+        if (
+            channel.uninteresting_after
+            and telegram_message.date
+            and telegram_message.date.date() > channel.uninteresting_after
+        ):
             return 0
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
@@ -372,6 +378,12 @@ class ChannelCrawler:
         ):
             if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
                 break
+            if (
+                channel.uninteresting_after
+                and telegram_message.date is not None
+                and telegram_message.date.date() > channel.uninteresting_after
+            ):
+                continue
             if isinstance(telegram_message, MessageService):
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
                 continue
