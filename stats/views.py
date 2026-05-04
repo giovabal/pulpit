@@ -314,9 +314,10 @@ class ChannelReactionsHistoryView(View):
 class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
-        texts = (
-            self._msg_qs(channel).exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
-        )
+        msg_qs = Message.objects.filter(channel=channel)
+        if channel.uninteresting_after:
+            msg_qs = msg_qs.filter(date__date__lte=channel.uninteresting_after)
+        texts = msg_qs.exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
         domain_counter: Counter = Counter()
         email_counter: Counter = Counter()
         for text in texts:

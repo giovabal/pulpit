@@ -1,5 +1,6 @@
 import datetime
 import logging
+import sys
 from collections.abc import Callable
 from time import sleep
 from typing import Any
@@ -105,16 +106,14 @@ class ChannelCrawler:
 
         try:
             channel, telegram_channel = self.get_basic_channel(seed)
-        except errors.rpcerrorlist.ChannelPrivateError:
-            Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
-            update_status(f"[telegram_id={seed}] | skipped (channel is private)")
-            return 0
-        except ValueError:
-            # Numeric channel IDs fail when Telethon hasn't cached the access_hash.
-            # Prefer a direct GetChannels lookup using the stored access_hash (no ResolveUsernameRequest).
-            # Fall back to username resolution only when access_hash is absent or stale.
+        except (errors.rpcerrorlist.ChannelPrivateError, ValueError):
+            # ChannelPrivateError from a bare numeric lookup is ambiguous: Telegram returns
+            # CHANNEL_PRIVATE both for genuinely private channels and for deleted ones.
+            # ValueError means Telethon lacks a cached access_hash for the numeric ID.
+            # In both cases run the same fallback chain before deciding the final status.
+            initial_private = isinstance(sys.exc_info()[1], errors.rpcerrorlist.ChannelPrivateError)
             channel, telegram_channel = None, None
-            is_private = False
+            is_private = initial_private  # tentative; may be overridden by fallbacks
             if isinstance(seed, int):
                 db_ch = Channel.objects.filter(telegram_id=seed).only("username", "access_hash").first()
                 if db_ch and db_ch.access_hash:
@@ -122,27 +121,39 @@ class ChannelCrawler:
                         channel, telegram_channel = self.get_basic_channel(
                             InputChannel(channel_id=seed, access_hash=db_ch.access_hash)
                         )
+                        is_private = False
                     except errors.rpcerrorlist.ChannelPrivateError:
                         is_private = True
                     except (ValueError, errors.rpcerrorlist.ChannelInvalidError):
-                        pass
+                        is_private = False  # stale access_hash → still try username
                 if channel is None and not is_private and db_ch and db_ch.username:
                     try:
                         channel, telegram_channel = self.get_basic_channel(db_ch.username)
+                        is_private = False
                     except errors.rpcerrorlist.ChannelPrivateError:
                         is_private = True
                     except (ValueError, errors.rpcerrorlist.ChannelInvalidError):
-                        pass
-            if is_private:
-                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
-                update_status(f"[telegram_id={seed}] | skipped (channel is private)")
-                return 0
+                        is_private = False  # can't resolve by username either → lost
             if channel is None:
-                logger.info("Seed is a user account not resolvable by username: %s", seed)
-                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
-                    is_user_account=True, is_lost=False
-                )
-                update_status(f"[telegram_id={seed}] | skipped (user account)")
+                if is_private:
+                    Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                        is_private=True, is_lost=False
+                    )
+                    update_status(f"[telegram_id={seed}] | skipped (channel is private)")
+                elif initial_private:
+                    # Started with ChannelPrivateError but fallbacks couldn't confirm private
+                    # or resolve the channel → it no longer exists.
+                    Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                        is_lost=True, is_private=False
+                    )
+                    update_status(f"[telegram_id={seed}] | skipped (channel not found)")
+                else:
+                    # Started with ValueError: couldn't resolve by any means → user account.
+                    logger.info("Seed is a user account not resolvable by username: %s", seed)
+                    Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                        is_user_account=True, is_lost=False
+                    )
+                    update_status(f"[telegram_id={seed}] | skipped (user account)")
                 return 0
         if channel is None:
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True, is_private=False)

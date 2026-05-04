@@ -25,9 +25,14 @@
           {% if selected_channel.is_private %}<span class="ch-badge ch-badge--warn"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span>{% endif %}
           {% if not is_interesting %}<span class="ch-badge ch-badge--muted">Not monitored</span>{% endif %}
         </div>
-        <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link flex-shrink-0" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
-          <i class="bi bi-telegram" aria-hidden="true"></i>
-        </a>
+        <div class="d-flex gap-2 flex-shrink-0">
+          <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">
+            <i class="bi bi-telegram" aria-hidden="true"></i>
+          </a>
+          <a href="{% url 'backoffice:channel-update' selected_channel.pk %}" class="tg-link" title="Edit in manage" aria-label="Edit {{ selected_channel.title }} in manage">
+            <i class="bi bi-pencil-square" aria-hidden="true"></i>
+          </a>
+        </div>
       </div>
 
       <div class="channel-meta-row">
