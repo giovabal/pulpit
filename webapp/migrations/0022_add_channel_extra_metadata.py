@@ -4,75 +4,74 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('webapp', '0021_add_channel_message_ttl'),
+        ("webapp", "0021_add_channel_message_ttl"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channel',
-            name='admins_count',
+            model_name="channel",
+            name="admins_count",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='available_min_id',
+            model_name="channel",
+            name="available_min_id",
             field=models.PositiveBigIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='extra_usernames',
+            model_name="channel",
+            name="extra_usernames",
             field=models.JSONField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='forum',
+            model_name="channel",
+            name="forum",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='join_request',
+            model_name="channel",
+            name="join_request",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='join_to_send',
+            model_name="channel",
+            name="join_to_send",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='level',
+            model_name="channel",
+            name="level",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='linked_chat_id',
+            model_name="channel",
+            name="linked_chat_id",
             field=models.BigIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='noforwards',
+            model_name="channel",
+            name="noforwards",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='online_count',
+            model_name="channel",
+            name="online_count",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='requests_pending',
+            model_name="channel",
+            name="requests_pending",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='slowmode_seconds',
+            model_name="channel",
+            name="slowmode_seconds",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='channel',
-            name='theme_emoticon',
+            model_name="channel",
+            name="theme_emoticon",
             field=models.CharField(blank=True, max_length=20),
         ),
     ]

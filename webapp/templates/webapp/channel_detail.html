@@ -36,31 +36,32 @@
       </div>
 
       <div class="channel-meta-row">
-        {% if selected_channel.username %}<span class="ch-meta-item"><i class="bi bi-at" aria-hidden="true"></i>{{ selected_channel.username }}</span>{% endif %}
-        {% if selected_channel.extra_usernames %}{% for un in selected_channel.extra_usernames %}<span class="ch-meta-item"><i class="bi bi-at" aria-hidden="true"></i>{{ un }}</span>{% endfor %}{% endif %}
-        <span class="ch-meta-item"><i class="bi bi-broadcast" aria-hidden="true"></i>{{ selected_channel.channel_type }}</span>
+        {% if selected_channel.username %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Primary Telegram username"><i class="bi bi-at" aria-hidden="true"></i>{{ selected_channel.username }}</span>{% endif %}
+        {% if selected_channel.extra_usernames %}{% for un in selected_channel.extra_usernames %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Additional collectible username"><i class="bi bi-at" aria-hidden="true"></i>{{ un }}</span>{% endfor %}{% endif %}
+        <span class="ch-meta-item" data-bs-toggle="tooltip" title="Telegram entity type (broadcast channel, supergroup, or user account)"><i class="bi bi-broadcast" aria-hidden="true"></i>{{ selected_channel.channel_type }}</span>
         {% if selected_channel.organization %}<span class="ch-meta-item"><span class="org-dot" style="background: {{ selected_channel.organization.color }};" aria-hidden="true"></span>{{ selected_channel.organization }}</span>{% endif %}
         {% for grp in channel_groups %}<span class="ch-meta-item"><i class="bi bi-collection" aria-hidden="true"></i>{{ grp.name }}</span>{% endfor %}
-        {% if selected_channel.participants_count %}<span class="ch-meta-item"><i class="bi bi-people" aria-hidden="true"></i>{{ selected_channel.participants_count }} subscribers</span>{% endif %}
-        {% if selected_channel.admins_count %}<span class="ch-meta-item"><i class="bi bi-person-badge" aria-hidden="true"></i>{{ selected_channel.admins_count }} admins</span>{% endif %}
-        {% if selected_channel.online_count %}<span class="ch-meta-item"><i class="bi bi-circle-fill ch-online-dot" aria-hidden="true"></i>~{{ selected_channel.online_count }} online</span>{% endif %}
-        {% if selected_channel.date and is_interesting %}<span class="ch-meta-item"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
-        {% if is_interesting %}<time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>{% endif %}
-        {% if selected_channel.telegram_location %}<span class="ch-meta-item"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ selected_channel.telegram_location }}</span>{% endif %}
-        {% if selected_channel.in_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
-        {% if is_interesting and selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
-        {% if selected_channel.level %}<span class="ch-meta-item"><i class="bi bi-lightning-fill" aria-hidden="true"></i>Level {{ selected_channel.level }}</span>{% endif %}
-        {% if selected_channel.forum %}<span class="ch-meta-item"><i class="bi bi-chat-square-dots" aria-hidden="true"></i>Forum</span>{% endif %}
-        {% if selected_channel.has_link %}<span class="ch-meta-item"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
-        {% if linked_channel %}<span class="ch-meta-item"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Linked: <a href="{{ linked_channel.get_absolute_url }}">{{ linked_channel.title }}</a></span>{% elif selected_channel.linked_chat_id %}<span class="ch-meta-item"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Linked ID: {{ selected_channel.linked_chat_id }}</span>{% endif %}
-        {% if selected_channel.signatures %}<span class="ch-meta-item"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
-        {% if selected_channel.join_request %}<span class="ch-meta-item"><i class="bi bi-person-check" aria-hidden="true"></i>Join by request{% if selected_channel.requests_pending %} ({{ selected_channel.requests_pending }} pending){% endif %}</span>{% endif %}
-        {% if selected_channel.join_to_send %}<span class="ch-meta-item"><i class="bi bi-door-open" aria-hidden="true"></i>Join to write</span>{% endif %}
-        {% if selected_channel.slowmode_seconds %}<span class="ch-meta-item"><i class="bi bi-hourglass-split" aria-hidden="true"></i>Slowmode: {{ selected_channel.slowmode_seconds }}s</span>{% endif %}
-        {% if selected_channel.noforwards %}<span class="ch-meta-item ch-meta-item--warn"><i class="bi bi-shield-lock" aria-hidden="true"></i>Content protected</span>{% endif %}
-        {% if selected_channel.available_min_id %}<span class="ch-meta-item ch-meta-item--warn"><i class="bi bi-trash" aria-hidden="true"></i>History from msg #{{ selected_channel.available_min_id }}</span>{% endif %}
-        {% if message_ttl_display %}<span class="ch-meta-item ch-meta-item--warn"><i class="bi bi-clock-history" aria-hidden="true"></i>Auto-delete: {{ message_ttl_display }}</span>{% endif %}
-        {% if selected_channel.theme_emoticon %}<span class="ch-meta-item">{{ selected_channel.theme_emoticon }}</span>{% endif %}
+        {% if selected_channel.participants_count %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Total number of subscribers at last crawl"><i class="bi bi-people" aria-hidden="true"></i>{{ selected_channel.participants_count }} subscribers</span>{% endif %}
+        {% if selected_channel.admins_count %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of administrators in this channel"><i class="bi bi-person-badge" aria-hidden="true"></i>{{ selected_channel.admins_count }} admins</span>{% endif %}
+        {% if selected_channel.online_count %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Approximate number of members online at last crawl (Telegram snapshot)"><i class="bi bi-circle-fill ch-online-dot" aria-hidden="true"></i>~{{ selected_channel.online_count }} online</span>{% endif %}
+        {% if selected_channel.date and is_interesting %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Date the channel was created on Telegram"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
+        {% if is_interesting %}<time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}" data-bs-toggle="tooltip" title="Date this channel was last crawled by Pulpit"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>{% endif %}
+        {% if selected_channel.telegram_location %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Geographic location set on the channel"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ selected_channel.telegram_location }}</span>{% endif %}
+        {% if selected_channel.in_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of interesting channels that forward from or mention this channel"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
+        {% if is_interesting and selected_channel.out_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of interesting channels this channel forwards from or mentions"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
+        {% if selected_channel.level %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Channel boost level — higher levels unlock extra Telegram features. Earned through paid boosts from subscribers."><i class="bi bi-lightning-fill" aria-hidden="true"></i>Level {{ selected_channel.level }}</span>{% endif %}
+        {% if selected_channel.forum %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Forum mode is active — messages are organised into topics (threads) rather than a single feed"><i class="bi bi-chat-square-dots" aria-hidden="true"></i>Forum</span>{% endif %}
+        {% if selected_channel.has_link %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="This channel has a linked discussion group where subscribers can comment on posts"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
+        {% if linked_channel %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Associated broadcast channel or discussion group linked on Telegram"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Linked: <a href="{{ linked_channel.get_absolute_url }}">{{ linked_channel.title }}</a></span>{% elif selected_channel.linked_chat_id %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Telegram ID of the associated linked channel or group (not in the database)"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Linked ID: {{ selected_channel.linked_chat_id }}</span>{% endif %}
+        {% if parent_channel %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Broadcast channel that this group is linked to as a discussion space"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Parent channel: <a href="{{ parent_channel.get_absolute_url }}">{{ parent_channel.title }}</a></span>{% endif %}
+        {% if selected_channel.signatures %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Posts in this channel are signed with the author's name"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
+        {% if selected_channel.join_request %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Admin approval is required to join this channel or group{% if selected_channel.requests_pending %} — {{ selected_channel.requests_pending }} request{{ selected_channel.requests_pending|pluralize }} currently pending{% endif %}"><i class="bi bi-person-check" aria-hidden="true"></i>Join by request{% if selected_channel.requests_pending %} ({{ selected_channel.requests_pending }} pending){% endif %}</span>{% endif %}
+        {% if selected_channel.join_to_send %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Users must join before they can send messages (applies to groups)"><i class="bi bi-door-open" aria-hidden="true"></i>Join to write</span>{% endif %}
+        {% if selected_channel.slowmode_seconds %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Slowmode is active — members can send only one message every {{ selected_channel.slowmode_seconds }} seconds"><i class="bi bi-hourglass-split" aria-hidden="true"></i>Slowmode: {{ selected_channel.slowmode_seconds }}s</span>{% endif %}
+        {% if selected_channel.noforwards %}<span class="ch-meta-item ch-meta-item--warn" data-bs-toggle="tooltip" title="Content protection is enabled — Telegram prevents forwarding, copying, and saving messages from this channel"><i class="bi bi-shield-lock" aria-hidden="true"></i>Content protected</span>{% endif %}
+        {% if selected_channel.available_min_id %}<span class="ch-meta-item ch-meta-item--warn" data-bs-toggle="tooltip" title="Oldest message accessible via the Telegram API — messages before ID {{ selected_channel.available_min_id }} have been permanently deleted"><i class="bi bi-trash" aria-hidden="true"></i>History from msg #{{ selected_channel.available_min_id }}</span>{% endif %}
+        {% if message_ttl_display %}<span class="ch-meta-item ch-meta-item--warn" data-bs-toggle="tooltip" title="Telegram automatically deletes all messages in this channel after {{ message_ttl_display }}"><i class="bi bi-clock-history" aria-hidden="true"></i>Auto-delete: {{ message_ttl_display }}</span>{% endif %}
+        {% if selected_channel.theme_emoticon %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Custom emoji theme applied to this channel">{{ selected_channel.theme_emoticon }}</span>{% endif %}
       </div>
     </div>
   </div>
@@ -591,6 +592,9 @@
 
 {% block extra_scripts %}
 <script>
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
   document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
     new bootstrap.Popover(el);
   });

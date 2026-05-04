@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('webapp', '0019_add_channel_uninteresting_after'),
+        ("webapp", "0019_add_channel_uninteresting_after"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channel',
-            name='restriction_reason',
+            model_name="channel",
+            name="restriction_reason",
             field=models.JSONField(blank=True, null=True),
         ),
     ]
