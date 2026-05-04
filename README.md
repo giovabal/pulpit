@@ -10,7 +10,7 @@ Telegram channels constantly reference each other — forwarding messages, linki
 
 ![Example graph — ~700 channels, ~12,000 edges, Leiden directed community detection, PageRank nodes size, vapoRwave palette](webapp_engine/static/2d_graph_example.jpg)
 
-<figcaption>~700 channels, ~12,000 edges. Leiden directed community detection, PageRank nodes size, vapoRwave palette.</figcaption>
+<figcaption><em>~700 channels, ~12,000 edges. Leiden directed community detection, PageRank nodes size, vapoRwave palette.</em></figcaption>
 </figure>
 
 Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different actors.
@@ -21,7 +21,7 @@ The analytical layer is built on established graph-theory methods: [PageRank](do
 
 ![The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis](webapp_engine/static/pipeline.jpg)
 
-<figcaption>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</figcaption>
+<figcaption><em>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</em></figcaption>
 </figure>
 
 ---
