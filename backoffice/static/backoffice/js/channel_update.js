@@ -175,6 +175,14 @@
         var cancelBtn = document.createElement("a"); cancelBtn.href = "/manage/channels/"; cancelBtn.className = "bo-btn bo-btn--ghost";
         cancelBtn.textContent = "Cancel";
         btnRow.appendChild(saveBtn); btnRow.appendChild(cancelBtn);
+        if (ch.detail_url) {
+            var detailLink = document.createElement("a");
+            detailLink.href = ch.detail_url;
+            detailLink.className = "bo-btn bo-btn--ghost";
+            detailLink.style.marginLeft = "auto";
+            detailLink.innerHTML = '<i class="bi bi-eye me-1" aria-hidden="true"></i>View detail';
+            btnRow.appendChild(detailLink);
+        }
         form.appendChild(btnRow);
 
         $root.appendChild(form);
