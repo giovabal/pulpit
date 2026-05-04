@@ -222,6 +222,7 @@ body {
   white-space: nowrap;
 }
 .ch-meta-item--warn { color: #92400e; }
+.ch-online-dot { font-size: .45rem; color: #16a34a; margin-bottom: .05rem; }
 
 .channel-about {
   font-size: .8375rem;

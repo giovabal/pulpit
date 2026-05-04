@@ -473,6 +473,7 @@ class ChannelDetailView(ListView):
         except ChannelVacancy.DoesNotExist:
             vacancy = None
 
+        linked_channel = Channel.objects.filter(telegram_id=ch.linked_chat_id).first() if ch.linked_chat_id else None
         context_data.update(
             {
                 "selected_channel": ch,
@@ -483,6 +484,7 @@ class ChannelDetailView(ListView):
                 "top_reactions": top_reactions,
                 "channel_groups": list(ch.groups.order_by("name")),
                 "vacancy": vacancy,
+                "linked_channel": linked_channel,
             }
         )
         return context_data
