@@ -66,6 +66,7 @@ class Channel(TelegramBaseModel):
     in_degree = models.PositiveIntegerField(null=True)
     out_degree = models.PositiveIntegerField(null=True)
     uninteresting_after = models.DateField(null=True, blank=True)
+    restriction_reason = models.JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
         return self.title or str(self.telegram_id)

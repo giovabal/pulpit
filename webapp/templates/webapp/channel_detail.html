@@ -44,6 +44,7 @@
         {% if is_interesting and selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
         {% if selected_channel.has_link %}<span class="ch-meta-item"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
         {% if selected_channel.signatures %}<span class="ch-meta-item"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
+        {% if selected_channel.restriction_reason %}{% for r in selected_channel.restriction_reason %}<span class="ch-meta-item"><i class="bi bi-slash-circle" aria-hidden="true"></i>{{ r.platform }}: {{ r.reason }}</span>{% endfor %}{% endif %}
       </div>
     </div>
   </div>

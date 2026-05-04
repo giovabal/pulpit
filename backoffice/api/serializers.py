@@ -74,6 +74,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "is_private",
             "date",
             "uninteresting_after",
+            "restriction_reason",
         ]
         read_only_fields = [
             "id",
@@ -85,6 +86,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "in_degree",
             "out_degree",
             "date",
+            "restriction_reason",
         ]
 
     def update(self, instance, validated_data):

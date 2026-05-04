@@ -62,7 +62,20 @@ class ChannelCrawler:
             channel.telegram_location = getattr(location, "address", "") or str(location)
         channel.is_lost = False
         channel.is_private = False
-        channel.save(update_fields=["participants_count", "about", "telegram_location", "is_lost", "is_private"])
+        rr = getattr(telegram_channel, "restriction_reason", None)
+        channel.restriction_reason = (
+            [{"platform": r.platform, "reason": r.reason, "text": r.text} for r in rr] if rr else None
+        )
+        channel.save(
+            update_fields=[
+                "participants_count",
+                "about",
+                "telegram_location",
+                "is_lost",
+                "is_private",
+                "restriction_reason",
+            ]
+        )
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
