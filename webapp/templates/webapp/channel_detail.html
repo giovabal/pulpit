@@ -21,7 +21,6 @@
           {% if selected_channel.verified %}<span class="ch-badge ch-badge--verified"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Verified</span>{% endif %}
           {% if selected_channel.scam %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Scam</span>{% endif %}
           {% if selected_channel.fake %}<span class="ch-badge ch-badge--danger"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Fake</span>{% endif %}
-          {% if selected_channel.restricted %}<span class="ch-badge ch-badge--warn"><i class="bi bi-slash-circle" aria-hidden="true"></i> Restricted</span>{% endif %}
           {% if selected_channel.is_lost %}<span class="ch-badge ch-badge--danger"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}
           {% if selected_channel.is_private %}<span class="ch-badge ch-badge--warn"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span>{% endif %}
           {% if not is_interesting %}<span class="ch-badge ch-badge--muted">Not monitored</span>{% endif %}
@@ -44,7 +43,6 @@
         {% if is_interesting and selected_channel.out_degree is not None %}<span class="ch-meta-item"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
         {% if selected_channel.has_link %}<span class="ch-meta-item"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
         {% if selected_channel.signatures %}<span class="ch-meta-item"><i class="bi bi-pen" aria-hidden="true"></i>Signed posts</span>{% endif %}
-        {% if selected_channel.restriction_reason %}{% for r in selected_channel.restriction_reason %}<span class="ch-meta-item"><i class="bi bi-slash-circle" aria-hidden="true"></i>{{ r.platform }}: {{ r.reason }}</span>{% endfor %}{% endif %}
       </div>
     </div>
   </div>
@@ -54,6 +52,24 @@
   {% endif %}
 
 </div>
+
+{% if selected_channel.restriction_reason %}
+<div class="restriction-card">
+  <div class="restriction-card-header">
+    <i class="bi bi-slash-circle restriction-card-icon" aria-hidden="true"></i>
+    <span class="restriction-card-title">Telegram restriction</span>
+  </div>
+  <ul class="restriction-card-list">
+    {% for r in selected_channel.restriction_reason %}
+    <li class="restriction-card-item">
+      <span class="restriction-platform">{{ r.platform }}</span>
+      <span class="restriction-reason">{{ r.reason }}</span>
+      {% if r.text %}<span class="restriction-text">{{ r.text }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 <div class="ch-summary-grid">
   {% for card in summary %}

@@ -389,6 +389,16 @@
   box-shadow: 0 0 0 2px rgba(67,56,202,.15);
 }
 .ops-param textarea::placeholder { color: var(--muted); opacity: .6; }
+.ops-global-badge {
+  font-size: .68rem;
+  color: var(--muted);
+  background: var(--border);
+  border-radius: 3px;
+  padding: .05rem .3rem;
+  margin-left: .3rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 
 /* ---- compare-network directory picker ---- */
 .ops-dir-picker {

@@ -1197,6 +1197,53 @@ body {
 
 .vacancy-list-table { width: 100%; }
 
+/* ---------- Channel detail: Restriction card ---------- */
+.restriction-card {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #d97706;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+}
+.restriction-card-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
+.restriction-card-icon { font-size: 1rem; color: #92400e; }
+.restriction-card-title { font-size: .9rem; font-weight: 700; color: #92400e; }
+.restriction-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.restriction-card-item {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  font-size: .82rem;
+}
+.restriction-platform {
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 3px;
+  padding: .1rem .35rem;
+  flex-shrink: 0;
+}
+.restriction-reason {
+  font-weight: 600;
+  color: #78350f;
+  flex-shrink: 0;
+}
+.restriction-text { color: #92400e; }
+
 /* ---------- Channel detail: Vacancy Analysis card ---------- */
 .vacancy-analysis-card {
   background: var(--surface);
