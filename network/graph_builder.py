@@ -129,7 +129,6 @@ def build_graph(
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = (
         Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
-        .exclude(is_lost=True)
         .exclude(is_private=True)
         .select_related("organization")
         .prefetch_related(

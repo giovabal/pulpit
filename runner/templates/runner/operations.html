@@ -202,6 +202,13 @@
                   <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
                 </div>
               </div>
+              <div class="ops-flags mt-2">
+                <label class="ops-flag">
+                  <input type="checkbox" name="retry_lost_and_private">Retry lost &amp; private
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Include channels marked as lost or private in the crawl scope. Each is checked at its turn: if now accessible its flag is cleared and it is processed like any other channel; if still inaccessible its flag is updated and it is skipped."></i>
+                </label>
+              </div>
             </fieldset>
           </div>
 

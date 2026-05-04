@@ -251,6 +251,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--get-new-messages")
         if post.get("fix_holes"):
             args.append("--fixholes")
+        if post.get("retry_lost_and_private"):
+            args.append("--retry-lost-and-private")
         if post.get("fetch_recommended_channels"):
             args.append("--fetch-recommended-channels")
         if post.get("retry_references"):

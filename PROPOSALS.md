@@ -9,12 +9,12 @@
 
 
 Before major release (/plan)
-- Have a deep inspection of Python code, search for bugs and bad practices
-- Have a deep inspection of JS code, search for bugs and bad practices
-- Have a deep inspection of HTML and CSS code, search for bugs and bad practices
+- Have a deep inspection of Python code, search for bugs, bad practices and dead code
+- Have a deep inspection of JS code, search for bugs, bad practices and dead code
+- Have a deep inspection of HTML and CSS code, search for bugs, bad practices and dead code
+- Have a deep inspection of HTML code, make sure the app and the HTML output of analysis are respecting accessibility rules and can provide a decent experience for people using screen readers.
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
 - review documentation
-- aria attributes
 
 
 ## 3. Content & Semantic Analysis
