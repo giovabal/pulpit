@@ -82,6 +82,7 @@ Downloads messages for all channels whose organisation is marked `is_interesting
 <img src="../webapp_engine/static/screenshot_13.jpg" alt="Operations panel">
 <figcaption><em>Operations panel: four numbered pipeline steps as task cards with real-time log output.</em></figcaption>
 </figure>
+<br>
 
 All steps are opt-in — expand **Options** to configure:
 
