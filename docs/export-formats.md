@@ -84,6 +84,7 @@ The entry point for sharing or publishing results. Lists every generated file wi
 <img src="../webapp_engine/static/screenshot_08.jpg" alt="Options panel in the interactive graph">
 <figcaption><em>Options panel: switch community strategy, resize nodes by any computed measure.</em></figcaption>
 </figure>
+<br>
 
 Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`. **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
@@ -99,6 +100,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`. **Requir
 <img src="../webapp_engine/static/screenshot_06.jpg" alt="3D interactive graph">
 <figcaption><em>3D interactive graph (~800 nodes, ~5,000 edges): rotate, zoom, click nodes to inspect measures.</em></figcaption>
 </figure>
+<br>
 
 > **[PLACEHOLDER: `images/workflow-timeline-nav.gif`]** Year navigator: step through annual snapshots of the network with animated transitions.
 
@@ -116,6 +118,7 @@ Powered by [Three.js](https://threejs.org/). Generated with `--3dgraph` (require
 <img src="../webapp_engine/static/screenshot_07.jpg" alt="Node detail panel in the 3D graph">
 <figcaption><em>Node detail panel: subscriber count, all computed measures, direct channel link.</em></figcaption>
 </figure>
+<br>
 
 ---
 

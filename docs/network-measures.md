@@ -8,6 +8,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
 <figcaption><em>Channel table: 14 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
 </figure>
+<br>
 
 ---
 
@@ -35,6 +36,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 <img src="../webapp_engine/static/screenshot_05.jpg" alt="Measure comparison scatter plot">
 <figcaption><em>Measure comparison: drag any two measures onto the axes to compare their distributions across channels.</em></figcaption>
 </figure>
+<br>
 
 ---
 

@@ -12,6 +12,7 @@ The Operations panel is the dashboard you use to launch data collection and anal
 <img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel list">
 <figcaption><em>Channel list with organisation filter, sort controls, and group chips.</em></figcaption>
 </figure>
+<br>
 
 A paginated list of all channels in the database. Filters and controls:
 
@@ -31,6 +32,7 @@ Channels marked `is_interesting = True` via their organisation show their networ
 <img src="../webapp_engine/static/screenshot_11.jpg" alt="Channel detail page">
 <figcaption><em>Channel detail page: subscriber history, message volume chart, network stats card, and message list.</em></figcaption>
 </figure>
+<br>
 
 Each channel has a dedicated detail page with:
 
@@ -45,6 +47,7 @@ Each channel has a dedicated detail page with:
 <img src="../webapp_engine/static/screenshot_12.jpg" alt="Channel detail showing vacancy analysis">
 <figcaption><em>Channel detail page: Vacancy Analysis card showing replacement candidates with scores.</em></figcaption>
 </figure>
+<br>
 
 ---
 
@@ -79,6 +82,7 @@ Use this page as the starting point for sharing or exploring results without nav
 <img src="../webapp_engine/static/screenshot_13.jpg" alt="Operations panel">
 <figcaption><em>Operations panel: four numbered pipeline steps as task cards with real-time log output.</em></figcaption>
 </figure>
+<br>
 
 The operations panel presents the four pipeline tasks as numbered cards:
 
@@ -105,6 +109,7 @@ Staff-only management interface for corpus administration. Accessible only to us
 <img src="../webapp_engine/static/screenshot_09.jpg" alt="Backoffice channels view">
 <figcaption><em>Backoffice channels view: bulk organisation assignment and group chip management.</em></figcaption>
 </figure>
+<br>
 
 ### Channels — `/manage/channels/`
 

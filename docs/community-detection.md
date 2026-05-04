@@ -10,6 +10,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 <img src="../webapp_engine/static/screenshot_00.jpg" alt="2D graph coloured by communities">
 <figcaption><em>2D graph coloured by Leiden directed communities, ~600 nodes. Each colour cluster is one detected community.</em></figcaption>
 </figure>
+<br>
 
 ---
 
@@ -208,6 +209,7 @@ STRONGCC reveals the mutually reinforcing cores. A large SCC is a group of chann
 <img src="../webapp_engine/static/screenshot_03.jpg" alt="Community table">
 <figcaption><em>Community table: structural metrics per community for each detection strategy side by side.</em></figcaption>
 </figure>
+<br>
 
 ### Organisation × community distribution
 
@@ -228,6 +230,7 @@ Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION stra
 <img src="images/community-consensus-matrix.png" alt="Community consensus matrix">
 <figcaption><em>Consensus matrix: larger red circles indicate channel pairs co-assigned to the same community by more algorithms.</em></figcaption>
 </figure>
+<br>
 
 > **[PLACEHOLDER: `images/community-consensus-matrix.png`]** Consensus matrix: larger red circles indicate channel pairs co-assigned to the same community by more algorithms.
 
