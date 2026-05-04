@@ -73,7 +73,20 @@ class ChannelCrawler:
         channel.extra_usernames = (
             [u.username for u in raw_usernames if u.active and u.username.lower() != primary] if raw_usernames else None
         ) or None
-        channel.linked_chat_id = getattr(full, "linked_chat_id", None) or None
+        linked_chat_id = getattr(full, "linked_chat_id", None) or None
+        channel.linked_chat_id = linked_chat_id
+        if linked_chat_id and not Channel.objects.filter(telegram_id=linked_chat_id).exists():
+            linked_tg = next(
+                (c for c in getattr(channel_full_info, "chats", []) if getattr(c, "id", None) == linked_chat_id),
+                None,
+            )
+            if linked_tg is not None:
+                try:
+                    Channel.from_telegram_object(
+                        linked_tg, force_update=False, defaults={"organization": channel.organization}
+                    )
+                except Exception as exc:
+                    logger.warning("Could not create linked channel %s: %s", linked_chat_id, exc)
         channel.available_min_id = getattr(full, "available_min_id", None) or None
         channel.slowmode_seconds = getattr(full, "slowmode_seconds", None) or None
         channel.admins_count = getattr(full, "admins_count", None) or None

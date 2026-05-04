@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('webapp', '0020_add_channel_restriction_reason'),
+        ("webapp", "0020_add_channel_restriction_reason"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channel',
-            name='message_ttl',
+            model_name="channel",
+            name="message_ttl",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
     ]

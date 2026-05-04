@@ -165,7 +165,8 @@
             /* name */
             var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
             var nameWrap = document.createElement("div");
-            var nameEl = document.createElement("div"); nameEl.className = "bo-ch-name";
+            var nameEl = document.createElement("a"); nameEl.className = "bo-ch-name";
+            nameEl.href = ch.detail_url || ("#");
             nameEl.textContent = ch.title || ("ID " + ch.id);
             nameWrap.appendChild(nameEl);
             if (ch.username) {

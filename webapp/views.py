@@ -474,6 +474,9 @@ class ChannelDetailView(ListView):
             vacancy = None
 
         linked_channel = Channel.objects.filter(telegram_id=ch.linked_chat_id).first() if ch.linked_chat_id else None
+        parent_channel = Channel.objects.filter(linked_chat_id=ch.telegram_id).first() if ch.telegram_id else None
+        if parent_channel and linked_channel and parent_channel.pk == linked_channel.pk:
+            parent_channel = None
         context_data.update(
             {
                 "selected_channel": ch,
@@ -485,6 +488,7 @@ class ChannelDetailView(ListView):
                 "channel_groups": list(ch.groups.order_by("name")),
                 "vacancy": vacancy,
                 "linked_channel": linked_channel,
+                "parent_channel": parent_channel,
             }
         )
         return context_data
