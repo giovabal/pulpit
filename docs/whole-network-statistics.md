@@ -6,7 +6,7 @@ If network measures score individual channels, whole-network statistics score th
 
 <figure>
 <img src="../webapp_engine/static/screenshot_04.jpg" alt="Whole-network statistics table">
-<figcaption>Whole-network statistics table: density, reciprocity, clustering, Freeman centralisation, E-I index, and more.</figcaption>
+<figcaption><em>Whole-network statistics table: density, reciprocity, clustering, Freeman centralisation, E-I index, and more.</em></figcaption>
 </figure>
 
 ---

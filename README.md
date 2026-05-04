@@ -23,7 +23,6 @@ The analytical layer is built on established graph-theory methods: [PageRank](do
 
 <figcaption>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</figcaption>
 </figure>
-> **[PLACEHOLDER: `docs/images/readme-pipeline.png`]** .
 
 ---
 
