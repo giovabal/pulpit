@@ -221,6 +221,7 @@ body {
   gap: .25rem;
   white-space: nowrap;
 }
+.ch-meta-item--warn { color: #92400e; }
 
 .channel-about {
   font-size: .8375rem;
