@@ -347,7 +347,13 @@ class ChannelDetailView(ListView):
             extra += "&forwards_only=1"
         context_data["original_query"] = context_data["original_query"] + extra
 
-        is_interesting = Channel.objects.interesting().filter(pk=ch.pk).exists()
+        is_interesting = (
+            Channel.objects.filter(organization__is_interesting=True)
+            .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
+            .exclude(is_private=True)
+            .filter(pk=ch.pk)
+            .exists()
+        )
 
         msg_qs = Message.objects.filter(channel=ch)
         total_messages = msg_qs.count()
