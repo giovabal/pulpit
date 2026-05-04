@@ -187,10 +187,13 @@
 
 /* ── Channel name cell ──────────────────────────────────────────────────── */
 
-.bo-ch-cell { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.bo-ch-cell { display: flex; align-items: center; gap: .5rem; }
 .bo-ch-name { font-weight: 500; }
 .bo-ch-username { display: block; font-size: .8125rem; color: var(--muted); font-family: var(--font-mono); text-decoration: none; }
 .bo-ch-username:hover { color: var(--accent); text-decoration: underline; }
+.bo-ch-name-wrap { flex: 1; min-width: 0; }
+.bo-detail-btn { flex-shrink: 0; opacity: 0; transition: opacity .15s; }
+tr:hover .bo-detail-btn { opacity: 1; }
 .bo-ch-pic { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .bo-ch-pic--clickable { cursor: pointer; transition: opacity .15s; }
 .bo-ch-pic--clickable:hover { opacity: .75; }

@@ -164,9 +164,8 @@
 
             /* name */
             var tdName = document.createElement("td"); tdName.className = "bo-ch-cell";
-            var nameWrap = document.createElement("div");
-            var nameEl = document.createElement("a"); nameEl.className = "bo-ch-name";
-            nameEl.href = ch.detail_url || ("#");
+            var nameWrap = document.createElement("div"); nameWrap.className = "bo-ch-name-wrap";
+            var nameEl = document.createElement("div"); nameEl.className = "bo-ch-name";
             nameEl.textContent = ch.title || ("ID " + ch.id);
             nameWrap.appendChild(nameEl);
             if (ch.username) {
@@ -177,6 +176,15 @@
                 nameWrap.appendChild(unEl);
             }
             tdName.appendChild(nameWrap);
+            if (ch.detail_url) {
+                var detailBtn = document.createElement("a");
+                detailBtn.className = "bo-btn bo-btn--icon bo-detail-btn";
+                detailBtn.href = ch.detail_url;
+                detailBtn.title = "View detail page";
+                detailBtn.setAttribute("aria-label", "View detail page for " + (ch.title || ch.id));
+                detailBtn.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+                tdName.appendChild(detailBtn);
+            }
             if (ch.profile_picture_url) {
                 var img = document.createElement("img");
                 img.className = "bo-ch-pic bo-ch-pic--clickable";
