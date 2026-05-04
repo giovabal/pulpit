@@ -66,6 +66,8 @@ class ChannelCrawler:
         channel.restriction_reason = (
             [{"platform": r.platform, "reason": r.reason, "text": r.text} for r in rr] if rr else None
         )
+        ttl = getattr(channel_full_info.full_chat, "ttl_period", None)
+        channel.message_ttl = ttl if ttl else None
         channel.save(
             update_fields=[
                 "participants_count",
@@ -74,6 +76,7 @@ class ChannelCrawler:
                 "is_lost",
                 "is_private",
                 "restriction_reason",
+                "message_ttl",
             ]
         )
 

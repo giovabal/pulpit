@@ -18,7 +18,7 @@ from webapp.paginator import DiggPaginator
 
 from .models import Channel, ChannelGroup, ChannelVacancy, Message, MessageReaction, Organization, ProfilePicture
 from .utils.channel_types import channel_type_filter
-from .utils.dates import fmt_date
+from .utils.dates import fmt_date, fmt_ttl
 
 # ---- message list options ------------------------------------------------
 
@@ -479,6 +479,7 @@ class ChannelDetailView(ListView):
                 "summary": summary,
                 "panels": panels,
                 "is_interesting": is_interesting,
+                "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
                 "channel_groups": list(ch.groups.order_by("name")),
                 "vacancy": vacancy,
