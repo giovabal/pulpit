@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.17] - To be announced
-*Vacancy succession batch analysis. Documentation rewrite. Fixes.*
+*Vacancy succession batch analysis. Documentation rewrite. Channel details.*
 
 ### New features
 - **`uninteresting_after` date cutoff on channels** — each `Channel` gains an optional `uninteresting_after` date field. When set, messages written after that date are silently ignored everywhere: the crawler skips them during both the initial fetch and the stats-refresh pass; the graph builder, all network measures, community stats, and degree computations exclude them; channel detail panels, message lists, and all per-channel time-series charts only show messages up to the cutoff; the channel activity period is bounded accordingly. The field is settable from the channel edit page in the backoffice (`/manage/channels/<id>/`).
@@ -23,6 +23,7 @@
 - **Two-tab message view on channel detail page** — the message list is now split into two tabs: *Messages* (own messages, with a new *Forwards only* filter option) and *Forwards received* (messages from other monitored channels that forwarded this channel's content, each showing the amplifying channel). Tab selection and filters are preserved across pagination.
 
 ### Improvements
+- **Extended channel metadata** — 13 new fields fetched at zero extra API cost and displayed in the channel detail meta row: `noforwards` (content protection), `forum`, `join_to_send`, `join_request`, `level` (boost level) from the Channel object; `extra_usernames`, `linked_chat_id` (resolved to a link when the channel is in the DB), `available_min_id` (oldest accessible message — signals deleted history), `slowmode_seconds`, `admins_count`, `online_count`, `requests_pending`, `theme_emoticon` from ChannelFull. Fields indicating data loss (`noforwards`, `available_min_id`) are highlighted in amber.
 - **Message auto-delete timer (`message_ttl`) stored per channel** — Telegram's per-channel message TTL (in seconds) is fetched from `ChannelFull.ttl_period` and persisted on every crawl. When set, the channel detail page shows an amber "Auto-delete: 1 week" (or equivalent) meta item.
 - **`restriction_reason` stored per channel** — Telegram's per-platform restriction metadata (platform, reason, text) is now persisted as a JSON field and updated on every crawl. Individual restrictions are shown as meta items on the channel detail page (e.g. `ios: porno`).
 - **Lost and private channels are now first-class in the web UI** — their detail pages show the full set of panels, charts, and message lists (same as active channels); in the channel list they appear before the type-excluded section with their profile picture, ungreyed, without a toggle; the graph builder includes lost channels in the analysis. A new **Retry lost & private** option in the `crawl_channels` Scope panel includes those channels in the crawl scope: each is resolved at its turn, its flag is updated, and if now accessible it is crawled normally.
