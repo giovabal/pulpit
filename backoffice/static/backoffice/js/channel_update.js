@@ -211,7 +211,6 @@
         var p = document.createElement('p');
         p.className = 'bo-empty';
         p.textContent = 'Error loading channel: ' + e.message;
-        $root.innerHTML = '';
         $root.appendChild(p);
     });
 })();

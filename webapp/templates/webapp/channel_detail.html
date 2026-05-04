@@ -238,7 +238,11 @@
     return fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
   }
 
-  var eventsPromise = fetchJson("{% url 'events-data' %}");
+  var eventsPromise = null;
+  function getEventsPromise() {
+    if (!eventsPromise) eventsPromise = fetchJson("{% url 'events-data' %}");
+    return eventsPromise;
+  }
 
   document.querySelectorAll('.collapse[data-panel-url]').forEach(function (collapse) {
     var spinner = collapse.querySelector('.stats-spinner');
@@ -248,7 +252,7 @@
         loaded = true;
         var isChart = collapse.dataset.panelType !== 'table' && collapse.dataset.panelType !== 'cross-refs';
         var fetches = [fetchJson(collapse.dataset.panelUrl)];
-        if (isChart) fetches.push(eventsPromise);
+        if (isChart) fetches.push(getEventsPromise());
         Promise.all(fetches).then(function (results) {
           spinner.classList.add('hidden');
           if (collapse.dataset.panelType === 'table') {
@@ -263,6 +267,8 @@
         }).catch(function () {
           spinner.classList.add('hidden');
           loaded = false;
+          var wrap = collapse.querySelector('.panel-tables-wrap') || collapse.querySelector('.panel-chart-wrap');
+          if (wrap) { var p = document.createElement('p'); p.className = 'bo-empty'; p.textContent = 'Failed to load.'; wrap.appendChild(p); }
         });
       }
     });
