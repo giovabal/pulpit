@@ -559,21 +559,24 @@ class Command(BaseCommand):
                             self.stdout.flush()
                             _meta_len[0] = len(line)
                             try:
-                                ch_obj, tg_ch = crawler.get_basic_channel(meta_ch.telegram_id)
+                                ch_obj, tg_ch, status = crawler.resolve_channel_or_classify(meta_ch.telegram_id)
                             except errors.FloodWaitError as flood_err:
                                 self.stdout.write("", ending="\n")
                                 self.stdout.write(self.style.WARNING(f"Flood wait for {meta_ch}: {flood_err}"))
                                 if not settings.IGNORE_FLOODWAIT:
                                     sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                                 continue
-                            except errors.rpcerrorlist.ChannelPrivateError:
-                                Channel.objects.filter(pk=meta_ch.pk).update(is_private=True, is_lost=False)
-                                continue
                             except Exception as resolve_err:
                                 logger.warning("Could not resolve entity for %s: %s", meta_ch, resolve_err)
                                 continue
-                            if tg_ch is None:
+                            if status == "private":
+                                Channel.objects.filter(pk=meta_ch.pk).update(is_private=True, is_lost=False)
+                                continue
+                            if status == "lost":
                                 Channel.objects.filter(pk=meta_ch.pk).update(is_lost=True, is_private=False)
+                                continue
+                            if status == "user_account":
+                                Channel.objects.filter(pk=meta_ch.pk).update(is_user_account=True, is_lost=False)
                                 continue
                             crawler.media_handler.download_profile_picture(tg_ch)
                             try:

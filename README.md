@@ -8,16 +8,22 @@ Telegram channels constantly reference each other — forwarding messages, linki
 
 <figure>
 
-![Example graph — ~400 channels, ~8,000 edges, Leiden directed community detection, vapoRwave palette](webapp_engine/static/2d_graph_example.jpg)
+![Example graph — ~700 channels, ~12,000 edges, Leiden directed community detection, PageRank nodes size, vapoRwave palette](webapp_engine/static/2d_graph_example.jpg)
 
-<figcaption>~400 channels, ~8,000 edges. Leiden directed community detection, vapoRwave palette.</figcaption>
+<figcaption>~700 channels, ~12,000 edges. Leiden directed community detection, PageRank nodes size, vapoRwave palette.</figcaption>
 </figure>
 
 Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive map you can explore in a browser — zooming in on individual channels, filtering by community, comparing the reach of different actors.
 
 The analytical layer is built on established graph-theory methods: [PageRank](docs/network-measures.md#pagerank), [betweenness centrality](docs/network-measures.md#betweenness-centrality), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [Infomap echo-chamber detection](docs/community-detection.md#infomap), [SIR spreading simulation](docs/network-measures.md#spreading-efficiency), and more. Measures that are standard in network science are applied to the specific dynamics of Telegram forwarding networks. The software is actively developed; see the [changelog](CHANGELOG.md) for recent additions.
 
-> **[PLACEHOLDER: `docs/images/readme-pipeline.png`]** The four-step pipeline: search channels → organise → crawl messages → export network.
+<figure>
+
+![The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis](webapp_engine/static/pipeline.jpg)
+
+<figcaption>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</figcaption>
+</figure>
+> **[PLACEHOLDER: `docs/images/readme-pipeline.png`]** .
 
 ---
 
