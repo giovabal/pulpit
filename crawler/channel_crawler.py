@@ -62,12 +62,24 @@ class ChannelCrawler:
             channel.telegram_location = getattr(location, "address", "") or str(location)
         channel.is_lost = False
         channel.is_private = False
+        full = channel_full_info.full_chat
         rr = getattr(telegram_channel, "restriction_reason", None)
         channel.restriction_reason = (
             [{"platform": r.platform, "reason": r.reason, "text": r.text} for r in rr] if rr else None
         )
-        ttl = getattr(channel_full_info.full_chat, "ttl_period", None)
-        channel.message_ttl = ttl if ttl else None
+        channel.message_ttl = getattr(full, "ttl_period", None) or None
+        raw_usernames = getattr(telegram_channel, "usernames", None)
+        primary = channel.username.lower() if channel.username else None
+        channel.extra_usernames = (
+            [u.username for u in raw_usernames if u.active and u.username.lower() != primary] if raw_usernames else None
+        ) or None
+        channel.linked_chat_id = getattr(full, "linked_chat_id", None) or None
+        channel.available_min_id = getattr(full, "available_min_id", None) or None
+        channel.slowmode_seconds = getattr(full, "slowmode_seconds", None) or None
+        channel.admins_count = getattr(full, "admins_count", None) or None
+        channel.online_count = getattr(full, "online_count", None) or None
+        channel.requests_pending = getattr(full, "requests_pending", None) or None
+        channel.theme_emoticon = getattr(full, "theme_emoticon", None) or ""
         channel.save(
             update_fields=[
                 "participants_count",
@@ -77,6 +89,14 @@ class ChannelCrawler:
                 "is_private",
                 "restriction_reason",
                 "message_ttl",
+                "extra_usernames",
+                "linked_chat_id",
+                "available_min_id",
+                "slowmode_seconds",
+                "admins_count",
+                "online_count",
+                "requests_pending",
+                "theme_emoticon",
             ]
         )
 

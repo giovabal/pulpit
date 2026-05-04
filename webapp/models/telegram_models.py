@@ -33,6 +33,11 @@ class Channel(TelegramBaseModel):
         "gigagroup",
         "access_hash",
         "username",
+        "noforwards",
+        "forum",
+        "join_to_send",
+        "join_request",
+        "level",
     )
 
     objects = ChannelManager()
@@ -68,6 +73,19 @@ class Channel(TelegramBaseModel):
     uninteresting_after = models.DateField(null=True, blank=True)
     restriction_reason = models.JSONField(null=True, blank=True)
     message_ttl = models.PositiveIntegerField(null=True, blank=True)
+    noforwards = models.BooleanField(default=False)
+    forum = models.BooleanField(default=False)
+    join_to_send = models.BooleanField(default=False)
+    join_request = models.BooleanField(default=False)
+    level = models.PositiveIntegerField(null=True, blank=True)
+    extra_usernames = models.JSONField(null=True, blank=True)
+    linked_chat_id = models.BigIntegerField(null=True, blank=True)
+    available_min_id = models.PositiveBigIntegerField(null=True, blank=True)
+    slowmode_seconds = models.PositiveIntegerField(null=True, blank=True)
+    admins_count = models.PositiveIntegerField(null=True, blank=True)
+    online_count = models.PositiveIntegerField(null=True, blank=True)
+    requests_pending = models.PositiveIntegerField(null=True, blank=True)
+    theme_emoticon = models.CharField(max_length=20, blank=True)
 
     def __str__(self) -> str:
         return self.title or str(self.telegram_id)
