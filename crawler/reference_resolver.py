@@ -105,9 +105,14 @@ class ReferenceResolver:
         return missing
 
     def get_missing_references(
-        self, status_callback: Callable[[str], None] | None = None, force_retry: bool = False
+        self,
+        status_callback: Callable[[str], None] | None = None,
+        force_retry: bool = False,
+        channel_qs=None,
     ) -> None:
         qs = Message.objects.exclude(missing_references="")
+        if channel_qs is not None:
+            qs = qs.filter(channel__in=channel_qs)
         total = qs.count() if status_callback is not None else 0
         to_update: list[Message] = []
         to_add: list[tuple[Message, "Channel"]] = []

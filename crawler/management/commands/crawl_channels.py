@@ -594,22 +594,30 @@ class Command(BaseCommand):
                     else:
                         _ref_len = [0]
 
-                        def _ref_progress(done: int, total: int) -> None:
-                            line = printer._fit(f"Retrying unresolved message references [{done}/{total}]")
-                            padding = " " * max(0, _ref_len[0] - len(line))
-                            self.stdout.write(f"\r{line}{padding}", ending="")
-                            self.stdout.flush()
-                            _ref_len[0] = len(line)
+                        def _ref_progress(progress: str) -> None:
+                            line = printer._fit(f"Retrying unresolved message references [{progress}]")
+                            if printer._is_tty:
+                                padding = " " * max(0, _ref_len[0] - len(line))
+                                self.stdout.write(f"\r{line}{padding}", ending="")
+                                self.stdout.flush()
+                                _ref_len[0] = len(line)
+                            else:
+                                done_str, _, total_str = progress.partition("/")
+                                if done_str == total_str or int(done_str) % 100 == 0:
+                                    self.stdout.write(line, ending="\n")
+                                    self.stdout.flush()
 
                         self.stdout.write(f"\nRetrying {n_missing} unresolved message references", ending="")
                         self.stdout.flush()
-                        crawler.get_missing_references(status_callback=_ref_progress, force_retry=force_retry)
+                        crawler.get_missing_references(
+                            status_callback=_ref_progress, force_retry=force_retry, channel_qs=channels
+                        )
                         self.stdout.write("", ending="\n")
 
                 # ---- mine Channel.about for t.me/ references ----
                 if mine_about_texts:
                     about_refs: set[str] = set()
-                    for about_text in interesting_qs.exclude(about="").values_list("about", flat=True):
+                    for about_text in channels.exclude(about="").values_list("about", flat=True):
                         for m in _ABOUT_REF_RE.finditer(about_text):
                             ref = m.group(1).strip().lower()
                             if ref and ref not in SKIPPABLE_REFERENCES:
@@ -655,9 +663,12 @@ class Command(BaseCommand):
 
                 # ---- fetch Telegram-recommended channels ----
                 if fetch_recommended:
-                    interesting_channels = list(interesting_qs)
+                    interesting_channels = list(channels)
                     n_rec = len(interesting_channels)
-                    self.stdout.write(f"\nFetching recommended channels for {n_rec} interesting channels", ending="")
+                    self.stdout.write(
+                        f"\nFetching recommended channels for {n_rec} interesting channels",
+                        ending="\n" if not printer._is_tty else "",
+                    )
                     self.stdout.flush()
                     _rec_len: list[int] = [0]
                     rec_total = 0
@@ -686,7 +697,7 @@ class Command(BaseCommand):
                     self.stdout.write(f"Recommended channels: {rec_total} found, {rec_new} new.")
 
                 if fix_missing_media:
-                    self._fix_missing_media(interesting_qs, api_client, download_temp_dir, printer)
+                    self._fix_missing_media(channels, api_client, download_temp_dir, printer)
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection
@@ -699,6 +710,8 @@ class Command(BaseCommand):
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
         if refresh_degrees:
+            self.stdout.write("\nRefreshing degrees: querying message data…")
+            self.stdout.flush()
             interesting_pks = set(interesting_qs.values_list("pk", flat=True))
 
             # Non-interesting channels cited by interesting channels: via forwards or t.me/username references.
@@ -717,6 +730,8 @@ class Command(BaseCommand):
             ) - interesting_pks
 
             if interesting_pks:
+                self.stdout.write("Refreshing degrees: computing citation counts…")
+                self.stdout.flush()
                 # Build (message_id, target_channel_id) pairs for all citations toward interesting channels,
                 # taking the union of forward-from and reference links so each message counts once per target.
                 fwd_cited_by = set(
@@ -767,17 +782,24 @@ class Command(BaseCommand):
 
                 total = len(channels_to_update)
                 _len: list[int] = [0]
-                self.stdout.write(f"\nRefreshing degrees for {total} interesting channels", ending="")
+                self.stdout.write(
+                    f"\nRefreshing degrees for {total} interesting channels", ending="\n" if not printer._is_tty else ""
+                )
                 self.stdout.flush()
                 for i in range(0, total, 100):
                     Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
                     done = min(i + 100, total)
                     line = printer._fit(f"Refreshing degrees for {total} interesting channels [{done}/{total}]")
-                    padding = " " * max(0, _len[0] - len(line))
-                    self.stdout.write(f"\r{line}{padding}", ending="")
-                    self.stdout.flush()
-                    _len[0] = len(line)
-                self.stdout.write("", ending="\n")
+                    if printer._is_tty:
+                        padding = " " * max(0, _len[0] - len(line))
+                        self.stdout.write(f"\r{line}{padding}", ending="")
+                        self.stdout.flush()
+                        _len[0] = len(line)
+                    else:
+                        self.stdout.write(line, ending="\n")
+                        self.stdout.flush()
+                if printer._is_tty:
+                    self.stdout.write("", ending="\n")
 
             if cited_pks:
                 fwd_cited = set(

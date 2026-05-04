@@ -447,7 +447,9 @@ class ChannelCrawler:
                     channel=InputChannel(channel_id=channel.telegram_id, access_hash=channel.access_hash)
                 )
             )
-        except (errors.rpcerrorlist.ChannelPrivateError, errors.rpcerrorlist.ChannelInvalidError):
+        except errors.FloodWaitError:
+            raise
+        except Exception:
             return 0, 0
         total = 0
         new = 0
@@ -474,5 +476,7 @@ class ChannelCrawler:
                     new_count += 1
         return results_count, new_count
 
-    def get_missing_references(self, status_callback=None, force_retry: bool = False) -> None:
-        self.reference_resolver.get_missing_references(status_callback=status_callback, force_retry=force_retry)
+    def get_missing_references(self, status_callback=None, force_retry: bool = False, channel_qs=None) -> None:
+        self.reference_resolver.get_missing_references(
+            status_callback=status_callback, force_retry=force_retry, channel_qs=channel_qs
+        )
