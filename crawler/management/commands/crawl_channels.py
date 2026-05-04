@@ -136,6 +136,17 @@ class Command(BaseCommand):
             help="Check channel message ids for holes and fetch missing messages",
         )
         parser.add_argument(
+            "--retry-lost-and-private",
+            action="store_true",
+            default=False,
+            help=(
+                "Include channels marked as lost or private in the crawl scope. "
+                "Each such channel is resolved via the Telegram API at its turn: "
+                "if it is now accessible its flag is cleared and it is processed like any other channel; "
+                "if it is still inaccessible its flag is updated and it is skipped."
+            ),
+        )
+        parser.add_argument(
             "--ids",
             default=None,
             metavar="RANGES",
@@ -423,6 +434,7 @@ class Command(BaseCommand):
 
         get_new_messages: bool = options["get_new_messages"]
         fix_holes: bool = options["fixholes"]
+        retry_lost_and_private: bool = options["retry_lost_and_private"]
         fix_missing_media: bool = options["fix_missing_media"]
         fetch_recommended: bool = options["fetch_recommended_channels"]
         retry_references: bool = options["retry_references"]
@@ -446,12 +458,11 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        interesting_qs = (
-            Channel.objects.filter(organization__is_interesting=True)
-            .filter(channel_type_filter(channel_types))
-            .exclude(is_lost=True)
-            .exclude(is_private=True)
+        interesting_qs = Channel.objects.filter(organization__is_interesting=True).filter(
+            channel_type_filter(channel_types)
         )
+        if not retry_lost_and_private:
+            interesting_qs = interesting_qs.exclude(is_lost=True).exclude(is_private=True)
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
         if channel_groups:

@@ -350,7 +350,6 @@ class ChannelDetailView(ListView):
         is_interesting = (
             Channel.objects.filter(organization__is_interesting=True)
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
-            .exclude(is_private=True)
             .filter(pk=ch.pk)
             .exists()
         )
