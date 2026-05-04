@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.17] - To be announced
-*Vacancy succession batch analysis. Documentation rewrite.*
+*Vacancy succession batch analysis. Documentation rewrite. Fixes.*
 
 ### New features
 - **`uninteresting_after` date cutoff on channels** — each `Channel` gains an optional `uninteresting_after` date field. When set, messages written after that date are silently ignored everywhere: the crawler skips them during both the initial fetch and the stats-refresh pass; the graph builder, all network measures, community stats, and degree computations exclude them; channel detail panels, message lists, and all per-channel time-series charts only show messages up to the cutoff; the channel activity period is bounded accordingly. The field is settable from the channel edit page in the backoffice (`/manage/channels/<id>/`).
