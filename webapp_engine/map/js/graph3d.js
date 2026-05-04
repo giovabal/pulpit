@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { strategy_label } from './labels.js';
+import { escHtml } from './utils.js';
 
 // =============================================================================
 // Constants
@@ -72,11 +73,6 @@ var fade_color  = new THREE.Color(FADE_COLOR_HEX);
 // =============================================================================
 
 function el(id) { return document.getElementById(id); }
-function escHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 
 function parse_color(css_rgb) {

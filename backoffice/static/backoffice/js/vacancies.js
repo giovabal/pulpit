@@ -48,12 +48,16 @@
         if (!$chDrop.contains(e.target) && e.target !== $chSearch) $chDrop.style.display = "none";
     });
 
+    var _editCleanup = null;
+
     // ---- render row ----
     function renderRow(vac, editing) {
         var tr = document.createElement("tr");
         tr.dataset.id = vac.id;
 
         if (editing) {
+            if (_editCleanup) { _editCleanup(); _editCleanup = null; }
+
             var tdCh = document.createElement("td");
             var chInput = document.createElement("input"); chInput.className = "bo-input"; chInput.style.minWidth = "27rem"; chInput.value = vac.channel_title || "";
             var chIdInput = document.createElement("input"); chIdInput.type = "hidden"; chIdInput.value = vac.channel_id || "";
@@ -88,6 +92,7 @@
                 if (!drop.contains(e.target) && e.target !== chInput) drop.style.display = "none";
             }
             document.addEventListener("click", dropCloseHandler);
+            _editCleanup = function () { document.removeEventListener("click", dropCloseHandler); };
             tdCh.appendChild(wrap); tr.appendChild(tdCh);
 
             var tdDate = document.createElement("td");
@@ -106,7 +111,7 @@
                 if (chIdInput.value) body.channel_id = parseInt(chIdInput.value, 10);
                 apiFetch(API + vac.id + "/", { method: "PATCH", body: body })
                     .then(function (updated) {
-                        document.removeEventListener("click", dropCloseHandler);
+                        _editCleanup(); _editCleanup = null;
                         Object.assign(vac, updated);
                         $tbody.replaceChild(renderRow(vac, false), tr);
                         showToast("Saved.");
@@ -114,7 +119,7 @@
                     .catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
             cancelBtn.addEventListener("click", function () {
-                document.removeEventListener("click", dropCloseHandler);
+                _editCleanup(); _editCleanup = null;
                 $tbody.replaceChild(renderRow(vac, false), tr);
             });
             tdA.appendChild(saveBtn); tdA.appendChild(cancelBtn); tr.appendChild(tdA);

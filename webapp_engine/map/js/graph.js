@@ -3,6 +3,7 @@ import Graph from 'graphology';
 import EdgeCurveProgram from '@sigma/edge-curve';
 import { drawDiscNodeLabel } from 'sigma/rendering';
 import { strategy_label } from './labels.js';
+import { escHtml } from './utils.js';
 
 // =============================================================================
 // Measure and strategy tooltips
@@ -12,11 +13,6 @@ var BASE_MEASURE_KEYS = { 'in_deg': true, 'out_deg': true, 'fans': true, 'messag
 
 // Shorthand for document.getElementById
 function el(id) { return document.getElementById(id); }
-function escHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 // =============================================================================
 // State
@@ -622,7 +618,6 @@ function init_year_switcher(timeline) {
             _go_year(btn.dataset.year);
         });
 
-        // Close dropdown when clicking anywhere outside it
         document.addEventListener('click', function() { _year_drop_close(); });
     }
 
