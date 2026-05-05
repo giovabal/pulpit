@@ -257,6 +257,10 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all non-ORGANIZATION community strategies."></i>
               </label>
+              <label class="ops-flag"><input type="checkbox" name="structural_similarity">Structural similarity
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Generate a structural similarity matrix page (structural_similarity.html) showing pairwise cosine similarity between channels based on all computed network measures (min-max normalised per measure)."></i>
+              </label>
               <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Export the network as a GEXF file with all measures and community assignments as node attributes. Compatible with Gephi."></i>
@@ -1124,6 +1128,7 @@
         setCheck('seo',              opts.seo);
         setCheck('vertical_layout',  opts.vertical_layout);
         setCheck('consensus_matrix', opts.consensus_matrix);
+        setCheck('structural_similarity', opts.structural_similarity);
         setCheck('draw_dead_leaves', opts.draw_dead_leaves);
         setCheck('timeline_step',    opts.timeline_step === 'year');
 

@@ -332,6 +332,65 @@ def _compute_nmi(labels_a: list, labels_b: list) -> float | None:
     return round(float(2.0 * mi / denom), 4)
 
 
+def _compute_structural_similarity(
+    graph_data: GraphData,
+    measures_labels: "list[tuple[str, str]]",
+) -> "dict | None":
+    """Pairwise cosine similarity of per-channel feature vectors across all measures.
+
+    Each channel's vector is built from ``measures_labels`` keys.  None values
+    (e.g. burt_constraint on isolated nodes) are replaced with 0 before
+    normalisation.  Measures are min-max normalised per column so every
+    dimension contributes equally regardless of its natural scale.  Rows are
+    then normalised to unit length and the similarity matrix is computed as
+    S = U · Uᵀ, clipped to [0, 1].  The lower triangle (including the
+    diagonal) is stored row-by-row to halve the JSON payload size.
+
+    Returns None when fewer than 2 nodes are present or no measures are given.
+    """
+    nodes = graph_data["nodes"]
+    n = len(nodes)
+    if n < 2 or not measures_labels:
+        return None
+
+    keys = [k for k, _ in measures_labels]
+    m = len(keys)
+
+    # Raw feature matrix n×m — replace None with 0.0
+    raw = np.zeros((n, m), dtype=float)
+    for i, node in enumerate(nodes):
+        for j, key in enumerate(keys):
+            val = node.get(key)
+            raw[i, j] = float(val) if val is not None else 0.0
+
+    # Per-column min-max normalisation → all values in [0, 1]
+    col_min = raw.min(axis=0)
+    col_max = raw.max(axis=0)
+    safe_ranges = np.where(col_max - col_min > 0, col_max - col_min, 1.0)
+    normed = (raw - col_min) / safe_ranges
+
+    # Row-normalise to unit vectors for cosine similarity
+    norms = np.linalg.norm(normed, axis=1, keepdims=True)
+    safe_norms = np.where(norms > 0, norms, 1.0)
+    unit_vecs = normed / safe_norms
+
+    # Symmetric cosine similarity matrix, clipped against floating-point noise
+    sim = np.clip(unit_vecs @ unit_vecs.T, 0.0, 1.0)
+    # Force diagonal to 1.0: a channel is always identical to itself even when its
+    # feature vector is all-zero (happens when every measure is None / at minimum).
+    np.fill_diagonal(sim, 1.0)
+
+    # Store lower triangle (row i → values for j=0..i) to halve JSON size
+    cells_lower = [[round(float(sim[i, j]), 4) for j in range(i + 1)] for i in range(n)]
+
+    return {
+        "node_ids": [node["id"] for node in nodes],
+        "node_labels": [node.get("label") or node["id"] for node in nodes],
+        "measures": measures_labels,
+        "cells_lower": cells_lower,
+    }
+
+
 def _compute_org_cross_tab(
     nodes: list[dict],
     strategy_rows: list[dict],

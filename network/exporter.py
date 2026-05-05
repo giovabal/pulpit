@@ -333,6 +333,7 @@ def write_summary_json(
         "seo",
         "vertical_layout",
         "consensus_matrix",
+        "structural_similarity",
         "draw_dead_leaves",
         "timeline_step",
         "startdate",
