@@ -155,6 +155,7 @@ def write_network_metrics_json(
         ),
         "summary_rows": summary_rows,
         "modularity_rows": modularity_rows,
+        "nmi_matrix": community_table_data.get("nmi_matrix"),
     }
     with open(os.path.join(data_dir, "network_metrics.json"), "w") as f:
         f.write(json.dumps(payload))
@@ -205,6 +206,20 @@ def write_network_table_xlsx(
         for strategy_key in strategies:
             entry = ctd["strategies"].get(strategy_key)
             ws.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+
+        nmi_data = ctd.get("nmi_matrix")
+        if nmi_data and len(nmi_data.get("strategies", [])) >= 2:
+            nmi_strats = nmi_data["strategies"]
+            nmi_cells = nmi_data["cells"]
+            ws.append([])
+            ws.append(["Partition agreement (NMI)"])
+            for cell in ws[ws.max_row]:
+                cell.font = Font(bold=True)
+            ws.append([""] + [s.capitalize() for s in nmi_strats])
+            for cell in ws[ws.max_row]:
+                cell.font = Font(bold=True)
+            for i, sk in enumerate(nmi_strats):
+                ws.append([sk.capitalize()] + [nmi_cells[i][j] for j in range(len(nmi_strats))])
 
     wb = openpyxl.Workbook()
     wb.properties.creator = "Pulpit"

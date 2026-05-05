@@ -249,6 +249,76 @@ function _render_modularity(data) {
     initSortableTables();
 }
 
+function _render_nmi_matrix(data) {
+    var section = document.getElementById("nmi-section");
+    section.innerHTML = "";
+    var nm = data.nmi_matrix;
+    if (!nm || !nm.strategies || nm.strategies.length < 2) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+    var strats = nm.strategies;
+    var cells = nm.cells;
+
+    var h5 = document.createElement("h5"); h5.className = "mb-1";
+    h5.textContent = "Partition agreement (NMI)";
+    h5.title = "Normalized Mutual Information between each pair of community strategies. "
+             + "NMI = 1: identical partitions; NMI = 0: statistically independent groupings. "
+             + "Computed on nodes assigned in both strategies. Kvalseth 1987 / Fred & Jain 2003.";
+    section.appendChild(h5);
+
+    var p = document.createElement("p"); p.className = "text-muted small mb-2";
+    p.textContent = "How much knowing one partition tells you about another. "
+                  + "High NMI means your organisations map well onto structural clusters; "
+                  + "low NMI means the network topology cuts across your manual labels.";
+    section.appendChild(p);
+
+    var tableWrap = document.createElement("div"); tableWrap.style.overflowX = "auto";
+    var table = document.createElement("table");
+    table.className = "table table-sm table-bordered nmi-table";
+    table.style.cssText = "width:auto;min-width:0;";
+
+    var thead = document.createElement("thead");
+    var htr = document.createElement("tr");
+    var th0 = document.createElement("th"); th0.scope = "col"; htr.appendChild(th0);
+    strats.forEach(function(sk) {
+        var th = document.createElement("th"); th.scope = "col"; th.className = "number";
+        th.textContent = _strat_label(sk);
+        htr.appendChild(th);
+    });
+    thead.appendChild(htr); table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    strats.forEach(function(sk_a, i) {
+        var tr = document.createElement("tr");
+        var td0 = document.createElement("td"); td0.textContent = _strat_label(sk_a);
+        td0.style.fontWeight = "500";
+        tr.appendChild(td0);
+        strats.forEach(function(_sk_b, j) {
+            var val = cells[i][j];
+            var td = document.createElement("td"); td.className = "number";
+            if (i === j) {
+                td.textContent = "—";
+                td.style.color = "#adb5bd";
+            } else if (val === null || val === undefined) {
+                td.textContent = "—";
+            } else {
+                td.textContent = val.toFixed(4);
+                var r = Math.round(255 - val * 70);
+                var g = Math.round(255 - val * 40);
+                var b = Math.round(255 - val * 20);
+                td.style.backgroundColor = "rgb(" + r + "," + g + "," + b + ")";
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    section.appendChild(tableWrap);
+}
+
 // ── Build degree-distribution section (once on initial load) ───────────────────
 function _build_dist_section() {
     var distSection = document.getElementById("degree-dist-section");
@@ -376,6 +446,7 @@ function _switch_year(year) {
         _render_preamble(d.meta);
         _render_summary(d.data);
         _render_modularity(d.data);
+        _render_nmi_matrix(d.data);
         _update_dist_chart();
         _update_scatter_chart();
         _loading = false;
@@ -428,6 +499,7 @@ Promise.all([
         _render_preamble(meta);
         _render_summary(data);
         _render_modularity(data);
+        _render_nmi_matrix(data);
         _build_dist_section();
         _build_scatter_section();
     });

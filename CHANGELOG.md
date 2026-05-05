@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.18] - To be announced
+
+### New features
+- **Partition agreement matrix (NMI) in `network_table.html`** — when two or more community strategies are active, a new section shows the Normalised Mutual Information between every pair of strategies as a heatmap matrix. NMI = 1 means the two partitions are identical up to label permutation; NMI = 0 means they are statistically independent. Each pair is computed on the intersection of channels assigned in both strategies, which handles `ORGANIZATION` (which silently skips unassigned channels) correctly. The matrix also appears in `network_table.xlsx`. Formula: NMI(U,V) = 2·I(U;V) / (H(U)+H(V)) (Kvalseth 1987; Fred & Jain 2003). Documented in `docs/whole-network-statistics.md`.
+
 ## [0.17] - 2026-04-05
 *Vacancy succession batch analysis. Documentation rewrite. Channel details.*
 
