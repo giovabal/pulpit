@@ -300,6 +300,38 @@ def _network_content_metrics(
     }
 
 
+def _compute_nmi(labels_a: list, labels_b: list) -> float | None:
+    """Normalized Mutual Information between two discrete label sequences.
+
+    NMI(U,V) = 2·I(U;V) / (H(U) + H(V))   — Kvalseth 1987 / Fred & Jain 2003.
+    Returns None for empty input; 1.0 when both partitions are trivially uniform.
+    """
+    n = len(labels_a)
+    if n == 0:
+        return None
+    unique_a = sorted(set(labels_a))
+    unique_b = sorted(set(labels_b))
+    if len(unique_a) <= 1 and len(unique_b) <= 1:
+        return 1.0
+    idx_a = {v: i for i, v in enumerate(unique_a)}
+    idx_b = {v: i for i, v in enumerate(unique_b)}
+    ka, kb = len(unique_a), len(unique_b)
+    contingency = np.zeros((ka, kb), dtype=float)
+    for ai, bi in zip(labels_a, labels_b, strict=True):
+        contingency[idx_a[ai], idx_b[bi]] += 1.0
+    pa = contingency.sum(axis=1) / n
+    pb = contingency.sum(axis=0) / n
+    pab = contingency / n
+    h_a = -float(np.sum(pa[pa > 0] * np.log(pa[pa > 0])))
+    h_b = -float(np.sum(pb[pb > 0] * np.log(pb[pb > 0])))
+    denom = h_a + h_b
+    if denom < 1e-12:
+        return 1.0
+    h_ab = -float(np.sum(pab[pab > 0] * np.log(pab[pab > 0])))
+    mi = h_a + h_b - h_ab
+    return round(float(2.0 * mi / denom), 4)
+
+
 def _compute_org_cross_tab(
     nodes: list[dict],
     strategy_rows: list[dict],
@@ -517,6 +549,29 @@ def compute_community_metrics(
         )
         if status_callback:
             status_callback(strategy_key)
+
+    # ── NMI matrix ───────────────────────────────────────────────────────────────
+    # Pairwise Normalized Mutual Information between community strategies.
+    # Each pair is computed on the nodes assigned in both strategies (intersection),
+    # which matters for ORGANIZATION where unassigned nodes are silently skipped.
+    if len(strategies) >= 2:
+        node_comms: dict[str, dict[str, Any]] = {n["id"]: (n.get("communities") or {}) for n in graph_data["nodes"]}
+        nmi_cells: list[list[float | None]] = [[None] * len(strategies) for _ in range(len(strategies))]
+        for i, sk_a in enumerate(strategies):
+            for j, sk_b in enumerate(strategies):
+                if i == j:
+                    nmi_cells[i][j] = 1.0
+                elif j > i:
+                    pairs = [
+                        (comms[sk_a], comms[sk_b])
+                        for comms in node_comms.values()
+                        if comms.get(sk_a) is not None and comms.get(sk_b) is not None
+                    ]
+                    v = _compute_nmi([p[0] for p in pairs], [p[1] for p in pairs]) if pairs else None
+                    nmi_cells[i][j] = v
+                    nmi_cells[j][i] = v
+        result["nmi_matrix"] = {"strategies": strategies, "cells": nmi_cells}
+
     return result
 
 

@@ -4,7 +4,6 @@
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)
 - Organization changes overtime.
 - group analysis, similar to whole network analysis
-- Normalized Mutual Information between community strategies: a new entry in `network_table` could show NMI between every pair of strategies (LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP, etc.). This answers: does the algorithmic partition agree with the analyst's manual grouping? High NMI means your Organizations map well onto structural clusters; low NMI means the network's topology cuts across your labels.
 - pairwise structural similarity matrix (cosine similarity of node feature vectors across all measures)
 
 
@@ -14,7 +13,7 @@ Before major release (/plan)
 - Have a deep inspection of HTML and CSS code, search for bugs, bad practices and dead code
 - Have a deep inspection of HTML code, make sure the app and the HTML output of analysis are respecting accessibility rules and can provide a decent experience for people using screen readers.
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
-- review documentation
+- Read the code and review documentation, propose variations.
 
 
 ## 3. Content & Semantic Analysis

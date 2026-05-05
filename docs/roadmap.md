@@ -12,7 +12,6 @@ Planned features and areas for further development. None of the items listed her
 
 - **Organisation changes over time** — track how channel–organisation assignments change across network snapshots
 - **Group-level analysis** — whole-network and community statistics computed per ChannelGroup, analogous to the per-strategy community table
-- **Normalised Mutual Information between strategies** — a new entry in `network_table` showing NMI between every pair of active strategies (e.g. LEIDEN vs ORGANIZATION, LOUVAIN vs INFOMAP). High NMI means the algorithmic partition agrees with the manual grouping; low NMI means the network's topology cuts across analyst-defined labels
 - **Pairwise structural similarity matrix** — cosine similarity of node feature vectors across all computed measures
 
 ## Events

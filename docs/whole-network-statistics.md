@@ -236,6 +236,24 @@ Use E-I index together with reciprocity and inter-community edge ratio for a com
 - **Low reciprocity + positive mean E-I:** hierarchical cross-community citation, typical of competitive or monitoring dynamics
 - **Mixed:** intermediate communities with both internal amplification and active external engagement
 
+### Partition agreement matrix (NMI)
+
+The Normalised Mutual Information matrix appears in `network_table.html` whenever two or more community strategies are active. Each cell shows NMI between a pair of strategies:
+
+> NMI(U, V) = 2 · I(U; V) / (H(U) + H(V))
+
+where I(U; V) is mutual information and H(·) is Shannon entropy. The formula is symmetric and normalised to [0, 1].
+
+- **NMI = 1** — the two partitions are identical up to label permutation (every community in strategy A maps bijectively to a community in strategy B).
+- **NMI = 0** — the two partitions are statistically independent: knowing which community a channel belongs to under strategy A gives no information about its community under strategy B.
+- Values in between measure partial agreement.
+
+Each pair is computed on the **intersection** of channels assigned in both strategies. This matters for `ORGANIZATION`, which only assigns channels that have an organisation in the database; unassigned channels are silently excluded from that pair's NMI but not from others.
+
+**Reference:** Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069); Fred, A.L.N. & Jain, A.K. (2003) "Robust data clustering." *CVPR* 2.
+
+**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organisational lines. A low NMI (< 0.3) means the structural communities cut across organisations: channels from the same organisation are scattered across multiple structural clusters, or a single structural cluster spans several organisations. Comparing two algorithmic strategies (e.g. LEIDEN vs LOUVAIN) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
+
 ---
 
 ← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Vacancy analysis](vacancy-analysis.md) · [Web interface](web-interface.md) · [Exports](export-formats.md) · [Roadmap](roadmap.md)
