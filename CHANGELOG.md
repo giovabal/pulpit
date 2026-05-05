@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.17] - To be announced
+## [0.17] - 2026-04-05
 *Vacancy succession batch analysis. Documentation rewrite. Channel details.*
 
 ### New features
