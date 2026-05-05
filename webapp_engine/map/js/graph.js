@@ -1,6 +1,7 @@
 import { Sigma } from 'sigma';
 import Graph from 'graphology';
 import EdgeCurveProgram from '@sigma/edge-curve';
+import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel } from 'sigma/rendering';
 import { strategy_label } from './labels.js';
 import { escHtml } from './utils.js';
@@ -36,6 +37,7 @@ var year_sequence               = [];  // ['all', '2021', '2022', …] built by 
 var _year_switcher_inited       = false;
 var layout_cache                = {};  // '<algo>:<data_dir>' → position data
 var active_layout               = 'fa2';
+var active_theme                = 'dark';
 
 // =============================================================================
 // Sigma and graph instances
@@ -51,39 +53,101 @@ var app_settings = {
 
 el(app_settings.container).style.backgroundColor = app_settings.container_background_color;
 
-// drawDiscNodeHover hardcodes a white (#FFF) label background, clashing with our
-// white label text. This override uses a dark background instead.
-function drawDarkNodeHover(context, data, settings) {
-    var size = settings.labelSize, font = settings.labelFont, weight = settings.labelWeight;
-    context.font = weight + ' ' + size + 'px ' + font;
-    context.fillStyle = '#111';
-    context.shadowOffsetX = 0; context.shadowOffsetY = 0;
-    context.shadowBlur = 8; context.shadowColor = '#000';
-    var PADDING = 2;
-    if (typeof data.label === 'string') {
-        var textWidth = context.measureText(data.label).width,
-            boxWidth  = Math.round(textWidth + 5),
-            boxHeight = Math.round(size + 2 * PADDING),
-            radius    = Math.max(data.size, size / 2) + PADDING;
-        var angleRadian  = Math.asin(boxHeight / 2 / radius);
-        var xDeltaCoord  = Math.sqrt(Math.abs(Math.pow(radius, 2) - Math.pow(boxHeight / 2, 2)));
-        context.beginPath();
-        context.moveTo(data.x + xDeltaCoord, data.y + boxHeight / 2);
-        context.lineTo(data.x + radius + boxWidth, data.y + boxHeight / 2);
-        context.lineTo(data.x + radius + boxWidth, data.y - boxHeight / 2);
-        context.lineTo(data.x + xDeltaCoord, data.y - boxHeight / 2);
-        context.arc(data.x, data.y, radius, angleRadian, -angleRadian);
-        context.closePath();
-        context.fill();
-    } else {
-        context.beginPath();
-        context.arc(data.x, data.y, data.size + PADDING, 0, Math.PI * 2);
-        context.closePath();
-        context.fill();
-    }
-    context.shadowOffsetX = 0; context.shadowOffsetY = 0; context.shadowBlur = 0;
-    drawDiscNodeLabel(context, data, settings);
+// Returns a node-hover renderer that uses the given background fill colour.
+// drawDiscNodeHover hardcodes a white (#FFF) background; this factory lets
+// each theme supply its own contrasting colour.
+function make_node_hover_renderer(fillStyle) {
+    return function(context, data, settings) {
+        var size = settings.labelSize, font = settings.labelFont, weight = settings.labelWeight;
+        context.font = weight + ' ' + size + 'px ' + font;
+        context.fillStyle = fillStyle;
+        context.shadowOffsetX = 0; context.shadowOffsetY = 0;
+        context.shadowBlur = 8; context.shadowColor = 'rgba(0,0,0,0.4)';
+        var PADDING = 2;
+        if (typeof data.label === 'string') {
+            var textWidth = context.measureText(data.label).width,
+                boxWidth  = Math.round(textWidth + 5),
+                boxHeight = Math.round(size + 2 * PADDING),
+                radius    = Math.max(data.size, size / 2) + PADDING;
+            var angleRadian  = Math.asin(boxHeight / 2 / radius);
+            var xDeltaCoord  = Math.sqrt(Math.abs(Math.pow(radius, 2) - Math.pow(boxHeight / 2, 2)));
+            context.beginPath();
+            context.moveTo(data.x + xDeltaCoord, data.y + boxHeight / 2);
+            context.lineTo(data.x + radius + boxWidth, data.y + boxHeight / 2);
+            context.lineTo(data.x + radius + boxWidth, data.y - boxHeight / 2);
+            context.lineTo(data.x + xDeltaCoord, data.y - boxHeight / 2);
+            context.arc(data.x, data.y, radius, angleRadian, -angleRadian);
+            context.closePath();
+            context.fill();
+        } else {
+            context.beginPath();
+            context.arc(data.x, data.y, data.size + PADDING, 0, Math.PI * 2);
+            context.closePath();
+            context.fill();
+        }
+        context.shadowOffsetX = 0; context.shadowOffsetY = 0; context.shadowBlur = 0;
+        drawDiscNodeLabel(context, data, settings);
+    };
 }
+
+// =============================================================================
+// Theme definitions
+// =============================================================================
+
+var THEMES = {
+    dark: {
+        label: 'Dark', canvas: 'rgba(17, 34, 51, 1)', fade: 'rgba(27, 44, 61, .75)',
+        labelColor: '#ffffff', edgeOpacity: 0.25, defaultEdgeType: 'curved',
+        defaultEdgeColor: '#484848', nodeBorderSize: 0, nodeBorderColor: 'transparent',
+        hoverFill: '#111111',
+        cssVars: {
+            '--c-fg-raw': '255, 255, 255', '--c-panel-bg': 'rgba(8, 24, 40, 0.55)',
+            '--c-sidebar-bg': '#0d2035', '--c-sidebar-accent': '#e8a838',
+            '--c-year-menu-bg': 'rgba(8, 24, 40, 0.96)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.5)',
+            '--c-accordion-arrow': 'invert(1)',
+        },
+    },
+    light: {
+        label: 'Light', canvas: 'rgba(240, 244, 248, 1)', fade: 'rgba(180, 195, 210, .75)',
+        labelColor: '#1a2a3a', edgeOpacity: 0.30, defaultEdgeType: 'curved',
+        defaultEdgeColor: '#aaaaaa', nodeBorderSize: 0.08, nodeBorderColor: 'rgba(255,255,255,0.8)',
+        hoverFill: '#cddaeb',
+        cssVars: {
+            '--c-fg-raw': '20, 35, 60', '--c-panel-bg': 'rgba(220, 232, 246, 0.78)',
+            '--c-sidebar-bg': '#dce8f4', '--c-sidebar-accent': '#9a5200',
+            '--c-year-menu-bg': 'rgba(215, 230, 245, 0.97)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.12)',
+            '--c-accordion-arrow': 'none',
+        },
+    },
+    minimal: {
+        label: 'Minimal', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(210, 210, 210, .75)',
+        labelColor: '#333333', edgeOpacity: 0.18, defaultEdgeType: 'line',
+        defaultEdgeColor: '#cccccc', nodeBorderSize: 0.15, nodeBorderColor: '#ffffff',
+        hoverFill: '#eeeeee',
+        cssVars: {
+            '--c-fg-raw': '30, 30, 30', '--c-panel-bg': 'rgba(248, 248, 248, 0.82)',
+            '--c-sidebar-bg': '#f4f4f4', '--c-sidebar-accent': '#c07000',
+            '--c-year-menu-bg': 'rgba(248, 248, 248, 0.97)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.10)',
+            '--c-accordion-arrow': 'none',
+        },
+    },
+    print: {
+        label: 'Print', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(200, 200, 200, .75)',
+        labelColor: '#000000', edgeOpacity: 0.15, defaultEdgeType: 'line',
+        defaultEdgeColor: '#999999', nodeBorderSize: 0.20, nodeBorderColor: '#222222',
+        hoverFill: '#eeeeee',
+        cssVars: {
+            '--c-fg-raw': '0, 0, 0', '--c-panel-bg': 'rgba(255, 255, 255, 0.90)',
+            '--c-sidebar-bg': '#ffffff', '--c-sidebar-accent': '#000000',
+            '--c-year-menu-bg': 'rgba(255, 255, 255, 0.99)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.15)',
+            '--c-accordion-arrow': 'none',
+        },
+    },
+};
+
+// =============================================================================
+// Sigma and graph instances
+// =============================================================================
 
 var graph = new Graph({ type: 'directed', multi: false });
 var sigma_instance = new Sigma(graph, el(app_settings.container), {
@@ -100,7 +164,9 @@ var sigma_instance = new Sigma(graph, el(app_settings.container), {
     maxCameraRatio:             20,
     defaultEdgeType:            'curved',
     edgeProgramClasses:         { curved: EdgeCurveProgram },
-    defaultDrawNodeHover:       drawDarkNodeHover
+    defaultNodeType:            'border',
+    nodeProgramClasses:         { border: NodeBorderProgram },
+    defaultDrawNodeHover:       make_node_hover_renderer('#111111'),
 });
 
 // Sigma enables gl.BLEND but leaves the blend function at the WebGL default
@@ -110,6 +176,54 @@ sigma_instance.on('beforeRender', function() {
     var gl = sigma_instance.webGLContexts && sigma_instance.webGLContexts.edges;
     if (gl) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 });
+
+// =============================================================================
+// Theme application
+// =============================================================================
+
+function apply_theme(themeKey) {
+    var theme = THEMES[themeKey];
+    if (!theme) return;
+    active_theme = themeKey;
+
+    // CSS custom properties (nav bar, infobar, year switcher)
+    var root = document.documentElement;
+    for (var v in theme.cssVars) root.style.setProperty(v, theme.cssVars[v]);
+
+    // Canvas background
+    el(app_settings.container).style.backgroundColor = theme.canvas;
+    app_settings.container_background_color = theme.canvas;
+    app_settings.fade_color = theme.fade;
+
+    // Sigma rendering settings
+    sigma_instance.setSetting('labelColor', { color: theme.labelColor });
+    sigma_instance.setSetting('defaultEdgeType', theme.defaultEdgeType);
+    sigma_instance.setSetting('defaultEdgeColor', theme.defaultEdgeColor);
+    sigma_instance.setSetting('defaultDrawNodeHover', make_node_hover_renderer(theme.hoverFill));
+
+    // Live graph updates (only when data is loaded)
+    if (graph_loaded) {
+        graph.nodes().forEach(function(id) {
+            graph.setNodeAttribute(id, 'borderSize', theme.nodeBorderSize);
+            graph.setNodeAttribute(id, 'borderColor', theme.nodeBorderColor);
+        });
+        graph.edges().forEach(function(edgeId) {
+            var orig = graph.getEdgeAttribute(edgeId, 'originalColor');
+            if (!orig) return;
+            var parts = rgb_str_to_parts(orig);
+            var c = 'rgba(' + parts.join(',') + ',' + theme.edgeOpacity + ')';
+            graph.setEdgeAttribute(edgeId, 'color', c);
+            graph.setEdgeAttribute(edgeId, 'originalColor', c);
+        });
+        sigma_instance.refresh();
+    }
+
+    // Sync the select element if apply_theme was called programmatically
+    var sel = el('theme-select');
+    if (sel && sel.value !== themeKey) sel.value = themeKey;
+
+    try { localStorage.setItem('pulpit_theme', themeKey); } catch(e) {}
+}
 
 // =============================================================================
 // Color helpers
@@ -250,11 +364,12 @@ function apply_strategy_colors(strategy) {
         graph.setNodeAttribute(id, 'color', color);
         graph.setNodeAttribute(id, 'originalColor', color);
     });
+    var _edgeOp = (THEMES[active_theme] || THEMES.dark).edgeOpacity;
     graph.edges().forEach(function(edgeId) {
         var src = graph.getNodeAttributes(graph.source(edgeId));
         var tgt = graph.getNodeAttributes(graph.target(edgeId));
         var avg   = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
-        var color = 'rgba(' + avg.join(',') + ',0.25)';
+        var color = 'rgba(' + avg.join(',') + ',' + _edgeOp + ')';
         graph.setEdgeAttribute(edgeId, 'color', color);
         graph.setEdgeAttribute(edgeId, 'originalColor', color);
     });
@@ -411,6 +526,7 @@ function get_data(data_dir) {
         var minInDeg   = Math.min.apply(null, inDegVals);
         var inDegRange = (Math.max.apply(null, inDegVals) - minInDeg) || 1;
 
+        var _t = THEMES[active_theme] || THEMES.dark;
         pos_data.nodes.forEach(function(pos) {
             var m = measure_map[pos.id] || {};
             var rgbColor = 'rgb(' + (m.color || '128,128,128') + ')';
@@ -420,12 +536,15 @@ function get_data(data_dir) {
                 y:             pos.y,
                 size:          1.5 + ((m.in_deg || 0) - minInDeg) / inDegRange * 13.5,
                 color:         rgbColor,
-                originalColor: rgbColor
+                originalColor: rgbColor,
+                borderSize:    _t.nodeBorderSize,
+                borderColor:   _t.nodeBorderColor,
             }));
         });
 
+        var _op = _t.edgeOpacity;
         pos_data.edges.forEach(function(e) {
-            var color = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
+            var color = e.color ? 'rgba(' + e.color + ',' + _op + ')' : 'rgba(72,72,72,' + _op + ')';
             var attrs = Object.assign({}, e, { color: color, originalColor: color });
             delete attrs.source;
             delete attrs.target;
@@ -698,10 +817,14 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
     old_only.forEach(function(id) { if (graph.hasNode(id)) graph.dropNode(id); });
 
     // Add arriving nodes at the centre with size 0 so they can grow into place
+    var _yt = THEMES[active_theme] || THEMES.dark;
     new_only.forEach(function(id) {
         var m = new_ch_map[id] || {};
         var c = 'rgb(' + (m.color || '128,128,128') + ')';
-        graph.addNode(id, Object.assign({}, m, { id: id, x: cx, y: cy, size: 0, color: c, originalColor: c }));
+        graph.addNode(id, Object.assign({}, m, {
+            id: id, x: cx, y: cy, size: 0, color: c, originalColor: c,
+            borderSize: _yt.nodeBorderSize, borderColor: _yt.nodeBorderColor,
+        }));
     });
 
     var SKIP_ATTRS = { id: 1, x: 1, y: 1, size: 1, color: 1, originalColor: 1 };
@@ -874,6 +997,11 @@ function reload_graph(data_dir) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore saved theme before the graph renders so data loading uses correct settings
+    var _saved_theme = null;
+    try { _saved_theme = localStorage.getItem('pulpit_theme'); } catch(e) {}
+    apply_theme((_saved_theme && THEMES[_saved_theme]) ? _saved_theme : 'dark');
+
     if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
 
     var loading_el = document.getElementById('loading_modal');
@@ -996,6 +1124,8 @@ document.addEventListener('DOMContentLoaded', function() {
         sigma_instance.refresh();
         is_graph_completely_rendered = false;
     });
+
+    el('theme-select').addEventListener('change', function() { apply_theme(this.value); });
 
     var extra_layouts = window.EXTRA_LAYOUTS || [];
     if (extra_layouts.length > 0) {

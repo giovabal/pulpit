@@ -1,3 +1,19 @@
+/* ── Theme CSS custom properties (dark defaults) ────────────────────────── */
+:root {
+    /* Foreground RGB channels — used as rgba(var(--c-fg-raw), opacity) */
+    --c-fg-raw:            255, 255, 255;
+    /* Nav / menu bar */
+    --c-panel-bg:          rgba(8, 24, 40, 0.55);
+    /* Infobar / sidebar */
+    --c-sidebar-bg:        #0d2035;
+    --c-sidebar-accent:    #e8a838;
+    /* Year-switcher dropdown */
+    --c-year-menu-bg:      rgba(8, 24, 40, 0.96);
+    --c-year-menu-shadow:  rgba(0, 0, 0, 0.5);
+    /* Bootstrap accordion chevron filter (invert makes it white on dark bg) */
+    --c-accordion-arrow:   invert(1);
+}
+
 * {
     padding: 0px;
     margin: 0px;
@@ -46,16 +62,16 @@ html, body {
 .menu-button,
 .menu-button:focus,
 .menu-button:hover {
-    color: rgba(255,255,255,0.90);
+    color: rgba(var(--c-fg-raw), 0.90);
     padding: .6em 1.1em;
 }
 
 .menu-button:hover {
-    color: #fff;
+    color: rgba(var(--c-fg-raw), 1);
 }
 
 .menu-button:hover p {
-    color: rgba(255,255,255,0.90);
+    color: rgba(var(--c-fg-raw), 0.90);
 }
 
 #menu_container .bi {
@@ -64,7 +80,7 @@ html, body {
 
 #loading_message,
 .menu-button p {
-    color: rgba(255,255,255,0.65);
+    color: rgba(var(--c-fg-raw), 0.65);
     font-size: 0.65rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -75,7 +91,7 @@ html, body {
 .menu-icon-btn {
     background: none;
     border: none;
-    color: rgba(255,255,255,0.65);
+    color: rgba(var(--c-fg-raw), 0.65);
     padding: 0.2em 0.4em;
     cursor: pointer;
     line-height: 1;
@@ -84,7 +100,7 @@ html, body {
 
 .menu-icon-btn:hover,
 .menu-icon-btn:focus {
-    color: #fff;
+    color: rgba(var(--c-fg-raw), 1);
     outline: none;
 }
 
@@ -96,11 +112,11 @@ html, body {
         transform: translateX(-50%);
         width: fit-content;
         transition: all .25s ease-out;
-        background: rgba(8, 24, 40, 0.55);
+        background: var(--c-panel-bg);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.08);
+        border: 1px solid rgba(var(--c-fg-raw), 0.08);
     }
 }
 
@@ -112,21 +128,21 @@ html, body {
     right: 0;
     width: 320px;
     min-width: 320px;
-    background-color: #0d2035;
+    background-color: var(--c-sidebar-bg);
     overflow-x: hidden;
     overflow-y: auto;
     transition: 0.5s;
     display: none;
-    border-left: solid 1px rgba(255,255,255,0.08);
+    border-left: solid 1px rgba(var(--c-fg-raw), 0.08);
     padding: 1em 1.25em;
-    color: #fff;
+    color: rgba(var(--c-fg-raw), 1);
 }
 
 .infobar-close {
     position: absolute;
     top: 0.75em;
     right: 0.75em;
-    color: rgba(255,255,255,0.6);
+    color: rgba(var(--c-fg-raw), 0.6);
 }
 
 #node_picture {
@@ -143,19 +159,20 @@ html, body {
 }
 
 #node_url {
-    color: #e8a838;
+    color: var(--c-sidebar-accent);
     text-decoration: none;
     font-size: 0.9em;
 }
 
 #node_url:hover {
-    color: #f0c060;
+    color: var(--c-sidebar-accent);
     text-decoration: underline;
+    filter: brightness(1.15);
 }
 
 .infobar-sep {
     border: none;
-    border-top: 1px solid rgba(255,255,255,0.12);
+    border-top: 1px solid rgba(var(--c-fg-raw), 0.12);
     margin: 0.75em 0;
 }
 
@@ -167,8 +184,8 @@ html, body {
 }
 
 .metric-chip {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(var(--c-fg-raw), 0.05);
+    border: 1px solid rgba(var(--c-fg-raw), 0.08);
     border-radius: 6px;
     padding: 0.35em 0.6em;
 }
@@ -183,7 +200,7 @@ html, body {
     font-size: 0.65em;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.45);
+    color: rgba(var(--c-fg-raw), 0.45);
 }
 
 .metric-value {
@@ -191,12 +208,12 @@ html, body {
     font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
     font-size: 0.95em;
     font-weight: 500;
-    color: #fff;
+    color: rgba(var(--c-fg-raw), 1);
 }
 
 .infobar-measures {
     font-size: 0.85em;
-    color: rgba(255,255,255,0.7);
+    color: rgba(var(--c-fg-raw), 0.7);
     margin-bottom: 0.4em;
     line-height: 1.6;
 }
@@ -204,12 +221,12 @@ html, body {
 #infobar .accordion-item {
     background-color: transparent;
     border: none;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    border-top: 1px solid rgba(var(--c-fg-raw), 0.10);
 }
 
 #infobar .accordion-button {
     background-color: transparent;
-    color: rgba(255,255,255,0.7);
+    color: rgba(var(--c-fg-raw), 0.7);
     padding: 0.5em 0;
     font-size: 0.75rem;
     letter-spacing: 0.04em;
@@ -218,18 +235,18 @@ html, body {
 
 #infobar .accordion-button:not(.collapsed) {
     background-color: transparent;
-    color: #e8a838;
+    color: var(--c-sidebar-accent);
     box-shadow: none;
 }
 
 #infobar .accordion-button::after {
-    filter: invert(1);
+    filter: var(--c-accordion-arrow);
 }
 
 #infobar .accordion-body {
     background-color: transparent;
     padding: 0.25em 0 0.75em 0;
-    color: rgba(255,255,255,0.85);
+    color: rgba(var(--c-fg-raw), 0.85);
 }
 
 .link {
@@ -238,12 +255,12 @@ html, body {
 
 #infobar a.node-link,
 #infobar a.node-link:visited {
-    color: rgba(255,255,255,0.6);
+    color: rgba(var(--c-fg-raw), 0.6);
     text-decoration: none;
 }
 
 #infobar a.node-link:hover {
-    color: rgba(255,255,255,0.9);
+    color: rgba(var(--c-fg-raw), 0.9);
     text-decoration: underline;
 }
 
@@ -260,8 +277,8 @@ html, body {
 
 .year-btn {
     background: none;
-    border: 1px solid rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.55);
+    border: 1px solid rgba(var(--c-fg-raw), 0.18);
+    color: rgba(var(--c-fg-raw), 0.55);
     font-family: "IBM Plex Mono", ui-monospace, monospace;
     font-size: .72rem;
     font-weight: 600;
@@ -276,15 +293,15 @@ html, body {
 
 .year-btn:hover:not(:disabled),
 .year-btn:focus:not(:disabled) {
-    color: rgba(255,255,255,0.85);
-    border-color: rgba(255,255,255,0.42);
+    color: rgba(var(--c-fg-raw), 0.85);
+    border-color: rgba(var(--c-fg-raw), 0.42);
     outline: none;
 }
 
 .year-btn.active {
-    color: #fff;
-    border-color: rgba(255,255,255,0.65);
-    background: rgba(255,255,255,0.10);
+    color: rgba(var(--c-fg-raw), 1);
+    border-color: rgba(var(--c-fg-raw), 0.65);
+    background: rgba(var(--c-fg-raw), 0.10);
 }
 
 .year-btn:disabled {
@@ -336,15 +353,15 @@ html, body {
     min-width: 5rem;
     max-height: 40vh;
     overflow-y: auto;
-    background: rgba(8, 24, 40, 0.96);
+    background: var(--c-year-menu-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.14);
+    border: 1px solid rgba(var(--c-fg-raw), 0.14);
     border-radius: .4rem;
-    box-shadow: 0 -6px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 -6px 20px var(--c-year-menu-shadow);
     z-index: 2000;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.2) transparent;
+    scrollbar-color: rgba(var(--c-fg-raw), 0.2) transparent;
 }
 
 .year-drop-menu.open { display: flex; }

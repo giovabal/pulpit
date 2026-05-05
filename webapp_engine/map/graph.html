@@ -30,7 +30,8 @@
       "sigma/rendering": "https://esm.sh/sigma@3.0.2/rendering",
       "sigma/utils":     "https://esm.sh/sigma@3.0.2/utils",
       "graphology":      "https://esm.sh/graphology@0.25.4",
-      "@sigma/edge-curve": "https://esm.sh/@sigma/edge-curve@3.0.0?external=sigma"
+      "@sigma/edge-curve": "https://esm.sh/@sigma/edge-curve@3.0.0?external=sigma",
+      "@sigma/node-border": "https://esm.sh/@sigma/node-border@3.0.0?external=sigma"
     }
   }
   </script>
@@ -268,6 +269,15 @@
 	</div>
 	<div class="modal-body">
 	  <form id="options_form">
+	    <div class="mb-3">
+	      <label for="theme-select" class="form-label">Theme</label>
+	      <select id="theme-select" class="form-select">
+		<option value="dark" selected>Dark</option>
+		<option value="light">Light</option>
+		<option value="minimal">Minimal</option>
+		<option value="print">Print</option>
+	      </select>
+	    </div>
 	    <div class="mb-3" id="layout-select-group" style="display:none">
 	      <label for="layout-select" class="form-label">Layout</label>
 	      <select id="layout-select" class="form-select"></select>
