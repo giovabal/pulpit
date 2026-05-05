@@ -313,6 +313,26 @@
                 </label>
               </div>
             </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>Extra 2D layouts
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Pre-compute alternative 2D layouts alongside Force Atlas 2. A Layout switcher appears in the graph viewer so the user can switch between them without re-running the analysis. Requires 2D graph."></i>
+              </legend>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Nodes equally spaced on a ring."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPECTRAL">Spectral
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Laplacian eigenvectors — tends to visually separate community clusters."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPRING">Spring
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Fruchterman-Reingold force-directed layout — an alternative to Force Atlas 2."></i>
+                </label>
+              </div>
+            </fieldset>
           </div>
 
           <div class="ops-fieldset-row">

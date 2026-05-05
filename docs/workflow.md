@@ -139,6 +139,7 @@ Builds the directed citation graph, applies community detection algorithms and t
 | **GraphML file** | Write `network.graphml` |
 | **SEO-optimised** | Set `index, follow` robots tags; without this flag the output actively discourages indexing |
 | **Vertical layout** | Orient the graph vertically (default is horizontal) |
+| **Extra 2D layouts** | Pre-compute one or more alternative spatial layouts alongside ForceAtlas2: **Circular** (nodes equally spaced on a ring), **Spectral** (Laplacian eigenvectors — tends to separate community clusters visually), **Spring** (Fruchterman-Reingold force-directed). Each selected layout is stored as a separate `data/channel_position_<algo>.json` file. When any extras are present, a **Layout** dropdown appears in the Options panel of `graph.html`, letting users switch between layouts with a smooth animated transition at viewing time — no re-export required. Requires **2D graph**. CLI flag: `--extra-layouts CIRCULAR,SPECTRAL,SPRING` (or `ALL`). |
 | **Draw dead leaves** | Include non-interesting channels referenced by interesting ones as leaf nodes |
 
 ### Analysis options
@@ -183,6 +184,8 @@ python manage.py structural_analysis --gexf --graphml
 python manage.py structural_analysis --seo
 python manage.py structural_analysis --2dgraph --vertical-layout
 python manage.py structural_analysis --2dgraph --fa2-iterations 10000
+python manage.py structural_analysis --2dgraph --extra-layouts CIRCULAR,SPECTRAL
+python manage.py structural_analysis --2dgraph --extra-layouts ALL
 python manage.py structural_analysis --draw-dead-leaves
 python manage.py structural_analysis --measures PAGERANK,BETWEENNESS,BRIDGING
 python manage.py structural_analysis --measures ALL
