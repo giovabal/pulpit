@@ -87,7 +87,6 @@ After the export completes, the output directory contains:
 | [Vacancy analysis](docs/vacancy-analysis.md) | Identifying structural replacement channels after a node disappears |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
-| [Roadmap](docs/roadmap.md) | Planned features |
 | [Configuration](CONFIGURATION.md) | All `.env` settings |
 | [Changelog](CHANGELOG.md) | Version history |
 
