@@ -243,6 +243,7 @@ _COMPARE_RENAMES: dict[str, str] = {
     "network_table.html": "network_table_2.html",
     "community_table.html": "community_table_2.html",
     "consensus_matrix.html": "consensus_matrix_2.html",
+    "structural_similarity.html": "structural_similarity_2.html",
     "channel_table.xlsx": "channel_table_2.xlsx",
     "network_table.xlsx": "network_table_2.xlsx",
     "community_table.xlsx": "community_table_2.xlsx",
@@ -256,6 +257,7 @@ _HTML_LINK_RENAMES: list[tuple[str, str]] = [
     ("network_table.html", "network_table_2.html"),
     ("community_table.html", "community_table_2.html"),
     ("consensus_matrix.html", "consensus_matrix_2.html"),
+    ("structural_similarity.html", "structural_similarity_2.html"),
     ("channel_table.xlsx", "channel_table_2.xlsx"),
     ("network_table.xlsx", "network_table_2.xlsx"),
     ("community_table.xlsx", "community_table_2.xlsx"),
@@ -506,6 +508,27 @@ def write_consensus_matrix_html(
         f.write(content)
 
 
+def write_structural_similarity_json(sim_data: dict, graph_dir: str) -> None:
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "structural_similarity.json"), "w") as f:
+        f.write(json.dumps(sim_data))
+
+
+def write_structural_similarity_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    title = f"{project_title} | Structural similarity" if project_title else "Structural similarity"
+    robots_meta = "index, follow" if seo else "noindex, nofollow"
+
+    context = {"title": title, "robots_meta": robots_meta}
+    content = render_to_string("network/structural_similarity.html", context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
 def write_vacancy_analysis_html(
     output_filename: str,
     seo: bool = False,
@@ -533,6 +556,7 @@ def write_index_html(
     include_community_html: bool = False,
     include_community_xlsx: bool = False,
     include_consensus_matrix_html: bool = False,
+    include_structural_similarity: bool = False,
     include_compare_html: bool = False,
     compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
@@ -559,6 +583,7 @@ def write_index_html(
         "include_community_html": include_community_html,
         "include_community_xlsx": include_community_xlsx,
         "include_consensus_matrix_html": include_consensus_matrix_html,
+        "include_structural_similarity": include_structural_similarity,
         "include_compare_html": include_compare_html,
         "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],

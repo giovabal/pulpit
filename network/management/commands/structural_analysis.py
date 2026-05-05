@@ -245,6 +245,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--structural-similarity",
+            dest="structural_similarity",
+            action="store_true",
+            default=False,
+            help=(
+                "Generate a structural similarity matrix page (structural_similarity.html) showing "
+                "pairwise cosine similarity of per-channel feature vectors built from all computed "
+                "network measures. Measures are min-max normalised per column; None values treated as 0."
+            ),
+        )
+        parser.add_argument(
             "--community-distribution-threshold",
             dest="community_distribution_threshold",
             type=int,
@@ -855,6 +866,7 @@ class Command(BaseCommand):
         do_gexf = options["gexf"]
         do_graphml = options["graphml"]
         do_consensus_matrix = options["consensus_matrix"]
+        do_structural_similarity = options["structural_similarity"]
 
         fa2_iterations: int = options["fa2_iterations"]
         vertical_layout: bool = options["vertical_layout"]
@@ -911,9 +923,22 @@ class Command(BaseCommand):
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         strategies = [s.lower() for s in communities_strategy]
 
+        # Copy the map template (js/, css/, static assets) whenever any HTML page is being
+        # generated, not just when a graph is requested — table pages and the structural
+        # similarity matrix all reference the same local CSS/JS files.
+        need_static_assets = (
+            do_graph
+            or do_3dgraph
+            or do_html
+            or do_consensus_matrix
+            or do_structural_similarity
+            or bool(selected_vacancy_measures)
+        )
+        if need_static_assets:
+            exporter.ensure_graph_root(root_target)
+
         if do_graph or do_3dgraph:
             self.stdout.write("\nGenerate map")
-            exporter.ensure_graph_root(root_target)
             self.stdout.write("- config files")
             exporter.apply_robots_to_graph_html(
                 root_target, seo, project_title=project_title, include_3d=do_3dgraph, vertical_layout=vertical_layout
@@ -1001,6 +1026,18 @@ class Command(BaseCommand):
             self.stdout.write("- consensus matrix (html)")
             tables.write_consensus_matrix_html(
                 output_filename=os.path.join(root_target, "consensus_matrix.html"),
+                seo=seo,
+                project_title=project_title,
+            )
+
+        if do_structural_similarity:
+            self.stdout.write("- structural similarity (html + json)")
+            os.makedirs(root_target, exist_ok=True)
+            sim_data = community_stats._compute_structural_similarity(graph_data, measures_labels)
+            if sim_data is not None:
+                tables.write_structural_similarity_json(sim_data, root_target)
+            tables.write_structural_similarity_html(
+                output_filename=os.path.join(root_target, "structural_similarity.html"),
                 seo=seo,
                 project_title=project_title,
             )
@@ -1146,6 +1183,7 @@ class Command(BaseCommand):
             compare_files=set(),
             strategies=strategies,
             include_consensus_matrix_html=do_consensus_matrix,
+            include_structural_similarity=do_structural_similarity,
             timeline_entries=timeline_entries or None,
             include_vacancy_analysis=do_vacancy,
         )

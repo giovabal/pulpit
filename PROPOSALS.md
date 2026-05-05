@@ -4,7 +4,6 @@
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)
 - Organization changes overtime.
 - group analysis, similar to whole network analysis
-- pairwise structural similarity matrix (cosine similarity of node feature vectors across all measures)
 
 
 Before major release (/plan)

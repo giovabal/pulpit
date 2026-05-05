@@ -12,7 +12,6 @@ Planned features and areas for further development. None of the items listed her
 
 - **Organisation changes over time** — track how channel–organisation assignments change across network snapshots
 - **Group-level analysis** — whole-network and community statistics computed per ChannelGroup, analogous to the per-strategy community table
-- **Pairwise structural similarity matrix** — cosine similarity of node feature vectors across all computed measures
 
 ## Events
 

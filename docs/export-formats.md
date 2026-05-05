@@ -16,6 +16,7 @@ exports/
     network_table.html      ← whole-network metrics
     community_table.html    ← per-community metrics
     consensus_matrix.html   ← cross-strategy co-clustering (optional)
+    structural_similarity.html  ← channel cosine similarity matrix (optional)
     network_compare_table.html   ← network comparison (optional)
     channel_table.xlsx      ← Excel version (optional)
     network_table.xlsx
@@ -29,6 +30,7 @@ exports/
       communities.json
       meta.json
       summary.json
+      structural_similarity.json  (when --structural-similarity)
       timeline.json         (when --timeline-step year)
     data_YYYY/              (one per year when --timeline-step year)
       ...
@@ -54,6 +56,7 @@ Some files can be opened directly from the filesystem (`file://`); others requir
 | `network_table.html` / `.xlsx` | — |
 | `community_table.html` / `.xlsx` | — |
 | `consensus_matrix.html` | — |
+| `structural_similarity.html` | — |
 | `network_compare_table.html` | — |
 | `index.html` | — |
 | `network.gexf`, `network.graphml` | — |
@@ -145,6 +148,24 @@ For a full explanation of each metric, see [Whole-network statistics](whole-netw
 One section per active community detection strategy. For each strategy: a table of per-community structural metrics (node count, internal/external edges, density, reciprocity, clustering, E-I index, path lengths), a modularity-contribution column, and a collapsible organisation × community distribution panel (when multiple organisations are present).
 
 For a full explanation of the metrics, see [Whole-network statistics](whole-network-statistics.md) and [Community detection](community-detection.md).
+
+---
+
+## structural_similarity.html — channel cosine similarity matrix
+
+Generated with `--structural-similarity`.
+
+A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity between channel i and channel j, computed from all configured network measures (PageRank, betweenness, degree, Burt's constraint, spreading efficiency, content originality, etc.). Measures are min-max normalised per column before computing cosine, so all dimensions contribute equally regardless of scale. Missing values (e.g. `burt_constraint` on isolated nodes) are treated as 0.
+
+Color scale: white (similarity = 0, orthogonal profiles) → steel-blue (similarity = 1, structurally identical). Diagonal is always 1 and is marked in grey. Hover a cell for a tooltip: "Channel A × Channel B: 0.8742."
+
+A sort dropdown above the matrix controls channel ordering:
+- **Community** (default): groups channels by their plurality community assignment, making block-diagonal structure visible when communities are structurally cohesive.
+- **Any measure** (e.g. PageRank): sorts channels descending by that value.
+
+Pre-computed data is stored in `data/structural_similarity.json` (lower-triangle float matrix + node labels and measure list). The page loads `channels.json` and `communities.json` at runtime for sorting.
+
+See [Whole-network statistics § Structural similarity matrix](whole-network-statistics.md#structural-similarity-matrix) for interpretation guidance.
 
 ---
 

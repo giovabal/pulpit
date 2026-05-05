@@ -127,6 +127,18 @@
   </div>
   {% endif %}
 
+  {% if include_structural_similarity %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural similarity</h5>
+        <p class="card-text text-muted small">Channel × channel cosine similarity matrix built from all computed network measures (min-max normalised). Channels with similar structural profiles appear darker.</p>
+        <a href="structural_similarity.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 
 {% if include_vacancy_analysis %}
@@ -192,7 +204,7 @@
 </div>
 {% endif %}
 
-{% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files or "community_table_2.html" in compare_files or "community_table_2.xlsx" in compare_files or "network_table_2.html" in compare_files or "network_table_2.xlsx" in compare_files or "consensus_matrix_2.html" in compare_files %}
+{% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files or "community_table_2.html" in compare_files or "community_table_2.xlsx" in compare_files or "network_table_2.html" in compare_files or "network_table_2.xlsx" in compare_files or "consensus_matrix_2.html" in compare_files or "structural_similarity_2.html" in compare_files %}
 <div class="row g-4">
   {% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files %}
   <div class="col-md-6 col-xl-4">
@@ -244,6 +256,19 @@
         <p class="card-text text-muted small">Channel-pair co-clustering agreement for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="consensus_matrix_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if "structural_similarity_2.html" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural similarity</h5>
+        <p class="card-text text-muted small">Cosine similarity matrix of per-channel feature vectors for the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="structural_similarity_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
         </div>
       </div>
     </div>

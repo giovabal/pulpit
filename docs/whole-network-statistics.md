@@ -254,6 +254,26 @@ Each pair is computed on the **intersection** of channels assigned in both strat
 
 **In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organisational lines. A low NMI (< 0.3) means the structural communities cut across organisations: channels from the same organisation are scattered across multiple structural clusters, or a single structural cluster spans several organisations. Comparing two algorithmic strategies (e.g. LEIDEN vs LOUVAIN) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
 
+## Structural similarity matrix
+
+Generated with `--structural-similarity`. Available as a standalone page `structural_similarity.html` (see [Export formats](export-formats.md#structural_similarityhtml--channel-cosine-similarity-matrix)).
+
+Each cell (i, j) shows the cosine similarity between channel i's feature vector and channel j's feature vector, where the feature vector is built from all computed network measures (PageRank, betweenness, in-degree, out-degree, Burt's constraint, spreading efficiency, content originality, etc.).
+
+**Preprocessing:**
+1. A raw n × m matrix is built (n channels, m measures). Missing values — `None` for measures such as `burt_constraint` on isolated nodes — are replaced with 0.
+2. Each column (measure) is min-max normalised to [0, 1] so that all measures contribute equally regardless of their natural scale.
+3. Each row is normalised to unit length.
+4. Cosine similarity S = U · Uᵀ, diagonal forced to 1.0.
+
+**Range:** 0 (orthogonal profiles — no common structure) to 1 (identical profiles up to magnitude).
+
+The heatmap colours cells from white (low similarity) to steel-blue (high similarity). The diagonal is marked in grey (always 1.0 by definition). Only the lower triangle is rendered; the upper triangle is masked.
+
+**Sorting:** A dropdown above the matrix controls the row/column order. "Community" groups channels by their plurality community assignment across all strategies (revealing a block-diagonal structure if the network has clear clusters); any individual measure (e.g. PageRank) sorts channels descending by that score.
+
+**In practice:** channels that share a similar structural profile are likely to be functionally equivalent in the network — they occupy the same role (hub, bridge, peripheral consumer) even if their content differs. A dense dark block along the diagonal after community-sorting confirms that communities are also structurally cohesive; scattered dark cells off the diagonal reveal structurally equivalent channels that the community partition placed in different groups. Channels with no similarity to anyone else (entire pale row/column) are structural outliers whose combination of measures is unique in the network.
+
 ---
 
 ← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Vacancy analysis](vacancy-analysis.md) · [Web interface](web-interface.md) · [Exports](export-formats.md) · [Roadmap](roadmap.md)

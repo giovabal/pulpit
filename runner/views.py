@@ -342,6 +342,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args += ["--spreading-runs", spreading_runs_val]
         if post.get("consensus_matrix"):
             args.append("--consensus-matrix")
+        if post.get("structural_similarity"):
+            args.append("--structural-similarity")
         community_distribution_threshold_val = post.get("community_distribution_threshold", "").strip()
         if community_distribution_threshold_val:
             args += ["--community-distribution-threshold", community_distribution_threshold_val]
