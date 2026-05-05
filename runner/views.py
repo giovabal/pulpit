@@ -309,6 +309,9 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--html")
         if post.get("vertical_layout"):
             args.append("--vertical-layout")
+        extra_layouts_val = ",".join(post.getlist("extra_layouts"))
+        if extra_layouts_val:
+            args += ["--extra-layouts", extra_layouts_val]
         fa2 = post.get("fa2_iterations", "").strip()
         if fa2:
             args += ["--fa2-iterations", fa2]

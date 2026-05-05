@@ -107,8 +107,14 @@ def ensure_graph_root(root_target: str) -> None:
         logger.warning("Could not copy map template to %s: %s", root_target, e)
 
 
-def _patch_html_file(path: str, seo: bool, project_title: str, vertical_layout: bool = False) -> None:
-    """Patch the robots meta tag, title, and layout flag in a static HTML file in-place."""
+def _patch_html_file(
+    path: str,
+    seo: bool,
+    project_title: str,
+    vertical_layout: bool = False,
+    extra_layouts: "list[str] | None" = None,
+) -> None:
+    """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
     if not os.path.exists(path):
         return
     with open(path) as f:
@@ -127,7 +133,8 @@ def _patch_html_file(path: str, seo: bool, project_title: str, vertical_layout: 
             content,
         )
     vl_value = "true" if vertical_layout else "false"
-    injection = f"<script>window.VERTICAL_LAYOUT = {vl_value};</script>\n"
+    layouts_json = json.dumps(extra_layouts or [])
+    injection = f"<script>window.VERTICAL_LAYOUT = {vl_value}; window.EXTRA_LAYOUTS = {layouts_json};</script>\n"
     for marker in ('<script src="js/', '<script type="module" src="js/'):
         idx = content.find(marker)
         if idx != -1:
@@ -138,12 +145,17 @@ def _patch_html_file(path: str, seo: bool, project_title: str, vertical_layout: 
 
 
 def apply_robots_to_graph_html(
-    root_target: str, seo: bool, project_title: str = "", include_3d: bool = False, vertical_layout: bool = False
+    root_target: str,
+    seo: bool,
+    project_title: str = "",
+    include_3d: bool = False,
+    vertical_layout: bool = False,
+    extra_layouts: "list[str] | None" = None,
 ) -> None:
-    """Patch the robots meta tag, title, and layout flag in the static graph HTML files after they are copied."""
-    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout)
+    """Patch the robots meta tag, title, and layout flags in the static graph HTML files after they are copied."""
+    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout, extra_layouts)
     if include_3d:
-        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title, vertical_layout)
+        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title, vertical_layout, extra_layouts)
 
 
 _EXPORT_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
@@ -209,6 +221,7 @@ def write_graph_files(
     graph_dir: str,
     include_positions: bool = True,
     positions_3d: dict | None = None,
+    extra_positions: "dict[str, dict] | None" = None,
 ) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -238,6 +251,23 @@ def write_graph_files(
         position_3d_payload = {"nodes": nodes_3d, "edges": graph_data["edges"]}
         with open(os.path.join(data_dir, "channel_position_3d.json"), "w") as f:
             f.write(json.dumps(position_3d_payload))
+
+    if extra_positions and include_positions:
+        # channel_position_<algo>.json — alternative 2D layouts for the browser switcher
+        for algo, pos in extra_positions.items():
+            nodes_extra = []
+            for n in graph_data["nodes"]:
+                p = pos.get(n["id"])
+                nodes_extra.append(
+                    {
+                        "id": n["id"],
+                        "x": float(p[0]) if p is not None else 0.0,
+                        "y": float(p[1]) if p is not None else 0.0,
+                    }
+                )
+            extra_payload = {"nodes": nodes_extra, "edges": graph_data["edges"]}
+            with open(os.path.join(data_dir, f"channel_position_{algo}.json"), "w") as f:
+                f.write(json.dumps(extra_payload))
 
     # channels.json — per-node metadata, computed measures, community assignments, measure labels
     node_keys: set[str] = {
@@ -339,6 +369,7 @@ def write_summary_json(
         "startdate",
         "enddate",
         "fa2_iterations",
+        "extra_layouts",
         "recency_weights",
         "spreading_runs",
         "community_distribution_threshold",

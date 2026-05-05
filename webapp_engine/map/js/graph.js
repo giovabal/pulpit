@@ -34,6 +34,8 @@ var year_cache                  = {};  // data_dir → { pos, ch, comm }
 var year_cache_pend             = {};  // data_dir → true while fetch is in flight
 var year_sequence               = [];  // ['all', '2021', '2022', …] built by init_year_switcher
 var _year_switcher_inited       = false;
+var layout_cache                = {};  // '<algo>:<data_dir>' → position data
+var active_layout               = 'fa2';
 
 // =============================================================================
 // Sigma and graph instances
@@ -769,6 +771,70 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
     animation_frame_id = requestAnimationFrame(step);
 }
 
+function animate_layout_transition(new_pos_data, duration_ms) {
+    if (animation_frame_id) { cancelAnimationFrame(animation_frame_id); animation_frame_id = null; }
+
+    var new_pos_map = {};
+    new_pos_data.nodes.forEach(function(n) { new_pos_map[n.id] = n; });
+
+    var snap = {};
+    graph.nodes().forEach(function(id) {
+        snap[id] = { x: graph.getNodeAttribute(id, 'x'), y: graph.getNodeAttribute(id, 'y') };
+    });
+
+    var start_cam = sigma_instance.getCamera().getState();
+    var target_cam = { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
+    var start_ts = null;
+
+    function step(ts) {
+        if (!start_ts) start_ts = ts;
+        var raw = Math.min((ts - start_ts) / duration_ms, 1);
+        var e = _ease(raw);
+        graph.nodes().forEach(function(id) {
+            var s = snap[id], n = new_pos_map[id];
+            if (!s || !n) return;
+            graph.setNodeAttribute(id, 'x', _lerp(s.x, n.x, e));
+            graph.setNodeAttribute(id, 'y', _lerp(s.y, n.y, e));
+        });
+        sigma_instance.getCamera().setState({
+            x:     _lerp(start_cam.x,     target_cam.x,     e),
+            y:     _lerp(start_cam.y,     target_cam.y,     e),
+            ratio: _lerp(start_cam.ratio, target_cam.ratio, e),
+            angle: 0,
+        });
+        sigma_instance.refresh();
+        if (raw < 1) {
+            animation_frame_id = requestAnimationFrame(step);
+        } else {
+            animation_frame_id = null;
+        }
+    }
+
+    animation_frame_id = requestAnimationFrame(step);
+}
+
+function switch_layout(algo) {
+    if (algo === active_layout || !graph_loaded) return;
+    active_layout = algo;
+    var filename = algo === 'fa2' ? 'channel_position.json' : 'channel_position_' + algo + '.json';
+    var cache_key = algo + ':' + current_data_dir;
+    if (layout_cache[cache_key]) {
+        animate_layout_transition(layout_cache[cache_key], 600);
+    } else {
+        fetch(current_data_dir + filename)
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(function(data) {
+                layout_cache[cache_key] = data;
+                animate_layout_transition(data, 600);
+            })
+            .catch(function(err) {
+                console.error('Failed to load layout', algo, err);
+                active_layout = 'fa2';
+                if (el('layout-select')) el('layout-select').value = 'fa2';
+            });
+    }
+}
+
 function reload_graph(data_dir) {
     if (animation_frame_id) { cancelAnimationFrame(animation_frame_id); animation_frame_id = null; }
 
@@ -779,6 +845,11 @@ function reload_graph(data_dir) {
     is_graph_completely_rendered = false;
     el('infobar').style.display      = 'none';
     el('node_details').style.display = 'none';
+
+    // Extra layout files exist only for the full-range export; reset and disable during year views.
+    active_layout = 'fa2';
+    var layoutSel = el('layout-select');
+    if (layoutSel) { layoutSel.value = 'fa2'; layoutSel.disabled = (data_dir !== 'data/'); }
 
     var c = year_cache[data_dir];
     if (c) {
@@ -925,6 +996,23 @@ document.addEventListener('DOMContentLoaded', function() {
         sigma_instance.refresh();
         is_graph_completely_rendered = false;
     });
+
+    var extra_layouts = window.EXTRA_LAYOUTS || [];
+    if (extra_layouts.length > 0) {
+        var layout_group = el('layout-select-group');
+        var layout_sel   = el('layout-select');
+        if (layout_group && layout_sel) {
+            layout_group.style.display = '';
+            var _layout_labels = { circular: 'Circular', spectral: 'Spectral', spring: 'Spring (Fruchterman-Reingold)' };
+            var _opts = ['<option value="fa2">Force Atlas 2</option>'];
+            extra_layouts.forEach(function(algo) {
+                var lbl = _layout_labels[algo] || (algo.charAt(0).toUpperCase() + algo.slice(1));
+                _opts.push('<option value="' + algo + '">' + lbl + '</option>');
+            });
+            layout_sel.innerHTML = _opts.join('');
+            layout_sel.addEventListener('change', function() { switch_layout(this.value); });
+        }
+    }
 
     el('zoom_in').addEventListener('click', function() {
         var cam = sigma_instance.getCamera();

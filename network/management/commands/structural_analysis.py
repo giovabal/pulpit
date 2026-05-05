@@ -113,6 +113,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--extra-layouts",
+            dest="extra_layouts",
+            default="",
+            metavar="LAYOUTS",
+            help=(
+                "Comma-separated list of additional 2D layout algorithms to pre-compute alongside ForceAtlas2. "
+                "The browser graph viewer will offer a dropdown to switch between them at viewing time. "
+                "Available: CIRCULAR, SPECTRAL, SPRING, ALL. Requires --2dgraph."
+            ),
+        )
+        parser.add_argument(
             "--measures",
             dest="measures",
             default="PAGERANK",
@@ -872,6 +883,11 @@ class Command(BaseCommand):
         vertical_layout: bool = options["vertical_layout"]
         target_layout = layout.LAYOUT_VERTICAL if vertical_layout else layout.LAYOUT_HORIZONTAL
 
+        extra_layout_names = _parse_csv(options["extra_layouts"])
+        if "ALL" in extra_layout_names:
+            extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES)
+        extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES]
+
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
@@ -895,6 +911,20 @@ class Command(BaseCommand):
 
         strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
         positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
+
+        extra_positions: dict[str, dict] = {}
+        if do_graph and extra_layout_names:
+            _extra_layout_funcs = {
+                "CIRCULAR": layout.circular_positions,
+                "SPECTRAL": layout.spectral_positions,
+                "SPRING": layout.spring_positions,
+            }
+            self.stdout.write("\nCompute extra layouts")
+            for name in extra_layout_names:
+                self.stdout.write(f"- {name.lower()} … ", ending="")
+                self.stdout.flush()
+                extra_positions[name.lower()] = _extra_layout_funcs[name](graph)
+                self.stdout.write("done")
 
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
         measures_labels = self._compute_measures(
@@ -941,7 +971,12 @@ class Command(BaseCommand):
             self.stdout.write("\nGenerate map")
             self.stdout.write("- config files")
             exporter.apply_robots_to_graph_html(
-                root_target, seo, project_title=project_title, include_3d=do_3dgraph, vertical_layout=vertical_layout
+                root_target,
+                seo,
+                project_title=project_title,
+                include_3d=do_3dgraph,
+                vertical_layout=vertical_layout,
+                extra_layouts=list(extra_positions.keys()),
             )
             exporter.write_robots_txt(root_target, seo)
 
@@ -954,6 +989,7 @@ class Command(BaseCommand):
             graph_dir=root_target,
             include_positions=do_graph or do_3dgraph,
             positions_3d=positions_3d,
+            extra_positions=extra_positions or None,
         )
         exporter.write_meta_json(
             graph_dir=root_target,
