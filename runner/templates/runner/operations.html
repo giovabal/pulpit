@@ -136,21 +136,21 @@
               </label>
               <label class="ops-flag">
                 <span class="ops-flag-step">7</span>
-                <input type="checkbox" name="refresh_degrees">Refresh degrees<span class="ops-global-badge">all channels</span>
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Skipping leaves cached degree values stale. DB id filter is ignored: degrees must reflect the full network topology to be meaningful."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">8</span>
                 <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
               </label>
               <label class="ops-flag">
-                <span class="ops-flag-step">9</span>
+                <span class="ops-flag-step">8</span>
                 <input type="checkbox" name="fix_missing_media">Fix missing media
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="After crawling, find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
+              </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">9</span>
+                <input type="checkbox" name="refresh_degrees">Refresh degrees<span class="ops-global-badge">all channels</span>
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Runs last so degrees reflect any channels added by earlier steps. DB id filter is ignored: degrees must reflect the full network topology to be meaningful."></i>
               </label>
             </div>
           </fieldset>
