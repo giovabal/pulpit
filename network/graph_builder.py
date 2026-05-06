@@ -82,11 +82,12 @@ def _build_edge_list(
     messages_per_channel: dict,
     pk_to_str: dict[int, str],
     edge_weight_strategy: str,
+    include_self_references: bool = False,
 ) -> list[list[str | float]]:
     """Compute weighted edge list from raw count dicts."""
     edge_list: list[list[str | float]] = []
     for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
-        if target_pk == source_pk:
+        if not include_self_references and target_pk == source_pk:
             continue
         total = forwarded_counts.get((target_pk, source_pk), 0) + reference_counts.get((target_pk, source_pk), 0)
         if edge_weight_strategy == "NONE":
@@ -117,6 +118,7 @@ def build_graph(
     channel_groups: list[str] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
     include_mentions: bool = True,
+    include_self_references: bool = False,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -129,6 +131,7 @@ def build_graph(
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = (
         Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
+        .exclude(is_private=True)
         .select_related("organization")
         .prefetch_related(
             Prefetch(
@@ -263,7 +266,13 @@ def build_graph(
 
     pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
     edge_list = _build_edge_list(
-        forwarded_counts, reference_counts, referencing_counts, messages_per_channel, pk_to_str, edge_weight_strategy
+        forwarded_counts,
+        reference_counts,
+        referencing_counts,
+        messages_per_channel,
+        pk_to_str,
+        edge_weight_strategy,
+        include_self_references=include_self_references,
     )
 
     if not edge_list:

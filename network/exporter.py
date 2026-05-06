@@ -380,6 +380,8 @@ def write_summary_json(
         "community_strategies",
         "network_stat_groups",
         "edge_weight_strategy",
+        "include_mentions",
+        "include_self_references",
         "channel_types",
         "channel_groups",
         "vacancy_measures",
