@@ -268,48 +268,64 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
-	  <form id="options_form">
-	    <div class="mb-3">
-	      <label for="theme-select" class="form-label">Theme</label>
-	      <select id="theme-select" class="form-select">
-		<option value="dark" selected>Dark</option>
-		<option value="light">Light</option>
-		<option value="minimal">Minimal</option>
-		<option value="print">Print</option>
-	      </select>
+	  <ul class="nav nav-tabs mb-3" id="options-tabs" role="tablist">
+	    <li class="nav-item" role="presentation">
+	      <button class="nav-link active" id="opts-analysis-tab" data-bs-toggle="tab" data-bs-target="#opts-analysis-pane" type="button" role="tab" aria-controls="opts-analysis-pane" aria-selected="true">Analysis</button>
+	    </li>
+	    <li class="nav-item" role="presentation">
+	      <button class="nav-link" id="opts-styles-tab" data-bs-toggle="tab" data-bs-target="#opts-styles-pane" type="button" role="tab" aria-controls="opts-styles-pane" aria-selected="false">Styles</button>
+	    </li>
+	  </ul>
+	  <div class="tab-content">
+	    <div class="tab-pane fade show active" id="opts-analysis-pane" role="tabpanel" aria-labelledby="opts-analysis-tab">
+	      <form id="options_form">
+		<div class="mb-3" id="layout-select-group" style="display:none">
+		  <label for="layout-select" class="form-label">Layout</label>
+		  <select id="layout-select" class="form-select"></select>
+		</div>
+		<div class="mb-3" id="community-strategy-group" style="display:none">
+		  <label for="community-strategy-select" class="form-label">Community coloring</label>
+		  <select id="community-strategy-select" class="form-select"></select>
+		</div>
+		<div class="mb-3">
+		  <label for="size-select" class="form-label">Nodes dimension</label>
+		  <select id="size-select" class="form-select"></select>
+		</div>
+		<div class="mb-3">
+		  <label for="group-select" class="form-label">Filter by community</label>
+		  <select id="group-select" class="form-select"></select>
+		</div>
+	      </form>
 	    </div>
-	    <div class="mb-3" id="layout-select-group" style="display:none">
-	      <label for="layout-select" class="form-label">Layout</label>
-	      <select id="layout-select" class="form-select"></select>
+	    <div class="tab-pane fade" id="opts-styles-pane" role="tabpanel" aria-labelledby="opts-styles-tab">
+	      <form>
+		<div class="mb-3">
+		  <label for="theme-select" class="form-label">Theme</label>
+		  <select id="theme-select" class="form-select">
+		    <option value="dark" selected>Dark</option>
+		    <option value="light">Light</option>
+		    <option value="minimal">Minimal</option>
+		    <option value="print">Print</option>
+		  </select>
+		</div>
+		<div class="mb-3">
+		  <label for="labels-select" class="form-label">Labels</label>
+		  <select id="labels-select" class="form-select">
+		    <option value="on_size" selected>On size</option>
+		    <option value="always">Always</option>
+		    <option value="never">Never</option>
+		  </select>
+		</div>
+		<div class="mb-3 form-check form-switch">
+		  <input class="form-check-input" type="checkbox" id="colored-edges-toggle" checked>
+		  <label class="form-check-label" for="colored-edges-toggle">Colored edges</label>
+		</div>
+	      </form>
+	      <hr>
+	      <h5>Legend</h5>
+	      <ul id="legend" class="list-unstyled" aria-label="Community color legend"></ul>
 	    </div>
-	    <div class="mb-3" id="community-strategy-group" style="display:none">
-	      <label for="community-strategy-select" class="form-label">Community coloring</label>
-	      <select id="community-strategy-select" class="form-select"></select>
-	    </div>
-	    <div class="mb-3">
-	      <label for="size-select" class="form-label">Nodes dimension</label>
-	      <select id="size-select" class="form-select"></select>
-	    </div>
-	    <div class="mb-3">
-	      <label for="group-select" class="form-label">Filter by community</label>
-	      <select id="group-select" class="form-select"></select>
-	    </div>
-	    <div class="mb-3">
-	      <label for="labels-select" class="form-label">Labels</label>
-	      <select id="labels-select" class="form-select">
-		<option value="on_size" selected>On size</option>
-		<option value="always">Always</option>
-		<option value="never">Never</option>
-	      </select>
-	    </div>
-	    <div class="mb-3 form-check form-switch">
-	      <input class="form-check-input" type="checkbox" id="colored-edges-toggle" checked>
-	      <label class="form-check-label" for="colored-edges-toggle">Colored edges</label>
-	    </div>
-	  </form>
-	  <hr>
-	  <h5>Legend</h5>
-	  <ul id="legend" class="list-unstyled" aria-label="Community color legend"></ul>
+	  </div>
 	</div>
 	<div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
