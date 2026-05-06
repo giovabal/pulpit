@@ -104,6 +104,7 @@
   margin-bottom: .5rem;
 }
 .ops-fieldset:last-child { margin-bottom: 0; }
+.ops-fieldset[disabled] { opacity: .4; pointer-events: none; }
 
 .ops-fieldset-row {
   display: flex;

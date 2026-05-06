@@ -313,12 +313,16 @@
                 </label>
               </div>
             </fieldset>
-            <fieldset class="ops-fieldset">
-              <legend>Extra 2D layouts
+            <fieldset class="ops-fieldset" id="extra-layouts-fieldset">
+              <legend>2D layouts
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Pre-compute alternative 2D layouts alongside Force Atlas 2. A Layout switcher appears in the graph viewer so the user can switch between them without re-running the analysis. Requires 2D graph."></i>
+                   title="Force Atlas 2 is always computed. Select additional layouts to pre-compute: a Layout switcher in the graph viewer lets users switch between them without re-exporting. Requires 2D graph."></i>
               </legend>
               <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2" checked>Force Atlas 2
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
+                </label>
                 <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Nodes equally spaced on a ring."></i>
@@ -804,7 +808,7 @@
 
     startPolling() {
       if (this.poller) return;
-      this.poller = setInterval(() => this.fetchStatus(), 500);
+      this.poller = setInterval(() => this.fetchStatus(), 1000);
     }
 
     stopPolling() {
@@ -980,6 +984,28 @@
     _extraTermsEl.addEventListener('input', _syncSaveTerms);
     _syncSaveTerms();
   }
+
+  // 2D layouts fieldset: gray-out when 2D graph is off; enforce at-least-one layout selected.
+  (function () {
+    var graphCb   = document.querySelector('#form-structural_analysis input[name="graph"]');
+    var layoutsFs = document.getElementById('extra-layouts-fieldset');
+    if (!graphCb || !layoutsFs) return;
+
+    function syncLayoutsFieldset() {
+      layoutsFs.disabled = !graphCb.checked;
+    }
+    graphCb.addEventListener('change', syncLayoutsFieldset);
+    syncLayoutsFieldset();
+
+    // Collect all layout checkboxes (FA2 + extras).
+    var layoutCbs = Array.from(layoutsFs.querySelectorAll('input[type="checkbox"]'));
+    layoutCbs.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var anyChecked = layoutCbs.some(function (c) { return c.checked; });
+        if (!anyChecked) cb.checked = true;  // silently restore the last one
+      });
+    });
+  })();
 
   (function () {
     var nameInput = document.getElementById('export_name');
