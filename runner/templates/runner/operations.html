@@ -269,6 +269,10 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Export the network as a GraphML file. Compatible with R/igraph, NetworkX, yEd, and most graph analysis tools."></i>
               </label>
+              <label class="ops-flag"><input type="checkbox" name="csv">CSV files
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Export nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions). Most portable format for downstream analysis in R, Python, or shell scripts."></i>
+              </label>
               <label class="ops-flag"><input type="checkbox" name="draw_dead_leaves">Draw dead leaves
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Include non-interesting channels that are referenced by interesting ones as leaf nodes. Adds context but can significantly increase graph size."></i>
@@ -1176,6 +1180,7 @@
         setCheck('xlsx',             opts.xlsx);
         setCheck('gexf',             opts.gexf);
         setCheck('graphml',          opts.graphml);
+        setCheck('csv',              opts.csv);
         setCheck('seo',              opts.seo);
         setCheck('vertical_layout',  opts.vertical_layout);
         setCheck('consensus_matrix', opts.consensus_matrix);

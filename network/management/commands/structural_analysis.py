@@ -74,6 +74,13 @@ class Command(BaseCommand):
             help="Also write network.graphml with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
+            "--csv",
+            dest="csv",
+            action="store_true",
+            default=False,
+            help="Also write nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions).",
+        )
+        parser.add_argument(
             "--seo",
             action="store_true",
             default=False,
@@ -903,6 +910,7 @@ class Command(BaseCommand):
         do_xlsx = options["xlsx"]
         do_gexf = options["gexf"]
         do_graphml = options["graphml"]
+        do_csv = options["csv"]
         do_consensus_matrix = options["consensus_matrix"]
         do_structural_similarity = options["structural_similarity"]
 
@@ -1120,6 +1128,11 @@ class Command(BaseCommand):
             self.stdout.write("- graphml")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
+
+        if do_csv:
+            self.stdout.write("- csv")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_csv(graph_data, edge_list, measures_labels, strategies, root_target)
 
         do_vacancy = bool(selected_vacancy_measures)
         if do_vacancy:

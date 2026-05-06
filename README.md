@@ -108,6 +108,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by six algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
+| **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
 | **GEXF and GraphML** | For Gephi, Cytoscape, R/igraph, and any graph-analysis tool [more](docs/export-formats.md#networkgexf--networkgraphml--network-exchange-formats) |
 
 ---

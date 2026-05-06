@@ -58,6 +58,7 @@
     if (opts.xlsx)      outputs.push('XLSX');
     if (opts.gexf)      outputs.push('GEXF');
     if (opts.graphml)   outputs.push('GraphML');
+    if (opts.csv)       outputs.push('CSV');
     if (outputs.length) pills.push(outputs.join('·'));
     if (opts.measures)  pills.push(opts.measures.split(',').length + ' measures');
     if (opts.community_strategies) pills.push(opts.community_strategies.split(',').length + ' strategies');

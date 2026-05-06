@@ -1,3 +1,4 @@
+import csv as _csv
 import datetime
 import html as _html
 import json
@@ -201,6 +202,72 @@ def write_graphml(graph: nx.DiGraph, graph_data: GraphData, output_filename: str
     """Write a GraphML file with all computed node attributes embedded."""
     g = _prepare_export_graph(graph, graph_data)
     nx.write_graphml(g, output_filename)
+
+
+_CSV_BASE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
+
+
+def write_csv(
+    graph_data: GraphData,
+    edge_list: list[list],
+    measures_labels: list[tuple[str, str]],
+    strategies: list[str],
+    output_dir: str,
+) -> None:
+    """Write nodes.csv and edges.csv to output_dir.
+
+    nodes.csv has the same columns as channel_table.xlsx.
+    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions
+    where weight_forwards and weight_mentions are the raw forward/mention counts.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    label_by_id = {node["id"]: node.get("label") or node["id"] for node in graph_data["nodes"]}
+
+    extra = [(k, lbl) for k, lbl in measures_labels if k not in _CSV_BASE_KEYS]
+    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
+    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
+
+    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound"]
+    if pagerank_col:
+        headers.append(pagerank_col[1])
+    headers += [lbl for _, lbl in other_extra]
+    headers += [s.capitalize() for s in strategies]
+    headers += ["Activity start", "Activity end"]
+
+    with open(os.path.join(output_dir, "nodes.csv"), "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(headers)
+        for node in sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True):
+            communities = node.get("communities") or {}
+            row: list = [
+                node.get("label") or node["id"],
+                node.get("url") or "",
+                node.get("fans"),
+                node.get("messages_count"),
+                node.get("in_deg"),
+                node.get("out_deg"),
+            ]
+            if pagerank_col:
+                row.append(node.get(pagerank_col[0]))
+            for key, _ in other_extra:
+                row.append(node.get(key))
+            for s in strategies:
+                row.append(communities.get(s, ""))
+            row.append(node.get("activity_start") or "")
+            row.append(node.get("activity_end") or "")
+            writer.writerow(row)
+
+    with open(os.path.join(output_dir, "edges.csv"), "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(["source_label", "target_label", "weight", "weight_forwards", "weight_mentions"])
+        for edge in edge_list:
+            source_label = label_by_id.get(str(edge[0]), str(edge[0]))
+            target_label = label_by_id.get(str(edge[1]), str(edge[1]))
+            weight = edge[2]
+            weight_forwards = edge[3] if len(edge) > 3 else ""
+            weight_mentions = edge[4] if len(edge) > 4 else ""
+            writer.writerow([source_label, target_label, weight, weight_forwards, weight_mentions])
 
 
 def write_robots_txt(root_target: str, seo: bool) -> None:

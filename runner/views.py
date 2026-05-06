@@ -301,6 +301,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--gexf")
         if post.get("graphml"):
             args.append("--graphml")
+        if post.get("csv"):
+            args.append("--csv")
         if post.get("seo"):
             args.append("--seo")
         if post.get("graph"):
