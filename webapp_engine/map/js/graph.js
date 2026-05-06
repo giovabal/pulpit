@@ -969,23 +969,39 @@ function reload_graph(data_dir) {
     el('infobar').style.display      = 'none';
     el('node_details').style.display = 'none';
 
-    // Extra layout files exist only for the full-range export; reset and disable during year views.
-    active_layout = 'fa2';
-    var layoutSel = el('layout-select');
-    if (layoutSel) { layoutSel.value = 'fa2'; layoutSel.disabled = (data_dir !== 'data/'); }
+    var yc = year_cache[data_dir];
 
-    var c = year_cache[data_dir];
-    if (c) {
-        // Data already in cache — start animation immediately, no network wait
-        animate_year_transition(c.pos, c.ch, 700);
+    if (active_layout === 'fa2') {
+        if (yc) {
+            animate_year_transition(yc.pos, yc.ch, 700);
+        } else {
+            Promise.all([
+                fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+                fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+            ]).then(function(results) {
+                animate_year_transition(results[0], results[1], 700);
+            }).catch(function(err) {
+                console.error('reload_graph fetch failed for', data_dir, err);
+            });
+        }
     } else {
-        Promise.all([
-            fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-            fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        ]).then(function(results) {
+        var lc_key = active_layout + ':' + data_dir;
+        var pos_p = layout_cache[lc_key]
+            ? Promise.resolve(layout_cache[lc_key])
+            : fetch(data_dir + 'channel_position_' + active_layout + '.json')
+                .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+                .then(function(d) { layout_cache[lc_key] = d; return d; });
+        var ch_p = yc
+            ? Promise.resolve(yc.ch)
+            : fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
+        Promise.all([pos_p, ch_p]).then(function(results) {
             animate_year_transition(results[0], results[1], 700);
         }).catch(function(err) {
-            console.error('reload_graph fetch failed for', data_dir, err);
+            console.error('reload_graph: layout', active_layout, 'not available for', data_dir, '— falling back to FA2');
+            active_layout = 'fa2';
+            var layoutSel = el('layout-select');
+            if (layoutSel) layoutSel.value = 'fa2';
+            reload_graph(data_dir);
         });
     }
 

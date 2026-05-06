@@ -334,6 +334,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args += ["--network-stat-groups", network_stat_groups_val]
         if not post.get("include_mentions"):
             args.append("--no-mentions")
+        if post.get("include_self_references"):
+            args.append("--self-references")
         edge_weight_strategy_val = post.get("edge_weight_strategy", "").strip()
         if edge_weight_strategy_val:
             args += ["--edge-weight-strategy", edge_weight_strategy_val]

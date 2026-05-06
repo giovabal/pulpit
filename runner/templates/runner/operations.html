@@ -397,6 +397,11 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Count t.me/ link references alongside forwards when building edges. Uncheck to use forwards only."></i>
                 </label>
+                <label class="ops-flag">
+                  <input type="checkbox" name="include_self_references">Include self-references
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Count cases where a channel forwards from or mentions itself as self-loop edges. Off by default — self-loops add no network information and have no effect on most centrality measures."></i>
+                </label>
               </div>
             </fieldset>
           </div>
@@ -1204,6 +1209,7 @@
         // Edge weight radio
         if (opts.edge_weight_strategy) setRadio('edge_weight_strategy', opts.edge_weight_strategy);
         if (opts.include_mentions !== undefined) setCheck('include_mentions', opts.include_mentions);
+        if (opts.include_self_references !== undefined) setCheck('include_self_references', opts.include_self_references);
 
         // Vacancy analysis
         setMulti('vacancy_measures',       opts.vacancy_measures || '');
