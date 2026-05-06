@@ -1,13 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
-- rewrite the installation and workflow documentation so it's clear for less technical people
-- verify how self-loop are drawn in 2D and 3D graphs
-- channels count diverge in home page and in structural analysis, in this last case is higher: explain why
-- in 2d graph options modal windows add a switch for having colored edges (as it is now) or not (use a gray that's good for both light and dark backgrounds). And in "print" style, background color should be white
-- in 2d graph options modal windows separate in 2 tabs analysisi options and styles options
-- /plan bring layouts and styles of 2D graph to 3D graph
-- in channels details page, Forwards received list filter, add a select for "include self-reference", "do not include self-references", "show only self-references"
 - Screenshot missing
 -- Crawl channels panel open (13)
 -- Search channels panel open (new, instead of 13)
@@ -37,3 +30,41 @@
 - Have a deep inspection of all options accepted by commands, look for inconsistencies and bad practices
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
 - Read the code and review documentation, propose variations.
+
+
+---
+### 4.6 — Per-node local clustering coefficient
+
+`nx.average_clustering()` is already used as a whole-network statistic, but per-node `nx.clustering()` is never computed or exported. Add a `LOCALCLUSTERING` measure. Channels with high local clustering are embedded in echo-chamber cliques; channels with low values are structural bridges even when their ego-density is low. Pairs well with `EGODENSITY` for a richer characterisation of local structure.
+
+### 4.7 — Separate forward and mention edge weights
+
+Currently, message forwards and `t.me/` inline mentions are summed into a single edge weight. Storing them as two separate edge attributes (`weight_forwards`, `weight_mentions`) in the graph and in GEXF/GraphML exports would let analysts distinguish strong-signal forwards (deliberate reposting) from weak-signal mentions (inline links). The data is already split in `_build_edge_list()` (`network/graph_builder.py`) — `forwarded_counts` and `reference_counts` are separate dicts that get added together only at the last step. Edge weight computation would stay the same for the final `weight` attribute; the two components would be stored alongside it as extra attributes.
+
+
+### 5.5 — Community evolution visualization
+
+When `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.
+
+
+### 6.5 — Edit tracking per message
+
+`Message.edit_date` is returned by Telethon but never stored. Add an `edit_date DateTimeField(null=True)` to `Message` and show an "edited" indicator on post cards when the field is set. Relevant for disinformation research: post-publication edits can change meaning after initial amplification.
+
+
+### 6.6 — Post author attribution
+
+`Message.post_author` (a freeform string, set for channels with "Sign messages" enabled) is not stored. Add a `post_author CharField(max_length=255, blank=True)` and display it on the post card. The `signatures` meta badge is already shown on the channel detail page; this fills in the per-post counterpart.
+
+### 6.7 — Custom and sticker reactions
+
+`_save_reactions()` in the crawler explicitly skips custom/sticker reactions (the `else` branch when `hasattr(rc.reaction, "emoticon")` is false). At minimum, tally them under a `custom` bucket so that total reaction counts are not understated on channels whose communities use custom emoji packs.
+
+
+### 10.1 — CSV node and edge list export
+
+XLSX and GEXF are available but CSV is the most portable format for scripting (R, Python, shell). Add two optional files to every export: `nodes.csv` (one row per channel, same columns as `channel_table.xlsx`) and `edges.csv` (source_label, target_label, weight, weight_forwards, weight_mentions). Gate behind a `--csv` flag and an Operations panel checkbox alongside the existing GEXF/GraphML options.
+
+### 11.1 — Label propagation
+
+`nx.community.label_propagation_communities()` is a fast, parameter-free algorithm that runs in near-linear time. It would add a useful low-cost baseline for comparison with Leiden and Louvain, and is well-suited to large graphs where Infomap or MCL are slow. Adds one entry to the `detect()` function in `network/community.py`.
