@@ -195,6 +195,19 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     return [(key, "Burt's Constraint")]
 
 
+def apply_closeness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add closeness centrality to each node.
+
+    Uses the Wasserman-Faust improved formula (NetworkX default), which handles partially
+    disconnected graphs correctly: nodes that cannot reach any other node receive 0.0.
+    """
+    key = "closeness_centrality"
+    values: dict[str, float] = nx.closeness_centrality(graph)
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Closeness Centrality")]
+
+
 def apply_ego_network_density(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add ego network density to each node.
 

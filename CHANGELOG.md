@@ -12,6 +12,9 @@
 - **Self-reference filter on Forwards received tab** — the *Forwards received* tab on channel detail pages gains a select control with three options: *Include self-references* (default), *Do not include self-references*, and *Show only self-references*. A self-reference occurs when a channel re-posts its own content, making it appear among its own forwards received. The selection is preserved across pagination.
 - **Self-loop rendering in 3D graph** — when `--self-references` is on, self-loop edges were previously invisible in `graph3d.html` because the Bézier control point collapsed to the node position. They now render as a small arch above the node, sized proportionally to the node's radius (`arm = 1× radius`, `peak = 3.5× radius`).
 
+### New features
+- **Closeness centrality** (`CLOSENESS`) — new node measure for `structural_analysis`. Computes in-closeness centrality for each channel: the Wasserman-Faust normalised score reflecting how easily the rest of the network can reach this channel along citation paths. Channels with high closeness are structurally well-positioned to receive information quickly — they sit at the convergence of many short incoming paths. Isolated nodes and nodes outside the main component receive 0.0. Available in `--measures` and the Operations panel Measures grid.
+
 ### Improvements
 - **README rewritten** — restructured as a comprehensive landing page for both non-technical and specialist readers. Adds a *Questions you can answer* section with concrete per-channel, community, and over-time questions linked to specific measures; expands the outputs table to reflect all current files; splits the measures reference into three thematic groups (Influence & reach / Position & brokerage / Content & dynamics); adds a dedicated Vacancy Analysis section with the full scoring table; updates the community detection table with a direction-aware column; and corrects the measure count from 14 to 15.
 
