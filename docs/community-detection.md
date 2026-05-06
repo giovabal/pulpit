@@ -20,6 +20,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | :------- | :------ | :--- | :------------------- |
 | Organisation | `ORGANIZATION` | Domain knowledge | — |
 | Louvain | `LOUVAIN` | Modularity | No |
+| Label propagation | `LABELPROPAGATION` | Label consensus | No |
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
 | Leiden CPM coarse | `LEIDEN_CPM_COARSE` | Constant Potts Model | No |
@@ -179,6 +180,23 @@ Walktrap computes a random-walk distance between each pair of channels: two chan
 
 ---
 
+## Label propagation
+
+*Label propagation finds communities by spreading labels through the network until each node carries the label held by the majority of its neighbours — no parameters, no matrix operations, near-linear time.*
+
+Each node starts with a unique label. At every step, each node adopts the label that the largest number of its neighbours carry. This continues until no node would change its label on the next step; nodes sharing a label at convergence form a community. The NetworkX implementation uses the semi-synchronous variant (Cordasco & Gargano 2010), which partitions nodes into colour classes before each sweep to ensure the algorithm terminates and produces consistent results.
+
+The graph is symmetrised to undirected before running. Edge weights are not used — all citation links are treated equally regardless of frequency.
+
+**References:** Raghavan, U.N., Albert, R. & Kumara, S. (2007) "Near linear time algorithm to detect community structures in large-scale networks." *Physical Review E* 76(3). [doi:10.1103/PhysRevE.76.036106](https://doi.org/10.1103/PhysRevE.76.036106)  
+Cordasco, G. & Gargano, L. (2010) "Community detection via semi-synchronous label propagation algorithms." *IEEE BASNA*. [doi:10.1109/BASNA.2010.5730298](https://doi.org/10.1109/BASNA.2010.5730298)
+
+**In practice:** label propagation is the fastest algorithm in the set and requires no tuning. Its main value is as a parameter-free baseline: if a grouping appears in both Leiden and label propagation, it is unlikely to be an artefact of algorithmic choices or resolution settings. It is also the best option for very large graphs where Infomap, MCL, or Walktrap are too slow. The main limitation is that it ignores edge weights and direction, so it can miss fine-grained structure that frequency-sensitive algorithms (Leiden, MCL) detect.
+
+**Example.** A monitoring project collects 1,200 channels. Leiden directed takes several minutes; label propagation runs in under a second and produces a coarser partition with 8 communities instead of 14. Six of those eight communities align well with Leiden's output. The two that don't — a mixed cluster merging two Leiden communities — are exactly where the two Leiden communities share many bidirectional links, and edge weights are what separates them. The comparison reveals that the two-community split is weight-driven, not structural.
+
+---
+
 ## Weakly Connected Components (WEAKCC)
 
 *Two channels belong to the same weakly connected component if there is any path between them — ignoring edge direction.*
@@ -251,6 +269,7 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | :------------ | :------------------- |
 | Use your own domain knowledge as the baseline | `ORGANIZATION` |
 | Find all community structure, no prior knowledge | `LEIDEN` or `LEIDEN_DIRECTED` |
+| Fast parameter-free baseline for large graphs | `LABELPROPAGATION` |
 | Direction of citation matters | `LEIDEN_DIRECTED`, `MCL`, `INFOMAP` |
 | Identify echo chambers and information traps | `INFOMAP` |
 | Detect context-dependent flows | `INFOMAP_MEMORY` |

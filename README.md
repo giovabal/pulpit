@@ -152,7 +152,7 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 13 algorithms
+## Community detection — 14 algorithms
 
 Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
@@ -164,6 +164,7 @@ Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals
 | [Leiden CPM coarse](docs/community-detection.md#leiden-cpm-coarse-and-fine) | Few, large communities — even weak citation ties bind | No |
 | [Leiden CPM fine](docs/community-detection.md#leiden-cpm-coarse-and-fine) | More, smaller communities — only dense mutual citation | No |
 | [Louvain](docs/community-detection.md#louvain) | Modularity maximisation — fast, widely used baseline | No |
+| [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
 | [Infomap](docs/community-detection.md#infomap) | Echo chambers: communities where information circulates in closed loops | Yes |
 | [Memory Infomap](docs/community-detection.md#memory-infomap-second-order) | Second-order Infomap: path-dependent flow traps invisible to first-order methods | Yes |
 | [MCL](docs/community-detection.md#mcl-markov-clustering) | Flow-based communities: channels bound by shared circulation patterns | Yes |
