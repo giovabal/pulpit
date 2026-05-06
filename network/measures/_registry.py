@@ -17,6 +17,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "CONTENTORIGINALITY",
         "SPREADING",
         "EGODENSITY",
+        "LOCALCLUSTERING",
     }
 )
 
@@ -67,6 +68,7 @@ MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("CLOSENESS", "closeness centrality", "apply_closeness_centrality"),
     ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
     ("EGODENSITY", "ego network density", "apply_ego_network_density"),
+    ("LOCALCLUSTERING", "local clustering", "apply_local_clustering"),
 ]
 
 
