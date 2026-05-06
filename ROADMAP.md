@@ -1,6 +1,8 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
+- rewrite the installation and workflow documentation so it's clear for less technical people
+- verify how self-loop are drawn in 2D and 3D graphs
 - channels count diverge in home page and in structural analysis, in this last case is higher: explain why
 - in 2d graph options modal windows add a switch for having colored edges (as it is now) or not (use a gray that's good for both light and dark backgrounds). And in "print" style, background color should be white
 - in 2d graph options modal windows separate in 2 tabs analysisi options and styles options
