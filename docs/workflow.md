@@ -192,6 +192,7 @@ python manage.py structural_analysis --2dgraph --html
 python manage.py structural_analysis --2dgraph --html --xlsx
 python manage.py structural_analysis --2dgraph --3dgraph --html --xlsx
 python manage.py structural_analysis --gexf --graphml
+python manage.py structural_analysis --csv
 python manage.py structural_analysis --measures PAGERANK,BETWEENNESS
 python manage.py structural_analysis --measures ALL
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED

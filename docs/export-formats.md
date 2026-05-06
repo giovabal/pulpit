@@ -23,6 +23,8 @@ exports/
     community_table.xlsx
     network.gexf            ← GEXF network file (optional)
     network.graphml         ← GraphML network file (optional)
+    nodes.csv               ← CSV node list (optional)
+    edges.csv               ← CSV edge list (optional)
     data/
       channels.json
       channel_position.json
@@ -60,6 +62,7 @@ Some files can be opened directly from the filesystem (`file://`); others requir
 | `network_compare_table.html` | — |
 | `index.html` | — |
 | `network.gexf`, `network.graphml` | — |
+| `nodes.csv`, `edges.csv` | — |
 
 The graph and vacancy-analysis pages fetch JSON files from the `data/` subdirectory at runtime. The table pages have their data embedded at generation time and open fine as local files.
 
@@ -202,6 +205,72 @@ Contains:
 - A "Normalise axes [0–1] per network" toggle that min-max-scales each network independently, making size-dependent measures comparable across networks of different sizes
 
 See [Workflow § Network comparison](workflow.md#network-comparison) for how to generate it.
+
+---
+
+## nodes.csv / edges.csv — CSV node and edge lists
+
+Generated with `--csv`. Two plain-text CSV files, the most portable format for downstream analysis in R, Python, pandas, or shell scripts.
+
+### nodes.csv
+
+One row per channel, same columns as `channel_table.xlsx`:
+
+| Column | Content |
+| :----- | :------ |
+| Channel | Channel label (name or username) |
+| URL | Telegram URL |
+| Users | Subscriber count |
+| Messages | Total message count |
+| Inbound | In-degree (number of channels that forward or cite this channel) |
+| Outbound | Out-degree (number of channels this channel forwards or cites) |
+| *Measure columns* | One column per computed measure (PageRank, Betweenness, etc.) — only present when the measure was selected at export time |
+| *Community columns* | One column per active community strategy, containing the community label assigned to this channel |
+| Activity start | Earliest message date (`YYYY-MM`), empty if no messages |
+| Activity end | Most recent message date (`YYYY-MM`), empty if no messages |
+
+Rows are sorted by in-degree descending (most-cited channels first), matching the default order of the HTML and Excel channel tables.
+
+### edges.csv
+
+One row per directed edge in the network:
+
+| Column | Content |
+| :----- | :------ |
+| `source_label` | Label of the source node (as in `nodes.csv`) |
+| `target_label` | Label of the target node |
+| `weight` | Combined edge weight computed by the active `--edge-weight-strategy` |
+| `weight_forwards` | Raw count of message forwards contributing to this edge (before normalisation) |
+| `weight_mentions` | Raw count of `t.me/` reference mentions contributing to this edge (before normalisation) |
+
+`weight_forwards + weight_mentions` equals the raw total from which `weight` is computed (with the exception of the `NONE` strategy, where `weight` is always 1.0 regardless of counts). This lets you re-apply any normalisation or filter to only forwards vs. only mentions.
+
+**Quick start in Python:**
+
+```python
+import pandas as pd
+
+nodes = pd.read_csv("exports/my-export/nodes.csv")
+edges = pd.read_csv("exports/my-export/edges.csv")
+
+# Top 10 channels by PageRank
+print(nodes.nlargest(10, "PageRank")[["Channel", "PageRank", "Users"]])
+
+# Edges where forwards dominate over mentions
+forward_heavy = edges[edges["weight_forwards"] > edges["weight_mentions"]]
+```
+
+**Quick start in R:**
+
+```r
+nodes <- read.csv("exports/my-export/nodes.csv")
+edges <- read.csv("exports/my-export/edges.csv")
+
+library(igraph)
+g <- graph_from_data_frame(edges[, c("source_label", "target_label")],
+                           directed = TRUE, vertices = nodes)
+E(g)$weight <- edges$weight
+```
 
 ---
 
