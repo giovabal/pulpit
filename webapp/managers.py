@@ -11,7 +11,6 @@ class ChannelQuerySet(models.QuerySet["Channel"]):
         return (
             self.filter(organization__is_interesting=True)
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
-            .exclude(is_lost=True)
             .exclude(is_private=True)
         )
 
