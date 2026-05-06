@@ -14,6 +14,8 @@ var EDGE_OPACITY       = 0.30;
 var EDGE_DARKEN        = 0.75;   // factor applied to averaged endpoint color
 var CURVE_SEGMENTS     = 10;     // line segments per curved edge
 var CURVATURE          = 0.15;   // control-point offset as fraction of edge length
+var SELF_LOOP_ARM      = 1.0;    // self-loop arm spread as multiple of node radius
+var SELF_LOOP_HEIGHT   = 3.5;    // self-loop arc peak as multiple of node radius
 var ZOOM_STEP          = 0.75;
 // Node radii as fractions of spatial network diameter
 var SIZE_MIN_FRAC      = 0.00225;
@@ -248,9 +250,18 @@ function build_graph(pos_data, ch_data) {
         var tgt = nodes_index[e.target];
         if (!src || !tgt) return;
 
-        var sp = new THREE.Vector3(src.x, src.y, src.z);
-        var tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-        var cp = curve_control(sp, tp);
+        var sp, tp, cp;
+        if (e.source === e.target) {
+            var arm  = src.size * SELF_LOOP_ARM;
+            var peak = src.size * SELF_LOOP_HEIGHT;
+            sp = new THREE.Vector3(src.x - arm, src.y, src.z);
+            tp = new THREE.Vector3(src.x + arm, src.y, src.z);
+            cp = new THREE.Vector3(src.x, src.y + peak, src.z);
+        } else {
+            sp = new THREE.Vector3(src.x, src.y, src.z);
+            tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
+            cp = curve_control(sp, tp);
+        }
         var curve = new THREE.QuadraticBezierCurve3(sp, cp, tp);
         var pts = curve.getPoints(CURVE_SEGMENTS);   // CURVE_SEGMENTS+1 points
 
