@@ -6,7 +6,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 
 <figure>
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
-<figcaption><em>Channel table: 14 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
+<figcaption><em>Channel table: 16 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
 </figure>
 <br>
 
@@ -24,6 +24,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | In-degree centrality | `INDEGCENTRALITY` | Which channels are cited by the largest fraction of others? |
 | Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
 | Harmonic centrality | `HARMONICCENTRALITY` | Which channels can reach the rest of the network in the fewest hops? |
+| Closeness centrality | `CLOSENESS` | Which channels are most easily reached from the rest of the network? |
 | Katz centrality | `KATZ` | Which channels are most accessible through all paths, direct and indirect? |
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Ego network density | `EGODENSITY` | How deeply is this channel embedded in a tight, mutually referencing cluster? |
@@ -135,6 +136,22 @@ A high out-degree score means a channel casts a wide net — pointing outward to
 Harmonic centrality sums the reciprocals of shortest path lengths to every other reachable channel, then normalises by the number of other channels. Unreachable channels contribute zero, making it robust in the sparse, partially disconnected networks typical of political Telegram ecosystems. Unlike betweenness, it does not require a channel to sit on paths others use; it only asks how short those paths are from its own vantage point.
 
 **In practice:** harmonic centrality surfaces structurally well-positioned channels that are invisible to betweenness-based rankings — channels that are structurally close to everyone without being a bottleneck.
+
+---
+
+## Closeness centrality
+
+*A high closeness score means this channel is easily reached from the rest of the network — many channels can arrive at it in very few hops.*
+
+Closeness centrality (Wasserman-Faust normalised) measures how accessible a channel is as a destination. For each channel, the average incoming path length from all other reachable channels is computed, then normalised by the fraction of the network that can actually reach it. A channel with high closeness sits at the convergence of many short incoming paths: the rest of the network can find it efficiently, without traversing many intermediaries.
+
+The Wasserman-Faust correction handles the partial connectivity typical of Telegram networks — channels in isolated components or with no incoming paths receive 0.0 — without penalising every node for the size of unreachable components.
+
+**Relationship to harmonic centrality.** Both harmonic and closeness measure how reachable a node is from the rest of the network. The formulas differ in how they aggregate distances: harmonic sums reciprocals (each extra path contributes independently), while closeness computes a mean corrected by the reachable fraction. In practice the two rankings are correlated, but they diverge at the periphery: a channel embedded in a dense sub-cluster will score well on harmonic (many short local paths) but modestly on closeness (the fraction of the full network reaching it is small). Closeness is thus sensitive to both proximity and scope.
+
+**In practice:** use closeness to identify channels that are structurally accessible from across the network — not just from a local neighbourhood. Pair it with betweenness to distinguish roles: a channel with high closeness and low betweenness is a reachable destination that information arrives at, not a bottleneck it passes through.
+
+**Example.** A major party's official channel scores 0.74 on closeness — much of the network links toward it through short paths. A small aggregator at the intersection of three communities scores 0.52 on closeness but four times higher on betweenness: information passes *through* the aggregator but converges *at* the party channel. Neither measure alone captures both roles.
 
 ---
 

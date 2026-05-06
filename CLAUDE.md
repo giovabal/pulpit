@@ -75,6 +75,7 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Harmonic centrality |
+| `CLOSENESS` | Closeness centrality (Wasserman-Faust); measures how easily the rest of the network can reach this channel |
 | `KATZ` | Katz centrality |
 | `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `--community-strategies` |
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |

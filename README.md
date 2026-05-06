@@ -4,6 +4,9 @@
 
 **Map influence, information flow, and community structure in Telegram networks.**
 
+Telegram channels constantly reference each other — forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random: they reveal alliances, ideological clusters, and influence structures that are otherwise invisible. Which channels set the agenda? Who redistributes their content? Where do otherwise separate ecosystems overlap? Who is the only bridge connecting two communities that never directly interact?
+
+
 <figure>
 
 ![Example graph — ~700 channels, ~10,000 edges, Leiden directed community detection, PageRank nodes size, vapoRwave palette](webapp_engine/static/2d_graph_example.jpg)
@@ -12,19 +15,9 @@
 </figure>
 <br>
 
-Telegram channels constantly reference each other — forwarding messages, linking to one another, amplifying certain voices and ignoring others. These cross-references are not random: they reveal alliances, ideological clusters, and influence structures that are otherwise invisible. Which channels set the agenda? Who redistributes their content? Where do otherwise separate ecosystems overlap? Who is the only bridge connecting two communities that never directly interact?
-
 Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive network map you can explore in a browser — zooming in on individual channels, filtering by detected community, comparing the reach of different actors, stepping through how the network evolved year by year.
 
 The analytical layer is built on established methods from network science: [PageRank](docs/network-measures.md#pagerank), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [Infomap echo-chamber detection](docs/community-detection.md#infomap), [SIR spreading simulation](docs/network-measures.md#spreading-efficiency), and more — applied to the specific dynamics of Telegram forwarding networks. See the [changelog](CHANGELOG.md) for recent additions.
-
-<figure>
-
-![The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis](webapp_engine/static/pipeline.jpg)
-
-<figcaption><em>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</em></figcaption>
-</figure>
-<br>
 
 ---
 
@@ -82,6 +75,14 @@ Open [http://localhost:8000](http://localhost:8000). The entire workflow runs fr
 
 A Pulpit research project runs in four steps, all accessible from the browser interface:
 
+<figure>
+
+![The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis](webapp_engine/static/pipeline.jpg)
+
+<figcaption><em>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</em></figcaption>
+</figure>
+<br>
+
 1. **Find channels** — add keywords; Pulpit searches Telegram and populates a list of matching channels
 2. **Organise** — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
 3. **Collect messages** — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
@@ -111,9 +112,9 @@ After export, the output directory contains self-contained files that can be sha
 
 ---
 
-## Network measures — 15 per channel
+## Network measures — 16 per channel
 
-Each channel receives a score for up to 15 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 16 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -133,6 +134,7 @@ Each channel receives a score for up to 15 measures. All can be used to size nod
 | [Betweenness centrality](docs/network-measures.md#betweenness-centrality) | Channels sitting on the shortest paths between sub-networks — the brokers |
 | [Flow betweenness](docs/network-measures.md#flow-betweenness) | Random-walk brokers that geodesic betweenness misses (Newman 2005) |
 | [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels best-positioned to reach the entire network in the fewest hops |
+| [Closeness centrality](docs/network-measures.md#closeness-centrality) | Channels most easily reached from the rest of the network — high incoming accessibility |
 | [Katz centrality](docs/network-measures.md#katz-centrality) | Deeply embedded nodes reachable through many indirect paths |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Ego network density](docs/network-measures.md#ego-network-density) | How deeply a channel is embedded in an echo-chamber clique vs. how much it bridges isolated sources |
