@@ -579,6 +579,7 @@
           <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
           <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+          {% if post.edit_date %}<span class="post-meta-item" title="Edited {{ post.edit_date }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edited</span>{% endif %}
           {% for reaction in post.reactions.all %}
           <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
           {% endfor %}

@@ -53,6 +53,7 @@
           <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
           <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+          {% if post.edit_date %}<span class="post-meta-item" title="Edited {{ post.edit_date }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edited</span>{% endif %}
         </div>
         <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
           <i class="bi bi-telegram" aria-hidden="true"></i>

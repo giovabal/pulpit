@@ -469,6 +469,7 @@ class ChannelCrawler:
                 "views": telegram_message.views,
                 "forwards": telegram_message.forwards,
                 "pinned": bool(telegram_message.pinned),
+                "edit_date": telegram_message.edit_date,
                 "_updated": now,
             }
             if telegram_message.pinned:
