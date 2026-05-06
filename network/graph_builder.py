@@ -84,12 +84,19 @@ def _build_edge_list(
     edge_weight_strategy: str,
     include_self_references: bool = False,
 ) -> list[list[str | float]]:
-    """Compute weighted edge list from raw count dicts."""
+    """Compute weighted edge list from raw count dicts.
+
+    Each row: [source, target, weight, weight_forwards, weight_mentions]
+    weight_forwards and weight_mentions are the raw forward/mention counts
+    (before any normalisation) available for CSV export.
+    """
     edge_list: list[list[str | float]] = []
     for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
         if not include_self_references and target_pk == source_pk:
             continue
-        total = forwarded_counts.get((target_pk, source_pk), 0) + reference_counts.get((target_pk, source_pk), 0)
+        f_count = forwarded_counts.get((target_pk, source_pk), 0)
+        m_count = reference_counts.get((target_pk, source_pk), 0)
+        total = f_count + m_count
         if edge_weight_strategy == "NONE":
             weight = 1.0
         elif edge_weight_strategy == "TOTAL":
@@ -104,7 +111,7 @@ def _build_edge_list(
             target_str = pk_to_str[target_pk]
             source_str = pk_to_str[source_pk]
             edge: list[str | float] = [target_str, source_str] if settings.REVERSED_EDGES else [source_str, target_str]
-            edge.append(weight)
+            edge.extend([weight, float(f_count), float(m_count)])
             edge_list.append(edge)
     return edge_list
 
