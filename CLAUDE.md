@@ -42,7 +42,7 @@ See WORKFLOW.md for all flags and options.
 - **`crawler/reference_resolver.py`** — Resolves `t.me/` references to `Channel` records.
 - **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
 - **`network/measures/`** — All centrality and influence measures; `apply_*` functions split across `_centrality.py`, `_content.py`, `_spreading.py`; registry in `_registry.py`.
-- **`network/community.py`** — Community detection: ORGANIZATION, LOUVAIN, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
+- **`network/community.py`** — Community detection: ORGANIZATION, LOUVAIN, LABELPROPAGATION, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, WEAKCC, STRONGCC.
 - **`network/layout.py`** — Spatial layout: Kamada-Kawai seed → ForceAtlas2 (`pyforceatlas2`).
 - **`network/exporter.py`** — Builds `GraphData`; writes `data/*.json`, config, and GEXF/GraphML exports.
 - **`network/tables.py`** — Writes channel, network, and community HTML/XLSX tables.

@@ -46,6 +46,7 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN_CPM_COARSE",
     "LEIDEN_CPM_FINE",
     "LOUVAIN",
+    "LABELPROPAGATION",
     "KCORE",
     "INFOMAP",
     "INFOMAP_MEMORY",

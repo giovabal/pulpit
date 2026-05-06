@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 COMMUNITY_ALGORITHMS = {
     "LOUVAIN",
+    "LABELPROPAGATION",
     "KCORE",
     "INFOMAP",
     "INFOMAP_MEMORY",
@@ -76,6 +77,30 @@ def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> Com
     for node_id in isolated[1:]:
         community_map[node_id] = target_community
     return community_map
+
+
+def detect_label_propagation(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+    """Label propagation community detection — Cordasco & Gargano 2010 / Raghavan et al. 2007.
+
+    Each node is initialised with a unique label; at each step every node adopts
+    the label held by the majority of its neighbours.  The NetworkX implementation
+    uses the semi-synchronous variant (Cordasco & Gargano 2010), which partitions
+    nodes into colour classes before each sweep to avoid oscillation.  The
+    algorithm is deterministic, parameter-free, and runs in near-linear time.
+
+    Edge weights are not used — all edges are treated equally.
+    The graph is symmetrised to undirected before running.
+    """
+    community_map: CommunityMap = {}
+    undirected = graph.to_undirected()
+    communities = nx.community.label_propagation_communities(undirected)
+    communities = sorted(communities, key=len, reverse=True)
+    for index, community in enumerate(communities, start=1):
+        for node_id in community:
+            community_map[node_id] = index
+    community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
 
 
 def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
@@ -432,6 +457,8 @@ def detect(
     mcl_inflation: float = 2.0,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Run community detection. Returns (community_map, community_palette)."""
+    if strategy == "LABELPROPAGATION":
+        return detect_label_propagation(graph, palette_name)
     if strategy == "LOUVAIN":
         return detect_louvain(graph, palette_name)
     if strategy == "KCORE":

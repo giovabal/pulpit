@@ -15,6 +15,7 @@ from network.community import (
     build_community_palette,
     detect_infomap,
     detect_kcore,
+    detect_label_propagation,
     detect_leiden,
     detect_louvain,
     detect_organization,
@@ -195,6 +196,39 @@ class DetectOrganizationTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# community.py — detect_label_propagation
+# ---------------------------------------------------------------------------
+
+
+class DetectLabelPropagationTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b", "c", "d"])
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("d", "a")])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_label_propagation(self.graph, "SomePalette")
+        self.assertIsInstance(community_map, dict)
+        self.assertIsInstance(palette, dict)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_label_propagation(self.graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_label_propagation(self.graph, "SomePalette")
+        self.assertGreaterEqual(min(community_map.values()), 1)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_label_propagation(self.graph, "SomePalette")
+        for community_id in community_map.values():
+            self.assertIn(community_id, palette)
+
+
 # community.py — detect_louvain
 # ---------------------------------------------------------------------------
 
