@@ -214,6 +214,7 @@ class Channel(TelegramBaseModel):
 class Message(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "date",
+        "edit_date",
         "out",
         "mentioned",
         "post",
@@ -242,6 +243,7 @@ class Message(TelegramBaseModel):
     grouped_id = models.BigIntegerField(null=True)
     views = models.PositiveBigIntegerField(null=True)
     forwards = models.PositiveBigIntegerField(null=True)
+    edit_date = models.DateTimeField(null=True)
     pinned = models.BooleanField(null=True, default=False)
     has_been_pinned = models.BooleanField(default=False)
     webpage_url = models.URLField(max_length=255, default="", blank=True)
