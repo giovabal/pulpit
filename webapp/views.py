@@ -316,6 +316,11 @@ class ChannelDetailView(ListView):
             )
             if q:
                 qs = qs.filter(message__icontains=q)
+            self_ref = self.request.GET.get("self_ref", "include")
+            if self_ref == "exclude":
+                qs = qs.exclude(channel=self.selected_channel)
+            elif self_ref == "only":
+                qs = qs.filter(channel=self.selected_channel)
             return _apply_message_options(qs, self.request.GET)
         qs = (
             Message.objects.filter(channel=self.selected_channel)
@@ -340,11 +345,15 @@ class ChannelDetailView(ListView):
         tab = self.request.GET.get("tab", "messages")
         context_data["active_tab"] = tab
         context_data["forwards_only"] = bool(self.request.GET.get("forwards_only"))
+        self_ref = self.request.GET.get("self_ref", "include")
+        context_data["self_ref"] = self_ref
         context_data.update(_message_options_context(self.request.GET))
-        # Extend original_query so pagination links preserve tab and forwards_only.
+        # Extend original_query so pagination links preserve tab, self_ref, and forwards_only.
         extra = ""
         if tab == "received":
             extra += "&tab=received"
+            if self_ref != "include":
+                extra += f"&self_ref={self_ref}"
         if self.request.GET.get("forwards_only"):
             extra += "&forwards_only=1"
         context_data["original_query"] = context_data["original_query"] + extra

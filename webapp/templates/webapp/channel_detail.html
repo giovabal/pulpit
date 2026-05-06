@@ -488,6 +488,12 @@
       <input type="checkbox" name="forwards_only" {% if forwards_only %}checked{% endif %} onchange="this.form.submit()">
       Forwards only
     </label>
+    {% else %}
+    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+      <option value="include" {% if self_ref == "include" %}selected{% endif %}>Include self-references</option>
+      <option value="exclude" {% if self_ref == "exclude" %}selected{% endif %}>Do not include self-references</option>
+      <option value="only" {% if self_ref == "only" %}selected{% endif %}>Show only self-references</option>
+    </select>
     {% endif %}
   </form>
   {% if query %}
