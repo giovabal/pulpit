@@ -168,6 +168,17 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--self-references",
+            dest="include_self_references",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help=(
+                "Include self-references (a channel forwarding from or mentioning itself) as "
+                "self-loop edges in the graph (default: off). "
+                "Only mention-based self-references are affected by --no-mentions."
+            ),
+        )
+        parser.add_argument(
             "--edge-weight-strategy",
             dest="edge_weight_strategy",
             default="PARTIAL_REFERENCES",
@@ -676,6 +687,7 @@ class Command(BaseCommand):
         selected_network_groups: "frozenset[str]",
         reference_positions: dict | None = None,
         reference_positions_3d: dict | None = None,
+        extra_layout_names: list[str] | None = None,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
@@ -694,6 +706,7 @@ class Command(BaseCommand):
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
+                include_self_references=options["include_self_references"],
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -716,6 +729,17 @@ class Command(BaseCommand):
             reference_positions,
             reference_positions_3d,
         )
+
+        year_extra_positions: dict[str, dict] = {}
+        if do_graph and extra_layout_names:
+            _extra_layout_funcs = {
+                "CIRCULAR": layout.circular_positions,
+                "SPECTRAL": layout.spectral_positions,
+                "SPRING": layout.spring_positions,
+            }
+            for name in extra_layout_names:
+                year_extra_positions[name.lower()] = _extra_layout_funcs[name](graph)
+
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
         measures_labels = self._compute_measures(
             graph,
@@ -743,6 +767,7 @@ class Command(BaseCommand):
                 graph_dir=tmp_dir,
                 include_positions=do_graph or do_3dgraph,
                 positions_3d=positions_3d,
+                extra_positions=year_extra_positions or None,
             )
             exporter.write_meta_json(
                 graph_dir=tmp_dir,
@@ -906,6 +931,7 @@ class Command(BaseCommand):
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
+                include_self_references=options["include_self_references"],
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
@@ -1164,6 +1190,7 @@ class Command(BaseCommand):
                         selected_network_groups,
                         reference_positions=positions if do_graph else None,
                         reference_positions_3d=positions_3d if do_3dgraph else None,
+                        extra_layout_names=extra_layout_names if extra_layout_names else None,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
