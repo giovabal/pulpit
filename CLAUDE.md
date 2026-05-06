@@ -80,6 +80,7 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `BRIDGING` or `BRIDGING(STRATEGY)` | Betweenness × neighbour-community Shannon entropy; defaults to `LEIDEN`; strategy must also be in `--community-strategies` |
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
 | `EGODENSITY` | Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = fully connected clique (echo chamber); `null` for fewer than 2 neighbours |
+| `LOCALCLUSTERING` | Directed local clustering coefficient (Fagiolo 2007); fraction of directed triangles through the node relative to all possible directed triads; 0 for nodes with total degree < 2 |
 | `AMPLIFICATION` | Forwards received from interesting channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
 | `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `--spreading-runs` (default 200) |

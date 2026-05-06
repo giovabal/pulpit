@@ -49,6 +49,7 @@ from network.measures import (
     apply_hits,
     apply_in_degree_centrality,
     apply_katz_centrality,
+    apply_local_clustering,
     apply_out_degree_centrality,
     apply_pagerank,
     apply_spreading_efficiency,
@@ -1883,6 +1884,48 @@ class ApplyEgoNetworkDensityTests(TestCase):
         val = gd["nodes"][0]["ego_network_density"]
         self.assertGreaterEqual(val, 0.0)
         self.assertLessEqual(val, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_local_clustering
+# ---------------------------------------------------------------------------
+
+
+class ApplyLocalClusteringTests(TestCase):
+    def setUp(self) -> None:
+        # A directed 3-cycle: every node participates in exactly one directed triangle.
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_local_clustering_key(self) -> None:
+        apply_local_clustering(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("local_clustering", node)
+
+    def test_values_in_unit_interval(self) -> None:
+        apply_local_clustering(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertGreaterEqual(node["local_clustering"], 0.0)
+            self.assertLessEqual(node["local_clustering"], 1.0)
+
+    def test_cycle_nodes_have_nonzero_clustering(self) -> None:
+        # Every node in a 3-cycle is part of a directed triangle.
+        apply_local_clustering(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertGreater(node["local_clustering"], 0.0)
+
+    def test_isolated_node_gets_zero(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_node("isolated")
+        graph_data: dict = {"nodes": [{"id": "isolated"}], "edges": []}
+        apply_local_clustering(graph_data, graph)
+        self.assertEqual(graph_data["nodes"][0]["local_clustering"], 0.0)
+
+    def test_returns_label(self) -> None:
+        labels = apply_local_clustering(self.graph_data, self.graph)
+        keys = [k for k, _ in labels]
+        self.assertIn("local_clustering", keys)
 
 
 # ---------------------------------------------------------------------------

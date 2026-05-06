@@ -208,6 +208,19 @@ def apply_closeness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
     return [(key, "Closeness Centrality")]
 
 
+def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add directed local clustering coefficient to each node (Fagiolo 2007).
+
+    Counts the fraction of directed triangles through the node relative to all possible
+    directed triads.  Nodes with total degree < 2 receive 0.0.
+    """
+    key = "local_clustering"
+    values: dict[str, float] = nx.clustering(graph)
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], 0.0)
+    return [(key, "Local Clustering")]
+
+
 def apply_ego_network_density(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add ego network density to each node.
 

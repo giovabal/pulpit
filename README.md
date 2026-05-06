@@ -112,9 +112,9 @@ After export, the output directory contains self-contained files that can be sha
 
 ---
 
-## Network measures — 16 per channel
+## Network measures — 17 per channel
 
-Each channel receives a score for up to 16 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 17 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -138,6 +138,7 @@ Each channel receives a score for up to 16 measures. All can be used to size nod
 | [Katz centrality](docs/network-measures.md#katz-centrality) | Deeply embedded nodes reachable through many indirect paths |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Ego network density](docs/network-measures.md#ego-network-density) | How deeply a channel is embedded in an echo-chamber clique vs. how much it bridges isolated sources |
+| [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel itself forms closed citation cycles — a direct participant in mutual amplification loops |
 | [Bridging centrality](docs/network-measures.md#bridging-centrality) | Channels that are both structurally central AND bridge genuinely distinct communities |
 
 **Content and dynamics**

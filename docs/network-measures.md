@@ -28,6 +28,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | Katz centrality | `KATZ` | Which channels are most accessible through all paths, direct and indirect? |
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Ego network density | `EGODENSITY` | How deeply is this channel embedded in a tight, mutually referencing cluster? |
+| Local clustering | `LOCALCLUSTERING` | Does this channel itself form closed citation cycles with its neighbours? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Spreading efficiency | `SPREADING` | If this channel starts spreading a message, what fraction of the network eventually receives it? |
@@ -188,6 +189,22 @@ The score ranges from 0 to 1. A low score means the channel's contacts belong to
 Ego network density measures how densely the immediate neighbourhood (predecessors ∪ successors) of a channel is connected among itself, excluding the channel. A value of 1.0 means the neighbourhood is a fully connected clique — every neighbour cites every other. A value of 0.0 means neighbours share no connections at all — the channel is a hub between completely disconnected sources. Channels with fewer than two neighbours receive no score.
 
 **In practice:** use ego density in combination with PageRank or betweenness to distinguish structural roles. A channel with high betweenness and low ego density is a genuine bridge between disconnected groups. A channel with high betweenness and high ego density is a central node in a tight cluster — it appears to bridge because it is highly connected, but its neighbourhood is a single coherent echo chamber.
+
+---
+
+## Local clustering
+
+*A high local clustering score means this channel participates directly in closed citation cycles — it is embedded in a loop of mutual amplification.*
+
+Local clustering coefficient (Fagiolo 2007) counts the directed triangles that pass through the channel itself, normalised by the number of possible directed triads centred on it. A directed triangle exists when A forwards from B, B forwards from C, and C forwards from A — a closed loop. A score of 1.0 means every pair of the channel's neighbours that could form a triangle does. A score of 0.0 means no such loops exist.
+
+**Reference:** Fagiolo, G. (2007) "Clustering in complex directed networks." *Physical Review E* 76(2). [doi:10.1103/PhysRevE.76.026107](https://doi.org/10.1103/PhysRevE.76.026107)
+
+**Relationship to ego network density.** Both measures characterise the cohesion of a channel's immediate neighbourhood, but they ask different questions. Ego density asks whether the neighbours connect *to each other* (independently of the focal channel); local clustering asks whether the focal channel *itself* is part of those triangular loops. A channel can have high ego density — its neighbours form a tight cluster — while having low local clustering, if it is not part of the loop (for example, it cites into a clique without being cited back). Conversely, a channel with low ego density can have non-zero clustering if it participates in one tight triple that does not generalise to the rest of its neighbourhood.
+
+**In practice:** local clustering and ego density together produce a richer picture of local structure. Both high: the channel is embedded in a cohesive echo chamber and actively participates in its circular citation loops. High ego density, low clustering: the channel is surrounded by a clique but stands at its edge — a point of entry into a closed community rather than a member of it. Low ego density, non-zero clustering: the channel forms a tight triangular relationship with a specific pair of neighbours while otherwise bridging isolated sources.
+
+**Example.** An internal channel within a tightly coordinated disinformation network — one that forwards from the network's seeder and is cited back by it — has high local clustering (0.67) because it participates in a clear citation cycle. A mainstream aggregator with the same number of connections but drawing from independent, mutually unrelated sources scores near 0 on clustering even if some of those sources have connections to each other.
 
 ---
 
