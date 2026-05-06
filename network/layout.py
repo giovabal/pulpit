@@ -109,7 +109,7 @@ def spectral_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
     """
     try:
         return nx.spectral_layout(graph, scale=_EXTRA_LAYOUT_SCALE)
-    except (nx.NetworkXError, np.linalg.LinAlgError, ValueError):
+    except Exception:
         return spring_positions(graph)
 
 
