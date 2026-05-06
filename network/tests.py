@@ -41,6 +41,7 @@ from network.measures import (
     apply_betweenness_centrality,
     apply_bridging_centrality,
     apply_burt_constraint,
+    apply_closeness_centrality,
     apply_content_originality,
     apply_ego_network_density,
     apply_flow_betweenness_centrality,
@@ -1649,6 +1650,42 @@ class ApplyKatzCentralityTests(TestCase):
         for node in self.graph_data["nodes"]:
             self.assertIsInstance(node["katz_centrality"], float)
             self.assertGreater(node["katz_centrality"], 0.0)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_closeness_centrality
+# ---------------------------------------------------------------------------
+
+
+class ApplyClosenessCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
+        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+
+    def test_adds_closeness_centrality_key(self) -> None:
+        apply_closeness_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertIn("closeness_centrality", node)
+
+    def test_values_in_unit_interval(self) -> None:
+        apply_closeness_centrality(self.graph_data, self.graph)
+        for node in self.graph_data["nodes"]:
+            self.assertGreaterEqual(node["closeness_centrality"], 0.0)
+            self.assertLessEqual(node["closeness_centrality"], 1.0)
+
+    def test_sink_node_has_highest_closeness(self) -> None:
+        # Node "3" is reachable from all others in 1 hop, so it has maximal in-closeness.
+        apply_closeness_centrality(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertGreater(node_map["3"]["closeness_centrality"], node_map["1"]["closeness_centrality"])
+
+    def test_isolated_node_gets_zero(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_node("isolated")
+        graph_data: dict = {"nodes": [{"id": "isolated"}], "edges": []}
+        apply_closeness_centrality(graph_data, graph)
+        self.assertEqual(graph_data["nodes"][0]["closeness_centrality"], 0.0)
 
 
 # ---------------------------------------------------------------------------
