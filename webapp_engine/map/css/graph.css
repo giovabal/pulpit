@@ -445,3 +445,8 @@ html, body {
         flex-direction: column;
     }
 }
+
+/* ── graph3d.html theme overrides for .node-label ───────────────────────── */
+body[data-theme3d="light"]  .node-label,
+body[data-theme3d="print"]  .node-label { color: #111; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+body[data-theme3d="minimal"] .node-label { color: #eee; }

@@ -17,6 +17,12 @@ var CURVATURE          = 0.15;   // control-point offset as fraction of edge len
 var SELF_LOOP_ARM      = 1.0;    // self-loop arm spread as multiple of node radius
 var SELF_LOOP_HEIGHT   = 3.5;    // self-loop arc peak as multiple of node radius
 var ZOOM_STEP          = 0.75;
+var THEMES_3D = {
+    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30 },
+    light:   { bg: 0xe8eff6, fade: 0xc8d8e8, edge_opacity: 0.40 },
+    minimal: { bg: 0x111111, fade: 0x1a1a1a, edge_opacity: 0.25 },
+    print:   { bg: 0xffffff, fade: 0xeeeeee, edge_opacity: 0.80 },
+};
 // Node radii as fractions of spatial network diameter
 var SIZE_MIN_FRAC      = 0.00225;
 var SIZE_MAX_FRAC      = 0.01350;
@@ -54,6 +60,12 @@ var _year_switcher_inited = false;
 var year_cache            = {};
 var year_cache_pend       = {};
 var animation_frame_id_3d = null;
+
+var active_layout   = 'fa2';
+var layout_cache_3d = {};
+var layout_anim_id  = null;
+var colored_edges   = true;
+var active_theme_3d = 'dark';
 
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
 var g_size_min       = 1;
@@ -309,12 +321,13 @@ function build_graph(pos_data, ch_data) {
 
 function rebuild_edge_colors() {
     if (!edge_segments || !edge_list.length) return;
+    var gray = new THREE.Color(0.30, 0.30, 0.30);
     var arr = edge_segments.geometry.getAttribute('color').array;
     edge_list.forEach(function(e) {
         var src = nodes_index[e.source];
         var tgt = nodes_index[e.target];
         if (!src || !tgt) return;
-        var c = avg_darken(src.orig_color, tgt.orig_color);
+        var c = colored_edges ? avg_darken(src.orig_color, tgt.orig_color) : gray;
         var base = e.vert_start * 3;
         for (var i = 0; i < CURVE_SEGMENTS * 2; i++) {
             arr[base + i * 3]     = c.r;
@@ -323,6 +336,98 @@ function rebuild_edge_colors() {
         }
     });
     edge_segments.geometry.getAttribute('color').needsUpdate = true;
+}
+
+function _rebuild_edge_positions() {
+    if (!edge_segments || !edge_list.length) return;
+    var arr = edge_segments.geometry.getAttribute('position').array;
+    edge_list.forEach(function(e) {
+        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        if (!src || !tgt) return;
+        var sp, tp, cp;
+        if (e.source === e.target) {
+            var arm = src.size * SELF_LOOP_ARM, peak = src.size * SELF_LOOP_HEIGHT;
+            sp = new THREE.Vector3(src.x - arm, src.y, src.z);
+            tp = new THREE.Vector3(src.x + arm, src.y, src.z);
+            cp = new THREE.Vector3(src.x, src.y + peak, src.z);
+        } else {
+            sp = new THREE.Vector3(src.x, src.y, src.z);
+            tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
+            cp = curve_control(sp, tp);
+        }
+        var pts = new THREE.QuadraticBezierCurve3(sp, cp, tp).getPoints(CURVE_SEGMENTS);
+        for (var i = 0; i < CURVE_SEGMENTS; i++) {
+            var base = (e.vert_start + i * 2) * 3;
+            arr[base]   = pts[i].x;   arr[base+1] = pts[i].y;   arr[base+2] = pts[i].z;
+            arr[base+3] = pts[i+1].x; arr[base+4] = pts[i+1].y; arr[base+5] = pts[i+1].z;
+        }
+    });
+    edge_segments.geometry.getAttribute('position').needsUpdate = true;
+}
+
+// =============================================================================
+// Themes, layout switching
+// =============================================================================
+
+function apply_theme_3d(theme) {
+    var t = THEMES_3D[theme] || THEMES_3D.dark;
+    active_theme_3d = theme;
+    if (scene) scene.background.setHex(t.bg);
+    fade_color.setHex(t.fade);
+    if (edge_segments) edge_segments.material.opacity = t.edge_opacity;
+    document.body.setAttribute('data-theme3d', theme);
+    localStorage.setItem('pulpit_theme', theme);
+}
+
+function build_layout_selector() {
+    var layouts = window.EXTRA_LAYOUTS || [];
+    if (!layouts.length) return;
+    var sel = el('layout-select');
+    var all = [['fa2', 'ForceAtlas2']].concat(layouts.map(function(l) {
+        return [l, l.charAt(0).toUpperCase() + l.slice(1)];
+    }));
+    sel.innerHTML = all.map(function(pair) {
+        return '<option value="' + pair[0] + '">' + pair[1] + '</option>';
+    }).join('');
+    el('layout-select-group').style.display = '';
+}
+
+function switch_layout_3d(algo) {
+    active_layout = algo;
+    var filename = algo === 'fa2' ? 'channel_position_3d.json' : 'channel_position_' + algo + '.json';
+    var key = current_data_dir + filename;
+    if (layout_cache_3d[key]) { _animate_layout_3d(layout_cache_3d[key]); return; }
+    fetch(current_data_dir + filename)
+        .then(function(r) { return r.json(); })
+        .then(function(data) { layout_cache_3d[key] = data; _animate_layout_3d(data); });
+}
+
+function _animate_layout_3d(pos_data) {
+    var new_pos = {};
+    pos_data.nodes.forEach(function(n) { new_pos[n.id] = n; });
+    var old_pos = {};
+    Object.keys(nodes_index).forEach(function(id) {
+        var n = nodes_index[id];
+        old_pos[id] = { x: n.x, y: n.y, z: n.z };
+    });
+    if (layout_anim_id !== null) { cancelAnimationFrame(layout_anim_id); layout_anim_id = null; }
+    var start = performance.now(), DURATION = 600;
+    function step(now) {
+        var raw = Math.min((now - start) / DURATION, 1.0);
+        var e = raw < 0.5 ? 2*raw*raw : -1+(4-2*raw)*raw;
+        Object.keys(nodes_index).forEach(function(id) {
+            var np = new_pos[id]; if (!np) return;
+            var op = old_pos[id];
+            var nx = op.x + (np.x - op.x) * e;
+            var ny = op.y + (np.y - op.y) * e;
+            var nz = op.z + ((np.z || 0) - op.z) * e;
+            nodes_index[id].x = nx; nodes_index[id].y = ny; nodes_index[id].z = nz;
+            nodes_index[id].mesh.position.set(nx, ny, nz);
+        });
+        _rebuild_edge_positions();
+        layout_anim_id = raw < 1.0 ? requestAnimationFrame(step) : null;
+    }
+    layout_anim_id = requestAnimationFrame(step);
 }
 
 // =============================================================================
@@ -963,8 +1068,12 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
     var geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.BufferAttribute(positions.subarray(0, used), 3));
     geom.setAttribute('color',    new THREE.BufferAttribute(colors.subarray(0, used), 3));
-    edge_segments = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: EDGE_OPACITY }));
+    var theme_opacity = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).edge_opacity;
+    edge_segments = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: theme_opacity }));
     scene.add(edge_segments);
+
+    active_layout = 'fa2';
+    if (el('layout-select')) el('layout-select').value = 'fa2';
 
     if (active_strategy) apply_strategy_colors(active_strategy);
     apply_node_size(current_size_key);
@@ -1110,6 +1219,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     init_three();
 
+    var saved_theme = localStorage.getItem('pulpit_theme') || 'dark';
+    el('theme-select').value = saved_theme;
+    apply_theme_3d(saved_theme);
+
+    build_layout_selector();
+
     var loading_el       = el('loading_modal');
     var loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
 
@@ -1143,6 +1258,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     Promise.all([graph_promise, years_promise])
         .then(function() { loading_modal_bs.hide(); });
+
+    el('layout-select').addEventListener('change', function() { switch_layout_3d(this.value); });
+
+    el('theme-select').addEventListener('change', function() { apply_theme_3d(this.value); });
+
+    el('colored-edges-toggle').addEventListener('change', function() {
+        colored_edges = this.checked;
+        rebuild_edge_colors();
+    });
 
     el('community-strategy-select').addEventListener('change', function() {
         active_strategy = this.value;
