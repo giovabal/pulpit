@@ -38,6 +38,7 @@ var _year_switcher_inited       = false;
 var layout_cache                = {};  // '<algo>:<data_dir>' → position data
 var active_layout               = 'fa2';
 var active_theme                = 'dark';
+var colored_edges               = true;
 
 // =============================================================================
 // Sigma and graph instances
@@ -190,8 +191,9 @@ function apply_theme(themeKey) {
     var root = document.documentElement;
     for (var v in theme.cssVars) root.style.setProperty(v, theme.cssVars[v]);
 
-    // Canvas background
+    // Canvas and document background
     el(app_settings.container).style.backgroundColor = theme.canvas;
+    document.documentElement.style.backgroundColor = theme.canvas;
     app_settings.container_background_color = theme.canvas;
     app_settings.fade_color = theme.fade;
 
@@ -212,10 +214,9 @@ function apply_theme(themeKey) {
             if (!orig) return;
             var parts = rgb_str_to_parts(orig);
             var c = 'rgba(' + parts.join(',') + ',' + theme.edgeOpacity + ')';
-            graph.setEdgeAttribute(edgeId, 'color', c);
             graph.setEdgeAttribute(edgeId, 'originalColor', c);
         });
-        sigma_instance.refresh();
+        refresh_edge_colors();
     }
 
     // Sync the select element if apply_theme was called programmatically
@@ -370,11 +371,28 @@ function apply_strategy_colors(strategy) {
         var tgt = graph.getNodeAttributes(graph.target(edgeId));
         var avg   = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
         var color = 'rgba(' + avg.join(',') + ',' + _edgeOp + ')';
-        graph.setEdgeAttribute(edgeId, 'color', color);
         graph.setEdgeAttribute(edgeId, 'originalColor', color);
     });
-    sigma_instance.refresh();
+    refresh_edge_colors();
     is_graph_completely_rendered = true;
+}
+
+function refresh_edge_colors() {
+    if (!graph_loaded) return;
+    var theme = THEMES[active_theme] || THEMES.dark;
+    if (colored_edges) {
+        graph.edges().forEach(function(edgeId) {
+            var orig = graph.getEdgeAttribute(edgeId, 'originalColor');
+            if (orig) graph.setEdgeAttribute(edgeId, 'color', orig);
+        });
+    } else {
+        var grayParts = hex_to_rgb_parts(theme.defaultEdgeColor);
+        var grayColor = 'rgba(' + grayParts.join(',') + ',' + theme.edgeOpacity + ')';
+        graph.edges().forEach(function(edgeId) {
+            graph.setEdgeAttribute(edgeId, 'color', grayColor);
+        });
+    }
+    sigma_instance.refresh();
 }
 
 function maybe_apply_initial_colors() {
@@ -494,10 +512,7 @@ function reset_colors() {
     graph.nodes().forEach(function(id) {
         graph.setNodeAttribute(id, 'color', graph.getNodeAttribute(id, 'originalColor'));
     });
-    graph.edges().forEach(function(edgeId) {
-        graph.setEdgeAttribute(edgeId, 'color', graph.getEdgeAttribute(edgeId, 'originalColor'));
-    });
-    sigma_instance.refresh();
+    refresh_edge_colors();
     is_graph_completely_rendered = true;
 }
 
@@ -1142,6 +1157,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     el('theme-select').addEventListener('change', function() { apply_theme(this.value); });
+    el('colored-edges-toggle').addEventListener('change', function() {
+        colored_edges = this.checked;
+        refresh_edge_colors();
+    });
 
     var extra_layouts = window.EXTRA_LAYOUTS || [];
     if (extra_layouts.length > 0) {
