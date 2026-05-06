@@ -449,6 +449,7 @@ class Command(BaseCommand):
         """Run all community detection strategies and apply results to the graph."""
         strategy_results: dict[str, tuple] = {}
         self.stdout.write("Calculate communities")
+        self.stdout.flush()
         for strategy in communities_strategy:
             self.stdout.write(f"- {strategy.lower()} … ", ending="")
             self.stdout.flush()
@@ -468,6 +469,7 @@ class Command(BaseCommand):
             strategy_results[strategy] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
             self.stdout.write(f"{n_communities} communities")
+            self.stdout.flush()
         community.apply_edge_colors(graph, edge_list, channel_dict)
         return strategy_results
 
@@ -908,6 +910,7 @@ class Command(BaseCommand):
         except ValueError as e:
             raise CommandError(str(e)) from e
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
+        self.stdout.flush()
 
         strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
         positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
