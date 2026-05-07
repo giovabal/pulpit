@@ -280,7 +280,7 @@ function get_anchor(node) {
     var color = node.originalColor || '#ccc';
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
     return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + escHtml(label) + '"></i>'
-         + ' <a href="#" class="node-link" data="' + escHtml(node.id) + '">' + escHtml(node.label || node.id) + '</a>';
+         + ' <a href="#" class="node-link" data-node-id="' + escHtml(node.id) + '">' + escHtml(node.label || node.id) + '</a>';
 }
 
 function get_group(node) {
@@ -463,7 +463,8 @@ function search(word, result_el) {
         result_el.style.display = '';
         return;
     }
-    var pattern = RegExp(word, 'i');
+    var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var pattern = RegExp(escaped, 'i');
     var matches = [];
     graph.nodes().forEach(function(id) {
         var n = graph.getNodeAttributes(id);
@@ -628,7 +629,7 @@ function load_accessory(data_dir) {
         fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
     ]).then(function(results) {
         _apply_accessory(results[0], results[1], prev_strategy, prev_size);
-    });
+    }).catch(function(err) { console.error('load_accessory failed:', err); });
 }
 
 // =============================================================================
@@ -883,12 +884,12 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
             // frame is painted before any synchronous work blocks the thread.
             requestAnimationFrame(function() {
                 // Add the new year's edges (old edges were cleared before animation started)
-                new_pos_data.edges.forEach(function(e) {
-                    if (!graph.hasNode(e.source) || !graph.hasNode(e.target)) return;
-                    var col = e.color ? 'rgba(' + e.color + ',0.25)' : 'rgba(72,72,72,0.25)';
-                    var attrs = Object.assign({}, e, { color: col, originalColor: col });
+                new_pos_data.edges.forEach(function(edge) {
+                    if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) return;
+                    var col = edge.color ? 'rgba(' + edge.color + ',0.25)' : 'rgba(72,72,72,0.25)';
+                    var attrs = Object.assign({}, edge, { color: col, originalColor: col });
                     delete attrs.source; delete attrs.target; delete attrs.id;
-                    try { graph.addEdge(e.source, e.target, attrs); } catch(_) {}
+                    try { graph.addEdge(edge.source, edge.target, attrs); } catch(_) {}
                 });
 
                 // Update node metadata (measures, communities, label, etc.)
@@ -1094,6 +1095,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     el('search_input').value = '';
     el('search_modal').addEventListener('shown.bs.modal', function() { el('search_input').focus(); });
+    el('search_modal').addEventListener('hide.bs.modal', function() {
+        var r = el('results'); r.innerHTML = ''; r.style.display = 'none';
+    });
     el('search').addEventListener('submit', function(e) {
         e.preventDefault();
         search(el('search_input').value, el('results'));
@@ -1111,7 +1115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var link = e.target.closest('a.node-link');
         if (!link) return;
         e.preventDefault();
-        click_node(link.getAttribute('data'));
+        click_node(link.dataset.nodeId);
     });
 
     el('size-select').addEventListener('change', function() { apply_node_size(this.value); });

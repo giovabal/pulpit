@@ -198,7 +198,7 @@
     function saveChannel(ch, form, orgs, groups) {
         var fd = new FormData(form);
         var orgVal = fd.get("organization_id");
-        var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value); });
+        var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
         var cutoffVal = form.querySelector("input[name=uninteresting_after]").value;
         var body = {
             organization_id: orgVal ? parseInt(orgVal) : null,

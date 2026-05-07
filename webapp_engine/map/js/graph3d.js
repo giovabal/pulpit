@@ -398,8 +398,13 @@ function switch_layout_3d(algo) {
     var key = current_data_dir + filename;
     if (layout_cache_3d[key]) { _animate_layout_3d(layout_cache_3d[key]); return; }
     fetch(current_data_dir + filename)
-        .then(function(r) { return r.json(); })
-        .then(function(data) { layout_cache_3d[key] = data; _animate_layout_3d(data); });
+        .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+        .then(function(data) { layout_cache_3d[key] = data; _animate_layout_3d(data); })
+        .catch(function(err) {
+            console.error('Failed to load layout', algo, err);
+            active_layout = 'fa2';
+            if (el('layout-select')) el('layout-select').value = 'fa2';
+        });
 }
 
 function _animate_layout_3d(pos_data) {
@@ -592,7 +597,7 @@ function node_anchor(id) {
     var color = '#' + node.orig_color.getHexString();
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
     return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + escHtml(label) + '"></i>'
-         + ' <a href="#" class="node-link" data="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
+         + ' <a href="#" class="node-link" data-node-id="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
 }
 
 function get_group_html(id) {
@@ -664,7 +669,8 @@ function show_node_info(id) {
 function search(word, result_el) {
     result_el.innerHTML = '';
     if (word.length <= 2) { result_el.innerHTML = '<i>Search for terms of at least 3 characters.</i>'; return; }
-    var pattern = new RegExp(word, 'i');
+    var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var pattern = new RegExp(escaped, 'i');
     var matches = Object.values(nodes_index).filter(function(n) { return pattern.test(n.label || ''); });
     matches.sort(function(a, b) { return (a.label || '').localeCompare(b.label || ''); });
     var html = ['<b>Results:</b> <ul class="list-unstyled">'];
@@ -682,7 +688,6 @@ function search(word, result_el) {
 // =============================================================================
 
 function zoom_by(factor) {
-    var dist = camera.position.distanceTo(controls.target);
     camera.position.lerp(controls.target, 1 - factor);
     controls.update();
 }
@@ -1012,6 +1017,7 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
 
 function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max,
                             target_cam_pos, target_cam_tgt) {
+    var SKIP = { x:1, y:1, z:1, size:1, mesh:1, orig_color:1 };
     new_pos_data.nodes.forEach(function(np) {
         var node = nodes_index[np.id];
         if (!node) return;
@@ -1021,7 +1027,6 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
         node.x = np.x; node.y = np.y; node.z = np.z || 0; node.size = sz;
         var m = new_ch_map[np.id];
         if (m) {
-            var SKIP = { x:1, y:1, z:1, size:1, mesh:1, orig_color:1 };
             Object.keys(m).forEach(function(k) { if (!SKIP[k]) node[k] = m[k]; });
             var lbl = label_objects[np.id];
             if (lbl && lbl.element) lbl.element.textContent = m.label || np.id;
@@ -1287,6 +1292,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     el('search_input').value = '';
     el('search_modal').addEventListener('shown.bs.modal', function() { el('search_input').focus(); });
+    el('search_modal').addEventListener('hide.bs.modal', function() {
+        var r = el('results'); r.innerHTML = ''; r.style.display = 'none';
+    });
     el('search').addEventListener('submit', function(e) {
         e.preventDefault();
         search(el('search_input').value, el('results'));
@@ -1296,7 +1304,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var link = e.target.closest('a.node-link');
         if (!link) return;
         e.preventDefault();
-        var id = link.getAttribute('data');
+        var id = link.dataset.nodeId;
         var sm = bootstrap.Modal.getInstance(el('search_modal'));
         if (sm) sm.hide();
         select_node(id);
