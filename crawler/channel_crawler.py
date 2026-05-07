@@ -720,8 +720,14 @@ class ChannelCrawler:
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
             except Exception as exc:
-                if type(exc).__name__ == "MessageIdInvalidError":
-                    logger.debug("MessageIdInvalid for post %s in %s; marking unavailable", msg_telegram_id, channel)
+                exc_str = str(exc).lower()
+                if "message id" in exc_str and "invalid" in exc_str:
+                    logger.debug(
+                        "MessageIdInvalid for post %s in %s [%s]; marking unavailable",
+                        msg_telegram_id,
+                        channel,
+                        type(exc).__name__,
+                    )
                     Message.objects.filter(pk=msg_pk).update(replies_unavailable=True)
                 else:
                     logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
