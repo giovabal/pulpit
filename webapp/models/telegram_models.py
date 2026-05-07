@@ -86,6 +86,14 @@ class Channel(TelegramBaseModel):
     online_count = models.PositiveIntegerField(null=True, blank=True)
     requests_pending = models.PositiveIntegerField(null=True, blank=True)
     theme_emoticon = models.CharField(max_length=20, blank=True)
+    boosts_applied = models.PositiveIntegerField(null=True, blank=True)
+    boosts_unrestrict = models.PositiveIntegerField(null=True, blank=True)
+    kicked_count = models.PositiveIntegerField(null=True, blank=True)
+    banned_count = models.PositiveIntegerField(null=True, blank=True)
+    antispam = models.BooleanField(default=False)
+    has_scheduled = models.BooleanField(default=False)
+    pinned_msg_id = models.PositiveBigIntegerField(null=True, blank=True)
+    migrated_from_chat_id = models.BigIntegerField(null=True, blank=True)
 
     def __str__(self) -> str:
         return self.title or str(self.telegram_id)
@@ -225,6 +233,7 @@ class Message(TelegramBaseModel):
         "views",
         "forwards",
         "pinned",
+        "silent",
     )
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="message_set")
     date = models.DateTimeField(null=True)
@@ -251,12 +260,18 @@ class Message(TelegramBaseModel):
     webpage_url = models.URLField(max_length=255, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
     media_type = models.CharField(max_length=32, default="", blank=True)  # "photo", "video", "document", or ""
+    replies = models.PositiveBigIntegerField(null=True)
+    silent = models.BooleanField(default=False)
+    reply_to_msg_id = models.PositiveBigIntegerField(null=True)
+    fwd_from_channel_post = models.PositiveBigIntegerField(null=True)
+    fwd_from_from_name = models.CharField(max_length=255, blank=True)
+    factcheck = models.JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        for field in ("message", "post_author", "webpage_url", "webpage_type", "media_type"):
+        for field in ("message", "post_author", "webpage_url", "webpage_type", "media_type", "fwd_from_from_name"):
             setattr(self, field, getattr(self, field) or "")
         if self.pinned:
             self.has_been_pinned = True

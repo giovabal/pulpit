@@ -93,6 +93,14 @@ class ChannelCrawler:
         channel.online_count = getattr(full, "online_count", None) or None
         channel.requests_pending = getattr(full, "requests_pending", None) or None
         channel.theme_emoticon = getattr(full, "theme_emoticon", None) or ""
+        channel.boosts_applied = getattr(full, "boosts_applied", None) or None
+        channel.boosts_unrestrict = getattr(full, "boosts_unrestrict", None) or None
+        channel.kicked_count = getattr(full, "kicked_count", None) or None
+        channel.banned_count = getattr(full, "banned_count", None) or None
+        channel.antispam = bool(getattr(full, "antispam", False))
+        channel.has_scheduled = bool(getattr(full, "has_scheduled", False))
+        channel.pinned_msg_id = getattr(full, "pinned_msg_id", None) or None
+        channel.migrated_from_chat_id = getattr(full, "migrated_from_chat_id", None) or None
         channel.save(
             update_fields=[
                 "participants_count",
@@ -110,6 +118,14 @@ class ChannelCrawler:
                 "online_count",
                 "requests_pending",
                 "theme_emoticon",
+                "boosts_applied",
+                "boosts_unrestrict",
+                "kicked_count",
+                "banned_count",
+                "antispam",
+                "has_scheduled",
+                "pinned_msg_id",
+                "migrated_from_chat_id",
             ]
         )
 
@@ -316,6 +332,10 @@ class ChannelCrawler:
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
+        if telegram_message.fwd_from:
+            message.fwd_from_channel_post = getattr(telegram_message.fwd_from, "channel_post", None)
+            message.fwd_from_from_name = getattr(telegram_message.fwd_from, "from_name", None) or ""
+
         if (
             telegram_message.fwd_from
             and telegram_message.fwd_from.from_id
@@ -361,6 +381,21 @@ class ChannelCrawler:
                 message.webpage_type = (
                     telegram_message.media.webpage.type if hasattr(telegram_message.media.webpage, "type") else ""
                 )
+
+        replies_obj = getattr(telegram_message, "replies", None)
+        message.replies = getattr(replies_obj, "replies", None)
+
+        reply_to = getattr(telegram_message, "reply_to", None)
+        message.reply_to_msg_id = getattr(reply_to, "reply_to_msg_id", None)
+
+        fc = getattr(telegram_message, "factcheck", None)
+        if fc is not None:
+            text_obj = getattr(fc, "text", None)
+            message.factcheck = {
+                "need_check": bool(getattr(fc, "need_check", False)),
+                "country": getattr(fc, "country", None),
+                "text": getattr(text_obj, "text", None) if text_obj else None,
+            }
 
         message.save()
         _save_reactions(message.pk, telegram_message)
@@ -465,12 +500,30 @@ class ChannelCrawler:
             if isinstance(telegram_message, MessageService):
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
                 continue
+            replies_obj = getattr(telegram_message, "replies", None)
+            media = telegram_message.media
+            webpage = getattr(media, "webpage", None) if media else None
+            fc = getattr(telegram_message, "factcheck", None)
+            if fc is not None:
+                text_obj = getattr(fc, "text", None)
+                factcheck_data = {
+                    "need_check": bool(getattr(fc, "need_check", False)),
+                    "country": getattr(fc, "country", None),
+                    "text": getattr(text_obj, "text", None) if text_obj else None,
+                }
+            else:
+                factcheck_data = None
             update_kwargs: dict = {
                 "views": telegram_message.views,
                 "forwards": telegram_message.forwards,
+                "replies": getattr(replies_obj, "replies", None),
                 "pinned": bool(telegram_message.pinned),
                 "edit_date": telegram_message.edit_date,
                 "post_author": telegram_message.post_author or "",
+                "message": telegram_message.message or "",
+                "webpage_url": getattr(webpage, "url", "") or "",
+                "webpage_type": getattr(webpage, "type", "") or "",
+                "factcheck": factcheck_data,
                 "_updated": now,
             }
             if telegram_message.pinned:
