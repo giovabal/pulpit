@@ -25,17 +25,22 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
     """Persist the current emoji reactions for *message_pk* from a Telethon message object.
 
     Replaces any existing reactions — always reflects the current Telegram state.
-    Custom-emoji reactions (non-standard stickers) are skipped; only plain emoji are stored.
+    Custom-emoji / sticker reactions are tallied together under the synthetic emoji "custom"
+    so that total reaction counts are not understated on channels that use custom emoji packs.
     """
     MessageReaction.objects.filter(message_id=message_pk).delete()
     reactions_obj = getattr(telegram_message, "reactions", None)
     if not reactions_obj:
         return
-    to_create = [
-        MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count)
-        for rc in (getattr(reactions_obj, "results", None) or [])
-        if hasattr(rc.reaction, "emoticon")
-    ]
+    to_create = []
+    custom_total = 0
+    for rc in getattr(reactions_obj, "results", None) or []:
+        if hasattr(rc.reaction, "emoticon"):
+            to_create.append(MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count))
+        else:
+            custom_total += rc.count
+    if custom_total:
+        to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
     if to_create:
         MessageReaction.objects.bulk_create(to_create)
 
