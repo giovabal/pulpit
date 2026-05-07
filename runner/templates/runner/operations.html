@@ -153,12 +153,6 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Runs last so degrees reflect any channels added by earlier steps. DB id filter is ignored: degrees must reflect the full network topology to be meaningful."></i>
               </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">10</span>
-                <input type="checkbox" name="fetch_replies">Fetch replies
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="For each interesting channel with a linked discussion group, fetch individual reply messages for posts that have replies > 0 and store them in the database. Requires linked_chat_id to be set on the channel."></i>
-              </label>
             </div>
           </fieldset>
           <div class="ops-fieldset-col">
@@ -217,6 +211,11 @@
                   <input type="checkbox" name="retry_lost_and_private">Retry lost &amp; private
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Include channels marked as lost or private in the crawl scope. Each is checked at its turn: if now accessible its flag is cleared and it is processed like any other channel; if still inaccessible its flag is updated and it is skipped."></i>
+                </label>
+                <label class="ops-flag">
+                  <input type="checkbox" name="fetch_replies" checked>Fetch replies
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Fetch reply messages from linked discussion groups. When Get new messages is on, fetches replies for newly crawled posts. When Refresh message stats is on, fetches replies for already-stored posts. Requires linked_chat_id to be set on the channel."></i>
                 </label>
               </div>
             </fieldset>

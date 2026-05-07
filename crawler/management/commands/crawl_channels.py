@@ -262,6 +262,36 @@ class Command(BaseCommand):
             ),
         )
 
+    def _fetch_replies_for_channel(
+        self,
+        channel: Channel,
+        crawler: ChannelCrawler,
+        index: int,
+        printer: ProgressPrinter,
+        *,
+        min_telegram_id: int | None = None,
+        max_telegram_id: int | None = None,
+    ) -> None:
+        if not channel.linked_chat_id:
+            return
+        try:
+            crawler.fetch_channel_replies(
+                channel,
+                min_telegram_id=min_telegram_id,
+                max_telegram_id=max_telegram_id,
+                status_callback=lambda message, idx=index: printer.status(message, idx),
+            )
+            printer.ensure_newline()
+        except errors.FloodWaitError as exc:
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Flood wait fetching replies for {channel}: {exc}"))
+            if not settings.IGNORE_FLOODWAIT:
+                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+        except Exception as exc:
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Error fetching replies for {channel}: {exc}"))
+            logger.exception("fetch_channel_replies failed for %s", channel)
+
     def _refresh_channel(
         self,
         channel: Channel,
@@ -543,6 +573,13 @@ class Command(BaseCommand):
                                 pre_crawl_max_id,
                                 printer,
                             )
+                            if fetch_replies:
+                                self._fetch_replies_for_channel(
+                                    channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
+                                )
+                        if fetch_replies:
+                            new_min = pre_crawl_max_id + 1 if pre_crawl_max_id > 0 else None
+                            self._fetch_replies_for_channel(channel, crawler, index, printer, min_telegram_id=new_min)
 
                     printer.newline()
 
@@ -711,33 +748,6 @@ class Command(BaseCommand):
 
                 if fix_missing_media:
                     self._fix_missing_media(channels, api_client, download_temp_dir, printer)
-
-                if fetch_replies:
-                    reply_channels = list(channels.filter(linked_chat_id__isnull=False).order_by("id"))
-                    n_reply_ch = len(reply_channels)
-                    self.stdout.write(f"\nFetching replies for {n_reply_ch} channel(s) with linked discussion groups")
-                    self.stdout.flush()
-                    total_replies = 0
-                    for reply_ch in reply_channels:
-                        try:
-                            upserted = crawler.fetch_channel_replies(
-                                reply_ch,
-                                status_callback=lambda message: printer.status(message, 0),
-                            )
-                            total_replies += upserted
-                            printer.ensure_newline()
-                        except errors.FloodWaitError as exc:
-                            printer.ensure_newline()
-                            self.stdout.write(
-                                self.style.WARNING(f"Flood wait while fetching replies for {reply_ch}: {exc}")
-                            )
-                            if not settings.IGNORE_FLOODWAIT:
-                                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-                        except Exception as exc:
-                            printer.ensure_newline()
-                            self.stdout.write(self.style.WARNING(f"Error fetching replies for {reply_ch}: {exc}"))
-                            logger.exception("fetch_channel_replies failed for %s", reply_ch)
-                    self.stdout.write(f"Replies: {total_replies} records upserted.")
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection
