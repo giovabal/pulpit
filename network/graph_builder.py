@@ -287,7 +287,13 @@ def build_graph(
 
     max_weight = max(edge[2] for edge in edge_list)
     for edge in edge_list:
-        graph.add_edge(edge[0], edge[1], weight=10 * edge[2] / max_weight)
+        graph.add_edge(
+            edge[0],
+            edge[1],
+            weight=10 * edge[2] / max_weight,
+            weight_forwards=edge[3],
+            weight_mentions=edge[4],
+        )
 
     # Remove dead leaves that ended up with no edges after date filtering.
     # Their all-time DB degree earned them a slot, but the restricted window contains
