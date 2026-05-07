@@ -15,10 +15,8 @@ from crawler.reference_resolver import ReferenceResolver
 from webapp.models import (
     Channel,
     Message,
-    MessagePicture,
     MessageReaction,
     MessageReply,
-    MessageVideo,
     Poll,
     PollAnswer,
 )
@@ -591,18 +589,6 @@ class ChannelCrawler:
                 updated += 1
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
-                if telegram_message.media:
-                    if (
-                        hasattr(telegram_message.media, "photo")
-                        and not MessagePicture.objects.filter(
-                            message__channel=channel, message__telegram_id=telegram_message.id
-                        ).exists()
-                    ):
-                        self.media_handler.download_message_picture(telegram_message)
-                    if not MessageVideo.objects.filter(
-                        message__channel=channel, message__telegram_id=telegram_message.id
-                    ).exists():
-                        self.media_handler.download_message_video(telegram_message)
             update_status(f"refreshing message stats … {updated} updated")
         return updated
 
