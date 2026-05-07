@@ -1052,11 +1052,10 @@
     });
   })();
 
-  // 3D layouts fieldset: gray-out when 3D graph is off; enforce at-least-one; sync with 2D.
+  // 3D layouts fieldset: gray-out when 3D graph is off; enforce at-least-one (independent of 2D).
   (function () {
     var graph3dCb   = document.querySelector('#form-structural_analysis input[name="graph_3d"]');
     var layouts3dFs = document.getElementById('3d-layouts-fieldset');
-    var layouts2dFs = document.getElementById('extra-layouts-fieldset');
     if (!graph3dCb || !layouts3dFs) return;
 
     function sync3dLayoutsFieldset() {
@@ -1065,29 +1064,12 @@
     graph3dCb.addEventListener('change', sync3dLayoutsFieldset);
     sync3dLayoutsFieldset();
 
-    // At-least-one enforcement (same rule as 2D layouts).
     var layout3dCbs = Array.from(layouts3dFs.querySelectorAll('input[type="checkbox"]'));
     layout3dCbs.forEach(function (cb) {
       cb.addEventListener('change', function () {
         var anyChecked = layout3dCbs.some(function (c) { return c.checked; });
         if (!anyChecked) cb.checked = true;
       });
-    });
-
-    // Two-way sync: all layout checkboxes (FA2 + extras) mirror each other by value.
-    if (!layouts2dFs) return;
-    var cbs2d = Array.from(layouts2dFs.querySelectorAll('input[type="checkbox"]'));
-    var cbs3d = layout3dCbs;
-
-    function syncPeer(source, targets) {
-      var peer = targets.find(function (cb) { return cb.value === source.value; });
-      if (peer && peer.checked !== source.checked) peer.checked = source.checked;
-    }
-    cbs2d.forEach(function (cb) {
-      cb.addEventListener('change', function () { syncPeer(cb, cbs3d); });
-    });
-    cbs3d.forEach(function (cb) {
-      cb.addEventListener('change', function () { syncPeer(cb, cbs2d); });
     });
   })();
 
