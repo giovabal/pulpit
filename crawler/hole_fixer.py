@@ -30,7 +30,7 @@ def fix_message_holes(
     channel: Channel,
     telegram_channel: Any,
     api_client: Any,
-    get_message_fn: Callable[[Channel, Any], int],
+    get_message_fn: Callable[[Channel, Any], tuple[bool, int]],
     remaining_limit: int | None,
     update_status: Callable[[str], None],
     channel_label: str,
@@ -79,8 +79,10 @@ def fix_message_holes(
         for telegram_message in messages:
             if telegram_message is None or not hasattr(telegram_message, "peer_id"):
                 continue
-            downloaded_images += get_message_fn(channel, telegram_message)
-            processed_messages += 1
+            stored, imgs = get_message_fn(channel, telegram_message)
+            downloaded_images += imgs
+            if stored:
+                processed_messages += 1
             update_status(f"{channel_label} | messages processed: {current_message_count + processed_messages}")
         # Save progress after each batch so an interrupted run resumes from here.
         channel.last_hole_check_max_telegram_id = batch[-1]
