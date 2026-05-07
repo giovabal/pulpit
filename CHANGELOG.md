@@ -30,6 +30,7 @@
 ### Fixes
 - **Stats refresh no longer downloads missing media** — `refresh_message_stats` was silently triggering photo and video downloads for messages that had no locally stored media, turning a lightweight stats update into a potentially expensive media fetch. It now strictly updates counters and text fields and leaves media untouched.
 - **"N new messages" count no longer includes service events** — Telegram service events (pin changes, admin promotions, linked-group updates, etc.) have their own message IDs and were previously counted as new messages even though they are never stored in the database. The completed-channel status line now only counts messages that were actually written to the DB.
+- **`MESSAGE_ID_INVALID` errors silenced when fetching replies** — posts whose reply thread is no longer accessible in the linked discussion group (deleted, migrated, etc.) previously logged a WARNING for every affected post. They are now silently skipped at DEBUG level.
 
 ## [0.17] - 2026-04-05
 *Vacancy succession batch analysis. Documentation rewrite. Channel details.*
