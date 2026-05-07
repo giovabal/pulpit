@@ -234,140 +234,61 @@
             </div>
           </fieldset>
 
-          <fieldset class="ops-fieldset">
-            <legend>Outputs</legend>
-            <div class="ops-flags">
-              <label class="ops-flag"><input type="checkbox" name="graph" checked>2D graph
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Generate the 2D interactive graph (graph.html). Includes layout computation."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="html" checked>HTML tables
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Generate the channel, community, and network HTML tables."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="graph_3d">3D graph
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Generate an additional 3D force-directed graph (graph3d.html) rendered with Three.js. Rotate, zoom, and pan with the mouse."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="xlsx">Excel spreadsheets
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Export channel, community, and network tables as .xlsx files alongside the HTML versions."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="consensus_matrix">Consensus matrix
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all non-ORGANIZATION community strategies."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="structural_similarity">Structural similarity
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Generate a structural similarity matrix page (structural_similarity.html) showing pairwise cosine similarity between channels based on all computed network measures (min-max normalised per measure)."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Export the network as a GEXF file with all measures and community assignments as node attributes. Compatible with Gephi."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="graphml">GraphML file
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Export the network as a GraphML file. Compatible with R/igraph, NetworkX, yEd, and most graph analysis tools."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="csv">CSV files
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Export nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions). Most portable format for downstream analysis in R, Python, or shell scripts."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="draw_dead_leaves">Draw dead leaves
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Include non-interesting channels that are referenced by interesting ones as leaf nodes. Adds context but can significantly increase graph size."></i>
-              </label>
-              <label class="ops-flag"><input type="checkbox" name="timeline_step">Timeline by year
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Repeat the export for each calendar year found in the data. Generates per-year data directories (data_YYYY/) and optional per-year HTML tables. The year switcher in graph.html lets you switch between years with animated transitions. Substantially increases total run time."></i>
-              </label>
-            </div>
-          </fieldset>
-
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset">
-              <legend>Filters</legend>
-              <div class="ops-params">
-                <div class="ops-param">
-                  <label for="startdate">Start date
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Include only messages from this date onward when computing edge weights and activity metrics. Leave blank for no lower bound."></i>
-                  </label>
-                  <input type="date" name="startdate" id="startdate">
-                </div>
-                <div class="ops-param">
-                  <label for="enddate">End date
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Include only messages up to and including this date. Leave blank for no upper bound."></i>
-                  </label>
-                  <input type="date" name="enddate" id="enddate">
-                </div>
-              </div>
-            </fieldset>
-            <fieldset class="ops-fieldset">
-              <legend>Presentation</legend>
+              <legend>Outputs</legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised
+                <label class="ops-flag"><input type="checkbox" name="graph" checked>2D graph
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Add meta tags and structured data to the graph HTML for better search engine indexing. Use when publishing the graph publicly."></i>
+                     title="Generate the 2D interactive graph (graph.html). Includes layout computation."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="vertical_layout">Vertical layout
+                <label class="ops-flag"><input type="checkbox" name="graph_3d">3D graph
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Orient the graph vertically. By default the layout is horizontal. The graph is rotated 90° when the computed aspect ratio does not match."></i>
+                     title="Generate an additional 3D force-directed graph (graph3d.html) rendered with Three.js. Rotate, zoom, and pan with the mouse."></i>
+                </label>
+                <div class="ops-flags-break"></div>
+                <label class="ops-flag"><input type="checkbox" name="html" checked>HTML tables
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Generate the channel, community, and network HTML tables."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="xlsx">Excel spreadsheets
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Export channel, community, and network tables as .xlsx files alongside the HTML versions."></i>
+                </label>
+                <div class="ops-flags-break"></div>
+                <label class="ops-flag"><input type="checkbox" name="timeline_step">Timeline by year
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Repeat the export for each calendar year found in the data. Generates per-year data directories (data_YYYY/) and optional per-year HTML tables. The year switcher in graph.html lets you switch between years with animated transitions. Substantially increases total run time."></i>
+                </label>
+                <div class="ops-flags-break"></div>
+                <label class="ops-flag"><input type="checkbox" name="gexf">GEXF file
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Export the network as a GEXF file with all measures and community assignments as node attributes. Compatible with Gephi."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="graphml">GraphML file
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Export the network as a GraphML file. Compatible with R/igraph, NetworkX, yEd, and most graph analysis tools."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="csv">CSV files
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Export nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions). Most portable format for downstream analysis in R, Python, or shell scripts."></i>
+                </label>
+                <div class="ops-flags-break"></div>
+                <label class="ops-flag"><input type="checkbox" name="structural_similarity">Structural similarity
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Generate a structural similarity matrix page (structural_similarity.html) showing pairwise cosine similarity between channels based on all computed network measures (min-max normalised per measure)."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="consensus_matrix">Consensus matrix
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all non-ORGANIZATION community strategies."></i>
+                </label>
+                <div class="ops-flags-break"></div>
+                <label class="ops-flag"><input type="checkbox" name="draw_dead_leaves">Draw dead leaves
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Include non-interesting channels that are referenced by interesting ones as leaf nodes. Adds context but can significantly increase graph size."></i>
                 </label>
               </div>
             </fieldset>
-            <fieldset class="ops-fieldset" id="extra-layouts-fieldset">
-              <legend>2D layouts
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Force Atlas 2 is always computed. Select additional layouts to pre-compute: a Layout switcher in the graph viewer lets users switch between them without re-exporting. Requires 2D graph."></i>
-              </legend>
-              <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2" checked>Force Atlas 2
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
-                </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Nodes equally spaced on a ring."></i>
-                </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPECTRAL">Spectral
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Laplacian eigenvectors — tends to visually separate community clusters."></i>
-                </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPRING">Spring
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Fruchterman-Reingold force-directed layout — an alternative to Force Atlas 2."></i>
-                </label>
-              </div>
-            </fieldset>
-          </div>
-
-          <div class="ops-fieldset-row">
-            <fieldset class="ops-fieldset">
-              <legend>Channel types
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Which Telegram entity types to include in the graph."></i>
-              </legend>
-              <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
-              </div>
-            </fieldset>
-            {% if channel_groups %}
-            <fieldset class="ops-fieldset">
-              <legend>Channel groups
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all interesting channels."></i>
-              </legend>
-              <div class="ops-flags">
-                {% for group in channel_groups %}
-                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
-                {% endfor %}
-              </div>
-            </fieldset>
-            {% endif %}
             <fieldset class="ops-fieldset">
               <legend>Edge weights
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -405,6 +326,116 @@
                   <input type="checkbox" name="include_self_references">Include self-references
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Count cases where a channel forwards from or mentions itself as self-loop edges. Off by default — self-loops add no network information and have no effect on most centrality measures."></i>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="ops-fieldset-row">
+            <fieldset class="ops-fieldset">
+              <legend>Filters</legend>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="startdate">Start date
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Include only messages from this date onward when computing edge weights and activity metrics. Leave blank for no lower bound."></i>
+                  </label>
+                  <input type="date" name="startdate" id="startdate">
+                </div>
+                <div class="ops-param">
+                  <label for="enddate">End date
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Include only messages up to and including this date. Leave blank for no upper bound."></i>
+                  </label>
+                  <input type="date" name="enddate" id="enddate">
+                </div>
+              </div>
+            </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>Channel types
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Which Telegram entity types to include in the graph."></i>
+              </legend>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
+              </div>
+            </fieldset>
+            {% if channel_groups %}
+            <fieldset class="ops-fieldset">
+              <legend>Channel groups
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all interesting channels."></i>
+              </legend>
+              <div class="ops-flags">
+                {% for group in channel_groups %}
+                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
+                {% endfor %}
+              </div>
+            </fieldset>
+            {% endif %}
+          </div>
+
+          <div class="ops-fieldset-row">
+            <fieldset class="ops-fieldset" id="extra-layouts-fieldset">
+              <legend>2D layouts
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Force Atlas 2 is always computed. Select additional layouts to pre-compute: a Layout switcher in the graph viewer lets users switch between them without re-exporting. Requires 2D graph."></i>
+              </legend>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2" checked>Force Atlas 2
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Nodes equally spaced on a ring."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPECTRAL">Spectral
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Laplacian eigenvectors — tends to visually separate community clusters."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="SPRING">Spring
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Fruchterman-Reingold force-directed layout — an alternative to Force Atlas 2."></i>
+                </label>
+              </div>
+            </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>3D layouts
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="The 3D graph reuses the same layout files as the 2D graph. Force Atlas 2 is always available; any extras selected in 2D layouts are also switchable in the 3D viewer without re-exporting."></i>
+              </legend>
+              <div class="ops-flags">
+                <label class="ops-flag" style="opacity:.55"><input type="checkbox" checked disabled>Force Atlas 2
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Always computed — no separate option needed."></i>
+                </label>
+                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Circular
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Enable in 2D layouts above."></i>
+                </label>
+                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Spectral
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Enable in 2D layouts above."></i>
+                </label>
+                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Spring
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Enable in 2D layouts above."></i>
+                </label>
+              </div>
+            </fieldset>
+            <fieldset class="ops-fieldset">
+              <legend>Presentation</legend>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Add meta tags and structured data to the graph HTML for better search engine indexing. Use when publishing the graph publicly."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="vertical_layout">Vertical layout
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Orient the graph vertically. By default the layout is horizontal. The graph is rotated 90° when the computed aspect ratio does not match."></i>
                 </label>
               </div>
             </fieldset>

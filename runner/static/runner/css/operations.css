@@ -182,7 +182,7 @@
   cursor: pointer;
   flex-shrink: 0;
 }
-.ops-flag:has(input:checked) {
+.ops-flag:has(input:checked:not(:disabled)) {
   background: var(--accent-bg);
   border-color: var(--accent);
   color: var(--accent);
@@ -314,6 +314,9 @@
   opacity: .4;
   line-height: 1;
 }
+
+/* force a line-break inside an .ops-flags flex container */
+.ops-flags-break { flex-basis: 100%; height: 0; overflow: hidden; }
 
 /* ---- vertical numbered flag list (crawl_channels crawl steps) ---- */
 .ops-flags--pipeline {
