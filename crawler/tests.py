@@ -45,6 +45,11 @@ def _make_telegram_channel(telegram_id: int = 999, username: str = "testchan") -
     tc.fake = False
     tc.gigagroup = False
     tc.access_hash = None
+    tc.noforwards = False
+    tc.forum = False
+    tc.join_to_send = False
+    tc.join_request = False
+    tc.level = None
     return tc
 
 
@@ -1085,11 +1090,35 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.org = Organization.objects.create(name="Org", is_interesting=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
 
+    def _make_tc(self) -> MagicMock:
+        """Minimal telegram channel mock safe for set_more_channel_details."""
+        tc = MagicMock()
+        tc.restriction_reason = None
+        tc.usernames = None
+        return tc
+
     def _make_full_channel_response(self, participants: int = 500, about: str = "desc") -> MagicMock:
         resp = MagicMock()
         resp.full_chat.participants_count = participants
         resp.full_chat.about = about
         resp.full_chat.location = None
+        resp.full_chat.linked_chat_id = None
+        resp.full_chat.available_min_id = None
+        resp.full_chat.slowmode_seconds = None
+        resp.full_chat.admins_count = None
+        resp.full_chat.online_count = None
+        resp.full_chat.requests_pending = None
+        resp.full_chat.theme_emoticon = None
+        resp.full_chat.ttl_period = None
+        resp.full_chat.boosts_applied = None
+        resp.full_chat.boosts_unrestrict = None
+        resp.full_chat.kicked_count = None
+        resp.full_chat.banned_count = None
+        resp.full_chat.antispam = False
+        resp.full_chat.has_scheduled = False
+        resp.full_chat.pinned_msg_id = None
+        resp.full_chat.migrated_from_chat_id = None
+        resp.chats = []
         return resp
 
     def test_sets_participants_count(self) -> None:
@@ -1203,6 +1232,8 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         tm.peer_id.channel_id = self.source_channel.telegram_id
         # TELEGRAM_OBJECT_PROPERTIES must have safe values (not raw MagicMocks).
         tm.date = None
+        tm.edit_date = None
+        tm.post_author = ""
         tm.out = False
         tm.mentioned = False
         tm.post = False
@@ -1212,10 +1243,16 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         tm.views = None
         tm.forwards = None
         tm.pinned = False
+        tm.silent = False
+        tm.replies = None
+        tm.reply_to = None
+        tm.factcheck = None
         tm.entities = []
         tm.media = None
         if fwd_channel_id is not None:
             tm.fwd_from.from_id.channel_id = fwd_channel_id
+            tm.fwd_from.channel_post = None
+            tm.fwd_from.from_name = None
         else:
             tm.fwd_from = None
         return tm
@@ -1476,7 +1513,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("crawl_channels")
+            call_command("crawl_channels", retry_references=True)
 
             mock_crawler.get_missing_references.assert_called_once()
 

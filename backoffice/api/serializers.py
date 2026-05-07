@@ -166,7 +166,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "email", "is_staff", "is_active", "date_joined", "password"]
-        read_only_fields = ["id", "username", "date_joined", "is_staff", "is_active"]
+        read_only_fields = ["id", "username", "date_joined"]
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
