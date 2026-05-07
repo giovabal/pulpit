@@ -1,9 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
-
-Fetch replies should be an option in SCOPE fieldset, it's on by default. If it is on, "get new messages" and "refresh messages stats" are fetching replies (only for new messages, only for old messages, respectively)
-
 - Screenshots missing
 -- Crawl channels panel open (13)
 -- Search channels panel open (new, instead of 13)
