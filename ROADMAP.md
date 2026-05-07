@@ -1,6 +1,9 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
+
+Fetch replies should be an option in SCOPE fieldset, it's on by default. If it is on, "get new messages" and "refresh messages stats" are fetching replies (only for new messages, only for old messages, respectively)
+
 - Screenshots missing
 -- Crawl channels panel open (13)
 -- Search channels panel open (new, instead of 13)
@@ -34,4 +37,4 @@
 - Have a deep inspection of HTML code, make sure the app and the HTML output of analysis are respecting accessibility rules and can provide a decent experience for people using screen readers
 - Have a deep inspection of all options accepted by commands, look for inconsistencies and bad practices
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
-- Read the code and review documentation, propose variations.
+- Read the code and review documentation, make the documentation complete and coherent, propose variations.

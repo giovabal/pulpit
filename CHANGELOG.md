@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.18] - To be announced
-*Alternative graph layouts and styles. A few more measures and channels details.*
+*Alternative graph layouts and styles. A few more measures and channels details. Polls and quizzes.*
 
 ### New features
 - **Alternative 2D graph layouts** — `structural_analysis` gains an `--extra-layouts` flag (values: `CIRCULAR`, `SPECTRAL`, `SPRING`, `ALL`) that pre-computes additional spatial layouts alongside ForceAtlas2 and stores each as `data/channel_position_<algo>.json`. When extras are present, a **Layout** dropdown appears in the Options panel of `graph.html`, letting users switch between them with a smooth animated transition at viewing time — no re-export required. Available as checkboxes in a dedicated **Extra 2D layouts** fieldset in the Operations panel.
@@ -26,6 +26,9 @@
 - **Extended Telethon fields on `Channel` and `Message`** — 14 additional fields that Telethon already exposes are now persisted at zero extra API cost. On `Channel` (all from `ChannelFull`): `boosts_applied` and `boosts_unrestrict` (boost count and headroom — proxy for engaged fan base), `kicked_count` and `banned_count` (moderation intensity), `antispam` (Telegram's automated anti-spam active), `has_scheduled` (editorial planning signal), `pinned_msg_id` (currently pinned message ID), `migrated_from_chat_id` (channel origin — was it upgraded from a group?). On `Message`: `replies` (comment/reply count, refreshed alongside views and forwards), `silent` (sent without notification), `reply_to_msg_id` (enables reply-thread analysis), `fwd_from_channel_post` (original message ID in the source channel — provenance tracing), `fwd_from_from_name` (display name when forwarded from a user rather than a channel), `post_author` (author's name), `edit_date` (edits made after initial amplification), `factcheck` (Telegram's built-in fact-check annotation, stored as JSON with `need_check`, `country`, and `text` — useful for disinformation research).
 - **Stats refresh also updates message text, webpage metadata, and fact-check labels** — `refresh_message_stats` previously re-fetched views, forwards, replies, pinned state, edit date, post author, and reactions, but not fields that can silently change after publication. It now also updates `message` (edited text), `webpage_url` and `webpage_type` (link-preview metadata), and `factcheck` (fact-check annotations that Telegram can add or remove at any time after a post goes live).
 - **README rewritten** — restructured as a comprehensive landing page for both non-technical and specialist readers. Adds a *Questions you can answer* section with concrete per-channel, community, and over-time questions linked to specific measures; expands the outputs table to reflect all current files; splits the measures reference into three thematic groups (Influence & reach / Position & brokerage / Content & dynamics); adds a dedicated Vacancy Analysis section with the full scoring table; updates the community detection table with a direction-aware column; and corrects the measure count from 14 to 15.
+
+### Fixes
+- **Stats refresh no longer downloads missing media** — `refresh_message_stats` was silently triggering photo and video downloads for messages that had no locally stored media, turning a lightweight stats update into a potentially expensive media fetch. It now strictly updates counters and text fields and leaves media untouched.
 
 ## [0.17] - 2026-04-05
 *Vacancy succession batch analysis. Documentation rewrite. Channel details.*

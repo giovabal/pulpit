@@ -636,10 +636,13 @@ class ChannelCrawler:
     def fetch_channel_replies(
         self,
         channel: Channel,
+        min_telegram_id: int | None = None,
+        max_telegram_id: int | None = None,
         status_callback: Callable[[str], None] | None = None,
     ) -> int:
-        """Fetch and upsert reply messages for all posts in *channel* with replies > 0.
+        """Fetch and upsert reply messages for posts in *channel* with replies > 0.
 
+        ``min_telegram_id`` / ``max_telegram_id`` restrict which parent messages are processed.
         Replies live in the linked discussion group (channel.linked_chat_id). Returns the
         number of MessageReply records created or updated.
         """
@@ -658,7 +661,12 @@ class ChannelCrawler:
             logger.warning("Could not resolve linked group %s for %s: %s", channel.linked_chat_id, channel, exc)
             return 0
 
-        parent_messages = list(Message.objects.filter(channel=channel, replies__gt=0).values_list("pk", "telegram_id"))
+        parent_qs = Message.objects.filter(channel=channel, replies__gt=0)
+        if min_telegram_id is not None:
+            parent_qs = parent_qs.filter(telegram_id__gte=min_telegram_id)
+        if max_telegram_id is not None:
+            parent_qs = parent_qs.filter(telegram_id__lte=max_telegram_id)
+        parent_messages = list(parent_qs.values_list("pk", "telegram_id"))
         if not parent_messages:
             return 0
 
