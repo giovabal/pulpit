@@ -584,12 +584,15 @@ class ChannelCrawler:
                 update_kwargs["has_been_pinned"] = True
             if media and hasattr(media, "poll"):
                 update_kwargs["media_type"] = "poll"
-            msg_pk = (
+            msg_row = (
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                .values_list("pk", flat=True)
+                .values("pk", "replies_unavailable")
                 .first()
             )
-            if msg_pk is not None:
+            if msg_row is not None:
+                msg_pk = msg_row["pk"]
+                if msg_row["replies_unavailable"]:
+                    update_kwargs.pop("replies", None)
                 Message.objects.filter(pk=msg_pk).update(**update_kwargs)
                 updated += 1
                 _save_reactions(msg_pk, telegram_message)
@@ -666,7 +669,7 @@ class ChannelCrawler:
             logger.warning("Could not resolve linked group %s for %s: %s", channel.linked_chat_id, channel, exc)
             return 0
 
-        parent_qs = Message.objects.filter(channel=channel, replies__gt=0)
+        parent_qs = Message.objects.filter(channel=channel, replies__gt=0, replies_unavailable=False)
         if min_telegram_id is not None:
             parent_qs = parent_qs.filter(telegram_id__gte=min_telegram_id)
         if max_telegram_id is not None:
@@ -718,7 +721,8 @@ class ChannelCrawler:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
             except Exception as exc:
                 if type(exc).__name__ == "MessageIdInvalidError":
-                    logger.debug("MessageIdInvalid for post %s in %s; skipping", msg_telegram_id, channel)
+                    logger.debug("MessageIdInvalid for post %s in %s; marking unavailable", msg_telegram_id, channel)
+                    Message.objects.filter(pk=msg_pk).update(replies_unavailable=True)
                 else:
                     logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
 
