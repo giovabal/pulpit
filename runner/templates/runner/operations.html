@@ -384,7 +384,7 @@
                    title="Force Atlas 2 is always computed. Select additional layouts to pre-compute: a Layout switcher in the graph viewer lets users switch between them without re-exporting. Requires 2D graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2" checked>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
                 </label>
@@ -408,9 +408,9 @@
                    title="The 3D graph reuses the same layout files as the 2D graph. Force Atlas 2 is always available; any extras selected in 2D layouts are also switchable in the 3D viewer without re-exporting."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" checked disabled>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts_fa2_3d" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Always computed — no separate option needed."></i>
+                     title="ForceAtlas2 with Kamada-Kawai seed — default 3D layout."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -1052,7 +1052,7 @@
     });
   })();
 
-  // 3D layouts fieldset: gray-out when 3D graph is off; keep extra-layout checkboxes in sync with 2D.
+  // 3D layouts fieldset: gray-out when 3D graph is off; enforce at-least-one; sync with 2D.
   (function () {
     var graph3dCb   = document.querySelector('#form-structural_analysis input[name="graph_3d"]');
     var layouts3dFs = document.getElementById('3d-layouts-fieldset');
@@ -1065,10 +1065,19 @@
     graph3dCb.addEventListener('change', sync3dLayoutsFieldset);
     sync3dLayoutsFieldset();
 
-    // Two-way sync: extra_layouts checkboxes in 2D and 3D fieldsets mirror each other.
+    // At-least-one enforcement (same rule as 2D layouts).
+    var layout3dCbs = Array.from(layouts3dFs.querySelectorAll('input[type="checkbox"]'));
+    layout3dCbs.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var anyChecked = layout3dCbs.some(function (c) { return c.checked; });
+        if (!anyChecked) cb.checked = true;
+      });
+    });
+
+    // Two-way sync: all layout checkboxes (FA2 + extras) mirror each other by value.
     if (!layouts2dFs) return;
-    var cbs2d = Array.from(layouts2dFs.querySelectorAll('input[name="extra_layouts"]'));
-    var cbs3d = Array.from(layouts3dFs.querySelectorAll('input[name="extra_layouts"]'));
+    var cbs2d = Array.from(layouts2dFs.querySelectorAll('input[type="checkbox"]'));
+    var cbs3d = layout3dCbs;
 
     function syncPeer(source, targets) {
       var peer = targets.find(function (cb) { return cb.value === source.value; });
