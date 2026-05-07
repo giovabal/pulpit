@@ -717,7 +717,7 @@ class ChannelCrawler:
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
             except Exception as exc:
-                if "MESSAGE_ID_INVALID" in str(exc).upper():
+                if type(exc).__name__ == "MessageIdInvalidError":
                     logger.debug("MessageIdInvalid for post %s in %s; skipping", msg_telegram_id, channel)
                 else:
                     logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
