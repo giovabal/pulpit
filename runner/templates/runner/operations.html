@@ -402,25 +402,25 @@
                 </label>
               </div>
             </fieldset>
-            <fieldset class="ops-fieldset">
+            <fieldset class="ops-fieldset" id="3d-layouts-fieldset">
               <legend>3D layouts
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="The 3D graph reuses the same layout files as the 2D graph. Force Atlas 2 is always available; any extras selected in 2D layouts are also switchable in the 3D viewer without re-exporting."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag" style="opacity:.55"><input type="checkbox" checked disabled>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" checked disabled>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Always computed — no separate option needed."></i>
                 </label>
-                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Circular
+                <label class="ops-flag"><input type="checkbox" disabled>Circular
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Enable in 2D layouts above."></i>
                 </label>
-                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Spectral
+                <label class="ops-flag"><input type="checkbox" disabled>Spectral
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Enable in 2D layouts above."></i>
                 </label>
-                <label class="ops-flag" style="opacity:.55"><input type="checkbox" disabled>Spring
+                <label class="ops-flag"><input type="checkbox" disabled>Spring
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Enable in 2D layouts above."></i>
                 </label>
@@ -1050,6 +1050,19 @@
         if (!anyChecked) cb.checked = true;  // silently restore the last one
       });
     });
+  })();
+
+  // 3D layouts fieldset: gray-out when 3D graph is off.
+  (function () {
+    var graph3dCb  = document.querySelector('#form-structural_analysis input[name="graph_3d"]');
+    var layouts3dFs = document.getElementById('3d-layouts-fieldset');
+    if (!graph3dCb || !layouts3dFs) return;
+
+    function sync3dLayoutsFieldset() {
+      layouts3dFs.disabled = !graph3dCb.checked;
+    }
+    graph3dCb.addEventListener('change', sync3dLayoutsFieldset);
+    sync3dLayoutsFieldset();
   })();
 
   (function () {
