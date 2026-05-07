@@ -111,9 +111,12 @@ class ChannelGroupAdmin(admin.ModelAdmin):
     search_fields = ("name",)
     filter_horizontal = ("channels",)
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet[ChannelGroup]:
+        return super().get_queryset(request).annotate(_channel_count=Count("channels"))
+
     @admin.display(description="Channels")
     def channel_count(self, obj: ChannelGroup) -> int:
-        return obj.channels.count()
+        return obj._channel_count  # type: ignore[attr-defined]
 
 
 @admin.register(Organization)

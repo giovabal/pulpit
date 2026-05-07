@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import signal
@@ -9,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 TASK_NAMES = ("crawl_channels", "search_channels", "structural_analysis", "compare_analysis")
 
@@ -53,7 +56,8 @@ def get_status(task: str) -> dict:
 
     try:
         meta = json.loads(meta_path.read_text())
-    except (ValueError, OSError):
+    except (ValueError, OSError) as e:
+        logger.warning("Cannot read task meta for %s: %s", task, e)
         return {"status": "idle", "start_time": None, "end_time": None, "args": [], "exit_code": None, "pid": None}
 
     pid = meta.get("pid")

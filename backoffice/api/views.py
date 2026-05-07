@@ -67,7 +67,7 @@ class ChannelViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = ChannelSerializer
-    http_method_names = ["get", "patch", "post", "head", "options"]
+    http_method_names = ["get", "patch", "head", "options"]
     filter_backends = [OrderingFilter]
     ordering_fields = ["id", "title", "participants_count", "in_degree"]
     ordering = ["-id"]

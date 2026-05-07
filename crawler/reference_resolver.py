@@ -20,6 +20,17 @@ SKIPPABLE_REFERENCES = {"joinchat"}
 DEAD_PREFIX = "!"
 
 
+def _bulk_add_references(pairs: list[tuple["Message", "Channel"]]) -> None:
+    """Insert M2M references in a single bulk_create instead of one query per pair."""
+    if not pairs:
+        return
+    through = Message.references.through
+    through.objects.bulk_create(
+        [through(message_id=msg.pk, channel_id=ch.pk) for msg, ch in pairs],
+        ignore_conflicts=True,
+    )
+
+
 class ReferenceResolver:
     def __init__(self, api_client: TelegramAPIClient) -> None:
         self.api_client = api_client
@@ -142,12 +153,10 @@ class ReferenceResolver:
             if len(to_update) >= 500:
                 Message.objects.bulk_update(to_update, ["missing_references"])
                 to_update.clear()
-                for msg, ch in to_add:
-                    msg.references.add(ch)
+                _bulk_add_references(to_add)
                 to_add.clear()
             if status_callback is not None:
                 status_callback(f"{index}/{total}")
         if to_update:
             Message.objects.bulk_update(to_update, ["missing_references"])
-        for msg, ch in to_add:
-            msg.references.add(ch)
+        _bulk_add_references(to_add)

@@ -290,7 +290,7 @@ def build_graph(
         graph.add_edge(
             edge[0],
             edge[1],
-            weight=10 * edge[2] / max_weight,
+            weight=10 * edge[2] / max_weight if max_weight else 0.0,
             weight_forwards=edge[3],
             weight_mentions=edge[4],
         )

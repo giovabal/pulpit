@@ -72,7 +72,7 @@ def align_to_reference(
         return positions  # identity — nothing to do
 
     all_pts = np.array(list(positions.values())) @ best_R.T
-    return dict(zip(positions.keys(), (tuple(row) for row in all_pts.tolist()), strict=False))
+    return dict(zip(positions.keys(), (tuple(row) for row in all_pts.tolist()), strict=True))
 
 
 def kamada_kawai_positions(graph: nx.DiGraph) -> dict:

@@ -315,7 +315,7 @@ def _scores_ppr(
     if not orphaned_nodes or graph.number_of_nodes() <= 1:
         return dict.fromkeys(candidate_pks, 0.0)
 
-    rev = graph.reverse(copy=False)
+    rev = graph.reverse(copy=True)
     per_node = 1.0 / len(orphaned_nodes)
     personalization = dict.fromkeys(rev.nodes(), 0.0)
     for n in orphaned_nodes:
