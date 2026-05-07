@@ -215,6 +215,7 @@ class Message(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "date",
         "edit_date",
+        "post_author",
         "out",
         "mentioned",
         "post",
@@ -244,6 +245,7 @@ class Message(TelegramBaseModel):
     views = models.PositiveBigIntegerField(null=True)
     forwards = models.PositiveBigIntegerField(null=True)
     edit_date = models.DateTimeField(null=True)
+    post_author = models.CharField(max_length=255, blank=True)
     pinned = models.BooleanField(null=True, default=False)
     has_been_pinned = models.BooleanField(default=False)
     webpage_url = models.URLField(max_length=255, default="", blank=True)
@@ -254,7 +256,7 @@ class Message(TelegramBaseModel):
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        for field in ("message", "webpage_url", "webpage_type", "media_type"):
+        for field in ("message", "post_author", "webpage_url", "webpage_type", "media_type"):
             setattr(self, field, getattr(self, field) or "")
         if self.pinned:
             self.has_been_pinned = True

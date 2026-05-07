@@ -48,6 +48,11 @@
       </div>
       {% endif %}
       <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+      {% if post.post_author %}
+      <div class="pin-banner subtle">
+        <i class="bi bi-pen" aria-hidden="true"></i> {{ post.post_author }}
+      </div>
+      {% endif %}
       <footer class="post-footer">
         <div class="post-meta">
           <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>

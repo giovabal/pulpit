@@ -470,6 +470,7 @@ class ChannelCrawler:
                 "forwards": telegram_message.forwards,
                 "pinned": bool(telegram_message.pinned),
                 "edit_date": telegram_message.edit_date,
+                "post_author": telegram_message.post_author or "",
                 "_updated": now,
             }
             if telegram_message.pinned:

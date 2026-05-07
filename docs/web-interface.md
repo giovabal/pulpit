@@ -40,7 +40,7 @@ Each channel has a dedicated detail page with:
 - **Message volume chart** — message activity over time, also annotated with events
 - **Network stats card** — in-degree, out-degree, all computed measures for this channel from the latest export
 - **Vacancy Analysis card** — appears when the channel has a registered vacancy (see [Vacancy analysis](vacancy-analysis.md))
-- **Message list** — paginated list of crawled messages with timestamps and forward indicators. Each post card shows views, forwards, reactions, and the post date. When a message has been edited after original publication, a pencil icon and "Edited" label appear in the footer alongside the original date (the edit timestamp is shown on hover).
+- **Message list** — paginated list of crawled messages with timestamps and forward indicators. Each post card shows views, forwards, reactions, and the post date. When a message has been edited after original publication, a pencil icon and "Edited" label appear in the footer (exact edit timestamp on hover). When a channel has "Sign messages" enabled, the post author's name appears on the card below the message body.
 - **Forwarded-from filter** — show only forwarded messages or only original posts
 
 <figure>
