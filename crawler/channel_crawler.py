@@ -716,10 +716,11 @@ class ChannelCrawler:
                 raise
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
-            except errors.rpcerrorlist.MessageIdInvalidError:
-                logger.debug("MessageIdInvalid for post %s in %s; skipping", msg_telegram_id, channel)
             except Exception as exc:
-                logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
+                if "MESSAGE_ID_INVALID" in str(exc).upper():
+                    logger.debug("MessageIdInvalid for post %s in %s; skipping", msg_telegram_id, channel)
+                else:
+                    logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
 
         return total_upserted
 
