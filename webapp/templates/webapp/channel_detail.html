@@ -589,10 +589,29 @@
           <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
           {% endfor %}
         </div>
-        <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
-          <i class="bi bi-telegram" aria-hidden="true"></i>
-        </a>
+        <div class="post-footer-actions">
+          <button type="button" class="post-details-btn" data-bs-toggle="collapse" data-bs-target="#pd-{{ post.pk }}" aria-expanded="false" aria-controls="pd-{{ post.pk }}" title="More details">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+          </button>
+          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
+            <i class="bi bi-telegram" aria-hidden="true"></i>
+          </a>
+        </div>
       </footer>
+      <div class="collapse post-details-panel" id="pd-{{ post.pk }}">
+        <dl class="post-details-dl">
+          {% if post.replies is not None or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
+            {% if post.replies is not None %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
+            {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>#{{ post.reply_to_msg_id }}</dd>{% endif %}
+            {% if post.fwd_from_channel_post %}<dt><i class="bi bi-link-45deg" aria-hidden="true"></i> Source post</dt><dd>#{{ post.fwd_from_channel_post }}</dd>{% endif %}
+            {% if post.fwd_from_from_name %}<dt><i class="bi bi-person" aria-hidden="true"></i> Forwarded by</dt><dd>{{ post.fwd_from_from_name }}</dd>{% endif %}
+            {% if post.silent %}<dt><i class="bi bi-bell-slash" aria-hidden="true"></i> Silent</dt><dd>Sent without notification</dd>{% endif %}
+            {% if post.factcheck %}<dt><i class="bi bi-patch-check" aria-hidden="true"></i> Fact-check</dt><dd>{% if post.factcheck.need_check %}<span class="post-detail-tag warning">Needs check</span> {% endif %}{% if post.factcheck.country %}{{ post.factcheck.country }}{% if post.factcheck.text %} — {% endif %}{% endif %}{% if post.factcheck.text %}{{ post.factcheck.text }}{% endif %}</dd>{% endif %}
+          {% else %}
+            <dt class="post-details-empty">No additional details available</dt>
+          {% endif %}
+        </dl>
+      </div>
     </article>
   </li>
   {% endfor %}

@@ -1250,6 +1250,27 @@ def _patch_export_pipeline() -> list:
 
 
 class ExportNetworkCommandTests(TestCase):
+    def setUp(self) -> None:
+        _b = _EXPORT_CMD
+        for target in [
+            f"{_b}.exporter.write_meta_json",
+            f"{_b}.exporter.write_robots_txt",
+            f"{_b}.exporter.write_summary_json",
+            f"{_b}.tables.write_index_html",
+            f"{_b}.tables.write_network_metrics_json",
+            f"{_b}.tables.write_community_metrics_json",
+            f"{_b}.tables.write_network_table_html",
+            f"{_b}.tables.write_community_table_html",
+            f"{_b}.tables.write_network_table_xlsx",
+            f"{_b}.tables.write_community_table_xlsx",
+            f"{_b}.community_stats.compute_community_metrics",
+            f"{_b}.os.makedirs",
+            f"{_b}.os.rename",
+        ]:
+            p = patch(target)
+            p.start()
+            self.addCleanup(p.stop)
+
     def _configure_happy_path(
         self,
         mock_build: MagicMock,

@@ -572,7 +572,7 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 class BuildArgsExportNetworkTests(TestCase):
     def test_export_name_appended(self):
-        args = _build_args("structural_analysis", FakePost({"export_name": "baseline"}))
+        args = _build_args("structural_analysis", FakePost({"export_name": "baseline", "include_mentions": "on"}))
         self.assertEqual(args, ["--name", "baseline"])
 
     def test_boolean_output_flags(self):
@@ -625,7 +625,7 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertEqual(args[idx + 1], "year")
 
     def test_empty_strings_not_added(self):
-        post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": ""})
+        post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": "", "include_mentions": "on"})
         self.assertEqual(_build_args("structural_analysis", post), [])
 
 

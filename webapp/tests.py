@@ -736,7 +736,7 @@ class ChannelDetailViewTests(TestCase):
     def test_messages_ordered_by_date(self) -> None:
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
         dates = [m.date for m in response.context["object_list"] if m.date]
-        self.assertEqual(dates, sorted(dates))
+        self.assertEqual(dates, sorted(dates, reverse=True))
 
     def test_only_messages_for_selected_channel(self) -> None:
         other = Channel.objects.create(telegram_id=2, title="Other")
