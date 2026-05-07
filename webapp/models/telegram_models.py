@@ -259,7 +259,9 @@ class Message(TelegramBaseModel):
     has_been_pinned = models.BooleanField(default=False)
     webpage_url = models.URLField(max_length=255, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
-    media_type = models.CharField(max_length=32, default="", blank=True)  # "photo", "video", "document", or ""
+    media_type = models.CharField(
+        max_length=32, default="", blank=True
+    )  # "photo", "video", "audio", "document", "poll", or ""
     replies = models.PositiveBigIntegerField(null=True)
     silent = models.BooleanField(default=False)
     reply_to_msg_id = models.PositiveBigIntegerField(null=True)
@@ -329,3 +331,34 @@ class MessageReply(models.Model):
 
     def __str__(self) -> str:
         return f"Reply {self.telegram_id} to message {self.parent_message_id}"
+
+
+class Poll(models.Model):
+    message = models.OneToOneField(Message, on_delete=models.CASCADE, related_name="poll")
+    poll_id = models.BigIntegerField()
+    question = models.TextField()
+    closed = models.BooleanField(default=False)
+    public_voters = models.BooleanField(default=False)
+    multiple_choice = models.BooleanField(default=False)
+    quiz = models.BooleanField(default=False)
+    close_date = models.DateTimeField(null=True, blank=True)
+    total_voters = models.PositiveIntegerField(null=True, blank=True)
+    solution = models.TextField(blank=True)
+
+    def __str__(self) -> str:
+        return f"Poll {self.poll_id} on message {self.message_id}"
+
+
+class PollAnswer(models.Model):
+    poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name="answers")
+    option = models.BinaryField(max_length=8)
+    text = models.TextField()
+    voters = models.PositiveIntegerField(default=0)
+    correct = models.BooleanField(null=True)
+
+    class Meta:
+        unique_together = [("poll", "option")]
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"Option {self.option!r} on poll {self.poll_id} ({self.voters} voters)"
