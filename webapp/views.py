@@ -16,7 +16,15 @@ from django.views.static import serve as _static_serve
 
 from webapp.paginator import DiggPaginator
 
-from .models import Channel, ChannelGroup, ChannelVacancy, Message, MessageReaction, Organization, ProfilePicture
+from .models import (
+    Channel,
+    ChannelGroup,
+    ChannelVacancy,
+    Message,
+    MessageReaction,
+    Organization,
+    ProfilePicture,
+)
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_ttl
 
@@ -696,5 +704,33 @@ class VacancyAnalysisView(View):
                 "months_before": months_before,
                 "months_after": months_after,
                 "only_after_vacancy": only_after_vacancy,
+            }
+        )
+
+
+class MessageRepliesView(View):
+    """JSON endpoint returning stored reply messages for a single channel post.
+
+    GET /channel/<channel_pk>/message/<telegram_id>/replies/
+
+    Response shape:
+        {
+          "count": <int>,
+          "fetched": <bool>,   # False means replies>0 but not yet crawled
+          "replies": [{"id", "date", "text", "sender_name", "views"}, ...]
+        }
+    """
+
+    def get(self, request: HttpRequest, channel_pk: int, telegram_id: int) -> JsonResponse:
+        channel = get_object_or_404(Channel, pk=channel_pk)
+        msg = get_object_or_404(Message, channel=channel, telegram_id=telegram_id)
+        stored = list(msg.reply_set.values("id", "date", "text", "sender_name", "views"))
+        # fetched=False only when the post has replies but none have been stored yet
+        fetched = bool(stored) or not msg.replies
+        return JsonResponse(
+            {
+                "count": len(stored),
+                "fetched": fetched,
+                "replies": [{**r, "date": r["date"].isoformat() if r["date"] else None} for r in stored],
             }
         )

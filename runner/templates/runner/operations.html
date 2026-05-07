@@ -93,6 +93,7 @@
           </fieldset>
 
           {% elif task.name == "crawl_channels" %}
+          <div class="ops-fieldset-row">
           <fieldset class="ops-fieldset">
             <legend>Crawl</legend>
             <div class="ops-flags ops-flags--pipeline">
@@ -152,32 +153,41 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Runs last so degrees reflect any channels added by earlier steps. DB id filter is ignored: degrees must reflect the full network topology to be meaningful."></i>
               </label>
+              <label class="ops-flag">
+                <span class="ops-flag-step">10</span>
+                <input type="checkbox" name="fetch_replies">Fetch replies
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="For each interesting channel with a linked discussion group, fetch individual reply messages for posts that have replies > 0 and store them in the database. Requires linked_chat_id to be set on the channel."></i>
+              </label>
             </div>
           </fieldset>
-          <fieldset class="ops-fieldset">
-            <legend>Channel types
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Which Telegram entity types to crawl."></i>
-            </legend>
-            <div class="ops-flags">
-              <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
-              <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
-              <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
-            </div>
-          </fieldset>
-          {% if channel_groups %}
-          <fieldset class="ops-fieldset">
-            <legend>Channel groups
-              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Restrict crawling to channels that belong to at least one of the selected groups. Leave all unchecked to crawl all interesting channels."></i>
-            </legend>
-            <div class="ops-flags">
-              {% for group in channel_groups %}
-              <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
-              {% endfor %}
-            </div>
-          </fieldset>
-          {% endif %}
+          <div class="ops-fieldset-col">
+            <fieldset class="ops-fieldset">
+              <legend>Channel types
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Which Telegram entity types to crawl."></i>
+              </legend>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
+              </div>
+            </fieldset>
+            {% if channel_groups %}
+            <fieldset class="ops-fieldset">
+              <legend>Channel groups
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Restrict crawling to channels that belong to at least one of the selected groups. Leave all unchecked to crawl all interesting channels."></i>
+              </legend>
+              <div class="ops-flags">
+                {% for group in channel_groups %}
+                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
+                {% endfor %}
+              </div>
+            </fieldset>
+            {% endif %}
+          </div>
+          </div>
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset">
               <legend>Stats refresh</legend>

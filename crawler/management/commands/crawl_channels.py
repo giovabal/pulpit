@@ -238,6 +238,15 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--fetch-replies",
+            action="store_true",
+            default=False,
+            help=(
+                "For each interesting channel with a linked discussion group, fetch individual "
+                "reply messages for posts with replies > 0 and store them as MessageReply records."
+            ),
+        )
+        parser.add_argument(
             "--refresh-messages-stats",
             nargs="?",
             const=None,
@@ -441,6 +450,7 @@ class Command(BaseCommand):
         force_retry: bool = options["force_retry_unresolved_references"]
         mine_about_texts: bool = options["mine_about_texts"]
         refresh_degrees: bool = options["refresh_degrees"]
+        fetch_replies: bool = options["fetch_replies"]
         try:
             refresh_limit, refresh_min_date = _parse_refresh_arg(options["refresh_messages_stats"])
         except ValueError as exc:
@@ -701,6 +711,33 @@ class Command(BaseCommand):
 
                 if fix_missing_media:
                     self._fix_missing_media(channels, api_client, download_temp_dir, printer)
+
+                if fetch_replies:
+                    reply_channels = list(channels.filter(linked_chat_id__isnull=False).order_by("id"))
+                    n_reply_ch = len(reply_channels)
+                    self.stdout.write(f"\nFetching replies for {n_reply_ch} channel(s) with linked discussion groups")
+                    self.stdout.flush()
+                    total_replies = 0
+                    for reply_ch in reply_channels:
+                        try:
+                            upserted = crawler.fetch_channel_replies(
+                                reply_ch,
+                                status_callback=lambda message: printer.status(message, 0),
+                            )
+                            total_replies += upserted
+                            printer.ensure_newline()
+                        except errors.FloodWaitError as exc:
+                            printer.ensure_newline()
+                            self.stdout.write(
+                                self.style.WARNING(f"Flood wait while fetching replies for {reply_ch}: {exc}")
+                            )
+                            if not settings.IGNORE_FLOODWAIT:
+                                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                        except Exception as exc:
+                            printer.ensure_newline()
+                            self.stdout.write(self.style.WARNING(f"Error fetching replies for {reply_ch}: {exc}"))
+                            logger.exception("fetch_channel_replies failed for %s", reply_ch)
+                    self.stdout.write(f"Replies: {total_replies} records upserted.")
 
                 media_handler.clean_leftovers()
             # The TelegramClient context manager has now exited and the connection

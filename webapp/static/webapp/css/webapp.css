@@ -715,6 +715,101 @@ body {
   opacity: .85;
 }
 
+/* ---------- Replies button ---------- */
+.post-replies-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  height: 28px;
+  padding: 0 .5rem;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: .72rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.post-replies-btn:hover,
+.post-replies-btn[aria-expanded="true"] {
+  background: var(--hover);
+  border-color: #aaa;
+  color: var(--text);
+}
+
+.post-replies-count { font-variant-numeric: tabular-nums; }
+
+/* ---------- Replies panel ---------- */
+.post-replies-panel {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.post-replies-inner { padding: .5rem .875rem; }
+
+.post-replies-spinner { padding: .375rem 0; }
+
+.post-replies-list {
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+  margin: 0;
+}
+
+.post-reply-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .375rem .625rem;
+  background: var(--bg);
+}
+
+.post-reply-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .15rem;
+}
+
+.post-reply-sender {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.post-reply-date {
+  font-size: .67rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.post-reply-views {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  font-size: .67rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  margin-left: auto;
+}
+
+.post-reply-body {
+  font-size: .78rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.post-replies-hint {
+  font-size: .75rem;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+}
+
 /* ---------- Search ---------- */
 .search-header { max-width: 52rem; margin-left: auto; margin-right: auto; margin-bottom: 1.25rem; }
 

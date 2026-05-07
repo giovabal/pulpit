@@ -1,6 +1,12 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
+/plan
+I want to store replies to messages too and then visualize them (as a dropdown to each message, loaded via API on request)
+
+/plan
+There is a way to read and store polls in messages and their results?
+
 - Screenshots missing
 -- Crawl channels panel open (13)
 -- Search channels panel open (new, instead of 13)
