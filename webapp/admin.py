@@ -3,7 +3,17 @@ from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpRequest
 from django.utils.html import format_html
 
-from .models import Channel, ChannelGroup, Message, MessagePicture, Organization, ProfilePicture, SearchTerm
+from .models import (
+    Channel,
+    ChannelGroup,
+    Message,
+    MessagePicture,
+    Organization,
+    Poll,
+    PollAnswer,
+    ProfilePicture,
+    SearchTerm,
+)
 
 
 @admin.register(Channel)
@@ -110,3 +120,18 @@ class ChannelGroupAdmin(admin.ModelAdmin):
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("name", "color", "is_interesting")
     list_editable = ["color", "is_interesting"]
+
+
+class PollAnswerInline(admin.TabularInline):
+    model = PollAnswer
+    extra = 0
+    readonly_fields = ("option", "text", "voters", "correct")
+
+
+@admin.register(Poll)
+class PollAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "question", "quiz", "closed", "total_voters", "close_date")
+    list_filter = ("quiz", "closed")
+    search_fields = ("question",)
+    inlines = [PollAnswerInline]
+    raw_id_fields = ("message",)

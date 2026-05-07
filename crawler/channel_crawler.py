@@ -12,7 +12,16 @@ from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel, Message, MessagePicture, MessageReaction, MessageReply, MessageVideo
+from webapp.models import (
+    Channel,
+    Message,
+    MessagePicture,
+    MessageReaction,
+    MessageReply,
+    MessageVideo,
+    Poll,
+    PollAnswer,
+)
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
@@ -43,6 +52,39 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
         to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
     if to_create:
         MessageReaction.objects.bulk_create(to_create)
+
+
+def _save_poll(message_pk: int, telegram_message: Any) -> None:
+    media = telegram_message.media
+    if not hasattr(media, "poll"):
+        return
+    tg_poll = media.poll
+    tg_results = getattr(media, "results", None)
+    poll, _ = Poll.objects.update_or_create(
+        message_id=message_pk,
+        defaults={
+            "poll_id": tg_poll.id,
+            "question": tg_poll.question.text,
+            "closed": bool(tg_poll.closed),
+            "public_voters": bool(tg_poll.public_voters),
+            "multiple_choice": bool(tg_poll.multiple_choice),
+            "quiz": bool(tg_poll.quiz),
+            "close_date": getattr(tg_poll, "close_date", None),
+            "total_voters": getattr(tg_results, "total_voters", None),
+            "solution": getattr(tg_results, "solution", None) or "",
+        },
+    )
+    result_map: dict[bytes, tuple[int, bool | None]] = {}
+    for r in getattr(tg_results, "results", None) or []:
+        result_map[bytes(r.option)] = (r.voters, getattr(r, "correct", None))
+    for answer in tg_poll.answers:
+        option_bytes = bytes(answer.option)
+        voters, correct = result_map.get(option_bytes, (0, None))
+        PollAnswer.objects.update_or_create(
+            poll=poll,
+            option=option_bytes,
+            defaults={"text": answer.text.text, "voters": voters, "correct": correct},
+        )
 
 
 class ChannelCrawler:
@@ -379,6 +421,8 @@ class ChannelCrawler:
                     message.media_type = "audio"
                 else:
                     message.media_type = "document"
+            elif hasattr(telegram_message.media, "poll"):
+                message.media_type = "poll"
             if hasattr(telegram_message.media, "webpage"):
                 message.webpage_url = (
                     telegram_message.media.webpage.url if hasattr(telegram_message.media.webpage, "url") else ""
@@ -404,6 +448,7 @@ class ChannelCrawler:
 
         message.save()
         _save_reactions(message.pk, telegram_message)
+        _save_poll(message.pk, telegram_message)
         return downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:
@@ -533,6 +578,8 @@ class ChannelCrawler:
             }
             if telegram_message.pinned:
                 update_kwargs["has_been_pinned"] = True
+            if media and hasattr(media, "poll"):
+                update_kwargs["media_type"] = "poll"
             rows = Message.objects.filter(
                 channel=channel,
                 telegram_id=telegram_message.id,
@@ -546,6 +593,7 @@ class ChannelCrawler:
                 )
                 if msg_pk is not None:
                     _save_reactions(msg_pk, telegram_message)
+                    _save_poll(msg_pk, telegram_message)
                 if telegram_message.media:
                     if (
                         hasattr(telegram_message.media, "photo")
