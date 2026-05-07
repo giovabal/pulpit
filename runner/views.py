@@ -247,31 +247,45 @@ def _build_args(task: str, post: Any) -> list[str]:
     args: list[str] = []
 
     if task == "crawl_channels":
-        if post.get("get_new_messages"):
-            args.append("--get-new-messages")
-        if post.get("fix_holes"):
-            args.append("--fixholes")
-        if post.get("retry_lost_and_private"):
-            args.append("--retry-lost-and-private")
-        if post.get("fetch_recommended_channels"):
-            args.append("--fetch-recommended-channels")
-        if post.get("retry_references"):
-            args.append("--retry-references")
-        if post.get("force_retry_unresolved_references"):
-            args.append("--force-retry-unresolved-references")
+        # Channels
+        if post.get("get_channels_info"):
+            args.append("--get-channels-info")
         if post.get("mine_about_texts"):
             args.append("--mine-about-texts")
-        if post.get("refresh_degrees"):
-            args.append("--refresh-degrees")
-        if post.get("fix_missing_media"):
-            args.append("--fix-missing-media")
+        if post.get("fetch_recommended_channels"):
+            args.append("--fetch-recommended-channels")
+        if post.get("retry_lost_and_private"):
+            args.append("--retry-lost-and-private")
+        # Messages
+        if post.get("get_new_messages"):
+            args.append("--get-new-messages")
         if post.get("fetch_replies"):
             args.append("--fetch-replies")
         if post.get("do_refresh"):
             args.append("--refresh-messages-stats")
-            val = post.get("refresh_value", "").strip()
-            if val:
-                args.append(val)
+        refresh_limit = post.get("refresh_limit", "").strip()
+        if refresh_limit:
+            args += ["--refresh-limit", refresh_limit]
+        refresh_from = post.get("refresh_from", "").strip()
+        if refresh_from:
+            args += ["--refresh-from", refresh_from]
+        refresh_to = post.get("refresh_to", "").strip()
+        if refresh_to:
+            args += ["--refresh-to", refresh_to]
+        if post.get("fix_holes"):
+            args.append("--fixholes")
+        if post.get("fix_missing_media"):
+            args.append("--fix-missing-media")
+        if post.get("retry_references"):
+            args.append("--retry-references")
+        if post.get("force_retry_unresolved_references"):
+            args.append("--force-retry-unresolved-references")
+        # Degrees
+        if post.get("in_degrees"):
+            args.append("--in-degrees")
+        if post.get("out_degrees"):
+            args.append("--out-degrees")
+        # Scope
         ids = post.get("ids", "").strip()
         if ids:
             args += ["--ids", ids]

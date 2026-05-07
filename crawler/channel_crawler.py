@@ -248,13 +248,12 @@ class ChannelCrawler:
             return None, None
         # ChannelPrivateError propagates so resolve_channel_or_classify() can distinguish it from "not found"
 
-    def get_channel(
+    def refresh_channel_info(
         self,
         seed: int | str,
         status_callback: Callable[[str], None] | None = None,
-        fix_holes: bool = False,
-    ) -> int:
-        """Crawl a channel and return the pre-crawl max telegram_id (0 if none existed)."""
+    ) -> str:
+        """Fetch and persist channel metadata (profile picture + full details). Returns the status string."""
 
         def update_status(message: str) -> None:
             if status_callback:
@@ -264,23 +263,74 @@ class ChannelCrawler:
         if status == "private":
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
             update_status(f"[telegram_id={seed}] | skipped (channel is private)")
-            return 0
+            return status
         if status == "lost":
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True, is_private=False)
             update_status(f"[telegram_id={seed}] | skipped (channel not found)")
-            return 0
+            return status
         if status == "user_account":
             logger.info("Seed is a user account not resolvable by username: %s", seed)
             Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True, is_lost=False)
             update_status(f"[telegram_id={seed}] | skipped (user account)")
-            return 0
+            return status
 
         channel_label = f"[id={channel.id}] {channel}"
         update_status(f"{channel_label} | fetching profile pictures")
-        image_count = self.media_handler.download_profile_picture(telegram_channel)
-
+        self.media_handler.download_profile_picture(telegram_channel)
         update_status(f"{channel_label} | fetching channel details")
         self.set_more_channel_details(channel, telegram_channel)
+        update_status(f"{channel_label} | channel info updated")
+        return "ok"
+
+    def get_channel(
+        self,
+        seed: int | str,
+        status_callback: Callable[[str], None] | None = None,
+        fix_holes: bool = False,
+        update_info: bool = True,
+    ) -> int:
+        """Crawl a channel and return the pre-crawl max telegram_id (0 if none existed).
+
+        When ``update_info=False`` the channel metadata (profile picture, full details,
+        and lost/private flags) is never written — only messages are fetched.
+        """
+
+        def update_status(message: str) -> None:
+            if status_callback:
+                status_callback(message)
+
+        channel, telegram_channel, status = self.resolve_channel_or_classify(seed)
+        if status == "private":
+            if update_info:
+                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_private=True, is_lost=False)
+            else:
+                logger.warning("Channel %s is private; skipping message fetch", seed)
+            update_status(f"[telegram_id={seed}] | skipped (channel is private)")
+            return 0
+        if status == "lost":
+            if update_info:
+                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_lost=True, is_private=False)
+            else:
+                logger.warning("Channel %s not found; skipping message fetch", seed)
+            update_status(f"[telegram_id={seed}] | skipped (channel not found)")
+            return 0
+        if status == "user_account":
+            logger.info("Seed is a user account not resolvable by username: %s", seed)
+            if update_info:
+                Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                    is_user_account=True, is_lost=False
+                )
+            update_status(f"[telegram_id={seed}] | skipped (user account)")
+            return 0
+
+        channel_label = f"[id={channel.id}] {channel}"
+        if update_info:
+            update_status(f"{channel_label} | fetching profile pictures")
+            image_count = self.media_handler.download_profile_picture(telegram_channel)
+            update_status(f"{channel_label} | fetching channel details")
+            self.set_more_channel_details(channel, telegram_channel)
+        else:
+            image_count = 0
 
         id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
         last_known_id = id_agg["max_id"] or 0
@@ -505,19 +555,17 @@ class ChannelCrawler:
         telegram_channel: Any,
         limit: int | None = None,
         min_date: datetime.date | None = None,
+        max_date: datetime.date | None = None,
         max_telegram_id: int | None = None,
         status_callback: Callable[[str], None] | None = None,
     ) -> int:
         """Re-fetch messages and update views/forwards/pinned in place.
 
-        ``limit=None`` and ``min_date=None`` refreshes all stored messages.
-        ``limit=N`` restricts the refresh to the N most recent messages.
-        ``min_date`` refreshes all messages whose date is on or after that date;
-        iteration stops as soon as an older message is encountered.
-        ``max_telegram_id``, when set, skips messages whose telegram id is above
-        this value — used to exclude messages freshly stored in the same crawl run.
-        ``_updated`` is explicitly stamped because QuerySet.update() bypasses
-        the auto_now behaviour of that field.
+        ``limit`` restricts to the N most recent messages **within the date window**.
+        ``min_date`` / ``max_date`` define the inclusive date window; iteration stops
+        as soon as a message older than ``min_date`` is found.
+        ``max_telegram_id``, when set, excludes messages freshly stored in the same run.
+        ``_updated`` is explicitly stamped because QuerySet.update() bypasses auto_now.
         """
 
         def update_status(message: str) -> None:
@@ -526,25 +574,41 @@ class ChannelCrawler:
 
         Channel.objects.filter(pk=channel.pk).update(is_lost=False, is_private=False)
         now = timezone.now()
-        # Convert date to a timezone-aware datetime for comparison with message dates.
-        cutoff: datetime.datetime | None = (
+        from_cutoff: datetime.datetime | None = (
             datetime.datetime(min_date.year, min_date.month, min_date.day, tzinfo=datetime.timezone.utc)
             if min_date is not None
             else None
         )
-        # When max_telegram_id is set, pass it as max_id to iter_messages so that newly-crawled
-        # messages don't consume the limit before we reach the messages we actually want to refresh.
-        # Telethon's max_id is exclusive (id < max_id), so add 1 to include max_telegram_id itself.
-        iter_max_id = (max_telegram_id + 1) if (max_telegram_id is not None and max_telegram_id > 0) else 0
+        to_cutoff: datetime.datetime | None = (
+            datetime.datetime(max_date.year, max_date.month, max_date.day + 1, tzinfo=datetime.timezone.utc)
+            if max_date is not None
+            else None
+        )
+        # Compute iter_max_id: the most restrictive upper bound across pre-crawl max and max_date.
+        # Telethon's max_id is exclusive (fetches id < max_id), so add 1 to each candidate.
+        id_bounds: list[int] = []
+        if max_telegram_id is not None and max_telegram_id > 0:
+            id_bounds.append(max_telegram_id + 1)
+        if to_cutoff is not None:
+            to_max = Message.objects.filter(channel=channel, date__lt=to_cutoff).aggregate(Max("telegram_id"))[
+                "telegram_id__max"
+            ]
+            if to_max is None:
+                return 0  # no stored messages before to_cutoff
+            id_bounds.append(to_max + 1)
+        iter_max_id = min(id_bounds) if id_bounds else 0
+        processed = 0
         updated = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
-            limit=limit,
+            limit=None,
             wait_time=self.api_client.wait_time,
             max_id=iter_max_id,
         ):
-            if cutoff is not None and telegram_message.date is not None and telegram_message.date < cutoff:
+            if from_cutoff is not None and telegram_message.date is not None and telegram_message.date < from_cutoff:
                 break
+            if to_cutoff is not None and telegram_message.date is not None and telegram_message.date >= to_cutoff:
+                continue
             if (
                 channel.uninteresting_after
                 and telegram_message.date is not None
@@ -554,6 +618,9 @@ class ChannelCrawler:
             if isinstance(telegram_message, MessageService):
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
                 continue
+            processed += 1
+            if limit is not None and processed > limit:
+                break
             replies_obj = getattr(telegram_message, "replies", None)
             media = telegram_message.media
             webpage = getattr(media, "webpage", None) if media else None

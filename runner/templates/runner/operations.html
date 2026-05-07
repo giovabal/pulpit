@@ -94,131 +94,159 @@
 
           {% elif task.name == "crawl_channels" %}
           <div class="ops-fieldset-row">
-          <fieldset class="ops-fieldset">
-            <legend>Crawl</legend>
-            <div class="ops-flags ops-flags--pipeline">
-              <label class="ops-flag">
-                <span class="ops-flag-step">1</span>
-                <input type="checkbox" name="get_new_messages" checked>Get new messages
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Fetch new messages for each interesting channel. Uncheck to skip message crawling and only run post-processing steps (reference resolution, about-text mining, etc.)."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">2</span>
-                <input type="checkbox" name="fix_holes">Fix message holes
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Slower but ensures complete history."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">3</span>
-                <input type="checkbox" name="retry_references">Retry unresolved references
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="After crawling, retry all pending t.me/ references that could not be resolved in a previous run. Without this, the reference-resolution step is skipped entirely."></i>
-                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Force-retry dead references"></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">4</span>
-                <input type="checkbox" name="force_retry_unresolved_references" data-requires-flag="retry_references">Force-retry dead references
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="When retrying references, also re-attempt those already marked as permanently unresolvable (e.g. deleted channels). Only applies when Retry unresolved references is enabled."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">5</span>
-                <input type="checkbox" name="do_refresh">Refresh message stats
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Re-fetch view counts, forward counts, and pinned status for already-stored messages. Use Refresh limit to restrict how many messages are updated per channel."></i>
-                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Refresh limit"></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">6</span>
-                <input type="checkbox" name="mine_about_texts">Mine about texts
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Scan the 'about' field of all channels in the database for t.me/ links and fetch any referenced channels not yet in the database. Zero extra API calls for already-known channels."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">7</span>
-                <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="After crawling, fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">8</span>
-                <input type="checkbox" name="fix_missing_media">Fix missing media
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="After crawling, find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
-              </label>
-              <label class="ops-flag">
-                <span class="ops-flag-step">9</span>
-                <input type="checkbox" name="refresh_degrees">Refresh degrees<span class="ops-global-badge">all channels</span>
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Recompute and store in-degree and out-degree for all interesting channels, and citation degree for non-interesting channels forwarded or mentioned by interesting ones. Runs last so degrees reflect any channels added by earlier steps. DB id filter is ignored: degrees must reflect the full network topology to be meaningful."></i>
-              </label>
+            <div class="ops-fieldset-col">
+
+              <fieldset class="ops-fieldset">
+                <legend>Channels</legend>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="get_channels_info" checked>Get channels info
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Update profile pictures and full channel details (subscribers, about text, linked group, etc.) for each channel. Does not fetch messages."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="mine_about_texts">Mine about texts
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Scan the about field of all channels for t.me/ links and fetch any referenced channels not yet in the database."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="fetch_recommended_channels">Fetch recommended channels
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="retry_lost_and_private">Retry lost &amp; private
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Include channels marked as lost or private in the scope. Each is checked at its turn: if now accessible its flag is cleared; if still inaccessible its flag is updated and it is skipped."></i>
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset class="ops-fieldset">
+                <legend>Messages</legend>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="get_new_messages" checked>Get new messages
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Fetch messages published since the last crawl for each interesting channel."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="fetch_replies">Fetch replies
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Fetch reply messages from linked discussion groups. When Get new messages is on, fetches replies for newly crawled posts. When Refresh message stats is on, fetches replies for already-stored posts."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="do_refresh">Refresh message stats
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Re-fetch view counts, forward counts, pinned status, and reactions for already-stored messages. Use the date and quantity fields below to restrict which messages are refreshed."></i>
+                    <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: limit, from date, to date"></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="fix_holes">Fix message holes
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Can run independently of Get new messages."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="fix_missing_media">Fix missing media
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="retry_references">Retry unresolved references
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Retry all pending t.me/ references that could not be resolved in a previous run."></i>
+                    <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Force-retry dead references"></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="force_retry_unresolved_references" data-requires-flag="retry_references">Force-retry dead references
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="When retrying references, also re-attempt those already marked as permanently unresolvable. Only applies when Retry unresolved references is enabled."></i>
+                  </label>
+                </div>
+                <div class="ops-params mt-2">
+                  <div class="ops-param">
+                    <label for="refresh_limit">Limit
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Refresh at most N messages per channel within the date window. Leave blank to refresh all messages in the window."></i>
+                    </label>
+                    <input type="number" name="refresh_limit" id="refresh_limit" placeholder="–" min="1" data-width="sm" data-requires-flag="do_refresh">
+                  </div>
+                  <div class="ops-param">
+                    <label for="refresh_from">From date
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Only refresh messages on or after this date (YYYY-MM-DD)."></i>
+                    </label>
+                    <input type="text" name="refresh_from" id="refresh_from" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="do_refresh">
+                  </div>
+                  <div class="ops-param">
+                    <label for="refresh_to">To date
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Only refresh messages on or before this date (YYYY-MM-DD)."></i>
+                    </label>
+                    <input type="text" name="refresh_to" id="refresh_to" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="do_refresh">
+                  </div>
+                </div>
+              </fieldset>
+
+              <fieldset class="ops-fieldset">
+                <legend>Refresh degrees</legend>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="in_degrees" checked>In target channels
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Recompute in-degree and out-degree for all interesting channels."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="out_degrees" checked>Out of target channels
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Recompute citation degree for non-interesting channels forwarded or mentioned by interesting ones. Does not open a Telegram connection."></i>
+                  </label>
+                </div>
+              </fieldset>
+
             </div>
-          </fieldset>
-          <div class="ops-fieldset-col">
-            <fieldset class="ops-fieldset">
-              <legend>Channel types
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Which Telegram entity types to crawl."></i>
-              </legend>
-              <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
-                <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
-              </div>
-            </fieldset>
-            {% if channel_groups %}
-            <fieldset class="ops-fieldset">
-              <legend>Channel groups
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Restrict crawling to channels that belong to at least one of the selected groups. Leave all unchecked to crawl all interesting channels."></i>
-              </legend>
-              <div class="ops-flags">
-                {% for group in channel_groups %}
-                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
-                {% endfor %}
-              </div>
-            </fieldset>
-            {% endif %}
-          </div>
-          </div>
-          <div class="ops-fieldset-row">
-            <fieldset class="ops-fieldset">
-              <legend>Stats refresh</legend>
-              <div class="ops-params">
-                <div class="ops-param">
-                  <label for="refresh_value">Refresh limit
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Restrict stat refresh to the N most recent messages (e.g. 200), or to all messages from a date onward (e.g. 2024-01-01). Leave blank to refresh all messages. Only applies when step 5 (Refresh message stats) is checked."></i>
-                  </label>
-                  <input type="text" name="refresh_value" id="refresh_value" placeholder="e.g. 200 or 2025-01-01" data-width="md" data-requires-flag="do_refresh">
+            <div class="ops-fieldset-col">
+
+              <fieldset class="ops-fieldset">
+                <legend>Scope</legend>
+                <div class="ops-params">
+                  <div class="ops-param">
+                    <label for="ids">DB id filter
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Comma-separated IDs and ranges, e.g. &quot;-30, 50-80, 99, 120-&quot;. -N = up to N; N- = from N upward; N-M = inclusive range. Tokens are OR-ed. Leave blank for all channels."></i>
+                    </label>
+                    <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
+                  </div>
                 </div>
-              </div>
-            </fieldset>
-            <fieldset class="ops-fieldset">
-              <legend>Scope</legend>
-              <div class="ops-params">
-                <div class="ops-param">
-                  <label for="ids">DB id filter
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Comma-separated IDs and ranges, e.g. &quot;-30, 50-80, 99, 120-&quot;. -N = up to N; N- = from N upward; N-M = inclusive range. Tokens are OR-ed. Leave blank for all channels."></i>
-                  </label>
-                  <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
+              </fieldset>
+
+              <fieldset class="ops-fieldset">
+                <legend>Channel types
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Which Telegram entity types to include."></i>
+                </legend>
+                <div class="ops-flags">
+                  <label class="ops-flag"><input type="checkbox" name="channel_type_channel" value="1" {% if "CHANNEL" in default_channel_types %}checked{% endif %}>Channel</label>
+                  <label class="ops-flag"><input type="checkbox" name="channel_type_group" value="1" {% if "GROUP" in default_channel_types %}checked{% endif %}>Group</label>
+                  <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
                 </div>
-              </div>
-              <div class="ops-flags mt-2">
-                <label class="ops-flag">
-                  <input type="checkbox" name="retry_lost_and_private">Retry lost &amp; private
+              </fieldset>
+
+              {% if channel_groups %}
+              <fieldset class="ops-fieldset">
+                <legend>Channel groups
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Include channels marked as lost or private in the crawl scope. Each is checked at its turn: if now accessible its flag is cleared and it is processed like any other channel; if still inaccessible its flag is updated and it is skipped."></i>
-                </label>
-                <label class="ops-flag">
-                  <input type="checkbox" name="fetch_replies" checked>Fetch replies
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Fetch reply messages from linked discussion groups. When Get new messages is on, fetches replies for newly crawled posts. When Refresh message stats is on, fetches replies for already-stored posts. Requires linked_chat_id to be set on the channel."></i>
-                </label>
-              </div>
-            </fieldset>
+                     title="Restrict to channels belonging to at least one of the selected groups. Leave all unchecked for all channels."></i>
+                </legend>
+                <div class="ops-flags">
+                  {% for group in channel_groups %}
+                  <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
+                  {% endfor %}
+                </div>
+              </fieldset>
+              {% endif %}
+
+            </div>
           </div>
 
           {% elif task.name == "structural_analysis" %}
