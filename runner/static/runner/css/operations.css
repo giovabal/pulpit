@@ -116,6 +116,17 @@
   flex: 1;
   margin-bottom: 0;
 }
+
+.ops-fieldset-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: .5rem;
+  min-width: 0;
+}
+.ops-fieldset-col > .ops-fieldset {
+  margin-bottom: 0;
+}
 .ops-fieldset legend {
   font-size: .7rem;
   font-weight: 600;

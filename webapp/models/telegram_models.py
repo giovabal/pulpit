@@ -310,3 +310,22 @@ class MessageReaction(models.Model):
 
     def __str__(self) -> str:
         return f"{self.emoji} ×{self.count} on message {self.message_id}"
+
+
+class MessageReply(models.Model):
+    """An individual reply to a channel post, fetched from the linked discussion group."""
+
+    parent_message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="reply_set")
+    telegram_id = models.BigIntegerField()
+    date = models.DateTimeField(null=True)
+    text = models.TextField(blank=True)
+    sender_name = models.CharField(max_length=255, blank=True)
+    sender_id = models.BigIntegerField(null=True)
+    views = models.PositiveBigIntegerField(null=True)
+
+    class Meta:
+        unique_together = [("parent_message", "telegram_id")]
+        ordering = ["date"]
+
+    def __str__(self) -> str:
+        return f"Reply {self.telegram_id} to message {self.parent_message_id}"

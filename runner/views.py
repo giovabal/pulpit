@@ -265,6 +265,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--refresh-degrees")
         if post.get("fix_missing_media"):
             args.append("--fix-missing-media")
+        if post.get("fetch_replies"):
+            args.append("--fetch-replies")
         if post.get("do_refresh"):
             args.append("--refresh-messages-stats")
             val = post.get("refresh_value", "").strip()

@@ -12,7 +12,7 @@ from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel, Message, MessagePicture, MessageReaction, MessageVideo
+from webapp.models import Channel, Message, MessagePicture, MessageReaction, MessageReply, MessageVideo
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
@@ -600,6 +600,81 @@ class ChannelCrawler:
                     Channel.from_telegram_object(channel, force_update=True)
                     new_count += 1
         return results_count, new_count
+
+    def fetch_channel_replies(
+        self,
+        channel: Channel,
+        status_callback: Callable[[str], None] | None = None,
+    ) -> int:
+        """Fetch and upsert reply messages for all posts in *channel* with replies > 0.
+
+        Replies live in the linked discussion group (channel.linked_chat_id). Returns the
+        number of MessageReply records created or updated.
+        """
+        if not channel.linked_chat_id:
+            return 0
+
+        self.api_client.wait()
+        try:
+            linked_entity = self.api_client.client.get_entity(channel.linked_chat_id)
+        except errors.rpcerrorlist.ChannelPrivateError:
+            logger.warning("Linked group %s for %s is private; skipping replies.", channel.linked_chat_id, channel)
+            return 0
+        except errors.FloodWaitError:
+            raise
+        except Exception as exc:
+            logger.warning("Could not resolve linked group %s for %s: %s", channel.linked_chat_id, channel, exc)
+            return 0
+
+        parent_messages = list(Message.objects.filter(channel=channel, replies__gt=0).values_list("pk", "telegram_id"))
+        if not parent_messages:
+            return 0
+
+        total_upserted = 0
+        for msg_pk, msg_telegram_id in parent_messages:
+            if status_callback:
+                status_callback(f"[id={channel.id}] {channel} | replies for post #{msg_telegram_id}")
+            self.api_client.wait()
+            try:
+                to_upsert: list[MessageReply] = []
+                for tg_reply in self.api_client.client.iter_messages(linked_entity, reply_to=msg_telegram_id):
+                    if isinstance(tg_reply, MessageService):
+                        continue
+                    sender_name = ""
+                    if getattr(tg_reply, "post_author", None):
+                        sender_name = tg_reply.post_author
+                    elif tg_reply.sender:
+                        first = getattr(tg_reply.sender, "first_name", "") or ""
+                        last = getattr(tg_reply.sender, "last_name", "") or ""
+                        uname = getattr(tg_reply.sender, "username", "") or ""
+                        sender_name = f"{first} {last}".strip() or uname
+                    to_upsert.append(
+                        MessageReply(
+                            parent_message_id=msg_pk,
+                            telegram_id=tg_reply.id,
+                            date=tg_reply.date,
+                            text=tg_reply.message or "",
+                            sender_name=sender_name[:255],
+                            sender_id=tg_reply.sender_id,
+                            views=getattr(tg_reply, "views", None),
+                        )
+                    )
+                if to_upsert:
+                    MessageReply.objects.bulk_create(
+                        to_upsert,
+                        update_conflicts=True,
+                        unique_fields=["parent_message", "telegram_id"],
+                        update_fields=["date", "text", "sender_name", "sender_id", "views"],
+                    )
+                    total_upserted += len(to_upsert)
+            except errors.FloodWaitError:
+                raise
+            except errors.rpcerrorlist.ChannelPrivateError:
+                logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
+            except Exception as exc:
+                logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
+
+        return total_upserted
 
     def get_missing_references(self, status_callback=None, force_retry: bool = False, channel_qs=None) -> None:
         self.reference_resolver.get_missing_references(
