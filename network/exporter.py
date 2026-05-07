@@ -265,8 +265,8 @@ def write_csv(
             source_label = label_by_id.get(str(edge[0]), str(edge[0]))
             target_label = label_by_id.get(str(edge[1]), str(edge[1]))
             weight = edge[2]
-            weight_forwards = edge[3] if len(edge) > 3 else ""
-            weight_mentions = edge[4] if len(edge) > 4 else ""
+            weight_forwards = edge[3]
+            weight_mentions = edge[4]
             writer.writerow([source_label, target_label, weight, weight_forwards, weight_mentions])
 
 
