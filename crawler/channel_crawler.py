@@ -298,8 +298,10 @@ class ChannelCrawler:
             limit=remaining_limit,
             reverse=True,
         ):
-            batch_count += 1
-            image_count += self.get_message(channel, telegram_message)
+            stored, imgs = self.get_message(channel, telegram_message)
+            image_count += imgs
+            if stored:
+                batch_count += 1
             update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
         message_count += batch_count
@@ -324,8 +326,10 @@ class ChannelCrawler:
             for telegram_message in self.api_client.client.iter_messages(
                 telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time, limit=remaining_limit
             ):
-                batch_count += 1
-                image_count += self.get_message(channel, telegram_message)
+                stored, imgs = self.get_message(channel, telegram_message)
+                image_count += imgs
+                if stored:
+                    batch_count += 1
                 update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
         message_count += batch_count
@@ -365,15 +369,16 @@ class ChannelCrawler:
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
         return last_known_id
 
-    def get_message(self, channel: Channel, telegram_message: Any) -> int:
+    def get_message(self, channel: Channel, telegram_message: Any) -> tuple[bool, int]:
+        """Store *telegram_message* and return ``(stored, downloaded_images)``."""
         if isinstance(telegram_message, MessageService):
-            return 0
+            return False, 0
         if (
             channel.uninteresting_after
             and telegram_message.date
             and telegram_message.date.date() > channel.uninteresting_after
         ):
-            return 0
+            return False, 0
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
 
@@ -447,7 +452,7 @@ class ChannelCrawler:
         message.save()
         _save_reactions(message.pk, telegram_message)
         _save_poll(message.pk, telegram_message)
-        return downloaded_images
+        return True, downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:
         """Resolve forwarded-channel entity lookups deferred during get_message().
@@ -711,6 +716,8 @@ class ChannelCrawler:
                 raise
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
+            except errors.rpcerrorlist.MessageIdInvalidError:
+                logger.debug("MessageIdInvalid for post %s in %s; skipping", msg_telegram_id, channel)
             except Exception as exc:
                 logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
 
