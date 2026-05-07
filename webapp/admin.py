@@ -58,7 +58,7 @@ class ChannelAdmin(admin.ModelAdmin):
     @admin.display(description="Img")
     def thumb(self, obj: Channel) -> str:
         pic = next(iter(obj.profilepicture_set.all()), None)
-        src = pic.picture.url if pic else ""
+        src = pic.picture.url if (pic and pic.picture) else ""
         if not src:
             return ""
         return format_html("<img width='60' src='{}'>", src)
@@ -93,7 +93,7 @@ class MessageAdmin(admin.ModelAdmin):
     @admin.display(description="Img")
     def thumb(self, obj: Message) -> str:
         pic = next(iter(obj.messagepicture_set.all()), None)
-        src = pic.picture.url if pic else ""
+        src = pic.picture.url if (pic and pic.picture) else ""
         if not src:
             return ""
         return format_html("<img width='60' src='{}'>", src)

@@ -133,13 +133,11 @@ class ChannelViewSet(
                 org = Organization.objects.filter(pk=organization_id).first() if organization_id else None
                 channels.update(organization=org)
             if add_group_ids:
-                add_groups = ChannelGroup.objects.filter(pk__in=add_group_ids)
-                for ch in channels:
-                    ch.groups.add(*add_groups)
+                for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
+                    grp.channel_set.add(*channels)
             if remove_group_ids:
-                remove_groups = ChannelGroup.objects.filter(pk__in=remove_group_ids)
-                for ch in channels:
-                    ch.groups.remove(*remove_groups)
+                for grp in ChannelGroup.objects.filter(pk__in=remove_group_ids):
+                    grp.channel_set.remove(*channels)
 
         return Response({"updated": channels.count()})
 

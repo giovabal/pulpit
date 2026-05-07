@@ -38,8 +38,8 @@ class ChannelSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
-    organization_name = serializers.CharField(source="organization.name", read_only=True, default=None)
-    organization_color = serializers.CharField(source="organization.color", read_only=True, default=None)
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    organization_color = serializers.CharField(source="organization.color", read_only=True)
     group_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         source="groups",

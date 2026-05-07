@@ -1,25 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
-Reorganize Crawl Channels this way:
-1. Channels
-    - Get channels info
-    - Mine about text
-    - Fetch recommended channels
-    - Retry lost and private
-    [channel db id filter]
-2 Messages
-    - Get new messages
-    - Fetch replies
-    - Refresh message stats
-    - Fix message holes
-    - Fix missing media
-    - Retry unresolved references
-    - Force-retry dead references
-    [channel db id filter]
-    [refresh limit]
-3. Refresh degrees
-
-
 ## [0.18]
 - Screenshots missing
 -- Crawl channels panel open (13)

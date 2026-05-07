@@ -507,7 +507,7 @@ def apply_to_graph(
             detected_community = (
                 build_community_label(community_id, strategy)
                 if strategy in COMMUNITY_ALGORITHMS
-                else org_names[community_id]
+                else org_names.get(community_id, str(community_id))
             )
             node_data.setdefault("communities", {})[strategy_key] = detected_community
             channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community

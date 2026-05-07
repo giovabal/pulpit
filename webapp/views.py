@@ -411,8 +411,9 @@ class ChannelDetailView(ListView):
             .annotate(total=Sum("count"))
             .order_by("-total")[:10]
         )
-        top_reactions = [{"emoji": r["emoji"], "total": f"{r['total']:,}"} for r in top_reactions_qs]
-        total_reactions = sum(int(r["total"].replace(",", "")) for r in top_reactions)
+        top_reactions_raw = list(top_reactions_qs)
+        total_reactions = sum(r["total"] for r in top_reactions_raw)
+        top_reactions = [{"emoji": r["emoji"], "total": f"{r['total']:,}"} for r in top_reactions_raw]
         if total_reactions:
             summary.append({"icon": "bi-emoji-smile", "label": "Total reactions", "value": f"{total_reactions:,}"})
 

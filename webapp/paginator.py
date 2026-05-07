@@ -24,11 +24,12 @@ class SoftPaginator(Paginator):
 
 
 class DiggPaginator(SoftPaginator):
+    def _get_page(self, *args: Any, **kwargs: Any) -> "DiggPage":
+        return DiggPage(*args, **kwargs)
+
     def page(self, number: Any, *args: Any, **kwargs: Any) -> "DiggPage":
         kwargs.update({"softlimit": True})
-        page = super().page(number, *args, **kwargs)
-        page.__class__ = DiggPage
-        return page  # type: ignore[return-value]
+        return super().page(number, *args, **kwargs)  # type: ignore[return-value]
 
 
 class DiggPage(Page):

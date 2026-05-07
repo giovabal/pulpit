@@ -186,16 +186,15 @@ def launch(task: str, args: list[str]) -> None:
             "MPLBACKEND": "Agg",
         }
         cmd = [sys.executable, _MANAGE_PY, task, *args]
-        log_file = open(log_path, "wb")  # subprocess inherits the fd; we close our copy after Popen
-        try:
+        # Open log file, pass the fd to the subprocess, then close our copy immediately
+        # (the subprocess keeps the fd alive via inheritance).
+        with open(log_path, "wb") as log_file:
             proc = subprocess.Popen(
                 [sys.executable, "-c", _WRAPPER_SCRIPT, str(meta_path), *cmd],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 env=env,
             )
-        finally:
-            log_file.close()
 
         meta["pid"] = proc.pid
         meta_path.write_text(json.dumps(meta))
