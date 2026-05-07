@@ -211,7 +211,7 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
         return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
 
 
-class ChannelCrossRefsView(View):
+class ChannelCrossRefsView(_ChannelTimeSeriesBase):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
         interesting_pks = Channel.objects.interesting().values("pk")

@@ -104,7 +104,7 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message picture: %s\n%s", e, telegram_message.__dict__)
+            logger.warning("Error downloading message picture (msg_id=%s): %s", telegram_message.id, e)
         return 0
 
     def download_message_video(self, telegram_message: Any) -> None:
@@ -139,7 +139,7 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message video: %s\n%s", e, telegram_message.__dict__)
+            logger.warning("Error downloading message video (msg_id=%s): %s", telegram_message.id, e)
 
     def clean_leftovers(self) -> None:
         for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):

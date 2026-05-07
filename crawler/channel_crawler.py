@@ -489,7 +489,8 @@ class ChannelCrawler:
                     forwarded_from_private=channel_id,
                     pending_forward_telegram_id=None,
                 )
-            except (AttributeError, ValueError):
+            except (AttributeError, ValueError) as e:
+                logger.warning("Unexpected error resolving pending forward for channel_id=%s: %s", channel_id, e)
                 Message.objects.filter(pending_forward_telegram_id=channel_id).update(
                     forwarded_from_private=0,
                     pending_forward_telegram_id=None,
@@ -580,20 +581,16 @@ class ChannelCrawler:
                 update_kwargs["has_been_pinned"] = True
             if media and hasattr(media, "poll"):
                 update_kwargs["media_type"] = "poll"
-            rows = Message.objects.filter(
-                channel=channel,
-                telegram_id=telegram_message.id,
-            ).update(**update_kwargs)
-            if rows:
+            msg_pk = (
+                Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
+                .values_list("pk", flat=True)
+                .first()
+            )
+            if msg_pk is not None:
+                Message.objects.filter(pk=msg_pk).update(**update_kwargs)
                 updated += 1
-                msg_pk = (
-                    Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                    .values_list("pk", flat=True)
-                    .first()
-                )
-                if msg_pk is not None:
-                    _save_reactions(msg_pk, telegram_message)
-                    _save_poll(msg_pk, telegram_message)
+                _save_reactions(msg_pk, telegram_message)
+                _save_poll(msg_pk, telegram_message)
                 if telegram_message.media:
                     if (
                         hasattr(telegram_message.media, "photo")
@@ -622,7 +619,8 @@ class ChannelCrawler:
             )
         except errors.FloodWaitError:
             raise
-        except Exception:
+        except Exception as e:
+            logger.warning("get_recommended_channels failed for channel_id=%s: %s", channel.telegram_id, e)
             return 0, 0
         total = 0
         new = 0
