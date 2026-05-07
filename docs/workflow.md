@@ -83,15 +83,34 @@ This step can take a while, especially on a first run. The log shows progress ch
 
 ### What the options do (expand Options to see them)
 
-For a first run, the defaults work well. The most useful options are:
+The options panel is organised into three independent groups — each is its own pass over the channels in scope.
+
+**1. Channels** — update channel metadata without touching messages.
 
 | Option | When to use it |
 | :----- | :------------- |
-| **Get new messages** | Always on. This is what actually downloads messages. |
-| **Refresh message stats** | Turn this on periodically to update view counts and forward counts for already-downloaded messages. |
-| **Mine about texts** | Scan channel descriptions for links to other Telegram channels and add any new ones to your database. Useful for discovering channels your search terms missed. |
-| **Fetch recommended channels** | Ask Telegram for its own channel suggestions and add them to the database. Like mine about texts, new channels are saved but not automatically crawled. |
-| **Refresh degrees** | Recalculate how many channels cite each other. Run this after any major data collection to keep these counts up to date. |
+| **Get channels info** | On by default. Updates profile pictures, subscriber counts, about text, and other channel details. |
+| **Mine about texts** | Scan channel descriptions for links to other Telegram channels and add any new ones to your database. |
+| **Fetch recommended channels** | Ask Telegram for its own channel suggestions and add them to the database. New channels are saved but not automatically crawled. |
+| **Retry lost & private** | Re-attempt channels previously marked as inaccessible. If a channel is now reachable its flag is cleared. |
+
+**2. Messages** — download and update message content.
+
+| Option | When to use it |
+| :----- | :------------- |
+| **Get new messages** | On by default. Downloads messages published since the last crawl. |
+| **Fetch replies** | Fetch reply threads from linked discussion groups for posts that have replies. |
+| **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
+| **Fix message holes** | Scan message ID sequences for gaps and fill them in. Can run without *Get new messages*. |
+| **Fix missing media** | Re-download photos and videos that were never saved or are missing from disk. |
+| **Retry unresolved references** | Re-attempt t.me/ links that could not be resolved in a previous run. |
+
+**3. Refresh degrees** — recalculate citation counts (no Telegram connection needed).
+
+| Option | When to use it |
+| :----- | :------------- |
+| **In target channels** | On by default. Recomputes in-degree and out-degree for all interesting channels. |
+| **Out of target channels** | On by default. Recomputes citation degree for non-interesting channels referenced by interesting ones. |
 
 **Limiting the scope:** if you only want to update a few specific channels, enter their IDs in the **DB id filter** field (e.g. `5, 10-20, 50`) before clicking Run. Find a channel's ID in the Manage → Channels list.
 
@@ -178,13 +197,21 @@ python manage.py search_channels
 python manage.py search_channels --amount 15
 python manage.py search_channels --extra-term "keyword"
 
-# Collect messages
-python manage.py crawl_channels --get-new-messages
+# Collect messages — the three independent groups
+python manage.py crawl_channels --get-channels-info           # 1. update channel metadata only
+python manage.py crawl_channels --get-new-messages            # 2. fetch new messages only
+python manage.py crawl_channels --in-degrees --out-degrees    # 3. refresh degrees only (no Telegram connection)
+
+# Combine as needed
+python manage.py crawl_channels --get-channels-info --get-new-messages
 python manage.py crawl_channels --get-new-messages --fixholes
 python manage.py crawl_channels --get-new-messages --retry-references
+python manage.py crawl_channels --get-new-messages --fetch-replies
 python manage.py crawl_channels --mine-about-texts
-python manage.py crawl_channels --refresh-degrees
 python manage.py crawl_channels --fetch-recommended-channels
+python manage.py crawl_channels --refresh-messages-stats
+python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-01 --refresh-to 2024-06-30
+python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
 
 # Generate the map
