@@ -263,6 +263,7 @@ class Message(TelegramBaseModel):
         max_length=32, default="", blank=True
     )  # "photo", "video", "audio", "document", "poll", or ""
     replies = models.PositiveBigIntegerField(null=True)
+    replies_fetched = models.BooleanField(default=False)
     replies_unavailable = models.BooleanField(default=False)
     silent = models.BooleanField(default=False)
     reply_to_msg_id = models.PositiveBigIntegerField(null=True)

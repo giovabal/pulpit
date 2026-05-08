@@ -20,7 +20,9 @@
     if (!data.replies || !data.replies.length) {
       var empty = document.createElement('p');
       empty.className = 'post-replies-hint';
-      empty.textContent = 'No replies stored.';
+      empty.textContent = data.unavailable
+        ? 'Replies are not accessible (Telegram restriction on the linked discussion group).'
+        : 'No replies were found in the discussion group.';
       inner.appendChild(empty);
       return;
     }

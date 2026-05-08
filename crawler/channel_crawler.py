@@ -782,6 +782,7 @@ class ChannelCrawler:
                         update_fields=["date", "text", "sender_name", "sender_id", "views"],
                     )
                     total_upserted += len(to_upsert)
+                Message.objects.filter(pk=msg_pk).update(replies_fetched=True)
             except errors.FloodWaitError:
                 raise
             except errors.rpcerrorlist.ChannelPrivateError:
@@ -795,7 +796,7 @@ class ChannelCrawler:
                         channel,
                         type(exc).__name__,
                     )
-                    Message.objects.filter(pk=msg_pk).update(replies_unavailable=True)
+                    Message.objects.filter(pk=msg_pk).update(replies_unavailable=True, replies_fetched=True)
                 else:
                     logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
 

@@ -726,12 +726,12 @@ class MessageRepliesView(View):
         channel = get_object_or_404(Channel, pk=channel_pk)
         msg = get_object_or_404(Message, channel=channel, telegram_id=telegram_id)
         stored = list(msg.reply_set.values("id", "date", "text", "sender_name", "views"))
-        # fetched=False only when the post has replies but none have been stored yet
-        fetched = bool(stored) or not msg.replies
+        fetched = bool(stored) or not msg.replies or msg.replies_fetched
         return JsonResponse(
             {
                 "count": len(stored),
                 "fetched": fetched,
+                "unavailable": msg.replies_unavailable,
                 "replies": [{**r, "date": r["date"].isoformat() if r["date"] else None} for r in stored],
             }
         )
