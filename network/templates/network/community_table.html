@@ -1,16 +1,18 @@
 {% extends "network/_table_base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Community Statistics</h2>
-  <div class="d-flex gap-2">
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#community-detection-strategies" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Strategies explained</a>
+<div class="export-narrow">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h2 class="mb-0">Community Statistics</h2>
+    <div class="d-flex gap-2">
+      <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+      <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
+      <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+      <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#community-detection-strategies" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Strategies explained</a>
+    </div>
   </div>
+  <div id="timeline-nav" class="mb-2"></div>
 </div>
-<div id="timeline-nav" class="mb-2"></div>
 <div id="community-tables"></div>
 <script type="module" src="js/community_table.js"></script>
 {% endblock %}

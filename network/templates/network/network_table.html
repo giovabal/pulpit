@@ -6,26 +6,27 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Network Statistics</h2>
-  <div class="d-flex gap-2">
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#whole-network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures explained</a>
+<div class="export-narrow">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h2 class="mb-0">Network Statistics</h2>
+    <div class="d-flex gap-2">
+      <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+      <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
+      <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+      <a href="https://github.com/giovabal/pulpit/blob/main/ANALYSIS.md#whole-network-measures" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures explained</a>
+    </div>
   </div>
+  <div id="timeline-nav" class="mb-2"></div>
+  <div id="network-preamble" class="mb-3"></div>
 </div>
-
-<div id="timeline-nav" class="mb-2"></div>
-<div id="network-preamble" class="mb-3"></div>
 <div class="row g-4 mb-4">
   <div class="col-lg-7" id="summary-section"></div>
   <div class="col-lg-5 d-none" id="modularity-section"></div>
 </div>
 <div class="d-none mb-4" id="nmi-section"></div>
-<h4 class="mt-4 mb-3">Degree distribution</h4>
+<div class="export-narrow"><h4 class="mt-4 mb-3">Degree distribution</h4></div>
 <div id="degree-dist-section"></div>
-<h4 class="mt-4 mb-3">Measure comparison</h4>
+<div class="export-narrow"><h4 class="mt-4 mb-3">Measure comparison</h4></div>
 <div id="scatter-section"></div>
 <script type="module" src="js/network_table.js"></script>
 {% endblock %}
