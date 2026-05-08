@@ -237,6 +237,10 @@
         </div>
         <div class="modal-body">
           <form id="options_form">
+            <div class="mb-3" id="layout-select-group" style="display:none">
+              <label for="layout-select" class="form-label">Layout</label>
+              <select id="layout-select" class="form-select"></select>
+            </div>
             <div class="mb-3" id="community-strategy-group" style="display:none">
               <label for="community-strategy-select" class="form-label">Community coloring</label>
               <select id="community-strategy-select" class="form-select"></select>
@@ -250,12 +254,25 @@
               <select id="group-select" class="form-select"></select>
             </div>
             <div class="mb-3">
+              <label for="theme-select" class="form-label">Theme</label>
+              <select id="theme-select" class="form-select">
+                <option value="dark" selected>Dark</option>
+                <option value="light">Light</option>
+                <option value="minimal">Minimal</option>
+                <option value="print">Print</option>
+              </select>
+            </div>
+            <div class="mb-3">
               <label for="labels-select" class="form-label">Labels</label>
               <select id="labels-select" class="form-select">
                 <option value="on_size" selected>On size</option>
                 <option value="always">Always</option>
                 <option value="never">Never</option>
               </select>
+            </div>
+            <div class="mb-3 form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="colored-edges-toggle" checked>
+              <label class="form-check-label" for="colored-edges-toggle">Colored edges</label>
             </div>
           </form>
           <hr>
