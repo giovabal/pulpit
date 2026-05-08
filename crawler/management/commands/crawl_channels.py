@@ -372,8 +372,8 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
                 return
 
+        refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
         try:
-            refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
             crawler.refresh_message_stats(
                 channel,
                 telegram_channel,
@@ -397,6 +397,28 @@ class Command(BaseCommand):
                     f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
                 )
             )
+        except errors.ServerError as error:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Telegram server error refreshing channel {channel.telegram_id}: {error} — retrying in 30s…"
+                )
+            )
+            sleep(30)
+            try:
+                crawler.refresh_message_stats(
+                    channel,
+                    telegram_channel,
+                    limit=refresh_limit,
+                    min_date=refresh_from,
+                    max_date=refresh_to,
+                    max_telegram_id=pre_crawl_max_id,
+                    status_callback=lambda message, ind=refresh_indent: printer.indented(message, ind),
+                )
+            except Exception as retry_error:
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Retry failed for channel {channel.telegram_id}: {retry_error}"))
+                logger.exception("Refresh retry failed for channel %s", channel.telegram_id)
         except Exception as error:
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
