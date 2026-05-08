@@ -279,29 +279,4 @@
 
 {% endif %}
 
-{% if timeline_entries %}
-<div class="export-section-sep"><span><i class="bi bi-calendar-range me-1" aria-hidden="true"></i>Timeline — by year</span></div>
-
-<div class="row g-3">
-  {% for entry in timeline_entries %}
-  <div class="col-sm-6 col-lg-4 col-xl-3">
-    <div class="card h-100">
-      <div class="card-body">
-        <h6 class="card-title fw-bold mb-1">{{ entry.year }}</h6>
-        <p class="card-text text-muted small mb-2">{{ entry.nodes }} channels &middot; {{ entry.edges }} edges</p>
-        <div class="d-flex gap-1 flex-wrap">
-          {% if entry.has_channel_html %}<a href="channel_table_{{ entry.year }}.html" class="btn btn-outline-secondary btn-sm">Channels</a>{% endif %}
-          {% if entry.has_channel_xlsx %}<a href="channel_table_{{ entry.year }}.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i></a>{% endif %}
-          {% if entry.has_network_html %}<a href="network_table_{{ entry.year }}.html" class="btn btn-outline-secondary btn-sm">Network</a>{% endif %}
-          {% if entry.has_network_xlsx %}<a href="network_table_{{ entry.year }}.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i></a>{% endif %}
-          {% if entry.has_community_html %}<a href="community_table_{{ entry.year }}.html" class="btn btn-outline-secondary btn-sm">Communities</a>{% endif %}
-          {% if entry.has_community_xlsx %}<a href="community_table_{{ entry.year }}.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i></a>{% endif %}
-          {% if entry.has_consensus_matrix_html %}<a href="consensus_matrix_{{ entry.year }}.html" class="btn btn-outline-secondary btn-sm">Consensus</a>{% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
 {% endblock %}

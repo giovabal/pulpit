@@ -277,17 +277,6 @@ def _patch_compare_html(content: str) -> str:
     return content
 
 
-def _patch_timeline_html(content: str, year: int) -> str:
-    """Inject a DATA_DIR override for a per-year timeline export."""
-    injection = f'<script>window.DATA_DIR = "data_{year}/";</script>\n'
-    for marker in ('<script src="js/', '<script type="module" src="js/'):
-        idx = content.find(marker)
-        if idx != -1:
-            content = content[:idx] + injection + content[idx:]
-            break
-    return content
-
-
 def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
     """Copy files from a compare graph/ directory into graph/, renaming with _2 suffix.
 

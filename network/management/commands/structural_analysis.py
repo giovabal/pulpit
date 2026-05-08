@@ -10,7 +10,6 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Max, Min
-from django.template.loader import render_to_string
 
 from network import community, community_stats, exporter, graph_builder, layout, measures, tables, vacancy_analysis
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
@@ -681,9 +680,7 @@ class Command(BaseCommand):
         strategies: list[str],
         do_graph: bool,
         do_3dgraph: bool,
-        do_html: bool,
         do_xlsx: bool,
-        do_consensus_matrix: bool,
         channel_types: list[str],
         channel_groups: list[str],
         edge_weight_strategy: str,
@@ -762,7 +759,7 @@ class Command(BaseCommand):
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
-        need_metrics = do_html or do_xlsx or do_consensus_matrix
+        need_metrics = do_xlsx
         community_table_data = None
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -786,7 +783,7 @@ class Command(BaseCommand):
                 total_nodes=n_nodes,
                 total_edges=n_edges,
                 community_distribution_threshold=options["community_distribution_threshold"],
-                has_consensus_matrix=do_consensus_matrix,
+                has_consensus_matrix=False,
             )
             if need_metrics:
                 community_table_data = community_stats.compute_community_metrics(
@@ -817,55 +814,16 @@ class Command(BaseCommand):
                 "description": description,
             }
 
-        has_channel_html = has_channel_xlsx = False
-        has_network_html = has_network_xlsx = False
-        has_community_html = has_community_xlsx = False
-        has_consensus_matrix_html = False
-
-        if do_html:
-            ctx = _mk_ctx(
-                f"Channels ({year})",
-                description=f"Network data for {n_nodes} channels in {year}.",
-            )
-            content = render_to_string("network/channel_table.html", ctx)
-            with open(os.path.join(root_target, f"channel_table_{year}.html"), "w") as fh:
-                fh.write(tables._patch_timeline_html(content, year))
-            has_channel_html = True
-
-            ctx = _mk_ctx(f"Network ({year})")
-            content = render_to_string("network/network_table.html", ctx)
-            with open(os.path.join(root_target, f"network_table_{year}.html"), "w") as fh:
-                fh.write(tables._patch_timeline_html(content, year))
-            has_network_html = True
-
-            ctx = _mk_ctx(f"Communities ({year})")
-            content = render_to_string("network/community_table.html", ctx)
-            with open(os.path.join(root_target, f"community_table_{year}.html"), "w") as fh:
-                fh.write(tables._patch_timeline_html(content, year))
-            has_community_html = True
-
         # Per-year XLSX files are not written individually; data is returned so the
         # caller can assemble a single multi-sheet workbook for each table type.
-
-        if do_consensus_matrix:
-            ctx = _mk_ctx(f"Consensus matrix ({year})")
-            content = render_to_string("network/consensus_matrix.html", ctx)
-            with open(os.path.join(root_target, f"consensus_matrix_{year}.html"), "w") as fh:
-                fh.write(tables._patch_timeline_html(content, year))
-            has_consensus_matrix_html = True
-
         return {
             "year": year,
             "nodes": n_nodes,
             "edges": n_edges,
             "has_graph": True,
-            "has_channel_html": has_channel_html,
-            "has_channel_xlsx": has_channel_xlsx,
-            "has_network_html": has_network_html,
-            "has_network_xlsx": has_network_xlsx,
-            "has_community_html": has_community_html,
-            "has_community_xlsx": has_community_xlsx,
-            "has_consensus_matrix_html": has_consensus_matrix_html,
+            "has_channel_html": True,
+            "has_network_html": True,
+            "has_community_html": True,
             # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
@@ -1190,9 +1148,7 @@ class Command(BaseCommand):
                         strategies,
                         do_graph,
                         do_3dgraph,
-                        do_html,
                         do_xlsx,
-                        do_consensus_matrix,
                         channel_types,
                         channel_groups,
                         edge_weight_strategy,
