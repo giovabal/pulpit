@@ -200,7 +200,7 @@ function build_graph(pos_data, ch_data) {
         if (p.z < min_z) min_z = p.z; if (p.z > max_z) max_z = p.z;
     });
     var dx = max_x - min_x, dy = max_y - min_y, dz = max_z - min_z;
-    _layout_bbox = { cx: (min_x + max_x) / 2, cy: (min_y + max_y) / 2, cz: (min_z + max_z) / 2, w: dx || 1, h: dy || 1 };
+    _layout_bbox = { cx: (min_x + max_x) / 2, cy: (min_y + max_y) / 2, cz: (min_z + max_z) / 2, w: dx || 1, h: dy || 1, d: dz || 1 };
     var diameter = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
     g_size_min        = diameter * SIZE_MIN_FRAC;
     g_size_max        = diameter * SIZE_MAX_FRAC;
@@ -397,21 +397,23 @@ function build_layout_selector() {
 function _rescale_to_fa2(pos_data) {
     if (!_layout_bbox) return pos_data;
     var nodes = pos_data.nodes;
-    var nx0 = Infinity, nx1 = -Infinity, ny0 = Infinity, ny1 = -Infinity;
+    var nx0 = Infinity, nx1 = -Infinity, ny0 = Infinity, ny1 = -Infinity, nz0 = Infinity, nz1 = -Infinity;
     nodes.forEach(function(n) {
         if (n.x < nx0) nx0 = n.x; if (n.x > nx1) nx1 = n.x;
         if (n.y < ny0) ny0 = n.y; if (n.y > ny1) ny1 = n.y;
+        var z = n.z || 0;
+        if (z < nz0) nz0 = z; if (z > nz1) nz1 = z;
     });
-    var src_w = nx1 - nx0 || 1, src_h = ny1 - ny0 || 1;
-    var scale = Math.min(_layout_bbox.w / src_w, _layout_bbox.h / src_h);
-    var src_cx = (nx0 + nx1) / 2, src_cy = (ny0 + ny1) / 2;
+    var src_w = nx1 - nx0 || 1, src_h = ny1 - ny0 || 1, src_d = nz1 - nz0 || 1;
+    var scale = Math.min(_layout_bbox.w / src_w, _layout_bbox.h / src_h, _layout_bbox.d / src_d);
+    var src_cx = (nx0 + nx1) / 2, src_cy = (ny0 + ny1) / 2, src_cz = (nz0 + nz1) / 2;
     return {
         nodes: nodes.map(function(n) {
             return {
                 id: n.id,
                 x: _layout_bbox.cx + (n.x - src_cx) * scale,
                 y: _layout_bbox.cy + (n.y - src_cy) * scale,
-                z: _layout_bbox.cz,
+                z: _layout_bbox.cz + ((n.z || 0) - src_cz) * scale,
             };
         }),
     };

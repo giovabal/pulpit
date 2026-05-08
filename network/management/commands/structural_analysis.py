@@ -126,7 +126,7 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of additional 2D layout algorithms to pre-compute alongside ForceAtlas2. "
                 "The browser graph viewer will offer a dropdown to switch between them at viewing time. "
-                "Available: CIRCULAR, SPECTRAL, SPRING, ALL. Requires --2dgraph."
+                "Available: SPECTRAL, SPRING, ALL. Requires --2dgraph."
             ),
         )
         parser.add_argument(
@@ -737,7 +737,6 @@ class Command(BaseCommand):
         year_extra_positions: dict[str, dict] = {}
         if do_graph and extra_layout_names:
             _extra_layout_funcs = {
-                "CIRCULAR": layout.circular_positions,
                 "SPECTRAL": layout.spectral_positions,
                 "SPRING": layout.spring_positions,
             }
@@ -910,7 +909,6 @@ class Command(BaseCommand):
         extra_positions: dict[str, dict] = {}
         if (do_graph or do_3dgraph) and extra_layout_names:
             _extra_layout_funcs = {
-                "CIRCULAR": layout.circular_positions,
                 "SPECTRAL": layout.spectral_positions,
                 "SPRING": layout.spring_positions,
             }

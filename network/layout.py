@@ -92,30 +92,25 @@ def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[f
     return forceatlas2_positions(graph, kamada_kawai_positions(graph), iterations)
 
 
-EXTRA_LAYOUT_CHOICES = {"CIRCULAR", "SPECTRAL", "SPRING"}
+EXTRA_LAYOUT_CHOICES = {"SPECTRAL", "SPRING"}
 
 _EXTRA_LAYOUT_SCALE = 500.0
 
 
-def circular_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
-    """Place nodes equally spaced on a circle."""
-    return nx.circular_layout(graph, scale=_EXTRA_LAYOUT_SCALE)
-
-
-def spectral_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
-    """Place nodes using the two smallest Laplacian eigenvectors.
+def spectral_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]]:
+    """Place nodes using the three smallest Laplacian eigenvectors (3D).
 
     Falls back to spring layout if the eigensolver fails (e.g. disconnected graph).
     """
     try:
-        return nx.spectral_layout(graph, scale=_EXTRA_LAYOUT_SCALE)
+        return nx.spectral_layout(graph, scale=_EXTRA_LAYOUT_SCALE, dim=3)
     except Exception:
         return spring_positions(graph)
 
 
-def spring_positions(graph: nx.DiGraph, iterations: int = 200) -> dict[str, tuple[float, float]]:
-    """Place nodes with the Fruchterman-Reingold force-directed algorithm."""
-    return nx.spring_layout(graph, scale=_EXTRA_LAYOUT_SCALE, iterations=iterations, seed=42)
+def spring_positions(graph: nx.DiGraph, iterations: int = 200) -> dict[str, tuple[float, float, float]]:
+    """Place nodes with the Fruchterman-Reingold force-directed algorithm in 3D."""
+    return nx.spring_layout(graph, scale=_EXTRA_LAYOUT_SCALE, iterations=iterations, seed=42, dim=3)
 
 
 def kamada_kawai_positions_3d(graph: nx.DiGraph) -> dict:

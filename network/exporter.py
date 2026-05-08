@@ -320,7 +320,7 @@ def write_graph_files(
             f.write(json.dumps(position_3d_payload))
 
     if extra_positions and include_positions:
-        # channel_position_<algo>.json — alternative 2D layouts for the browser switcher
+        # channel_position_<algo>.json — alternative 3D layouts for the browser switcher
         for algo, pos in extra_positions.items():
             nodes_extra = []
             for n in graph_data["nodes"]:
@@ -330,6 +330,7 @@ def write_graph_files(
                         "id": n["id"],
                         "x": float(p[0]) if p is not None else 0.0,
                         "y": float(p[1]) if p is not None else 0.0,
+                        "z": float(p[2]) if p is not None and len(p) > 2 else 0.0,
                     }
                 )
             extra_payload = {"nodes": nodes_extra, "edges": graph_data["edges"]}
