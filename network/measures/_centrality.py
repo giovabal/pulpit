@@ -89,8 +89,12 @@ def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     try:
         values: dict[str, float] = nx.katz_centrality(graph, weight="weight")
     except nx.PowerIterationFailedConvergence:
-        logger.warning("Katz centrality failed to converge")
-        return []
+        logger.warning("Katz centrality failed to converge; retrying with numpy solver")
+        try:
+            values = nx.katz_centrality_numpy(graph, weight="weight")
+        except Exception as exc:
+            logger.warning("Katz centrality numpy fallback also failed: %s", exc)
+            return []
     for node in graph_data["nodes"]:
         node[key] = values.get(node["id"], 0.0)
     return [(key, "Katz Centrality")]
