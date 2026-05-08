@@ -908,7 +908,7 @@ class Command(BaseCommand):
         positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
 
         extra_positions: dict[str, dict] = {}
-        if do_graph and extra_layout_names:
+        if (do_graph or do_3dgraph) and extra_layout_names:
             _extra_layout_funcs = {
                 "CIRCULAR": layout.circular_positions,
                 "SPECTRAL": layout.spectral_positions,
