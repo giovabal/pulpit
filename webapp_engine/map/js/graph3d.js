@@ -64,6 +64,7 @@ var animation_frame_id_3d = null;
 var active_layout   = 'fa2';
 var layout_cache_3d = {};
 var layout_anim_id  = null;
+var _layout_bbox    = null;   // bounding box of the initial FA2 3D layout; used to rescale extra layouts
 var colored_edges   = true;
 var active_theme_3d = 'dark';
 
@@ -199,6 +200,7 @@ function build_graph(pos_data, ch_data) {
         if (p.z < min_z) min_z = p.z; if (p.z > max_z) max_z = p.z;
     });
     var dx = max_x - min_x, dy = max_y - min_y, dz = max_z - min_z;
+    _layout_bbox = { cx: (min_x + max_x) / 2, cy: (min_y + max_y) / 2, cz: (min_z + max_z) / 2, w: dx || 1, h: dy || 1 };
     var diameter = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
     g_size_min        = diameter * SIZE_MIN_FRAC;
     g_size_max        = diameter * SIZE_MAX_FRAC;
@@ -392,6 +394,29 @@ function build_layout_selector() {
     el('layout-select-group').style.display = '';
 }
 
+function _rescale_to_fa2(pos_data) {
+    if (!_layout_bbox) return pos_data;
+    var nodes = pos_data.nodes;
+    var nx0 = Infinity, nx1 = -Infinity, ny0 = Infinity, ny1 = -Infinity;
+    nodes.forEach(function(n) {
+        if (n.x < nx0) nx0 = n.x; if (n.x > nx1) nx1 = n.x;
+        if (n.y < ny0) ny0 = n.y; if (n.y > ny1) ny1 = n.y;
+    });
+    var src_w = nx1 - nx0 || 1, src_h = ny1 - ny0 || 1;
+    var scale = Math.min(_layout_bbox.w / src_w, _layout_bbox.h / src_h);
+    var src_cx = (nx0 + nx1) / 2, src_cy = (ny0 + ny1) / 2;
+    return {
+        nodes: nodes.map(function(n) {
+            return {
+                id: n.id,
+                x: _layout_bbox.cx + (n.x - src_cx) * scale,
+                y: _layout_bbox.cy + (n.y - src_cy) * scale,
+                z: _layout_bbox.cz,
+            };
+        }),
+    };
+}
+
 function switch_layout_3d(algo) {
     active_layout = algo;
     var filename = algo === 'fa2' ? 'channel_position_3d.json' : 'channel_position_' + algo + '.json';
@@ -399,7 +424,11 @@ function switch_layout_3d(algo) {
     if (layout_cache_3d[key]) { _animate_layout_3d(layout_cache_3d[key]); return; }
     fetch(current_data_dir + filename)
         .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
-        .then(function(data) { layout_cache_3d[key] = data; _animate_layout_3d(data); })
+        .then(function(data) {
+            var display = algo === 'fa2' ? data : _rescale_to_fa2(data);
+            layout_cache_3d[key] = display;
+            _animate_layout_3d(display);
+        })
         .catch(function(err) {
             console.error('Failed to load layout', algo, err);
             active_layout = 'fa2';
