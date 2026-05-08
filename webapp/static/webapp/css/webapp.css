@@ -1450,6 +1450,13 @@ body {
   margin-bottom: 1.25rem;
   overflow: hidden;
 }
+.vacancy-analysis-card--inactive {
+  border-color: var(--border);
+  border-left-color: var(--border);
+}
+.vacancy-analysis-card--inactive .vacancy-impact-icon,
+.vacancy-analysis-card--inactive .vacancy-impact-title { color: var(--text-muted); }
+.vacancy-analysis-card--inactive .vacancy-analysis-header { border-bottom: none; }
 .vacancy-analysis-header {
   display: flex;
   align-items: flex-start;
