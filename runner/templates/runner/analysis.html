@@ -95,9 +95,7 @@
           tr.appendChild(tdName);
 
           var tdDate = document.createElement('td');
-          tdDate.className = 'text-muted';
-          tdDate.style.fontSize = '.875rem';
-          tdDate.style.whiteSpace = 'nowrap';
+          tdDate.className = 'text-muted analysis-date-cell';
           tdDate.textContent = fmtDate(exp.created_at);
           tr.appendChild(tdDate);
 

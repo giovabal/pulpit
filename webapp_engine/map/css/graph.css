@@ -450,3 +450,10 @@ html, body {
 body[data-theme3d="light"]  .node-label,
 body[data-theme3d="print"]  .node-label { color: #111; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 body[data-theme3d="minimal"] .node-label { color: #eee; }
+
+/* ── Share buttons ───────────────────────────────────────────────────────── */
+.share-btn--bluesky  { background: #0085ff; color: #fff; }
+.share-btn--facebook { background: #1877f2; color: #fff; }
+.share-btn--linkedin { background: #0077b5; color: #fff; }
+.share-btn--whatsapp { background: #25d366; color: #fff; }
+.share-btn--telegram { background: #0088cc; color: #fff; }

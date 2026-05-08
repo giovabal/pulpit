@@ -481,3 +481,6 @@
   font-size: .875rem;
   padding: 2rem 1rem;
 }
+
+/* ---- Analysis page ---- */
+.analysis-date-cell { font-size: .875rem; white-space: nowrap; }

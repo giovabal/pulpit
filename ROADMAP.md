@@ -32,6 +32,6 @@
 - Have a deep inspection of JS code, search for bugs, bad practices and dead code
 - Have a deep inspection of HTML and CSS code, search for bugs, bad practices and dead code
 - Have a deep inspection of HTML code, make sure the app and the HTML output of analysis are respecting accessibility rules and can provide a decent experience for people using screen readers
-- Have a deep inspection of all options accepted by commands, look for inconsistencies and bad practices
+- Have a deep inspection of all options accepted by commands, verify their coherence, look for inconsistencies and bad practices
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
 - Read the code and review documentation, make the documentation complete and coherent, propose variations.
