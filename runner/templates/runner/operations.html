@@ -603,7 +603,7 @@
           </div>
 
           <div class="ops-fieldset-row">
-          <fieldset class="ops-fieldset">
+          <fieldset class="ops-fieldset" id="network-stat-groups-fieldset">
             <legend>Network stat groups
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Whole-network structural metric groups to compute (applies when HTML tables, Excel, or consensus matrix is enabled). Deselect expensive groups to speed up exports on large networks."></i>
@@ -1108,6 +1108,24 @@
         if (!anyChecked) cb.checked = true;
       });
     });
+  })();
+
+  (function () {
+    var form = document.getElementById('form-structural_analysis');
+    var netStatsFs = document.getElementById('network-stat-groups-fieldset');
+    var triggerNames = ['html', 'xlsx', 'consensus_matrix'];
+    function syncNetStatGroups() {
+      var active = triggerNames.some(function(name) {
+        var cb = form.querySelector('input[name="' + name + '"]');
+        return cb && cb.checked;
+      });
+      netStatsFs.disabled = !active;
+    }
+    triggerNames.forEach(function(name) {
+      var cb = form.querySelector('input[name="' + name + '"]');
+      if (cb) cb.addEventListener('change', syncNetStatGroups);
+    });
+    syncNetStatGroups();
   })();
 
   (function () {
