@@ -9,7 +9,7 @@
     <div class="d-flex align-items-baseline gap-2">
       <h1 class="h5 fw-semibold mb-0">Channels</h1>
       <span class="channels-count" id="channels-count"></span>
-      <a href="{% url 'channel-vacancies' %}" class="channels-vacancies-link"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Vacancies</a>
+      {% if has_vacancies %}<a href="{% url 'channel-vacancies' %}" class="channels-vacancies-link"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Vacancies</a>{% endif %}
     </div>
     <div class="channel-filters">
       <div class="channel-filters-top">

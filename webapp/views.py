@@ -238,6 +238,7 @@ class ChannelListView(ListView):
         ctx["groups"] = (
             ChannelGroup.objects.filter(channels__in=Channel.objects.interesting()).distinct().order_by("name")
         )
+        ctx["has_vacancies"] = ChannelVacancy.objects.exists()
         return ctx
 
 
