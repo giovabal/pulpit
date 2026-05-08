@@ -1,11 +1,10 @@
 (function () {
     "use strict";
 
-    var API_CH  = "/manage/api/channels/" + CHANNEL_PK + "/";
+    var $root   = document.getElementById("bo-ch-update");
+    var API_CH  = "/manage/api/channels/" + $root.dataset.channelPk + "/";
     var API_ORG = "/manage/api/organizations/?limit=500";
     var API_GRP = "/manage/api/groups/?limit=500";
-
-    var $root = document.getElementById("bo-ch-update");
     var _picUrls  = [];
     var _picIndex = 0;
     var _picModal = null;
