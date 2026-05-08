@@ -9,7 +9,7 @@
     {% for picture in selected_channel.profilepicture_set.all|slice:":1" %}
     {% if picture.picture %}
     <figure class="mb-0 flex-shrink-0">
-      <img src="{{ picture.picture.url }}" class="channel-avatar" alt="{{ selected_channel.title }} avatar">
+      <img src="{{ picture.picture.url }}" class="channel-avatar channel-avatar--clickable" id="ch-pic-avatar" alt="{{ selected_channel.title }} avatar">
     </figure>
     {% endif %}
     {% endfor %}
@@ -304,7 +304,7 @@
         }).catch(function () {
           spinner.classList.add('hidden');
           loaded = false;
-          var wrap = collapse.querySelector('.panel-tables-wrap') || collapse.querySelector('.panel-chart-wrap');
+          var wrap = collapse.querySelector('.panel-tables-wrap') || collapse.querySelector('.chart-canvas-wrap');
           if (wrap) { var p = document.createElement('p'); p.className = 'bo-empty'; p.textContent = 'Failed to load.'; wrap.appendChild(p); }
         });
       }
@@ -486,11 +486,11 @@
     {% include "webapp/message_options.html" %}
     {% if active_tab != "received" %}
     <label class="msg-forwards-only-toggle">
-      <input type="checkbox" name="forwards_only" {% if forwards_only %}checked{% endif %} onchange="this.form.submit()">
+      <input type="checkbox" name="forwards_only" {% if forwards_only %}checked{% endif %} id="msg-forwards-only">
       Forwards only
     </label>
     {% else %}
-    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" id="msg-self-ref">
       <option value="include" {% if self_ref == "include" %}selected{% endif %}>Include self-references</option>
       <option value="exclude" {% if self_ref == "exclude" %}selected{% endif %}>Do not include self-references</option>
       <option value="only" {% if self_ref == "only" %}selected{% endif %}>Show only self-references</option>
@@ -582,10 +582,10 @@
       {% endif %}
       <footer class="post-footer">
         <div class="post-meta">
-          <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
-          <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
-          <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
-          {% if post.edit_date %}<span class="post-meta-item" title="Edited {{ post.edit_date }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edited</span>{% endif %}
+          <span class="post-meta-item" data-bs-toggle="tooltip" title="Views"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
+          <span class="post-meta-item" data-bs-toggle="tooltip" title="Times forwarded"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
+          <time class="post-meta-item" datetime="{{ post.date|date:'c' }}" data-bs-toggle="tooltip" title="Published"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+          {% if post.edit_date %}<span class="post-meta-item" data-bs-toggle="tooltip" title="Last edited"><i class="bi bi-pencil" aria-hidden="true"></i> {{ post.edit_date }}</span>{% endif %}
           {% for reaction in post.reactions.all %}
           <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
           {% endfor %}
@@ -601,9 +601,11 @@
             <span class="post-replies-count">{{ post.replies }}</span>
           </button>
           {% endif %}
+          {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
           <button type="button" class="post-details-btn" data-bs-toggle="collapse" data-bs-target="#pd-{{ post.pk }}" aria-expanded="false" aria-controls="pd-{{ post.pk }}" title="More details">
             <i class="bi bi-info-circle" aria-hidden="true"></i>
           </button>
+          {% endif %}
           <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
             <i class="bi bi-telegram" aria-hidden="true"></i>
           </a>
@@ -614,8 +616,8 @@
       </div>
       <div class="collapse post-details-panel" id="pd-{{ post.pk }}">
         <dl class="post-details-dl">
-          {% if post.replies is not None or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
-            {% if post.replies is not None %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
+          {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
+            {% if post.replies %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
             {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>#{{ post.reply_to_msg_id }}</dd>{% endif %}
             {% if post.fwd_from_channel_post %}<dt><i class="bi bi-link-45deg" aria-hidden="true"></i> Source post</dt><dd>#{{ post.fwd_from_channel_post }}</dd>{% endif %}
             {% if post.fwd_from_from_name %}<dt><i class="bi bi-person" aria-hidden="true"></i> Forwarded by</dt><dd>{{ post.fwd_from_from_name }}</dd>{% endif %}
@@ -633,6 +635,25 @@
 
 {% include "webapp/pagination.html" %}
 {% endif %}
+
+<div class="modal fade" id="ch-pic-modal" tabindex="-1" aria-labelledby="ch-pic-modal-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <span class="modal-title fw-semibold" id="ch-pic-modal-title"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-3">
+        <img id="ch-pic-modal-img" src="" alt="" class="ch-pic-modal-img">
+      </div>
+      <div class="modal-footer py-2 justify-content-between" id="ch-pic-modal-footer" style="display:none">
+        <button class="ch-pic-nav-btn" id="ch-pic-modal-prev" aria-label="Previous">←</button>
+        <span class="text-muted small" id="ch-pic-modal-counter"></span>
+        <button class="ch-pic-nav-btn" id="ch-pic-modal-next" aria-label="Next">→</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock content %}
 
 {% block extra_scripts %}
@@ -643,6 +664,68 @@
   document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
     new bootstrap.Popover(el);
   });
+  (function () {
+    var fwdOnly = document.getElementById('msg-forwards-only');
+    var selfRef = document.getElementById('msg-self-ref');
+    if (fwdOnly) fwdOnly.addEventListener('change', function () { this.form.submit(); });
+    if (selfRef) selfRef.addEventListener('change', function () { this.form.submit(); });
+  })();
 </script>
 <script src="{% static 'webapp/js/post_replies.js' %}"></script>
+<script>
+(function () {
+  var $avatar  = document.getElementById("ch-pic-avatar");
+  var $modalEl = document.getElementById("ch-pic-modal");
+  if (!$avatar || !$modalEl || typeof bootstrap === "undefined") return;
+
+  var $img     = document.getElementById("ch-pic-modal-img");
+  var $title   = document.getElementById("ch-pic-modal-title");
+  var $counter = document.getElementById("ch-pic-modal-counter");
+  var $footer  = document.getElementById("ch-pic-modal-footer");
+  var $prev    = document.getElementById("ch-pic-modal-prev");
+  var $next    = document.getElementById("ch-pic-modal-next");
+
+  var _picModal = new bootstrap.Modal($modalEl);
+  var _picUrls  = [];
+  var _picIndex = 0;
+  var _loaded   = false;
+
+  function _showPic(index) {
+    _picIndex = index;
+    $img.src  = _picUrls[_picIndex];
+    $counter.textContent = _picUrls.length > 1 ? (_picIndex + 1) + " / " + _picUrls.length : "";
+    $prev.disabled = _picIndex === 0;
+    $next.disabled = _picIndex === _picUrls.length - 1;
+    $footer.style.display = _picUrls.length > 1 ? "" : "none";
+  }
+
+  $avatar.addEventListener("click", function () {
+    $title.textContent = "{{ selected_channel.title|escapejs }}";
+    $img.src = $avatar.src;
+    $footer.style.display = "none";
+    $counter.textContent = "";
+    _picModal.show();
+
+    if (_loaded) { _showPic(0); return; }
+    fetch("/manage/api/channels/{{ selected_channel.pk }}/pictures/")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _loaded = true;
+        _picUrls = data.pictures && data.pictures.length ? data.pictures : [$avatar.src];
+        _showPic(0);
+      })
+      .catch(function () {
+        _picUrls = [$avatar.src];
+        _showPic(0);
+      });
+  });
+
+  $prev.addEventListener("click", function () { if (_picIndex > 0) _showPic(_picIndex - 1); });
+  $next.addEventListener("click", function () { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); });
+  $modalEl.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft")  { if (_picIndex > 0) _showPic(_picIndex - 1); }
+    if (e.key === "ArrowRight") { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); }
+  });
+})();
+</script>
 {% endblock extra_scripts %}

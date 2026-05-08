@@ -71,7 +71,13 @@
         inner.innerHTML = '<div class="post-replies-spinner"><div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">Loading…</span></div></div>';
         fetch(btn.dataset.repliesUrl)
           .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-          .then(function (data) { renderReplies(panel, data); })
+          .then(function (data) {
+            renderReplies(panel, data);
+            if (data.fetched && data.count != null) {
+              var countEl = btn.querySelector('.post-replies-count');
+              if (countEl) countEl.textContent = data.count;
+            }
+          })
           .catch(function () {
             inner.innerHTML = '<p class="post-replies-hint">Failed to load replies.</p>';
             loaded = false;
