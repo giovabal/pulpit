@@ -759,7 +759,7 @@ class Command(BaseCommand):
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
-        need_metrics = do_xlsx
+        need_metrics = True
         community_table_data = None
 
         with tempfile.TemporaryDirectory() as tmp_dir:
