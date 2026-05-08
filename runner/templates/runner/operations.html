@@ -623,7 +623,7 @@
             </div>
           </fieldset>
 
-          <fieldset class="ops-fieldset">
+          <fieldset class="ops-fieldset"{% if not has_vacancies %} disabled{% endif %}>
             <legend>Vacancy Analysis
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Score replacement candidates for each vacancy channel. Select at least one measure to generate vacancy_analysis.html and data/vacancy_analysis.json in the export.{% if not has_vacancies %} No vacancies are currently defined in the database — options are disabled until at least one is added.{% endif %}"></i>
