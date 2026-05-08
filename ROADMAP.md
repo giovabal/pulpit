@@ -14,6 +14,7 @@
 
 
 ## [0.19]
+- small notes (bottom right) on what is on (layout, community and so on) for graphs
 - regency weights should be centered on a period of time, and there must regency weights even for the future
 - vacancy needs enough data for being efficient and significant, find academically validated ways to say if data are enough
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)
@@ -35,3 +36,7 @@
 - Have a deep inspection of all options accepted by commands, verify their coherence, look for inconsistencies and bad practices
 - I need strong layout coherence through all the software, inspect webapp templates and HTML outputs
 - Read the code and review documentation, make the documentation complete and coherent, propose variations.
+- Explore the Python code looking for factorizations, propose them to me and wait for approval.
+- Explore the JS code looking for factorizations, propose them to me and wait for approval.
+- Explore the CSS code looking for factorizations, propose them to me and wait for approval.
+- Explore the Django template code looking for factorizations, propose them to me and wait for approval.
