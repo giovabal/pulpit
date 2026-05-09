@@ -597,6 +597,14 @@ class ChannelCrawler:
                 return 0  # no stored messages before to_cutoff
             id_bounds.append(to_max + 1)
         iter_max_id = min(id_bounds) if id_bounds else 0
+        _total_qs = Message.objects.filter(channel=channel)
+        if from_cutoff is not None:
+            _total_qs = _total_qs.filter(date__gte=from_cutoff)
+        if to_cutoff is not None:
+            _total_qs = _total_qs.filter(date__lt=to_cutoff)
+        if iter_max_id > 0:
+            _total_qs = _total_qs.filter(telegram_id__lt=iter_max_id)
+        total_in_db = _total_qs.count()
         processed = 0
         updated = 0
         for telegram_message in self.api_client.client.iter_messages(
@@ -664,7 +672,7 @@ class ChannelCrawler:
                 updated += 1
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
-            update_status(f"refreshing message stats … {updated} updated")
+            update_status(f"refreshing message stats … {updated}/{total_in_db}")
         return updated
 
     def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:

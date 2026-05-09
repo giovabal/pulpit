@@ -1,5 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
-- -1492
+
 ## [0.18]
 - Screenshots missing
 -- Crawl channels panel open (13)
@@ -30,6 +30,7 @@
 
 
 ## [1.0]
+- Zenodo registration
 - Have a deep inspection of Python code, search for bugs, bad practices and dead code
 - Have a deep inspection of JS code, search for bugs, bad practices and dead code
 - Have a deep inspection of HTML and CSS code, search for bugs, bad practices and dead code
