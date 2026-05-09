@@ -135,6 +135,26 @@ def _scale_embedding(arr: np.ndarray, scale: float = 500.0) -> np.ndarray:
     return arr
 
 
+def _shortest_path_matrix(graph: nx.DiGraph) -> tuple[list, np.ndarray]:
+    """Return (nodes_list, distance_matrix) of all-pairs shortest-path lengths.
+
+    Uses the undirected symmetrisation.  Unreachable pairs are assigned
+    distance n (graph order) so UMAP treats disconnected components as
+    maximally far apart rather than encountering inf.
+    """
+    nodes = list(graph.nodes())
+    n = len(nodes)
+    node_idx = {node: i for i, node in enumerate(nodes)}
+    G_und = graph.to_undirected()
+    dist = np.full((n, n), float(n), dtype=float)
+    np.fill_diagonal(dist, 0.0)
+    for source, lengths in nx.all_pairs_shortest_path_length(G_und):
+        i = node_idx[source]
+        for target, length in lengths.items():
+            dist[i, node_idx[target]] = float(length)
+    return nodes, dist
+
+
 # ── 2D extra layouts ─────────────────────────────────────────────────────────
 
 
@@ -195,18 +215,24 @@ def tsne_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
 
 
 def umap_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
-    """2D UMAP embedding via the top Laplacian eigenvectors.
+    """2D UMAP embedding on the all-pairs shortest-path distance matrix.
 
-    McInnes et al. 2018.  Falls back to t-SNE when umap-learn is unavailable.
+    McInnes et al. 2018.  Using precomputed graph distances (not Laplacian
+    eigenvectors) gives a perspective complementary to t-SNE: UMAP sees raw
+    topological distances, so nodes that are many hops apart are pushed far
+    apart globally — not just locally separated by cluster membership.
+    Falls back to t-SNE when umap-learn is unavailable.
     """
     if not HAS_UMAP:
         return tsne_positions_2d(graph)
-    nodes, features = _laplacian_features(graph)
+    nodes, dist = _shortest_path_matrix(graph)
     n = len(nodes)
     if n < 4:
         return kamada_kawai_positions(graph)
     n_neighbors = min(15, n - 1)
-    embedding = _umap_lib.UMAP(n_components=2, random_state=42, n_neighbors=n_neighbors).fit_transform(features)
+    embedding = _umap_lib.UMAP(
+        n_components=2, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
+    ).fit_transform(dist)
     embedding = _scale_embedding(embedding)
     return {node: (float(embedding[i, 0]), float(embedding[i, 1])) for i, node in enumerate(nodes)}
 
@@ -281,18 +307,20 @@ def tsne_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]
 
 
 def umap_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]]:
-    """3D UMAP embedding via the top Laplacian eigenvectors.
+    """3D UMAP embedding on the all-pairs shortest-path distance matrix.
 
     McInnes et al. 2018.  Falls back to 3D t-SNE when umap-learn is unavailable.
     """
     if not HAS_UMAP:
         return tsne_positions_3d(graph)
-    nodes, features = _laplacian_features(graph)
+    nodes, dist = _shortest_path_matrix(graph)
     n = len(nodes)
     if n < 4:
         return kamada_kawai_positions_3d(graph)
     n_neighbors = min(15, n - 1)
-    embedding = _umap_lib.UMAP(n_components=3, random_state=42, n_neighbors=n_neighbors).fit_transform(features)
+    embedding = _umap_lib.UMAP(
+        n_components=3, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
+    ).fit_transform(dist)
     embedding = _scale_embedding(embedding)
     return {
         node: (float(embedding[i, 0]), float(embedding[i, 1]), float(embedding[i, 2])) for i, node in enumerate(nodes)
