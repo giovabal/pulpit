@@ -382,6 +382,7 @@ function apply_theme_3d(theme) {
 }
 
 var _LAYOUT_LABELS_3D = {
+    fa2:          'ForceAtlas2',
     spectral:     'Spectral',
     spring:       'Spring (Fruchterman-Reingold)',
     kamada_kawai: 'Kamada-Kawai',
@@ -393,11 +394,9 @@ function build_layout_selector() {
     var layouts = window.EXTRA_LAYOUTS_3D || [];
     if (!layouts.length) return;
     var sel = el('layout-select');
-    var all = [['fa2', 'ForceAtlas2']].concat(layouts.map(function(l) {
-        return [l, _LAYOUT_LABELS_3D[l] || (l.charAt(0).toUpperCase() + l.slice(1))];
-    }));
-    sel.innerHTML = all.map(function(pair) {
-        return '<option value="' + pair[0] + '">' + pair[1] + '</option>';
+    sel.innerHTML = layouts.map(function(l) {
+        var lbl = _LAYOUT_LABELS_3D[l] || (l.charAt(0).toUpperCase() + l.slice(1));
+        return '<option value="' + l + '">' + lbl + '</option>';
     }).join('');
     el('layout-select-group').style.display = '';
 }

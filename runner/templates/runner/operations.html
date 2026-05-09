@@ -416,14 +416,14 @@
 
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset" id="extra-layouts-fieldset">
-              <legend>Extra 2D layouts
+              <legend>2D layouts
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Force Atlas 2 is always the default. Select additional 2D layouts to pre-compute: a Layout dropdown in the graph viewer lets users switch without re-exporting. Requires 2D graph."></i>
+                   title="Select which 2D layouts to pre-compute. A Layout dropdown in the graph viewer lets users switch between them without re-exporting. At least one must be selected. Requires 2D graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag ops-flag--skip"><input type="checkbox" name="extra_layouts_fa2" value="FA2" checked disabled>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="ForceAtlas2 with Kamada-Kawai seed — always computed."></i>
+                     title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
@@ -454,14 +454,14 @@
               </div>
             </fieldset>
             <fieldset class="ops-fieldset" id="3d-layouts-fieldset">
-              <legend>Extra 3D layouts
+              <legend>3D layouts
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Force Atlas 2 is always the default 3D layout. Select additional 3D layouts for the 3D graph viewer. Independent from 2D layouts. Requires 3D graph."></i>
+                   title="Select which 3D layouts to pre-compute for the 3D graph viewer. Independent from 2D layouts. At least one must be selected. Requires 3D graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag ops-flag--skip"><input type="checkbox" name="extra_layouts_fa2_3d" value="FA2" checked disabled>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="ForceAtlas2 with Kamada-Kawai seed — always computed."></i>
+                     title="ForceAtlas2 with Kamada-Kawai seed — default 3D layout."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="SPECTRAL">Spectral

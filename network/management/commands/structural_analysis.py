@@ -758,6 +758,8 @@ class Command(BaseCommand):
                 "HYPERBOLIC": layout.hyperbolic_positions,
             }
             for name in extra_layout_names:
+                if name == "FA2":
+                    continue
                 year_extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
         if do_3dgraph and extra_layout_names_3d:
             _extra_layout_funcs_3d = {
@@ -768,6 +770,8 @@ class Command(BaseCommand):
                 "UMAP": layout.umap_positions_3d,
             }
             for name in extra_layout_names_3d:
+                if name == "FA2":
+                    continue
                 year_extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
 
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
@@ -940,7 +944,9 @@ class Command(BaseCommand):
         positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
 
         extra_positions: dict[str, dict] = {}
+        fa2_in_2d = do_graph and "FA2" in extra_layout_names
         extra_positions_3d: dict[str, dict] = {}
+        fa2_in_3d = do_3dgraph and "FA2" in extra_layout_names_3d
         if do_graph and extra_layout_names:
             _extra_layout_funcs_2d = {
                 "CIRCULAR": layout.circular_positions,
@@ -950,8 +956,10 @@ class Command(BaseCommand):
                 "UMAP": layout.umap_positions_2d,
                 "HYPERBOLIC": layout.hyperbolic_positions,
             }
-            self.stdout.write("\nCompute extra 2D layouts")
-            for name in extra_layout_names:
+            non_fa2 = [n for n in extra_layout_names if n != "FA2"]
+            if non_fa2:
+                self.stdout.write("\nCompute extra 2D layouts")
+            for name in non_fa2:
                 self.stdout.write(f"- {name.lower()} … ", ending="")
                 self.stdout.flush()
                 extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
@@ -964,8 +972,10 @@ class Command(BaseCommand):
                 "TSNE": layout.tsne_positions_3d,
                 "UMAP": layout.umap_positions_3d,
             }
-            self.stdout.write("\nCompute extra 3D layouts")
-            for name in extra_layout_names_3d:
+            non_fa2_3d = [n for n in extra_layout_names_3d if n != "FA2"]
+            if non_fa2_3d:
+                self.stdout.write("\nCompute extra 3D layouts")
+            for name in non_fa2_3d:
                 self.stdout.write(f"- {name.lower()} … ", ending="")
                 self.stdout.flush()
                 extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
@@ -1021,8 +1031,8 @@ class Command(BaseCommand):
                 project_title=project_title,
                 include_3d=do_3dgraph,
                 vertical_layout=vertical_layout,
-                extra_layouts=list(extra_positions.keys()),
-                extra_layouts_3d=list(extra_positions_3d.keys()),
+                extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
+                extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
             )
             exporter.write_robots_txt(root_target, seo)
 

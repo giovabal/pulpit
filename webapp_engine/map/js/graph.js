@@ -1173,6 +1173,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (layout_group && layout_sel) {
             layout_group.style.display = '';
             var _layout_labels = {
+                fa2:             'Force Atlas 2',
                 circular:        'Circular',
                 kamada_kawai:    'Kamada-Kawai',
                 community_shell: 'Community shells',
@@ -1182,10 +1183,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 spectral:        'Spectral',
                 spring:          'Spring (Fruchterman-Reingold)',
             };
-            var _opts = ['<option value="fa2">Force Atlas 2</option>'];
-            extra_layouts.forEach(function(algo) {
+            var _opts = extra_layouts.map(function(algo) {
                 var lbl = _layout_labels[algo] || (algo.charAt(0).toUpperCase() + algo.slice(1));
-                _opts.push('<option value="' + algo + '">' + lbl + '</option>');
+                return '<option value="' + algo + '">' + lbl + '</option>';
             });
             layout_sel.innerHTML = _opts.join('');
             layout_sel.addEventListener('change', function() { switch_layout(this.value); });
