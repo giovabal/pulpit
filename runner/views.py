@@ -327,12 +327,12 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--html")
         if post.get("vertical_layout"):
             args.append("--vertical-layout")
-        extra_layouts_val = ",".join(dict.fromkeys(post.getlist("extra_layouts")))
+        extra_layouts_val = ",".join(dict.fromkeys(post.getlist("layouts_2d")))
         if extra_layouts_val:
-            args += ["--extra-layouts", extra_layouts_val]
-        extra_layouts_3d_val = ",".join(dict.fromkeys(post.getlist("extra_layouts_3d")))
+            args += ["--2dlayouts", extra_layouts_val]
+        extra_layouts_3d_val = ",".join(dict.fromkeys(post.getlist("layouts_3d")))
         if extra_layouts_3d_val:
-            args += ["--extra-layouts-3d", extra_layouts_3d_val]
+            args += ["--3dlayouts", extra_layouts_3d_val]
         fa2 = post.get("fa2_iterations", "").strip()
         if fa2:
             args += ["--fa2-iterations", fa2]

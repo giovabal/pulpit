@@ -119,25 +119,27 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--extra-layouts",
-            dest="extra_layouts",
+            "--2dlayouts",
+            dest="layouts_2d",
             default="",
             metavar="LAYOUTS",
             help=(
-                "Comma-separated list of additional 2D layout algorithms to pre-compute alongside ForceAtlas2. "
-                "The browser graph viewer will offer a dropdown to switch between them at viewing time. "
-                "Available: CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL. Requires --2dgraph."
+                "Comma-separated list of 2D layout algorithms to compute. "
+                "When omitted, ForceAtlas2 (FA2) is computed as the only layout. "
+                "The browser graph viewer offers a dropdown to switch between them at viewing time. "
+                "Available: FA2, CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL. Requires --2dgraph."
             ),
         )
         parser.add_argument(
-            "--extra-layouts-3d",
-            dest="extra_layouts_3d",
+            "--3dlayouts",
+            dest="layouts_3d",
             default="",
             metavar="LAYOUTS",
             help=(
-                "Comma-separated list of additional 3D layout algorithms to pre-compute alongside ForceAtlas2 3D. "
-                "The 3D graph viewer will offer a dropdown to switch between them at viewing time. "
-                "Available: SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --3dgraph."
+                "Comma-separated list of 3D layout algorithms to compute. "
+                "When omitted, ForceAtlas2 (FA2) is computed as the only layout. "
+                "The 3D graph viewer offers a dropdown to switch between them at viewing time. "
+                "Available: FA2, SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --3dgraph."
             ),
         )
         parser.add_argument(
@@ -907,12 +909,12 @@ class Command(BaseCommand):
         vertical_layout: bool = options["vertical_layout"]
         target_layout = layout.LAYOUT_VERTICAL if vertical_layout else layout.LAYOUT_HORIZONTAL
 
-        extra_layout_names = _parse_csv(options["extra_layouts"])
+        extra_layout_names = _parse_csv(options["layouts_2d"])
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
         extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES_2D]
 
-        extra_layout_names_3d = _parse_csv(options["extra_layouts_3d"])
+        extra_layout_names_3d = _parse_csv(options["layouts_3d"])
         if "ALL" in extra_layout_names_3d:
             extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
         extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]

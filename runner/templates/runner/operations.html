@@ -421,33 +421,33 @@
                    title="Select which 2D layouts to pre-compute. A Layout dropdown in the graph viewer lets users switch between them without re-exporting. At least one must be selected. Requires 2D graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="FA2" checked>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="ForceAtlas2 with Kamada-Kawai seed — default 2D layout."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="CIRCULAR">Circular
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="CIRCULAR">Circular
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Nodes equally spaced on a ring — useful as a neutral baseline."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="KAMADA_KAWAI">Kamada-Kawai
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="KAMADA_KAWAI">Kamada-Kawai
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Stress-minimisation: places pairs of nodes so geometric distance mirrors graph-theoretic distance (Kamada &amp; Kawai 1989). Slow on large graphs."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="COMMUNITY_SHELL">Community shells
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="COMMUNITY_SHELL">Community shells
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Concentric shells, one per community (largest outermost). Picks LEIDEN → LOUVAIN → first available strategy."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="TSNE">t-SNE
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="TSNE">t-SNE
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Non-linear dimensionality reduction on Laplacian eigenvectors — reveals cluster separation not visible in spectral layouts (van der Maaten &amp; Hinton 2008)."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="UMAP">UMAP
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="UMAP">UMAP
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Uniform Manifold Approximation — topology-preserving embedding; globally more faithful than t-SNE (McInnes et al. 2018)."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts" value="HYPERBOLIC">Hyperbolic
+                <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="HYPERBOLIC">Hyperbolic
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Pseudo-hyperbolic (Poincaré-disk) layout: hub channels placed at the centre, peripheral channels at the edge — approximates hyperbolic geometry for scale-free networks (Krioukov et al. 2010)."></i>
                 </label>
@@ -459,29 +459,29 @@
                    title="Select which 3D layouts to pre-compute for the 3D graph viewer. Independent from 2D layouts. At least one must be selected. Requires 3D graph."></i>
               </legend>
               <div class="ops-flags">
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="FA2" checked>Force Atlas 2
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="FA2" checked>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="ForceAtlas2 with Kamada-Kawai seed — default 3D layout."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="SPECTRAL">Spectral
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="SPECTRAL">Spectral
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="3D Laplacian eigenvectors — tends to spatially separate community clusters (Koren 2005)."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="SPRING">Spring
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="SPRING">Spring
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="3D Fruchterman-Reingold force-directed layout (Fruchterman &amp; Reingold 1991)."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="KAMADA_KAWAI">Kamada-Kawai
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="KAMADA_KAWAI">Kamada-Kawai
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="3D stress-minimisation layout: geometric distance mirrors graph-theoretic distance. Slow on large graphs."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="TSNE">t-SNE
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="TSNE">t-SNE
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="3D non-linear embedding on Laplacian eigenvectors (van der Maaten &amp; Hinton 2008)."></i>
                 </label>
-                <label class="ops-flag"><input type="checkbox" name="extra_layouts_3d" value="UMAP">UMAP
+                <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="UMAP">UMAP
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="3D UMAP topology-preserving embedding (McInnes et al. 2018)."></i>
                 </label>
