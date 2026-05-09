@@ -270,6 +270,7 @@ class Message(TelegramBaseModel):
     fwd_from_channel_post = models.PositiveBigIntegerField(null=True)
     fwd_from_from_name = models.CharField(max_length=255, blank=True)
     factcheck = models.JSONField(null=True, blank=True)
+    stats_refreshed_at = models.DateTimeField(null=True)
 
     def __str__(self) -> str:
         return f"{self.channel.title} [{self.date or self.telegram_id}]"

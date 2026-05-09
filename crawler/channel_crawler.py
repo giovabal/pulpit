@@ -654,6 +654,7 @@ class ChannelCrawler:
                 "webpage_type": getattr(webpage, "type", "") or "",
                 "factcheck": factcheck_data,
                 "_updated": now,
+                "stats_refreshed_at": now,
             }
             if telegram_message.pinned:
                 update_kwargs["has_been_pinned"] = True
