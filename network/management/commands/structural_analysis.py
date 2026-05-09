@@ -126,7 +126,18 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of additional 2D layout algorithms to pre-compute alongside ForceAtlas2. "
                 "The browser graph viewer will offer a dropdown to switch between them at viewing time. "
-                "Available: SPECTRAL, SPRING, ALL. Requires --2dgraph."
+                "Available: CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL. Requires --2dgraph."
+            ),
+        )
+        parser.add_argument(
+            "--extra-layouts-3d",
+            dest="extra_layouts_3d",
+            default="",
+            metavar="LAYOUTS",
+            help=(
+                "Comma-separated list of additional 3D layout algorithms to pre-compute alongside ForceAtlas2 3D. "
+                "The 3D graph viewer will offer a dropdown to switch between them at viewing time. "
+                "Available: SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --3dgraph."
             ),
         )
         parser.add_argument(
@@ -692,6 +703,7 @@ class Command(BaseCommand):
         reference_positions: dict | None = None,
         reference_positions_3d: dict | None = None,
         extra_layout_names: list[str] | None = None,
+        extra_layout_names_3d: list[str] | None = None,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
@@ -735,13 +747,28 @@ class Command(BaseCommand):
         )
 
         year_extra_positions: dict[str, dict] = {}
+        year_extra_positions_3d: dict[str, dict] = {}
         if do_graph and extra_layout_names:
-            _extra_layout_funcs = {
-                "SPECTRAL": layout.spectral_positions,
-                "SPRING": layout.spring_positions,
+            _extra_layout_funcs_2d = {
+                "CIRCULAR": layout.circular_positions,
+                "KAMADA_KAWAI": layout.kamada_kawai_positions,
+                "COMMUNITY_SHELL": lambda g: layout.community_shell_positions(g, strategy_results),
+                "TSNE": layout.tsne_positions_2d,
+                "UMAP": layout.umap_positions_2d,
+                "HYPERBOLIC": layout.hyperbolic_positions,
             }
             for name in extra_layout_names:
-                year_extra_positions[name.lower()] = _extra_layout_funcs[name](graph)
+                year_extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
+        if do_3dgraph and extra_layout_names_3d:
+            _extra_layout_funcs_3d = {
+                "SPECTRAL": layout.spectral_positions,
+                "SPRING": layout.spring_positions,
+                "KAMADA_KAWAI": layout.kamada_kawai_positions_3d,
+                "TSNE": layout.tsne_positions_3d,
+                "UMAP": layout.umap_positions_3d,
+            }
+            for name in extra_layout_names_3d:
+                year_extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
 
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
         measures_labels = self._compute_measures(
@@ -771,6 +798,7 @@ class Command(BaseCommand):
                 include_positions=do_graph or do_3dgraph,
                 positions_3d=positions_3d,
                 extra_positions=year_extra_positions or None,
+                extra_positions_3d=year_extra_positions_3d or None,
             )
             exporter.write_meta_json(
                 graph_dir=tmp_dir,
@@ -877,8 +905,13 @@ class Command(BaseCommand):
 
         extra_layout_names = _parse_csv(options["extra_layouts"])
         if "ALL" in extra_layout_names:
-            extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES)
-        extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES]
+            extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
+        extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES_2D]
+
+        extra_layout_names_3d = _parse_csv(options["extra_layouts_3d"])
+        if "ALL" in extra_layout_names_3d:
+            extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
+        extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]
 
         seo = options["seo"]
         start_date = self._parse_date(options["startdate"], "--startdate")
@@ -907,16 +940,35 @@ class Command(BaseCommand):
         positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
 
         extra_positions: dict[str, dict] = {}
-        if (do_graph or do_3dgraph) and extra_layout_names:
-            _extra_layout_funcs = {
-                "SPECTRAL": layout.spectral_positions,
-                "SPRING": layout.spring_positions,
+        extra_positions_3d: dict[str, dict] = {}
+        if do_graph and extra_layout_names:
+            _extra_layout_funcs_2d = {
+                "CIRCULAR": layout.circular_positions,
+                "KAMADA_KAWAI": layout.kamada_kawai_positions,
+                "COMMUNITY_SHELL": lambda g: layout.community_shell_positions(g, strategy_results),
+                "TSNE": layout.tsne_positions_2d,
+                "UMAP": layout.umap_positions_2d,
+                "HYPERBOLIC": layout.hyperbolic_positions,
             }
-            self.stdout.write("\nCompute extra layouts")
+            self.stdout.write("\nCompute extra 2D layouts")
             for name in extra_layout_names:
                 self.stdout.write(f"- {name.lower()} … ", ending="")
                 self.stdout.flush()
-                extra_positions[name.lower()] = _extra_layout_funcs[name](graph)
+                extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
+                self.stdout.write("done")
+        if do_3dgraph and extra_layout_names_3d:
+            _extra_layout_funcs_3d = {
+                "SPECTRAL": layout.spectral_positions,
+                "SPRING": layout.spring_positions,
+                "KAMADA_KAWAI": layout.kamada_kawai_positions_3d,
+                "TSNE": layout.tsne_positions_3d,
+                "UMAP": layout.umap_positions_3d,
+            }
+            self.stdout.write("\nCompute extra 3D layouts")
+            for name in extra_layout_names_3d:
+                self.stdout.write(f"- {name.lower()} … ", ending="")
+                self.stdout.flush()
+                extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
                 self.stdout.write("done")
 
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
@@ -970,6 +1022,7 @@ class Command(BaseCommand):
                 include_3d=do_3dgraph,
                 vertical_layout=vertical_layout,
                 extra_layouts=list(extra_positions.keys()),
+                extra_layouts_3d=list(extra_positions_3d.keys()),
             )
             exporter.write_robots_txt(root_target, seo)
 
@@ -983,6 +1036,7 @@ class Command(BaseCommand):
             include_positions=do_graph or do_3dgraph,
             positions_3d=positions_3d,
             extra_positions=extra_positions or None,
+            extra_positions_3d=extra_positions_3d or None,
         )
         exporter.write_meta_json(
             graph_dir=root_target,
@@ -1158,6 +1212,7 @@ class Command(BaseCommand):
                         reference_positions=positions if do_graph else None,
                         reference_positions_3d=positions_3d if do_3dgraph else None,
                         extra_layout_names=extra_layout_names if extra_layout_names else None,
+                        extra_layout_names_3d=extra_layout_names_3d if extra_layout_names_3d else None,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)

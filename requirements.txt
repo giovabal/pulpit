@@ -19,3 +19,4 @@ infomap==2.9.2
 leidenalg==0.11.0
 markov-clustering==0.0.6.dev0
 openpyxl==3.1.5
+umap-learn==0.5.11

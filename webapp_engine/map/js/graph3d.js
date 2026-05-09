@@ -381,12 +381,20 @@ function apply_theme_3d(theme) {
     localStorage.setItem('pulpit_theme', theme);
 }
 
+var _LAYOUT_LABELS_3D = {
+    spectral:     'Spectral',
+    spring:       'Spring (Fruchterman-Reingold)',
+    kamada_kawai: 'Kamada-Kawai',
+    tsne:         't-SNE',
+    umap:         'UMAP',
+};
+
 function build_layout_selector() {
-    var layouts = window.EXTRA_LAYOUTS || [];
+    var layouts = window.EXTRA_LAYOUTS_3D || [];
     if (!layouts.length) return;
     var sel = el('layout-select');
     var all = [['fa2', 'ForceAtlas2']].concat(layouts.map(function(l) {
-        return [l, l.charAt(0).toUpperCase() + l.slice(1)];
+        return [l, _LAYOUT_LABELS_3D[l] || (l.charAt(0).toUpperCase() + l.slice(1))];
     }));
     sel.innerHTML = all.map(function(pair) {
         return '<option value="' + pair[0] + '">' + pair[1] + '</option>';
@@ -421,7 +429,7 @@ function _rescale_to_fa2(pos_data) {
 
 function switch_layout_3d(algo) {
     active_layout = algo;
-    var filename = algo === 'fa2' ? 'channel_position_3d.json' : 'channel_position_' + algo + '.json';
+    var filename = algo === 'fa2' ? 'channel_position_3d.json' : 'channel_position_3d_' + algo + '.json';
     var key = current_data_dir + filename;
     if (layout_cache_3d[key]) { _animate_layout_3d(layout_cache_3d[key]); return; }
     fetch(current_data_dir + filename)

@@ -1172,7 +1172,16 @@ document.addEventListener('DOMContentLoaded', function() {
         var layout_sel   = el('layout-select');
         if (layout_group && layout_sel) {
             layout_group.style.display = '';
-            var _layout_labels = { circular: 'Circular', spectral: 'Spectral', spring: 'Spring (Fruchterman-Reingold)' };
+            var _layout_labels = {
+                circular:        'Circular',
+                kamada_kawai:    'Kamada-Kawai',
+                community_shell: 'Community shells',
+                tsne:            't-SNE',
+                umap:            'UMAP',
+                hyperbolic:      'Hyperbolic',
+                spectral:        'Spectral',
+                spring:          'Spring (Fruchterman-Reingold)',
+            };
             var _opts = ['<option value="fa2">Force Atlas 2</option>'];
             extra_layouts.forEach(function(algo) {
                 var lbl = _layout_labels[algo] || (algo.charAt(0).toUpperCase() + algo.slice(1));

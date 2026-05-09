@@ -114,6 +114,7 @@ def _patch_html_file(
     project_title: str,
     vertical_layout: bool = False,
     extra_layouts: "list[str] | None" = None,
+    extra_layouts_3d: "list[str] | None" = None,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
     if not os.path.exists(path):
@@ -135,7 +136,12 @@ def _patch_html_file(
         )
     vl_value = "true" if vertical_layout else "false"
     layouts_json = json.dumps(extra_layouts or [])
-    injection = f"<script>window.VERTICAL_LAYOUT = {vl_value}; window.EXTRA_LAYOUTS = {layouts_json};</script>\n"
+    layouts_3d_json = json.dumps(extra_layouts_3d or [])
+    injection = (
+        f"<script>window.VERTICAL_LAYOUT = {vl_value}; "
+        f"window.EXTRA_LAYOUTS = {layouts_json}; "
+        f"window.EXTRA_LAYOUTS_3D = {layouts_3d_json};</script>\n"
+    )
     for marker in ('<script src="js/', '<script type="module" src="js/'):
         idx = content.find(marker)
         if idx != -1:
@@ -152,11 +158,21 @@ def apply_robots_to_graph_html(
     include_3d: bool = False,
     vertical_layout: bool = False,
     extra_layouts: "list[str] | None" = None,
+    extra_layouts_3d: "list[str] | None" = None,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in the static graph HTML files after they are copied."""
-    _patch_html_file(os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout, extra_layouts)
+    _patch_html_file(
+        os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout, extra_layouts, extra_layouts_3d
+    )
     if include_3d:
-        _patch_html_file(os.path.join(root_target, "graph3d.html"), seo, project_title, vertical_layout, extra_layouts)
+        _patch_html_file(
+            os.path.join(root_target, "graph3d.html"),
+            seo,
+            project_title,
+            vertical_layout,
+            extra_layouts,
+            extra_layouts_3d,
+        )
 
 
 _EXPORT_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
@@ -289,6 +305,7 @@ def write_graph_files(
     include_positions: bool = True,
     positions_3d: dict | None = None,
     extra_positions: "dict[str, dict] | None" = None,
+    extra_positions_3d: "dict[str, dict] | None" = None,
 ) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -320,7 +337,7 @@ def write_graph_files(
             f.write(json.dumps(position_3d_payload))
 
     if extra_positions and include_positions:
-        # channel_position_<algo>.json — alternative 3D layouts for the browser switcher
+        # channel_position_<algo>.json — 2D extra layouts for the browser switcher (z=0 for 2D-only algos)
         for algo, pos in extra_positions.items():
             nodes_extra = []
             for n in graph_data["nodes"]:
@@ -335,6 +352,24 @@ def write_graph_files(
                 )
             extra_payload = {"nodes": nodes_extra, "edges": graph_data["edges"]}
             with open(os.path.join(data_dir, f"channel_position_{algo}.json"), "w") as f:
+                f.write(json.dumps(extra_payload))
+
+    if extra_positions_3d and (include_positions or positions_3d is not None):
+        # channel_position_3d_<algo>.json — 3D extra layouts for the 3D graph viewer
+        for algo, pos in extra_positions_3d.items():
+            nodes_extra = []
+            for n in graph_data["nodes"]:
+                p = pos.get(n["id"])
+                nodes_extra.append(
+                    {
+                        "id": n["id"],
+                        "x": float(p[0]) if p is not None else 0.0,
+                        "y": float(p[1]) if p is not None else 0.0,
+                        "z": float(p[2]) if p is not None and len(p) > 2 else 0.0,
+                    }
+                )
+            extra_payload = {"nodes": nodes_extra, "edges": graph_data["edges"]}
+            with open(os.path.join(data_dir, f"channel_position_3d_{algo}.json"), "w") as f:
                 f.write(json.dumps(extra_payload))
 
     # channels.json — per-node metadata, computed measures, community assignments, measure labels

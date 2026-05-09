@@ -4,8 +4,18 @@ import networkx as nx
 import numpy as np
 from fa2 import ForceAtlas2
 
+try:
+    import umap as _umap_lib
+
+    HAS_UMAP = True
+except ImportError:
+    HAS_UMAP = False
+
 LAYOUT_HORIZONTAL = "HORIZONTAL"
 LAYOUT_VERTICAL = "VERTICAL"
+
+EXTRA_LAYOUT_CHOICES_2D = {"CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMAP", "HYPERBOLIC"}
+EXTRA_LAYOUT_CHOICES_3D = {"SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"}
 
 
 def _build_forceatlas2(dim: int = 2) -> ForceAtlas2:
@@ -92,9 +102,147 @@ def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[f
     return forceatlas2_positions(graph, kamada_kawai_positions(graph), iterations)
 
 
-EXTRA_LAYOUT_CHOICES = {"SPECTRAL", "SPRING"}
-
 _EXTRA_LAYOUT_SCALE = 500.0
+
+
+# ── Private helpers ──────────────────────────────────────────────────────────
+
+
+def _laplacian_features(graph: nx.DiGraph, k: int = 10) -> tuple[list, np.ndarray]:
+    """Return (nodes_list, feature_matrix) using the k smallest non-trivial
+    normalised Laplacian eigenvectors of the undirected symmetrisation."""
+    nodes = list(graph.nodes())
+    n = len(nodes)
+    k = min(k, max(n - 2, 1))
+    G_und = graph.to_undirected()
+    A = nx.to_numpy_array(G_und, nodelist=nodes, weight="weight")
+    deg = A.sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        d_inv_sqrt = np.where(deg > 0, 1.0 / np.sqrt(deg), 0.0)
+    D_inv_sqrt = np.diag(d_inv_sqrt)
+    L_norm = np.eye(n) - D_inv_sqrt @ A @ D_inv_sqrt
+    eigenvalues, eigenvectors = np.linalg.eigh(L_norm)
+    # skip eigenvector 0 (constant, eigenvalue ≈ 0)
+    features = eigenvectors[:, 1 : k + 1]
+    return nodes, features
+
+
+def _scale_embedding(arr: np.ndarray, scale: float = 500.0) -> np.ndarray:
+    """Scale embedding to fit within [-scale, scale] on each axis."""
+    maxval = np.abs(arr).max()
+    if maxval > 0:
+        arr = arr / maxval * scale
+    return arr
+
+
+# ── 2D extra layouts ─────────────────────────────────────────────────────────
+
+
+def circular_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
+    """Place nodes equally spaced on a circle."""
+    return nx.circular_layout(graph, scale=_EXTRA_LAYOUT_SCALE)
+
+
+def community_shell_positions(
+    graph: nx.DiGraph,
+    strategy_results: "dict[str, tuple]",
+) -> dict[str, tuple[float, float]]:
+    """Place nodes in concentric shells, one shell per community.
+
+    Largest community occupies the outermost shell; remaining communities fill
+    progressively inner shells.  Falls back to a plain shell layout when no
+    community data is available.
+
+    *strategy_results* has the shape returned by ``_compute_communities``:
+    ``{STRATEGY_NAME: (community_map, palette)}`` where *community_map* is
+    ``{node_id: community_label}``.
+    """
+    preferred = ["LEIDEN", "LOUVAIN", "LABELPROPAGATION"]
+    community_map: dict | None = None
+    for key in preferred:
+        if key in strategy_results:
+            community_map, _ = strategy_results[key]
+            break
+    if community_map is None and strategy_results:
+        community_map, _ = next(iter(strategy_results.values()))
+    if community_map is None:
+        return nx.shell_layout(graph, scale=_EXTRA_LAYOUT_SCALE)
+
+    groups: dict[str, list] = {}
+    for node in graph.nodes():
+        cid = community_map.get(node, "__none__")
+        groups.setdefault(cid, []).append(node)
+    nlist = sorted(groups.values(), key=len, reverse=True)
+    return nx.shell_layout(graph, nlist=nlist, scale=_EXTRA_LAYOUT_SCALE)
+
+
+def tsne_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
+    """2D t-SNE embedding via the top Laplacian eigenvectors.
+
+    Van der Maaten & Hinton 2008.  Uses ``random_state=42`` for
+    reproducibility; perplexity is clamped to a safe range.
+    """
+    from sklearn.manifold import TSNE
+
+    nodes, features = _laplacian_features(graph)
+    n = len(nodes)
+    if n < 4:
+        return kamada_kawai_positions(graph)
+    perplexity = min(30, max(5, n // 4))
+    embedding = TSNE(n_components=2, random_state=42, perplexity=perplexity).fit_transform(features)
+    embedding = _scale_embedding(embedding)
+    return {node: (float(embedding[i, 0]), float(embedding[i, 1])) for i, node in enumerate(nodes)}
+
+
+def umap_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
+    """2D UMAP embedding via the top Laplacian eigenvectors.
+
+    McInnes et al. 2018.  Falls back to t-SNE when umap-learn is unavailable.
+    """
+    if not HAS_UMAP:
+        return tsne_positions_2d(graph)
+    nodes, features = _laplacian_features(graph)
+    n = len(nodes)
+    if n < 4:
+        return kamada_kawai_positions(graph)
+    n_neighbors = min(15, n - 1)
+    embedding = _umap_lib.UMAP(n_components=2, random_state=42, n_neighbors=n_neighbors).fit_transform(features)
+    embedding = _scale_embedding(embedding)
+    return {node: (float(embedding[i, 0]), float(embedding[i, 1])) for i, node in enumerate(nodes)}
+
+
+def hyperbolic_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
+    """Pseudo-hyperbolic (Poincaré-disk) layout.
+
+    Approximates hyperbolic embedding (Krioukov et al. 2010; Boguña et al.
+    2010 Mercator) without external dependencies: angular positions come from
+    a 2D spring seed and radial positions are derived from log-scaled total
+    degree — hubs land near the centre, peripheral channels at the edge,
+    reproducing the key visual property of the Poincaré disk.
+    """
+    nodes = list(graph.nodes())
+    n = len(nodes)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {nodes[0]: (0.0, 0.0)}
+
+    seed_pos = nx.spring_layout(graph.to_undirected(), seed=42)
+    degrees = dict(graph.degree())
+    max_deg = max(degrees.values()) if degrees else 1
+
+    result: dict[str, tuple[float, float]] = {}
+    for node in nodes:
+        sx, sy = seed_pos.get(node, (0.0, 0.0))
+        angle = float(np.arctan2(sy, sx))
+        deg = degrees.get(node, 0)
+        r_frac = 1.0 - float(np.log1p(deg) / np.log1p(max(max_deg, 1)))
+        r = r_frac * _EXTRA_LAYOUT_SCALE
+        result[node] = (r * float(np.cos(angle)), r * float(np.sin(angle)))
+    return result
+
+
+# ── 3D extra layouts ─────────────────────────────────────────────────────────
 
 
 def spectral_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]]:
@@ -111,6 +259,47 @@ def spectral_positions(graph: nx.DiGraph) -> dict[str, tuple[float, float, float
 def spring_positions(graph: nx.DiGraph, iterations: int = 200) -> dict[str, tuple[float, float, float]]:
     """Place nodes with the Fruchterman-Reingold force-directed algorithm in 3D."""
     return nx.spring_layout(graph, scale=_EXTRA_LAYOUT_SCALE, iterations=iterations, seed=42, dim=3)
+
+
+def tsne_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]]:
+    """3D t-SNE embedding via the top Laplacian eigenvectors.
+
+    Van der Maaten & Hinton 2008.
+    """
+    from sklearn.manifold import TSNE
+
+    nodes, features = _laplacian_features(graph)
+    n = len(nodes)
+    if n < 4:
+        return kamada_kawai_positions_3d(graph)
+    perplexity = min(30, max(5, n // 4))
+    embedding = TSNE(n_components=3, random_state=42, perplexity=perplexity).fit_transform(features)
+    embedding = _scale_embedding(embedding)
+    return {
+        node: (float(embedding[i, 0]), float(embedding[i, 1]), float(embedding[i, 2])) for i, node in enumerate(nodes)
+    }
+
+
+def umap_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]]:
+    """3D UMAP embedding via the top Laplacian eigenvectors.
+
+    McInnes et al. 2018.  Falls back to 3D t-SNE when umap-learn is unavailable.
+    """
+    if not HAS_UMAP:
+        return tsne_positions_3d(graph)
+    nodes, features = _laplacian_features(graph)
+    n = len(nodes)
+    if n < 4:
+        return kamada_kawai_positions_3d(graph)
+    n_neighbors = min(15, n - 1)
+    embedding = _umap_lib.UMAP(n_components=3, random_state=42, n_neighbors=n_neighbors).fit_transform(features)
+    embedding = _scale_embedding(embedding)
+    return {
+        node: (float(embedding[i, 0]), float(embedding[i, 1]), float(embedding[i, 2])) for i, node in enumerate(nodes)
+    }
+
+
+# ── Primary 3D pipeline ──────────────────────────────────────────────────────
 
 
 def kamada_kawai_positions_3d(graph: nx.DiGraph) -> dict:
