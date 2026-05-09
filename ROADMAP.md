@@ -1,5 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
-
+- -1492
 ## [0.18]
 - Screenshots missing
 -- Crawl channels panel open (13)
@@ -14,6 +14,7 @@
 
 
 ## [0.19]
+- select/unselect, regardless of organization, channels to be interesting
 - small notes (bottom right) on what is on (layout, community and so on) for graphs
 - regency weights should be centered on a period of time, and there must regency weights even for the future
 - vacancy needs enough data for being efficient and significant, find academically validated ways to say if data are enough
