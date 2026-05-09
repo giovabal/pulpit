@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Pulpit: Political undercurrents — linkage, propagation, influence on Telegram"
+authors:
+  - family-names: Baldini
+    given-names: Giovanni
+    email: giovanni.baldini@gmail.com
+version: "0.18"
+date-released: "2026-05-10"
+repository-code: "https://github.com/giovabal/pulpit"
+license: GPL-3.0-only
+abstract: >-
+  Pulpit crawls a user-defined set of Telegram channels, traces every forward
+  and every t.me/ cross-reference between them, and turns the result into an
+  interactive network map. It applies established methods from network science —
+  PageRank, HITS, Burt's structural holes, Leiden and Infomap community
+  detection, SIR spreading simulation, and more — to map influence, information
+  flow, and community structure in Telegram forwarding networks.
+keywords:
+  - Telegram
+  - social network analysis
+  - community detection
+  - information operations
+  - disinformation research
+  - political communication
+  - influence mapping
+  - graph visualization
+  - computational social science
+  - network science

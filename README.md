@@ -232,6 +232,27 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 ---
 
+## How to cite
+
+If you use Pulpit in academic work or a publication, please cite it as follows.
+
+**Plain text**
+
+Baldini, Giovanni. *Pulpit: Political undercurrents — linkage, propagation, influence on Telegram.* 2026. https://github.com/giovabal/pulpit
+
+**BibTeX**
+
+```bibtex
+@software{baldini2026pulpit,
+  author    = {Baldini, Giovanni},
+  title     = {Pulpit: Political undercurrents --- linkage, propagation, influence on {Telegram}},
+  year      = {2026},
+  url       = {https://github.com/giovabal/pulpit}
+}
+```
+
+---
+
 ## Disclaimer
 
 Pulpit is intended for academic research, investigative journalism, and analytical work on publicly accessible Telegram channels. It was written with the aim of complying with applicable laws and with [Telegram's Terms of Service](https://telegram.org/tos) as they stood at the time of development.
