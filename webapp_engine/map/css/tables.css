@@ -83,16 +83,16 @@ h2, h3, h4, h5, h6 {
   padding: 1.75rem 2rem;
 }
 
-/* Break out of the constrained wrapper so tables and charts use the full viewport. */
+/* Break out of the constrained wrapper; keep 3 rem clear on each side. */
 .export-wide {
-  margin-left: -2rem;
-  margin-right: -2rem;
+  margin-left: 1rem;   /* 2rem wrap padding + 1rem own margin = 3rem from edge */
+  margin-right: 1rem;
 }
 @media (min-width: 1400px) {
   .export-wide {
-    width: calc(100vw - 4rem);
-    margin-left: calc(-(100vw - 1400px) / 2 - 2rem);
-    margin-right: calc(-(100vw - 1400px) / 2 - 2rem);
+    width: calc(100vw - 6rem);
+    margin-left: calc(-(100vw - 1400px) / 2 + 1rem);
+    margin-right: calc(-(100vw - 1400px) / 2 + 1rem);
   }
 }
 
