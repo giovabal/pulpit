@@ -234,6 +234,9 @@ GRAPH_OUTPUT_DIR = config("GRAPH_OUTPUT_DIR", default="graph", cast=str)
 
 WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).upper()
 
+APP_VERSION = "0.18"
+REPOSITORY_URL = "https://github.com/giovabal/pulpit"
+
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"

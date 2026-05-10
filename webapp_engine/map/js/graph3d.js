@@ -19,9 +19,9 @@ var SELF_LOOP_HEIGHT   = 3.5;    // self-loop arc peak as multiple of node radiu
 var ZOOM_STEP          = 0.75;
 var THEMES_3D = {
     dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30 },
-    light:   { bg: 0xe8eff6, fade: 0xc8d8e8, edge_opacity: 0.40 },
-    minimal: { bg: 0x111111, fade: 0x1a1a1a, edge_opacity: 0.25 },
-    print:   { bg: 0xffffff, fade: 0xeeeeee, edge_opacity: 0.80 },
+    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40 },
+    minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25 },
+    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80 },
 };
 // Node radii as fractions of spatial network diameter
 var SIZE_MIN_FRAC      = 0.00225;
@@ -378,6 +378,8 @@ function apply_theme_3d(theme) {
     fade_color.setHex(t.fade);
     if (edge_segments) edge_segments.material.opacity = t.edge_opacity;
     document.body.setAttribute('data-theme3d', theme);
+    var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
+    document.documentElement.style.backgroundColor = bgHex;
     localStorage.setItem('pulpit_theme', theme);
 }
 
