@@ -8,7 +8,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 
 <figure>
 <img src="../webapp_engine/static/screenshot_00.jpg" alt="2D graph coloured by communities">
-<figcaption><em>2D graph coloured by Leiden directed communities, ~600 nodes. Each colour cluster is one detected community.</em></figcaption>
+<figcaption><em>2D graph coloured by Leiden directed communities, print layout Each colour cluster is one detected community.</em></figcaption>
 </figure>
 <br>
 
@@ -188,7 +188,7 @@ Each node starts with a unique label. At every step, each node adopts the label 
 
 The graph is symmetrised to undirected before running. Edge weights are not used — all citation links are treated equally regardless of frequency.
 
-**References:** Raghavan, U.N., Albert, R. & Kumara, S. (2007) "Near linear time algorithm to detect community structures in large-scale networks." *Physical Review E* 76(3). [doi:10.1103/PhysRevE.76.036106](https://doi.org/10.1103/PhysRevE.76.036106)  
+**References:** Raghavan, U.N., Albert, R. & Kumara, S. (2007) "Near linear time algorithm to detect community structures in large-scale networks." *Physical Review E* 76(3). [doi:10.1103/PhysRevE.76.036106](https://doi.org/10.1103/PhysRevE.76.036106)
 Cordasco, G. & Gargano, L. (2010) "Community detection via semi-synchronous label propagation algorithms." *IEEE BASNA*. [doi:10.1109/BASNA.2010.5730298](https://doi.org/10.1109/BASNA.2010.5730298)
 
 **In practice:** label propagation is the fastest algorithm in the set and requires no tuning. Its main value is as a parameter-free baseline: if a grouping appears in both Leiden and label propagation, it is unlikely to be an artefact of algorithmic choices or resolution settings. It is also the best option for very large graphs where Infomap, MCL, or Walktrap are too slow. The main limitation is that it ignores edge weights and direction, so it can miss fine-grained structure that frequency-sensitive algorithms (Leiden, MCL) detect.

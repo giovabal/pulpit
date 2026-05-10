@@ -24,8 +24,6 @@ The closure date is the analytical boundary:
 
 All registered vacancies are listed at **Channels → Vacancies** (`/channels/vacancies/`), which shows each channel's last-known in-degree, out-degree, and the count of orphaned amplifiers.
 
-> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and closure date.
-
 ---
 
 ## Finding replacement candidates
@@ -38,7 +36,12 @@ Any channel with a vacancy record gains a **Vacancy Analysis** card on its detai
 | **Months after** | 24 | How far forward after the closure date to search for replacement activity |
 | **Only after vacancy** | On | When on, restricts candidates to channels whose first message is on or after the closure date — ensuring they are genuinely new rather than pre-existing channels that happened to start being forwarded by the same amplifiers |
 
-> **[PLACEHOLDER: `images/vacancy-analysis-card.png`]** Vacancy Analysis card on a channel detail page: parameter form and ranked replacement candidate table.
+
+<figure>
+<img src="../webapp_engine/static/screenshot_21.jpg" alt="Vacancy analysis for a channel">
+<figcaption><em>Vacancy analysis for a channel, with proposed replacements.</em></figcaption>
+</figure>
+<br>
 
 The analysis proceeds in two steps:
 
