@@ -20,11 +20,12 @@
         <th class="text-end">Nodes</th>
         <th class="text-end">Edges</th>
         <th>Options</th>
+        <th>Version</th>
         <th></th>
       </tr>
     </thead>
     <tbody id="analysis-tbody">
-      <tr><td colspan="6" class="analysis-empty">Loading…</td></tr>
+      <tr><td colspan="7" class="analysis-empty">Loading…</td></tr>
     </tbody>
   </table>
 </div>
@@ -79,7 +80,7 @@
         var exports = data.exports || [];
         tbody.innerHTML = '';
         if (!exports.length) {
-          tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
           return;
         }
         exports.forEach(function(exp) {
@@ -113,6 +114,11 @@
           tdOpts.innerHTML = optionPills(exp.options);
           tr.appendChild(tdOpts);
 
+          var tdVer = document.createElement('td');
+          tdVer.className = 'text-muted analysis-date-cell';
+          tdVer.textContent = exp.pulpit_version || '—';
+          tr.appendChild(tdVer);
+
           var tdAct = document.createElement('td');
           var delBtn = document.createElement('button');
           delBtn.className = 'btn btn-sm btn-outline-danger';
@@ -126,7 +132,7 @@
               if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || r.status); });
               tr.remove();
               if (!tbody.querySelectorAll('tr').length)
-                tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
             }).catch(function(e) { alert('Error: ' + e.message); });
           });
           tdAct.appendChild(delBtn);
@@ -136,7 +142,7 @@
         });
       })
       .catch(function() {
-        tbody.innerHTML = '<tr><td colspan="6" class="analysis-empty">Failed to load exports.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="analysis-empty">Failed to load exports.</td></tr>';
       });
   }
 

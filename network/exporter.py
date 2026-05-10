@@ -134,13 +134,19 @@ def _patch_html_file(
             rf"\g<1>{escaped}\g<2>",
             content,
         )
+    repo_url = getattr(settings, "REPOSITORY_URL", "")
+    app_version = getattr(settings, "APP_VERSION", "")
+    if repo_url:
+        content = content.replace("https://github.com/giovabal/pulpit", repo_url)
     vl_value = "true" if vertical_layout else "false"
     layouts_json = json.dumps(extra_layouts or [])
     layouts_3d_json = json.dumps(extra_layouts_3d or [])
+    version_js = json.dumps(app_version)
     injection = (
         f"<script>window.VERTICAL_LAYOUT = {vl_value}; "
         f"window.EXTRA_LAYOUTS = {layouts_json}; "
-        f"window.EXTRA_LAYOUTS_3D = {layouts_3d_json};</script>\n"
+        f"window.EXTRA_LAYOUTS_3D = {layouts_3d_json}; "
+        f"window.APP_VERSION = {version_js};</script>\n"
     )
     for marker in ('<script src="js/', '<script type="module" src="js/'):
         idx = content.find(marker)
@@ -505,6 +511,7 @@ def write_summary_json(
     payload = {
         "name": name,
         "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "pulpit_version": getattr(settings, "APP_VERSION", ""),
         "nodes": nodes,
         "edges": edges,
         "options": opts,

@@ -118,12 +118,9 @@
     <i class="bi bi-exclamation-circle vacancy-impact-icon" aria-hidden="true"></i>
     <div>
       <h2 class="vacancy-impact-title">Vacancy Analysis</h2>
-      <p class="vacancy-impact-subtitle">
-        {% if vacancy %}closure date: {{ vacancy.closure_date|date:"N j, Y" }}{% if vacancy.note %} — {{ vacancy.note }}{% endif %}{% else %}no vacancy defined for this channel{% endif %}
-      </p>
+      <p class="vacancy-impact-subtitle">closure date: {{ vacancy.closure_date|date:"N j, Y" }}{% if vacancy.note %} — {{ vacancy.note }}{% endif %}</p>
     </div>
   </div>
-  {% if vacancy %}
   <div class="vacancy-analysis-body">
     <form class="vacancy-analysis-form" id="vacancy-analysis-form" autocomplete="off">
       <label class="vacancy-form-label">Months before <input class="vacancy-form-input" type="number" name="months_before" value="12" min="1" max="240"></label>
@@ -133,9 +130,7 @@
     </form>
     <div id="vacancy-analysis-results"></div>
   </div>
-  {% endif %}
 </div>
-{% if vacancy %}
 <script>
 (function () {
   var API = "{% url 'channel-vacancy-analysis' selected_channel.pk %}";

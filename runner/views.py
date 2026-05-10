@@ -195,6 +195,7 @@ class ExportsListView(View):
                     {
                         "name": item.name,
                         "created_at": data.get("created_at"),
+                        "pulpit_version": data.get("pulpit_version", ""),
                         "nodes": data.get("nodes"),
                         "edges": data.get("edges"),
                         "options": data.get("options", {}),

@@ -31,9 +31,10 @@
     <span class="export-footer-title">{{ title }}</span>
     <span class="export-footer-credit">
       Analyzed with
-      <a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer">
+      <a href="{{ repository_url }}" target="_blank" rel="noopener noreferrer">
         <img src="pulpit_logo.svg" alt="Pulpit" class="export-footer-logo">
       </a>
+      {% if app_version %}<span class="export-footer-version">v{{ app_version }}</span>{% endif %}
     </span>
   </footer>
 </body>

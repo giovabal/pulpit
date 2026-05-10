@@ -4,6 +4,7 @@ import os
 import shutil
 from typing import Any
 
+from django.conf import settings
 from django.template.loader import render_to_string
 
 from network.community_stats import network_summary_rows
@@ -13,6 +14,14 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 
 logger = logging.getLogger(__name__)
+
+
+def _pulpit_ctx() -> dict:
+    return {
+        "repository_url": getattr(settings, "REPOSITORY_URL", ""),
+        "app_version": getattr(settings, "APP_VERSION", ""),
+    }
+
 
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
@@ -45,6 +54,7 @@ def write_table_html(
     context = {
         "title": title,
         "robots_meta": robots_meta,
+        **_pulpit_ctx(),
         "description": (
             f"Network data for {n} Telegram channels, "
             "including activity metrics, inbound and outbound connections, and community assignments."
@@ -173,7 +183,7 @@ def write_network_table_html(
         title = f"{project_title} | Network" if project_title else "Network"
         robots_meta = "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/network_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -328,7 +338,7 @@ def write_network_compare_table_html(
     title = f"{project_title} | Network comparison" if project_title else "Network comparison"
     robots_meta = "index, follow" if seo else "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/network_compare_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -477,7 +487,7 @@ def write_community_table_html(
         title = f"{project_title} | Communities" if project_title else "Communities"
         robots_meta = "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/community_table.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -491,7 +501,7 @@ def write_consensus_matrix_html(
     title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
     robots_meta = "index, follow" if seo else "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/consensus_matrix.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -512,7 +522,7 @@ def write_structural_similarity_html(
     title = f"{project_title} | Structural similarity" if project_title else "Structural similarity"
     robots_meta = "index, follow" if seo else "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/structural_similarity.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -526,7 +536,7 @@ def write_vacancy_analysis_html(
     title = f"{project_title} | Vacancy Analysis" if project_title else "Vacancy Analysis"
     robots_meta = "index, follow" if seo else "noindex, nofollow"
 
-    context = {"title": title, "robots_meta": robots_meta}
+    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
     content = render_to_string("network/vacancy_analysis.html", context)
     with open(output_filename, "w") as f:
         f.write(content)
@@ -578,6 +588,7 @@ def write_index_html(
         "strategies": [s.capitalize() for s in (strategies or [])],
         "timeline_entries": timeline_entries or [],
         "include_vacancy_analysis": include_vacancy_analysis,
+        **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)
     with open(output_filename, "w") as f:
