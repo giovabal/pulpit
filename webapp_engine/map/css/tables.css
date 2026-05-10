@@ -83,17 +83,15 @@ h2, h3, h4, h5, h6 {
   padding: 1.75rem 2rem;
 }
 
-/* Break out of the constrained wrapper; keep 3 rem clear on each side. */
+/* Break out of the constrained wrapper; keep 3rem clear on each viewport edge.
+   50% is relative to the parent content width; 50vw is half the viewport.
+   Their difference is exactly the offset from the parent edge to the viewport edge,
+   so subtracting it (and adding back 3rem) pins the element 3rem from the viewport
+   at every screen width without needing a media query. */
 .export-wide {
-  margin-left: 1rem;   /* 2rem wrap padding + 1rem own margin = 3rem from edge */
-  margin-right: 1rem;
-}
-@media (min-width: 1400px) {
-  .export-wide {
-    width: calc(100vw - 6rem);
-    margin-left: calc(-(100vw - 1400px) / 2 + 1rem);
-    margin-right: calc(-(100vw - 1400px) / 2 + 1rem);
-  }
+  width: calc(100vw - 6rem);
+  margin-left: calc(50% - 50vw + 3rem);
+  margin-right: calc(50% - 50vw + 3rem);
 }
 
 /* ── Tables ────────────────────────────────────────────────── */
