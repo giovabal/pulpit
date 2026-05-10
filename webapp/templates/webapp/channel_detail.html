@@ -112,7 +112,8 @@
 </div>
 {% endif %}
 
-<div class="vacancy-analysis-card{% if not vacancy %} vacancy-analysis-card--inactive{% endif %}">
+{% if vacancy %}
+<div class="vacancy-analysis-card">
   <div class="vacancy-analysis-header">
     <i class="bi bi-exclamation-circle vacancy-impact-icon" aria-hidden="true"></i>
     <div>

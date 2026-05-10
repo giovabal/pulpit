@@ -79,14 +79,15 @@ A Pulpit research project runs in four steps, all accessible from the browser in
 
 ![The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis](webapp_engine/static/pipeline.jpg)
 
-<figcaption><em>The four-step pipeline: search channels → crawl channels → structural analysis → compare analysis.</em></figcaption>
+<figcaption><em>The four operations: search channels → crawl channels → structural analysis → compare analysis.</em></figcaption>
 </figure>
 <br>
 
-1. **Find channels** — add keywords; Pulpit searches Telegram and populates a list of matching channels
-2. **Organise** — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
-3. **Collect messages** — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
-4. **Generate the map** — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
+1. **Find channels** — *operations: search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
+2. **Organise** — *namage: channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
+3. **Collect channels info and messages** — *operations: crawl channels* — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
+4. **Generate the map** — *operations: structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
+5. **Compare maps** — *operations: compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
 The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's total publishing volume.
 
@@ -100,7 +101,7 @@ After export, the output directory contains self-contained files that can be sha
 | :----- | :--------- |
 | **Interactive 2D graph** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Spectral, Spring, and Circular layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--2d-interactive-graph) |
 | **Interactive 3D graph** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph) |
-| **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all 15 computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
+| **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
 | **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organisation × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
 | **Structural similarity matrix** (`structural_similarity.html`) | Pairwise cosine similarity between all channels across all computed measures, sortable by community or by measure [more](docs/export-formats.md) |
