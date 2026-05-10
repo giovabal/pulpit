@@ -1516,3 +1516,41 @@ body {
 .vacancy-meta { font-size: .78rem; color: var(--text-muted); margin: 0 0 .75rem; }
 .vacancy-empty { font-size: .82rem; color: var(--text-muted); margin: 0; font-style: italic; }
 .vacancy-candidates-table { width: 100%; }
+
+/* ── About footer ────────────────────────────────────────────────────────── */
+.app-footer {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: none;
+}
+.app-footer-btn {
+  pointer-events: all;
+  background: none;
+  border: none;
+  padding: .25rem .5rem;
+  color: var(--text-muted);
+  font-size: 1rem;
+  opacity: .4;
+  cursor: pointer;
+  transition: opacity .15s;
+  line-height: 1;
+}
+.app-footer-btn:hover { opacity: .85; }
+.about-modal-close {
+  position: absolute;
+  top: .5rem;
+  right: .6rem;
+  background: none;
+  border: none;
+  padding: .15rem .3rem;
+  color: var(--text-muted, #888);
+  font-size: 1.1rem;
+  opacity: .45;
+  cursor: pointer;
+  line-height: 1;
+  transition: opacity .15s;
+}
+.about-modal-close:hover { opacity: .9; }
