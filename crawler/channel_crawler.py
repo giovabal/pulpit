@@ -755,9 +755,12 @@ class ChannelCrawler:
             return 0
 
         total_upserted = 0
-        for msg_pk, msg_telegram_id in parent_messages:
+        total_parents = len(parent_messages)
+        for done, (msg_pk, msg_telegram_id) in enumerate(parent_messages, 1):
             if status_callback:
-                status_callback(f"[id={channel.id}] {channel} | replies for post #{msg_telegram_id}")
+                status_callback(
+                    f"[id={channel.id}] {channel} | replies for post #{msg_telegram_id} ({done}/{total_parents})"
+                )
             self.api_client.wait()
             try:
                 to_upsert: list[MessageReply] = []

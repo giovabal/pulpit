@@ -876,7 +876,8 @@
     _appendLines(lines) {
       // Only these high-frequency counter patterns should overwrite in place.
       function isCounter(text) {
-        return /\| messages processed: \d/.test(text);
+        return /\| messages processed: \d/.test(text) ||
+               /\| replies for post #\d/.test(text);
       }
       for (const line of lines) {
         const last = this.logEl.lastElementChild;
