@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 import os
@@ -618,6 +619,7 @@ class Command(BaseCommand):
         warning_handler: _WarningLogHandler | None = None
         try:
             if need_client:
+                asyncio.set_event_loop(asyncio.new_event_loop())
                 self.stdout.write("Connecting to Telegram…", ending="")
                 self.stdout.flush()
                 with TelegramClient(
