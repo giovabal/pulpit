@@ -98,14 +98,16 @@ h2, h3, h4, h5, h6 {
 }
 .export-wide {
   grid-column: full;
-  padding-left: 3rem;
-  padding-right: 3rem;
+  /* Use margin (not padding) so that elements with overflow-x:auto clip at
+     the element's own edge rather than including the gap in the scroll area. */
+  margin-left: 3rem;
+  margin-right: 3rem;
   min-width: 0;
 }
 /* Prose content inside wide sections (headings, preambles, accordions) is
    constrained to the same column width as the rest of the page.
-   100% here is the export-wide content box (viewport minus the 3rem padding
-   on each side), so min(100%, 1340px) is safe at all viewport widths.    */
+   100% here is the export-wide content box width, so min(100%, 1340px)
+   is safe at all viewport widths.                                         */
 .export-wide > h1, .export-wide > h2, .export-wide > h3,
 .export-wide > h4,  .export-wide > h5,
 .export-wide > p,   .export-wide > details,
