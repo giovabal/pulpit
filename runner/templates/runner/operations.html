@@ -875,9 +875,13 @@
 
     _appendLines(lines) {
       for (const line of lines) {
-        const m = line.match(/^\[(\d+\/\d+)\]/);
         const last = this.logEl.lastElementChild;
-        if (m && last && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === m[1]) {
+        const chanM   = line.match(/^\[(\d+\/\d+)\]/);
+        const indentM = line.match(/^(\s+)\S/);
+        const updateInPlace =
+          chanM   && last && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === chanM[1] ||
+          indentM && last && last.textContent.startsWith(indentM[1]);
+        if (updateInPlace) {
           last.textContent = line;
           const cls = classifyLine(line);
           last.className = cls || '';
