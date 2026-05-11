@@ -230,9 +230,11 @@ def umap_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
     if n < 4:
         return kamada_kawai_positions(graph)
     n_neighbors = min(15, n - 1)
-    embedding = _umap_lib.UMAP(
-        n_components=2, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
-    ).fit_transform(dist)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="umap")
+        embedding = _umap_lib.UMAP(
+            n_components=2, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
+        ).fit_transform(dist)
     embedding = _scale_embedding(embedding)
     return {node: (float(embedding[i, 0]), float(embedding[i, 1])) for i, node in enumerate(nodes)}
 
@@ -318,9 +320,11 @@ def umap_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]
     if n < 4:
         return kamada_kawai_positions_3d(graph)
     n_neighbors = min(15, n - 1)
-    embedding = _umap_lib.UMAP(
-        n_components=3, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
-    ).fit_transform(dist)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="umap")
+        embedding = _umap_lib.UMAP(
+            n_components=3, random_state=42, n_neighbors=n_neighbors, metric="precomputed"
+        ).fit_transform(dist)
     embedding = _scale_embedding(embedding)
     return {
         node: (float(embedding[i, 0]), float(embedding[i, 1]), float(embedding[i, 2])) for i, node in enumerate(nodes)
