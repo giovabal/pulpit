@@ -42,11 +42,6 @@ urlpatterns = [
         name="channel-avg-involvement-history",
     ),
     path(
-        "data/channel/<int:pk>/engagement_history/",
-        views.ChannelEngagementHistoryView.as_view(),
-        name="channel-engagement-history",
-    ),
-    path(
         "data/channel/<int:pk>/cross_refs/",
         views.ChannelCrossRefsView.as_view(),
         name="channel-cross-refs",
