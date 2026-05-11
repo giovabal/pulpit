@@ -618,6 +618,8 @@ class Command(BaseCommand):
         warning_handler: _WarningLogHandler | None = None
         try:
             if need_client:
+                self.stdout.write("Connecting to Telegram…", ending="")
+                self.stdout.flush()
                 with TelegramClient(
                     settings.TELEGRAM_SESSION_NAME,
                     settings.TELEGRAM_API_ID,
@@ -626,6 +628,7 @@ class Command(BaseCommand):
                     retry_delay=settings.TELEGRAM_RETRY_DELAY,
                     flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
                 ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
+                    self.stdout.write(" done")
                     api_client = TelegramAPIClient(client)
                     media_handler = MediaHandler(
                         api_client,
