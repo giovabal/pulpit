@@ -49,6 +49,7 @@ class ProgressPrinter:
         self._line_length = 0
         self._is_tty = getattr(stdout, "isatty", lambda: False)()
         self._indented_calls = 0
+        self._last_indented: tuple[str, str] | None = None
 
     def _fit(self, line: str) -> str:
         if not self._is_tty:
@@ -84,6 +85,7 @@ class ProgressPrinter:
             self._line_length = len(line)
         else:
             self._indented_calls += 1
+            self._last_indented = (message, indent)
             if self._indented_calls % 100 == 0:
                 line = f"{indent}{message}"
                 self._stdout.write(line, ending="\n")
@@ -91,10 +93,15 @@ class ProgressPrinter:
                 self._line_length = len(line)
 
     def newline(self) -> None:
+        if not self._is_tty and self._last_indented and self._indented_calls % 100 != 0:
+            message, indent = self._last_indented
+            self._stdout.write(f"{indent}{message}", ending="")
+            self._stdout.flush()
         self._stdout.write("", ending="\n")
         self._line_length = 0
         self._current_channel = None
         self._indented_calls = 0
+        self._last_indented = None
 
     def ensure_newline(self) -> None:
         """Move to a new line only if a progress line is currently shown."""
