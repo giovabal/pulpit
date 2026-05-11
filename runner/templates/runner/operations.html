@@ -875,11 +875,19 @@
 
     _appendLines(lines) {
       for (const line of lines) {
-        const div = document.createElement('div');
-        div.textContent = line;
-        const cls = classifyLine(line);
-        if (cls) div.className = cls;
-        this.logEl.appendChild(div);
+        const m = line.match(/^\[(\d+\/\d+)\]/);
+        const last = this.logEl.lastElementChild;
+        if (m && last && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === m[1]) {
+          last.textContent = line;
+          const cls = classifyLine(line);
+          last.className = cls || '';
+        } else {
+          const div = document.createElement('div');
+          div.textContent = line;
+          const cls = classifyLine(line);
+          if (cls) div.className = cls;
+          this.logEl.appendChild(div);
+        }
       }
       if (this.autoScroll) {
         this.logEl.scrollTop = this.logEl.scrollHeight;
