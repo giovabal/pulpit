@@ -103,6 +103,7 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
     var stratKeys = communities ? Object.keys(communities.strategies || {}) : [];
     var controlsDiv = document.createElement("div");
     controlsDiv.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+    controlsDiv.style.cssText = "max-width:min(100%,1340px);margin-left:auto;margin-right:auto;";
 
     // Sort-by select
     var sortWrap = document.createElement("div");
@@ -130,6 +131,7 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
     // ── Color legend ──────────────────────────────────────────────────────────
     var legDiv = document.createElement("div");
     legDiv.className = "mb-3 d-flex align-items-center gap-2";
+    legDiv.style.cssText = "max-width:min(100%,1340px);margin-left:auto;margin-right:auto;";
     legDiv.style.fontSize = "11px";
     legDiv.appendChild(document.createTextNode("Similarity → "));
     var gradBox = document.createElement("div");
@@ -152,7 +154,7 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
     var scrollDiv = document.createElement("div"); scrollDiv.style.cssText = "overflow-x:auto;";
     var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;";
+    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
 
     // Grid lines
     var gridG = document.createElementNS(NS, "g");

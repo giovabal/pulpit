@@ -122,7 +122,7 @@ function _render(d) {
 
     var legendDiv = document.createElement("div");
     legendDiv.className = "mb-3";
-    legendDiv.style.cssText = "display:flex;align-items:center;gap:10px;font-size:11px;color:#555;";
+    legendDiv.style.cssText = "display:flex;align-items:center;gap:10px;font-size:11px;color:#555;max-width:min(100%,1340px);margin-left:auto;margin-right:auto;";
     legendDiv.appendChild(document.createTextNode("Agreement → "));
     for (var k = 1; k <= maxCount; k++) {
         var legR = Math.max(1, maxR * Math.sqrt(k / maxCount));
@@ -140,7 +140,7 @@ function _render(d) {
     var scrollDiv = document.createElement("div"); scrollDiv.style.cssText = "overflow-x:auto;";
     var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;";
+    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
 
     var gridG = document.createElementNS(NS, "g");
     gridG.setAttribute("stroke", "#e4e4e4"); gridG.setAttribute("stroke-width", "0.5");
