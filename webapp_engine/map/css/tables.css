@@ -69,29 +69,38 @@ h2, h3, h4, h5, h6 {
   display: flex;
   align-items: center;
   height: 52px;
-  max-width: 1400px;
+  max-width: calc(1340px + 6rem);
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 3rem;
 }
 .export-topnav-brand { display: flex; align-items: center; text-decoration: none; }
 .export-topnav-brand img { height: 34px; width: auto; }
 
 /* ── Content wrappers ───────────────────────────────────────── */
+/* Full-bleed grid: text/headings are confined to the centre column
+   (≤ 1340 px); .export-wide spans the full grid with 3rem padding so its
+   content is always 3rem from each viewport edge.
+   Side columns are exactly 3rem until the viewport exceeds
+   1340 + 2×3rem = 1436 px, then they grow to keep the text centred.   */
 .export-wrap {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 1.75rem 2rem;
+  display: grid;
+  grid-template-columns:
+    [full-start]    minmax(3rem, 1fr)
+    [content-start] min(calc(100% - 6rem), 1340px)
+    [content-end]   minmax(3rem, 1fr)
+    [full-end];
+  padding-top: 1.75rem;
+  padding-bottom: 1.75rem;
 }
-
-/* Break out of the constrained wrapper; keep 3rem clear on each viewport edge.
-   50% is relative to the parent content width; 50vw is half the viewport.
-   Their difference is exactly the offset from the parent edge to the viewport edge,
-   so subtracting it (and adding back 3rem) pins the element 3rem from the viewport
-   at every screen width without needing a media query. */
+.export-wrap > * {
+  grid-column: content;
+  min-width: 0;
+}
 .export-wide {
-  width: calc(100vw - 6rem);
-  margin-left: calc(50% - 50vw + 3rem);
-  margin-right: calc(50% - 50vw + 3rem);
+  grid-column: full;
+  padding-left: 3rem;
+  padding-right: 3rem;
+  min-width: 0;
 }
 
 /* ── Tables ────────────────────────────────────────────────── */

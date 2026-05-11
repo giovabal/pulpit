@@ -66,6 +66,9 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 /* ---------- Top navbar ---------- */
@@ -135,6 +138,7 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+  flex: 1;
 }
 
 /* ---------- Channel header ---------- */
@@ -1519,11 +1523,8 @@ body {
 
 /* ── About footer ────────────────────────────────────────────────────────── */
 .app-footer {
-  position: fixed;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
+  text-align: center;
+  padding: .5rem 0 1rem;
   pointer-events: none;
 }
 .app-footer-btn {
