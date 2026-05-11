@@ -445,6 +445,13 @@ class ChannelDetailView(ListView):
                 "description": "Sum of view counts across all messages posted by this channel each month.",
             },
             {
+                "id": "ch-engagement-history",
+                "title": "Engagement rate per month",
+                "icon": "bi-graph-up-arrow",
+                "url": reverse("channel-engagement-history", kwargs={"pk": ch.pk}),
+                "description": "Average views per message each month — total monthly views divided by message count. Tracks content effectiveness over time.",
+            },
+            {
                 "id": "ch-forwards-history",
                 "title": "Forwards sent per month",
                 "icon": "bi-forward",

@@ -211,6 +211,27 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
         return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
 
 
+class ChannelEngagementHistoryView(_ChannelTimeSeriesBase):
+    annotate_field = "engagement_rate"
+    y_label = "views / msg"
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            self._msg_qs(channel, date__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total_views=Sum("views", default=0), total_messages=Count("id"))
+            .order_by("month")
+        )
+        return [
+            {
+                "month": e["month"].strftime("%Y-%m"),
+                "engagement_rate": round(e["total_views"] / e["total_messages"]) if e["total_messages"] else 0,
+            }
+            for e in qs
+        ]
+
+
 class ChannelCrossRefsView(_ChannelTimeSeriesBase):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)

@@ -1,4 +1,9 @@
 # Changelog
+## [0.19] - To be announced
+
+### New features
+- **Engagement rate chart on channel detail page** — a new *Engagement rate per month* panel shows average views per message each month (total monthly views ÷ message count). Surfaces content-effectiveness trends over time and complements the existing separate views and messages charts. Backed by a new `GET /stats/data/channel/<pk>/engagement_history/` endpoint.
+
 
 ## [0.18] - 2026-05-11
 *Alternative graph layouts and styles. A few more measures and channels details. Polls and quizzes.*
