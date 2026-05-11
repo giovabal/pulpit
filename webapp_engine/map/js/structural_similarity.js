@@ -288,8 +288,8 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
     svg.appendChild(rectG);
 
     scrollDiv.appendChild(svg);
-    _addSvgZoomPan(container, scrollDiv, svg);
     container.appendChild(scrollDiv);
+    _addSvgZoomPan(container, scrollDiv, svg);
 
     // ── Wire up controls ──────────────────────────────────────────────────────
     sortSel.addEventListener("change", function() {

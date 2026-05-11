@@ -263,8 +263,8 @@ function _render(d) {
     circleG.addEventListener("mouseleave", _hideTip);
     svg.appendChild(circleG);
     scrollDiv.appendChild(svg);
-    _addSvgZoomPan(container, scrollDiv, svg);
     container.appendChild(scrollDiv);
+    _addSvgZoomPan(container, scrollDiv, svg);
 }
 
 // ── Year switching ─────────────────────────────────────────────────────────────
