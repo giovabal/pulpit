@@ -245,12 +245,10 @@ Columns are sorted so that each organisation's dominant community falls as close
 Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION strategies active).
 
 <figure>
-<img src="images/community-consensus-matrix.png" alt="Community consensus matrix">
+<img src="../webapp_engine/static/screenshot_14.jpg" alt="Community consensus matrix">
 <figcaption><em>Consensus matrix: larger red circles indicate channel pairs co-assigned to the same community by more algorithms.</em></figcaption>
 </figure>
 <br>
-
-> **[PLACEHOLDER: `images/community-consensus-matrix.png`]** Consensus matrix: larger red circles indicate channel pairs co-assigned to the same community by more algorithms.
 
 The consensus matrix answers: **across all non-ORGANIZATION strategies, how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
 
