@@ -15,6 +15,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "BURTCONSTRAINT",
         "AMPLIFICATION",
         "CONTENTORIGINALITY",
+        "DIFFUSIONLAG",
         "SPREADING",
         "EGODENSITY",
         "LOCALCLUSTERING",

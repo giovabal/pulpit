@@ -639,6 +639,13 @@ class Command(BaseCommand):
                 ),
             ),
             (
+                "DIFFUSIONLAG",
+                "diffusion lag",
+                lambda gd, g: measures.apply_diffusion_lag(
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                ),
+            ),
+            (
                 "SPREADING",
                 "spreading efficiency (SIR)",
                 lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=spreading_runs),

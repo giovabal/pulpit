@@ -15,7 +15,7 @@ from network.measures._centrality import (
     apply_pagerank,
     compute_betweenness,
 )
-from network.measures._content import apply_amplification_factor, apply_content_originality
+from network.measures._content import apply_amplification_factor, apply_content_originality, apply_diffusion_lag
 from network.measures._registry import (
     ALL_MEASURES,
     ALL_NETWORK_STAT_GROUPS,
@@ -43,6 +43,7 @@ __all__ = [
     "apply_closeness_centrality",
     "apply_ego_network_density",
     "apply_content_originality",
+    "apply_diffusion_lag",
     "apply_flow_betweenness_centrality",
     "apply_harmonic_centrality",
     "apply_hits",

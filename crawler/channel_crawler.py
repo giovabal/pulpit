@@ -435,6 +435,7 @@ class ChannelCrawler:
         if telegram_message.fwd_from:
             message.fwd_from_channel_post = getattr(telegram_message.fwd_from, "channel_post", None)
             message.fwd_from_from_name = getattr(telegram_message.fwd_from, "from_name", None) or ""
+            message.fwd_from_date = getattr(telegram_message.fwd_from, "date", None)
 
         if (
             telegram_message.fwd_from
@@ -656,6 +657,8 @@ class ChannelCrawler:
                 "_updated": now,
                 "stats_refreshed_at": now,
             }
+            if telegram_message.fwd_from:
+                update_kwargs["fwd_from_date"] = getattr(telegram_message.fwd_from, "date", None)
             if telegram_message.pinned:
                 update_kwargs["has_been_pinned"] = True
             if media and hasattr(media, "poll"):

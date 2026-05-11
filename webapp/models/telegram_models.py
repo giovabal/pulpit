@@ -269,6 +269,7 @@ class Message(TelegramBaseModel):
     reply_to_msg_id = models.PositiveBigIntegerField(null=True)
     fwd_from_channel_post = models.PositiveBigIntegerField(null=True)
     fwd_from_from_name = models.CharField(max_length=255, blank=True)
+    fwd_from_date = models.DateTimeField(null=True)
     factcheck = models.JSONField(null=True, blank=True)
     stats_refreshed_at = models.DateTimeField(null=True)
 
