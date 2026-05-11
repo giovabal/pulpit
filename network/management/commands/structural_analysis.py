@@ -776,7 +776,10 @@ class Command(BaseCommand):
                     continue
                 year_extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
 
+        self.stdout.write("\nBuild graph data … ", ending="")
+        self.stdout.flush()
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
+        self.stdout.write("done")
         measures_labels = self._compute_measures(
             graph,
             graph_data,
@@ -983,7 +986,10 @@ class Command(BaseCommand):
                 extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
                 self.stdout.write("done")
 
+        self.stdout.write("\nBuild graph data … ", ending="")
+        self.stdout.flush()
         graph_data = exporter.build_graph_data(graph, channel_dict, positions)
+        self.stdout.write("done")
         measures_labels = self._compute_measures(
             graph,
             graph_data,
@@ -1007,7 +1013,10 @@ class Command(BaseCommand):
         shutil.rmtree(root_target, ignore_errors=True)  # clean up any interrupted previous run
         shutil.rmtree(_final_target + ".old", ignore_errors=True)  # clean up any orphaned backup
         project_title: str = settings.PROJECT_TITLE
+        self.stdout.write("Build communities data … ", ending="")
+        self.stdout.flush()
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
+        self.stdout.write("done")
         strategies = [s.lower() for s in communities_strategy]
 
         # Copy the map template (js/, css/, static assets) whenever any HTML page is being
