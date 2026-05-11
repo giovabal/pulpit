@@ -1,4 +1,6 @@
+import io
 import logging
+import sys
 from collections import Counter
 from typing import Any
 
@@ -18,10 +20,16 @@ from webapp.utils.colors import (
 
 import igraph as ig
 import leidenalg
-import markov_clustering as mc
 import networkx as nx
 import numpy as np
 from infomap import Infomap
+
+# markov_clustering writes to stderr at import time when matplotlib is absent
+_stderr, sys.stderr = sys.stderr, io.StringIO()
+import markov_clustering as mc  # noqa: E402
+
+sys.stderr = _stderr
+del _stderr
 
 logger = logging.getLogger(__name__)
 
