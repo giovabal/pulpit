@@ -123,7 +123,7 @@ class HomeView(ListView):
             .distinct()
             .count()
         )
-        total_replies = MessageReply.objects.filter(message__channel__in=interesting_qs.values("pk")).count()
+        total_replies = MessageReply.objects.filter(parent_message__channel__in=interesting_qs.values("pk")).count()
 
         ctx["summary"] = [
             {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
