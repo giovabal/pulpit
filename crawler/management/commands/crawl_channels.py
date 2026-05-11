@@ -69,13 +69,11 @@ class ProgressPrinter:
             self._stdout.flush()
             self._line_length = len(line)
         else:
-            if self._current_channel != channel_index:
-                self._current_channel = channel_index
-                self._line_length = 0
-                line = f"[{channel_index}/{self._total}] {message}"
-                self._stdout.write(line, ending="\n")
-                self._stdout.flush()
-                self._line_length = len(line)
+            self._current_channel = channel_index
+            line = f"[{channel_index}/{self._total}] {message}"
+            self._stdout.write(line, ending="\n")
+            self._stdout.flush()
+            self._line_length = len(line)
 
     def indented(self, message: str, indent: str) -> None:
         if self._is_tty:
