@@ -83,7 +83,7 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `LOCALCLUSTERING` | Directed local clustering coefficient (Fagiolo 2007); fraction of directed triangles through the node relative to all possible directed triads; 0 for nodes with total degree < 2 |
 | `AMPLIFICATION` | Forwards received from interesting channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
-| `DIFFUSIONLAG` | Average hours from original post date to forward date; `null` for channels with no dated forwards; low = early adopter, high = late amplifier |
+| `DIFFUSIONLAG` | Median hours from original post date to forward date (within a reaction window, default 30 days; set `--diffusion-window 0` to disable); `null` for channels with no dated forwards; low = early adopter, high = late amplifier |
 | `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `--spreading-runs` (default 200) |
 | `ALL` | All of the above; `BRIDGING` uses `LEIDEN` as community basis |
 

@@ -1,5 +1,6 @@
 import datetime
 import logging
+import statistics
 from typing import Any
 
 from django.db.models import Count, Q
@@ -94,8 +95,13 @@ def apply_diffusion_lag(
     channel_dict: dict[str, Any],
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    window_days: int = 30,
 ) -> list[tuple[str, str]]:
-    """Average hours from original post date to forward date per channel. None if no data."""
+    """Median hours from original post date to forward date per channel. None if no data.
+
+    window_days: only forwards where lag ≤ window_days are included (0 = no window).
+    Uses median to resist anniversary/archival re-shares that would inflate a mean.
+    """
     key = "diffusion_lag"
     channel_pks = [
         channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
@@ -108,13 +114,17 @@ def apply_diffusion_lag(
         & make_date_q(start_date, end_date)
         & channel_cutoff_q()
     )
+    window_h = window_days * 24 if window_days > 0 else None
     accum: dict[int, list[float]] = {}
     for row in Message.objects.filter(fwd_q).values("channel_id", "date", "fwd_from_date").iterator():
         lag_h = (row["date"] - row["fwd_from_date"]).total_seconds() / 3600
-        if lag_h >= 0:
-            accum.setdefault(row["channel_id"], []).append(lag_h)
+        if lag_h < 0:
+            continue
+        if window_h is not None and lag_h > window_h:
+            continue
+        accum.setdefault(row["channel_id"], []).append(lag_h)
 
-    lag_dict = {pk: round(sum(v) / len(v), 1) for pk, v in accum.items()}
+    lag_dict = {pk: round(statistics.median(v), 1) for pk, v in accum.items()}
 
     for node in graph_data["nodes"]:
         entry = channel_dict.get(node["id"])

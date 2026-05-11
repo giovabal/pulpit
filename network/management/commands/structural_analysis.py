@@ -231,6 +231,17 @@ class Command(BaseCommand):
             help="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Default: 200.",
         )
         parser.add_argument(
+            "--diffusion-window",
+            dest="diffusion_window",
+            type=int,
+            default=30,
+            metavar="DAYS",
+            help=(
+                "Reaction window in days for the DIFFUSIONLAG measure: only forwards within this many days of the "
+                "original post are included. Use 0 to disable the window. Default: 30."
+            ),
+        )
+        parser.add_argument(
             "--draw-dead-leaves",
             dest="draw_dead_leaves",
             action="store_true",
@@ -605,6 +616,7 @@ class Command(BaseCommand):
         do_graph: bool,
         do_3dgraph: bool,
         spreading_runs: int,
+        diffusion_window: int,
     ) -> list[tuple[str, str]]:
         """Compute all network measures and return (key, label) pairs for each active measure."""
         self.stdout.write("\nCalculations on the graph")
@@ -642,7 +654,7 @@ class Command(BaseCommand):
                 "DIFFUSIONLAG",
                 "diffusion lag",
                 lambda gd, g: measures.apply_diffusion_lag(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date
+                    gd, g, channel_dict, start_date=start_date, end_date=end_date, window_days=diffusion_window
                 ),
             ),
             (
@@ -798,6 +810,7 @@ class Command(BaseCommand):
             do_graph,
             do_3dgraph,
             options["spreading_runs"],
+            options["diffusion_window"],
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
@@ -1008,6 +1021,7 @@ class Command(BaseCommand):
             do_graph,
             do_3dgraph,
             options["spreading_runs"],
+            options["diffusion_window"],
         )
 
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")

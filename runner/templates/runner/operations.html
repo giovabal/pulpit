@@ -543,6 +543,13 @@
                   <input type="number" name="spreading_runs" id="spreading_runs" placeholder="200" min="1" data-requires-measure="SPREADING">
                 </div>
                 <div class="ops-param">
+                  <label for="diffusion_window">Diffusion window
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Reaction window in days for the DIFFUSIONLAG measure: only forwards within this many days of the original post are included. Use 0 to disable. Default: 30."></i>
+                  </label>
+                  <input type="number" name="diffusion_window" id="diffusion_window" placeholder="30" min="0" data-requires-measure="DIFFUSIONLAG">
+                </div>
+                <div class="ops-param">
                   <label for="leiden_coarse_resolution">CPM coarse γ
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Resolution parameter for LEIDEN_CPM_COARSE. Communities form when internal edge density exceeds γ. Lower = fewer, larger communities. Default: 0.01."></i>
@@ -1351,6 +1358,7 @@
         setVal('fa2_iterations',                 opts.fa2_iterations);
         setVal('recency_weights',                opts.recency_weights || '');
         setVal('spreading_runs',                 opts.spreading_runs);
+        setVal('diffusion_window',               opts.diffusion_window != null ? opts.diffusion_window : '');
         setVal('community_distribution_threshold', opts.community_distribution_threshold);
         setVal('leiden_coarse_resolution',       opts.leiden_coarse_resolution);
         setVal('leiden_fine_resolution',         opts.leiden_fine_resolution);

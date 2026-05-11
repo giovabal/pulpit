@@ -482,6 +482,7 @@ def write_summary_json(
         "layouts_3d",
         "recency_weights",
         "spreading_runs",
+        "diffusion_window",
         "community_distribution_threshold",
         "leiden_coarse_resolution",
         "leiden_fine_resolution",
