@@ -1,5 +1,59 @@
 import { build_year_nav } from './year_nav.js';
 
+// ── SVG zoom / pan ─────────────────────────────────────────────────────────────
+function _addSvgZoomPan(container, scrollDiv, svg) {
+    var NS = "http://www.w3.org/2000/svg";
+    var g = document.createElementNS(NS, "g");
+    while (svg.firstChild) g.appendChild(svg.firstChild);
+    svg.appendChild(g);
+
+    var scale = 1, tx = 0, ty = 0;
+    var dragging = false, startX, startY, startTx, startTy;
+
+    function applyTransform() {
+        g.setAttribute("transform", "translate(" + tx + "," + ty + ") scale(" + scale + ")");
+    }
+    function zoomTo(factor, cx, cy) {
+        var ns = Math.max(0.1, Math.min(50, scale * factor));
+        tx = cx - (cx - tx) * (ns / scale);
+        ty = cy - (cy - ty) * (ns / scale);
+        scale = ns; applyTransform();
+    }
+    svg.addEventListener("wheel", function(e) {
+        e.preventDefault();
+        var r = svg.getBoundingClientRect();
+        zoomTo(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    svg.addEventListener("mousedown", function(e) {
+        if (e.button !== 0) return;
+        dragging = true; startX = e.clientX; startY = e.clientY; startTx = tx; startTy = ty;
+        svg.style.cursor = "grabbing"; e.preventDefault();
+    });
+    document.addEventListener("mousemove", function(e) {
+        if (!dragging) return;
+        tx = startTx + (e.clientX - startX); ty = startTy + (e.clientY - startY); applyTransform();
+    });
+    document.addEventListener("mouseup", function() {
+        if (dragging) { dragging = false; svg.style.cursor = "grab"; }
+    });
+    svg.style.cursor = "grab";
+
+    var ctrl = document.createElement("div");
+    ctrl.style.cssText = "display:flex;gap:4px;margin-bottom:6px;";
+    [["＋", "Zoom in",  function() { var r = svg.getBoundingClientRect(); zoomTo(1.4, r.width / 2, r.height / 2); }],
+     ["－", "Zoom out", function() { var r = svg.getBoundingClientRect(); zoomTo(1 / 1.4, r.width / 2, r.height / 2); }],
+     ["↺",  "Reset",    function() { scale = 1; tx = 0; ty = 0; applyTransform(); }]
+    ].forEach(function(b) {
+        var btn = document.createElement("button");
+        btn.type = "button"; btn.className = "btn btn-outline-secondary btn-sm";
+        btn.style.cssText = "padding:1px 10px;font-size:13px;line-height:1.4;";
+        btn.textContent = b[0]; btn.title = b[1];
+        btn.addEventListener("click", b[2]);
+        ctrl.appendChild(btn);
+    });
+    container.insertBefore(ctrl, scrollDiv);
+}
+
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 function _pluralityComm(label, stratMaps, stratKeys) {
     var counts = {};
@@ -209,6 +263,7 @@ function _render(d) {
     circleG.addEventListener("mouseleave", _hideTip);
     svg.appendChild(circleG);
     scrollDiv.appendChild(svg);
+    _addSvgZoomPan(container, scrollDiv, svg);
     container.appendChild(scrollDiv);
 }
 
