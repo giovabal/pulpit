@@ -181,7 +181,7 @@ See [Community detection](docs/community-detection.md) for descriptions, referen
 
 ---
 
-## Vacancy analysis
+## Vacancy analysis — 6 algorithms
 
 When a channel goes silent — removed from Telegram, legally forced offline, or simply abandoned — it leaves a structural hole in the network. Channels that used to rely on it as a source now need to find an alternative. Pulpit's Vacancy Analysis answers: *who fills that structural role?*
 
