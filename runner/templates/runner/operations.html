@@ -1359,6 +1359,8 @@
         setMulti('measures',           opts.measures);
         setMulti('community_strategies', opts.community_strategies);
         setMulti('network_stat_groups',  opts.network_stat_groups);
+        setMulti('layouts_2d',           opts.layouts_2d || '');
+        setMulti('layouts_3d',           opts.layouts_3d || '');
 
         // Channel type checkboxes have names like channel_type_channel
         var ctypes = opts.channel_types ? opts.channel_types.split(',') : [];
