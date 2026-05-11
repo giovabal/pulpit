@@ -126,6 +126,8 @@ def build_graph(
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
     include_mentions: bool = True,
     include_self_references: bool = False,
+    include_lost: bool = False,
+    include_private: bool = False,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -136,16 +138,16 @@ def build_graph(
     if draw_dead_leaves:
         # Citations are stored in in_degree when REVERSED_EDGES=True, out_degree otherwise.
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
-    channel_qs: QuerySet[Channel] = (
-        Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
-        .exclude(is_private=True)
-        .select_related("organization")
-        .prefetch_related(
-            Prefetch(
-                "profilepicture_set",
-                queryset=ProfilePicture.objects.order_by("-date")[:1],
-                to_attr="_prefetched_profile_pics",
-            )
+    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
+    if not include_private:
+        channel_qs = channel_qs.exclude(is_private=True)
+    if not include_lost:
+        channel_qs = channel_qs.exclude(is_lost=True)
+    channel_qs = channel_qs.select_related("organization").prefetch_related(
+        Prefetch(
+            "profilepicture_set",
+            queryset=ProfilePicture.objects.order_by("-date")[:1],
+            to_attr="_prefetched_profile_pics",
         )
     )
     if channel_groups:

@@ -389,6 +389,10 @@ def _build_args(task: str, post: Any) -> list[str]:
         channel_groups = post.getlist("channel_groups")
         if channel_groups:
             args += ["--channel-groups", ",".join(channel_groups)]
+        if post.get("include_lost"):
+            args.append("--include-lost")
+        if post.get("include_private"):
+            args.append("--include-private")
         if post.get("timeline_step"):
             args += ["--timeline-step", "year"]
         vacancy_measures_val = ",".join(post.getlist("vacancy_measures"))

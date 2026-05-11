@@ -387,6 +387,16 @@
                   <input type="date" name="enddate" id="enddate">
                 </div>
               </div>
+              <div class="ops-flags">
+                <label class="ops-flag"><input type="checkbox" name="include_lost">Include lost channels
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Include channels marked as lost (unreachable by the crawler). Excluded by default."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="include_private">Include private channels
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Include channels marked as private (access-restricted). Excluded by default."></i>
+                </label>
+              </div>
             </fieldset>
             <fieldset class="ops-fieldset">
               <legend>Channel types

@@ -342,6 +342,20 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--include-lost",
+            dest="include_lost",
+            action="store_true",
+            default=False,
+            help="Include channels marked as lost in the graph (excluded by default).",
+        )
+        parser.add_argument(
+            "--include-private",
+            dest="include_private",
+            action="store_true",
+            default=False,
+            help="Include channels marked as private in the graph (excluded by default).",
+        )
+        parser.add_argument(
             "--timeline-step",
             dest="timeline_step",
             default="none",
@@ -744,6 +758,8 @@ class Command(BaseCommand):
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
                 include_self_references=options["include_self_references"],
+                include_lost=options["include_lost"],
+                include_private=options["include_private"],
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -959,6 +975,8 @@ class Command(BaseCommand):
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
                 include_self_references=options["include_self_references"],
+                include_lost=options["include_lost"],
+                include_private=options["include_private"],
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
