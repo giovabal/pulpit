@@ -1,12 +1,4 @@
 # Roadmap for Pulpit: Activities for Next Versions
-
-## [0.18]
-- Screenshots missing
--- Channel details with graphs (10) (exchange position with 11)
--- 3D graph (06, 07, 08)
--- Whole-network statistics table (04)
-
-
 ## [0.19]
 - select/unselect, regardless of organization, channels to be interesting
 - small notes (bottom right) on what is on (layout, community and so on) for graphs

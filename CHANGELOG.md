@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.18] - To be announced
+## [0.18] - 2026-05-11
 *Alternative graph layouts and styles. A few more measures and channels details. Polls and quizzes.*
 
 ### New features
