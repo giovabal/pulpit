@@ -33,7 +33,14 @@ _ABOUT_REF_RE = re.compile(r"t\.me/((?:[-\w.]|(?:%[\da-fA-F]{2}))+)")
 
 
 class ProgressPrinter:
-    """Manages overwriting progress lines in the terminal via carriage return."""
+    """Manages progress lines.
+
+    In TTY mode lines are overwritten in place with carriage return.
+    In non-TTY mode (file/pipe — the web output panel) each status change
+    is emitted as a complete newline-terminated line so the log reader
+    forwards it immediately.  High-frequency indented callbacks (e.g. per-
+    message stats refresh) are throttled to one line every 100 calls.
+    """
 
     def __init__(self, stdout: Any, total: int) -> None:
         self._stdout = stdout
@@ -41,6 +48,7 @@ class ProgressPrinter:
         self._current_channel: int | None = None
         self._line_length = 0
         self._is_tty = getattr(stdout, "isatty", lambda: False)()
+        self._indented_calls = 0
 
     def _fit(self, line: str) -> str:
         if not self._is_tty:
@@ -49,28 +57,46 @@ class ProgressPrinter:
         return line if len(line) <= cols else line[: cols - 1]
 
     def status(self, message: str, channel_index: int) -> None:
-        if self._current_channel != channel_index:
-            if self._current_channel is not None:
-                self._stdout.write("", ending="\n")
-            self._current_channel = channel_index
-            self._line_length = 0
-        line = self._fit(f"[{channel_index}/{self._total}] {message}")
-        padding = " " * max(0, self._line_length - len(line))
-        self._stdout.write(f"\r{line}{padding}", ending="")
-        self._stdout.flush()
-        self._line_length = len(line)
+        if self._is_tty:
+            if self._current_channel != channel_index:
+                if self._current_channel is not None:
+                    self._stdout.write("", ending="\n")
+                self._current_channel = channel_index
+                self._line_length = 0
+            line = self._fit(f"[{channel_index}/{self._total}] {message}")
+            padding = " " * max(0, self._line_length - len(line))
+            self._stdout.write(f"\r{line}{padding}", ending="")
+            self._stdout.flush()
+            self._line_length = len(line)
+        else:
+            if self._current_channel != channel_index:
+                self._current_channel = channel_index
+                self._line_length = 0
+                line = f"[{channel_index}/{self._total}] {message}"
+                self._stdout.write(line, ending="\n")
+                self._stdout.flush()
+                self._line_length = len(line)
 
     def indented(self, message: str, indent: str) -> None:
-        line = self._fit(f"{indent}{message}")
-        padding = " " * max(0, self._line_length - len(line))
-        self._stdout.write(f"\r{line}{padding}", ending="")
-        self._stdout.flush()
-        self._line_length = len(line)
+        if self._is_tty:
+            line = self._fit(f"{indent}{message}")
+            padding = " " * max(0, self._line_length - len(line))
+            self._stdout.write(f"\r{line}{padding}", ending="")
+            self._stdout.flush()
+            self._line_length = len(line)
+        else:
+            self._indented_calls += 1
+            if self._indented_calls % 100 == 0:
+                line = f"{indent}{message}"
+                self._stdout.write(line, ending="\n")
+                self._stdout.flush()
+                self._line_length = len(line)
 
     def newline(self) -> None:
         self._stdout.write("", ending="\n")
         self._line_length = 0
         self._current_channel = None
+        self._indented_calls = 0
 
     def ensure_newline(self) -> None:
         """Move to a new line only if a progress line is currently shown."""
