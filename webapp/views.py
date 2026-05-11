@@ -22,6 +22,7 @@ from .models import (
     ChannelVacancy,
     Message,
     MessageReaction,
+    MessageReply,
     Organization,
     ProfilePicture,
 )
@@ -122,10 +123,16 @@ class HomeView(ListView):
             .distinct()
             .count()
         )
+        total_replies = MessageReply.objects.filter(message__channel__in=interesting_qs.values("pk")).count()
 
         ctx["summary"] = [
             {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
-            {"icon": "bi-chat-left-text", "label": "Messages collected", "value": f"{total_messages:,}"},
+            {
+                "icon": "bi-chat-left-text",
+                "label": "Messages collected",
+                "value": f"{total_messages:,}",
+                "secondary": {"value": f"{total_replies:,}", "label": "replies"},
+            },
             {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
             {
                 "icon": "bi-calendar-range",
