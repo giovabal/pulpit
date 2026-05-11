@@ -874,12 +874,19 @@
     }
 
     _appendLines(lines) {
+      // Only these high-frequency counter patterns should overwrite in place.
+      function isCounter(text) {
+        return /\| messages processed: \d/.test(text);
+      }
       for (const line of lines) {
         const last = this.logEl.lastElementChild;
         const chanM   = line.match(/^\[(\d+\/\d+)\]/);
         const indentM = line.match(/^(\s+)\S/);
         const updateInPlace =
-          chanM   && last && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === chanM[1] ||
+          // Same channel AND both lines are repetitive counters
+          chanM && last && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === chanM[1]
+            && isCounter(line) && isCounter(last.textContent) ||
+          // Indented stats-refresh lines (refreshing message stats … N/M)
           indentM && last && last.textContent.startsWith(indentM[1]);
         if (updateInPlace) {
           last.textContent = line;
