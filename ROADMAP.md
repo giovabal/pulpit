@@ -1,13 +1,9 @@
 # Roadmap for Pulpit: Activities for Next Versions
 
 ## [0.18]
-- Take care that in every file, including HTML tables and everything else that is created in Structural Analysis, repository URL is using the new REPOSITORY_URL setting. In every such file add pulpit version too. Add a column with Pulpit version in Analysis table
-- In channels details page, if vacancy is not set for that channel, do not display the vacancy card
-
 - Screenshots missing
 -- Channel details with graphs (10) (exchange position with 11)
 -- 3D graph (06, 07, 08)
-
 -- Whole-network statistics table (04)
 
 

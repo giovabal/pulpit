@@ -83,11 +83,11 @@ A Pulpit research project runs in four steps, all accessible from the browser in
 </figure>
 <br>
 
-1. **Find channels** — *operations: search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
-2. **Organise** — *namage: channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
-3. **Collect channels info and messages** — *operations: crawl channels* — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
-4. **Generate the map** — *operations: structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
-5. **Compare maps** — *operations: compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
+1. **Find channels** — *Operations: Search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
+2. **Organise** — *Manage: Channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
+3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
+4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
+5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
 The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's total publishing volume.
 
