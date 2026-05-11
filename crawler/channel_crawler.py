@@ -674,6 +674,7 @@ class ChannelCrawler:
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
             update_status(f"refreshing message stats … {updated}/{total_in_db}")
+        update_status(f"refreshing message stats … {updated}/{total_in_db}")
         return updated
 
     def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:

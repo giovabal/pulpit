@@ -422,6 +422,7 @@ class Command(BaseCommand):
             )
             if not settings.IGNORE_FLOODWAIT:
                 sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return
         except errors.rpcerrorlist.ChannelPrivateError:
             printer.newline()
             self.stdout.write(
@@ -429,6 +430,7 @@ class Command(BaseCommand):
                     f"Skipping refresh for channel {channel.telegram_id}: channel is private or inaccessible"
                 )
             )
+            return
         except errors.ServerError as error:
             printer.newline()
             self.stdout.write(
@@ -451,10 +453,13 @@ class Command(BaseCommand):
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Retry failed for channel {channel.telegram_id}: {retry_error}"))
                 logger.exception("Refresh retry failed for channel %s", channel.telegram_id)
+                return
         except Exception as error:
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
             logger.exception("Refresh failed for channel %s", channel.telegram_id)
+            return
+        printer.newline()
 
     def _fix_missing_media(
         self,
