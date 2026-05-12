@@ -6,6 +6,8 @@
 
 ### Improvements
 - **`setup.sh` improvements** — the setup script now (1) checks that Python 3.12 is available and exits with a clear error if not; (2) automatically copies `env.example` to `.env` when no `.env` exists, reminding the user to fill in their Telegram credentials; (3) runs `python manage.py migrate` so the database is ready immediately after setup. First-time setup is now a single command.
+- **`setup.bat` for Windows** — new Windows batch equivalent of `setup.sh`: same Python 3.12 check, venv creation, dependency installation, `.env` bootstrap, and migration in a single `setup.bat` command.
+- **Windows-friendly documentation** — all docs now include Windows-specific instructions wherever Unix and Windows differ: `setup.bat` callout in Getting started; separate Windows cmd block for the database migration commands (no backslash line continuations); note in the Workflow CLI section that PowerShell supports `#` comments (or use `rem` in cmd); Windows path variant for `compare_analysis`; clarification that `python -m http.server` works on all platforms.
 - **Include lost / include private filters in Structural Analysis** — two new checkboxes in the Filters fieldset of the Operations panel (`include_lost`, `include_private`). Both are unchecked by default (lost and private channels are excluded from the graph). When checked, the corresponding `--include-lost` / `--include-private` flags are passed to `structural_analysis`, which propagates them to `graph_builder.build_graph()`.
 
 ### Fixes
