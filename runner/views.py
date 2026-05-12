@@ -367,6 +367,9 @@ def _build_args(task: str, post: Any) -> list[str]:
         spreading_runs_val = post.get("spreading_runs", "").strip()
         if spreading_runs_val:
             args += ["--spreading-runs", spreading_runs_val]
+        diffusion_window_val = post.get("diffusion_window", "").strip()
+        if diffusion_window_val:
+            args += ["--diffusion-window", diffusion_window_val]
         if post.get("consensus_matrix"):
             args.append("--consensus-matrix")
         if post.get("structural_similarity"):
