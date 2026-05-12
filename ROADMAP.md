@@ -1,19 +1,18 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.19]
-- select/unselect, regardless of organization, channels to be interesting
+- fix tests
 - small notes (bottom right) on what is on (layout, community and so on) for graphs
 - regency weights should be centered on a period of time, and there must regency weights even for the future
 - vacancy needs enough data for being efficient and significant, find academically validated ways to say if data are enough
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)
 - Organization changes overtime.
-- group analysis, groups as selectors, similar to whole network analysis
 - Community evolution visualization: when `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.
 
 
 ## [0.20]
 - persist structural analysis options, so they can be chosen before analysis, imported and exported
 - in homepage add a scattered graph that show number of connection / number of effective forwards (ie.: number against multiplicity)
-
+- dark theme
 
 ## [1.0]
 - Zenodo registration
