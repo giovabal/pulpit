@@ -67,7 +67,7 @@ class ChannelViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = ChannelSerializer
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "patch", "post", "head", "options"]
     filter_backends = [OrderingFilter]
     ordering_fields = ["id", "title", "participants_count", "in_degree"]
     ordering = ["-id"]
@@ -145,10 +145,10 @@ class ChannelViewSet(
                 channels.update(organization=org)
             if add_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
-                    grp.channel_set.add(*channels)
+                    grp.channels.add(*channels)
             if remove_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=remove_group_ids):
-                    grp.channel_set.remove(*channels)
+                    grp.channels.remove(*channels)
 
         return Response({"updated": channels.count()})
 

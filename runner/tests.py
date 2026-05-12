@@ -499,7 +499,8 @@ class BuildArgsGetChannelsTests(TestCase):
             "retry_references": "--retry-references",
             "force_retry_unresolved_references": "--force-retry-unresolved-references",
             "mine_about_texts": "--mine-about-texts",
-            "refresh_degrees": "--refresh-degrees",
+            "in_degrees": "--in-degrees",
+            "out_degrees": "--out-degrees",
             "fix_missing_media": "--fix-missing-media",
         }
         for field, expected_flag in flags.items():
@@ -513,11 +514,11 @@ class BuildArgsGetChannelsTests(TestCase):
         self.assertNotIn("200", args)
 
     def test_do_refresh_with_limit_value(self):
-        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": "200"}))
-        self.assertEqual(args, ["--refresh-messages-stats", "200"])
+        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_limit": "200"}))
+        self.assertEqual(args, ["--refresh-messages-stats", "--refresh-limit", "200"])
 
     def test_do_refresh_with_date_value(self):
-        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": "2024-01-01"}))
+        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_from": "2024-01-01"}))
         self.assertIn("2024-01-01", args)
 
     def test_ids_appended(self):

@@ -223,8 +223,8 @@ class FixMessageHolesTests(TestCase):
         self.status_messages.append(msg)
 
     @staticmethod
-    def _noop_get_message_fn(ch, tm) -> int:
-        return 0
+    def _noop_get_message_fn(ch, tm) -> tuple[bool, int]:
+        return True, 0
 
     def _run(
         self,
@@ -335,8 +335,8 @@ class FixMessageHolesTests(TestCase):
         self.assertEqual(result, (0, 0))
 
     def test_images_counted_in_return_value(self) -> None:
-        def one_image_fn(ch, tm) -> int:
-            return 1
+        def one_image_fn(ch, tm) -> tuple[bool, int]:
+            return True, 1
 
         self._create_messages([1, 3])  # hole at 2
         result = self._run(get_message_fn=one_image_fn)
@@ -1253,6 +1253,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
             tm.fwd_from.from_id.channel_id = fwd_channel_id
             tm.fwd_from.channel_post = None
             tm.fwd_from.from_name = None
+            tm.fwd_from.date = None
         else:
             tm.fwd_from = None
         return tm
@@ -1546,6 +1547,6 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("crawl_channels")
+            call_command("crawl_channels", get_new_messages=True)
 
             mock_media.clean_leftovers.assert_called_once()
