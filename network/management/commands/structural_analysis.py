@@ -336,7 +336,7 @@ class Command(BaseCommand):
             default=None,
             metavar="GROUPS",
             help=(
-                "Comma-separated list of ChannelGroup names. "
+                "Comma-separated list of ChannelGroup keys. "
                 "When provided, only channels belonging to at least one of these groups are included in the graph. "
                 "Leave unset to include all interesting channels regardless of group membership."
             ),

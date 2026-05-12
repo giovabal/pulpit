@@ -240,7 +240,7 @@
                 </legend>
                 <div class="ops-flags">
                   {% for group in channel_groups %}
-                  <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
+                  <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group.key }}">{{ group.name }}</label>
                   {% endfor %}
                 </div>
               </fieldset>
@@ -417,7 +417,7 @@
               </legend>
               <div class="ops-flags">
                 {% for group in channel_groups %}
-                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group }}">{{ group }}</label>
+                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group.key }}">{{ group.name }}</label>
                 {% endfor %}
               </div>
             </fieldset>

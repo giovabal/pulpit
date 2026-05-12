@@ -267,7 +267,8 @@ class OperationsViewTests(TestCase):
     def test_context_contains_channel_groups(self):
         ChannelGroup.objects.create(name="Alpha")
         resp = self.client.get(reverse("operations"))
-        self.assertIn("Alpha", resp.context["channel_groups"])
+        keys = [g["key"] for g in resp.context["channel_groups"]]
+        self.assertIn("alpha", keys)
 
 
 # ---------------------------------------------------------------------------

@@ -273,7 +273,7 @@ class Command(BaseCommand):
             default=None,
             metavar="GROUPS",
             help=(
-                "Comma-separated list of ChannelGroup names. "
+                "Comma-separated list of ChannelGroup keys. "
                 "Only channels belonging to at least one of these groups are included."
             ),
         )
@@ -633,7 +633,7 @@ class Command(BaseCommand):
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
         if channel_groups:
-            interesting_qs = interesting_qs.filter(groups__name__in=channel_groups).distinct()
+            interesting_qs = interesting_qs.filter(groups__key__in=channel_groups).distinct()
 
         need_client = (
             get_channels_info
@@ -707,7 +707,7 @@ class Command(BaseCommand):
                                 channel_type_filter(channel_types)
                             ).order_by("-id")
                             if channel_groups:
-                                excluded_by_type = excluded_by_type.filter(groups__name__in=channel_groups).distinct()
+                                excluded_by_type = excluded_by_type.filter(groups__key__in=channel_groups).distinct()
                             if ids_str:
                                 excluded_by_type = excluded_by_type.filter(parse_id_ranges(ids_str))
                             n_excluded = excluded_by_type.count()

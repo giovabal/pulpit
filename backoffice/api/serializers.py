@@ -25,10 +25,11 @@ class ChannelVacancySerializer(serializers.ModelSerializer):
 
 class ChannelGroupSerializer(serializers.ModelSerializer):
     channel_count = serializers.IntegerField(read_only=True)
+    key = serializers.SlugField(required=False, allow_blank=True, max_length=100)
 
     class Meta:
         model = ChannelGroup
-        fields = ["id", "name", "description", "note", "channel_count"]
+        fields = ["id", "name", "key", "description", "note", "channel_count"]
 
 
 class ChannelSerializer(serializers.ModelSerializer):

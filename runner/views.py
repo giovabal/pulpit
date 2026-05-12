@@ -47,7 +47,7 @@ class OperationsView(View):
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
-        channel_groups = list(ChannelGroup.objects.values_list("name", flat=True))
+        channel_groups = list(ChannelGroup.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
         return render(
             request,

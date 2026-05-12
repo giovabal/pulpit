@@ -151,7 +151,7 @@ def build_graph(
         )
     )
     if channel_groups:
-        channel_qs = channel_qs.filter(groups__name__in=channel_groups).distinct()
+        channel_qs = channel_qs.filter(groups__key__in=channel_groups).distinct()
 
     _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()
