@@ -59,11 +59,21 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 ## Quick start
 
+**macOS / Linux**
 ```sh
 git clone https://github.com/giovabal/pulpit
 cd pulpit
 sh setup.sh
 # Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
+python manage.py runserver
+```
+
+**Windows**
+```cmd
+git clone https://github.com/giovabal/pulpit
+cd pulpit
+setup.bat
+rem Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
 python manage.py runserver
 ```
 
@@ -154,7 +164,7 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 14 algorithms
+## Community detection — 13 algorithms and one custom selection
 
 Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 

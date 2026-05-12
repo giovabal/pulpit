@@ -34,7 +34,7 @@ sh setup.sh
 - `cd pulpit` moves you into that folder.
 - `sh setup.sh` checks your Python version, installs dependencies, creates a `.env` configuration file, and prepares the database. This may take a minute or two.
 
-> **Windows note:** if `sh setup.sh` does not work, run `setup.bat` instead.
+> **Windows users:** run `setup.bat` instead of `sh setup.sh`. Open **Command Prompt** or **PowerShell**, navigate to the `pulpit` folder, and type `setup.bat`.
 
 ---
 
