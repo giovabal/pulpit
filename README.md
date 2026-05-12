@@ -64,7 +64,7 @@ git clone https://github.com/giovabal/pulpit
 cd pulpit
 sh setup.sh
 # Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
-python manage.py migrate && python manage.py runserver
+python manage.py runserver
 ```
 
 Open [http://localhost:8000](http://localhost:8000). The entire workflow runs from the browser from here. See [Getting started](docs/getting-started.md) for setup details, Telegram credential registration, and database configuration.

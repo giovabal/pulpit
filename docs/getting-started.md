@@ -32,7 +32,7 @@ sh setup.sh
 
 - `git clone` downloads a copy of Pulpit to a new folder called `pulpit` on your computer.
 - `cd pulpit` moves you into that folder.
-- `sh setup.sh` installs Pulpit's dependencies (this may take a minute or two).
+- `sh setup.sh` checks your Python version, installs dependencies, creates a `.env` configuration file, and prepares the database. This may take a minute or two.
 
 > **Windows note:** if `sh setup.sh` does not work, run `setup.bat` instead.
 
@@ -52,17 +52,9 @@ Think of this step as authorising Pulpit to use your Telegram account — the sa
 
 ---
 
-## Step 3 — Create the configuration file
+## Step 3 — Fill in your credentials
 
-In the `pulpit` folder, copy the example settings file:
-
-```sh
-cp env.example .env
-```
-
-> **Windows users:** use `copy env.example .env` instead of `cp`.
-
-Open the new `.env` file in any text editor (Notepad works fine on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
+`setup.sh` already created a `.env` file for you. Open it in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
 
 ```
 TELEGRAM_API_ID=your_api_id_here
@@ -76,19 +68,7 @@ All other settings have sensible defaults. You do not need to change anything el
 
 ---
 
-## Step 4 — Prepare the database
-
-Pulpit stores everything — channels, messages, settings — in a database file on your computer. Run this command to create it:
-
-```sh
-python manage.py migrate
-```
-
-You should see a series of lines like `Applying webapp.0001_initial... OK`. Once it finishes, the database is ready.
-
----
-
-## Step 5 — Start Pulpit
+## Step 4 — Start Pulpit
 
 ```sh
 python manage.py runserver
@@ -138,7 +118,7 @@ Git is not installed. Download it from [git-scm.com/downloads](https://git-scm.c
 The setup script may not have run completely. Try: `pip install -r requirements.txt`.
 
 **The server starts but the browser shows an error**
-Make sure you ran `python manage.py migrate` before `python manage.py runserver`. If the problem persists, check the terminal for error messages.
+Check the terminal for error messages. If the error mentions missing tables, run `python manage.py migrate` manually — this can happen if `setup.sh` was interrupted before it finished.
 
 ---
 
