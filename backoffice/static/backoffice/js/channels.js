@@ -202,11 +202,6 @@
             badge.textContent = ch.channel_type || "—";
             tdType.appendChild(badge); tr.appendChild(tdType);
 
-            /* interesting override */
-            var tdOv = document.createElement("td");
-            renderOverrideCell(tdOv, ch);
-            tr.appendChild(tdOv);
-
             /* org */
             var tdOrg = document.createElement("td");
             tdOrg.className = "bo-org-cell";
@@ -216,6 +211,11 @@
                 openOrgSelect(tdOrg, ch);
             });
             tr.appendChild(tdOrg);
+
+            /* interesting override */
+            var tdOv = document.createElement("td");
+            renderOverrideCell(tdOv, ch);
+            tr.appendChild(tdOv);
 
             /* groups */
             var tdGrp = document.createElement("td");

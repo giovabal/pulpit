@@ -94,17 +94,17 @@ A high structural equivalence score means the candidate has stepped into the sam
 
 *Gould & Fernandez (1989), "Structures of mediation", [Sociological Methodology 19](https://doi.org/10.2307/270949). Burt (2004), "Structural holes and good ideas", [American Journal of Sociology 110(2)](https://doi.org/10.1086/421787).*
 
-*"Does this candidate bridge the same organisational communities as the vacancy did?"*
+*"Does this candidate bridge the same organizational communities as the vacancy did?"*
 
-Politically significant channels often function as **brokers** — they mediate between channels from distinct organisations. A nationalist aggregator that forwards from both a religious conservative outlet and an economic nationalist outlet bridges two otherwise separate communities. When that aggregator disappears, the question is not only who else gets forwarded by the same channels, but who else bridges the same organisational divide.
+Politically significant channels often function as **brokers** — they mediate between channels from distinct organizations. A nationalist aggregator that forwards from both a religious conservative outlet and an economic nationalist outlet bridges two otherwise separate communities. When that aggregator disappears, the question is not only who else gets forwarded by the same channels, but who else bridges the same organizational divide.
 
-The brokerage role score is a **Jaccard similarity** between the set of organisation-pairs the vacancy bridged and the set the candidate bridges:
+The brokerage role score is a **Jaccard similarity** between the set of organization-pairs the vacancy bridged and the set the candidate bridges:
 
-- For the vacancy (before window): for each forwarded message, record the organisation of the source; for each channel that forwarded the vacancy, record its organisation. The vacancy's *brokerage profile* is the set of (source-organisation, amplifier-organisation) pairs it mediated.
+- For the vacancy (before window): for each forwarded message, record the organization of the source; for each channel that forwarded the vacancy, record its organization. The vacancy's *brokerage profile* is the set of (source-organization, amplifier-organization) pairs it mediated.
 - For the candidate (after window): compute the same pairs.
 - Jaccard = |intersection| / |union|.
 
-A score of 1.0 means the candidate bridges exactly the same organisational pairs. The score is shown as `—` when the vacancy's neighbourhood contained no channels with organisation assignments.
+A score of 1.0 means the candidate bridges exactly the same organizational pairs. The score is shown as `—` when the vacancy's neighbourhood contained no channels with organization assignments.
 
 ---
 
@@ -206,7 +206,7 @@ In the **Operations panel**, all six measures are pre-checked when any vacancy e
 
 ## Interpreting results
 
-The six scores are complementary, not redundant, and fall into two analytical perspectives. Scores A–C characterise the candidate's structural position from a topological standpoint — who forwards it, what it forwards from, and what organisational boundaries it crosses. Scores D–F characterise it from a dynamical standpoint — whether information actually propagates to the same destinations, how well-embedded the candidate is in the orphaned channels' content supply chain, and how quickly it was adopted.
+The six scores are complementary, not redundant, and fall into two analytical perspectives. Scores A–C characterise the candidate's structural position from a topological standpoint — who forwards it, what it forwards from, and what organizational boundaries it crosses. Scores D–F characterise it from a dynamical standpoint — whether information actually propagates to the same destinations, how well-embedded the candidate is in the orphaned channels' content supply chain, and how quickly it was adopted.
 
 | Pattern | Interpretation |
 | :------ | :------------- |
@@ -214,7 +214,7 @@ The six scores are complementary, not redundant, and fall into two analytical pe
 | High A/B/C, low D/E/F | The candidate occupies the same structural slot but does not yet reach the same downstream audience through information cascades — possibly too new or poorly connected to established amplifiers |
 | Low A/B/C, high D/E/F | The candidate is well-connected in the broader diffusion network and was adopted quickly, but does not mirror the vacancy's immediate neighbourhood — a lateral successor rather than a direct replacement |
 | High A, high B, low C | The orphaned amplifiers have converged on a new source that serves a different ideological function — perhaps drawing from a narrower set of sources or operating within a single community |
-| Low A, low B, high C | The network has not found a single replacement; brokerage between the same organisations is handled by a channel not yet widely forwarded by the orphaned set |
+| Low A, low B, high C | The network has not found a single replacement; brokerage between the same organizations is handled by a channel not yet widely forwarded by the orphaned set |
 | Low on all six | No structural replacement has emerged; the orphaned amplifiers have diversified without collectively filling the vacancy |
 
 The table is sorted by **First activity** by default — the candidate's earliest recorded message — so that genuinely new channels appear at the top when *Only after vacancy* is enabled. Click any column header to re-sort.

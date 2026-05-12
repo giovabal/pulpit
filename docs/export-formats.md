@@ -133,7 +133,7 @@ Powered by [Three.js](https://threejs.org/). Generated with `--3dgraph` (require
 
 One row per channel. All computed measures appear as sortable columns. Generated with `--html`; the Excel version with `--xlsx`.
 
-Columns include: channel name and link, organisation, all computed network measures (PageRank, betweenness, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
+Columns include: channel name and link, organization, all computed network measures (PageRank, betweenness, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
 
 Click any column header to sort. Download the `.xlsx` for further analysis in a spreadsheet application.
 
@@ -141,7 +141,7 @@ Click any column header to sort. Download the `.xlsx` for further analysis in a 
 
 ## network_table.html / .xlsx — whole-network statistics
 
-Whole-network metrics organised by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm.
+Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm.
 
 For a full explanation of each metric, see [Whole-network statistics](whole-network-statistics.md).
 
@@ -149,7 +149,7 @@ For a full explanation of each metric, see [Whole-network statistics](whole-netw
 
 ## community_table.html / .xlsx — per-community metrics
 
-One section per active community detection strategy. For each strategy: a table of per-community structural metrics (node count, internal/external edges, density, reciprocity, clustering, E-I index, path lengths), a modularity-contribution column, and a collapsible organisation × community distribution panel (when multiple organisations are present).
+One section per active community detection strategy. For each strategy: a table of per-community structural metrics (node count, internal/external edges, density, reciprocity, clustering, E-I index, path lengths), a modularity-contribution column, and a collapsible organization × community distribution panel (when multiple organizations are present).
 
 For a full explanation of the metrics, see [Whole-network statistics](whole-network-statistics.md) and [Community detection](community-detection.md).
 
@@ -279,7 +279,7 @@ E(g)$weight <- edges$weight
 
 Generated with `--gexf` and `--graphml`. Import directly into [Gephi](https://gephi.org/), [Cytoscape](https://cytoscape.org/), or any other network analysis application that reads GEXF or GraphML.
 
-Both files include all node attributes (channel name, organisation, subscriber count, all computed measures, community assignments for each active strategy) and edge weights.
+Both files include all node attributes (channel name, organization, subscriber count, all computed measures, community assignments for each active strategy) and edge weights.
 
 ---
 

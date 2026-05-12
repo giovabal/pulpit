@@ -10,19 +10,19 @@ The Operations panel is the dashboard you use to launch data collection and anal
 
 <figure>
 <img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel list">
-<figcaption><em>Channel list with organisation filter, sort controls, and group chips.</em></figcaption>
+<figcaption><em>Channel list with organization filter, sort controls, and group chips.</em></figcaption>
 </figure>
 <br>
 
 A paginated list of all channels in the database. Filters and controls:
 
 - **Search** — filter by channel name or username
-- **Organisation filter** — show only channels assigned to a specific organisation
+- **Organization filter** — show only channels assigned to a specific organization
 - **Group filter** — show channels belonging to a specific ChannelGroup
 - **Sort** — by name, subscriber count, message count, in-degree, or out-degree
-- **Channel chips** — each card shows the channel's organisation colour, subscriber count, message count, and group chips
+- **Channel chips** — each card shows the channel's organization colour, subscriber count, message count, and group chips
 
-Channels marked `is_interesting = True` via their organisation show their network position data once crawled.
+Channels marked `is_interesting = True` via their organization show their network position data once crawled.
 
 ---
 
@@ -107,7 +107,7 @@ Staff-only management interface for corpus administration. Accessible only to us
 
 <figure>
 <img src="../webapp_engine/static/screenshot_09.jpg" alt="Backoffice channels view">
-<figcaption><em>Backoffice channels view: bulk organisation assignment and group chip management.</em></figcaption>
+<figcaption><em>Backoffice channels view: bulk organization assignment and group chip management.</em></figcaption>
 </figure>
 <br>
 
@@ -115,22 +115,22 @@ Staff-only management interface for corpus administration. Accessible only to us
 
 Bulk management of the channel database:
 
-- **Assign organisation** — select multiple channels and assign them to an organisation in one action
+- **Assign organization** — select multiple channels and assign them to an organization in one action
 - **Group chips** — add or remove ChannelGroup memberships inline
 - **Edit individual** — click through to edit a channel's details, is_interesting status, and vacancy record
-- **Filter** — by organisation, group, is_interesting status, entity type
+- **Filter** — by organization, group, is_interesting status, entity type
 
-### Organisations — `/manage/organizations/`
+### Organizations — `/manage/organizations/`
 
-Create and edit organisations. Key fields:
+Create and edit organizations. Key fields:
 
 - **Name** — label used throughout the interface
 - **Color** — hex color used in the graph when `COMMUNITY_PALETTE=ORGANIZATION`
-- **Is interesting** — when checked, all channels in this organisation are included in crawls and exports
+- **Is interesting** — when checked, all channels in this organization are included in crawls and exports
 
 ### Groups — `/manage/channel-groups/`
 
-ChannelGroups are labels you apply to channels for flexible filtering. They are independent of organisations — a channel can be in any number of groups and belong to one organisation. Use groups to define subsets for targeted analysis (e.g. run an export with `--channel-groups activist,media` to analyse only those channels).
+ChannelGroups are labels you apply to channels for flexible filtering. They are independent of organizations — a channel can be in any number of groups and belong to one organization. Use groups to define subsets for targeted analysis (e.g. run an export with `--channel-groups activist,media` to analyse only those channels).
 
 ### Search terms — `/manage/search-terms/`
 

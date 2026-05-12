@@ -36,7 +36,7 @@ Pulpit uses **log-linear mode** (`linLogMode`), which replaces the usual linear 
 
 **In practice:** FA2 is the most interpretable general-purpose layout for political Telegram networks. Communities tend to appear as convex spatial blobs, hub channels sit near the dense centres of their clusters, and channels that bridge communities appear between those blobs. The layout is not the same across re-exports — it converges to a similar structure but can rotate or mirror between runs. Use `--3dlayouts FA2` to include it in the 3D viewer's dropdown.
 
-**Example.** A network of ~600 channels produces five FA2 clusters that closely match the five organisations assigned in the admin interface, with two small "bridge" channels sitting in the white space between the far-right and mainstream-right blobs — channels that the algorithm, without any organisational information, identifies as inter-community connectors.
+**Example.** A network of ~600 channels produces five FA2 clusters that closely match the five organizations assigned in the admin interface, with two small "bridge" channels sitting in the white space between the far-right and mainstream-right blobs — channels that the algorithm, without any organizational information, identifies as inter-community connectors.
 
 ---
 
@@ -96,7 +96,7 @@ The circular layout assigns positions purely by rank along a circle, with no inf
 
 ## Community shells
 
-*Channels are placed in concentric rings, one ring per detected community — making community membership the primary organising principle.*
+*Channels are placed in concentric rings, one ring per detected community — making community membership the primary organizing principle.*
 
 Community shells uses NetworkX's `shell_layout` algorithm with community assignments as input. The largest community occupies the outermost ring, progressively smaller communities fill inner rings, and isolated nodes sit in the centre. Each ring's nodes are arranged at equal angular intervals around their shell.
 

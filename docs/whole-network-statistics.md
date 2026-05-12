@@ -14,7 +14,7 @@ If network measures score individual channels, whole-network statistics score th
 
 ## Metric groups
 
-Metrics are organised into selectable groups. Controlled via `--network-stat-groups` on the CLI, or the checkboxes in the Operations panel.
+Metrics are organized into selectable groups. Controlled via `--network-stat-groups` on the CLI, or the checkboxes in the Operations panel.
 
 | Group | Metrics | Cost |
 | :---- | :------ | :--- |
@@ -211,7 +211,7 @@ Beyond the whole-network level, community statistics appear in `community_table.
 
 Modularity measures the quality of a community partition — the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. Values above roughly 0.3 are conventionally considered evidence of meaningful community structure.
 
-**In practice:** if your Organisation partition's modularity is close to that of Leiden, your manual categorisation captures most of the network's structural organisation. If Leiden's modularity is substantially higher, there is structure your categorisation does not capture.
+**In practice:** if your Organization partition's modularity is close to that of Leiden, your manual categorisation captures most of the network's structural organization. If Leiden's modularity is substantially higher, there is structure your categorisation does not capture.
 
 ### Inter-community edge ratio (per strategy)
 
@@ -248,11 +248,11 @@ where I(U; V) is mutual information and H(·) is Shannon entropy. The formula is
 - **NMI = 0** — the two partitions are statistically independent: knowing which community a channel belongs to under strategy A gives no information about its community under strategy B.
 - Values in between measure partial agreement.
 
-Each pair is computed on the **intersection** of channels assigned in both strategies. This matters for `ORGANIZATION`, which only assigns channels that have an organisation in the database; unassigned channels are silently excluded from that pair's NMI but not from others.
+Each pair is computed on the **intersection** of channels assigned in both strategies. This matters for `ORGANIZATION`, which only assigns channels that have an organization in the database; unassigned channels are silently excluded from that pair's NMI but not from others.
 
 **Reference:** Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069); Fred, A.L.N. & Jain, A.K. (2003) "Robust data clustering." *CVPR* 2.
 
-**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organisational lines. A low NMI (< 0.3) means the structural communities cut across organisations: channels from the same organisation are scattered across multiple structural clusters, or a single structural cluster spans several organisations. Comparing two algorithmic strategies (e.g. LEIDEN vs LOUVAIN) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
+**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organizational lines. A low NMI (< 0.3) means the structural communities cut across organizations: channels from the same organization are scattered across multiple structural clusters, or a single structural cluster spans several organizations. Comparing two algorithmic strategies (e.g. LEIDEN vs LOUVAIN) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
 
 ## Structural similarity matrix
 

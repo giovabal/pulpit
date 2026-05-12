@@ -533,7 +533,7 @@
                 <div class="ops-param">
                   <label for="community_distribution_threshold">Distribution threshold %
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Minimum percentage a community must reach in at least one organisation row to appear in the Organisation × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
+                       title="Minimum percentage a community must reach in at least one organization row to appear in the Organization × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
                   </label>
                   <input type="number" name="community_distribution_threshold" id="community_distribution_threshold" placeholder="{{ ad.SA_COMMUNITY_DISTRIBUTION_THRESHOLD }}" value="{{ ad.SA_COMMUNITY_DISTRIBUTION_THRESHOLD }}" min="0" max="100">
                 </div>
@@ -626,7 +626,7 @@
               </span>
             </legend>
             <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" {% if "ORGANIZATION" in ad.sa_strategies %}checked{% endif %}>Organization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organisation in the database — not a detection algorithm, reflects manual categorisation."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" {% if "ORGANIZATION" in ad.sa_strategies %}checked{% endif %}>Organization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organization in the database — not a detection algorithm, reflects manual categorisation."></i></label>
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" {% if "LEIDEN" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — improved Louvain that guarantees well-connected communities."></i></label>
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" {% if "LEIDEN_DIRECTED" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Leiden directed<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i></label>
               <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" {% if "LEIDEN_CPM_COARSE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden CPM coarse<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective at low resolution (γ ≈ 0.01) — fewer, larger communities. Resolution tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: CPM coarse γ (Linked parameters)"></i></label>
@@ -688,7 +688,7 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if has_vacancies %}checked{% endif %}>Brokerage
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Jaccard of organisation-pair sets (source-org × amplifier-org) — does the candidate replicate the same inter-organisational brokerage role? (Gould &amp; Fernandez 1989)"></i>
+                   title="Jaccard of organization-pair sets (source-org × amplifier-org) — does the candidate replicate the same inter-organizational brokerage role? (Gould &amp; Fernandez 1989)"></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if has_vacancies %}checked{% endif %}>Cascade Overlap

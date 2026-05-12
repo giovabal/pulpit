@@ -94,8 +94,8 @@ A Pulpit research project runs in four steps, all accessible from the browser in
 <br>
 
 1. **Find channels** — *Operations: Search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
-2. **Organise** — *Manage: Channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
-3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from all organised channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
+2. **Organize** — *Manage: Channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
+3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from all organized channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
 4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
 5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
@@ -113,7 +113,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Interactive 3D graph** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph) |
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
-| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organisation × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
+| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organization × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
 | **Structural similarity matrix** (`structural_similarity.html`) | Pairwise cosine similarity between all channels across all computed measures, sortable by community or by measure [more](docs/export-formats.md) |
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across all detection strategies [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by six algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
@@ -170,7 +170,7 @@ Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
-| [Organisation](docs/community-detection.md#organisation) | Your own domain-knowledge categories as a baseline | — |
+| [Organization](docs/community-detection.md#organization) | Your own domain-knowledge categories as a baseline | — |
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
 | [Leiden CPM coarse](docs/community-detection.md#leiden-cpm-coarse-and-fine) | Few, large communities — even weak citation ties bind | No |
@@ -185,7 +185,7 @@ Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals
 | [Weakly connected](docs/community-detection.md#weakly-connected-components-weakcc) | Structurally isolated sub-ecosystems with no cross-referencing links | No |
 | [Strongly connected](docs/community-detection.md#strongly-connected-components-strongcc) | Mutually reinforcing circular cores — coordinated circular amplification | Yes |
 
-The **Organisation × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates all non-Organisation strategies into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
+The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates all non-Organization strategies into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
 
 See [Community detection](docs/community-detection.md) for descriptions, references, and a strategy selection guide.
 
@@ -201,7 +201,7 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 | :---- | :------- | :----- |
 | Amplifier Jaccard | What fraction of orphaned amplifiers have started forwarding the candidate? | Direct count |
 | Structural equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
-| Brokerage role | Does the candidate bridge the same organisational communities? | Jaccard (Gould & Fernandez 1989) |
+| Brokerage role | Does the candidate bridge the same organizational communities? | Jaccard (Gould & Fernandez 1989) |
 | Cascade overlap | Does information seeded at the candidate reach the same downstream channels? | SIR simulation (Watts & Dodds 2007) |
 | Personalized PageRank | How deeply embedded is the candidate in the orphaned channels' content supply chain? | PPR on reversed graph (Haveliwala 2002) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage × recency decay |
@@ -231,7 +231,7 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 | File | Contents |
 | :--- | :------- |
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
-| [Workflow](docs/workflow.md) | Step-by-step guide: search → organise → crawl → export; all CLI options |
+| [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
 | [Network measures](docs/network-measures.md) | All 15 per-channel measures with academic references and worked examples |
 | [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |

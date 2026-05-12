@@ -18,7 +18,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 
 | Strategy | CLI key | Type | Preserves direction? |
 | :------- | :------ | :--- | :------------------- |
-| Organisation | `ORGANIZATION` | Domain knowledge | — |
+| Organization | `ORGANIZATION` | Domain knowledge | — |
 | Louvain | `LOUVAIN` | Modularity | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
 | Leiden | `LEIDEN` | Modularity | No |
@@ -35,13 +35,13 @@ Multiple strategies can be computed simultaneously and switched between in the g
 
 ---
 
-## Organisation
+## Organization
 
-*Communities are the Organisations you defined in the admin interface.*
+*Communities are the Organizations you defined in the admin interface.*
 
-This is the most interpretable strategy because the groupings reflect your own domain knowledge. You decide what the categories are — by political orientation, country, topic, funding source, or any other criterion. The resulting map shows how your categories relate spatially: are channels from the same organisation clustered together? Do organisations form tight blocs or are they interspersed?
+This is the most interpretable strategy because the groupings reflect your own domain knowledge. You decide what the categories are — by political orientation, country, topic, funding source, or any other criterion. The resulting map shows how your categories relate spatially: are channels from the same organization clustered together? Do organizations form tight blocs or are they interspersed?
 
-**Example.** You group channels into five organisations: far-right, mainstream right, centrist, left, and state media. The map shows that far-right and mainstream right channels are adjacent and heavily cross-referenced, while state media channels form an isolated cluster with few outbound connections to the others — suggesting that official outlets are cited but do not cite back.
+**Example.** You group channels into five organizations: far-right, mainstream right, centrist, left, and state media. The map shows that far-right and mainstream right channels are adjacent and heavily cross-referenced, while state media channels form an isolated cluster with few outbound connections to the others — suggesting that official outlets are cited but do not cite back.
 
 ---
 
@@ -229,16 +229,16 @@ STRONGCC reveals the mutually reinforcing cores. A large SCC is a group of chann
 </figure>
 <br>
 
-### Organisation × community distribution
+### Organization × community distribution
 
-For each non-ORGANIZATION strategy, the community table includes a collapsible **Organisation × community distribution** panel with two cross-tabulation tables:
+For each non-ORGANIZATION strategy, the community table includes a collapsible **Organization × community distribution** panel with two cross-tabulation tables:
 
-- **% of organisation channels per community** (rows sum to 100%): for each organisation, what fraction of its channels ended up in each detected community? A row concentrated in one column means that organisation maps cleanly to a single algorithmic cluster; a spread-out row means the organisation was split across multiple communities.
-- **% of community channels per organisation** (columns sum to 100%): for each detected community, what fraction comes from each organisation? A column dominated by one organisation means the community is organisation-pure; a mixed column means the algorithm grouped channels from different organisations together.
+- **% of organization channels per community** (rows sum to 100%): for each organization, what fraction of its channels ended up in each detected community? A row concentrated in one column means that organization maps cleanly to a single algorithmic cluster; a spread-out row means the organization was split across multiple communities.
+- **% of community channels per organization** (columns sum to 100%): for each detected community, what fraction comes from each organization? A column dominated by one organization means the community is organization-pure; a mixed column means the algorithm grouped channels from different organizations together.
 
-Columns are sorted so that each organisation's dominant community falls as close to a diagonal as possible (Hungarian algorithm), making alignment easy to read at a glance.
+Columns are sorted so that each organization's dominant community falls as close to a diagonal as possible (Hungarian algorithm), making alignment easy to read at a glance.
 
-**In practice:** compare the two tables to understand mismatches between your domain-knowledge groupings and the algorithm's output. High purity on both sides confirms the algorithm. A spread-out row for one organisation signals that the algorithm sees structure *within* what you treated as a single bloc — a prompt to investigate whether that organisation should be split.
+**In practice:** compare the two tables to understand mismatches between your domain-knowledge groupings and the algorithm's output. High purity on both sides confirms the algorithm. A spread-out row for one organization signals that the algorithm sees structure *within* what you treated as a single bloc — a prompt to investigate whether that organization should be split.
 
 ### Consensus matrix
 
@@ -257,7 +257,7 @@ The consensus matrix answers: **across all non-ORGANIZATION strategies, how cons
 
 Channels are sorted by plurality community assignment so that pairs from the same detected community cluster along the diagonal.
 
-**In practice:** the consensus matrix reveals which groupings are robust and which are algorithm-dependent. A pair of channels with near-full agreement (large red balloon) is co-clustered by every algorithm — that grouping is stable regardless of which method you trust. A pair with low agreement is structurally ambiguous: the network evidence for placing them together or apart is genuinely weak. Pairs in the same manual Organisation that consistently appear in different algorithmic communities are candidates for review.
+**In practice:** the consensus matrix reveals which groupings are robust and which are algorithm-dependent. A pair of channels with near-full agreement (large red balloon) is co-clustered by every algorithm — that grouping is stable regardless of which method you trust. A pair with low agreement is structurally ambiguous: the network evidence for placing them together or apart is genuinely weak. Pairs in the same manual Organization that consistently appear in different algorithmic communities are candidates for review.
 
 ---
 

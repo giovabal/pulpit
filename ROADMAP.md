@@ -1,7 +1,7 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.19]
-- fix tests
-- small notes (bottom right) on what is on (layout, community and so on) for graphs
+- override column in channels list in manage should be right after organization column
+- small notes (bottom center) on what is on (layout, community, styles and so on) for graphs (2D and 3D): it's a small settings icon, half transparent, clicking on it expands horizontally with all options and becomes not so transparent (like the menu), clicking again it collapse back to the icon. Updating options in settings changes what in this small notes.
 - regency weights should be centered on a period of time, and there must regency weights even for the future
 - vacancy needs enough data for being efficient and significant, find academically validated ways to say if data are enough
 - nodes could have a category (like individuals, organizations, and so on. Or by nationality), this could be reflected in shapes of nodes in graph (like squares, circles, diamonds, and so on)

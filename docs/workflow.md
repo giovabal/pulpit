@@ -5,7 +5,7 @@ This guide walks you through the four steps of a Pulpit research project, from f
 **The pipeline:**
 
 ```
-1. Find channels  →  2. Organise  →  3. Collect messages  →  4. Generate the map
+1. Find channels  →  2. Organize  →  3. Collect messages  →  4. Generate the map
 ```
 
 Everything is done through the browser interface at [http://localhost:8000](http://localhost:8000). You do not need to use the terminal for normal research work.
@@ -48,44 +48,44 @@ The first time Pulpit connects to Telegram, it will send a verification code to 
 
 ---
 
-## Step 3 — Organise your channels
+## Step 3 — Organize your channels
 
 Go to **Manage → Channels**. You will see a list of all channels Pulpit found. Your job here is to decide which ones matter for your research and assign each a label.
 
-### What is an organisation?
+### What is an organization?
 
-An "organisation" in Pulpit is a category label you define — for example *Far right*, *Mainstream conservative*, *Pro-government*, *Independent media*, or any grouping that makes sense for your project. Every channel you want to analyse must belong to an organisation.
+An "organization" in Pulpit is a category label you define — for example *Far right*, *Mainstream conservative*, *Pro-government*, *Independent media*, or any grouping that makes sense for your project. Every channel you want to analyse must belong to an organization.
 
 ### How to assign channels
 
 1. In the Channels list, find a channel you want to include.
 2. Click on the channel's name or ID to open its edit page.
-3. Choose an organisation from the **Organisation** dropdown.
+3. Choose an organization from the **Organization** dropdown.
 4. Click **Save**.
 
-Repeat for all the channels you want in your analysis. Channels without an organisation are not collected or included in the map.
+Repeat for all the channels you want in your analysis. Channels without an organization are not collected or included in the map.
 
-**To create organisations:** go to **Manage → Organisations**, click **Add**, give the organisation a name and a colour, and make sure **Is interesting** is ticked. Only organisations marked as interesting are included in data collection.
+**To create organizations:** go to **Manage → Organizations**, click **Add**, give the organization a name and a colour, and make sure **Is interesting** is ticked. Only organizations marked as interesting are included in data collection.
 
-> **Tip:** you can also assign organisations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organisation for all of them at once.
+> **Tip:** you can also assign organizations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organization for all of them at once.
 
-**Interesting override (optional):** each channel has an **Override** field that lets you force its interesting status independently of its organisation:
+**Interesting override (optional):** each channel has an **Override** field that lets you force its interesting status independently of its organization:
 
 | Value | Meaning |
 | :---- | :------ |
-| **Auto** (default) | Interesting status follows the organisation — no change from normal behaviour. |
-| **Yes** | Always treated as interesting, even if unassigned or in a non-interesting organisation. |
-| **No** | Always excluded, even if its organisation is marked as interesting. |
+| **Auto** (default) | Interesting status follows the organization — no change from normal behaviour. |
+| **Yes** | Always treated as interesting, even if unassigned or in a non-interesting organization. |
+| **No** | Always excluded, even if its organization is marked as interesting. |
 
-Set it from the **Override** column in the Channels list (inline dropdown) or from the channel edit page. Use *Yes* to include a one-off channel without reorganising, and *No* to temporarily suspend a channel without removing it from its organisation.
+Set it from the **Override** column in the Channels list (inline dropdown) or from the channel edit page. Use *Yes* to include a one-off channel without reorganizing, and *No* to temporarily suspend a channel without removing it from its organization.
 
-**Channel groups (optional):** channel groups let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organisation. A channel can belong to any number of groups.
+**Channel groups (optional):** channel groups let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organization. A channel can belong to any number of groups.
 
 To create groups go to **Manage → Channel groups** and click **Add**. To assign a channel to a group, open its edit page and pick from the **Groups** field.
 
 Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all interesting channels are included, as usual.
 
-Use groups when you want to run separate analyses on a subset of your corpus without changing organisations — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
+Use groups when you want to run separate analyses on a subset of your corpus without changing organizations — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
 
 ---
 
@@ -93,13 +93,13 @@ Use groups when you want to run separate analyses on a subset of your corpus wit
 
 In the Operations panel, find the **Crawl Channels** card (Step 2) and click **Run**.
 
-Pulpit downloads messages from all the channels you organised, and traces every cross-channel link — when one channel forwards a message from another, or mentions another channel by name.
+Pulpit downloads messages from all the channels you organized, and traces every cross-channel link — when one channel forwards a message from another, or mentions another channel by name.
 
 This step can take a while, especially on a first run. The log shows progress channel by channel. When it finishes, the status changes to *done*.
 
 ### What the options do (expand Options to see them)
 
-The options panel is organised into three independent groups — each is its own pass over the channels in scope.
+The options panel is organized into three independent groups — each is its own pass over the channels in scope.
 
 **1. Channels** — update channel metadata without touching messages.
 
@@ -161,7 +161,7 @@ Before clicking Run, expand **Options** and choose which outputs you want:
 
 Under **Community strategies**, select the algorithm Pulpit uses to group channels into clusters:
 
-- **Organisation** (default) — clusters follow the organisations you defined in Step 3. A good starting point to see whether your categories map onto the actual citation patterns.
+- **Organization** (default) — clusters follow the organizations you defined in Step 3. A good starting point to see whether your categories map onto the actual citation patterns.
 - **Leiden** or **Leiden Directed** — mathematical community detection based on citation patterns, independent of your labels. Often reveals groupings you did not expect.
 
 You can select multiple strategies at once; the map lets you switch between them without re-exporting.
