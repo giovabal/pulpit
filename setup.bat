@@ -32,6 +32,17 @@ if not exist ".env" (
     )
 )
 
+rem Bootstrap .analysis-defaults from analysis-defaults.example if not present
+if not exist ".analysis-defaults" (
+    if exist "analysis-defaults.example" (
+        copy analysis-defaults.example .analysis-defaults >nul
+        echo Created .analysis-defaults from analysis-defaults.example.
+        echo Edit .analysis-defaults to tune crawling and analysis options.
+    ) else (
+        echo Warning: analysis-defaults.example not found -- .analysis-defaults will use built-in defaults.
+    )
+)
+
 rem Apply database migrations
 python manage.py migrate
 

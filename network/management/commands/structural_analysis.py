@@ -34,55 +34,55 @@ class Command(BaseCommand):
             "--2dgraph",
             dest="graph",
             action="store_true",
-            default=False,
+            default=None,
             help="Generate the 2D interactive graph (graph.html and layout computation).",
         )
         parser.add_argument(
             "--3dgraph",
             dest="graph_3d",
             action="store_true",
-            default=False,
+            default=None,
             help="Also produce a 3D graph (graph3d.html). Slower on large graphs.",
         )
         parser.add_argument(
             "--html",
             dest="html",
             action="store_true",
-            default=False,
+            default=None,
             help="Generate HTML table output (channel_table.html, network_table.html, community_table.html).",
         )
         parser.add_argument(
             "--xlsx",
             dest="xlsx",
             action="store_true",
-            default=False,
+            default=None,
             help="Also produce Excel spreadsheet output (channel_table.xlsx, network_table.xlsx, community_table.xlsx).",
         )
         parser.add_argument(
             "--gexf",
             dest="gexf",
             action="store_true",
-            default=False,
+            default=None,
             help="Also write network.gexf with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
             "--graphml",
             dest="graphml",
             action="store_true",
-            default=False,
+            default=None,
             help="Also write network.graphml with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
             "--csv",
             dest="csv",
             action="store_true",
-            default=False,
+            default=None,
             help="Also write nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions).",
         )
         parser.add_argument(
             "--seo",
             action="store_true",
-            default=False,
+            default=None,
             help=(
                 "Optimise the output mini-site for search engine discovery: sets indexable robots tags "
                 "and adds meta descriptions. Without this flag the output actively discourages indexing."
@@ -104,7 +104,7 @@ class Command(BaseCommand):
             "--fa2-iterations",
             dest="fa2_iterations",
             type=int,
-            default=5000,
+            default=None,
             metavar="N",
             help="Number of ForceAtlas2 iterations for the 2D and 3D layout. Default: 5000.",
         )
@@ -112,7 +112,7 @@ class Command(BaseCommand):
             "--vertical-layout",
             dest="vertical_layout",
             action="store_true",
-            default=False,
+            default=None,
             help=(
                 "Orient the graph vertically. By default the layout is horizontal. "
                 "When the computed aspect ratio does not match the chosen orientation the graph is rotated 90°."
@@ -121,7 +121,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--2dlayouts",
             dest="layouts_2d",
-            default="",
+            default=None,
             metavar="LAYOUTS",
             help=(
                 "Comma-separated list of 2D layout algorithms to compute. "
@@ -133,7 +133,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--3dlayouts",
             dest="layouts_3d",
-            default="",
+            default=None,
             metavar="LAYOUTS",
             help=(
                 "Comma-separated list of 3D layout algorithms to compute. "
@@ -145,7 +145,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--measures",
             dest="measures",
-            default="PAGERANK",
+            default=None,
             metavar="MEASURES",
             help=(
                 "Comma-separated list of centrality measures to compute. "
@@ -157,7 +157,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--community-strategies",
             dest="community_strategies",
-            default="ORGANIZATION",
+            default=None,
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
@@ -168,7 +168,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--network-stat-groups",
             dest="network_stat_groups",
-            default="ALL",
+            default=None,
             metavar="GROUPS",
             help=(
                 "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
@@ -180,7 +180,7 @@ class Command(BaseCommand):
             "--mentions",
             dest="include_mentions",
             action=argparse.BooleanOptionalAction,
-            default=True,
+            default=None,
             help=(
                 "Include t.me/ mention references as edges alongside forwards (default: on). "
                 "Use --no-mentions to build the graph from forwards only."
@@ -190,7 +190,7 @@ class Command(BaseCommand):
             "--self-references",
             dest="include_self_references",
             action=argparse.BooleanOptionalAction,
-            default=False,
+            default=None,
             help=(
                 "Include self-references (a channel forwarding from or mentioning itself) as "
                 "self-loop edges in the graph (default: off). "
@@ -200,7 +200,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--edge-weight-strategy",
             dest="edge_weight_strategy",
-            default="PARTIAL_REFERENCES",
+            default=None,
             choices=sorted(VALID_EDGE_WEIGHT_STRATEGIES),
             metavar="STRATEGY",
             help=(
@@ -226,7 +226,7 @@ class Command(BaseCommand):
             "--spreading-runs",
             dest="spreading_runs",
             type=int,
-            default=200,
+            default=None,
             metavar="N",
             help="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Default: 200.",
         )
@@ -234,7 +234,7 @@ class Command(BaseCommand):
             "--diffusion-window",
             dest="diffusion_window",
             type=int,
-            default=30,
+            default=None,
             metavar="DAYS",
             help=(
                 "Reaction window in days for the DIFFUSIONLAG measure: only forwards within this many days of the "
@@ -245,7 +245,7 @@ class Command(BaseCommand):
             "--draw-dead-leaves",
             dest="draw_dead_leaves",
             action="store_true",
-            default=False,
+            default=None,
             help=(
                 "Include non-interesting channels that are referenced by interesting ones as leaf nodes in the graph."
             ),
@@ -254,7 +254,7 @@ class Command(BaseCommand):
             "--leiden-coarse-resolution",
             dest="leiden_coarse_resolution",
             type=float,
-            default=0.01,
+            default=None,
             metavar="γ",
             help=(
                 "CPM resolution parameter for LEIDEN_CPM_COARSE. "
@@ -266,7 +266,7 @@ class Command(BaseCommand):
             "--leiden-fine-resolution",
             dest="leiden_fine_resolution",
             type=float,
-            default=0.05,
+            default=None,
             metavar="γ",
             help=(
                 "CPM resolution parameter for LEIDEN_CPM_FINE. "
@@ -278,7 +278,7 @@ class Command(BaseCommand):
             "--mcl-inflation",
             dest="mcl_inflation",
             type=float,
-            default=2.0,
+            default=None,
             metavar="r",
             help=(
                 "Inflation parameter for Markov Clustering (MCL). "
@@ -289,7 +289,7 @@ class Command(BaseCommand):
             "--consensus-matrix",
             dest="consensus_matrix",
             action="store_true",
-            default=False,
+            default=None,
             help=(
                 "Generate a consensus matrix page (consensus_matrix.html) showing how consistently "
                 "each channel pair is co-clustered across all non-ORGANIZATION community detection strategies. "
@@ -300,7 +300,7 @@ class Command(BaseCommand):
             "--structural-similarity",
             dest="structural_similarity",
             action="store_true",
-            default=False,
+            default=None,
             help=(
                 "Generate a structural similarity matrix page (structural_similarity.html) showing "
                 "pairwise cosine similarity of per-channel feature vectors built from all computed "
@@ -311,7 +311,7 @@ class Command(BaseCommand):
             "--community-distribution-threshold",
             dest="community_distribution_threshold",
             type=int,
-            default=10,
+            default=None,
             metavar="N",
             help=(
                 "Minimum percentage (0–100) a community must reach in at least one organisation row "
@@ -345,20 +345,20 @@ class Command(BaseCommand):
             "--include-lost",
             dest="include_lost",
             action="store_true",
-            default=False,
+            default=None,
             help="Include channels marked as lost in the graph (excluded by default).",
         )
         parser.add_argument(
             "--include-private",
             dest="include_private",
             action="store_true",
-            default=False,
+            default=None,
             help="Include channels marked as private in the graph (excluded by default).",
         )
         parser.add_argument(
             "--timeline-step",
             dest="timeline_step",
-            default="none",
+            default=None,
             choices=["none", "year"],
             help=(
                 "Repeat the export for each calendar year found in the data. "
@@ -371,7 +371,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--vacancy-measures",
             dest="vacancy_measures",
-            default="",
+            default=None,
             metavar="MEASURES",
             help=(
                 "Comma-separated list of vacancy succession algorithms to compute. "
@@ -386,7 +386,7 @@ class Command(BaseCommand):
             "--vacancy-months-before",
             dest="vacancy_months_before",
             type=int,
-            default=12,
+            default=None,
             metavar="N",
             help="Look-back window (months) before each vacancy's death date. Default: 12.",
         )
@@ -394,7 +394,7 @@ class Command(BaseCommand):
             "--vacancy-months-after",
             dest="vacancy_months_after",
             type=int,
-            default=24,
+            default=None,
             metavar="N",
             help="Forward window (months) after each vacancy's death date. Default: 24.",
         )
@@ -402,7 +402,7 @@ class Command(BaseCommand):
             "--vacancy-max-candidates",
             dest="vacancy_max_candidates",
             type=int,
-            default=30,
+            default=None,
             metavar="N",
             help="Maximum replacement candidates scored per vacancy. Default: 30.",
         )
@@ -410,7 +410,7 @@ class Command(BaseCommand):
             "--vacancy-ppr-alpha",
             dest="vacancy_ppr_alpha",
             type=float,
-            default=0.85,
+            default=None,
             metavar="α",
             help=(
                 "Damping factor for Personalized PageRank (PPR measure). "
@@ -902,13 +902,18 @@ class Command(BaseCommand):
         }
 
     def handle(self, *args: Any, **options: Any) -> None:
-        raw_community_strategies = _parse_csv(options["community_strategies"])
+        # Resolve None (not passed on CLI) from .analysis-defaults settings
+        def _o(key: str, setting_val: Any) -> Any:
+            v = options[key]
+            return v if v is not None else setting_val
+
+        raw_community_strategies = _parse_csv(_o("community_strategies", settings.SA_COMMUNITY_STRATEGIES))
         communities_strategy = (
             measures.ALL_STRATEGIES if "ALL" in raw_community_strategies else raw_community_strategies
         )
-        raw_network_measures = _parse_csv(options["measures"])
+        raw_network_measures = _parse_csv(_o("measures", settings.SA_MEASURES))
         network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
-        raw_network_stat_groups = _parse_csv(options["network_stat_groups"])
+        raw_network_stat_groups = _parse_csv(_o("network_stat_groups", settings.SA_NETWORK_STAT_GROUPS))
         network_stat_groups = (
             measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
         )
@@ -918,8 +923,9 @@ class Command(BaseCommand):
         )
         channel_groups_raw = options["channel_groups"]
         channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
-        edge_weight_strategy: str = options["edge_weight_strategy"]
-        raw_vacancy_measures = _parse_csv(options["vacancy_measures"]) if options["vacancy_measures"] else []
+        edge_weight_strategy: str = _o("edge_weight_strategy", settings.SA_EDGE_WEIGHT_STRATEGY)
+        _raw_vacancy = _o("vacancy_measures", settings.SA_VACANCY_MEASURES) or ""
+        raw_vacancy_measures = _parse_csv(_raw_vacancy) if _raw_vacancy else []
         selected_vacancy_measures = (
             set(vacancy_analysis.ALL_VACANCY_MEASURES) if "ALL" in raw_vacancy_measures else set(raw_vacancy_measures)
         )
@@ -934,49 +940,97 @@ class Command(BaseCommand):
         selected_measures = set(network_measures)
         selected_network_groups = frozenset(network_stat_groups)
 
-        do_graph = options["graph"]
-        do_3dgraph = options["graph_3d"]
-        do_html = options["html"]
-        do_xlsx = options["xlsx"]
-        do_gexf = options["gexf"]
-        do_graphml = options["graphml"]
-        do_csv = options["csv"]
-        do_consensus_matrix = options["consensus_matrix"]
-        do_structural_similarity = options["structural_similarity"]
+        do_graph = _o("graph", settings.SA_OUTPUT_GRAPH)
+        do_3dgraph = _o("graph_3d", settings.SA_OUTPUT_3DGRAPH)
+        do_html = _o("html", settings.SA_OUTPUT_HTML)
+        do_xlsx = _o("xlsx", settings.SA_OUTPUT_XLSX)
+        do_gexf = _o("gexf", settings.SA_OUTPUT_GEXF)
+        do_graphml = _o("graphml", settings.SA_OUTPUT_GRAPHML)
+        do_csv = _o("csv", settings.SA_OUTPUT_CSV)
+        do_consensus_matrix = _o("consensus_matrix", settings.SA_CONSENSUS_MATRIX)
+        do_structural_similarity = _o("structural_similarity", settings.SA_STRUCTURAL_SIMILARITY)
 
-        fa2_iterations: int = options["fa2_iterations"]
-        vertical_layout: bool = options["vertical_layout"]
+        fa2_iterations: int = _o("fa2_iterations", settings.SA_FA2_ITERATIONS)
+        vertical_layout: bool = _o("vertical_layout", settings.SA_VERTICAL_LAYOUT)
         target_layout = layout.LAYOUT_VERTICAL if vertical_layout else layout.LAYOUT_HORIZONTAL
 
-        extra_layout_names = _parse_csv(options["layouts_2d"])
+        extra_layout_names = _parse_csv(_o("layouts_2d", settings.SA_LAYOUTS_2D) or "")
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
         extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES_2D]
 
-        extra_layout_names_3d = _parse_csv(options["layouts_3d"])
+        extra_layout_names_3d = _parse_csv(_o("layouts_3d", settings.SA_LAYOUTS_3D) or "")
         if "ALL" in extra_layout_names_3d:
             extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
         extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]
 
-        seo = options["seo"]
+        seo = _o("seo", settings.SA_SEO)
         start_date = self._parse_date(options["startdate"], "--startdate")
         end_date = self._parse_date(options["enddate"], "--enddate")
+        draw_dead_leaves = _o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES)
+        include_mentions = _o("include_mentions", settings.SA_INCLUDE_MENTIONS)
+        include_self_references = _o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES)
+        include_lost = _o("include_lost", settings.SA_INCLUDE_LOST)
+        include_private = _o("include_private", settings.SA_INCLUDE_PRIVATE)
+        timeline_step = _o("timeline_step", settings.SA_TIMELINE_STEP)
+        vacancy_months_before = _o("vacancy_months_before", settings.SA_VACANCY_MONTHS_BEFORE)
+        vacancy_months_after = _o("vacancy_months_after", settings.SA_VACANCY_MONTHS_AFTER)
+        vacancy_max_candidates = _o("vacancy_max_candidates", settings.SA_VACANCY_MAX_CANDIDATES)
+        vacancy_ppr_alpha = _o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA)
+        spreading_runs = _o("spreading_runs", settings.SA_SPREADING_RUNS)
+        diffusion_window = _o("diffusion_window", settings.SA_DIFFUSION_WINDOW)
+        leiden_coarse = _o("leiden_coarse_resolution", settings.SA_LEIDEN_COARSE_RESOLUTION)
+        leiden_fine = _o("leiden_fine_resolution", settings.SA_LEIDEN_FINE_RESOLUTION)
+        mcl_inflation = _o("mcl_inflation", settings.SA_MCL_INFLATION)
+        community_dist_threshold = _o("community_distribution_threshold", settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD)
+
+        # Patch options dict so internal helpers (_compute_communities, _run_year_export, etc.) use resolved values
+        options.update(
+            graph=do_graph,
+            graph_3d=do_3dgraph,
+            html=do_html,
+            xlsx=do_xlsx,
+            gexf=do_gexf,
+            graphml=do_graphml,
+            csv=do_csv,
+            consensus_matrix=do_consensus_matrix,
+            structural_similarity=do_structural_similarity,
+            seo=seo,
+            vertical_layout=vertical_layout,
+            fa2_iterations=fa2_iterations,
+            draw_dead_leaves=draw_dead_leaves,
+            include_mentions=include_mentions,
+            include_self_references=include_self_references,
+            include_lost=include_lost,
+            include_private=include_private,
+            timeline_step=timeline_step,
+            spreading_runs=spreading_runs,
+            diffusion_window=diffusion_window,
+            leiden_coarse_resolution=leiden_coarse,
+            leiden_fine_resolution=leiden_fine,
+            mcl_inflation=mcl_inflation,
+            community_distribution_threshold=community_dist_threshold,
+            vacancy_months_before=vacancy_months_before,
+            vacancy_months_after=vacancy_months_after,
+            vacancy_max_candidates=vacancy_max_candidates,
+            vacancy_ppr_alpha=vacancy_ppr_alpha,
+        )
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
-                draw_dead_leaves=options["draw_dead_leaves"],
+                draw_dead_leaves=draw_dead_leaves,
                 start_date=start_date,
                 end_date=end_date,
                 recency_weights=options["recency_weights"],
                 channel_types=channel_types,
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
-                include_mentions=options["include_mentions"],
-                include_self_references=options["include_self_references"],
-                include_lost=options["include_lost"],
-                include_private=options["include_private"],
+                include_mentions=include_mentions,
+                include_self_references=include_self_references,
+                include_lost=include_lost,
+                include_private=include_private,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e

@@ -41,6 +41,17 @@ if [ ! -f ".env" ]; then
     fi
 fi
 
+# Bootstrap .analysis-defaults from analysis-defaults.example if not present
+if [ ! -f ".analysis-defaults" ]; then
+    if [ -f "analysis-defaults.example" ]; then
+        cp analysis-defaults.example .analysis-defaults
+        echo "Created .analysis-defaults from analysis-defaults.example."
+        echo "Edit .analysis-defaults to tune crawling and analysis options."
+    else
+        echo "Warning: analysis-defaults.example not found — .analysis-defaults will use built-in defaults." >&2
+    fi
+fi
+
 # Apply database migrations
 python manage.py migrate
 

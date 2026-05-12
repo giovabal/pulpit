@@ -9,6 +9,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
+from network import community as net_community, measures as net_measures, vacancy_analysis
 from runner import tasks
 from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
 
@@ -49,6 +50,68 @@ class OperationsView(View):
             task_info.append({**defn, "name": name, **status})
         channel_groups = list(ChannelGroup.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
+
+        def _expand(raw: str, all_set: set) -> set:
+            items = {s.strip().upper() for s in raw.split(",") if s.strip()}
+            return all_set if "ALL" in items else items
+
+        ad = {
+            # Crawl defaults
+            "CRAWL_GET_CHANNELS_INFO": settings.CRAWL_GET_CHANNELS_INFO,
+            "CRAWL_MINE_ABOUT_TEXTS": settings.CRAWL_MINE_ABOUT_TEXTS,
+            "CRAWL_FETCH_RECOMMENDED": settings.CRAWL_FETCH_RECOMMENDED,
+            "CRAWL_RETRY_LOST_AND_PRIVATE": settings.CRAWL_RETRY_LOST_AND_PRIVATE,
+            "CRAWL_GET_NEW_MESSAGES": settings.CRAWL_GET_NEW_MESSAGES,
+            "CRAWL_FETCH_REPLIES": settings.CRAWL_FETCH_REPLIES,
+            "CRAWL_REFRESH_MESSAGES_STATS": settings.CRAWL_REFRESH_MESSAGES_STATS,
+            "CRAWL_FIXHOLES": settings.CRAWL_FIXHOLES,
+            "CRAWL_FIX_MISSING_MEDIA": settings.CRAWL_FIX_MISSING_MEDIA,
+            "CRAWL_RETRY_REFERENCES": settings.CRAWL_RETRY_REFERENCES,
+            "CRAWL_FORCE_RETRY_UNRESOLVED": settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
+            "CRAWL_OUT_DEGREES": settings.CRAWL_OUT_DEGREES,
+            # SA outputs
+            "SA_OUTPUT_GRAPH": settings.SA_OUTPUT_GRAPH,
+            "SA_OUTPUT_3DGRAPH": settings.SA_OUTPUT_3DGRAPH,
+            "SA_OUTPUT_HTML": settings.SA_OUTPUT_HTML,
+            "SA_OUTPUT_XLSX": settings.SA_OUTPUT_XLSX,
+            "SA_OUTPUT_GEXF": settings.SA_OUTPUT_GEXF,
+            "SA_OUTPUT_GRAPHML": settings.SA_OUTPUT_GRAPHML,
+            "SA_OUTPUT_CSV": settings.SA_OUTPUT_CSV,
+            "SA_SEO": settings.SA_SEO,
+            "SA_VERTICAL_LAYOUT": settings.SA_VERTICAL_LAYOUT,
+            "SA_DRAW_DEAD_LEAVES": settings.SA_DRAW_DEAD_LEAVES,
+            "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
+            "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
+            "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,
+            "SA_INCLUDE_MENTIONS": settings.SA_INCLUDE_MENTIONS,
+            "SA_INCLUDE_SELF_REFERENCES": settings.SA_INCLUDE_SELF_REFERENCES,
+            "SA_INCLUDE_LOST": settings.SA_INCLUDE_LOST,
+            "SA_INCLUDE_PRIVATE": settings.SA_INCLUDE_PRIVATE,
+            # SA numeric params
+            "SA_FA2_ITERATIONS": settings.SA_FA2_ITERATIONS,
+            "SA_SPREADING_RUNS": settings.SA_SPREADING_RUNS,
+            "SA_DIFFUSION_WINDOW": settings.SA_DIFFUSION_WINDOW,
+            "SA_LEIDEN_COARSE_RESOLUTION": settings.SA_LEIDEN_COARSE_RESOLUTION,
+            "SA_LEIDEN_FINE_RESOLUTION": settings.SA_LEIDEN_FINE_RESOLUTION,
+            "SA_MCL_INFLATION": settings.SA_MCL_INFLATION,
+            "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
+            "SA_RECENCY_WEIGHTS": settings.SA_RECENCY_WEIGHTS or "",
+            "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
+            "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
+            "SA_VACANCY_MAX_CANDIDATES": settings.SA_VACANCY_MAX_CANDIDATES,
+            "SA_VACANCY_PPR_ALPHA": settings.SA_VACANCY_PPR_ALPHA,
+            # SA string params
+            "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
+            # SA expanded sets for checkbox groups
+            "sa_measures": _expand(settings.SA_MEASURES, set(net_measures.VALID_MEASURES)),
+            "sa_strategies": _expand(settings.SA_COMMUNITY_STRATEGIES, set(net_community.VALID_STRATEGIES)),
+            "sa_stat_groups": _expand(settings.SA_NETWORK_STAT_GROUPS, set(net_measures.ALL_NETWORK_STAT_GROUPS)),
+            "sa_layouts_2d": {s.strip().upper() for s in settings.SA_LAYOUTS_2D.split(",") if s.strip()},
+            "sa_layouts_3d": {s.strip().upper() for s in settings.SA_LAYOUTS_3D.split(",") if s.strip()},
+            "sa_vacancy_measures": _expand(settings.SA_VACANCY_MEASURES, set(vacancy_analysis.ALL_VACANCY_MEASURES)),
+        }
+
         return render(
             request,
             "runner/operations.html",
@@ -57,6 +120,7 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
                 "has_vacancies": has_vacancies,
+                "ad": ad,
             },
         )
 

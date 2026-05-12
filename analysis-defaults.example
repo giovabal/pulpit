@@ -1,0 +1,173 @@
+# Analysis defaults — copy to .analysis-defaults and adjust as needed.
+# All options below are set to their maximum / all-enabled preset.
+# Dial back anything you do not need.
+
+
+# ── Crawler behaviour ─────────────────────────────────────────────────────────
+
+TELEGRAM_CRAWLER_GRACE_TIME=1
+
+# How many times Telethon retries a failed connection before giving up.
+TELEGRAM_CONNECTION_RETRIES=10
+
+# Seconds to wait between connection retry attempts.
+TELEGRAM_RETRY_DELAY=5
+
+# Telethon auto-sleeps on FloodWait up to this many seconds; raises above threshold.
+TELEGRAM_FLOOD_SLEEP_THRESHOLD=60
+
+# False = sleep TELEGRAM_FLOODWAIT_SLEEP_SECONDS on FloodWait (recommended).
+# True  = skip the operation silently and continue.
+IGNORE_FLOODWAIT=False
+
+TELEGRAM_FLOODWAIT_SLEEP_SECONDS=900
+
+# Telethon session file name (without .session extension).
+TELEGRAM_SESSION_NAME=anon
+
+# Max messages to fetch per channel per run. 0 = no limit.
+TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL=0
+
+TELEGRAM_CRAWLER_DOWNLOAD_IMAGES=True
+TELEGRAM_CRAWLER_DOWNLOAD_VIDEO=False
+
+
+# ── Network and graph ─────────────────────────────────────────────────────────
+
+REVERSED_EDGES=True
+
+# Comma-separated Telegram entity types to include: CHANNEL, GROUP, USER
+DEFAULT_CHANNEL_TYPES=CHANNEL,USER
+
+# Color palette for communities.
+# Use ORGANIZATION to colour by org, or any palette from:
+# https://python-graph-gallery.com/color-palette-finder/ (mind letter case)
+COMMUNITY_PALETTE=ORGANIZATION
+
+# Hex colour for non-interesting referenced channels ("dead leaves").
+DEAD_LEAVES_COLOR=#596a64
+
+# Output directory for structural_analysis. Relative paths resolve from project root.
+GRAPH_OUTPUT_DIR=graph
+
+
+# ── Crawl Channels — default operations ───────────────────────────────────────
+# Set True to enable each operation by default in the Operations panel and CLI.
+
+CRAWL_GET_CHANNELS_INFO=True
+CRAWL_MINE_ABOUT_TEXTS=True
+CRAWL_FETCH_RECOMMENDED=True
+CRAWL_RETRY_LOST_AND_PRIVATE=False
+CRAWL_GET_NEW_MESSAGES=True
+CRAWL_FETCH_REPLIES=True
+CRAWL_REFRESH_MESSAGES_STATS=False
+CRAWL_FIXHOLES=False
+CRAWL_FIX_MISSING_MEDIA=False
+CRAWL_RETRY_REFERENCES=True
+CRAWL_FORCE_RETRY_UNRESOLVED=False
+CRAWL_IN_DEGREES=True
+CRAWL_OUT_DEGREES=True
+
+
+# ── Structural Analysis — outputs ─────────────────────────────────────────────
+
+SA_OUTPUT_GRAPH=True
+SA_OUTPUT_3DGRAPH=True
+SA_OUTPUT_HTML=True
+SA_OUTPUT_XLSX=True
+SA_OUTPUT_GEXF=True
+SA_OUTPUT_GRAPHML=True
+SA_OUTPUT_CSV=True
+SA_SEO=False
+SA_VERTICAL_LAYOUT=False
+
+
+# ── Structural Analysis — layouts ─────────────────────────────────────────────
+
+SA_FA2_ITERATIONS=5000
+
+# Comma-separated list of 2D layouts to pre-compute alongside ForceAtlas2.
+# Available: FA2, CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL
+SA_LAYOUTS_2D=FA2,CIRCULAR,KAMADA_KAWAI,COMMUNITY_SHELL,TSNE,UMAP,HYPERBOLIC
+
+# Comma-separated list of 3D layouts to pre-compute.
+# Available: FA2, SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL
+SA_LAYOUTS_3D=FA2,SPECTRAL,SPRING,KAMADA_KAWAI,TSNE,UMAP
+
+
+# ── Structural Analysis — measures ────────────────────────────────────────────
+# Comma-separated list. Use ALL to enable every measure.
+# Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, FLOWBETWEENNESS,
+#   INDEGCENTRALITY, OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, CLOSENESS,
+#   SPREADING, BRIDGING, BURTCONSTRAINT, EGODENSITY, LOCALCLUSTERING,
+#   AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL
+
+SA_MEASURES=ALL
+
+# Number of Monte Carlo SIR simulations per node for SPREADING.
+SA_SPREADING_RUNS=200
+
+# Reaction window in days for DIFFUSIONLAG. 0 = no window.
+SA_DIFFUSION_WINDOW=30
+
+
+# ── Structural Analysis — community detection ─────────────────────────────────
+# Comma-separated list. Use ALL to run every strategy.
+# Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM_COARSE,
+#   LEIDEN_CPM_FINE, LOUVAIN, LABELPROPAGATION, KCORE, INFOMAP,
+#   INFOMAP_MEMORY, MCL, WALKTRAP, WEAKCC, STRONGCC, ALL
+
+SA_COMMUNITY_STRATEGIES=ALL
+
+SA_LEIDEN_COARSE_RESOLUTION=0.01
+SA_LEIDEN_FINE_RESOLUTION=0.05
+SA_MCL_INFLATION=2.0
+
+# Minimum % a community must reach in at least one org row to appear in tables.
+SA_COMMUNITY_DISTRIBUTION_THRESHOLD=10
+
+
+# ── Structural Analysis — network stat groups ─────────────────────────────────
+# Comma-separated list. Use ALL for all groups.
+# Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, CENTRALIZATION, CONTENT, ALL
+
+SA_NETWORK_STAT_GROUPS=ALL
+
+
+# ── Structural Analysis — edge weights ────────────────────────────────────────
+# Options: PARTIAL_REFERENCES (default), PARTIAL_MESSAGES, TOTAL, NONE
+
+SA_EDGE_WEIGHT_STRATEGY=PARTIAL_REFERENCES
+
+SA_INCLUDE_MENTIONS=True
+SA_INCLUDE_SELF_REFERENCES=True
+
+
+# ── Structural Analysis — graph scope ─────────────────────────────────────────
+
+SA_DRAW_DEAD_LEAVES=True
+SA_INCLUDE_LOST=False
+SA_INCLUDE_PRIVATE=False
+
+# Recency decay half-life in days. Leave blank (or remove) to weight all messages equally.
+SA_RECENCY_WEIGHTS=
+
+
+# ── Structural Analysis — extra outputs ───────────────────────────────────────
+
+SA_STRUCTURAL_SIMILARITY=True
+SA_CONSENSUS_MATRIX=True
+
+# Timeline step: none or year
+SA_TIMELINE_STEP=year
+
+
+# ── Structural Analysis — vacancy analysis ────────────────────────────────────
+# Comma-separated list. Use ALL for all algorithms. Leave blank to disable.
+# Available: AMPLIFIER_JACCARD, STRUCTURAL_EQUIV, BROKERAGE, CASCADE_OVERLAP, PPR, TEMPORAL, ALL
+
+SA_VACANCY_MEASURES=ALL
+SA_VACANCY_MONTHS_BEFORE=12
+SA_VACANCY_MONTHS_AFTER=24
+SA_VACANCY_MAX_CANDIDATES=30
+SA_VACANCY_PPR_ALPHA=0.85

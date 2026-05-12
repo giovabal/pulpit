@@ -54,7 +54,12 @@ Think of this step as authorising Pulpit to use your Telegram account — the sa
 
 ## Step 3 — Fill in your credentials
 
-The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created a `.env` file for you. Open it in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
+The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created two configuration files for you:
+
+- **`.env`** — credentials and deployment settings. Open it and fill in your Telegram credentials.
+- **`.analysis-defaults`** — crawler behaviour and analysis options. The defaults work for a first run; edit later to tune things like download limits or channel types.
+
+Open `.env` in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
 
 ```
 TELEGRAM_API_ID=your_api_id_here
@@ -116,6 +121,9 @@ Git is not installed. Download it from [git-scm.com/downloads](https://git-scm.c
 
 **"No module named …"**
 The setup script may not have run completely. Try: `pip install -r requirements.txt`.
+
+**Missing `.env` or `.analysis-defaults`**
+Run `setup.sh` (or `setup.bat`) — it creates both from their example files automatically. If you prefer to create them manually: `cp env.example .env` and `cp analysis-defaults.example .analysis-defaults` (use `copy` on Windows).
 
 **The server starts but the browser shows an error**
 Check the terminal for error messages. If the error mentions missing tables, run `python manage.py migrate` manually — this can happen if `setup.sh` was interrupted before it finished.

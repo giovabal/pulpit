@@ -581,20 +581,20 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
-        # ── Channels options ───────────────────────────────────────────────────
-        get_channels_info: bool = options["get_channels_info"]
-        mine_about_texts: bool = options["mine_about_texts"]
-        fetch_recommended: bool = options["fetch_recommended_channels"]
-        retry_lost_and_private: bool = options["retry_lost_and_private"]
+        # ── Channels options — CLI flag or .analysis-defaults setting ──────────
+        get_channels_info: bool = options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO
+        mine_about_texts: bool = options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS
+        fetch_recommended: bool = options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED
+        retry_lost_and_private: bool = options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE
         # ── Messages options ───────────────────────────────────────────────────
-        get_new_messages: bool = options["get_new_messages"]
-        fetch_replies: bool = options["fetch_replies"]
-        do_refresh: bool = options["refresh_messages_stats"]
+        get_new_messages: bool = options["get_new_messages"] or settings.CRAWL_GET_NEW_MESSAGES
+        fetch_replies: bool = options["fetch_replies"] or settings.CRAWL_FETCH_REPLIES
+        do_refresh: bool = options["refresh_messages_stats"] or settings.CRAWL_REFRESH_MESSAGES_STATS
         refresh_limit: int | None = options["refresh_limit"]
-        fix_holes: bool = options["fixholes"]
-        fix_missing_media: bool = options["fix_missing_media"]
-        retry_references: bool = options["retry_references"]
-        force_retry: bool = options["force_retry_unresolved_references"]
+        fix_holes: bool = options["fixholes"] or settings.CRAWL_FIXHOLES
+        fix_missing_media: bool = options["fix_missing_media"] or settings.CRAWL_FIX_MISSING_MEDIA
+        retry_references: bool = options["retry_references"] or settings.CRAWL_RETRY_REFERENCES
+        force_retry: bool = options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED
         # ── Refresh date window ────────────────────────────────────────────────
         refresh_from: datetime.date | None = None
         refresh_to: datetime.date | None = None
@@ -610,8 +610,8 @@ class Command(BaseCommand):
                 else:
                     refresh_to = datetime.date.fromisoformat(_raw)
         # ── Degrees options ────────────────────────────────────────────────────
-        in_degrees: bool = options["in_degrees"]
-        out_degrees: bool = options["out_degrees"]
+        in_degrees: bool = options["in_degrees"] or settings.CRAWL_IN_DEGREES
+        out_degrees: bool = options["out_degrees"] or settings.CRAWL_OUT_DEGREES
         # ── Scope ─────────────────────────────────────────────────────────────
         ids_str: str | None = options["ids"]
         channel_types_raw = options["channel_types"]

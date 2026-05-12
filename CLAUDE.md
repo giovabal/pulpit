@@ -101,6 +101,14 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 ### Configuration
 
-All options in `.env` (copy from `env.example`). Required: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
+Configuration is split across three files:
 
-Key optional: `REVERSED_EDGES` (default `True`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`). Analysis options (measures, community strategies, edge weights, channel types, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see WORKFLOW.md.
+| File | Content | Gitignored | Example |
+|:-----|:--------|:----------:|:-------:|
+| `.env` | Credentials + deployment (Telegram creds, DB, secret key, web access, locale) | ✓ | `env.example` |
+| `.analysis-defaults` | Crawler behaviour and network/graph options | ✓ | `analysis-defaults.example` |
+| `.system-options` | `APP_VERSION`, `REPOSITORY_URL` — managed by the project, do not edit | ✗ | — |
+
+Required (in `.env`): `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
+
+Key options (in `.analysis-defaults`): `REVERSED_EDGES` (default `True`), `DEFAULT_CHANNEL_TYPES` (default `CHANNEL`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`), `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` / `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` (default `False`). Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see WORKFLOW.md.
