@@ -71,8 +71,9 @@ The graph and vacancy-analysis pages fetch JSON files from the `data/` subdirect
 ```sh
 cd exports/<name>
 python -m http.server 8001
-# open http://localhost:8001
 ```
+
+Open [http://localhost:8001](http://localhost:8001) in your browser. This works on macOS, Linux, and Windows — run it from any terminal with Python on the PATH.
 
 If the Pulpit web interface is already running (`python manage.py runserver`), the export is also accessible at `http://localhost:8000/exports/<name>/graph.html` without starting a separate server.
 

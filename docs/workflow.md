@@ -208,6 +208,8 @@ You can also share an export by copying the whole `exports/<name>/` folder to a 
 
 If you prefer to work in a terminal — for example to automate or schedule runs — every operation has a CLI equivalent.
 
+> **Windows users:** use **PowerShell** for these examples — it supports `#` comments just like bash. In Command Prompt, replace `#` comment lines with `rem`. All `python manage.py ...` commands work identically on both platforms.
+
 ```sh
 # Start the server
 python manage.py runserver
@@ -252,6 +254,8 @@ python manage.py structural_analysis --2dgraph --html --channel-groups media,act
 
 # Compare two exports
 python manage.py compare_analysis /path/to/exports/<other-name>
+# Windows: use backslashes or quote the path
+# python manage.py compare_analysis exports\<other-name>
 ```
 
 See `python manage.py <command> --help` for the full list of flags for any command.

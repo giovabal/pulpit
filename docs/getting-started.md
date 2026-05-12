@@ -54,7 +54,7 @@ Think of this step as authorising Pulpit to use your Telegram account — the sa
 
 ## Step 3 — Fill in your credentials
 
-`setup.sh` already created a `.env` file for you. Open it in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
+The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created a `.env` file for you. Open it in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
 
 ```
 TELEGRAM_API_ID=your_api_id_here
@@ -138,6 +138,7 @@ Then set `DB_ENGINE` and the connection fields in `.env` (`DB_NAME`, `DB_USER`, 
 
 To move existing data from SQLite to another engine:
 
+**macOS / Linux**
 ```sh
 # 1. Export all data from SQLite
 python manage.py dumpdata \
@@ -149,6 +150,18 @@ python manage.py dumpdata \
 python manage.py migrate
 
 # 3. Import the data
+python manage.py loaddata data.json
+```
+
+**Windows**
+```cmd
+rem 1. Export all data from SQLite
+python manage.py dumpdata --natural-foreign --natural-primary --exclude contenttypes --exclude auth.permission -o data.json
+
+rem 2. Point .env at the new database and run migrate
+python manage.py migrate
+
+rem 3. Import the data
 python manage.py loaddata data.json
 ```
 
