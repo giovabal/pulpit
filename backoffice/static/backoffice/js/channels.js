@@ -202,6 +202,11 @@
             badge.textContent = ch.channel_type || "—";
             tdType.appendChild(badge); tr.appendChild(tdType);
 
+            /* interesting override */
+            var tdOv = document.createElement("td");
+            renderOverrideCell(tdOv, ch);
+            tr.appendChild(tdOv);
+
             /* org */
             var tdOrg = document.createElement("td");
             tdOrg.className = "bo-org-cell";
@@ -243,6 +248,38 @@
             un.textContent = "— unassigned";
             td.appendChild(un);
         }
+    }
+
+    function renderOverrideCell(td, ch) {
+        td.innerHTML = "";
+        var sel = document.createElement("select"); sel.className = "bo-select bo-select--sm bo-override-select";
+        var cur = ch.interesting_override;
+        [["", "—"], ["true", "✓ Yes"], ["false", "✗ No"]].forEach(function (pair) {
+            var opt = new Option(pair[1], pair[0]);
+            if ((cur === null || cur === undefined) && pair[0] === "") opt.selected = true;
+            if (cur === true  && pair[0] === "true")  opt.selected = true;
+            if (cur === false && pair[0] === "false") opt.selected = true;
+            sel.appendChild(opt);
+        });
+        sel.style.color = cur === true ? "var(--bs-success)" : cur === false ? "var(--bs-danger)" : "";
+        sel.addEventListener("change", function () {
+            var raw = sel.value;
+            var newVal = raw === "true" ? true : raw === "false" ? false : null;
+            var prev = ch.interesting_override;
+            ch.interesting_override = newVal;
+            sel.style.color = newVal === true ? "var(--bs-success)" : newVal === false ? "var(--bs-danger)" : "";
+            apiFetch(API_BASE + "channels/" + ch.id + "/", {
+                method: "PATCH",
+                body: { interesting_override: newVal },
+            }).then(function () {
+                showToast("Override updated.");
+            }).catch(function (err) {
+                ch.interesting_override = prev;
+                renderOverrideCell(td, ch);
+                showToast("Error: " + err.message, "error");
+            });
+        });
+        td.appendChild(sel);
     }
 
     function openOrgSelect(td, ch) {

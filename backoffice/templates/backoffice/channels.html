@@ -14,6 +14,8 @@
     <option value="interesting">Interesting</option>
     <option value="lost">Lost</option>
     <option value="private">Private</option>
+    <option value="override_interesting">Forced interesting</option>
+    <option value="override_uninteresting">Forced not interesting</option>
   </select>
   <select class="bo-select" id="ch-org-filter">
     <option value="">All organizations</option>
@@ -49,6 +51,7 @@
         <th class="bo-th--num bo-th--sortable bo-th--sorted" id="ch-th-id">#<span class="bo-sort-icon"> ▼</span></th>
         <th class="bo-th--sortable" id="ch-th-name">Channel<span class="bo-sort-icon"> ⇅</span></th>
         <th>Type</th>
+        <th>Override</th>
         <th>Organization</th>
         <th>Groups</th>
         <th class="bo-th--num bo-th--sortable" id="ch-th-subscribers">Subscribers<span class="bo-sort-icon"> ⇅</span></th>
@@ -56,7 +59,7 @@
       </tr>
     </thead>
     <tbody id="ch-tbody">
-      <tr><td colspan="8" class="bo-empty">Loading…</td></tr>
+      <tr><td colspan="9" class="bo-empty">Loading…</td></tr>
     </tbody>
   </table>
 </div>

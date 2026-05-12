@@ -51,6 +51,7 @@ class Channel(TelegramBaseModel):
     is_active = models.BooleanField(default=False)
     is_lost = models.BooleanField(default=False)
     is_private = models.BooleanField(default=False)
+    interesting_override = models.BooleanField(null=True, blank=True, default=None)
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)

@@ -160,6 +160,19 @@
         });
         fgFlags.appendChild(flagsWrap); form.appendChild(fgFlags);
 
+        /* Interesting override */
+        var fgOverride = makeFieldGroup("Interesting override");
+        var selOverride = document.createElement("select"); selOverride.name = "interesting_override"; selOverride.className = "bo-select";
+        [["", "— auto (follows organization)"], ["true", "Yes — force interesting"], ["false", "No — force not interesting"]].forEach(function (pair) {
+            var opt = new Option(pair[1], pair[0]);
+            var cur = ch.interesting_override;
+            if ((cur === null || cur === undefined) && pair[0] === "") opt.selected = true;
+            if (cur === true  && pair[0] === "true")  opt.selected = true;
+            if (cur === false && pair[0] === "false") opt.selected = true;
+            selOverride.appendChild(opt);
+        });
+        fgOverride.appendChild(selOverride); form.appendChild(fgOverride);
+
         /* Uninteresting after */
         var fgCutoff = makeFieldGroup("Uninteresting after");
         var cutoffInput = document.createElement("input");
@@ -199,11 +212,14 @@
         var orgVal = fd.get("organization_id");
         var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
         var cutoffVal = form.querySelector("input[name=uninteresting_after]").value;
+        var overrideRaw = form.querySelector("select[name=interesting_override]").value;
+        var overrideVal = overrideRaw === "true" ? true : overrideRaw === "false" ? false : null;
         var body = {
             organization_id: orgVal ? parseInt(orgVal) : null,
             group_ids: groupIds,
             is_lost: form.querySelector("input[name=is_lost]").checked,
             is_private: form.querySelector("input[name=is_private]").checked,
+            interesting_override: overrideVal,
             uninteresting_after: cutoffVal || null,
         };
         apiFetch(API_CH, { method: "PATCH", body: body })

@@ -102,11 +102,22 @@ class ChannelViewSet(
         if status_filter == "unassigned":
             qs = qs.filter(organization__isnull=True)
         elif status_filter == "interesting":
-            qs = qs.filter(organization__is_interesting=True).exclude(is_lost=True).exclude(is_private=True)
+            qs = (
+                qs.filter(
+                    Q(interesting_override=True)
+                    | Q(interesting_override__isnull=True, organization__is_interesting=True)
+                )
+                .exclude(is_lost=True)
+                .exclude(is_private=True)
+            )
         elif status_filter == "lost":
             qs = qs.filter(is_lost=True)
         elif status_filter == "private":
             qs = qs.filter(is_private=True)
+        elif status_filter == "override_interesting":
+            qs = qs.filter(interesting_override=True)
+        elif status_filter == "override_uninteresting":
+            qs = qs.filter(interesting_override=False)
 
         return qs
 

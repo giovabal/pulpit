@@ -78,6 +78,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "out_degree",
             "is_lost",
             "is_private",
+            "interesting_override",
             "date",
             "uninteresting_after",
             "restriction_reason",

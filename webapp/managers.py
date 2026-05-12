@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from webapp.utils.channel_types import channel_type_filter
 
@@ -9,7 +10,9 @@ from webapp.utils.channel_types import channel_type_filter
 class ChannelQuerySet(models.QuerySet["Channel"]):
     def interesting(self) -> ChannelQuerySet:
         return (
-            self.filter(organization__is_interesting=True)
+            self.filter(
+                Q(interesting_override=True) | Q(interesting_override__isnull=True, organization__is_interesting=True)
+            )
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_private=True)
             .exclude(is_lost=True)

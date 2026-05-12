@@ -69,7 +69,23 @@ Repeat for all the channels you want in your analysis. Channels without an organ
 
 > **Tip:** you can also assign organisations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organisation for all of them at once.
 
-**Channel groups (optional):** you can also create groups (`Manage → Channel groups`) to create subsets of your corpus without changing organisations — useful if you want to run separate analyses on different subsets later.
+**Interesting override (optional):** each channel has an **Override** field that lets you force its interesting status independently of its organisation:
+
+| Value | Meaning |
+| :---- | :------ |
+| **Auto** (default) | Interesting status follows the organisation — no change from normal behaviour. |
+| **Yes** | Always treated as interesting, even if unassigned or in a non-interesting organisation. |
+| **No** | Always excluded, even if its organisation is marked as interesting. |
+
+Set it from the **Override** column in the Channels list (inline dropdown) or from the channel edit page. Use *Yes* to include a one-off channel without reorganising, and *No* to temporarily suspend a channel without removing it from its organisation.
+
+**Channel groups (optional):** channel groups let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organisation. A channel can belong to any number of groups.
+
+To create groups go to **Manage → Channel groups** and click **Add**. To assign a channel to a group, open its edit page and pick from the **Groups** field.
+
+Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all interesting channels are included, as usual.
+
+Use groups when you want to run separate analyses on a subset of your corpus without changing organisations — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
 
 ---
 
@@ -112,7 +128,10 @@ The options panel is organised into three independent groups — each is its own
 | **In target channels** | On by default. Recomputes in-degree and out-degree for all interesting channels. |
 | **Out of target channels** | On by default. Recomputes citation degree for non-interesting channels referenced by interesting ones. |
 
-**Limiting the scope:** if you only want to update a few specific channels, enter their IDs in the **DB id filter** field (e.g. `5, 10-20, 50`) before clicking Run. Find a channel's ID in the Manage → Channels list.
+**Limiting the scope:** you can restrict the crawl to a subset of channels in two ways:
+
+- **DB id filter** — enter specific channel IDs (e.g. `5, 10-20, 50`). Find a channel's ID in the Manage → Channels list.
+- **Channel groups** — tick one or more groups in the **Channel groups** fieldset. Only channels belonging to at least one selected group are crawled. Leave all unchecked to crawl all interesting channels.
 
 > **The first connection to Telegram:** if this is your first run, Telegram will send a verification code to your phone. Enter it in the terminal when prompted.
 
@@ -153,6 +172,7 @@ You can select multiple strategies at once; the map lets you switch between them
 | :----- | :----------- |
 | **Measures** | Which influence scores to compute for each channel (PageRank, betweenness, etc.). Start with the default (PageRank). See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
+| **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all interesting channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
 | **Draw dead leaves** | Include channels that are *referenced by* your monitored channels but not themselves monitored. Useful for seeing what outside content your corpus amplifies. |
 
@@ -213,6 +233,7 @@ python manage.py crawl_channels --refresh-messages-stats
 python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-01 --refresh-to 2024-06-30
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
+python manage.py crawl_channels --get-new-messages --channel-groups media,activists
 
 # Generate the map
 python manage.py structural_analysis --2dgraph --html
@@ -227,6 +248,7 @@ python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --2dgraph --timeline-step year
+python manage.py structural_analysis --2dgraph --html --channel-groups media,activists
 
 # Compare two exports
 python manage.py compare_analysis /path/to/exports/<other-name>
