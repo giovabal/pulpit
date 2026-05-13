@@ -564,8 +564,10 @@ class Command(BaseCommand):
                 initial_pos = {n: reference_positions.get(n, kk_pos[n]) for n in graph.nodes()}
                 self.stdout.write("done")
             else:
-                self.stdout.write("- seeding from reference layout")
+                self.stdout.write("- seeding from reference layout … ", ending="")
+                self.stdout.flush()
                 initial_pos = {n: reference_positions[n] for n in graph.nodes()}
+                self.stdout.write("done")
         else:
             self.stdout.write("- Kamada-Kawai … ", ending="")
             self.stdout.flush()
@@ -591,8 +593,10 @@ class Command(BaseCommand):
             if (target_layout == layout.LAYOUT_HORIZONTAL and height > width) or (
                 target_layout == layout.LAYOUT_VERTICAL and width > height
             ):
-                self.stdout.write("- rotating layout 90°")
+                self.stdout.write("- rotating layout 90° … ", ending="")
+                self.stdout.flush()
                 positions = layout.rotate_positions(positions)
+                self.stdout.write("done")
 
         if do_3dgraph:
             if reference_positions_3d is not None:
@@ -604,8 +608,10 @@ class Command(BaseCommand):
                     initial_pos_3d = {n: reference_positions_3d.get(n, kk_pos_3d[n]) for n in graph.nodes()}
                     self.stdout.write("done")
                 else:
-                    self.stdout.write("- seeding 3D from reference layout")
+                    self.stdout.write("- seeding 3D from reference layout … ", ending="")
+                    self.stdout.flush()
                     initial_pos_3d = {n: reference_positions_3d[n] for n in graph.nodes()}
+                    self.stdout.write("done")
             else:
                 self.stdout.write("- Kamada-Kawai 3D … ", ending="")
                 self.stdout.flush()
