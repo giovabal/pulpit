@@ -443,7 +443,7 @@ function update_info_bar() {
     var toggle = el('graph-info-toggle');
     var bar    = el('graph-info-bar');
     if (!toggle || !bar) return;
-    toggle.addEventListener('click', function() {
+    bar.addEventListener('click', function() {
         bar.classList.toggle('is-expanded');
         toggle.setAttribute('aria-expanded', String(bar.classList.contains('is-expanded')));
     });

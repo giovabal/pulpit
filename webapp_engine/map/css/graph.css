@@ -462,7 +462,7 @@ body[data-theme3d="print"]   .node-label { color: #111; text-shadow: 0 0 3px #ff
 @media screen {
     #graph-info-bar {
         position: fixed;
-        bottom: 80px;
+        bottom: 0;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -470,13 +470,15 @@ body[data-theme3d="print"]   .node-label { color: #111; text-shadow: 0 0 3px #ff
         background: var(--c-panel-bg);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
-        border-radius: 20px;
+        border-radius: 20px 20px 0 0;
         border: 1px solid rgba(var(--c-fg-raw), 0.08);
+        border-bottom: none;
         opacity: 0.45;
         transition: opacity 0.2s ease;
         z-index: 500;
         overflow: hidden;
         white-space: nowrap;
+        cursor: pointer;
     }
 
     #graph-info-bar.is-expanded         { opacity: 1; }
