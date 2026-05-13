@@ -3,7 +3,7 @@ import Graph from 'graphology';
 import EdgeCurveProgram from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel } from 'sigma/rendering';
-import { strategy_label } from './labels.js';
+import { strategy_label, layout_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
 import { escHtml } from './utils.js';
 
 // =============================================================================
@@ -403,8 +403,51 @@ function maybe_apply_initial_colors() {
             if (metric) apply_node_size(metric);
             is_year_switch = false;
         }
+        update_info_bar();
     }
 }
+
+// =============================================================================
+// Info bar
+// =============================================================================
+
+function update_info_bar() {
+    var chips_el = el('graph-info-chips');
+    if (!chips_el) return;
+
+    var chips = [];
+    chips.push(layout_label(active_layout));
+    if (active_strategy) chips.push(strategy_label(active_strategy));
+
+    var size_sel = el('size-select');
+    if (size_sel && size_sel.options.length > 0)
+        chips.push(size_sel.options[size_sel.selectedIndex].text);
+
+    chips.push(THEME_LABELS[active_theme] || active_theme);
+
+    var labels_sel = el('labels-select');
+    if (labels_sel) chips.push(LABELS_MODE_LABELS[labels_sel.value] || labels_sel.value);
+
+    chips.push(colored_edges ? 'Colored edges' : 'Plain edges');
+
+    var group_sel = el('group-select');
+    var group_val = group_sel ? group_sel.value : '';
+
+    var html = chips.map(function(t) { return '<span class="info-chip">' + t + '</span>'; }).join('');
+    if (group_val) html += '<span class="info-chip info-chip--filter">' + group_val + '</span>';
+
+    chips_el.innerHTML = html;
+}
+
+(function() {
+    var toggle = el('graph-info-toggle');
+    var bar    = el('graph-info-bar');
+    if (!toggle || !bar) return;
+    toggle.addEventListener('click', function() {
+        bar.classList.toggle('is-expanded');
+        toggle.setAttribute('aria-expanded', String(bar.classList.contains('is-expanded')));
+    });
+})();
 
 // =============================================================================
 // Node sizing
@@ -1091,6 +1134,7 @@ document.addEventListener('DOMContentLoaded', function() {
             apply_strategy_colors(active_strategy);
             el('group-select').value = '';
         }
+        update_info_bar();
     });
 
     el('search_input').value = '';
@@ -1118,11 +1162,15 @@ document.addEventListener('DOMContentLoaded', function() {
         click_node(link.dataset.nodeId);
     });
 
-    el('size-select').addEventListener('change', function() { apply_node_size(this.value); });
+    el('size-select').addEventListener('change', function() {
+        apply_node_size(this.value);
+        update_info_bar();
+    });
 
     el('labels-select').addEventListener('change', function() {
         var thresholds = { 'always': 0, 'on_size': 8, 'never': Infinity };
         sigma_instance.setSetting('labelRenderedSizeThreshold', thresholds[this.value]);
+        update_info_bar();
     });
 
     el('group-select').addEventListener('change', function() {
@@ -1136,6 +1184,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             sigma_instance.refresh();
             is_graph_completely_rendered = true;
+            update_info_bar();
             return;
         }
         var toKeep = new Set();
@@ -1158,12 +1207,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         sigma_instance.refresh();
         is_graph_completely_rendered = false;
+        update_info_bar();
     });
 
-    el('theme-select').addEventListener('change', function() { apply_theme(this.value); });
+    el('theme-select').addEventListener('change', function() {
+        apply_theme(this.value);
+        update_info_bar();
+    });
     el('colored-edges-toggle').addEventListener('change', function() {
         colored_edges = this.checked;
         refresh_edge_colors();
+        update_info_bar();
     });
 
     var extra_layouts = window.EXTRA_LAYOUTS || [];
@@ -1188,7 +1242,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 return '<option value="' + algo + '">' + lbl + '</option>';
             });
             layout_sel.innerHTML = _opts.join('');
-            layout_sel.addEventListener('change', function() { switch_layout(this.value); });
+            layout_sel.addEventListener('change', function() {
+                switch_layout(this.value);
+                update_info_bar();
+            });
         }
     }
 

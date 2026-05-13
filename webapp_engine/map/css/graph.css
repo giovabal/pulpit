@@ -457,3 +457,85 @@ body[data-theme3d="print"]   .node-label { color: #111; text-shadow: 0 0 3px #ff
 .share-btn--linkedin { background: #0077b5; color: #fff; }
 .share-btn--whatsapp { background: #25d366; color: #fff; }
 .share-btn--telegram { background: #0088cc; color: #fff; }
+
+/* ── Graph info bar ────────────────────────────────────────────────────────── */
+@media screen {
+    #graph-info-bar {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        background: var(--c-panel-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(var(--c-fg-raw), 0.08);
+        opacity: 0.45;
+        transition: opacity 0.2s ease;
+        z-index: 500;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    #graph-info-bar.is-expanded         { opacity: 1; }
+    #graph-info-bar:hover                { opacity: 0.75; }
+    #graph-info-bar.is-expanded:hover   { opacity: 1; }
+
+    #graph-info-toggle {
+        flex-shrink: 0;
+        background: none;
+        border: none;
+        color: rgba(var(--c-fg-raw), 0.80);
+        cursor: pointer;
+        padding: 0.42em 0.65em;
+        font-size: 1rem;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.15s;
+    }
+
+    #graph-info-toggle:hover,
+    #graph-info-toggle:focus { color: rgba(var(--c-fg-raw), 1); outline: none; }
+
+    #graph-info-chips {
+        display: flex;
+        align-items: center;
+        gap: 0.3em;
+        max-width: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: max-width 0.32s ease, opacity 0.25s ease, padding 0.32s ease;
+        padding: 0;
+    }
+
+    #graph-info-bar.is-expanded #graph-info-chips {
+        max-width: 640px;
+        opacity: 1;
+        padding: 0.3em 0.5em 0.3em 0;
+    }
+
+    .info-chip {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(var(--c-fg-raw), 0.08);
+        border: 1px solid rgba(var(--c-fg-raw), 0.12);
+        border-radius: 10px;
+        padding: 0.15em 0.55em;
+        font-size: 11px;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        letter-spacing: 0.02em;
+        color: rgba(var(--c-fg-raw), 0.85);
+        line-height: 1.4;
+        white-space: nowrap;
+    }
+
+    .info-chip--filter {
+        background: rgba(var(--c-fg-raw), 0.14);
+        border-color: rgba(var(--c-fg-raw), 0.25);
+        color: rgba(var(--c-fg-raw), 1);
+    }
+}

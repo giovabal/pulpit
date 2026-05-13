@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { strategy_label } from './labels.js';
+import { strategy_label, layout_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
 import { escHtml } from './utils.js';
 
 // =============================================================================
@@ -382,6 +382,42 @@ function apply_theme_3d(theme) {
     document.documentElement.style.backgroundColor = bgHex;
     localStorage.setItem('pulpit_theme', theme);
 }
+
+// =============================================================================
+// Info bar
+// =============================================================================
+
+function update_info_bar() {
+    var chips_el = el('graph-info-chips');
+    if (!chips_el) return;
+
+    var chips = [];
+    chips.push(layout_label(active_layout));
+    if (active_strategy) chips.push(strategy_label(active_strategy));
+
+    var size_sel = el('size-select');
+    if (size_sel && size_sel.options.length > 0)
+        chips.push(size_sel.options[size_sel.selectedIndex].text);
+
+    chips.push(THEME_LABELS[active_theme_3d] || active_theme_3d);
+    chips.push(LABELS_MODE_LABELS[labels_mode] || labels_mode);
+    chips.push(colored_edges ? 'Colored edges' : 'Plain edges');
+
+    var html = chips.map(function(t) { return '<span class="info-chip">' + t + '</span>'; }).join('');
+    if (current_group) html += '<span class="info-chip info-chip--filter">' + current_group + '</span>';
+
+    chips_el.innerHTML = html;
+}
+
+(function() {
+    var toggle = el('graph-info-toggle');
+    var bar    = el('graph-info-bar');
+    if (!toggle || !bar) return;
+    toggle.addEventListener('click', function() {
+        bar.classList.toggle('is-expanded');
+        toggle.setAttribute('aria-expanded', String(bar.classList.contains('is-expanded')));
+    });
+})();
 
 var _LAYOUT_LABELS_3D = {
     fa2:          'ForceAtlas2',
@@ -829,6 +865,7 @@ function get_data() {
         el('about_graph_stats').innerHTML =
             node_meshes.length + ' channels, ' + edge_list.length + ' connections';
         reset_camera();
+        update_info_bar();
     }).catch(function(err) {
         el('loading_message').innerHTML = 'Error: ' + err.message;
         console.error(err);
@@ -887,6 +924,7 @@ function _apply_accessory_3d(ch_data, comm_data) {
         }
     }
     if (!found && el('size-select').options.length > 0) current_size_key = el('size-select').value;
+    update_info_bar();
 }
 
 function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
@@ -1304,13 +1342,20 @@ document.addEventListener('DOMContentLoaded', function() {
     Promise.all([graph_promise, years_promise])
         .then(function() { loading_modal_bs.hide(); });
 
-    el('layout-select').addEventListener('change', function() { switch_layout_3d(this.value); });
+    el('layout-select').addEventListener('change', function() {
+        switch_layout_3d(this.value);
+        update_info_bar();
+    });
 
-    el('theme-select').addEventListener('change', function() { apply_theme_3d(this.value); });
+    el('theme-select').addEventListener('change', function() {
+        apply_theme_3d(this.value);
+        update_info_bar();
+    });
 
     el('colored-edges-toggle').addEventListener('change', function() {
         colored_edges = this.checked;
         rebuild_edge_colors();
+        update_info_bar();
     });
 
     el('community-strategy-select').addEventListener('change', function() {
@@ -1319,16 +1364,24 @@ document.addEventListener('DOMContentLoaded', function() {
         apply_strategy_colors(active_strategy);
         el('group-select').value = '';
         current_group = '';
+        update_info_bar();
     });
 
-    el('size-select').addEventListener('change', function() { apply_node_size(this.value); });
+    el('size-select').addEventListener('change', function() {
+        apply_node_size(this.value);
+        update_info_bar();
+    });
 
     el('labels-select').addEventListener('change', function() {
         labels_mode = this.value;
         set_labels_visibility();
+        update_info_bar();
     });
 
-    el('group-select').addEventListener('change', function() { apply_group_filter(this.value); });
+    el('group-select').addEventListener('change', function() {
+        apply_group_filter(this.value);
+        update_info_bar();
+    });
 
     el('search_input').value = '';
     el('search_modal').addEventListener('shown.bs.modal', function() { el('search_input').focus(); });

@@ -42,6 +42,13 @@
     <div class="sigma-expand" id="sigma-canvas" style="background-color: #123;"></div>
   </main>
 
+  <div id="graph-info-bar" aria-label="Active settings" role="status">
+    <button type="button" id="graph-info-toggle" aria-expanded="false" aria-controls="graph-info-chips" aria-label="Show active settings">
+      <i class="bi bi-sliders2" aria-hidden="true"></i>
+    </button>
+    <div id="graph-info-chips"></div>
+  </div>
+
   <nav id="menu_container" class="d-flex align-items-center" aria-label="Map controls">
     <a href="#" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal">
       <i class="bi bi-search" aria-hidden="true"></i><p class="d-none d-sm-block">Search</p>
