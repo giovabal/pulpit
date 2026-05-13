@@ -110,13 +110,18 @@ class HomeView(ListView):
         interesting_qs = Channel.objects.interesting()
         interesting_channels = interesting_qs.count()
         interesting_msgs = Message.objects.filter(channel__in=interesting_qs.values("pk"))
-        total_messages = interesting_msgs.count()
+        msg_agg = interesting_msgs.aggregate(
+            total=Count("id"),
+            earliest=Min("date"),
+            latest=Max("date"),
+            forwards=Count("id", filter=Q(forwarded_from__isnull=False)),
+        )
+        total_messages = msg_agg["total"]
+        total_forwards = msg_agg["forwards"]
         total_subscribers = (
             interesting_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"]
             or 0
         )
-        date_agg = interesting_msgs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
-        total_forwards = interesting_msgs.filter(forwarded_from__isnull=False).count()
         total_forward_edges = (
             interesting_msgs.filter(forwarded_from__in=interesting_qs.values("pk"))
             .values("channel_id", "forwarded_from_id")
@@ -137,7 +142,7 @@ class HomeView(ListView):
             {
                 "icon": "bi-calendar-range",
                 "label": "Date range",
-                "value": f"{fmt_date(date_agg['earliest'])} – {fmt_date(date_agg['latest'])}",
+                "value": f"{fmt_date(msg_agg['earliest'])} – {fmt_date(msg_agg['latest'])}",
                 "note": "first message - last message",
             },
             {
