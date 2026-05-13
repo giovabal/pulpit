@@ -3,7 +3,7 @@ import tempfile
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
@@ -1213,6 +1213,7 @@ class ChannelCrawlerSearchChannelTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(IGNORE_FLOODWAIT=True, TELEGRAM_FLOODWAIT_SLEEP_SECONDS=0)
 class ChannelCrawlerPendingForwardsTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
