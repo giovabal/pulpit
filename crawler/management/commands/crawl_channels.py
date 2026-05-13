@@ -404,7 +404,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
                 return
 
-        refresh_indent = " " * len(f"[{index}/{total_channels}] [id={channel.id}] ")
+        refresh_prefix = f"[{index}/{total_channels}] [id={channel.id}] {channel} | "
         try:
             crawler.refresh_message_stats(
                 channel,
@@ -413,7 +413,7 @@ class Command(BaseCommand):
                 min_date=refresh_from,
                 max_date=refresh_to,
                 max_telegram_id=pre_crawl_max_id,
-                status_callback=lambda message, ind=refresh_indent: printer.indented(message, ind),
+                status_callback=lambda message, prefix=refresh_prefix: printer.indented(message, prefix),
             )
         except errors.FloodWaitError as error:
             printer.newline()
@@ -447,7 +447,7 @@ class Command(BaseCommand):
                     min_date=refresh_from,
                     max_date=refresh_to,
                     max_telegram_id=pre_crawl_max_id,
-                    status_callback=lambda message, ind=refresh_indent: printer.indented(message, ind),
+                    status_callback=lambda message, prefix=refresh_prefix: printer.indented(message, prefix),
                 )
             except Exception as retry_error:
                 printer.newline()

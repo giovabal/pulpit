@@ -605,9 +605,12 @@ class ChannelCrawler:
             _total_qs = _total_qs.filter(date__lt=to_cutoff)
         if iter_max_id > 0:
             _total_qs = _total_qs.filter(telegram_id__lt=iter_max_id)
+        if channel.uninteresting_after is not None:
+            _total_qs = _total_qs.filter(date__date__lte=channel.uninteresting_after)
         total_in_db = _total_qs.count()
         processed = 0
         updated = 0
+        service_cleaned = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             limit=None,
@@ -625,7 +628,10 @@ class ChannelCrawler:
             ):
                 continue
             if isinstance(telegram_message, MessageService):
-                Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
+                deleted, _ = Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()
+                if deleted:
+                    service_cleaned += 1
+                    total_in_db -= 1
                 continue
             processed += 1
             if limit is not None and processed > limit:
@@ -677,7 +683,13 @@ class ChannelCrawler:
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
             update_status(f"refreshing message stats … {updated}/{total_in_db}")
-        update_status(f"refreshing message stats … {updated}/{total_in_db}")
+        notes: list[str] = []
+        if service_cleaned:
+            notes.append(f"{service_cleaned} service msg cleaned up")
+        if updated < total_in_db:
+            notes.append(f"{total_in_db - updated} missing on Telegram")
+        suffix = f" ({', '.join(notes)})" if notes else ""
+        update_status(f"refreshing message stats … {updated}/{total_in_db}{suffix}")
         return updated
 
     def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:
