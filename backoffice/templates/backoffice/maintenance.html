@@ -1,0 +1,55 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-maint">
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Database maintenance</h2>
+    </div>
+
+    <p class="bo-maint-intro">
+      Run engine-specific routines to reclaim disk space and refresh the query planner's
+      statistics. Use this when the database has grown noticeably on disk or when queries feel
+      slower than usual — refreshed statistics help Django pick better query plans, and a
+      rebuild reclaims pages left fragmented by deletions and updates.
+      <strong>VACUUM</strong> on SQLite holds an exclusive lock and rewrites the entire file,
+      so it can take minutes on a multi-GB database — schedule it when crawl and analysis are
+      idle. PostgreSQL's <strong>VACUUM ANALYZE</strong> is concurrent-safe.
+    </p>
+
+    <div class="bo-maint-status">
+      <div><span class="bo-maint-status-label">Engine:</span> <span id="bo-maint-engine">…</span></div>
+      <div><span class="bo-maint-status-label">Size on disk:</span> <span id="bo-maint-size">…</span></div>
+    </div>
+
+    <div id="bo-maint-strategies" class="bo-maint-strategies">
+      <p class="bo-empty">Loading…</p>
+    </div>
+
+    <div class="bo-maint-actions">
+      <button class="bo-btn" id="bo-maint-run" disabled>
+        <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run optimization
+      </button>
+      <span class="bo-maint-hint">Running may block other requests until each step finishes.</span>
+    </div>
+
+    <div id="bo-maint-result" class="bo-maint-result d-none">
+      <h3 class="bo-maint-result-title">Last run</h3>
+      <table class="bo-table">
+        <thead>
+          <tr><th>Step</th><th>Status</th><th class="bo-th--num">Duration</th></tr>
+        </thead>
+        <tbody id="bo-maint-result-body"></tbody>
+      </table>
+      <p class="bo-maint-result-summary" id="bo-maint-result-summary"></p>
+    </div>
+  </div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/maintenance.js' %}"></script>
+{% endblock extra_scripts %}

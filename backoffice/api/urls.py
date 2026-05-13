@@ -1,3 +1,6 @@
+from django.urls import path
+
+from .maintenance import maintenance_info, maintenance_optimize
 from .views import (
     ChannelGroupViewSet,
     ChannelVacancyViewSet,
@@ -21,4 +24,8 @@ router.register("events", EventViewSet, basename="api-events")
 router.register("users", UserViewSet, basename="api-users")
 router.register("vacancies", ChannelVacancyViewSet, basename="api-vacancies")
 
-urlpatterns = router.urls
+urlpatterns = [
+    *router.urls,
+    path("maintenance/", maintenance_info, name="api-maintenance-info"),
+    path("maintenance/optimize/", maintenance_optimize, name="api-maintenance-optimize"),
+]
