@@ -264,6 +264,54 @@ class ChannelCrossRefsView(_ChannelTimeSeriesBase):
         return JsonResponse({"mentioned": serialize(mentioned), "mentioning": serialize(mentioning)})
 
 
+class ReactionsHistoryDataView(View):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        spine = global_month_spine()
+        if not spine:
+            return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
+
+        from network.utils import channel_cutoff_q
+
+        interesting_pks = Channel.objects.interesting().values("pk")
+        cutoff_q = channel_cutoff_q(channel_field="message__channel", date_field="message__date")
+
+        top_emojis_qs = (
+            MessageReaction.objects.filter(message__channel__in=interesting_pks)
+            .filter(cutoff_q)
+            .values("emoji")
+            .annotate(total=Sum("count"))
+            .order_by("-total")[:8]
+        )
+        top_emojis = [r["emoji"] for r in top_emojis_qs]
+        if not top_emojis:
+            return JsonResponse({"labels": spine, "series": [], "y_label": "reactions"})
+
+        monthly = (
+            MessageReaction.objects.filter(
+                message__channel__in=interesting_pks,
+                message__date__isnull=False,
+                emoji__in=top_emojis,
+            )
+            .filter(cutoff_q)
+            .annotate(month=TruncMonth("message__date"))
+            .values("month", "emoji")
+            .annotate(total=Sum("count"))
+            .order_by("month", "emoji")
+        )
+        rows = [{"month": r["month"].strftime("%Y-%m"), "emoji": r["emoji"], "total": r["total"]} for r in monthly]
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            pivot = df.pivot_table(index="month", columns="emoji", values="total", aggfunc="sum", fill_value=0)
+            pivot = pivot.reindex(spine, fill_value=0)
+            pivot = pivot.reindex(columns=top_emojis, fill_value=0)
+        else:
+            pivot = pd.DataFrame(0, index=spine, columns=top_emojis)
+            pivot.index.name = "month"
+
+        series = [{"emoji": emoji, "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis]
+        return JsonResponse({"labels": spine, "series": series, "y_label": "reactions"})
+
+
 class ChannelReactionsHistoryView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)

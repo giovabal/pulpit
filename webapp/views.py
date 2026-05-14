@@ -189,6 +189,13 @@ class HomeView(ListView):
                 "url": reverse("avg-involvement-history-data"),
                 "description": "Average number of views per message across monitored channels each month. A proxy for audience engagement intensity.",
             },
+            {
+                "id": "reactions-history",
+                "title": "Reactions per month",
+                "icon": "bi-emoji-smile",
+                "url": reverse("reactions-history-data"),
+                "description": "Total reactions to messages posted by monitored channels each month, broken down by the eight most-used emojis. Custom and sticker reactions are aggregated together under the 'custom' bucket.",
+            },
         ]
         return ctx
 

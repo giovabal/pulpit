@@ -31,6 +31,7 @@ urlpatterns = [
     ),
     path("data/forwards_history/", views.ForwardsHistoryDataView.as_view(), name="forwards-history-data"),
     path("data/views_history/", views.ViewsHistoryDataView.as_view(), name="views-history-data"),
+    path("data/reactions_history/", views.ReactionsHistoryDataView.as_view(), name="reactions-history-data"),
     path(
         "data/avg_involvement_history/",
         views.AvgInvolvementHistoryDataView.as_view(),
