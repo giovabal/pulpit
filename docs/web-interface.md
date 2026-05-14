@@ -8,7 +8,11 @@ The Operations panel is the dashboard you use to launch data collection and anal
 
 ## Home page — `/`
 
-> **[PLACEHOLDER: `images/home.png`]** Home page: project-level summary cards, time-series charts, and the recent-messages feed.
+<figure>
+<img src="../webapp_engine/static/screenshot_15.jpg" alt="Home page: project-level summary cards, time-series charts, and the recent-messages feed.">
+<figcaption><em>Home page: project-level summary cards, time-series charts, and the recent-messages feed.</em></figcaption>
+</figure>
+<br>
 
 The landing page gives a project-level snapshot of the monitored corpus:
 
@@ -74,8 +78,6 @@ Lists all channels registered as vacancies with:
 - Closure date
 
 See [Vacancy analysis](vacancy-analysis.md) for the full documentation.
-
-> **[PLACEHOLDER: `images/vacancy-list.png`]** Vacancies list: all registered vacant channels with in-degree, orphaned amplifier counts, and closure date.
 
 ---
 
