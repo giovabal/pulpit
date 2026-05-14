@@ -309,186 +309,156 @@ class ExportDetailView(View):
         return JsonResponse({"deleted": name})
 
 
-def _build_args(task: str, post: Any) -> list[str]:
-    args: list[str] = []
+# ── Per-task arg specs ────────────────────────────────────────────────────────
+# Each spec is a tuple starting with a kind keyword that names the translation
+# from POST data to a CLI argument. Adding a flag is a one-line table edit.
+#
+#   ("flag",          post_key, cli_flag)              "if post.get(key): args += [cli_flag]"
+#   ("inverted_flag", post_key, cli_flag)              "if not post.get(key): args += [cli_flag]"
+#   ("value",         post_key, cli_flag)              ".strip()-d value; skipped when empty"
+#   ("csv",           post_key, cli_flag)              "post.getlist(key) joined by ','"
+#   ("csv_unique",    post_key, cli_flag)              "csv with order-preserving dedupe"
+#   ("const",         post_key, cli_flag, const_value) "fixed second arg when post[key] is truthy"
+#   ("channel_types", cli_flag)                        "CHANNEL/GROUP/USER triplet → csv"
+#   ("extra_terms",   post_key)                        "one --extra-term per non-blank line"
+#   ("positional",    post_key)                        "a bare argument (no flag) when set"
 
-    if task == "crawl_channels":
-        # Channels
-        if post.get("get_channels_info"):
-            args.append("--get-channels-info")
-        if post.get("mine_about_texts"):
-            args.append("--mine-about-texts")
-        if post.get("fetch_recommended_channels"):
-            args.append("--fetch-recommended-channels")
-        if post.get("retry_lost_and_private"):
-            args.append("--retry-lost-and-private")
-        # Messages
-        if post.get("get_new_messages"):
-            args.append("--get-new-messages")
-        if post.get("fetch_replies"):
-            args.append("--fetch-replies")
-        if post.get("do_refresh"):
-            args.append("--refresh-messages-stats")
-        refresh_limit = post.get("refresh_limit", "").strip()
-        if refresh_limit:
-            args += ["--refresh-limit", refresh_limit]
-        refresh_from = post.get("refresh_from", "").strip()
-        if refresh_from:
-            args += ["--refresh-from", refresh_from]
-        refresh_to = post.get("refresh_to", "").strip()
-        if refresh_to:
-            args += ["--refresh-to", refresh_to]
-        if post.get("fix_holes"):
-            args.append("--fixholes")
-        if post.get("fix_missing_media"):
-            args.append("--fix-missing-media")
-        if post.get("retry_lost_messages"):
-            args.append("--retry-lost-messages")
-        if post.get("retry_references"):
-            args.append("--retry-references")
-        if post.get("force_retry_unresolved_references"):
-            args.append("--force-retry-unresolved-references")
-        # Degrees
-        if post.get("in_degrees"):
-            args.append("--in-degrees")
-        if post.get("out_degrees"):
-            args.append("--out-degrees")
-        # Scope
-        ids = post.get("ids", "").strip()
-        if ids:
-            args += ["--ids", ids]
-        channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
-        if channel_types:
-            args += ["--channel-types", ",".join(channel_types)]
-        channel_groups = post.getlist("channel_groups")
-        if channel_groups:
-            args += ["--channel-groups", ",".join(channel_groups)]
+_CHANNEL_TYPE_KEYS = ("CHANNEL", "GROUP", "USER")
 
-    elif task == "search_channels":
-        amount = post.get("amount", "").strip()
-        if amount:
-            args += ["--amount", amount]
-        for line in post.get("extra_terms", "").splitlines():
+
+def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
+    kind = spec[0]
+    if kind == "flag":
+        _, key, flag = spec
+        if post.get(key):
+            args.append(flag)
+    elif kind == "inverted_flag":
+        _, key, flag = spec
+        if not post.get(key):
+            args.append(flag)
+    elif kind == "value":
+        _, key, flag = spec
+        val = post.get(key, "").strip()
+        if val:
+            args += [flag, val]
+    elif kind == "csv":
+        _, key, flag = spec
+        val = ",".join(post.getlist(key))
+        if val:
+            args += [flag, val]
+    elif kind == "csv_unique":
+        _, key, flag = spec
+        val = ",".join(dict.fromkeys(post.getlist(key)))
+        if val:
+            args += [flag, val]
+    elif kind == "const":
+        _, key, flag, const_value = spec
+        if post.get(key):
+            args += [flag, const_value]
+    elif kind == "channel_types":
+        _, flag = spec
+        types = [ct for ct in _CHANNEL_TYPE_KEYS if post.get(f"channel_type_{ct.lower()}")]
+        if types:
+            args += [flag, ",".join(types)]
+    elif kind == "extra_terms":
+        _, key = spec
+        for line in post.get(key, "").splitlines():
             word = " ".join(line.split()).lower()
             if word:
                 args += ["--extra-term", word]
+    elif kind == "positional":
+        _, key = spec
+        val = post.get(key, "").strip()
+        if val:
+            args.append(val)
+    else:
+        raise ValueError(f"Unknown arg-spec kind: {kind!r}")
 
-    elif task == "structural_analysis":
-        name_val = post.get("export_name", "").strip()
-        if name_val:
-            args += ["--name", name_val]
-        if post.get("graph_3d"):
-            args.append("--3dgraph")
-        if post.get("xlsx"):
-            args.append("--xlsx")
-        if post.get("gexf"):
-            args.append("--gexf")
-        if post.get("graphml"):
-            args.append("--graphml")
-        if post.get("csv"):
-            args.append("--csv")
-        if post.get("seo"):
-            args.append("--seo")
-        if post.get("graph"):
-            args.append("--2dgraph")
-        if post.get("html"):
-            args.append("--html")
-        if post.get("vertical_layout"):
-            args.append("--vertical-layout")
-        extra_layouts_val = ",".join(dict.fromkeys(post.getlist("layouts_2d")))
-        if extra_layouts_val:
-            args += ["--2dlayouts", extra_layouts_val]
-        extra_layouts_3d_val = ",".join(dict.fromkeys(post.getlist("layouts_3d")))
-        if extra_layouts_3d_val:
-            args += ["--3dlayouts", extra_layouts_3d_val]
-        fa2 = post.get("fa2_iterations", "").strip()
-        if fa2:
-            args += ["--fa2-iterations", fa2]
-        startdate = post.get("startdate", "").strip()
-        if startdate:
-            args += ["--startdate", startdate]
-        enddate = post.get("enddate", "").strip()
-        if enddate:
-            args += ["--enddate", enddate]
-        if post.get("draw_dead_leaves"):
-            args.append("--draw-dead-leaves")
-        measures_val = ",".join(post.getlist("measures"))
-        if measures_val:
-            args += ["--measures", measures_val]
-        community_strategies_val = ",".join(post.getlist("community_strategies"))
-        if community_strategies_val:
-            args += ["--community-strategies", community_strategies_val]
-        network_stat_groups_val = ",".join(post.getlist("network_stat_groups"))
-        if network_stat_groups_val:
-            args += ["--network-stat-groups", network_stat_groups_val]
-        if not post.get("include_mentions"):
-            args.append("--no-mentions")
-        if post.get("include_self_references"):
-            args.append("--self-references")
-        edge_weight_strategy_val = post.get("edge_weight_strategy", "").strip()
-        if edge_weight_strategy_val:
-            args += ["--edge-weight-strategy", edge_weight_strategy_val]
-        recency_weights_val = post.get("recency_weights", "").strip()
-        if recency_weights_val:
-            args += ["--recency-weights", recency_weights_val]
-        spreading_runs_val = post.get("spreading_runs", "").strip()
-        if spreading_runs_val:
-            args += ["--spreading-runs", spreading_runs_val]
-        diffusion_window_val = post.get("diffusion_window", "").strip()
-        if diffusion_window_val:
-            args += ["--diffusion-window", diffusion_window_val]
-        if post.get("consensus_matrix"):
-            args.append("--consensus-matrix")
-        if post.get("structural_similarity"):
-            args.append("--structural-similarity")
-        community_distribution_threshold_val = post.get("community_distribution_threshold", "").strip()
-        if community_distribution_threshold_val:
-            args += ["--community-distribution-threshold", community_distribution_threshold_val]
-        leiden_coarse_resolution_val = post.get("leiden_coarse_resolution", "").strip()
-        if leiden_coarse_resolution_val:
-            args += ["--leiden-coarse-resolution", leiden_coarse_resolution_val]
-        leiden_fine_resolution_val = post.get("leiden_fine_resolution", "").strip()
-        if leiden_fine_resolution_val:
-            args += ["--leiden-fine-resolution", leiden_fine_resolution_val]
-        mcl_inflation_val = post.get("mcl_inflation", "").strip()
-        if mcl_inflation_val:
-            args += ["--mcl-inflation", mcl_inflation_val]
-        channel_types = [ct for ct in ["CHANNEL", "GROUP", "USER"] if post.get(f"channel_type_{ct.lower()}")]
-        if channel_types:
-            args += ["--channel-types", ",".join(channel_types)]
-        channel_groups = post.getlist("channel_groups")
-        if channel_groups:
-            args += ["--channel-groups", ",".join(channel_groups)]
-        if post.get("include_lost"):
-            args.append("--include-lost")
-        if post.get("include_private"):
-            args.append("--include-private")
-        if post.get("timeline_step"):
-            args += ["--timeline-step", "year"]
-        vacancy_measures_val = ",".join(post.getlist("vacancy_measures"))
-        if vacancy_measures_val:
-            args += ["--vacancy-measures", vacancy_measures_val]
-        vacancy_months_before_val = post.get("vacancy_months_before", "").strip()
-        if vacancy_months_before_val:
-            args += ["--vacancy-months-before", vacancy_months_before_val]
-        vacancy_months_after_val = post.get("vacancy_months_after", "").strip()
-        if vacancy_months_after_val:
-            args += ["--vacancy-months-after", vacancy_months_after_val]
-        vacancy_max_candidates_val = post.get("vacancy_max_candidates", "").strip()
-        if vacancy_max_candidates_val:
-            args += ["--vacancy-max-candidates", vacancy_max_candidates_val]
-        vacancy_ppr_alpha_val = post.get("vacancy_ppr_alpha", "").strip()
-        if vacancy_ppr_alpha_val:
-            args += ["--vacancy-ppr-alpha", vacancy_ppr_alpha_val]
 
-    elif task == "compare_analysis":
-        project_dir = post.get("project_dir", "").strip()
-        if project_dir:
-            args.append(project_dir)
-        target_val = post.get("compare_target", "").strip()
-        if target_val:
-            args += ["--target", target_val]
-        if post.get("seo"):
-            args.append("--seo")
+TASK_ARG_SPECS: dict[str, list[tuple]] = {
+    "crawl_channels": [
+        # Channels
+        ("flag", "get_channels_info", "--get-channels-info"),
+        ("flag", "mine_about_texts", "--mine-about-texts"),
+        ("flag", "fetch_recommended_channels", "--fetch-recommended-channels"),
+        ("flag", "retry_lost_and_private", "--retry-lost-and-private"),
+        # Messages
+        ("flag", "get_new_messages", "--get-new-messages"),
+        ("flag", "fetch_replies", "--fetch-replies"),
+        ("flag", "do_refresh", "--refresh-messages-stats"),
+        ("value", "refresh_limit", "--refresh-limit"),
+        ("value", "refresh_from", "--refresh-from"),
+        ("value", "refresh_to", "--refresh-to"),
+        ("flag", "fix_holes", "--fixholes"),
+        ("flag", "fix_missing_media", "--fix-missing-media"),
+        ("flag", "retry_lost_messages", "--retry-lost-messages"),
+        ("flag", "retry_references", "--retry-references"),
+        ("flag", "force_retry_unresolved_references", "--force-retry-unresolved-references"),
+        # Degrees
+        ("flag", "in_degrees", "--in-degrees"),
+        ("flag", "out_degrees", "--out-degrees"),
+        # Scope
+        ("value", "ids", "--ids"),
+        ("channel_types", "--channel-types"),
+        ("csv", "channel_groups", "--channel-groups"),
+    ],
+    "search_channels": [
+        ("value", "amount", "--amount"),
+        ("extra_terms", "extra_terms"),
+    ],
+    "structural_analysis": [
+        ("value", "export_name", "--name"),
+        ("flag", "graph_3d", "--3dgraph"),
+        ("flag", "xlsx", "--xlsx"),
+        ("flag", "gexf", "--gexf"),
+        ("flag", "graphml", "--graphml"),
+        ("flag", "csv", "--csv"),
+        ("flag", "seo", "--seo"),
+        ("flag", "graph", "--2dgraph"),
+        ("flag", "html", "--html"),
+        ("flag", "vertical_layout", "--vertical-layout"),
+        ("csv_unique", "layouts_2d", "--2dlayouts"),
+        ("csv_unique", "layouts_3d", "--3dlayouts"),
+        ("value", "fa2_iterations", "--fa2-iterations"),
+        ("value", "startdate", "--startdate"),
+        ("value", "enddate", "--enddate"),
+        ("flag", "draw_dead_leaves", "--draw-dead-leaves"),
+        ("csv", "measures", "--measures"),
+        ("csv", "community_strategies", "--community-strategies"),
+        ("csv", "network_stat_groups", "--network-stat-groups"),
+        ("inverted_flag", "include_mentions", "--no-mentions"),
+        ("flag", "include_self_references", "--self-references"),
+        ("value", "edge_weight_strategy", "--edge-weight-strategy"),
+        ("value", "recency_weights", "--recency-weights"),
+        ("value", "spreading_runs", "--spreading-runs"),
+        ("value", "diffusion_window", "--diffusion-window"),
+        ("flag", "consensus_matrix", "--consensus-matrix"),
+        ("flag", "structural_similarity", "--structural-similarity"),
+        ("value", "community_distribution_threshold", "--community-distribution-threshold"),
+        ("value", "leiden_coarse_resolution", "--leiden-coarse-resolution"),
+        ("value", "leiden_fine_resolution", "--leiden-fine-resolution"),
+        ("value", "mcl_inflation", "--mcl-inflation"),
+        ("channel_types", "--channel-types"),
+        ("csv", "channel_groups", "--channel-groups"),
+        ("flag", "include_lost", "--include-lost"),
+        ("flag", "include_private", "--include-private"),
+        ("const", "timeline_step", "--timeline-step", "year"),
+        ("csv", "vacancy_measures", "--vacancy-measures"),
+        ("value", "vacancy_months_before", "--vacancy-months-before"),
+        ("value", "vacancy_months_after", "--vacancy-months-after"),
+        ("value", "vacancy_max_candidates", "--vacancy-max-candidates"),
+        ("value", "vacancy_ppr_alpha", "--vacancy-ppr-alpha"),
+    ],
+    "compare_analysis": [
+        ("positional", "project_dir"),
+        ("value", "compare_target", "--target"),
+        ("flag", "seo", "--seo"),
+    ],
+}
 
+
+def _build_args(task: str, post: Any) -> list[str]:
+    args: list[str] = []
+    for spec in TASK_ARG_SPECS.get(task, []):
+        _apply_spec(spec, post, args)
     return args

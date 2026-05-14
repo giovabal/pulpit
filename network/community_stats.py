@@ -1,7 +1,8 @@
 import datetime
 import logging
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from django.db.models import Count, Q, QuerySet
@@ -18,6 +19,31 @@ logger = logging.getLogger(__name__)
 # Tiny communities (singletons, pairs) are trivially O(1) but incur WCC setup overhead;
 # skipping them avoids calling weakly_connected_components on many 1–2 node subgraphs.
 _PATH_LENGTH_MIN_NODES = 3
+
+# Exceptions networkx routines may raise on graphs that are too small, empty,
+# or disconnected for a given metric. Centralised so a new "expected failure"
+# exception type only needs to be added in one place.
+_SAFE_METRIC_EXC: tuple[type[BaseException], ...] = (
+    nx.NetworkXError,
+    nx.NetworkXAlgorithmError,
+    ZeroDivisionError,
+)
+
+
+@contextmanager
+def _swallow_metric(label: str, *extra_excs: type[BaseException]) -> Iterator[None]:
+    """Run a metric computation, swallowing & logging the usual networkx failure modes.
+
+    Use as ``with _swallow_metric("avg_clustering"): ...`` — any variable
+    assigned inside the block stays at its previously-initialised value when an
+    expected exception fires.  Extra exception types can be passed positionally
+    for metrics that raise outside the standard set (e.g. ``ValueError`` for
+    modularity).
+    """
+    try:
+        yield
+    except (*_SAFE_METRIC_EXC, *extra_excs) as exc:
+        logger.debug("%s unavailable: %s", label, exc)
 
 
 def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None" = None) -> dict[str, Any]:
@@ -49,19 +75,15 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     scc_path_on_full = True
 
     if _sel("PATHS"):
-        try:
+        with _swallow_metric("reciprocity"):
             reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("reciprocity unavailable: %s", exc)
-        try:
+        with _swallow_metric("avg_clustering"):
             avg_clustering = nx.average_clustering(graph)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("avg_clustering unavailable: %s", exc)
 
     need_wcc = _sel("PATHS") or _sel("COMPONENTS")
     need_scc = _sel("PATHS") or _sel("COMPONENTS")
     if n >= 2 and need_wcc:
-        try:
+        with _swallow_metric("wcc/path_length/diameter"):
             wccs = list(nx.weakly_connected_components(graph))
             largest_wcc = max(wccs, key=len)
             if _sel("COMPONENTS"):
@@ -73,10 +95,8 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
                     ug = graph.subgraph(largest_wcc).to_undirected()
                     avg_path_length = nx.average_shortest_path_length(ug)
                     diameter = nx.diameter(ug)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("wcc/path_length/diameter unavailable: %s", exc)
     if n >= 2 and need_scc:
-        try:
+        with _swallow_metric("scc"):
             sccs = list(nx.strongly_connected_components(graph))
             largest_scc = max(sccs, key=len)
             if _sel("COMPONENTS"):
@@ -88,8 +108,6 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
                     scc_sub = graph.subgraph(largest_scc)
                     avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
                     diameter_directed = nx.diameter(scc_sub)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("scc unavailable: %s", exc)
 
     # ── COHESION — transitivity, global efficiency, algebraic connectivity ─────
     # Transitivity — fraction of closed triads (O(m))
@@ -108,27 +126,21 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     in_degree_cv: float | None = None
     out_degree_cv: float | None = None
     if _sel("COHESION"):
-        try:
+        with _swallow_metric("transitivity"):
             transitivity = round(nx.transitivity(graph), 6)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError) as exc:
-            logger.debug("transitivity unavailable: %s", exc)
         if n >= 2:
-            try:
+            with _swallow_metric("global_efficiency"):
                 total_inv_dist = 0.0
                 for source in graph.nodes():
                     lengths = nx.single_source_shortest_path_length(graph, source)
                     total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
                 global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
-            except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-                logger.debug("global_efficiency unavailable: %s", exc)
-            try:
+            with _swallow_metric("algebraic_connectivity"):
                 ug_ac = graph.to_undirected()
                 lcc_nodes = max(nx.connected_components(ug_ac), key=len)
                 lcc_ac = ug_ac.subgraph(lcc_nodes)
                 if len(lcc_ac) >= 2:
                     algebraic_connectivity = round(nx.algebraic_connectivity(lcc_ac, method="tracemin_pcg", seed=42), 6)
-            except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-                logger.debug("algebraic_connectivity unavailable: %s", exc)
             in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
             out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
             in_mean = float(in_arr.mean())
@@ -198,28 +210,22 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
     total_deg = sum(graph.in_degree(nd) + graph.out_degree(nd) for nd in nodes_set)
     external_edges = total_deg - 2 * internal_edges
     density = nx.density(subgraph)
-    try:
-        reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-        logger.debug("reciprocity unavailable for subgraph: %s", exc)
-        reciprocity = None
-    try:
-        avg_clustering = nx.average_clustering(subgraph)
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-        logger.debug("avg_clustering unavailable for subgraph: %s", exc)
-        avg_clustering = None
+    reciprocity: float | None = None
+    avg_clustering: float | None = None
     avg_path_length = None
     diameter = None
+    with _swallow_metric("reciprocity (subgraph)"):
+        reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
+    with _swallow_metric("avg_clustering (subgraph)"):
+        avg_clustering = nx.average_clustering(subgraph)
     if n >= _PATH_LENGTH_MIN_NODES:
-        try:
+        with _swallow_metric("wcc/path_length/diameter (subgraph)"):
             wccs = list(nx.weakly_connected_components(subgraph))
             largest_wcc = max(wccs, key=len)
             if len(largest_wcc) >= 2:
                 ug = subgraph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-            logger.debug("wcc/path_length/diameter unavailable for subgraph: %s", exc)
     m = graph.number_of_edges()
     modularity_contribution = None
     if m > 0:
@@ -494,10 +500,8 @@ def _compute_strategy_entry(
 
     modularity = None
     if label_to_nodes:
-        try:
+        with _swallow_metric(f"modularity (strategy {strategy_key})", ValueError):
             modularity = nx.community.modularity(graph, label_to_nodes.values())
-        except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError, ValueError) as exc:
-            logger.debug("modularity unavailable for strategy %s: %s", strategy_key, exc)
 
     # ── Inter-community edge ratio ────────────────────────────────────────────
     # Fraction of all directed edges whose source and target belong to different

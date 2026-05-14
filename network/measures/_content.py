@@ -3,8 +3,13 @@ import logging
 import statistics
 from typing import Any
 
-from django.db.models import Count, Q
+from django.db.models import Q
 
+from network.measures._base import (
+    channel_pks_from_graph_data,
+    per_channel_forwards_received,
+    per_channel_message_counts,
+)
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
@@ -23,24 +28,9 @@ def apply_amplification_factor(
     """Add amplification factor (forwards received / own message count) to each node."""
     key = "amplification_factor"
 
-    channel_pks = [
-        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
-    ]
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
-    message_counts: dict[int, int] = {
-        item["channel_id"]: item["total"]
-        for item in Message.objects.alive().filter(msg_q).values("channel_id").annotate(total=Count("id"))
-    }
-
-    fwd_q = (
-        Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
-        & make_date_q(start_date, end_date)
-        & channel_cutoff_q()
-    )
-    forwards_received: dict[int, int] = {
-        item["forwarded_from_id"]: item["total"]
-        for item in Message.objects.alive().filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
-    }
+    channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date)
+    forwards_received = per_channel_forwards_received(channel_pks, start_date, end_date)
 
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
@@ -64,19 +54,11 @@ def apply_content_originality(
     """Add content originality (1 − forwarded_messages / total_messages) to each node. None if no messages."""
     key = "content_originality"
 
-    channel_pks = [
-        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
-    ]
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
-    message_counts: dict[int, int] = {
-        item["channel_id"]: item["total"]
-        for item in Message.objects.alive().filter(msg_q).values("channel_id").annotate(total=Count("id"))
-    }
-    fwd_q = msg_q & Q(forwarded_from__isnull=False)
-    forwarded_counts: dict[int, int] = {
-        item["channel_id"]: item["total"]
-        for item in Message.objects.alive().filter(fwd_q).values("channel_id").annotate(total=Count("id"))
-    }
+    channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date)
+    forwarded_counts = per_channel_message_counts(
+        channel_pks, start_date, end_date, extra_q=Q(forwarded_from__isnull=False)
+    )
 
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
@@ -103,9 +85,7 @@ def apply_diffusion_lag(
     Uses median to resist anniversary/archival re-shares that would inflate a mean.
     """
     key = "diffusion_lag"
-    channel_pks = [
-        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
-    ]
+    channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
     fwd_q = (
         Q(channel_id__in=channel_pks)
         & Q(forwarded_from__isnull=False)

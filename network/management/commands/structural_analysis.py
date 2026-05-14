@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,174 @@ import networkx as nx
 def _parse_csv(value: str) -> list[str]:
     """Split a comma-separated string into a list of uppercase tokens."""
     return [s.strip().upper() for s in value.split(",") if s.strip()]
+
+
+# ── Extra-layout dispatch ────────────────────────────────────────────────────
+# Centralised so adding a new layout means editing one map plus
+# `network.layout.EXTRA_LAYOUT_CHOICES_2D` / `_3D`, instead of three places.
+
+_EXTRA_LAYOUT_FUNCS_2D: dict[str, Any] = {
+    "CIRCULAR": layout.circular_positions,
+    "KAMADA_KAWAI": layout.kamada_kawai_positions,
+    "TSNE": layout.tsne_positions_2d,
+    "UMAP": layout.umap_positions_2d,
+    "HYPERBOLIC": layout.hyperbolic_positions,
+    # COMMUNITY_SHELL needs the strategy_results, so it's resolved lazily below.
+}
+
+_EXTRA_LAYOUT_FUNCS_3D: dict[str, Any] = {
+    "SPECTRAL": layout.spectral_positions,
+    "SPRING": layout.spring_positions,
+    "KAMADA_KAWAI": layout.kamada_kawai_positions_3d,
+    "TSNE": layout.tsne_positions_3d,
+    "UMAP": layout.umap_positions_3d,
+}
+
+
+def _compute_extra_layouts(
+    graph: nx.DiGraph,
+    names: list[str],
+    *,
+    dim: int = 2,
+    strategy_results: dict | None = None,
+    on_progress: "callable[[str], None] | None" = None,
+) -> dict[str, dict]:
+    """Compute every extra layout in ``names`` (excluding FA2, which is the
+    primary layout) and return ``{lower_case_name: positions}``."""
+    funcs = _EXTRA_LAYOUT_FUNCS_2D if dim == 2 else _EXTRA_LAYOUT_FUNCS_3D
+    out: dict[str, dict] = {}
+    for name in names:
+        if name == "FA2":
+            continue
+        if on_progress is not None:
+            on_progress(name)
+        if dim == 2 and name == "COMMUNITY_SHELL":
+            out[name.lower()] = layout.community_shell_positions(graph, strategy_results or {})
+        else:
+            out[name.lower()] = funcs[name](graph)
+    return out
+
+
+def _atomic_publish(staging: str, final_target: str) -> None:
+    """Atomically swap ``staging`` into ``final_target``.
+
+    Two-step rename: ``final_target`` → ``final_target.old`` → cleanup of staging.
+    ``os.rename`` is atomic per inode on POSIX but cannot replace a non-empty
+    directory, hence the intermediate ``.old`` directory.
+    """
+    old = final_target + ".old"
+    if os.path.isdir(final_target):
+        os.rename(final_target, old)
+    os.rename(staging, final_target)
+    if os.path.isdir(old):
+        shutil.rmtree(old, ignore_errors=True)
+
+
+@dataclass(frozen=True)
+class ResolvedOptions:
+    """All options the command needs, with .analysis-defaults applied.
+
+    Built once at the top of ``handle`` so downstream helpers can take a single
+    object rather than 30 individual kwargs.
+    """
+
+    # Output toggles
+    do_graph: bool
+    do_3dgraph: bool
+    do_html: bool
+    do_xlsx: bool
+    do_gexf: bool
+    do_graphml: bool
+    do_csv: bool
+    do_consensus_matrix: bool
+    do_structural_similarity: bool
+
+    # Layout / presentation
+    seo: bool
+    vertical_layout: bool
+    target_layout: str
+    fa2_iterations: int
+    extra_layout_names: list[str]
+    extra_layout_names_3d: list[str]
+
+    # Graph build / scope
+    start_date: datetime.date | None
+    end_date: datetime.date | None
+    draw_dead_leaves: bool
+    include_mentions: bool
+    include_self_references: bool
+    include_lost: bool
+    include_private: bool
+    channel_types: list[str]
+    channel_groups: list[str]
+    edge_weight_strategy: str
+    recency_weights: int | None
+
+    # Communities and measures
+    communities_strategy: list[str]
+    strategies_lower: list[str]
+    selected_measures: set[str]
+    selected_network_groups: frozenset[str]
+    bridging_token: str | None
+
+    # Tunable measure / strategy parameters
+    spreading_runs: int
+    diffusion_window: int
+    leiden_coarse_resolution: float
+    leiden_fine_resolution: float
+    mcl_inflation: float
+    community_distribution_threshold: int
+
+    # Timeline
+    timeline_step: str
+
+    # Vacancy analysis
+    selected_vacancy_measures: set[str] = field(default_factory=set)
+    vacancy_months_before: int = 0
+    vacancy_months_after: int = 0
+    vacancy_max_candidates: int = 0
+    vacancy_ppr_alpha: float = 0.85
+
+    # Export naming
+    export_name: str = ""
+
+    @property
+    def do_vacancy(self) -> bool:
+        return bool(self.selected_vacancy_measures)
+
+    def to_options_dict(self) -> dict[str, Any]:
+        """Compatibility shim: ``_run_year_export`` still takes a plain dict."""
+        return {
+            "graph": self.do_graph,
+            "graph_3d": self.do_3dgraph,
+            "html": self.do_html,
+            "xlsx": self.do_xlsx,
+            "gexf": self.do_gexf,
+            "graphml": self.do_graphml,
+            "csv": self.do_csv,
+            "consensus_matrix": self.do_consensus_matrix,
+            "structural_similarity": self.do_structural_similarity,
+            "seo": self.seo,
+            "vertical_layout": self.vertical_layout,
+            "fa2_iterations": self.fa2_iterations,
+            "draw_dead_leaves": self.draw_dead_leaves,
+            "include_mentions": self.include_mentions,
+            "include_self_references": self.include_self_references,
+            "include_lost": self.include_lost,
+            "include_private": self.include_private,
+            "timeline_step": self.timeline_step,
+            "spreading_runs": self.spreading_runs,
+            "diffusion_window": self.diffusion_window,
+            "leiden_coarse_resolution": self.leiden_coarse_resolution,
+            "leiden_fine_resolution": self.leiden_fine_resolution,
+            "mcl_inflation": self.mcl_inflation,
+            "community_distribution_threshold": self.community_distribution_threshold,
+            "vacancy_months_before": self.vacancy_months_before,
+            "vacancy_months_after": self.vacancy_months_after,
+            "vacancy_max_candidates": self.vacancy_max_candidates,
+            "vacancy_ppr_alpha": self.vacancy_ppr_alpha,
+            "recency_weights": self.recency_weights,
+        }
 
 
 class Command(BaseCommand):
@@ -905,8 +1074,9 @@ class Command(BaseCommand):
             "_xlsx_community_data": community_table_data if do_xlsx else None,
         }
 
-    def handle(self, *args: Any, **options: Any) -> None:
-        # Resolve None (not passed on CLI) from .analysis-defaults settings
+    def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
+        """Apply .analysis-defaults fallbacks and parse CSV/date options into a typed bundle."""
+
         def _o(key: str, setting_val: Any) -> Any:
             v = options[key]
             return v if v is not None else setting_val
@@ -941,22 +1111,6 @@ class Command(BaseCommand):
             edge_weight_strategy,
             list(selected_vacancy_measures),
         )
-        selected_measures = set(network_measures)
-        selected_network_groups = frozenset(network_stat_groups)
-
-        do_graph = _o("graph", settings.SA_OUTPUT_GRAPH)
-        do_3dgraph = _o("graph_3d", settings.SA_OUTPUT_3DGRAPH)
-        do_html = _o("html", settings.SA_OUTPUT_HTML)
-        do_xlsx = _o("xlsx", settings.SA_OUTPUT_XLSX)
-        do_gexf = _o("gexf", settings.SA_OUTPUT_GEXF)
-        do_graphml = _o("graphml", settings.SA_OUTPUT_GRAPHML)
-        do_csv = _o("csv", settings.SA_OUTPUT_CSV)
-        do_consensus_matrix = _o("consensus_matrix", settings.SA_CONSENSUS_MATRIX)
-        do_structural_similarity = _o("structural_similarity", settings.SA_STRUCTURAL_SIMILARITY)
-
-        fa2_iterations: int = _o("fa2_iterations", settings.SA_FA2_ITERATIONS)
-        vertical_layout: bool = _o("vertical_layout", settings.SA_VERTICAL_LAYOUT)
-        target_layout = layout.LAYOUT_VERTICAL if vertical_layout else layout.LAYOUT_HORIZONTAL
 
         extra_layout_names = _parse_csv(_o("layouts_2d", settings.SA_LAYOUTS_2D) or "")
         if "ALL" in extra_layout_names:
@@ -968,118 +1122,115 @@ class Command(BaseCommand):
             extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
         extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]
 
-        seo = _o("seo", settings.SA_SEO)
-        start_date = self._parse_date(options["startdate"], "--startdate")
-        end_date = self._parse_date(options["enddate"], "--enddate")
-        draw_dead_leaves = _o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES)
-        include_mentions = _o("include_mentions", settings.SA_INCLUDE_MENTIONS)
-        include_self_references = _o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES)
-        include_lost = _o("include_lost", settings.SA_INCLUDE_LOST)
-        include_private = _o("include_private", settings.SA_INCLUDE_PRIVATE)
-        timeline_step = _o("timeline_step", settings.SA_TIMELINE_STEP)
-        vacancy_months_before = _o("vacancy_months_before", settings.SA_VACANCY_MONTHS_BEFORE)
-        vacancy_months_after = _o("vacancy_months_after", settings.SA_VACANCY_MONTHS_AFTER)
-        vacancy_max_candidates = _o("vacancy_max_candidates", settings.SA_VACANCY_MAX_CANDIDATES)
-        vacancy_ppr_alpha = _o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA)
-        spreading_runs = _o("spreading_runs", settings.SA_SPREADING_RUNS)
-        diffusion_window = _o("diffusion_window", settings.SA_DIFFUSION_WINDOW)
-        leiden_coarse = _o("leiden_coarse_resolution", settings.SA_LEIDEN_COARSE_RESOLUTION)
-        leiden_fine = _o("leiden_fine_resolution", settings.SA_LEIDEN_FINE_RESOLUTION)
-        mcl_inflation = _o("mcl_inflation", settings.SA_MCL_INFLATION)
-        community_dist_threshold = _o("community_distribution_threshold", settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD)
+        vertical = _o("vertical_layout", settings.SA_VERTICAL_LAYOUT)
+        export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
+        if not export_name:
+            export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        # Patch options dict so internal helpers (_compute_communities, _run_year_export, etc.) use resolved values
-        options.update(
-            graph=do_graph,
-            graph_3d=do_3dgraph,
-            html=do_html,
-            xlsx=do_xlsx,
-            gexf=do_gexf,
-            graphml=do_graphml,
-            csv=do_csv,
-            consensus_matrix=do_consensus_matrix,
-            structural_similarity=do_structural_similarity,
-            seo=seo,
-            vertical_layout=vertical_layout,
-            fa2_iterations=fa2_iterations,
-            draw_dead_leaves=draw_dead_leaves,
-            include_mentions=include_mentions,
-            include_self_references=include_self_references,
-            include_lost=include_lost,
-            include_private=include_private,
-            timeline_step=timeline_step,
-            spreading_runs=spreading_runs,
-            diffusion_window=diffusion_window,
-            leiden_coarse_resolution=leiden_coarse,
-            leiden_fine_resolution=leiden_fine,
-            mcl_inflation=mcl_inflation,
-            community_distribution_threshold=community_dist_threshold,
-            vacancy_months_before=vacancy_months_before,
-            vacancy_months_after=vacancy_months_after,
-            vacancy_max_candidates=vacancy_max_candidates,
-            vacancy_ppr_alpha=vacancy_ppr_alpha,
+        return ResolvedOptions(
+            do_graph=_o("graph", settings.SA_OUTPUT_GRAPH),
+            do_3dgraph=_o("graph_3d", settings.SA_OUTPUT_3DGRAPH),
+            do_html=_o("html", settings.SA_OUTPUT_HTML),
+            do_xlsx=_o("xlsx", settings.SA_OUTPUT_XLSX),
+            do_gexf=_o("gexf", settings.SA_OUTPUT_GEXF),
+            do_graphml=_o("graphml", settings.SA_OUTPUT_GRAPHML),
+            do_csv=_o("csv", settings.SA_OUTPUT_CSV),
+            do_consensus_matrix=_o("consensus_matrix", settings.SA_CONSENSUS_MATRIX),
+            do_structural_similarity=_o("structural_similarity", settings.SA_STRUCTURAL_SIMILARITY),
+            seo=_o("seo", settings.SA_SEO),
+            vertical_layout=vertical,
+            target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
+            fa2_iterations=_o("fa2_iterations", settings.SA_FA2_ITERATIONS),
+            extra_layout_names=extra_layout_names,
+            extra_layout_names_3d=extra_layout_names_3d,
+            start_date=self._parse_date(options["startdate"], "--startdate"),
+            end_date=self._parse_date(options["enddate"], "--enddate"),
+            draw_dead_leaves=_o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES),
+            include_mentions=_o("include_mentions", settings.SA_INCLUDE_MENTIONS),
+            include_self_references=_o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES),
+            include_lost=_o("include_lost", settings.SA_INCLUDE_LOST),
+            include_private=_o("include_private", settings.SA_INCLUDE_PRIVATE),
+            channel_types=channel_types,
+            channel_groups=channel_groups,
+            edge_weight_strategy=edge_weight_strategy,
+            recency_weights=options["recency_weights"],
+            communities_strategy=communities_strategy,
+            strategies_lower=[s.lower() for s in communities_strategy],
+            selected_measures=set(network_measures),
+            selected_network_groups=frozenset(network_stat_groups),
+            bridging_token=bridging_token,
+            spreading_runs=_o("spreading_runs", settings.SA_SPREADING_RUNS),
+            diffusion_window=_o("diffusion_window", settings.SA_DIFFUSION_WINDOW),
+            leiden_coarse_resolution=_o("leiden_coarse_resolution", settings.SA_LEIDEN_COARSE_RESOLUTION),
+            leiden_fine_resolution=_o("leiden_fine_resolution", settings.SA_LEIDEN_FINE_RESOLUTION),
+            mcl_inflation=_o("mcl_inflation", settings.SA_MCL_INFLATION),
+            community_distribution_threshold=_o(
+                "community_distribution_threshold", settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD
+            ),
+            timeline_step=_o("timeline_step", settings.SA_TIMELINE_STEP),
+            selected_vacancy_measures=selected_vacancy_measures,
+            vacancy_months_before=_o("vacancy_months_before", settings.SA_VACANCY_MONTHS_BEFORE),
+            vacancy_months_after=_o("vacancy_months_after", settings.SA_VACANCY_MONTHS_AFTER),
+            vacancy_max_candidates=_o("vacancy_max_candidates", settings.SA_VACANCY_MAX_CANDIDATES),
+            vacancy_ppr_alpha=_o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA),
+            export_name=export_name,
         )
+
+    def handle(self, *args: Any, **options: Any) -> None:
+        opts = self._resolve_options(options)
+        # Patch options dict so _run_year_export and _compute_communities (which still
+        # take a plain dict) see the resolved values.
+        options.update(opts.to_options_dict())
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
-                draw_dead_leaves=draw_dead_leaves,
-                start_date=start_date,
-                end_date=end_date,
-                recency_weights=options["recency_weights"],
-                channel_types=channel_types,
-                channel_groups=channel_groups or None,
-                edge_weight_strategy=edge_weight_strategy,
-                include_mentions=include_mentions,
-                include_self_references=include_self_references,
-                include_lost=include_lost,
-                include_private=include_private,
+                draw_dead_leaves=opts.draw_dead_leaves,
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                recency_weights=opts.recency_weights,
+                channel_types=opts.channel_types,
+                channel_groups=opts.channel_groups or None,
+                edge_weight_strategy=opts.edge_weight_strategy,
+                include_mentions=opts.include_mentions,
+                include_self_references=opts.include_self_references,
+                include_lost=opts.include_lost,
+                include_private=opts.include_private,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
         self.stdout.flush()
 
-        strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
-        positions, positions_3d = self._compute_layout(graph, do_graph, do_3dgraph, fa2_iterations, target_layout)
+        strategy_results = self._compute_communities(graph, channel_dict, edge_list, opts.communities_strategy, options)
+        positions, positions_3d = self._compute_layout(
+            graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
+        )
+
+        fa2_in_2d = opts.do_graph and "FA2" in opts.extra_layout_names
+        fa2_in_3d = opts.do_3dgraph and "FA2" in opts.extra_layout_names_3d
+
+        def _progress_2d(name: str) -> None:
+            self.stdout.write(f"- {name.lower()} … ", ending="")
+            self.stdout.flush()
 
         extra_positions: dict[str, dict] = {}
-        fa2_in_2d = do_graph and "FA2" in extra_layout_names
-        extra_positions_3d: dict[str, dict] = {}
-        fa2_in_3d = do_3dgraph and "FA2" in extra_layout_names_3d
-        if do_graph and extra_layout_names:
-            _extra_layout_funcs_2d = {
-                "CIRCULAR": layout.circular_positions,
-                "KAMADA_KAWAI": layout.kamada_kawai_positions,
-                "COMMUNITY_SHELL": lambda g: layout.community_shell_positions(g, strategy_results),
-                "TSNE": layout.tsne_positions_2d,
-                "UMAP": layout.umap_positions_2d,
-                "HYPERBOLIC": layout.hyperbolic_positions,
-            }
-            non_fa2 = [n for n in extra_layout_names if n != "FA2"]
+        if opts.do_graph and opts.extra_layout_names:
+            non_fa2 = [n for n in opts.extra_layout_names if n != "FA2"]
             if non_fa2:
                 self.stdout.write("\nCompute extra 2D layouts")
-            for name in non_fa2:
-                self.stdout.write(f"- {name.lower()} … ", ending="")
-                self.stdout.flush()
-                extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
+                extra_positions = _compute_extra_layouts(
+                    graph, non_fa2, dim=2, strategy_results=strategy_results, on_progress=_progress_2d
+                )
                 self.stdout.write("done")
-        if do_3dgraph and extra_layout_names_3d:
-            _extra_layout_funcs_3d = {
-                "SPECTRAL": layout.spectral_positions,
-                "SPRING": layout.spring_positions,
-                "KAMADA_KAWAI": layout.kamada_kawai_positions_3d,
-                "TSNE": layout.tsne_positions_3d,
-                "UMAP": layout.umap_positions_3d,
-            }
-            non_fa2_3d = [n for n in extra_layout_names_3d if n != "FA2"]
+
+        extra_positions_3d: dict[str, dict] = {}
+        if opts.do_3dgraph and opts.extra_layout_names_3d:
+            non_fa2_3d = [n for n in opts.extra_layout_names_3d if n != "FA2"]
             if non_fa2_3d:
                 self.stdout.write("\nCompute extra 3D layouts")
-            for name in non_fa2_3d:
-                self.stdout.write(f"- {name.lower()} … ", ending="")
-                self.stdout.flush()
-                extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
+                extra_positions_3d = _compute_extra_layouts(graph, non_fa2_3d, dim=3, on_progress=_progress_2d)
                 self.stdout.write("done")
 
         self.stdout.write("\nBuild graph data … ", ending="")
@@ -1090,20 +1241,17 @@ class Command(BaseCommand):
             graph,
             graph_data,
             channel_dict,
-            selected_measures,
-            bridging_token,
-            start_date,
-            end_date,
-            do_graph,
-            do_3dgraph,
-            options["spreading_runs"],
-            options["diffusion_window"],
+            opts.selected_measures,
+            opts.bridging_token,
+            opts.start_date,
+            opts.end_date,
+            opts.do_graph,
+            opts.do_3dgraph,
+            opts.spreading_runs,
+            opts.diffusion_window,
         )
 
-        export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
-        if not export_name:
-            export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        _final_target = str(Path(settings.BASE_DIR) / "exports" / export_name)
+        _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
         # All writes go to the staging directory; it is renamed to _final_target only after
         # write_summary_json completes, making every live export atomically consistent.
         root_target = _final_target + ".tmp"
@@ -1112,37 +1260,37 @@ class Command(BaseCommand):
         project_title: str = settings.PROJECT_TITLE
         self.stdout.write("Build communities data … ", ending="")
         self.stdout.flush()
-        communities_data = community.build_communities_payload(communities_strategy, strategy_results)
+        communities_data = community.build_communities_payload(opts.communities_strategy, strategy_results)
         self.stdout.write("done")
-        strategies = [s.lower() for s in communities_strategy]
+        strategies = opts.strategies_lower
 
         # Copy the map template (js/, css/, static assets) whenever any HTML page is being
         # generated, not just when a graph is requested — table pages and the structural
         # similarity matrix all reference the same local CSS/JS files.
         need_static_assets = (
-            do_graph
-            or do_3dgraph
-            or do_html
-            or do_consensus_matrix
-            or do_structural_similarity
-            or bool(selected_vacancy_measures)
+            opts.do_graph
+            or opts.do_3dgraph
+            or opts.do_html
+            or opts.do_consensus_matrix
+            or opts.do_structural_similarity
+            or opts.do_vacancy
         )
         if need_static_assets:
             exporter.ensure_graph_root(root_target)
 
-        if do_graph or do_3dgraph:
+        if opts.do_graph or opts.do_3dgraph:
             self.stdout.write("\nGenerate map")
             self.stdout.write("- config files")
             exporter.apply_robots_to_graph_html(
                 root_target,
-                seo,
+                opts.seo,
                 project_title=project_title,
-                include_3d=do_3dgraph,
-                vertical_layout=vertical_layout,
+                include_3d=opts.do_3dgraph,
+                vertical_layout=opts.vertical_layout,
                 extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
                 extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
             )
-            exporter.write_robots_txt(root_target, seo)
+            exporter.write_robots_txt(root_target, opts.seo)
 
         self.stdout.write("- data files")
         exporter.write_graph_files(
@@ -1151,7 +1299,7 @@ class Command(BaseCommand):
             measures_labels,
             channel_qs,
             graph_dir=root_target,
-            include_positions=do_graph or do_3dgraph,
+            include_positions=opts.do_graph or opts.do_3dgraph,
             positions_3d=positions_3d,
             extra_positions=extra_positions or None,
             extra_positions_3d=extra_positions_3d or None,
@@ -1160,16 +1308,16 @@ class Command(BaseCommand):
             graph_dir=root_target,
             project_title=project_title,
             reversed_edges=settings.REVERSED_EDGES,
-            edge_weight_strategy=edge_weight_strategy,
-            start_date=start_date,
-            end_date=end_date,
+            edge_weight_strategy=opts.edge_weight_strategy,
+            start_date=opts.start_date,
+            end_date=opts.end_date,
             total_nodes=len(graph.nodes),
             total_edges=len(graph.edges),
-            community_distribution_threshold=options["community_distribution_threshold"],
-            has_consensus_matrix=do_consensus_matrix,
+            community_distribution_threshold=opts.community_distribution_threshold,
+            has_consensus_matrix=opts.do_consensus_matrix,
         )
 
-        need_community_metrics = do_html or do_xlsx or do_consensus_matrix
+        need_community_metrics = opts.do_html or opts.do_xlsx or opts.do_consensus_matrix
         if need_community_metrics:
             self.stdout.write("- community metrics")
             _steps = ["network"] + strategies
@@ -1195,43 +1343,43 @@ class Command(BaseCommand):
                 measures_labels=measures_labels,
                 status_callback=_on_metrics_step,
                 channel_qs=channel_qs,
-                start_date=start_date,
-                end_date=end_date,
-                selected_network_groups=selected_network_groups,
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                selected_network_groups=opts.selected_network_groups,
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
-        if do_html:
+        if opts.do_html:
             self.stdout.write("- table (html)")
             tables.write_table_html(
                 graph_data,
                 output_filename=os.path.join(root_target, "channel_table.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
             self.stdout.write("- network table (html)")
             tables.write_network_table_html(
                 output_filename=os.path.join(root_target, "network_table.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
             self.stdout.write("- community table (html)")
             tables.write_community_table_html(
                 output_filename=os.path.join(root_target, "community_table.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
         # XLSX written after the timeline loop so year sheets can be included.
 
-        if do_consensus_matrix:
+        if opts.do_consensus_matrix:
             self.stdout.write("- consensus matrix (html)")
             tables.write_consensus_matrix_html(
                 output_filename=os.path.join(root_target, "consensus_matrix.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
 
-        if do_structural_similarity:
+        if opts.do_structural_similarity:
             self.stdout.write("- structural similarity (html + json)")
             os.makedirs(root_target, exist_ok=True)
             sim_data = community_stats._compute_structural_similarity(graph_data, measures_labels)
@@ -1239,31 +1387,30 @@ class Command(BaseCommand):
                 tables.write_structural_similarity_json(sim_data, root_target)
             tables.write_structural_similarity_html(
                 output_filename=os.path.join(root_target, "structural_similarity.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
 
-        if do_graph or do_3dgraph:
+        if opts.do_graph or opts.do_3dgraph:
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, root_target)
 
-        if do_gexf:
+        if opts.do_gexf:
             self.stdout.write("- gexf")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_gexf(graph, graph_data, os.path.join(root_target, "network.gexf"))
 
-        if do_graphml:
+        if opts.do_graphml:
             self.stdout.write("- graphml")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_graphml(graph, graph_data, os.path.join(root_target, "network.graphml"))
 
-        if do_csv:
+        if opts.do_csv:
             self.stdout.write("- csv")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_csv(graph_data, edge_list, measures_labels, strategies, root_target)
 
-        do_vacancy = bool(selected_vacancy_measures)
-        if do_vacancy:
+        if opts.do_vacancy:
             self.stdout.write("\nVacancy analysis")
             _vac_n = [0]
 
@@ -1277,12 +1424,12 @@ class Command(BaseCommand):
             vac_payload = vacancy_analysis.compute_vacancy_analysis(
                 graph=graph,
                 channel_dict=channel_dict,
-                selected_measures=selected_vacancy_measures,
-                months_before=options["vacancy_months_before"],
-                months_after=options["vacancy_months_after"],
-                max_candidates=options["vacancy_max_candidates"],
-                sir_runs=options["spreading_runs"],
-                ppr_alpha=options["vacancy_ppr_alpha"],
+                selected_measures=opts.selected_vacancy_measures,
+                months_before=opts.vacancy_months_before,
+                months_after=opts.vacancy_months_after,
+                max_candidates=opts.vacancy_max_candidates,
+                sir_runs=opts.spreading_runs,
+                ppr_alpha=opts.vacancy_ppr_alpha,
                 progress_callback=_vac_progress,
             )
             if _vac_n[0] > 0:
@@ -1294,13 +1441,13 @@ class Command(BaseCommand):
             self.stdout.write("- vacancy_analysis.json")
             tables.write_vacancy_analysis_html(
                 output_filename=os.path.join(root_target, "vacancy_analysis.html"),
-                seo=seo,
+                seo=opts.seo,
                 project_title=project_title,
             )
             self.stdout.write("- vacancy_analysis.html")
 
         timeline_entries: list[dict] = []
-        if options["timeline_step"] == "year":
+        if opts.timeline_step == "year":
             year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
             min_date, max_date = year_agg["min_date"], year_agg["max_date"]
             if min_date is None:
@@ -1312,32 +1459,32 @@ class Command(BaseCommand):
                         yr,
                         root_target,
                         options,
-                        selected_measures,
-                        bridging_token,
-                        communities_strategy,
+                        opts.selected_measures,
+                        opts.bridging_token,
+                        opts.communities_strategy,
                         strategies,
-                        do_graph,
-                        do_3dgraph,
-                        do_xlsx,
-                        channel_types,
-                        channel_groups,
-                        edge_weight_strategy,
-                        fa2_iterations,
-                        target_layout,
-                        seo,
+                        opts.do_graph,
+                        opts.do_3dgraph,
+                        opts.do_xlsx,
+                        opts.channel_types,
+                        opts.channel_groups,
+                        opts.edge_weight_strategy,
+                        opts.fa2_iterations,
+                        opts.target_layout,
+                        opts.seo,
                         project_title,
-                        selected_network_groups,
-                        reference_positions=positions if do_graph else None,
-                        reference_positions_3d=positions_3d if do_3dgraph else None,
-                        extra_layout_names=extra_layout_names if extra_layout_names else None,
-                        extra_layout_names_3d=extra_layout_names_3d if extra_layout_names_3d else None,
+                        opts.selected_network_groups,
+                        reference_positions=positions if opts.do_graph else None,
+                        reference_positions_3d=positions_3d if opts.do_3dgraph else None,
+                        extra_layout_names=opts.extra_layout_names or None,
+                        extra_layout_names_3d=opts.extra_layout_names_3d or None,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
                 if timeline_entries:
                     tables.write_timeline_json(timeline_entries, graph_dir=root_target)
 
-        if do_xlsx:
+        if opts.do_xlsx:
             year_xlsx = [
                 (e["year"], e["_xlsx_graph_data"], e["_xlsx_community_data"])
                 for e in timeline_entries
@@ -1375,35 +1522,26 @@ class Command(BaseCommand):
         os.makedirs(root_target, exist_ok=True)
         tables.write_index_html(
             output_filename=os.path.join(root_target, "index.html"),
-            seo=seo,
+            seo=opts.seo,
             project_title=project_title,
-            include_graph=do_graph,
-            include_3d_graph=do_3dgraph,
-            include_channel_html=do_html,
-            include_channel_xlsx=do_xlsx,
-            include_network_html=do_html,
-            include_network_xlsx=do_xlsx,
-            include_community_html=do_html,
-            include_community_xlsx=do_xlsx,
+            include_graph=opts.do_graph,
+            include_3d_graph=opts.do_3dgraph,
+            include_channel_html=opts.do_html,
+            include_channel_xlsx=opts.do_xlsx,
+            include_network_html=opts.do_html,
+            include_network_xlsx=opts.do_xlsx,
+            include_community_html=opts.do_html,
+            include_community_xlsx=opts.do_xlsx,
             include_compare_html=False,
             compare_files=set(),
             strategies=strategies,
-            include_consensus_matrix_html=do_consensus_matrix,
-            include_structural_similarity=do_structural_similarity,
+            include_consensus_matrix_html=opts.do_consensus_matrix,
+            include_structural_similarity=opts.do_structural_similarity,
             timeline_entries=timeline_entries or None,
-            include_vacancy_analysis=do_vacancy,
+            include_vacancy_analysis=opts.do_vacancy,
         )
 
-        exporter.write_summary_json(root_target, export_name or None, options, len(graph.nodes), len(graph.edges))
+        exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))
 
-        # Atomic swap: two-step rename so there is never a window where neither the old
-        # nor the new export exists.  On POSIX, os.rename is atomic per inode, but cannot
-        # replace a non-empty directory in a single call, hence the intermediate .old step.
-        _old = _final_target + ".old"
-        if os.path.isdir(_final_target):
-            os.rename(_final_target, _old)
-        os.rename(root_target, _final_target)
-        if os.path.isdir(_old):
-            shutil.rmtree(_old, ignore_errors=True)
-
+        _atomic_publish(root_target, _final_target)
         self.stdout.write(self.style.SUCCESS("\nDone."))

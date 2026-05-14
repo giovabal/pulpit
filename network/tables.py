@@ -23,6 +23,36 @@ def _pulpit_ctx() -> dict:
     }
 
 
+def _write_page(
+    template: str,
+    output_filename: str,
+    *,
+    seo: bool,
+    project_title: str,
+    title_part: str,
+    seo_title_part: str | None = None,
+    description: str = "",
+) -> None:
+    """Render a standard pulpit HTML page.
+
+    ``title_part`` is the human-facing page name used in the rendered title.
+    ``seo_title_part`` overrides ``title_part`` when SEO mode is on (used by
+    pages where the public/search-engine title differs from the in-app one).
+    ``project_title``, when set, prefixes the title as ``"<project> | <part>"``.
+    """
+    label = seo_title_part if (seo and seo_title_part) else title_part
+    title = f"{project_title} | {label}" if project_title else label
+    context = {
+        "title": title,
+        "robots_meta": "index, follow" if seo else "noindex, nofollow",
+        "description": description,
+        **_pulpit_ctx(),
+    }
+    content = render_to_string(template, context)
+    with open(output_filename, "w") as f:
+        f.write(content)
+
+
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
 
@@ -44,25 +74,18 @@ def write_table_html(
     project_title: str = "",
 ) -> None:
     n = len(graph_data["nodes"])
-    if seo:
-        title = f"{project_title} | Channels" if project_title else "Channel network data"
-        robots_meta = "index, follow"
-    else:
-        title = f"{project_title} | Channels" if project_title else "Channels"
-        robots_meta = "noindex, nofollow"
-
-    context = {
-        "title": title,
-        "robots_meta": robots_meta,
-        **_pulpit_ctx(),
-        "description": (
+    _write_page(
+        "network/channel_table.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Channels",
+        seo_title_part="Channel network data",
+        description=(
             f"Network data for {n} Telegram channels, "
             "including activity metrics, inbound and outbound connections, and community assignments."
         ),
-    }
-    content = render_to_string("network/channel_table.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    )
 
 
 def write_table_xlsx(
@@ -176,17 +199,14 @@ def write_network_table_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    if seo:
-        title = f"{project_title} | Network statistics" if project_title else "Network statistics"
-        robots_meta = "index, follow"
-    else:
-        title = f"{project_title} | Network" if project_title else "Network"
-        robots_meta = "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/network_table.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/network_table.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Network",
+        seo_title_part="Network statistics",
+    )
 
 
 def write_network_table_xlsx(
@@ -335,13 +355,13 @@ def write_network_compare_table_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    title = f"{project_title} | Network comparison" if project_title else "Network comparison"
-    robots_meta = "index, follow" if seo else "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/network_compare_table.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/network_compare_table.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Network comparison",
+    )
 
 
 def write_community_table_xlsx(
@@ -480,17 +500,14 @@ def write_community_table_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    if seo:
-        title = f"{project_title} | Community statistics" if project_title else "Community statistics"
-        robots_meta = "index, follow"
-    else:
-        title = f"{project_title} | Communities" if project_title else "Communities"
-        robots_meta = "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/community_table.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/community_table.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Communities",
+        seo_title_part="Community statistics",
+    )
 
 
 def write_consensus_matrix_html(
@@ -498,13 +515,13 @@ def write_consensus_matrix_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    title = f"{project_title} | Consensus matrix" if project_title else "Consensus matrix"
-    robots_meta = "index, follow" if seo else "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/consensus_matrix.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/consensus_matrix.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Consensus matrix",
+    )
 
 
 def write_structural_similarity_json(sim_data: dict, graph_dir: str) -> None:
@@ -519,13 +536,13 @@ def write_structural_similarity_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    title = f"{project_title} | Structural similarity" if project_title else "Structural similarity"
-    robots_meta = "index, follow" if seo else "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/structural_similarity.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/structural_similarity.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Structural similarity",
+    )
 
 
 def write_vacancy_analysis_html(
@@ -533,13 +550,13 @@ def write_vacancy_analysis_html(
     seo: bool = False,
     project_title: str = "",
 ) -> None:
-    title = f"{project_title} | Vacancy Analysis" if project_title else "Vacancy Analysis"
-    robots_meta = "index, follow" if seo else "noindex, nofollow"
-
-    context = {"title": title, "robots_meta": robots_meta, **_pulpit_ctx()}
-    content = render_to_string("network/vacancy_analysis.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)
+    _write_page(
+        "network/vacancy_analysis.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Vacancy Analysis",
+    )
 
 
 def write_index_html(

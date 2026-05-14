@@ -12,6 +12,53 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 
+def channel_pks_from_graph_data(graph_data: GraphData, channel_dict: dict[str, Any]) -> list[int]:
+    """PKs of the Channels represented as nodes in ``graph_data`` (in graph order)."""
+    return [channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])]
+
+
+def per_channel_message_counts(
+    channel_pks: list[int],
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+    *,
+    alive: bool = True,
+    extra_q: Q | None = None,
+) -> dict[int, int]:
+    """Return ``{channel_id: count}`` of messages in ``channel_pks`` honouring the
+    date window and each channel's ``out_of_target_after`` cutoff.
+
+    ``alive``: when True (default), excludes messages marked as lost. Base node
+    measures pass ``alive=False`` to keep parity with historical totals.
+    ``extra_q``: optional Q filter merged with the base query (e.g. for
+    forwarded-only sub-counts).
+    """
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
+    if extra_q is not None:
+        msg_q &= extra_q
+    qs = Message.objects.alive() if alive else Message.objects
+    return {
+        item["channel_id"]: item["total"] for item in qs.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+    }
+
+
+def per_channel_forwards_received(
+    channel_pks: list[int],
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+) -> dict[int, int]:
+    """Return ``{channel_id: count_of_messages_in_other_in_target_channels_forwarding_from_it}``."""
+    fwd_q = (
+        Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
+        & make_date_q(start_date, end_date)
+        & channel_cutoff_q()
+    )
+    return {
+        item["forwarded_from_id"]: item["total"]
+        for item in Message.objects.alive().filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
+    }
+
+
 def apply_base_node_measures(
     graph_data: GraphData,
     graph: nx.DiGraph,
@@ -27,14 +74,11 @@ def apply_base_node_measures(
         ("messages_count", "Messages"),
     ]
 
-    channel_pks = [
-        channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])
-    ]
+    channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
+    # Base totals historically include lost messages (alive=False).
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, alive=False)
+    # Activity bounds need Min/Max aggregates, not the per-channel count shape.
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
-    message_counts: dict[int, int] = {
-        item["channel_id"]: item["total"]
-        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
-    }
     activity_bounds: dict[int, dict] = {
         item["channel_id"]: {"min_date": item["min_date"], "max_date": item["max_date"]}
         for item in Message.objects.filter(msg_q, date__isnull=False)

@@ -97,8 +97,16 @@ class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
 
 
 class _ChannelTimeSeriesBase(View):
+    """Per-channel monthly aggregation pipeline.
+
+    Mirrors ``_GlobalTimeSeriesBase``: subclasses only declare ``annotate_field``,
+    ``y_label``, and ``get_annotation()`` (plus optional ``extra_filters`` and
+    ``post_process_value`` / ``get_queryset`` hooks for the two outliers).
+    """
+
     annotate_field: ClassVar[str]
     y_label: ClassVar[str]
+    extra_filters: ClassVar[dict[str, Any]] = {}
 
     def _msg_qs(self, channel: Channel, **filters):
         """Base Message queryset for a channel, respecting out_of_target_after and excluding lost."""
@@ -107,8 +115,34 @@ class _ChannelTimeSeriesBase(View):
             qs = qs.filter(date__date__lte=channel.out_of_target_after)
         return qs
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+    def get_annotation(self) -> Count | Sum | Avg:
         raise NotImplementedError
+
+    def get_queryset(self, channel: Channel):
+        """Queryset that feeds the monthly aggregation. Override for views that
+        scope to in-target channels rather than the subject channel itself
+        (e.g. ``ChannelForwardsReceivedHistoryView``)."""
+        return self._msg_qs(channel, date__isnull=False, **self.extra_filters)
+
+    def post_process_value(self, value: Any) -> Any:
+        """Post-process each monthly value before serialising. Default: identity."""
+        return value
+
+    def _get_monthly_data(self, channel: Channel) -> list[dict]:
+        qs = (
+            self.get_queryset(channel)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(**{self.annotate_field: self.get_annotation()})
+            .order_by("month")
+        )
+        return [
+            {
+                "month": e["month"].strftime("%Y-%m"),
+                self.annotate_field: self.post_process_value(e[self.annotate_field]),
+            }
+            for e in qs
+        ]
 
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
@@ -131,86 +165,59 @@ class ChannelMessagesHistoryView(_ChannelTimeSeriesBase):
     annotate_field = "total_messages"
     y_label = "messages"
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        qs = (
-            self._msg_qs(channel, date__isnull=False)
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(total_messages=Count("id"))
-            .order_by("month")
-        )
-        return [{"month": e["month"].strftime("%Y-%m"), "total_messages": e["total_messages"]} for e in qs]
+    def get_annotation(self) -> Count:
+        return Count("id")
 
 
 class ChannelViewsHistoryView(_ChannelTimeSeriesBase):
     annotate_field = "total_views"
     y_label = "views"
+    extra_filters = {"views__isnull": False}
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        qs = (
-            self._msg_qs(channel, date__isnull=False, views__isnull=False)
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(total_views=Sum("views"))
-            .order_by("month")
-        )
-        return [{"month": e["month"].strftime("%Y-%m"), "total_views": e["total_views"]} for e in qs]
+    def get_annotation(self) -> Sum:
+        return Sum("views")
 
 
 class ChannelForwardsHistoryView(_ChannelTimeSeriesBase):
     annotate_field = "total_forwards"
     y_label = "forwards sent"
+    extra_filters = {"forwarded_from__isnull": False}
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        qs = (
-            self._msg_qs(channel, date__isnull=False, forwarded_from__isnull=False)
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(total_forwards=Count("id"))
-            .order_by("month")
-        )
-        return [{"month": e["month"].strftime("%Y-%m"), "total_forwards": e["total_forwards"]} for e in qs]
+    def get_annotation(self) -> Count:
+        return Count("id")
 
 
 class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
+    """Forwards received by this channel from in-target channels — needs a different
+    base queryset (other channels' messages forwarding from us), so it overrides
+    ``get_queryset`` instead of declaring ``extra_filters``."""
+
     annotate_field = "total_forwards_received"
     y_label = "forwards received"
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        in_target_pks = Channel.objects.in_target().values("pk")
+    def get_queryset(self, channel: Channel):
         from network.utils import channel_cutoff_q
 
-        qs = (
+        in_target_pks = Channel.objects.in_target().values("pk")
+        return (
             Message.objects.alive()
-            .filter(
-                channel__in=in_target_pks,
-                forwarded_from=channel,
-                date__isnull=False,
-            )
+            .filter(channel__in=in_target_pks, forwarded_from=channel, date__isnull=False)
             .filter(channel_cutoff_q())
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(total_forwards_received=Count("id"))
-            .order_by("month")
         )
-        return [
-            {"month": e["month"].strftime("%Y-%m"), "total_forwards_received": e["total_forwards_received"]} for e in qs
-        ]
+
+    def get_annotation(self) -> Count:
+        return Count("id")
 
 
 class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
     annotate_field = "avg_involvement"
     y_label = "avg views"
 
-    def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        qs = (
-            self._msg_qs(channel, date__isnull=False)
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(avg_involvement=Avg("views", default=0))
-            .order_by("month")
-        )
-        return [{"month": e["month"].strftime("%Y-%m"), "avg_involvement": round(e["avg_involvement"])} for e in qs]
+    def get_annotation(self) -> Avg:
+        return Avg("views", default=0)
+
+    def post_process_value(self, value: Any) -> int:
+        return round(value)
 
 
 class ChannelCrossRefsView(_ChannelTimeSeriesBase):

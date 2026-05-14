@@ -7,6 +7,8 @@ import shutil
 import tempfile
 from argparse import ArgumentParser
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from time import sleep
 from typing import Any
 
@@ -27,6 +29,100 @@ from telethon import errors
 from telethon.sync import TelegramClient
 
 logger = logging.getLogger(__name__)
+
+
+from dataclasses import dataclass  # noqa: E402
+
+
+@dataclass(frozen=True)
+class CrawlOptions:
+    """All crawl_channels options resolved from CLI flags and .analysis-defaults.
+
+    Built once at the top of ``handle`` so subsequent code doesn't have to keep
+    repeating ``options["x"] or settings.CRAWL_X`` (which silently demotes
+    explicit ``False`` to the default), and the option surface is
+    self-documenting in one place.
+    """
+
+    # Channels phase
+    get_channels_info: bool
+    mine_about_texts: bool
+    fetch_recommended: bool
+    retry_lost_and_private: bool
+
+    # Messages phase
+    get_new_messages: bool
+    fetch_replies: bool
+    do_refresh: bool
+    refresh_limit: int | None
+    refresh_from: datetime.date | None
+    refresh_to: datetime.date | None
+    fix_holes: bool
+    fix_missing_media: bool
+    retry_lost_messages: bool
+    retry_references: bool
+    force_retry: bool
+
+    # Degrees phase
+    in_degrees: bool
+    out_degrees: bool
+
+    # Scope
+    ids_str: str | None
+    channel_types: list[str]
+    channel_groups: list[str]
+
+    @property
+    def need_client(self) -> bool:
+        return (
+            self.get_channels_info
+            or self.mine_about_texts
+            or self.fetch_recommended
+            or self.get_new_messages
+            or self.do_refresh
+            or self.fix_holes
+            or self.fix_missing_media
+            or self.retry_lost_messages
+            or self.retry_references
+            or self.fetch_replies
+        )
+
+
+@contextmanager
+def per_channel_step(
+    stdout: Any,
+    style: Any,
+    printer: "ProgressPrinter",
+    *,
+    action: str,
+    channel: Any,
+    ensure_newline_on_success: bool = True,
+) -> Iterator[None]:
+    """Wrap a per-channel Telegram operation with the standard error scaffolding.
+
+    Catches the two recurring failure modes:
+      * ``FloodWaitError`` → prints a WARNING line and sleeps when
+        ``settings.IGNORE_FLOODWAIT`` is false. The wrapped block is skipped.
+      * any other ``Exception`` → prints a WARNING line and logs the traceback.
+
+    On success, optionally ensures the progress-printer terminates the current
+    line (matching the historical ``printer.ensure_newline()`` calls).
+    """
+    try:
+        yield
+    except errors.FloodWaitError as exc:
+        printer.newline()
+        stdout.write(style.WARNING(f"Flood wait {action} for {channel}: {exc}"))
+        if not settings.IGNORE_FLOODWAIT:
+            sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+    except Exception as exc:
+        printer.newline()
+        stdout.write(style.WARNING(f"Error {action} for {channel}: {exc}"))
+        logger.exception("%s failed for %s", action, channel)
+    else:
+        if ensure_newline_on_success:
+            printer.ensure_newline()
+
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ABOUT_REF_RE = re.compile(r"t\.me/((?:[-\w.]|(?:%[\da-fA-F]{2}))+)")
@@ -107,6 +203,35 @@ class ProgressPrinter:
         """Move to a new line only if a progress line is currently shown."""
         if self._line_length > 0:
             self.newline()
+
+    def progress(self, line: str) -> None:
+        """Render an arbitrary progress line.
+
+        TTY: overwrites the current line via carriage return (so a long
+        per-iteration loop stays on a single visible row).
+        Non-TTY: emits a complete newline-terminated line so the web log
+        reader forwards it immediately.
+
+        Use this instead of replicating the private ``_fit`` / ``_line_length``
+        bookkeeping in callers — it keeps every progress loop consistent.
+        """
+        if self._is_tty:
+            line = self._fit(line)
+            padding = " " * max(0, self._line_length - len(line))
+            self._stdout.write(f"\r{line}{padding}", ending="")
+            self._stdout.flush()
+            self._line_length = len(line)
+        else:
+            self._stdout.write(line, ending="\n")
+            self._stdout.flush()
+            self._line_length = len(line)
+
+    def announce(self, message: str) -> None:
+        """Emit a single newline-terminated banner line marking a new section.
+        Resets the progress-line tracking so the next ``progress`` call starts fresh."""
+        self._stdout.write(message, ending="\n")
+        self._stdout.flush()
+        self._line_length = 0
 
 
 class _WarningLogHandler(logging.Handler):
@@ -294,21 +419,11 @@ class Command(BaseCommand):
         index: int,
         printer: ProgressPrinter,
     ) -> None:
-        try:
+        with per_channel_step(self.stdout, self.style, printer, action="updating info", channel=channel):
             crawler.refresh_channel_info(
                 channel.telegram_id,
                 status_callback=lambda message, idx=index: printer.status(message, idx),
             )
-            printer.ensure_newline()
-        except errors.FloodWaitError as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Flood wait updating info for {channel}: {exc}"))
-            if not settings.IGNORE_FLOODWAIT:
-                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-        except Exception as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Error updating info for {channel}: {exc}"))
-            logger.exception("refresh_channel_info failed for %s", channel)
 
     def _fix_holes_for_channel(
         self,
@@ -330,7 +445,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Could not resolve entity for {channel}: {exc}"))
             return
         channel_label = f"[id={channel.id}] {channel}"
-        try:
+        with per_channel_step(self.stdout, self.style, printer, action="fixing holes", channel=channel):
             fix_message_holes(
                 channel,
                 telegram_channel,
@@ -341,16 +456,6 @@ class Command(BaseCommand):
                 channel_label,
                 0,
             )
-            printer.ensure_newline()
-        except errors.FloodWaitError as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Flood wait fixing holes for {channel}: {exc}"))
-            if not settings.IGNORE_FLOODWAIT:
-                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-        except Exception as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Error fixing holes for {channel}: {exc}"))
-            logger.exception("fix_message_holes failed for %s", channel)
 
     def _fetch_replies_for_channel(
         self,
@@ -364,23 +469,13 @@ class Command(BaseCommand):
     ) -> None:
         if not channel.linked_chat_id:
             return
-        try:
+        with per_channel_step(self.stdout, self.style, printer, action="fetching replies", channel=channel):
             crawler.fetch_channel_replies(
                 channel,
                 min_telegram_id=min_telegram_id,
                 max_telegram_id=max_telegram_id,
                 status_callback=lambda message, idx=index: printer.status(message, idx),
             )
-            printer.ensure_newline()
-        except errors.FloodWaitError as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Flood wait fetching replies for {channel}: {exc}"))
-            if not settings.IGNORE_FLOODWAIT:
-                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-        except Exception as exc:
-            printer.newline()
-            self.stdout.write(self.style.WARNING(f"Error fetching replies for {channel}: {exc}"))
-            logger.exception("fetch_channel_replies failed for %s", channel)
 
     def _retry_lost_for_channel(
         self,
@@ -646,76 +741,106 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Missing media: {downloaded} downloaded, {skipped} skipped.")
 
-    def handle(self, *args: Any, **options: Any) -> None:
+    def _resolve_options(self, options: dict[str, Any]) -> CrawlOptions:
         from django.core.management.base import CommandError
 
-        # ── Channels options — CLI flag or .analysis-defaults setting ──────────
-        get_channels_info: bool = options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO
-        mine_about_texts: bool = options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS
-        fetch_recommended: bool = options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED
-        retry_lost_and_private: bool = options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE
-        # ── Messages options ───────────────────────────────────────────────────
-        get_new_messages: bool = options["get_new_messages"] or settings.CRAWL_GET_NEW_MESSAGES
-        fetch_replies: bool = options["fetch_replies"] or settings.CRAWL_FETCH_REPLIES
-        do_refresh: bool = options["refresh_messages_stats"] or settings.CRAWL_REFRESH_MESSAGES_STATS
-        refresh_limit: int | None = options["refresh_limit"]
-        fix_holes: bool = options["fixholes"] or settings.CRAWL_FIXHOLES
-        fix_missing_media: bool = options["fix_missing_media"] or settings.CRAWL_FIX_MISSING_MEDIA
-        retry_lost_messages: bool = options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES
-        retry_references: bool = options["retry_references"] or settings.CRAWL_RETRY_REFERENCES
-        force_retry: bool = options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED
-        # ── Refresh date window ────────────────────────────────────────────────
-        refresh_from: datetime.date | None = None
-        refresh_to: datetime.date | None = None
-        for _raw, _flag, _attr in (
-            (options.get("refresh_from"), "--refresh-from", "refresh_from"),
-            (options.get("refresh_to"), "--refresh-to", "refresh_to"),
-        ):
-            if _raw is not None:
-                if not _DATE_RE.match(_raw):
-                    raise CommandError(f"{_flag}: expected YYYY-MM-DD, got {_raw!r}")
-                if _attr == "refresh_from":
-                    refresh_from = datetime.date.fromisoformat(_raw)
-                else:
-                    refresh_to = datetime.date.fromisoformat(_raw)
-        # ── Degrees options ────────────────────────────────────────────────────
-        in_degrees: bool = options["in_degrees"] or settings.CRAWL_IN_DEGREES
-        out_degrees: bool = options["out_degrees"] or settings.CRAWL_OUT_DEGREES
-        # ── Scope ─────────────────────────────────────────────────────────────
-        ids_str: str | None = options["ids"]
+        def _parse_date(raw: str | None, flag: str) -> datetime.date | None:
+            if raw is None:
+                return None
+            if not _DATE_RE.match(raw):
+                raise CommandError(f"{flag}: expected YYYY-MM-DD, got {raw!r}")
+            return datetime.date.fromisoformat(raw)
+
         channel_types_raw = options["channel_types"]
         channel_types = (
             [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
             if channel_types_raw is not None
-            else settings.DEFAULT_CHANNEL_TYPES
+            else list(settings.DEFAULT_CHANNEL_TYPES)
         )
         invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        in_target_qs = Channel.objects.filter(organization__is_in_target=True).filter(
-            channel_type_filter(channel_types)
-        )
-        if not retry_lost_and_private:
-            in_target_qs = in_target_qs.exclude(is_lost=True).exclude(is_private=True)
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
-        if channel_groups:
-            in_target_qs = in_target_qs.filter(groups__key__in=channel_groups).distinct()
 
-        need_client = (
-            get_channels_info
-            or mine_about_texts
-            or fetch_recommended
-            or get_new_messages
-            or do_refresh
-            or fix_holes
-            or fix_missing_media
-            or retry_lost_messages
-            or retry_references
-            or fetch_replies
+        return CrawlOptions(
+            get_channels_info=options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO,
+            mine_about_texts=options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS,
+            fetch_recommended=options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED,
+            retry_lost_and_private=options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE,
+            get_new_messages=options["get_new_messages"] or settings.CRAWL_GET_NEW_MESSAGES,
+            fetch_replies=options["fetch_replies"] or settings.CRAWL_FETCH_REPLIES,
+            do_refresh=options["refresh_messages_stats"] or settings.CRAWL_REFRESH_MESSAGES_STATS,
+            refresh_limit=options["refresh_limit"],
+            refresh_from=_parse_date(options.get("refresh_from"), "--refresh-from"),
+            refresh_to=_parse_date(options.get("refresh_to"), "--refresh-to"),
+            fix_holes=options["fixholes"] or settings.CRAWL_FIXHOLES,
+            fix_missing_media=options["fix_missing_media"] or settings.CRAWL_FIX_MISSING_MEDIA,
+            retry_lost_messages=options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES,
+            retry_references=options["retry_references"] or settings.CRAWL_RETRY_REFERENCES,
+            force_retry=options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            in_degrees=options["in_degrees"] or settings.CRAWL_IN_DEGREES,
+            out_degrees=options["out_degrees"] or settings.CRAWL_OUT_DEGREES,
+            ids_str=options["ids"],
+            channel_types=channel_types,
+            channel_groups=channel_groups,
         )
+
+    def _build_in_target_qs(self, opts: CrawlOptions) -> Any:
+        """Build the in-target channel queryset with type/group/lost-private filters applied."""
+        qs = Channel.objects.filter(organization__is_in_target=True).filter(channel_type_filter(opts.channel_types))
+        if not opts.retry_lost_and_private:
+            qs = qs.exclude(is_lost=True).exclude(is_private=True)
+        if opts.channel_groups:
+            qs = qs.filter(groups__key__in=opts.channel_groups).distinct()
+        return qs
+
+    @contextmanager
+    def _connect_telegram(self) -> Iterator[Any]:
+        """Open a Telethon ``TelegramClient`` configured from settings, then close it."""
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        self.stdout.write("Connecting to Telegram…", ending="")
+        self.stdout.flush()
+        with TelegramClient(
+            settings.TELEGRAM_SESSION_NAME,
+            settings.TELEGRAM_API_ID,
+            settings.TELEGRAM_API_HASH,
+            connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
+            retry_delay=settings.TELEGRAM_RETRY_DELAY,
+            flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
+        ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
+            self.stdout.write(" done")
+            yield client
+
+    def handle(self, *args: Any, **options: Any) -> None:
+        from django.core.management.base import CommandError
+
+        opts = self._resolve_options(options)
+        in_target_qs = self._build_in_target_qs(opts)
+
+        # Locals kept for backward-compatibility with the rest of the (still-inlined)
+        # crawl pipeline. Once that is split into per-phase helpers these can go.
+        get_channels_info = opts.get_channels_info
+        mine_about_texts = opts.mine_about_texts
+        fetch_recommended = opts.fetch_recommended
+        get_new_messages = opts.get_new_messages
+        fetch_replies = opts.fetch_replies
+        do_refresh = opts.do_refresh
+        refresh_limit = opts.refresh_limit
+        refresh_from = opts.refresh_from
+        refresh_to = opts.refresh_to
+        fix_holes = opts.fix_holes
+        fix_missing_media = opts.fix_missing_media
+        retry_lost_messages = opts.retry_lost_messages
+        retry_references = opts.retry_references
+        force_retry = opts.force_retry
+        in_degrees = opts.in_degrees
+        out_degrees = opts.out_degrees
+        ids_str = opts.ids_str
+        channel_types = opts.channel_types
+        channel_groups = opts.channel_groups
 
         messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
@@ -724,19 +849,8 @@ class Command(BaseCommand):
 
         warning_handler: _WarningLogHandler | None = None
         try:
-            if need_client:
-                asyncio.set_event_loop(asyncio.new_event_loop())
-                self.stdout.write("Connecting to Telegram…", ending="")
-                self.stdout.flush()
-                with TelegramClient(
-                    settings.TELEGRAM_SESSION_NAME,
-                    settings.TELEGRAM_API_ID,
-                    settings.TELEGRAM_API_HASH,
-                    connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
-                    retry_delay=settings.TELEGRAM_RETRY_DELAY,
-                    flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
-                ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
-                    self.stdout.write(" done")
+            if opts.need_client:
+                with self._connect_telegram() as client:
                     api_client = TelegramAPIClient(client)
                     media_handler = MediaHandler(
                         api_client,
@@ -782,17 +896,9 @@ class Command(BaseCommand):
                                 excluded_by_type = excluded_by_type.filter(parse_id_ranges(ids_str))
                             n_excluded = excluded_by_type.count()
                             if n_excluded:
-                                _meta_len: list[int] = [0]
-                                self.stdout.write(
-                                    f"\nUpdating metadata for {n_excluded} type-excluded channel(s)", ending=""
-                                )
-                                self.stdout.flush()
+                                printer.announce(f"\nUpdating metadata for {n_excluded} type-excluded channel(s)")
                                 for i, meta_ch in enumerate(excluded_by_type.iterator(chunk_size=10), start=1):
-                                    line = printer._fit(f"Metadata [{i}/{n_excluded}] {meta_ch}")
-                                    padding = " " * max(0, _meta_len[0] - len(line))
-                                    self.stdout.write(f"\r{line}{padding}", ending="")
-                                    self.stdout.flush()
-                                    _meta_len[0] = len(line)
+                                    printer.progress(f"Metadata [{i}/{n_excluded}] {meta_ch}")
                                     try:
                                         ch_obj, tg_ch, status = crawler.resolve_channel_or_classify(meta_ch.telegram_id)
                                     except errors.FloodWaitError as flood_err:
@@ -837,18 +943,10 @@ class Command(BaseCommand):
                                 new_about_refs = sorted(about_refs - known_lower)
                                 if new_about_refs:
                                     n_about = len(new_about_refs)
-                                    self.stdout.write(
-                                        f"\nFetching {n_about} channels referenced in about texts", ending=""
-                                    )
-                                    self.stdout.flush()
-                                    _about_len: list[int] = [0]
+                                    printer.announce(f"\nFetching {n_about} channels referenced in about texts")
                                     fetched_about = 0
                                     for i, ref in enumerate(new_about_refs, start=1):
-                                        line = printer._fit(f"About texts [{i}/{n_about}] {ref}")
-                                        padding = " " * max(0, _about_len[0] - len(line))
-                                        self.stdout.write(f"\r{line}{padding}", ending="")
-                                        self.stdout.flush()
-                                        _about_len[0] = len(line)
+                                        printer.progress(f"About texts [{i}/{n_about}] {ref}")
                                         try:
                                             ch_ref, _ = crawler.get_basic_channel(ref)
                                             if ch_ref:
@@ -873,20 +971,11 @@ class Command(BaseCommand):
                         if fetch_recommended:
                             in_target_channels = list(channels)
                             n_rec = len(in_target_channels)
-                            self.stdout.write(
-                                f"\nFetching recommended channels for {n_rec} in-target channels",
-                                ending="\n" if not printer._is_tty else "",
-                            )
-                            self.stdout.flush()
-                            _rec_len: list[int] = [0]
+                            printer.announce(f"\nFetching recommended channels for {n_rec} in-target channels")
                             rec_total = 0
                             rec_new = 0
                             for i, ch_rec in enumerate(in_target_channels, start=1):
-                                line = printer._fit(f"Recommended channels [{i}/{n_rec}] {ch_rec}")
-                                padding = " " * max(0, _rec_len[0] - len(line))
-                                self.stdout.write(f"\r{line}{padding}", ending="")
-                                self.stdout.flush()
-                                _rec_len[0] = len(line)
+                                printer.progress(f"Recommended channels [{i}/{n_rec}] {ch_rec}")
                                 try:
                                     found, new = crawler.get_recommended_channels(ch_rec)
                                     rec_total += found
@@ -1081,27 +1170,13 @@ class Command(BaseCommand):
                         ch.in_degree, ch.out_degree = cites, cited_by
 
                 total = len(channels_to_update)
-                _len: list[int] = [0]
                 _deg_printer = ProgressPrinter(self.stdout, total)
-                self.stdout.write(
-                    f"\nRefreshing degrees for {total} in-target channels",
-                    ending="\n" if not _deg_printer._is_tty else "",
-                )
-                self.stdout.flush()
+                _deg_printer.announce(f"\nRefreshing degrees for {total} in-target channels")
                 for i in range(0, total, 100):
                     Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
                     done = min(i + 100, total)
-                    line = _deg_printer._fit(f"Refreshing degrees for {total} in-target channels [{done}/{total}]")
-                    if _deg_printer._is_tty:
-                        padding = " " * max(0, _len[0] - len(line))
-                        self.stdout.write(f"\r{line}{padding}", ending="")
-                        self.stdout.flush()
-                        _len[0] = len(line)
-                    else:
-                        self.stdout.write(line, ending="\n")
-                        self.stdout.flush()
-                if _deg_printer._is_tty:
-                    self.stdout.write("", ending="\n")
+                    _deg_printer.progress(f"Refreshing degrees for {total} in-target channels [{done}/{total}]")
+                _deg_printer.ensure_newline()
 
             if out_degrees and cited_pks:
                 fwd_cited = set(
@@ -1131,20 +1206,13 @@ class Command(BaseCommand):
                         ch.in_degree, ch.out_degree = 0, citations
 
                 total = len(cited_channels)
-                _len2: list[int] = [0]
                 _deg_printer2 = ProgressPrinter(self.stdout, total)
-                self.stdout.write(f"Refreshing citation degree for {total} referenced channels", ending="")
-                self.stdout.flush()
                 for i in range(0, total, 100):
                     Channel.objects.bulk_update(cited_channels[i : i + 100], ["in_degree", "out_degree"])
                     done = min(i + 100, total)
-                    line = _deg_printer2._fit(
+                    _deg_printer2.progress(
                         f"Refreshing citation degree for {total} referenced channels [{done}/{total}]"
                     )
-                    padding = " " * max(0, _len2[0] - len(line))
-                    self.stdout.write(f"\r{line}{padding}", ending="")
-                    self.stdout.flush()
-                    _len2[0] = len(line)
-                self.stdout.write("", ending="\n")
+                _deg_printer2.ensure_newline()
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))

@@ -2,6 +2,7 @@ import io
 import logging
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from typing import Any
 
 from django.db.models import Count
@@ -98,6 +99,63 @@ def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> Com
     return community_map
 
 
+# ── Shared scaffolding for the per-algorithm detect_* functions ────────────────
+
+
+def _node_id_index(graph: nx.DiGraph) -> tuple[list[str], dict[str, int]]:
+    """Stable sorted ``node_ids`` plus ``{node_id: index}`` map. Used by every
+    igraph- or matrix-based detector to translate between str ids and 0..n-1 indices."""
+    node_ids = sorted(graph.nodes())
+    return node_ids, {node_id: index for index, node_id in enumerate(node_ids)}
+
+
+def _build_directed_igraph(
+    graph: nx.DiGraph, node_ids: list[str], node_id_map: dict[str, int]
+) -> tuple[ig.Graph, list[float]]:
+    """Build a directed igraph from a NetworkX DiGraph preserving edge weights."""
+    ig_graph = ig.Graph(n=len(node_ids), directed=True)
+    edges = [(node_id_map[s], node_id_map[t]) for s, t in graph.edges()]
+    weights = [graph.edges[s, t].get("weight", 1.0) for s, t in graph.edges()]
+    ig_graph.add_edges(edges)
+    return ig_graph, weights
+
+
+def _assign_from_partition(partition: Iterable, node_ids: list[str]) -> CommunityMap:
+    """Build {node_id: community_index} from an iterable of communities-as-node-indices."""
+    community_map: CommunityMap = {}
+    for community_index, community in enumerate(partition, start=1):
+        for node_index in community:
+            community_map[node_ids[node_index]] = community_index
+    return community_map
+
+
+def _assign_from_node_sets(communities: Iterable[Iterable[str]]) -> CommunityMap:
+    """Build {node_id: community_index} from an iterable of communities-as-node-id-sets."""
+    community_map: CommunityMap = {}
+    for index, community in enumerate(communities, start=1):
+        for node_id in community:
+            community_map[node_id] = index
+    return community_map
+
+
+def _finalize_partition(
+    graph: nx.DiGraph,
+    community_map: CommunityMap,
+    palette_name: str,
+    *,
+    merge_isolated: bool = True,
+) -> tuple[CommunityMap, CommunityPalette]:
+    """Common closing for every detect_* function: optional isolated-node merge,
+    canonical id renumbering, palette construction."""
+    if merge_isolated:
+        community_map = _merge_isolated_nodes(graph, community_map)
+    community_map = normalize_community_map(community_map)
+    return community_map, build_community_palette(community_map, palette_name)
+
+
+# ── Detection algorithms ──────────────────────────────────────────────────────
+
+
 def detect_label_propagation(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
     """Label propagation community detection — Cordasco & Gargano 2010 / Raghavan et al. 2007.
 
@@ -110,29 +168,15 @@ def detect_label_propagation(graph: nx.DiGraph, palette_name: str) -> tuple[Comm
     Edge weights are not used — all edges are treated equally.
     The graph is symmetrised to undirected before running.
     """
-    community_map: CommunityMap = {}
-    undirected = graph.to_undirected()
-    communities = nx.community.label_propagation_communities(undirected)
-    communities = sorted(communities, key=len, reverse=True)
-    for index, community in enumerate(communities, start=1):
-        for node_id in community:
-            community_map[node_id] = index
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    communities = sorted(nx.community.label_propagation_communities(graph.to_undirected()), key=len, reverse=True)
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name)
 
 
 def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
-    louvain_graph = graph.to_undirected()
-    communities = nx.community.louvain_communities(louvain_graph, weight="weight", seed=0)
-    communities = sorted(communities, key=len, reverse=True)
-    for index, community in enumerate(communities, start=1):
-        for node_id in community:
-            community_map[node_id] = index
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    communities = sorted(
+        nx.community.louvain_communities(graph.to_undirected(), weight="weight", seed=0), key=len, reverse=True
+    )
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name)
 
 
 def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
@@ -154,7 +198,9 @@ def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, Co
     coreness = nx.core_number(graph.to_undirected())
     # Nodes with coreness 0 (isolated) are grouped together at shell 1
     raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
-    # Assign community IDs ordered from most internal (highest k-shell) to outermost
+    # Assign community IDs ordered from most internal (highest k-shell) to outermost.
+    # K-core deliberately preserves the shell order — it does NOT renormalise by
+    # community size like the other detectors, so we bypass _finalize_partition.
     shells = sorted(set(raw.values()), reverse=True)
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
@@ -162,83 +208,49 @@ def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, Co
 
 
 def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
+    node_ids, node_id_map = _node_id_index(graph)
     infomap = Infomap("--two-level --directed --silent")
-    node_ids: list[str] = sorted(graph.nodes())
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
     for source, target, edge_data in graph.edges(data=True):
-        weight = edge_data.get("weight", 1.0)
-        infomap.addLink(node_id_map[source], node_id_map[target], weight)
+        infomap.addLink(node_id_map[source], node_id_map[target], edge_data.get("weight", 1.0))
 
     infomap.run()
-    module_ids: dict[str, int] = {}
-    for node in infomap.nodes:
-        original_id = node_ids[node.node_id]
-        module_ids[original_id] = node.module_id
+    module_ids: dict[str, int] = {node_ids[node.node_id]: node.module_id for node in infomap.nodes}
 
+    community_map: CommunityMap = {}
     if module_ids:
         module_map = {module_id: index for index, module_id in enumerate(sorted(set(module_ids.values())), start=1)}
-        for node_id, module_id in module_ids.items():
-            community_map[node_id] = module_map[module_id]
+        community_map = {node_id: module_map[module_id] for node_id, module_id in module_ids.items()}
 
     next_community = max(community_map.values(), default=0) + 1
     for node_id in node_ids:
         if node_id not in community_map:
             community_map[node_id] = next_community
 
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
 
 
 def detect_weakcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
     components = sorted(nx.weakly_connected_components(graph), key=len, reverse=True)
-    for index, component in enumerate(components, start=1):
-        for node_id in component:
-            community_map[node_id] = index
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, _assign_from_node_sets(components), palette_name, merge_isolated=False)
 
 
 def detect_strongcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
     components = sorted(nx.strongly_connected_components(graph), key=len, reverse=True)
-    for index, component in enumerate(components, start=1):
-        for node_id in component:
-            community_map[node_id] = index
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, _assign_from_node_sets(components), palette_name, merge_isolated=False)
 
 
 def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
-    community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
-
-    undirected = graph.to_undirected(reciprocal=False)
-    ig_graph = ig.Graph(n=len(node_ids), directed=False)
-    edges, weights = [], []
-    for s, t in undirected.edges():
-        edges.append((node_id_map[s], node_id_map[t]))
-        weights.append(undirected.edges[s, t].get("weight", 1.0))
-    ig_graph.add_edges(edges)
+    node_ids, node_id_map = _node_id_index(graph)
+    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
     if weights:
         ig_graph.es["weight"] = weights
-
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.ModularityVertexPartition,
         weights="weight" if weights else None,
         seed=0,
     )
-
-    for community_index, community in enumerate(partition, start=1):
-        for node_index in community:
-            community_map[node_ids[node_index]] = community_index
-
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
 
 
 def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
@@ -251,31 +263,17 @@ def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[Commun
     a target that is widely cited.  Edge direction is preserved throughout
     the optimisation.
     """
-    community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
-
-    ig_graph = ig.Graph(n=len(node_ids), directed=True)
-    edges = [(node_id_map[s], node_id_map[t]) for s, t in graph.edges()]
-    weights = [graph.edges[s, t].get("weight", 1.0) for s, t in graph.edges()]
-    ig_graph.add_edges(edges)
+    node_ids, node_id_map = _node_id_index(graph)
+    ig_graph, weights = _build_directed_igraph(graph, node_ids, node_id_map)
     if weights:
         ig_graph.es["weight"] = weights
-
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.ModularityVertexPartition,
         weights="weight",
         seed=0,
     )
-
-    for community_index, community in enumerate(partition, start=1):
-        for node_index in community:
-            community_map[node_ids[node_index]] = community_index
-
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
 
 
 def _build_undirected_igraph(
@@ -302,11 +300,8 @@ def detect_leiden_cpm(graph: nx.DiGraph, palette_name: str, resolution: float) -
 
     The graph is symmetrised to undirected before optimisation (same as LEIDEN).
     """
-    community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+    node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
-
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.CPMVertexPartition,
@@ -314,14 +309,7 @@ def detect_leiden_cpm(graph: nx.DiGraph, palette_name: str, resolution: float) -
         resolution_parameter=resolution,
         seed=0,
     )
-
-    for community_index, community in enumerate(partition, start=1):
-        for node_index in community:
-            community_map[node_ids[node_index]] = community_index
-
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
 
 
 def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[CommunityMap, CommunityPalette]:
@@ -332,11 +320,8 @@ def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[
     convergence.  The ``inflation`` parameter controls granularity: higher
     values produce more, smaller communities.
     """
-    community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
+    node_ids, node_id_map = _node_id_index(graph)
     n = len(node_ids)
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
-
     matrix = np.zeros((n, n), dtype=float)
     for source, target, edge_data in graph.edges(data=True):
         matrix[node_id_map[source], node_id_map[target]] = edge_data.get("weight", 1.0)
@@ -346,24 +331,18 @@ def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[
         if matrix[i].sum() == 0 and matrix[:, i].sum() == 0:
             matrix[i, i] = 1.0
 
-    result = mc.run_mcl(matrix, inflation=inflation)
-    clusters = mc.get_clusters(result)
-
-    assigned: set[int] = set()
-    for community_index, cluster in enumerate(clusters, start=1):
-        for node_index in cluster:
-            community_map[node_ids[node_index]] = community_index
-            assigned.add(node_index)
+    clusters = mc.get_clusters(mc.run_mcl(matrix, inflation=inflation))
+    community_map = _assign_from_partition(clusters, node_ids)
 
     # Nodes not placed in any cluster (edge cases in sparse graphs) → singletons.
+    assigned: set[int] = {idx for cluster in clusters for idx in cluster}
     next_id = len(clusters) + 1
     for i, node_id in enumerate(node_ids):
         if i not in assigned:
             community_map[node_id] = next_id
             next_id += 1
 
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
 
 
 def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
@@ -377,9 +356,8 @@ def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[Communi
     virtual entry state so they participate in the flow.
     """
     community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
+    node_ids, node_id_map = _node_id_index(graph)
     n = len(node_ids)
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
 
     infomap = Infomap("--two-level --directed --silent --recorded-teleportation", seed=123)
 
@@ -430,8 +408,7 @@ def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[Communi
             community_map[node_id] = next_id
             next_id += 1
 
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
 
 
 def detect_walktrap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
@@ -445,24 +422,12 @@ def detect_walktrap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap,
 
     The graph is symmetrised to undirected before clustering (same as LEIDEN).
     """
-    community_map: CommunityMap = {}
-    node_ids: list[str] = sorted(graph.nodes())
-    node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+    node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
-
     if weights:
         ig_graph.es["weight"] = weights
-
-    dendrogram = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4)
-    partition = dendrogram.as_clustering()
-
-    for community_index, community in enumerate(partition, start=1):
-        for node_index in community:
-            community_map[node_ids[node_index]] = community_index
-
-    community_map = _merge_isolated_nodes(graph, community_map)
-    community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    partition = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4).as_clustering()
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
 
 
 def detect(
