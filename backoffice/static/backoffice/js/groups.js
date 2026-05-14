@@ -94,6 +94,8 @@
         apiFetch(API, { method: "POST", body: { name: fd.get("name").trim(), description: fd.get("description").trim(), note: fd.get("note").trim() } })
             .then(function (grp) {
                 grp.channel_count = 0;
+                var empty = $tbody.querySelector(".bo-empty");
+                if (empty) empty.parentNode.remove();
                 $tbody.appendChild(renderRow(grp, false));
                 _total++;
                 _renderPagination();

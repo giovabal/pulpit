@@ -77,10 +77,11 @@ function fmtDate(d) {
     return d.slice(0, 10);
 }
 
-function makeDeleteBtn(title) {
+function makeDeleteBtn(name) {
     var btn = document.createElement("button");
     btn.className = "bo-btn bo-btn--icon bo-btn--danger";
-    btn.title = "Delete";
+    btn.title = name ? 'Delete "' + name + '"' : 'Delete';
+    btn.setAttribute('aria-label', btn.title);
     btn.innerHTML = '<i class="bi bi-trash" aria-hidden="true"></i>';
     return btn;
 }

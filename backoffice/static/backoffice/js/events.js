@@ -68,13 +68,24 @@
     }
 
     function loadTypes() {
-        apiFetch(API_ET + "?limit=500").then(function (data) {
+        return apiFetch(API_ET + "?limit=500").then(function (data) {
             _types = data.results;
             $etTbody.innerHTML = "";
             if (!_types.length) { $etTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No event types yet.</td></tr>'; }
             else { _types.forEach(function (t) { $etTbody.appendChild(renderTypeRow(t, false)); }); }
             rebuildTypeSelects();
         }).catch(function (e) { showToast("Error: " + e.message, "error"); });
+    }
+
+    // Populate year filter once from the full event list (separate from the
+    // paginated table fetch, which would otherwise only ever see the first page).
+    function loadYearFilter() {
+        return apiFetch(API_EV + "?limit=10000&fields=date").then(function (data) {
+            var years = new Set((data.results || []).map(function (e) { return e.date.slice(0, 4); }));
+            Array.from(years).sort().reverse().forEach(function (y) {
+                $evYearFilter.appendChild(new Option(y, y));
+            });
+        }).catch(function () { /* non-fatal — filter just stays empty */ });
     }
 
     $etAddBtn.addEventListener("click", function () { $etAddForm.classList.remove("d-none"); $etAddBtn.classList.add("d-none"); });
@@ -139,13 +150,9 @@
         apiFetch(API_EV + "?" + params.toString()).then(function (data) {
             _evTotal = data.count;
             $evTbody.innerHTML = "";
-            if (!data.results.length) { $evTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No events found.</td></tr>'; }
-            else {
-                /* Populate year filter from full result set first time */
-                if ($evYearFilter.options.length <= 1) {
-                    var years = new Set(data.results.map(function (e) { return e.date.slice(0, 4); }));
-                    Array.from(years).sort().reverse().forEach(function (y) { $evYearFilter.appendChild(new Option(y, y)); });
-                }
+            if (!data.results.length) {
+                $evTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No events found.</td></tr>';
+            } else {
                 data.results.forEach(function (ev) { $evTbody.appendChild(renderEventRow(ev)); });
             }
             _evRenderPagination();
@@ -171,6 +178,9 @@
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     });
 
-    loadTypes();
-    loadEvents();
+    // Sequence the init so the type filter is populated before the user can
+    // interact with it. Year filter loads in parallel — it does not gate
+    // anything in the events table.
+    loadYearFilter();
+    loadTypes().then(loadEvents);
 })();

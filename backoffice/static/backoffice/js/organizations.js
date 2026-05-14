@@ -108,6 +108,8 @@
         apiFetch(API, { method: "POST", body: { name: fd.get("name").trim(), color: fd.get("color"), is_in_target: fd.get("is_in_target") === "on" } })
             .then(function (org) {
                 org.channel_count = 0;
+                var empty = $tbody.querySelector(".bo-empty");
+                if (empty) empty.parentNode.remove();
                 $tbody.appendChild(renderRow(org, false));
                 _total++;
                 _renderPagination();

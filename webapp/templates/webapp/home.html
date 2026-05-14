@@ -75,10 +75,12 @@
         No results for <strong>{{ query }}</strong>
       {% endif %}
     </p>
+    {% else %}
+    <p class="search-summary">Recent messages</p>
     {% endif %}
   </div>
 
-  {% if query %}
+  {% if page_obj.paginator.count %}
   {% include "webapp/pagination.html" %}
   <ol class="post-list list-unstyled mt-2">
     {% for post in page_obj %}
@@ -117,29 +119,45 @@
 
 </div>
 
+
 <script>
-  var eventsPromise = fetch("{% url 'events-data' %}").then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
+  // Events are best-effort: a failure must not block chart rendering.
+  var eventsPromise = fetch("{% url 'events-data' %}")
+    .then(function (r) { return r.ok ? r.json() : []; })
+    .catch(function () { return []; });
 
   document.querySelectorAll('.home-page .collapse[data-chart-url]').forEach(function (collapse) {
     var canvas = collapse.querySelector('canvas');
     var spinner = collapse.querySelector('.stats-spinner');
+    var wrap = collapse.querySelector('.chart-canvas-wrap');
     var loaded = false;
     collapse.addEventListener('show.bs.collapse', function () {
-      if (!loaded) {
-        loaded = true;
-        Promise.all([
-          fetch(collapse.dataset.chartUrl).then(function (r) { return r.json(); }),
-          eventsPromise,
-        ]).then(function (results) {
-          spinner.classList.add('hidden');
-          var data = results[0];
-          if (data && data.series) {
-            renderReactionsChart(canvas, data, results[1]);
-          } else {
-            renderChart(canvas, data, results[1]);
-          }
-        });
-      }
+      if (loaded) return;
+      loaded = true;
+      Promise.all([
+        fetch(collapse.dataset.chartUrl).then(function (r) {
+          if (!r.ok) return Promise.reject(new Error(r.status));
+          return r.json();
+        }),
+        eventsPromise,
+      ]).then(function (results) {
+        spinner.classList.add('hidden');
+        var data = results[0];
+        if (data && data.series) {
+          renderReactionsChart(canvas, data, results[1]);
+        } else {
+          renderChart(canvas, data, results[1]);
+        }
+      }).catch(function () {
+        spinner.classList.add('hidden');
+        loaded = false;
+        if (wrap) {
+          var p = document.createElement('p');
+          p.className = 'text-muted';
+          p.textContent = 'Failed to load chart.';
+          wrap.appendChild(p);
+        }
+      });
     });
   });
 

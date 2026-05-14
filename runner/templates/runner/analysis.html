@@ -75,7 +75,10 @@
 
   function load() {
     fetch('/operations/exports/')
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        if (!r.ok) return Promise.reject(new Error(r.status));
+        return r.json();
+      })
       .then(function(data) {
         var exports = data.exports || [];
         tbody.innerHTML = '';

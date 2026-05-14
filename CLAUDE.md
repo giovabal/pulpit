@@ -112,4 +112,4 @@ Configuration is split across three files:
 
 Required (in `.env`): `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key options (in `.analysis-defaults`): `REVERSED_EDGES` (default `True`), `DEFAULT_CHANNEL_TYPES` (default `CHANNEL`), `COMMUNITY_PALETTE` (default `ORGANIZATION`), `DEAD_LEAVES_COLOR` (default `#596a64`), `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` / `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` (default `False`). Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see [docs/workflow.md](docs/workflow.md).
+Key options (in `.analysis-defaults`): `REVERSED_EDGES` (default `True`), `DEFAULT_CHANNEL_TYPES` (default `CHANNEL`), `COMMUNITY_PALETTE` (default `ORGANIZATION`; non-organisation strategies fall back to `vaporwave`), `DEAD_LEAVES_COLOR` (default `#596a64`), `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` / `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` (default `False`). Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see [docs/workflow.md](docs/workflow.md).

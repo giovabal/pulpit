@@ -220,8 +220,13 @@
                     '&months_after='  + encodeURIComponent(fd.get('months_after')) +
                     '&only_after_vacancy=' + (fd.get('only_after_vacancy') ? '1' : '0');
     results.innerHTML = '<p class="vacancy-empty">Loading…</p>';
-    fetch(url).then(function(r) { return r.json(); }).then(render)
-              .catch(function() { results.innerHTML = '<p class="vacancy-empty">Failed to load results.</p>'; });
+    fetch(url)
+      .then(function(r) {
+        if (!r.ok) return Promise.reject(new Error(r.status));
+        return r.json();
+      })
+      .then(render)
+      .catch(function() { results.innerHTML = '<p class="vacancy-empty">Failed to load results.</p>'; });
   }
 
   form.addEventListener('submit', function(e) { e.preventDefault(); run(); });
@@ -276,7 +281,12 @@
 
   var eventsPromise = null;
   function getEventsPromise() {
-    if (!eventsPromise) eventsPromise = fetchJson("{% url 'events-data' %}");
+    if (!eventsPromise) {
+      eventsPromise = fetchJson("{% url 'events-data' %}").catch(function (err) {
+        eventsPromise = null;  // allow a retry on the next panel open
+        return [];
+      });
+    }
     return eventsPromise;
   }
 

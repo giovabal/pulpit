@@ -19,6 +19,7 @@ export function strategy_label(key) {
         (key.charAt(0).toUpperCase() + key.slice(1).toLowerCase().replace(/_/g, ' '));
 }
 
+// Short labels shown in info-bar chips — kept terse so chips stay compact.
 export var LAYOUT_LABELS = {
     fa2:             'FA2',
     circular:        'Circular',
@@ -31,8 +32,27 @@ export var LAYOUT_LABELS = {
     spring:          'Spring',
 };
 
+// Verbose labels shown in dropdown options. Covers both 2D and 3D layouts;
+// the dropdown only renders entries listed in window.EXTRA_LAYOUTS / EXTRA_LAYOUTS_3D.
+export var LAYOUT_LONG_LABELS = {
+    fa2:             'Force Atlas 2',
+    circular:        'Circular',
+    kamada_kawai:    'Kamada-Kawai',
+    community_shell: 'Community shells',
+    tsne:            't-SNE',
+    umap:            'UMAP',
+    hyperbolic:      'Hyperbolic',
+    spectral:        'Spectral',
+    spring:          'Spring (Fruchterman-Reingold)',
+};
+
 export function layout_label(key) {
     return LAYOUT_LABELS[key] ||
+        (key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '));
+}
+
+export function layout_long_label(key) {
+    return LAYOUT_LONG_LABELS[key] ||
         (key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '));
 }
 

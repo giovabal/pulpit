@@ -3,7 +3,7 @@ import { mini_hist } from './charts.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
-var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"katz_centrality":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
+var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"katz_centrality":1,"harmonic_centrality":1,"closeness_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
 var STRUCTURAL_KEYS = {"betweenness":1,"flow_betweenness":1,"bridging_centrality":1,"burt_constraint":1};
 var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
@@ -21,6 +21,7 @@ var COL_TOOLTIPS = {
     "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
     "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
     "harmonic_centrality": "Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
+    "closeness_centrality":"Closeness centrality (Wasserman-Faust): how easily the rest of the network can reach this channel along citation paths",
     "katz_centrality":     "Katz centrality: counts all directed paths with exponential penalization for length",
     "bridging_centrality": "Bridging centrality: betweenness × cross-community Shannon entropy; high → information broker",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",

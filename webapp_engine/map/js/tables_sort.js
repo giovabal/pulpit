@@ -3,10 +3,6 @@ function heatmapBg(val, min, max) {
     var ratio = (val - min) / (max - min);
     return "background-color:rgb(" + Math.round(255 - ratio * 35) + "," + Math.round(255 - ratio * 21) + "," + Math.round(255 - ratio * 6) + ")";
 }
-function fmtNum(val, decimals) {
-    if (val === null || val === undefined) return "—";
-    return decimals === 0 ? String(Math.round(val)) : val.toFixed(decimals);
-}
 function sigFig(val, n) {
     if (val === null || val === undefined) return "—";
     if (!isFinite(val) || val === 0) return "0";
@@ -41,7 +37,11 @@ function initSortableTables() {
             table.setAttribute('data-sort-initialized', 'true');
             for (j = 0; j < headers.length; j++) {
                 headers[j].setAttribute('aria-sort', 'none');
-                headers[j].innerHTML = "<a href='#'>" + headers[j].innerText + "</a>";
+                var anchor = document.createElement('a');
+                anchor.href = '#';
+                anchor.textContent = headers[j].textContent;
+                headers[j].textContent = '';
+                headers[j].appendChild(anchor);
             }
             if (table._sortListener) thead.removeEventListener("click", table._sortListener);
             table._sortListener = sortTableFunction(table);
@@ -89,12 +89,15 @@ function sortRows(table, columnIndex, direction) {
         if (classList.contains("date")) cls = "date";
         else if (classList.contains("number")) cls = "number";
     }
+    // Number() is stricter than parseFloat — "123abc" returns NaN instead of 123,
+    // so a mixed text/number column is correctly classified as non-numeric.
     for (index = 0; index < rows.length; index++) {
         node = rows[index].querySelector(sel2);
         val = node.getAttribute("data-sort-value");
-        if (val === null || val === "") val = node.innerText;
-        var numericVal = parseFloat(val);
-        if (!Number.isNaN(numericVal) && isFinite(numericVal)) val = numericVal; else allNum = false;
+        if (val === null || val === "") val = node.textContent;
+        var trimmed = (typeof val === "string") ? val.trim() : val;
+        var numericVal = trimmed === "" ? NaN : Number(trimmed);
+        if (Number.isFinite(numericVal)) val = numericVal; else allNum = false;
         values.push({ value: val, row: rows[index] });
     }
     if (cls === "" && allNum) cls = "number";

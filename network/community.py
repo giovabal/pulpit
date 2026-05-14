@@ -65,45 +65,21 @@ def normalize_community_map(community_map: CommunityMap) -> CommunityMap:
     return {node_id: remap[community_id] for node_id, community_id in community_map.items()}
 
 
-# Tableau-20 hex codes — used when palette_name="ORGANIZATION" but no organisations
-# are defined, so callers always get distinguishable community colours.
-_QUALITATIVE_FALLBACK_COLORS: tuple[str, ...] = (
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
-    "#e377c2",
-    "#7f7f7f",
-    "#bcbd22",
-    "#17becf",
-    "#aec7e8",
-    "#ffbb78",
-    "#98df8a",
-    "#ff9896",
-    "#c5b0d5",
-    "#c49c94",
-    "#f7b6d2",
-    "#c7c7c7",
-    "#dbdb8d",
-    "#9edae5",
-)
-
-
-def _organization_palette_colors() -> list[str]:
-    """Return the colours of all organisations (ordered by id), or a hardcoded qualitative
-    fallback when none are defined. Used when ``COMMUNITY_PALETTE=ORGANIZATION`` is paired
-    with a non-organisation strategy (e.g. LEIDEN) so communities still get distinct colours."""
-    org_colors = list(Organization.objects.exclude(color="").order_by("id").values_list("color", flat=True))
-    return org_colors or list(_QUALITATIVE_FALLBACK_COLORS)
+# Default palette used by non-organisation strategies when ``COMMUNITY_PALETTE=ORGANIZATION``
+# (which only makes sense for the ORGANIZATION strategy itself). Lets Leiden/Louvain/etc.
+# still produce a distinct, attractive palette without the user having to override the setting.
+_NON_ORGANIZATION_FALLBACK_PALETTE = "vaporwave"
 
 
 def build_community_palette(community_map: CommunityMap, palette_name: str) -> CommunityPalette:
     if not community_map:
         return {}
     total = max(community_map.values())
-    source_colors = _organization_palette_colors() if palette_name == "ORGANIZATION" else palette_colors(palette_name)
+    # ``palette_name="ORGANIZATION"`` is only meaningful for the ORGANIZATION strategy
+    # (which builds its palette directly from Organization.color). Other strategies that
+    # land here fall back to a generic qualitative palette so they still get distinct colours.
+    effective_palette = _NON_ORGANIZATION_FALLBACK_PALETTE if palette_name == "ORGANIZATION" else palette_name
+    source_colors = palette_colors(effective_palette)
     colors = expand_colors(source_colors, total)
     return {
         index: parse_color(colors[index - 1]) if index <= len(colors) else DEFAULT_FALLBACK_COLOR

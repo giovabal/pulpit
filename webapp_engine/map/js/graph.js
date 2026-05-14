@@ -3,7 +3,7 @@ import Graph from 'graphology';
 import EdgeCurveProgram from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel } from 'sigma/rendering';
-import { strategy_label, layout_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
 import { escHtml } from './utils.js';
 
 // =============================================================================
@@ -305,14 +305,17 @@ function get_neighbors_list(id_list) {
 
 function show_node_info(nodeId) {
     var node = graph.getNodeAttributes(nodeId);
-    var key = node.url ? node.url.replace('https://t.me/', '') : '';
+    // Extract the @username only when the URL is a real t.me/ link; otherwise
+    // skip the prefix so we don't render gibberish like "@https://example.com/...".
+    var tg_match = node.url ? /^https?:\/\/t\.me\/(.+)$/.exec(node.url) : null;
+    var key = tg_match ? tg_match[1] : '';
     el('node_label').textContent = node.label || node.id;
     var urlEl = el('node_url');
-    urlEl.textContent = '@' + key;
+    urlEl.textContent = key ? '@' + key : '';
     urlEl.href = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
     el('node_picture').innerHTML = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width: 60px;' />" : '';
     el('node_group').innerHTML = get_group(node);
-    el('node_followers_count').textContent = node.fans;
+    el('node_followers_count').textContent = (node.fans != null) ? Number(node.fans).toLocaleString() : '—';
     var measures_html = '';
     if (accessory_data) {
         accessory_data.measures.forEach(function(m) {
@@ -323,8 +326,8 @@ function show_node_info(nodeId) {
         });
     }
     el('node_measures').innerHTML = measures_html;
-    el('node_messages_count').textContent = node.messages_count;
-    el('node_activity_period').textContent = node.activity_period;
+    el('node_messages_count').textContent = (node.messages_count != null) ? Number(node.messages_count).toLocaleString() : '—';
+    el('node_activity_period').textContent = node.activity_period || '—';
     el('node_is_lost').style.display = node.is_lost ? '' : 'none';
     el('node_details').style.display = '';
 
@@ -401,6 +404,10 @@ function maybe_apply_initial_colors() {
         if (is_year_switch) {
             var metric = el('size-select').value;
             if (metric) apply_node_size(metric);
+            // Group filter values are per-year; reset to "All nodes" so a stale
+            // label from the previous year does not silently fade everything.
+            var group_sel = el('group-select');
+            if (group_sel) group_sel.value = '';
             is_year_switch = false;
         }
         update_info_bar();
@@ -484,12 +491,14 @@ function build_legend(strategyData) {
     var group_select_items = ['<option value="" selected="selected">All nodes</option>'];
     strategyData.groups.forEach(function(l) {
         // l = [id, count, label, hexColor]
+        var label = escHtml(l[2]);
+        var color = escHtml(l[3]);
         legend_items.push(
             '<li style="padding-bottom: .75em;">'
-            + '<i class="bi bi-circle-fill" style="color: ' + l[3] + ';"></i> ' + l[2] + ', ' + l[1] + ' channels'
+            + '<i class="bi bi-circle-fill" style="color: ' + color + ';"></i> ' + label + ', ' + l[1] + ' channels'
             + '</li>'
         );
-        group_select_items.push('<option value="' + l[2] + '">' + l[2] + '</option>');
+        group_select_items.push('<option value="' + label + '">' + label + '</option>');
     });
     el('legend').innerHTML = legend_items.join('');
     el('group-select').innerHTML = group_select_items.join('');
@@ -561,6 +570,10 @@ function reset_colors() {
 }
 
 function click_node(nodeId) {
+    // Selection mutates node colours; an in-flight year/layout animation also
+    // mutates colours and positions per frame, so let the animation finish
+    // first to avoid a visual race.
+    if (animation_frame_id) return;
     if (!is_graph_completely_rendered) reset_colors();
     select_node(nodeId);
 }
@@ -610,7 +623,11 @@ function get_data(data_dir) {
             delete attrs.id;
             try {
                 graph.addEdge(e.source, e.target, attrs);
-            } catch(err) { /* skip duplicate or invalid edges */ }
+            } catch (err) {
+                // Duplicate or otherwise invalid edge: keep loading the rest,
+                // but surface the cause so schema mismatches don't hide silently.
+                if (typeof console !== 'undefined' && console.warn) console.warn('addEdge skipped', e.source, '→', e.target, err.message);
+            }
         });
 
         sigma_instance.refresh();
@@ -932,7 +949,8 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
                     var col = edge.color ? 'rgba(' + edge.color + ',0.25)' : 'rgba(72,72,72,0.25)';
                     var attrs = Object.assign({}, edge, { color: col, originalColor: col });
                     delete attrs.source; delete attrs.target; delete attrs.id;
-                    try { graph.addEdge(edge.source, edge.target, attrs); } catch(_) {}
+                    try { graph.addEdge(edge.source, edge.target, attrs); }
+                    catch (err) { if (typeof console !== 'undefined' && console.warn) console.warn('addEdge skipped', edge.source, '→', edge.target, err.message); }
                 });
 
                 // Update node metadata (measures, communities, label, etc.)
@@ -1226,20 +1244,8 @@ document.addEventListener('DOMContentLoaded', function() {
         var layout_sel   = el('layout-select');
         if (layout_group && layout_sel) {
             layout_group.style.display = '';
-            var _layout_labels = {
-                fa2:             'Force Atlas 2',
-                circular:        'Circular',
-                kamada_kawai:    'Kamada-Kawai',
-                community_shell: 'Community shells',
-                tsne:            't-SNE',
-                umap:            'UMAP',
-                hyperbolic:      'Hyperbolic',
-                spectral:        'Spectral',
-                spring:          'Spring (Fruchterman-Reingold)',
-            };
             var _opts = extra_layouts.map(function(algo) {
-                var lbl = _layout_labels[algo] || (algo.charAt(0).toUpperCase() + algo.slice(1));
-                return '<option value="' + algo + '">' + lbl + '</option>';
+                return '<option value="' + algo + '">' + layout_long_label(algo) + '</option>';
             });
             layout_sel.innerHTML = _opts.join('');
             layout_sel.addEventListener('change', function() {

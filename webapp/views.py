@@ -105,13 +105,11 @@ class HomeView(ListView):
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         q = self.request.GET.get("q", "").strip()
-        if not q:
-            return Message.objects.none()
-        qs = (
-            Message.objects.filter(channel__in=Channel.objects.in_target())
-            .select_related("channel", "channel__organization", "forwarded_from")
-            .filter(message__icontains=q)
+        qs = Message.objects.filter(channel__in=Channel.objects.in_target()).select_related(
+            "channel", "channel__organization", "forwarded_from"
         )
+        if q:
+            qs = qs.filter(message__icontains=q)
         return _apply_message_options(qs, self.request.GET)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:

@@ -178,7 +178,10 @@
     var privateCountEl = document.getElementById("private-count");
 
     function norm(s) {
-      return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+      // Strip the Combining Diacritical Marks block (U+0300..U+036F) after NFD
+      // decomposition. Written with explicit Unicode escapes so the regex
+      // can't be silently mangled by editors or formatters.
+      return s.normalize("NFD").replace(/[\u0300-\u036F]/g, "");
     }
 
     function visible(rows) {

@@ -1,58 +1,5 @@
 import { build_year_nav } from './year_nav.js';
-
-// ── SVG zoom / pan ─────────────────────────────────────────────────────────────
-function _addSvgZoomPan(container, scrollDiv, svg) {
-    var NS = "http://www.w3.org/2000/svg";
-    var g = document.createElementNS(NS, "g");
-    while (svg.firstChild) g.appendChild(svg.firstChild);
-    svg.appendChild(g);
-
-    var scale = 1, tx = 0, ty = 0;
-    var dragging = false, startX, startY, startTx, startTy;
-
-    function applyTransform() {
-        g.setAttribute("transform", "translate(" + tx + "," + ty + ") scale(" + scale + ")");
-    }
-    function zoomTo(factor, cx, cy) {
-        var ns = Math.max(0.1, Math.min(50, scale * factor));
-        tx = cx - (cx - tx) * (ns / scale);
-        ty = cy - (cy - ty) * (ns / scale);
-        scale = ns; applyTransform();
-    }
-    svg.addEventListener("wheel", function(e) {
-        e.preventDefault();
-        var r = svg.getBoundingClientRect();
-        zoomTo(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top);
-    }, { passive: false });
-    svg.addEventListener("mousedown", function(e) {
-        if (e.button !== 0) return;
-        dragging = true; startX = e.clientX; startY = e.clientY; startTx = tx; startTy = ty;
-        svg.style.cursor = "grabbing"; e.preventDefault();
-    });
-    document.addEventListener("mousemove", function(e) {
-        if (!dragging) return;
-        tx = startTx + (e.clientX - startX); ty = startTy + (e.clientY - startY); applyTransform();
-    });
-    document.addEventListener("mouseup", function() {
-        if (dragging) { dragging = false; svg.style.cursor = "grab"; }
-    });
-    svg.style.cursor = "grab";
-
-    var ctrl = document.createElement("div");
-    ctrl.style.cssText = "display:flex;gap:4px;margin-bottom:6px;";
-    [["＋", "Zoom in",  function() { var r = svg.getBoundingClientRect(); zoomTo(1.4, r.width / 2, r.height / 2); }],
-     ["－", "Zoom out", function() { var r = svg.getBoundingClientRect(); zoomTo(1 / 1.4, r.width / 2, r.height / 2); }],
-     ["↺",  "Reset",    function() { scale = 1; tx = 0; ty = 0; applyTransform(); }]
-    ].forEach(function(b) {
-        var btn = document.createElement("button");
-        btn.type = "button"; btn.className = "btn btn-outline-secondary btn-sm";
-        btn.style.cssText = "padding:1px 10px;font-size:13px;line-height:1.4;";
-        btn.textContent = b[0]; btn.title = b[1];
-        btn.addEventListener("click", b[2]);
-        ctrl.appendChild(btn);
-    });
-    container.insertBefore(ctrl, scrollDiv);
-}
+import { addSvgZoomPan as _addSvgZoomPan, showTip as _showTip, moveTip as _moveTip, hideTip as _hideTip } from './_zoom_pan.js';
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 function _pluralityComm(label, stratMaps, stratKeys) {
@@ -77,15 +24,6 @@ var _ym = _dd.match(/data_(\d{4,})\//);
 var _current_year = _ym ? parseInt(_ym[1]) : "all";
 var _base_dd = _ym ? "data/" : _dd;
 var _ty = [], _cache = {}, _loading = false;
-
-// Tooltip — created once, reused across year switches
-var _tip = document.createElement("div");
-_tip.style.cssText = "position:fixed;background:rgba(0,0,0,.78);color:#fff;font-size:11px;" +
-    "padding:3px 8px;border-radius:3px;pointer-events:none;display:none;z-index:9999;white-space:nowrap;";
-document.body.appendChild(_tip);
-function _showTip(e, txt) { _tip.textContent = txt; _tip.style.display = "block"; _tip.style.left = (e.clientX + 14) + "px"; _tip.style.top = (e.clientY - 30) + "px"; }
-function _moveTip(e) { _tip.style.left = (e.clientX + 14) + "px"; _tip.style.top = (e.clientY - 30) + "px"; }
-function _hideTip() { _tip.style.display = "none"; }
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {

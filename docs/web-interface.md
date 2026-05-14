@@ -9,8 +9,8 @@ The Operations panel is the dashboard you use to launch data collection and anal
 ## Home page — `/`
 
 <figure>
-<img src="../webapp_engine/static/screenshot_15.jpg" alt="Home page: project-level summary cards, time-series charts, and the recent-messages feed.">
-<figcaption><em>Home page: project-level summary cards, time-series charts, and the recent-messages feed.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_15.jpg" alt="Home page: project-level summary cards, with open Reactions per month chart.">
+<figcaption><em>Home page: project-level summary cards, time-series charts, with open Reactions per month chart.</em></figcaption>
 </figure>
 <br>
 
@@ -18,7 +18,6 @@ The landing page gives a project-level snapshot of the monitored corpus:
 
 - **Summary cards** — total in-target channels, total messages collected, the date range of the message archive, and the count of forwarded messages. Lost messages are excluded from every aggregate so the totals match the crawl scope. All four values are computed in a single aggregate query for fast page loads on large databases.
 - **Time-series charts** — month-by-month aggregates across the whole corpus: messages sent, active channels, forwards, views, reactions, and average involvement. Each chart is rendered by the same Chart.js component used on channel detail pages, including the dashed vertical-line event annotations (see [Workflow § Events](workflow.md#mark-events-on-charts)).
-- **Reactions per month** — a collapsible panel mirroring the per-channel chart at the project level. Reaction counts are aggregated across all monitored channels and broken down by the eight most-used emojis; each channel's `out_of_target_after` cutoff is respected so a channel that left the target set later stops contributing from that month onward.
 - **Recent messages** — a feed of the latest posts collected, with a link to each source channel and the same post-card layout used elsewhere (views, forwards, reactions, edit indicator, replies pill).
 
 ---

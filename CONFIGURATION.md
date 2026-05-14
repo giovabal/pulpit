@@ -96,7 +96,7 @@ pip install oracledb           # Oracle
 | :----- | :---------- | -----------------: |
 | `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `True` |
 | `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Default for `crawl_channels` and `structural_analysis`. | `CHANNEL,USER` |
-| `COMMUNITY_PALETTE` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin, or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
+| `COMMUNITY_PALETTE` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin (non-organisation strategies fall back to `vaporwave`), or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive) | `ORGANIZATION` |
 | `DEAD_LEAVES_COLOR` | Hex colour for dead-leaf nodes (out-of-target referenced channels) | `#596a64` |
 | `GRAPH_OUTPUT_DIR` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
 

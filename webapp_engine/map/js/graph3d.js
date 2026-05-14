@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { strategy_label, layout_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
 import { escHtml } from './utils.js';
 
 // =============================================================================
@@ -380,7 +380,8 @@ function apply_theme_3d(theme) {
     document.body.setAttribute('data-theme3d', theme);
     var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
     document.documentElement.style.backgroundColor = bgHex;
-    localStorage.setItem('pulpit_theme', theme);
+    // Safari private browsing and locked-down profiles can throw on setItem.
+    try { localStorage.setItem('pulpit_theme', theme); } catch (e) { /* persistence is best-effort */ }
 }
 
 // =============================================================================
@@ -419,22 +420,12 @@ function update_info_bar() {
     });
 })();
 
-var _LAYOUT_LABELS_3D = {
-    fa2:          'ForceAtlas2',
-    spectral:     'Spectral',
-    spring:       'Spring (Fruchterman-Reingold)',
-    kamada_kawai: 'Kamada-Kawai',
-    tsne:         't-SNE',
-    umap:         'UMAP',
-};
-
 function build_layout_selector() {
     var layouts = window.EXTRA_LAYOUTS_3D || [];
     if (!layouts.length) return;
     var sel = el('layout-select');
     sel.innerHTML = layouts.map(function(l) {
-        var lbl = _LAYOUT_LABELS_3D[l] || (l.charAt(0).toUpperCase() + l.slice(1));
-        return '<option value="' + l + '">' + lbl + '</option>';
+        return '<option value="' + l + '">' + layout_long_label(l) + '</option>';
     }).join('');
     el('layout-select-group').style.display = '';
 }
@@ -627,6 +618,10 @@ function select_node(id) {
 }
 
 function on_canvas_click(event) {
+    // Skip clicks while a year/layout transition is animating; selection mutates
+    // the same mesh attributes the animation is sweeping, so a click mid-frame
+    // produces inconsistent visuals.
+    if (animation_frame_id_3d !== null || layout_anim_id !== null) return;
     var rect = renderer.domElement.getBoundingClientRect();
     pointer.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
     pointer.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
@@ -693,15 +688,16 @@ function get_group_html(id) {
 function show_node_info(id) {
     var node = nodes_index[id];
     if (!node) return;
-    var key = node.url ? node.url.replace('https://t.me/', '') : '';
+    var tg_match = node.url ? /^https?:\/\/t\.me\/(.+)$/.exec(node.url) : null;
+    var key = tg_match ? tg_match[1] : '';
     el('node_label').textContent           = node.label || id;
-    el('node_url').textContent             = '@' + key;
+    el('node_url').textContent             = key ? '@' + key : '';
     el('node_url').href                    = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
     el('node_picture').innerHTML           = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width:60px'>" : '';
     el('node_group').innerHTML             = get_group_html(id);
-    el('node_followers_count').textContent = node.fans || '';
-    el('node_messages_count').textContent  = node.messages_count || '';
-    el('node_activity_period').textContent = node.activity_period || '';
+    el('node_followers_count').textContent = (node.fans != null) ? Number(node.fans).toLocaleString() : '—';
+    el('node_messages_count').textContent  = (node.messages_count != null) ? Number(node.messages_count).toLocaleString() : '—';
+    el('node_activity_period').textContent = node.activity_period || '—';
     el('node_is_lost').style.display     = node.is_lost ? '' : 'none';
     el('node_details').style.display     = '';
 
@@ -800,8 +796,10 @@ function build_strategy_selector(communities) {
 function build_legend(strategyData) {
     var legend_items = [], group_items = ['<option value="" selected>All nodes</option>'];
     strategyData.groups.forEach(function(g) {
-        legend_items.push('<li style="padding-bottom:.75em"><i class="bi bi-circle-fill" style="color:' + g[3] + '"></i> ' + g[2] + ', ' + g[1] + ' channels</li>');
-        group_items.push('<option value="' + g[2] + '">' + g[2] + '</option>');
+        var label = escHtml(g[2]);
+        var color = escHtml(g[3]);
+        legend_items.push('<li style="padding-bottom:.75em"><i class="bi bi-circle-fill" style="color:' + color + '"></i> ' + label + ', ' + g[1] + ' channels</li>');
+        group_items.push('<option value="' + label + '">' + label + '</option>');
     });
     el('legend').innerHTML       = legend_items.join('');
     el('group-select').innerHTML = group_items.join('');
@@ -924,6 +922,13 @@ function _apply_accessory_3d(ch_data, comm_data) {
         }
     }
     if (!found && el('size-select').options.length > 0) current_size_key = el('size-select').value;
+
+    // Group filter is per-year; reset so a stale label from the previous year
+    // does not silently fade every node.
+    var group_sel = el('group-select');
+    if (group_sel) group_sel.value = '';
+    current_group = '';
+
     update_info_bar();
 }
 
@@ -956,6 +961,11 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
         selected_node_id = null;
         el('infobar').style.display      = 'none';
         el('node_details').style.display = 'none';
+    }
+    // Hover label survived: clear it so the next mousemove starts from a
+    // clean state instead of a now-deleted node id.
+    if (hovered_node_id && old_only.indexOf(hovered_node_id) >= 0) {
+        hovered_node_id = null;
     }
 
     // Remove departing nodes immediately (edges hidden).
@@ -1302,7 +1312,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     init_three();
 
-    var saved_theme = localStorage.getItem('pulpit_theme') || 'dark';
+    var saved_theme = null;
+    try { saved_theme = localStorage.getItem('pulpit_theme'); } catch (e) { /* localStorage may be disabled */ }
+    saved_theme = (saved_theme && THEMES_3D[saved_theme]) ? saved_theme : 'dark';
     el('theme-select').value = saved_theme;
     apply_theme_3d(saved_theme);
 
