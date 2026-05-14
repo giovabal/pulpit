@@ -102,8 +102,10 @@ var THEMES = {
         defaultEdgeColor: '#484848', nodeBorderSize: 0, nodeBorderColor: 'transparent',
         hoverFill: '#111111',
         cssVars: {
+            // Sidebar accent uses indigo-300 — same Pulpit brand hue used app-wide,
+            // shifted lighter so it stays readable on the dark navy panel.
             '--c-fg-raw': '255, 255, 255', '--c-panel-bg': 'rgba(8, 24, 40, 0.55)',
-            '--c-sidebar-bg': '#0d2035', '--c-sidebar-accent': '#e8a838',
+            '--c-sidebar-bg': '#0d2035', '--c-sidebar-accent': '#a5b4fc',
             '--c-year-menu-bg': 'rgba(8, 24, 40, 0.96)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.5)',
             '--c-accordion-arrow': 'invert(1)',
         },
@@ -115,7 +117,7 @@ var THEMES = {
         hoverFill: '#cddaeb',
         cssVars: {
             '--c-fg-raw': '20, 35, 60', '--c-panel-bg': 'rgba(220, 232, 246, 0.78)',
-            '--c-sidebar-bg': '#dce8f4', '--c-sidebar-accent': '#9a5200',
+            '--c-sidebar-bg': '#dce8f4', '--c-sidebar-accent': '#4338ca',
             '--c-year-menu-bg': 'rgba(215, 230, 245, 0.97)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.12)',
             '--c-accordion-arrow': 'none',
         },
@@ -127,7 +129,7 @@ var THEMES = {
         hoverFill: '#eeeeee',
         cssVars: {
             '--c-fg-raw': '30, 30, 30', '--c-panel-bg': 'rgba(248, 248, 248, 0.82)',
-            '--c-sidebar-bg': '#f4f4f4', '--c-sidebar-accent': '#c07000',
+            '--c-sidebar-bg': '#f4f4f4', '--c-sidebar-accent': '#4f46e5',
             '--c-year-menu-bg': 'rgba(248, 248, 248, 0.97)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.10)',
             '--c-accordion-arrow': 'none',
         },
@@ -138,6 +140,7 @@ var THEMES = {
         defaultEdgeColor: '#999999', nodeBorderSize: 0.20, nodeBorderColor: '#222222',
         hoverFill: '#eeeeee',
         cssVars: {
+            // Print stays monochrome — black accent reads identically on b&w printers.
             '--c-fg-raw': '0, 0, 0', '--c-panel-bg': 'rgba(255, 255, 255, 0.90)',
             '--c-sidebar-bg': '#ffffff', '--c-sidebar-accent': '#000000',
             '--c-year-menu-bg': 'rgba(255, 255, 255, 0.99)', '--c-year-menu-shadow': 'rgba(0, 0, 0, 0.15)',

@@ -31,6 +31,25 @@
   --chart-fill: rgba(67,56,202,.08);
   --chart-grid: #ece9e3;
   --chart-label: #78716c;
+  /* Semantic colours — danger / warning / success / info */
+  --danger:         #b91c1c;
+  --danger-hover:   #991b1b;
+  --danger-bg:      #fef2f2;
+  --danger-bg-soft: #fee2e2;
+  --danger-border:  #fecaca;
+  --danger-accent:  #fca5a5;
+  --warning:        #92400e;
+  --warning-hover:  #78350f;
+  --warning-bg:     #fffbeb;
+  --warning-bg-soft:#fef3c7;
+  --warning-border: #fcd34d;
+  --warning-accent: #d97706;
+  --success:        #166534;
+  --success-bg:     #dcfce7;
+  --success-border: #bbf7d0;
+  --info:           #1d4ed8;
+  --info-bg:        #dbeafe;
+  --info-border:    #bae6fd;
   /* Bootstrap primary override — match accent */
   --bs-primary: #4338ca;
   --bs-primary-rgb: 67, 56, 202;
@@ -55,10 +74,109 @@
   --bs-btn-focus-shadow-rgb: 67, 56, 202;
 }
 
+/* Remap Bootstrap btn-danger / btn-outline-danger to the semantic --danger token */
+.btn-danger {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--danger);
+  --bs-btn-border-color: var(--danger);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--danger-hover);
+  --bs-btn-hover-border-color: var(--danger-hover);
+  --bs-btn-active-bg: var(--danger-hover);
+  --bs-btn-active-border-color: var(--danger-hover);
+  --bs-btn-disabled-bg: var(--danger);
+  --bs-btn-disabled-border-color: var(--danger);
+  --bs-btn-focus-shadow-rgb: 185, 28, 28;
+}
+.btn-outline-danger {
+  --bs-btn-color: var(--danger);
+  --bs-btn-border-color: var(--danger);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--danger);
+  --bs-btn-hover-border-color: var(--danger);
+  --bs-btn-active-bg: var(--danger-hover);
+  --bs-btn-active-border-color: var(--danger-hover);
+  --bs-btn-focus-shadow-rgb: 185, 28, 28;
+}
+
+/* Ghost variant — transparent background, neutral colour, hover fills with surface tint */
+.btn-ghost {
+  --bs-btn-color: var(--muted);
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-color: var(--text);
+  --bs-btn-hover-bg: var(--hover);
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-active-color: var(--text);
+  --bs-btn-active-bg: var(--hover);
+  --bs-btn-active-border-color: transparent;
+  --bs-btn-focus-shadow-rgb: 67, 56, 202;
+}
+
+/* Compact icon-only button — pair with .btn-sm and/or .btn-ghost. */
+.btn-icon {
+  padding: .25rem .375rem;
+  line-height: 1;
+}
+
+/* ---------- Pulpit-namespaced buttons (bo-btn family) ----------
+   Originally introduced for the backoffice but used app-wide. Independent of
+   Bootstrap's .btn cascade so they can be used without inheriting Bootstrap's
+   focus rings or sizing. Pair with --sm / --ghost / --danger / --icon. */
+.bo-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: .375rem .875rem;
+  font-size: .875rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.bo-btn:hover { background: var(--hover); }
+.bo-btn--sm { padding: .25rem .625rem; font-size: .8125rem; }
+.bo-btn--ghost { border-color: transparent; color: var(--muted); }
+.bo-btn--ghost:hover { background: var(--hover); color: var(--text); }
+.bo-btn--danger { color: var(--danger); border-color: var(--danger-border); }
+.bo-btn--danger:hover { background: var(--danger-bg); }
+.bo-btn--icon {
+  padding: .25rem .375rem;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+.bo-btn--icon:hover { background: var(--hover); color: var(--text); }
+
 /* ---------- Utilities ---------- */
 .page-subtitle { font-size: .85rem; }
 .page-heading  { font-family: var(--font-serif); font-weight: 700; }
 .mono          { font-family: var(--font-mono); }
+
+/* ---------- Panel — shared surface for card-like containers ----------
+   ``.panel`` is the forward-looking class for new code. The legacy class
+   names (summary-card, channel-card, data-card, bo-panel, ops-card) are
+   group-selected here so the base bg/border/radius declarations live in
+   one place — each specific class only carries its own padding, hover
+   state, and decorative modifiers. */
+.panel,
+.summary-card,
+.channel-card,
+.data-card,
+.bo-panel,
+.ops-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.panel--accent-top { border-top: 3px solid var(--accent); }
+.panel--shadow-sm  { box-shadow: var(--shadow-sm); }
+.panel--padded     { padding: 1rem 1.25rem; }
 
 /* ---------- Base ---------- */
 body {
@@ -143,9 +261,7 @@ body {
 
 /* ---------- Channel header ---------- */
 .channel-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* base bg/border/radius from .panel */
   overflow: hidden;
   margin-bottom: 1.25rem;
 }
@@ -208,7 +324,7 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   font-variant: small-caps;
-  color: #b91c1c;
+  color: var(--danger);
   margin: 0;
   line-height: 1.2;
 }
@@ -224,9 +340,9 @@ body {
   white-space: nowrap;
 }
 
-.ch-badge--verified { background: #e0e7ff; color: #4338ca; }
-.ch-badge--danger   { background: #fee2e2; color: #b91c1c; }
-.ch-badge--warn     { background: #fef3c7; color: #92400e; }
+.ch-badge--verified { background: #e0e7ff; color: var(--accent); }
+.ch-badge--danger   { background: var(--danger-bg-soft); color: var(--danger); }
+.ch-badge--warn     { background: var(--warning-bg-soft); color: var(--warning); }
 .ch-badge--muted    { background: var(--border); color: var(--text-muted); }
 
 .channel-meta-row {
@@ -244,7 +360,7 @@ body {
   gap: .25rem;
   white-space: nowrap;
 }
-.ch-meta-item--warn { color: #92400e; }
+.ch-meta-item--warn { color: var(--warning); }
 .ch-online-dot { font-size: .45rem; color: #16a34a; margin-bottom: .05rem; }
 
 .channel-about {
@@ -281,9 +397,9 @@ body {
   align-items: center;
   font-size: .72rem;
   font-weight: 600;
-  color: #991b1b;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
+  color: var(--danger-hover);
+  background: var(--danger-bg-soft);
+  border: 1px solid var(--danger-border);
   border-radius: 4px;
   padding: 0 .375rem;
   text-decoration: none;
@@ -309,8 +425,8 @@ body {
   gap: .3rem;
   padding: .3rem .875rem;
   font-size: .7rem;
-  color: #92400e;
-  background: #fffbeb;
+  color: var(--warning);
+  background: var(--warning-bg);
   border-bottom: 1px solid #fde68a;
 }
 
@@ -445,8 +561,8 @@ body {
 }
 
 .post-detail-tag.warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-bg-soft);
+  color: var(--warning);
 }
 
 /* ---------- Telegram link ---------- */
@@ -503,10 +619,8 @@ body {
 
 /* ---------- Summary cards ---------- */
 .summary-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  /* base bg/border/radius from .panel */
   border-top: 3px solid var(--accent);
-  border-radius: var(--radius);
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
@@ -1290,11 +1404,9 @@ body {
 }
 
 .data-card {
+  /* base bg/border/radius from .panel */
   display: flex;
   gap: 1rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   padding: 1.125rem 1.25rem;
   height: 100%;
 }
@@ -1409,15 +1521,15 @@ body {
   transition: color .12s, border-color .12s;
   white-space: nowrap;
 }
-.channels-vacancies-link:hover { color: #b91c1c; border-color: #fca5a5; background: #fff1f2; }
+.channels-vacancies-link:hover { color: var(--danger); border-color: var(--danger-accent); background: var(--danger-bg); }
 
 .vacancy-list-table { width: 100%; }
 
 /* ---------- Channel detail: Restriction card ---------- */
 .restriction-card {
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-left: 4px solid #d97706;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-left: 4px solid var(--warning-accent);
   border-radius: var(--radius);
   margin-bottom: 1.25rem;
   padding: 1rem 1.25rem;
@@ -1428,8 +1540,8 @@ body {
   gap: .5rem;
   margin-bottom: .75rem;
 }
-.restriction-card-icon { font-size: 1rem; color: #92400e; }
-.restriction-card-title { font-size: .9rem; font-weight: 700; color: #92400e; }
+.restriction-card-icon { font-size: 1rem; color: var(--warning); }
+.restriction-card-title { font-size: .9rem; font-weight: 700; color: var(--warning); }
 .restriction-card-list {
   list-style: none;
   margin: 0;
@@ -1446,25 +1558,25 @@ body {
 }
 .restriction-platform {
   font-weight: 600;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
+  color: var(--warning);
+  background: var(--warning-bg-soft);
+  border: 1px solid var(--warning-border);
   border-radius: 3px;
   padding: .1rem .35rem;
   flex-shrink: 0;
 }
 .restriction-reason {
   font-weight: 600;
-  color: #78350f;
+  color: var(--warning-hover);
   flex-shrink: 0;
 }
-.restriction-text { color: #92400e; }
+.restriction-text { color: var(--warning); }
 
 /* ---------- Channel detail: Vacancy Analysis card ---------- */
 .vacancy-analysis-card {
   background: var(--surface);
-  border: 1px solid #fca5a5;
-  border-left: 4px solid #b91c1c;
+  border: 1px solid var(--danger-accent);
+  border-left: 4px solid var(--danger);
   border-radius: var(--radius);
   margin-bottom: 1.25rem;
   overflow: hidden;
@@ -1483,8 +1595,8 @@ body {
   padding: 1rem 1.25rem .75rem;
   border-bottom: 1px solid var(--border);
 }
-.vacancy-impact-icon { font-size: 1.25rem; color: #b91c1c; flex-shrink: 0; margin-top: .1rem; }
-.vacancy-impact-title { font-size: 1rem; font-weight: 700; margin: 0 0 .2rem; color: #b91c1c; }
+.vacancy-impact-icon { font-size: 1.25rem; color: var(--danger); flex-shrink: 0; margin-top: .1rem; }
+.vacancy-impact-title { font-size: 1rem; font-weight: 700; margin: 0 0 .2rem; color: var(--danger); }
 .vacancy-impact-subtitle { font-size: .8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
 
 .vacancy-analysis-body { padding: 1rem 1.25rem; }
@@ -1513,19 +1625,9 @@ body {
   background: var(--surface);
   color: var(--text);
 }
-.vacancy-form-input:focus { outline: none; border-color: #b91c1c; }
-.vacancy-form-btn {
-  padding: .28rem .85rem;
-  font-size: .82rem;
-  font-weight: 500;
-  border: 1px solid #b91c1c;
-  border-radius: .375rem;
-  background: #b91c1c;
-  color: #fff;
-  cursor: pointer;
-  transition: background .12s;
-}
-.vacancy-form-btn:hover { background: #991b1b; }
+.vacancy-form-input:focus { outline: none; border-color: var(--danger); }
+/* .vacancy-form-btn was a bespoke red button — now uses ``.btn .btn-danger .btn-sm``
+   from the global Bootstrap override above. */
 .vacancy-form-check { gap: .35rem; cursor: pointer; }
 
 .vacancy-candidates-title { font-size: .875rem; font-weight: 600; margin: 0 0 .35rem; }

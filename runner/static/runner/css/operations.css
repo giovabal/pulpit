@@ -4,9 +4,7 @@
 .ops-header p  { font-size: .875rem; color: var(--muted); margin: 0; }
 
 .ops-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* base bg/border/radius come from .panel in webapp.css */
   box-shadow: var(--shadow-sm);
   margin-bottom: 1rem;
   overflow: hidden;
@@ -79,14 +77,14 @@
   white-space: nowrap;
 }
 .ops-badge--idle    { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
-.ops-badge--running { background: #dbeafe; color: #1d4ed8; }
-.ops-badge--done    { background: #dcfce7; color: #166534; }
-.ops-badge--failed  { background: #fee2e2; color: #991b1b; }
+.ops-badge--running { background: var(--info-bg); color: var(--info); }
+.ops-badge--done    { background: var(--success-bg); color: var(--success); }
+.ops-badge--failed  { background: var(--danger-bg-soft); color: var(--danger-hover); }
 
 @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
 .ops-badge--running .dot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-  background: #1d4ed8; animation: pulse-dot 1.2s ease-in-out infinite;
+  background: var(--info); animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
 /* ---- options section ---- */
@@ -199,9 +197,9 @@
   color: var(--accent);
 }
 .ops-flag--skip:has(input:checked) {
-  background: #fffbeb;
-  border-color: #d97706;
-  color: #92400e;
+  background: var(--warning-bg);
+  border-color: var(--warning-accent);
+  color: var(--warning);
 }
 
 /* param inputs */

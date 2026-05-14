@@ -4,9 +4,10 @@
     --c-fg-raw:            255, 255, 255;
     /* Nav / menu bar */
     --c-panel-bg:          rgba(8, 24, 40, 0.55);
-    /* Infobar / sidebar */
+    /* Infobar / sidebar — accent kept aligned with the Pulpit brand indigo,
+       shifted to a lighter shade so it stays readable on the dark surface. */
     --c-sidebar-bg:        #0d2035;
-    --c-sidebar-accent:    #e8a838;
+    --c-sidebar-accent:    #a5b4fc;
     /* Year-switcher dropdown */
     --c-year-menu-bg:      rgba(8, 24, 40, 0.96);
     --c-year-menu-shadow:  rgba(0, 0, 0, 0.5);

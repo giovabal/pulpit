@@ -221,7 +221,7 @@ tr:hover .bo-detail-btn { opacity: 1; }
 }
 
 .bo-org-name { font-size: .875rem; }
-.bo-org-unassigned { color: #dc2626; font-size: .875rem; }
+.bo-org-unassigned { color: var(--danger); font-size: .875rem; }
 
 .bo-org-select {
   width: 100%;
@@ -309,35 +309,9 @@ tr:hover .bo-detail-btn { opacity: 1; }
 .bo-chip-dropdown button:hover { background: var(--hover); }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
-
-.bo-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: .375rem .875rem;
-  font-size: .875rem;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: background .15s;
-  white-space: nowrap;
-}
-.bo-btn:hover { background: var(--hover); }
-.bo-btn--sm { padding: .25rem .625rem; font-size: .8125rem; }
-.bo-btn--ghost { border-color: transparent; color: var(--muted); }
-.bo-btn--ghost:hover { background: var(--hover); color: var(--text); }
-.bo-btn--danger { color: #dc2626; border-color: #fecaca; }
-.bo-btn--danger:hover { background: #fef2f2; }
-.bo-btn--icon {
-  padding: .25rem .375rem;
-  border-color: transparent;
-  background: none;
-  color: var(--muted);
-}
-.bo-btn--icon:hover { background: var(--hover); color: var(--text); }
+/* The .bo-btn* family is defined in webapp/static/webapp/css/webapp.css so
+   every Django app can share the same vocabulary. Keep this section header
+   here as a discovery aid. */
 
 /* ── Forms ──────────────────────────────────────────────────────────────── */
 
@@ -389,9 +363,7 @@ tr:hover .bo-detail-btn { opacity: 1; }
 @media (max-width: 900px) { .bo-two-col { grid-template-columns: 1fr; } }
 
 .bo-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* base bg/border/radius come from .panel in webapp.css */
   padding: var(--space-4);
 }
 
@@ -484,8 +456,8 @@ tr:hover .bo-detail-btn { opacity: 1; }
   animation: bo-toast-in .2s ease;
   max-width: 320px;
 }
-.bo-toast--success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-.bo-toast--error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.bo-toast--success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+.bo-toast--error   { background: var(--danger-bg); color: var(--danger-hover); border: 1px solid var(--danger-border); }
 
 @keyframes bo-toast-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -595,4 +567,4 @@ tr:hover .bo-detail-btn { opacity: 1; }
   font-size: .8125rem;
   margin-top: var(--space-3);
 }
-.bo-maint-row--error { color: #dc2626; }
+.bo-maint-row--error { color: var(--danger); }

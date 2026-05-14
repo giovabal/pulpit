@@ -1,15 +1,36 @@
-/* ── Design tokens ─────────────────────────────────────────── */
+/* ── Design tokens ─────────────────────────────────────────────
+   Kept in sync with webapp/static/webapp/css/webapp.css :root.
+   The export bundle is standalone (no Django context), so it
+   carries its own copy of the token palette. Change them in
+   webapp.css first, then mirror here.                          */
 :root {
+  /* Colours */
   --accent:        #4338ca;
   --accent-hover:  #3730a3;
   --accent-bg:     #eef2ff;
+  --hover:         #efede8;
   --bg:            #f5f4f0;
   --surface:       #ffffff;
   --text:          #1c1917;
   --muted:         #78716c;
   --border:        #e3e0d8;
+  /* Shape */
   --radius:        .5rem;
   --shadow-sm:     0 1px 2px rgba(0,0,0,.05);
+  --shadow:        0 4px 12px rgba(0,0,0,.08);
+  /* Fonts */
+  --font-sans:     "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-serif:    "IBM Plex Serif", Georgia, serif;
+  --font-mono:     "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 
   /* Bootstrap 5 primary → indigo */
   --bs-primary:              #4338ca;
@@ -46,13 +67,13 @@
 
 /* ── Base ──────────────────────────────────────────────────── */
 body {
-  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   color: var(--text);
   background: var(--bg);
   font-size: 0.9rem;
 }
 h2, h3, h4, h5, h6 {
-  font-family: "IBM Plex Serif", Georgia, serif;
+  font-family: var(--font-serif);
   font-weight: 700;
 }
 
@@ -131,7 +152,7 @@ h2, h3, h4, h5, h6 {
 }
 .table thead th {
   border-bottom: none !important;
-  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -148,7 +169,7 @@ h2, h3, h4, h5, h6 {
 .table-responsive { max-height: 78vh; overflow-y: auto; }
 td.number, th.number {
   text-align: right;
-  font-family: "IBM Plex Mono", ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   font-size: 0.84rem;
@@ -192,7 +213,7 @@ th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; op
 /* Channel-table tfoot stats row */
 .table:has(tfoot) tbody tr:last-child td { border-bottom: none !important; }
 .table tfoot td {
-  font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
   font-style: italic;
   font-size: 0.82rem;
   color: var(--muted);
@@ -204,7 +225,7 @@ th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; op
 
 /* Network-table group sub-header rows */
 tr.summary-group-header td {
-  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.67rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -288,7 +309,7 @@ td.col-group-start, th.col-group-start {
   margin-right: auto;
 }
 .export-footer-title {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: .72rem;
   letter-spacing: .04em;
   text-transform: uppercase;
