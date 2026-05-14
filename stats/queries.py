@@ -6,9 +6,11 @@ import pandas as pd
 
 
 def _month_spine(q: models.Q) -> list[str]:
-    """Return a sorted list of YYYY-MM strings spanning the earliest to latest message matching q."""
-    agg = Message.objects.filter(q, date__isnull=False).aggregate(
-        earliest=models.Min("date"), latest=models.Max("date")
+    """Return a sorted list of YYYY-MM strings spanning the earliest to latest non-lost message matching q."""
+    agg = (
+        Message.objects.alive()
+        .filter(q, date__isnull=False)
+        .aggregate(earliest=models.Min("date"), latest=models.Max("date"))
     )
     if not agg["earliest"] or not agg["latest"]:
         return []

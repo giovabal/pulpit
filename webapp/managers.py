@@ -25,3 +25,17 @@ class ChannelManager(models.Manager["Channel"]):
 
     def in_target(self) -> ChannelQuerySet:
         return self.get_queryset().in_target()
+
+
+class MessageQuerySet(models.QuerySet["Message"]):
+    def alive(self) -> MessageQuerySet:
+        """Exclude messages that no longer exist on Telegram."""
+        return self.filter(is_lost=False)
+
+
+class MessageManager(models.Manager["Message"]):
+    def get_queryset(self) -> MessageQuerySet:
+        return MessageQuerySet(self.model, using=self._db)
+
+    def alive(self) -> MessageQuerySet:
+        return self.get_queryset().alive()

@@ -66,6 +66,7 @@ class OperationsView(View):
             "CRAWL_REFRESH_MESSAGES_STATS": settings.CRAWL_REFRESH_MESSAGES_STATS,
             "CRAWL_FIXHOLES": settings.CRAWL_FIXHOLES,
             "CRAWL_FIX_MISSING_MEDIA": settings.CRAWL_FIX_MISSING_MEDIA,
+            "CRAWL_RETRY_LOST_MESSAGES": settings.CRAWL_RETRY_LOST_MESSAGES,
             "CRAWL_RETRY_REFERENCES": settings.CRAWL_RETRY_REFERENCES,
             "CRAWL_FORCE_RETRY_UNRESOLVED": settings.CRAWL_FORCE_RETRY_UNRESOLVED,
             "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
@@ -341,6 +342,8 @@ def _build_args(task: str, post: Any) -> list[str]:
             args.append("--fixholes")
         if post.get("fix_missing_media"):
             args.append("--fix-missing-media")
+        if post.get("retry_lost_messages"):
+            args.append("--retry-lost-messages")
         if post.get("retry_references"):
             args.append("--retry-references")
         if post.get("force_retry_unresolved_references"):

@@ -35,7 +35,8 @@ class _GlobalTimeSeriesBase(View):
 
         in_target_pks = Channel.objects.in_target().values("pk")
         monthly_data = (
-            Message.objects.filter(channel__in=in_target_pks, date__isnull=False)
+            Message.objects.alive()
+            .filter(channel__in=in_target_pks, date__isnull=False)
             .filter(channel_cutoff_q())
             .annotate(month=TruncMonth("date"))
             .values("month")
@@ -100,8 +101,8 @@ class _ChannelTimeSeriesBase(View):
     y_label: ClassVar[str]
 
     def _msg_qs(self, channel: Channel, **filters):
-        """Base Message queryset for a channel, respecting out_of_target_after."""
-        qs = Message.objects.filter(channel=channel, **filters)
+        """Base Message queryset for a channel, respecting out_of_target_after and excluding lost."""
+        qs = Message.objects.alive().filter(channel=channel, **filters)
         if channel.out_of_target_after:
             qs = qs.filter(date__date__lte=channel.out_of_target_after)
         return qs
@@ -180,7 +181,8 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
         from network.utils import channel_cutoff_q
 
         qs = (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=in_target_pks,
                 forwarded_from=channel,
                 date__isnull=False,
@@ -231,12 +233,14 @@ class ChannelCrossRefsView(_ChannelTimeSeriesBase):
         mentioned = fwd_out + ref_out
 
         fwd_in = Counter(
-            Message.objects.filter(channel__in=in_target_pks, forwarded_from=channel)
+            Message.objects.alive()
+            .filter(channel__in=in_target_pks, forwarded_from=channel)
             .filter(channel_cutoff_q())
             .values_list("channel", flat=True)
         )
         ref_in = Counter(
-            Message.objects.filter(channel__in=in_target_pks, references=channel)
+            Message.objects.alive()
+            .filter(channel__in=in_target_pks, references=channel)
             .filter(channel_cutoff_q())
             .exclude(channel=channel)
             .values_list("channel", flat=True)
@@ -276,7 +280,7 @@ class ReactionsHistoryDataView(View):
         cutoff_q = channel_cutoff_q(channel_field="message__channel", date_field="message__date")
 
         top_emojis_qs = (
-            MessageReaction.objects.filter(message__channel__in=in_target_pks)
+            MessageReaction.objects.filter(message__channel__in=in_target_pks, message__is_lost=False)
             .filter(cutoff_q)
             .values("emoji")
             .annotate(total=Sum("count"))
@@ -290,6 +294,7 @@ class ReactionsHistoryDataView(View):
             MessageReaction.objects.filter(
                 message__channel__in=in_target_pks,
                 message__date__isnull=False,
+                message__is_lost=False,
                 emoji__in=top_emojis,
             )
             .filter(cutoff_q)
@@ -319,7 +324,7 @@ class ChannelReactionsHistoryView(View):
         if not spine:
             return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
 
-        top_emojis_filter = {"message__channel": channel}
+        top_emojis_filter = {"message__channel": channel, "message__is_lost": False}
         if channel.out_of_target_after:
             top_emojis_filter["message__date__date__lte"] = channel.out_of_target_after
         top_emojis_qs = (
@@ -337,6 +342,7 @@ class ChannelReactionsHistoryView(View):
             MessageReaction.objects.filter(
                 message__channel=channel,
                 message__date__isnull=False,
+                message__is_lost=False,
                 emoji__in=top_emojis,
                 **cutoff_kwargs,
             )
@@ -362,7 +368,7 @@ class ChannelReactionsHistoryView(View):
 class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
-        msg_qs = Message.objects.filter(channel=channel)
+        msg_qs = Message.objects.alive().filter(channel=channel)
         if channel.out_of_target_after:
             msg_qs = msg_qs.filter(date__date__lte=channel.out_of_target_after)
         texts = msg_qs.exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)

@@ -467,7 +467,7 @@
 <ol class="post-list list-unstyled mt-2">
   {% for post in page_obj %}
   <li>
-    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and active_tab != 'received' %} is-forwarded{% endif %}">
+    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and active_tab != 'received' %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
       {% if active_tab == "received" %}
       <div class="forwarded-banner">
         <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
@@ -540,6 +540,7 @@
           <span class="post-meta-item" data-bs-toggle="tooltip" title="Times forwarded"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
           <time class="post-meta-item" datetime="{{ post.date|date:'c' }}" data-bs-toggle="tooltip" title="Published"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
           {% if post.edit_date %}<span class="post-meta-item" data-bs-toggle="tooltip" title="Last edited"><i class="bi bi-pencil" aria-hidden="true"></i> {{ post.edit_date }}</span>{% endif %}
+          {% if post.is_lost %}<span class="post-lost-badge" data-bs-toggle="tooltip" title="No longer exists on Telegram">lost</span>{% endif %}
           {% for reaction in post.reactions.all %}
           <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
           {% endfor %}

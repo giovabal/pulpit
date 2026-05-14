@@ -220,6 +220,15 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--retry-lost-messages",
+            action="store_true",
+            default=False,
+            help=(
+                "Re-fetch every message marked is_lost=True. Messages that come back are unmarked and "
+                "their stats refreshed; messages that Telegram still doesn't return stay lost."
+            ),
+        )
+        parser.add_argument(
             "--retry-references",
             action="store_true",
             default=False,
@@ -372,6 +381,65 @@ class Command(BaseCommand):
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Error fetching replies for {channel}: {exc}"))
             logger.exception("fetch_channel_replies failed for %s", channel)
+
+    def _retry_lost_for_channel(
+        self,
+        channel: Channel,
+        crawler: ChannelCrawler,
+        index: int,
+        total_channels: int,
+        printer: ProgressPrinter,
+    ) -> None:
+        if not Message.objects.filter(channel=channel, is_lost=True).exists():
+            return
+        try:
+            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
+        except ValueError:
+            if not channel.username:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping retry-lost for channel {channel.telegram_id}: "
+                        "entity not in cache and no username stored"
+                    )
+                )
+                return
+            try:
+                telegram_channel = crawler.api_client.client.get_entity(channel.username)
+            except Exception as error:
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Skipping retry-lost for channel {channel.telegram_id}: {error}"))
+                return
+
+        prefix = f"[{index}/{total_channels}] [id={channel.id}] {channel} | "
+        try:
+            crawler.retry_lost_messages(
+                channel,
+                telegram_channel,
+                status_callback=lambda message, p=prefix: printer.indented(message, p),
+            )
+        except errors.FloodWaitError as error:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(f"Skipping retry-lost for channel {channel.telegram_id} due to flood wait: {error}")
+            )
+            if not settings.IGNORE_FLOODWAIT:
+                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return
+        except errors.rpcerrorlist.ChannelPrivateError:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Skipping retry-lost for channel {channel.telegram_id}: channel is private or inaccessible"
+                )
+            )
+            return
+        except Exception as error:
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Retry-lost failed for channel {channel.telegram_id}: {error}"))
+            logger.exception("retry_lost_messages failed for %s", channel)
+            return
+        printer.newline()
 
     def _refresh_channel(
         self,
@@ -593,6 +661,7 @@ class Command(BaseCommand):
         refresh_limit: int | None = options["refresh_limit"]
         fix_holes: bool = options["fixholes"] or settings.CRAWL_FIXHOLES
         fix_missing_media: bool = options["fix_missing_media"] or settings.CRAWL_FIX_MISSING_MEDIA
+        retry_lost_messages: bool = options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES
         retry_references: bool = options["retry_references"] or settings.CRAWL_RETRY_REFERENCES
         force_retry: bool = options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED
         # ── Refresh date window ────────────────────────────────────────────────
@@ -643,6 +712,7 @@ class Command(BaseCommand):
             or do_refresh
             or fix_holes
             or fix_missing_media
+            or retry_lost_messages
             or retry_references
             or fetch_replies
         )
@@ -840,6 +910,7 @@ class Command(BaseCommand):
                         or do_refresh
                         or fix_holes
                         or fix_missing_media
+                        or retry_lost_messages
                         or retry_references
                         or fetch_replies
                     ):
@@ -893,6 +964,9 @@ class Command(BaseCommand):
                                     self._fetch_replies_for_channel(
                                         channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
                                     )
+
+                            if retry_lost_messages:
+                                self._retry_lost_for_channel(channel, crawler, index, total_channels, printer)
 
                         printer.newline()
 

@@ -85,6 +85,44 @@ def _save_poll(message_pk: int, telegram_message: Any) -> None:
         )
 
 
+def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> dict:
+    """Extract the update_kwargs dict used to refresh a Message row from a Telethon object."""
+    replies_obj = getattr(telegram_message, "replies", None)
+    media = telegram_message.media
+    webpage = getattr(media, "webpage", None) if media else None
+    fc = getattr(telegram_message, "factcheck", None)
+    if fc is not None:
+        text_obj = getattr(fc, "text", None)
+        factcheck_data: dict | None = {
+            "need_check": bool(getattr(fc, "need_check", False)),
+            "country": getattr(fc, "country", None),
+            "text": getattr(text_obj, "text", None) if text_obj else None,
+        }
+    else:
+        factcheck_data = None
+    update_kwargs: dict = {
+        "views": telegram_message.views,
+        "forwards": telegram_message.forwards,
+        "replies": getattr(replies_obj, "replies", None),
+        "pinned": bool(telegram_message.pinned),
+        "edit_date": telegram_message.edit_date,
+        "post_author": telegram_message.post_author or "",
+        "message": telegram_message.message or "",
+        "webpage_url": getattr(webpage, "url", "") or "",
+        "webpage_type": getattr(webpage, "type", "") or "",
+        "factcheck": factcheck_data,
+        "_updated": now,
+        "stats_refreshed_at": now,
+    }
+    if telegram_message.fwd_from:
+        update_kwargs["fwd_from_date"] = getattr(telegram_message.fwd_from, "date", None)
+    if telegram_message.pinned:
+        update_kwargs["has_been_pinned"] = True
+    if media and hasattr(media, "poll"):
+        update_kwargs["media_type"] = "poll"
+    return update_kwargs
+
+
 class ChannelCrawler:
     def __init__(
         self,
@@ -607,10 +645,13 @@ class ChannelCrawler:
             _total_qs = _total_qs.filter(telegram_id__lt=iter_max_id)
         if channel.out_of_target_after is not None:
             _total_qs = _total_qs.filter(date__date__lte=channel.out_of_target_after)
-        total_in_db = _total_qs.count()
+        db_ids_initial = set(_total_qs.values_list("telegram_id", flat=True))
+        total_in_db = len(db_ids_initial)
         processed = 0
         updated = 0
         service_cleaned = 0
+        visited_ids: set[int] = set()
+        limit_hit = False
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             limit=None,
@@ -632,65 +673,100 @@ class ChannelCrawler:
                 if deleted:
                     service_cleaned += 1
                     total_in_db -= 1
+                    visited_ids.add(telegram_message.id)
                 continue
             processed += 1
             if limit is not None and processed > limit:
+                limit_hit = True
                 break
-            replies_obj = getattr(telegram_message, "replies", None)
-            media = telegram_message.media
-            webpage = getattr(media, "webpage", None) if media else None
-            fc = getattr(telegram_message, "factcheck", None)
-            if fc is not None:
-                text_obj = getattr(fc, "text", None)
-                factcheck_data = {
-                    "need_check": bool(getattr(fc, "need_check", False)),
-                    "country": getattr(fc, "country", None),
-                    "text": getattr(text_obj, "text", None) if text_obj else None,
-                }
-            else:
-                factcheck_data = None
-            update_kwargs: dict = {
-                "views": telegram_message.views,
-                "forwards": telegram_message.forwards,
-                "replies": getattr(replies_obj, "replies", None),
-                "pinned": bool(telegram_message.pinned),
-                "edit_date": telegram_message.edit_date,
-                "post_author": telegram_message.post_author or "",
-                "message": telegram_message.message or "",
-                "webpage_url": getattr(webpage, "url", "") or "",
-                "webpage_type": getattr(webpage, "type", "") or "",
-                "factcheck": factcheck_data,
-                "_updated": now,
-                "stats_refreshed_at": now,
-            }
-            if telegram_message.fwd_from:
-                update_kwargs["fwd_from_date"] = getattr(telegram_message.fwd_from, "date", None)
-            if telegram_message.pinned:
-                update_kwargs["has_been_pinned"] = True
-            if media and hasattr(media, "poll"):
-                update_kwargs["media_type"] = "poll"
+            update_kwargs = _build_msg_update_kwargs(telegram_message, now)
             msg_row = (
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                .values("pk", "replies_unavailable")
+                .values("pk", "replies_unavailable", "is_lost")
                 .first()
             )
             if msg_row is not None:
                 msg_pk = msg_row["pk"]
                 if msg_row["replies_unavailable"]:
                     update_kwargs.pop("replies", None)
+                if msg_row["is_lost"]:
+                    update_kwargs["is_lost"] = False
                 Message.objects.filter(pk=msg_pk).update(**update_kwargs)
                 updated += 1
+                visited_ids.add(telegram_message.id)
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
             update_status(f"refreshing message stats … {updated}/{total_in_db}")
+        newly_lost = 0
+        if not limit_hit:
+            missing_ids = db_ids_initial - visited_ids
+            if missing_ids:
+                newly_lost = Message.objects.filter(channel=channel, telegram_id__in=missing_ids, is_lost=False).update(
+                    is_lost=True
+                )
         notes: list[str] = []
         if service_cleaned:
             notes.append(f"{service_cleaned} service msg cleaned up")
-        if updated < total_in_db:
-            notes.append(f"{total_in_db - updated} missing on Telegram")
+        if newly_lost:
+            notes.append(f"{newly_lost} marked lost")
         suffix = f" ({', '.join(notes)})" if notes else ""
         update_status(f"refreshing message stats … {updated}/{total_in_db}{suffix}")
         return updated
+
+    def retry_lost_messages(
+        self,
+        channel: Channel,
+        telegram_channel: Any,
+        status_callback: Callable[[str], None] | None = None,
+    ) -> tuple[int, int]:
+        """Re-fetch rows currently marked is_lost=True for *channel*.
+
+        For each batch of up to 100 telegram_ids, calls client.get_messages. A non-None
+        Telethon message updates the row's stats and clears is_lost; a None response
+        leaves the row marked lost. Returns (recovered, still_lost) where the totals
+        do not include MessageService rows, which are cleaned up like in refresh_message_stats.
+        """
+
+        def update_status(message: str) -> None:
+            if status_callback:
+                status_callback(message)
+
+        lost_rows = list(Message.objects.filter(channel=channel, is_lost=True).values_list("pk", "telegram_id"))
+        total = len(lost_rows)
+        if total == 0:
+            return 0, 0
+        recovered = 0
+        still_lost = 0
+        now = timezone.now()
+        BATCH = 100
+        for i in range(0, total, BATCH):
+            batch = lost_rows[i : i + BATCH]
+            batch_pk_by_tid = {tid: pk for pk, tid in batch}
+            batch_tids = [tid for _, tid in batch]
+            self.api_client.wait()
+            tg_messages = self.api_client.client.get_messages(telegram_channel, ids=batch_tids)
+            for tg_msg in tg_messages:
+                if tg_msg is None:
+                    still_lost += 1
+                    continue
+                if isinstance(tg_msg, MessageService):
+                    Message.objects.filter(channel=channel, telegram_id=tg_msg.id).delete()
+                    recovered += 1
+                    continue
+                msg_pk = batch_pk_by_tid.get(tg_msg.id)
+                if msg_pk is None:
+                    continue
+                update_kwargs = _build_msg_update_kwargs(tg_msg, now)
+                update_kwargs["is_lost"] = False
+                row = Message.objects.filter(pk=msg_pk).values("replies_unavailable").first()
+                if row and row["replies_unavailable"]:
+                    update_kwargs.pop("replies", None)
+                Message.objects.filter(pk=msg_pk).update(**update_kwargs)
+                recovered += 1
+                _save_reactions(msg_pk, tg_msg)
+                _save_poll(msg_pk, tg_msg)
+            update_status(f"retrying lost messages … {recovered + still_lost}/{total}")
+        return recovered, still_lost
 
     def get_recommended_channels(self, channel: Channel) -> tuple[int, int]:
         """Fetch Telegram-recommended channels for *channel*. Returns (total_found, new_to_db)."""

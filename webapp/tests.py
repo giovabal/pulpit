@@ -348,6 +348,31 @@ class ChannelManagerTests(TestCase):
         self.assertEqual(Channel.objects.in_target().count(), 1)
 
 
+# ─── MessageManager ────────────────────────────────────────────────────────────
+
+
+class MessageManagerTests(TestCase):
+    def setUp(self) -> None:
+        org = Organization.objects.create(name="In target", is_in_target=True)
+        self.ch = Channel.objects.create(telegram_id=1, title="Ch", organization=org)
+        self.alive_msg = Message.objects.create(telegram_id=10, channel=self.ch, is_lost=False)
+        self.lost_msg = Message.objects.create(telegram_id=11, channel=self.ch, is_lost=True)
+
+    def test_alive_excludes_lost(self) -> None:
+        alive_pks = list(Message.objects.alive().values_list("pk", flat=True))
+        self.assertIn(self.alive_msg.pk, alive_pks)
+        self.assertNotIn(self.lost_msg.pk, alive_pks)
+
+    def test_default_queryset_includes_lost(self) -> None:
+        all_pks = list(Message.objects.values_list("pk", flat=True))
+        self.assertIn(self.alive_msg.pk, all_pks)
+        self.assertIn(self.lost_msg.pk, all_pks)
+
+    def test_alive_is_chainable(self) -> None:
+        qs = Message.objects.alive().filter(channel=self.ch)
+        self.assertEqual(qs.count(), 1)
+
+
 # ─── Channel model ─────────────────────────────────────────────────────────────
 
 
@@ -746,6 +771,24 @@ class ChannelDetailViewTests(TestCase):
     def test_uses_digg_paginator(self) -> None:
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
         self.assertIsInstance(response.context["paginator"], DiggPaginator)
+
+    def test_lost_excluded_by_default(self) -> None:
+        Message.objects.create(telegram_id=42, channel=self.ch, is_lost=True)
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
+        tids = {m.telegram_id for m in response.context["object_list"]}
+        self.assertNotIn(42, tids)
+
+    def test_lost_only_returns_lost(self) -> None:
+        Message.objects.create(telegram_id=42, channel=self.ch, is_lost=True)
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}) + "?lost=only")
+        tids = {m.telegram_id for m in response.context["object_list"]}
+        self.assertEqual(tids, {42})
+
+    def test_lost_include_returns_everything(self) -> None:
+        Message.objects.create(telegram_id=42, channel=self.ch, is_lost=True)
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}) + "?lost=include")
+        tids = {m.telegram_id for m in response.context["object_list"]}
+        self.assertEqual(tids, {0, 1, 2, 42})
 
 
 # ─── SoftPaginator ─────────────────────────────────────────────────────────────

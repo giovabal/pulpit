@@ -29,7 +29,7 @@ def apply_amplification_factor(
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
-        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+        for item in Message.objects.alive().filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
 
     fwd_q = (
@@ -39,7 +39,7 @@ def apply_amplification_factor(
     )
     forwards_received: dict[int, int] = {
         item["forwarded_from_id"]: item["total"]
-        for item in Message.objects.filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
+        for item in Message.objects.alive().filter(fwd_q).values("forwarded_from_id").annotate(total=Count("id"))
     }
 
     for node in graph_data["nodes"]:
@@ -70,12 +70,12 @@ def apply_content_originality(
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
     message_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
-        for item in Message.objects.filter(msg_q).values("channel_id").annotate(total=Count("id"))
+        for item in Message.objects.alive().filter(msg_q).values("channel_id").annotate(total=Count("id"))
     }
     fwd_q = msg_q & Q(forwarded_from__isnull=False)
     forwarded_counts: dict[int, int] = {
         item["channel_id"]: item["total"]
-        for item in Message.objects.filter(fwd_q).values("channel_id").annotate(total=Count("id"))
+        for item in Message.objects.alive().filter(fwd_q).values("channel_id").annotate(total=Count("id"))
     }
 
     for node in graph_data["nodes"]:
@@ -116,7 +116,7 @@ def apply_diffusion_lag(
     )
     window_h = window_days * 24 if window_days > 0 else None
     accum: dict[int, list[float]] = {}
-    for row in Message.objects.filter(fwd_q).values("channel_id", "date", "fwd_from_date").iterator():
+    for row in Message.objects.alive().filter(fwd_q).values("channel_id", "date", "fwd_from_date").iterator():
         lag_h = (row["date"] - row["fwd_from_date"]).total_seconds() / 3600
         if lag_h < 0:
             continue

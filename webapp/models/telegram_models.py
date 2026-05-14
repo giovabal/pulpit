@@ -10,7 +10,7 @@ from django.db import models
 from django.db.models import F, Max, Min, Q
 from django.urls import reverse
 
-from webapp.managers import ChannelManager
+from webapp.managers import ChannelManager, MessageManager
 from webapp.models import Organization
 from webapp.models.base import TelegramBaseModel
 
@@ -173,7 +173,8 @@ class Channel(TelegramBaseModel):
         refresh_cited_degree() for out-of-target channels.
         """
         cited_by = (
-            Message.objects.filter(channel__in=Channel.objects.in_target())
+            Message.objects.alive()
+            .filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
             .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
             .exclude(channel=self)
@@ -181,7 +182,8 @@ class Channel(TelegramBaseModel):
             .count()
         )
         cites_qs = (
-            Message.objects.filter(channel=self)
+            Message.objects.alive()
+            .filter(channel=self)
             .filter(Q(forwarded_from__in=Channel.objects.in_target()) | Q(references__in=Channel.objects.in_target()))
             .exclude(forwarded_from=self)
             .distinct()
@@ -205,7 +207,8 @@ class Channel(TelegramBaseModel):
         The other field is set to 0.
         """
         citations = (
-            Message.objects.filter(channel__in=Channel.objects.in_target())
+            Message.objects.alive()
+            .filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
             .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
             .exclude(channel=self)
@@ -234,8 +237,11 @@ class Message(TelegramBaseModel):
         "pinned",
         "silent",
     )
+    objects = MessageManager()
+
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="message_set")
     date = models.DateTimeField(null=True)
+    is_lost = models.BooleanField(default=False, db_index=True)
     out = models.BooleanField(default=False)
     mentioned = models.BooleanField(default=False)
     post = models.BooleanField(default=False)

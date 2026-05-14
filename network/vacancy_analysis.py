@@ -115,7 +115,8 @@ def _build_spread_adj(
         return {pk: [] for pk in channel_pks}, set(channel_pks)
 
     rows = list(
-        Message.objects.filter(
+        Message.objects.alive()
+        .filter(
             channel__in=channel_pks,
             forwarded_from__in=channel_pks,
             date__gte=date_from,
@@ -173,7 +174,8 @@ def _scores_abc(
     amp_counts: dict[int, int] = {}
     if selected & {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV"}:
         for r in (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=candidate_pks,
                 date__gte=closure_dt,
@@ -188,7 +190,8 @@ def _scores_abc(
     vacancy_src_org_pks: set[int] = set()
     if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"}:
         for r in (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel=vacancy_pk,
                 forwarded_from__isnull=False,
                 date__gte=before_start,
@@ -214,7 +217,8 @@ def _scores_abc(
     cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
     if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"}:
         for r in (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=candidate_pks,
                 forwarded_from__isnull=False,
                 date__gte=closure_dt,
@@ -230,7 +234,8 @@ def _scores_abc(
     cand_amp_org_pks: dict[int, set[int]] = defaultdict(set)
     if "BROKERAGE" in selected:
         for r in (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=candidate_pks,
                 date__gte=closure_dt,
@@ -351,7 +356,8 @@ def _scores_temporal(
         return dict.fromkeys(candidate_pks, 0.0)
 
     rows = list(
-        Message.objects.filter(
+        Message.objects.alive()
+        .filter(
             channel__in=orphaned_pks,
             forwarded_from__in=candidate_pks,
             date__gte=closure_dt,
@@ -421,7 +427,8 @@ def _analyze_vacancy(
     )
 
     raw_cands = list(
-        Message.objects.filter(
+        Message.objects.alive()
+        .filter(
             channel__in=orphaned_pks,
             forwarded_from__in=Channel.objects.in_target(),
             date__gte=closure_dt,

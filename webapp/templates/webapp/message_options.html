@@ -33,6 +33,24 @@
         {% endfor %}
       </div>
 
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
+        <div class="msg-options-label">Lost messages</div>
+        <label class="msg-options-item">
+          <input type="radio" name="lost" value="exclude" class="msg-opt-input"
+                 {% if lost == "exclude" %}checked{% endif %}> Exclude
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="lost" value="include" class="msg-opt-input"
+                 {% if lost == "include" %}checked{% endif %}> Include
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="lost" value="only" class="msg-opt-input"
+                 {% if lost == "only" %}checked{% endif %}> Only
+        </label>
+      </div>
+
     </div>
   </div>
 </div>

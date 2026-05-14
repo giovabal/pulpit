@@ -42,6 +42,9 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 }
 
 
+_LOST_MODES = ("exclude", "include", "only")
+
+
 def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc") -> QuerySet:
     sort = params.get("sort", default_sort)
     qs = qs.order_by("date" if sort == "asc" else "-date")
@@ -51,6 +54,13 @@ def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc"
         for t in selected:
             type_q |= _CONTENT_TYPE_Q[t]
         qs = qs.filter(type_q)
+    lost = params.get("lost", "exclude")
+    if lost not in _LOST_MODES:
+        lost = "exclude"
+    if lost == "exclude":
+        qs = qs.filter(is_lost=False)
+    elif lost == "only":
+        qs = qs.filter(is_lost=True)
     return qs
 
 
@@ -59,7 +69,10 @@ def _message_options_context(params: Any, default_sort: str = "desc") -> dict[st
     selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
     if not selected:
         selected = list(_CONTENT_TYPES)
-    options_active = sort != default_sort or set(selected) != set(_CONTENT_TYPES)
+    lost = params.get("lost", "exclude")
+    if lost not in _LOST_MODES:
+        lost = "exclude"
+    options_active = sort != default_sort or set(selected) != set(_CONTENT_TYPES) or lost != "exclude"
 
     extra: dict[str, Any] = {}
     if params.get("q"):
@@ -68,12 +81,15 @@ def _message_options_context(params: Any, default_sort: str = "desc") -> dict[st
         extra["sort"] = sort
     if set(selected) != set(_CONTENT_TYPES):
         extra["type"] = selected
+    if lost != "exclude":
+        extra["lost"] = lost
     original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
 
     return {
         "sort": sort,
         "selected_types": selected,
         "all_types": _CONTENT_TYPES,
+        "lost": lost,
         "options_active": options_active,
         "original_query": original_query,
     }
@@ -109,7 +125,7 @@ class HomeView(ListView):
 
         in_target_qs = Channel.objects.in_target()
         in_target_channels = in_target_qs.count()
-        in_target_msgs = Message.objects.filter(channel__in=in_target_qs.values("pk"))
+        in_target_msgs = Message.objects.alive().filter(channel__in=in_target_qs.values("pk"))
         msg_agg = in_target_msgs.aggregate(
             total=Count("id"),
             earliest=Min("date"),
@@ -128,7 +144,9 @@ class HomeView(ListView):
             .distinct()
             .count()
         )
-        total_replies = MessageReply.objects.filter(parent_message__channel__in=in_target_qs.values("pk")).count()
+        total_replies = MessageReply.objects.filter(
+            parent_message__channel__in=in_target_qs.values("pk"), parent_message__is_lost=False
+        ).count()
 
         ctx["summary"] = [
             {"icon": "bi-broadcast", "label": "Channels", "value": f"{in_target_channels:,}"},
@@ -393,15 +411,17 @@ class ChannelDetailView(ListView):
             .exists()
         )
 
-        msg_qs = Message.objects.filter(channel=ch)
+        msg_qs = Message.objects.alive().filter(channel=ch)
         if ch.out_of_target_after:
             msg_qs = msg_qs.filter(date__date__lte=ch.out_of_target_after)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
         total_forwards_sent = msg_qs.filter(forwarded_from__isnull=False).count()
-        total_forwards_received = Message.objects.filter(
-            channel__in=Channel.objects.in_target().values("pk"), forwarded_from=ch
-        ).count()
+        total_forwards_received = (
+            Message.objects.alive()
+            .filter(channel__in=Channel.objects.in_target().values("pk"), forwarded_from=ch)
+            .count()
+        )
         date_agg = msg_qs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
 
         summary = [

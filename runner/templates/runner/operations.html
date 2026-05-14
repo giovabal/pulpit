@@ -152,6 +152,11 @@
                        title="Find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
                   </label>
                   <label class="ops-flag">
+                    <input type="checkbox" name="retry_lost_messages" {% if ad.CRAWL_RETRY_LOST_MESSAGES %}checked{% endif %}>Retry lost messages
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Re-fetch every message currently marked as lost. Messages Telegram returns are unmarked and their stats refreshed; the rest stay lost."></i>
+                  </label>
+                  <label class="ops-flag">
                     <input type="checkbox" name="retry_references" {% if ad.CRAWL_RETRY_REFERENCES %}checked{% endif %}>Retry unresolved references
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Retry all pending t.me/ references that could not be resolved in a previous run."></i>

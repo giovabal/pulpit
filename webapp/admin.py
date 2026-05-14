@@ -67,7 +67,8 @@ class ChannelAdmin(admin.ModelAdmin):
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
-    list_display = ("__str__", "thumb", "date", "telegram_url", "short_text", "forwards", "views")
+    list_display = ("__str__", "thumb", "date", "telegram_url", "short_text", "forwards", "views", "is_lost")
+    list_filter = ("is_lost",)
     search_fields = ["message"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Message]:

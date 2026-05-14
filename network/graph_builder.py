@@ -170,8 +170,10 @@ def build_graph(
         today = datetime.date.today()
 
         messages_per_channel: dict[int, float] = {}
-        for ch_id, date in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids).values_list(
-            "channel_id", "date"
+        for ch_id, date in (
+            Message.objects.alive()
+            .filter(date_q, cutoff_q, channel_id__in=channel_ids)
+            .values_list("channel_id", "date")
         ):
             messages_per_channel[ch_id] = messages_per_channel.get(ch_id, 0.0) + _recency_decay(
                 date, today, recency_weights
@@ -181,9 +183,11 @@ def build_graph(
             channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
 
         forwarded_counts: dict[tuple[int, int], float] = {}
-        for ch_id, fwd_id, date in Message.objects.filter(
-            date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids
-        ).values_list("channel_id", "forwarded_from_id", "date"):
+        for ch_id, fwd_id, date in (
+            Message.objects.alive()
+            .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+            .values_list("channel_id", "forwarded_from_id", "date")
+        ):
             key = (ch_id, fwd_id)
             forwarded_counts[key] = forwarded_counts.get(key, 0.0) + _recency_decay(date, today, recency_weights)
 
@@ -193,6 +197,7 @@ def build_graph(
                 references_through.objects.filter(
                     make_date_q(start_date, end_date, field="message__date"),
                     ref_cutoff_q,
+                    message__is_lost=False,
                     channel_id__in=channel_ids,
                     message__channel_id__in=channel_ids,
                 )
@@ -213,7 +218,8 @@ def build_graph(
                 else Q(forwarded_from_id__isnull=False)
             )
             for ch_id, date in (
-                Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
+                Message.objects.alive()
+                .filter(date_q, cutoff_q, channel_id__in=channel_ids)
                 .filter(ref_filter)
                 .values_list("channel_id", "date")
             ):
@@ -224,7 +230,8 @@ def build_graph(
     else:
         messages_per_channel = {
             item["channel_id"]: item["total"]
-            for item in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
+            for item in Message.objects.alive()
+            .filter(date_q, cutoff_q, channel_id__in=channel_ids)
             .values("channel_id")
             .annotate(total=Count("id"))
         }
@@ -234,9 +241,8 @@ def build_graph(
 
         forwarded_counts = {
             (item["channel_id"], item["forwarded_from_id"]): item["total"]
-            for item in Message.objects.filter(
-                date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids
-            )
+            for item in Message.objects.alive()
+            .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
             .values("channel_id", "forwarded_from_id")
             .annotate(total=Count("id"))
         }
@@ -246,6 +252,7 @@ def build_graph(
                 (item["message__channel_id"], item["channel_id"]): item["total"]
                 for item in references_through.objects.filter(
                     make_date_q(start_date, end_date, field="message__date"),
+                    message__is_lost=False,
                     channel_id__in=channel_ids,
                     message__channel_id__in=channel_ids,
                 )
@@ -267,7 +274,8 @@ def build_graph(
             )
             referencing_counts = {
                 item["channel_id"]: item["total"]
-                for item in Message.objects.filter(date_q, cutoff_q, channel_id__in=channel_ids)
+                for item in Message.objects.alive()
+                .filter(date_q, cutoff_q, channel_id__in=channel_ids)
                 .filter(ref_filter)
                 .values("channel_id")
                 .annotate(total=Count("id"))

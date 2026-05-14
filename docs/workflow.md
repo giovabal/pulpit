@@ -116,9 +116,10 @@ The options panel is organized into three independent groups — each is its own
 | :----- | :------------- |
 | **Get new messages** | On by default. Downloads messages published since the last crawl. |
 | **Fetch replies** | Fetch reply threads from linked discussion groups for posts that have replies. |
-| **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
+| **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages. Messages that Telegram no longer returns are flipped to `is_lost=True` and stop counting toward charts, edge weights, and citation measures (they still appear in the message list when the *Lost messages* filter is set to *Include* or *Only*). A previously-lost message that Telegram returns again is automatically un-marked. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
 | **Fix message holes** | Scan message ID sequences for gaps and fill them in. Can run without *Get new messages*. |
 | **Fix missing media** | Re-download photos and videos that were never saved or are missing from disk. |
+| **Retry lost messages** | Re-fetch every message currently marked as lost. Messages that Telegram returns are unmarked and their stats refreshed; the rest stay lost. Useful after a transient outage or to clean up stale lost-flags accumulated by older refreshes that ran with a small date window. |
 | **Retry unresolved references** | Re-attempt t.me/ links that could not be resolved in a previous run. |
 
 **3. Refresh degrees** — recalculate citation counts (no Telegram connection needed).

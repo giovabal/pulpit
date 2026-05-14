@@ -83,7 +83,7 @@
   <ol class="post-list list-unstyled mt-2">
     {% for post in page_obj %}
     <li>
-      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from %} is-forwarded{% endif %}">
+      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
         <div class="search-result-channel">
           <a href="{{ post.channel.get_absolute_url }}">
             <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
@@ -102,6 +102,7 @@
             <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
             <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
             <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+            {% if post.is_lost %}<span class="post-lost-badge">lost</span>{% endif %}
           </div>
           <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
             <i class="bi bi-telegram" aria-hidden="true"></i>
