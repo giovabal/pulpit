@@ -824,6 +824,26 @@
   {% endif %}
   {% endfor %}
 </div>
+
+<div class="modal fade" id="export-overwrite-modal" tabindex="-1"
+     aria-labelledby="export-overwrite-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="export-overwrite-modal-label">Export already exists</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">An export named <strong id="export-overwrite-name"></strong> already exists.
+          Re-running will overwrite its data and configuration.</p>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="export-overwrite-confirm">Overwrite</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock content %}
 
 {% block extra_scripts %}
@@ -959,7 +979,42 @@
       if (this.poller) { clearInterval(this.poller); this.poller = null; }
     }
 
+    async _confirmExportName() {
+      if (this.name !== 'structural_analysis') return true;
+      const nameInput = document.getElementById('export_name');
+      if (!nameInput) return true;
+      const name = nameInput.value.trim();
+      if (!name) return true;
+      let exports;
+      try {
+        const r = await fetch('{% url "operations-exports" %}');
+        if (!r.ok) return true;
+        const data = await r.json();
+        exports = data.exports || [];
+      } catch (_) {
+        return true;
+      }
+      if (!exports.some(function (e) { return e.name === name; })) return true;
+      return await new Promise(function (resolve) {
+        const modalEl = document.getElementById('export-overwrite-modal');
+        document.getElementById('export-overwrite-name').textContent = '"' + name + '"';
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const confirmBtn = document.getElementById('export-overwrite-confirm');
+        let resolved = false;
+        function onConfirm() { resolved = true; modal.hide(); resolve(true); }
+        function onHidden() {
+          confirmBtn.removeEventListener('click', onConfirm);
+          modalEl.removeEventListener('hidden.bs.modal', onHidden);
+          if (!resolved) resolve(false);
+        }
+        confirmBtn.addEventListener('click', onConfirm);
+        modalEl.addEventListener('hidden.bs.modal', onHidden);
+        modal.show();
+      });
+    }
+
     async run() {
+      if (!(await this._confirmExportName())) return;
       const formData = new FormData(this.form);
       let resp;
       try {
