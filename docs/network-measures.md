@@ -6,7 +6,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 
 <figure>
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
-<figcaption><em>Channel table: 16 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
+<figcaption><em>Channel table: 18 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
 </figure>
 <br>
 
@@ -31,6 +31,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | Local clustering | `LOCALCLUSTERING` | Does this channel itself form closed citation cycles with its neighbours? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
+| Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
 | Spreading efficiency | `SPREADING` | If this channel starts spreading a message, what fraction of the network eventually receives it? |
 | Bridging centrality | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
 
@@ -225,6 +226,22 @@ A value of 1.0 means each published message is forwarded, on average, once by ot
 *Content originality = 1 − (forwarded messages / total messages). A value of 1.0 means every published message is original; a value of 0.0 means every message is a forward.*
 
 **In practice:** content originality is the most direct way to distinguish producers from distributors. Combined with amplification factor, it produces a two-axis characterisation of each channel's role: high on both (original content that spreads widely) signals a primary source; low on both (mostly forwards that nobody re-shares) signals a peripheral amplifier.
+
+---
+
+## Diffusion lag
+
+*A low diffusion lag means this channel picks up forwarded content soon after it is first published — an early adopter. A high lag means it echoes narratives days or weeks later — a late amplifier.*
+
+Diffusion lag is the **median** number of hours between the original publication date of a forwarded message and the moment this channel forwarded it. Telegram exposes the original post timestamp on every forwarded message, so the lag is observed directly per forward; the channel-level score aggregates across all forwards the channel published. The median is used in preference to the mean because forwarding lags are heavy-tailed: a small number of anniversary posts or archival re-shares would otherwise dominate a mean and obscure the channel's typical reaction time.
+
+An optional **reaction window** (`--diffusion-window DAYS`, default 30; set to 0 to disable) excludes forwards whose lag exceeds the window. This keeps the measure focused on contemporaneous amplification rather than retrospective re-circulation. Channels with no dated forwards in scope receive `null`.
+
+**Reference:** Kwon, S., Cha, M., Jung, K., Chen, W. & Wang, Y. (2013) "Prominent features of rumor propagation in online social media." *2013 IEEE 13th International Conference on Data Mining* (ICDM). [doi:10.1109/ICDM.2013.61](https://doi.org/10.1109/ICDM.2013.61). Cheng, J., Adamic, L., Dow, P.A., Kleinberg, J. & Leskovec, J. (2014) "Can cascades be predicted?" *Proceedings of the 23rd International Conference on World Wide Web* (WWW). [doi:10.1145/2566486.2567997](https://doi.org/10.1145/2566486.2567997).
+
+**In practice:** diffusion lag answers a question structural measures cannot: *when* does a channel typically react? Two channels with identical PageRank and amplification factor can differ sharply on diffusion lag — one operating in near-real time, the other consistently lagging by half a day. Early adopters with high reach are agenda-setters within their community; late amplifiers with high reach extend the half-life of a narrative beyond its acute phase. Pair with `AMPLIFICATION` to separate channels by both reach and timing.
+
+**Example.** Within a network of nationalist commentators, two channels each forward roughly 60% of a primary broadcaster's posts and have comparable in-degree. Their diffusion lags are 1.8 hours and 17 hours respectively. The first is part of the broadcaster's same-day distribution chain; the second appears to be a slower aggregator that re-posts after the news cycle has moved on. The structural roles look identical; the temporal roles are not.
 
 ---
 

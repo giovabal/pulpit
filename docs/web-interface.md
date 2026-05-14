@@ -6,6 +6,19 @@ The Operations panel is the dashboard you use to launch data collection and anal
 
 ---
 
+## Home page — `/`
+
+> **[PLACEHOLDER: `images/home.png`]** Home page: project-level summary cards, time-series charts, and the recent-messages feed.
+
+The landing page gives a project-level snapshot of the monitored corpus:
+
+- **Summary cards** — total in-target channels, total messages collected, the date range of the message archive, and the count of forwarded messages. Lost messages are excluded from every aggregate so the totals match the crawl scope. All four values are computed in a single aggregate query for fast page loads on large databases.
+- **Time-series charts** — month-by-month aggregates across the whole corpus: messages sent, active channels, forwards, views, reactions, and average involvement. Each chart is rendered by the same Chart.js component used on channel detail pages, including the dashed vertical-line event annotations (see [Workflow § Events](workflow.md#mark-events-on-charts)).
+- **Reactions per month** — a collapsible panel mirroring the per-channel chart at the project level. Reaction counts are aggregated across all monitored channels and broken down by the eight most-used emojis; each channel's `out_of_target_after` cutoff is respected so a channel that left the target set later stops contributing from that month onward.
+- **Recent messages** — a feed of the latest posts collected, with a link to each source channel and the same post-card layout used elsewhere (views, forwards, reactions, edit indicator, replies pill).
+
+---
+
 ## Channel list — `/channels/`
 
 <figure>
@@ -42,6 +55,7 @@ Each channel has a dedicated detail page with:
 - **Vacancy Analysis card** — appears when the channel has a registered vacancy (see [Vacancy analysis](vacancy-analysis.md))
 - **Message list** — paginated list of crawled messages with timestamps and forward indicators. Each post card shows views, forwards, reactions, and the post date. When a message has been edited after original publication, a pencil icon and "Edited" label appear in the footer (exact edit timestamp on hover). When a channel has "Sign messages" enabled, the post author's name appears on the card below the message body.
 - **Forwarded-from filter** — show only forwarded messages or only original posts
+- **Lost messages filter** — tristate control (Exclude / Include / Only; default Exclude). Lost messages are rows that Telegram no longer returns; they remain in the database but are excluded from every aggregate, edge weight, and citation measure. Switching to *Include* or *Only* renders them faded with a strikethrough body and a small "lost" chip in the footer.
 
 <figure>
 <img src="../webapp_engine/static/screenshot_12.jpg" alt="Channel detail showing vacancy analysis">
@@ -98,6 +112,16 @@ For each task:
 - **Options** — expand to set task-specific parameters (see [Workflow](workflow.md) for a full reference)
 - **Status indicator** — idle / running / done / failed
 - **Import from export** — pre-fill the Export Network options from a previous export's `summary.json` to reproduce or extend it
+- **Retry lost messages** — a Get Channels option that bulk-refetches every message currently marked as lost; rows Telegram returns are unmarked and their stats refreshed
+- **Export name overwrite confirmation** — when the typed export name collides with an export already on disk, clicking *Run* on Structural Analysis opens a confirmation modal before launching the task; cancelling leaves the form untouched
+
+---
+
+## Graph viewer features
+
+The exported `graph.html` and `graph3d.html` files are self-contained interactive maps you open from the Data page. Beyond search, pan/zoom, community filtering, and the Options panel, the viewer surfaces the active configuration through a small ambient widget:
+
+- **Info bar** — a collapsible pill at the bottom-centre of both the 2D and 3D viewers. By default it appears as a small half-transparent sliders icon. Clicking it expands horizontally into compact chips for Layout, Community strategy, Size metric, Theme, Labels mode, Coloured/Plain edges, and (when filtering) the active community group. Chips update live whenever an option is changed in the Options panel; click the icon again to collapse it back.
 
 ---
 
@@ -147,6 +171,17 @@ Create and manage user accounts. The email address is used as the username. Set 
 ### Vacancies — `/manage/vacancies/`
 
 Register channel vacancies for structural replacement analysis. See [Vacancy analysis](vacancy-analysis.md).
+
+### Maintenance — `/manage/maintenance/`
+
+Staff-only database maintenance. The page reports the active engine, the database's current on-disk size, and a checklist of optimization strategies available for that engine. Pick one or more (or accept the default of all) and click **Run optimization** to execute them sequentially; the page reports per-step timing and the size before and after.
+
+| Engine | Available strategies |
+| :----- | :------------------- |
+| **SQLite** | `ANALYZE`, `PRAGMA optimize`, `PRAGMA wal_checkpoint(TRUNCATE)`, `VACUUM` |
+| **PostgreSQL** | `ANALYZE`, `VACUUM ANALYZE` (executed with autocommit, since `VACUUM` cannot run inside a transaction) |
+
+The same catalog and the current database size are available programmatically through `GET /manage/api/maintenance/`; running an optimization is `POST /manage/api/maintenance/optimize/`. Strategies are run in the order listed; the run stops at the first failure and returns the partial timing report.
 
 ---
 

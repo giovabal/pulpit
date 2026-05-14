@@ -246,6 +246,7 @@ python manage.py structural_analysis --gexf --graphml
 python manage.py structural_analysis --csv
 python manage.py structural_analysis --measures PAGERANK,BETWEENNESS
 python manage.py structural_analysis --measures ALL
+python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # reaction window in days; 0 disables
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31

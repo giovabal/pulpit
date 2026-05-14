@@ -124,9 +124,9 @@ After export, the output directory contains self-contained files that can be sha
 
 ---
 
-## Network measures — 17 per channel
+## Network measures — 18 per channel
 
-Each channel receives a score for up to 17 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 18 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -158,6 +158,7 @@ Each channel receives a score for up to 17 measures. All can be used to size nod
 | Measure | What it surfaces |
 | :------ | :--------------- |
 | [Content originality](docs/network-measures.md#content-originality) | Producers vs. redistributors — 1 minus the fraction of forwarded messages |
+| [Diffusion lag](docs/network-measures.md#diffusion-lag) | Median hours between a forwarded message's original publication and this channel forwarding it — early adopter vs. late amplifier |
 | [Spreading efficiency](docs/network-measures.md#spreading-efficiency) | Fraction of the network reached if this channel seeds a rumour (Monte Carlo SIR simulation) |
 
 See [Network measures](docs/network-measures.md) for academic references and worked examples for each measure.
@@ -232,10 +233,10 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 | :--- | :------- |
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
-| [Network measures](docs/network-measures.md) | All 15 per-channel measures with academic references and worked examples |
+| [Network measures](docs/network-measures.md) | All 18 per-channel measures with academic references and worked examples |
 | [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
-| [Vacancy analysis](docs/vacancy-analysis.md) | Six algorithms for identifying structural replacement channels after a node disappears |
+| [Vacancy analysis](docs/vacancy-analysis.md) | 6 algorithms for identifying structural replacement channels after a node disappears |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
 | [Configuration](CONFIGURATION.md) | All `.env` settings |
