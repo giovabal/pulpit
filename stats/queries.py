@@ -24,11 +24,11 @@ def _month_spine(q: models.Q) -> list[str]:
 
 
 def global_month_spine() -> list[str]:
-    """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across interesting channels."""
+    """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across in-target channels."""
     from webapp.models import Channel
 
-    interesting_pks = Channel.objects.interesting().values("pk")
-    return _month_spine(models.Q(channel__in=interesting_pks))
+    in_target_pks = Channel.objects.in_target().values("pk")
+    return _month_spine(models.Q(channel__in=in_target_pks))
 
 
 def channel_month_spine(channel: Channel) -> list[str]:

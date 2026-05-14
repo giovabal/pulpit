@@ -51,7 +51,7 @@ class Channel(TelegramBaseModel):
     is_active = models.BooleanField(default=False)
     is_lost = models.BooleanField(default=False)
     is_private = models.BooleanField(default=False)
-    interesting_override = models.BooleanField(null=True, blank=True, default=None)
+    in_target_override = models.BooleanField(null=True, blank=True, default=None)
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)
@@ -71,7 +71,7 @@ class Channel(TelegramBaseModel):
     access_hash = models.BigIntegerField(null=True)
     in_degree = models.PositiveIntegerField(null=True)
     out_degree = models.PositiveIntegerField(null=True)
-    uninteresting_after = models.DateField(null=True, blank=True)
+    out_of_target_after = models.DateField(null=True, blank=True)
     restriction_reason = models.JSONField(null=True, blank=True)
     message_ttl = models.PositiveIntegerField(null=True, blank=True)
     noforwards = models.BooleanField(default=False)
@@ -129,8 +129,8 @@ class Channel(TelegramBaseModel):
         self,
     ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:
         qs = self.message_set.exclude(date__isnull=True)
-        if self.uninteresting_after:
-            qs = qs.filter(date__date__lte=self.uninteresting_after)
+        if self.out_of_target_after:
+            qs = qs.filter(date__date__lte=self.out_of_target_after)
         agg = qs.aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]
@@ -170,26 +170,24 @@ class Channel(TelegramBaseModel):
         matching the edge construction in graph_builder. Respects REVERSED_EDGES:
         when True, citations are incoming edges (stored in in_degree); when False,
         citations are outgoing edges (stored in out_degree), consistent with
-        refresh_cited_degree() for non-interesting channels.
+        refresh_cited_degree() for out-of-target channels.
         """
         cited_by = (
-            Message.objects.filter(channel__in=Channel.objects.interesting())
+            Message.objects.filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(Q(channel__uninteresting_after__isnull=True) | Q(date__date__lte=F("channel__uninteresting_after")))
+            .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
             .exclude(channel=self)
             .distinct()
             .count()
         )
         cites_qs = (
             Message.objects.filter(channel=self)
-            .filter(
-                Q(forwarded_from__in=Channel.objects.interesting()) | Q(references__in=Channel.objects.interesting())
-            )
+            .filter(Q(forwarded_from__in=Channel.objects.in_target()) | Q(references__in=Channel.objects.in_target()))
             .exclude(forwarded_from=self)
             .distinct()
         )
-        if self.uninteresting_after:
-            cites_qs = cites_qs.filter(date__date__lte=self.uninteresting_after)
+        if self.out_of_target_after:
+            cites_qs = cites_qs.filter(date__date__lte=self.out_of_target_after)
         cites = cites_qs.count()
         if settings.REVERSED_EDGES:
             self._set_degrees(cited_by, cites)
@@ -197,9 +195,9 @@ class Channel(TelegramBaseModel):
             self._set_degrees(cites, cited_by)
 
     def refresh_cited_degree(self) -> None:
-        """Recompute and persist the citation count for a non-interesting channel.
+        """Recompute and persist the citation count for a out-of-target channel.
 
-        Counts how many messages from interesting channels cite this channel (via
+        Counts how many messages from in-target channels cite this channel (via
         forwards or t.me/username references) and stores the total in the field that
         matches the graph edge direction:
           - in_degree  when REVERSED_EDGES=True  (citations arrive as incoming edges)
@@ -207,9 +205,9 @@ class Channel(TelegramBaseModel):
         The other field is set to 0.
         """
         citations = (
-            Message.objects.filter(channel__in=Channel.objects.interesting())
+            Message.objects.filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(Q(channel__uninteresting_after__isnull=True) | Q(date__date__lte=F("channel__uninteresting_after")))
+            .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
             .exclude(channel=self)
             .distinct()
             .count()

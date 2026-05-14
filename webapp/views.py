@@ -92,7 +92,7 @@ class HomeView(ListView):
         if not q:
             return Message.objects.none()
         qs = (
-            Message.objects.filter(channel__in=Channel.objects.interesting())
+            Message.objects.filter(channel__in=Channel.objects.in_target())
             .select_related("channel", "channel__organization", "forwarded_from")
             .filter(message__icontains=q)
         )
@@ -107,10 +107,10 @@ class HomeView(ListView):
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET))
 
-        interesting_qs = Channel.objects.interesting()
-        interesting_channels = interesting_qs.count()
-        interesting_msgs = Message.objects.filter(channel__in=interesting_qs.values("pk"))
-        msg_agg = interesting_msgs.aggregate(
+        in_target_qs = Channel.objects.in_target()
+        in_target_channels = in_target_qs.count()
+        in_target_msgs = Message.objects.filter(channel__in=in_target_qs.values("pk"))
+        msg_agg = in_target_msgs.aggregate(
             total=Count("id"),
             earliest=Min("date"),
             latest=Max("date"),
@@ -119,19 +119,19 @@ class HomeView(ListView):
         total_messages = msg_agg["total"]
         total_forwards = msg_agg["forwards"]
         total_subscribers = (
-            interesting_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"]
+            in_target_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"]
             or 0
         )
         total_forward_edges = (
-            interesting_msgs.filter(forwarded_from__in=interesting_qs.values("pk"))
+            in_target_msgs.filter(forwarded_from__in=in_target_qs.values("pk"))
             .values("channel_id", "forwarded_from_id")
             .distinct()
             .count()
         )
-        total_replies = MessageReply.objects.filter(parent_message__channel__in=interesting_qs.values("pk")).count()
+        total_replies = MessageReply.objects.filter(parent_message__channel__in=in_target_qs.values("pk")).count()
 
         ctx["summary"] = [
-            {"icon": "bi-broadcast", "label": "Channels", "value": f"{interesting_channels:,}"},
+            {"icon": "bi-broadcast", "label": "Channels", "value": f"{in_target_channels:,}"},
             {
                 "icon": "bi-chat-left-text",
                 "label": "Messages collected",
@@ -213,7 +213,7 @@ class ChannelListView(ListView):
 
     def get_queryset(self) -> QuerySet[Channel]:
         return (
-            Channel.objects.interesting()
+            Channel.objects.in_target()
             .select_related("organization")
             .prefetch_related(self._pic_prefetch, "groups")
             .annotate(
@@ -227,7 +227,7 @@ class ChannelListView(ListView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
-            Channel.objects.filter(organization__is_interesting=True)
+            Channel.objects.filter(organization__is_in_target=True)
             .select_related("organization")
             .prefetch_related(self._pic_prefetch)
             .annotate(
@@ -238,7 +238,7 @@ class ChannelListView(ListView):
             .order_by("title")
         )
         ctx["excluded_list"] = (
-            Channel.objects.filter(organization__is_interesting=True)
+            Channel.objects.filter(organization__is_in_target=True)
             .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_lost=True)
             .exclude(is_private=True)
@@ -253,9 +253,9 @@ class ChannelListView(ListView):
         )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
-        ctx["organizations"] = Organization.objects.filter(is_interesting=True).order_by("name")
+        ctx["organizations"] = Organization.objects.filter(is_in_target=True).order_by("name")
         ctx["groups"] = (
-            ChannelGroup.objects.filter(channels__in=Channel.objects.interesting()).distinct().order_by("name")
+            ChannelGroup.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )
         ctx["has_vacancies"] = ChannelVacancy.objects.exists()
         return ctx
@@ -267,7 +267,7 @@ class VacanciesView(TemplateView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
         orphaned_sub = Subquery(
-            Channel.objects.interesting()
+            Channel.objects.in_target()
             .filter(message_set__forwarded_from=OuterRef("channel"))
             .values("pk")
             .annotate(c=Count("pk"))
@@ -302,7 +302,7 @@ class MessageSearchView(ListView):
     page_kwarg = "page"
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = Message.objects.filter(channel__in=Channel.objects.interesting()).select_related(
+        qs = Message.objects.filter(channel__in=Channel.objects.in_target()).select_related(
             "channel", "channel__organization", "forwarded_from"
         )
         q = self.request.GET.get("q", "").strip()
@@ -337,7 +337,7 @@ class ChannelDetailView(ListView):
             qs = (
                 Message.objects.filter(
                     forwarded_from=self.selected_channel,
-                    channel__in=Channel.objects.interesting().values("pk"),
+                    channel__in=Channel.objects.in_target().values("pk"),
                 )
                 .select_related("channel", "channel__organization", "forwarded_from")
                 .prefetch_related("references", "reactions")
@@ -355,8 +355,8 @@ class ChannelDetailView(ListView):
             .select_related("forwarded_from")
             .prefetch_related("references", "reactions")
         )
-        if self.selected_channel.uninteresting_after:
-            qs = qs.filter(date__date__lte=self.selected_channel.uninteresting_after)
+        if self.selected_channel.out_of_target_after:
+            qs = qs.filter(date__date__lte=self.selected_channel.out_of_target_after)
         if q:
             qs = qs.filter(message__icontains=q)
         if self.request.GET.get("forwards_only"):
@@ -386,21 +386,21 @@ class ChannelDetailView(ListView):
             extra += "&forwards_only=1"
         context_data["original_query"] = context_data["original_query"] + extra
 
-        is_interesting = (
-            Channel.objects.filter(organization__is_interesting=True)
+        is_in_target = (
+            Channel.objects.filter(organization__is_in_target=True)
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .filter(pk=ch.pk)
             .exists()
         )
 
         msg_qs = Message.objects.filter(channel=ch)
-        if ch.uninteresting_after:
-            msg_qs = msg_qs.filter(date__date__lte=ch.uninteresting_after)
+        if ch.out_of_target_after:
+            msg_qs = msg_qs.filter(date__date__lte=ch.out_of_target_after)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
         total_forwards_sent = msg_qs.filter(forwarded_from__isnull=False).count()
         total_forwards_received = Message.objects.filter(
-            channel__in=Channel.objects.interesting().values("pk"), forwarded_from=ch
+            channel__in=Channel.objects.in_target().values("pk"), forwarded_from=ch
         ).count()
         date_agg = msg_qs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
 
@@ -437,7 +437,7 @@ class ChannelDetailView(ListView):
         if total_reactions:
             summary.append({"icon": "bi-emoji-smile", "label": "Total reactions", "value": f"{total_reactions:,}"})
 
-        if not is_interesting:
+        if not is_in_target:
             for card in summary[:-1]:
                 card["dim"] = True
 
@@ -503,7 +503,7 @@ class ChannelDetailView(ListView):
             },
         ]
 
-        if not is_interesting:
+        if not is_in_target:
             panels = [p for p in panels if p["id"] == "ch-cross-refs"]
 
         try:
@@ -520,7 +520,7 @@ class ChannelDetailView(ListView):
                 "selected_channel": ch,
                 "summary": summary,
                 "panels": panels,
-                "is_interesting": is_interesting,
+                "is_in_target": is_in_target,
                 "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
                 "channel_groups": list(ch.groups.order_by("name")),
@@ -569,7 +569,7 @@ class VacancyAnalysisView(View):
         )
 
         orphaned = (
-            Channel.objects.interesting()
+            Channel.objects.in_target()
             .filter(
                 message_set__forwarded_from=ch,
                 message_set__date__gte=before_start,
@@ -583,7 +583,7 @@ class VacancyAnalysisView(View):
         raw = list(
             Message.objects.filter(
                 channel__in=orphaned_pks,
-                forwarded_from__in=Channel.objects.interesting(),
+                forwarded_from__in=Channel.objects.in_target(),
                 date__gte=closure_dt,
                 date__lte=after_end,
             )

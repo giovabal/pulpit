@@ -181,7 +181,7 @@ class _ApiTestCase(TestCase):
 
 class OrganizationViewSetTests(_ApiTestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Alpha", color="#ff0000", is_interesting=True)
+        self.org = Organization.objects.create(name="Alpha", color="#ff0000", is_in_target=True)
 
     def test_list_returns_organizations(self):
         resp = self.jget(_api("organizations/"))
@@ -195,15 +195,15 @@ class OrganizationViewSetTests(_ApiTestCase):
         self.assertEqual(org["channel_count"], 1)
 
     def test_create_organization(self):
-        resp = self.jpost(_api("organizations/"), {"name": "Beta", "color": "#00ff00", "is_interesting": False})
+        resp = self.jpost(_api("organizations/"), {"name": "Beta", "color": "#00ff00", "is_in_target": False})
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(Organization.objects.filter(name="Beta").exists())
 
     def test_update_organization(self):
-        resp = self.jpatch(_api(f"organizations/{self.org.pk}/"), {"is_interesting": False})
+        resp = self.jpatch(_api(f"organizations/{self.org.pk}/"), {"is_in_target": False})
         self.assertEqual(resp.status_code, 200)
         self.org.refresh_from_db()
-        self.assertFalse(self.org.is_interesting)
+        self.assertFalse(self.org.is_in_target)
 
     def test_delete_organization(self):
         resp = self.jdelete(_api(f"organizations/{self.org.pk}/"))
@@ -273,7 +273,7 @@ class ChannelGroupViewSetTests(_ApiTestCase):
 
 class ChannelViewSetTests(_ApiTestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="OrgA", color="#ff0000", is_interesting=True)
+        self.org = Organization.objects.create(name="OrgA", color="#ff0000", is_in_target=True)
         self.org2 = Organization.objects.create(name="OrgB", color="#0000ff")
         self.group = ChannelGroup.objects.create(name="G1")
         self.ch = Channel.objects.create(telegram_id=1, title="Alpha Channel", username="alpha", organization=self.org)
@@ -313,8 +313,8 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertIn("Alpha Channel", titles)
         self.assertNotIn("Lost", titles)
 
-    def test_status_filter_interesting(self):
-        resp = self.jget(_api("channels/?status=interesting"))
+    def test_status_filter_in_target(self):
+        resp = self.jget(_api("channels/?status=in_target"))
         ids = [c["id"] for c in resp.json()["results"]]
         self.assertIn(self.ch.pk, ids)
         self.assertNotIn(self.ch_lost.pk, ids)

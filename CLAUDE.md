@@ -29,7 +29,7 @@ See WORKFLOW.md for all flags and options.
 
 1. User adds `SearchTerm` entries in Django admin
 2. Operations panel (`/operations/`) or `search_channels` finds channels via Telegram API → `Channel` records
-3. User assigns channels to `Organization` objects, marks `is_interesting=True`
+3. User assigns channels to `Organization` objects, marks `is_in_target=True`
 4. Operations panel or `crawl_channels` fetches messages and resolves cross-channel references
 5. Operations panel or `structural_analysis` builds the graph, detects communities, runs layout, writes output to `graph/`
 
@@ -57,7 +57,7 @@ See WORKFLOW.md for all flags and options.
 - **`webapp_engine/middleware.py`** (`WebAccessMiddleware`) — Enforces `WEB_ACCESS` policy: `ALL` (no-op), `OPEN` (staff required for `/operations/` and `/manage/`), `PROTECTED` (login required everywhere; staff required for `/operations/` and `/manage/`). Django admin's own auth handles `/admin/` in non-`ALL` modes.
 - **`webapp/context_processors.py`** — Exposes `WEB_ACCESS` to all templates.
 - **`webapp/models/`** — `Channel`, `Message` (with `references` M2M back to `Channel`), `Organization`, `SearchTerm`, media models, `ChannelVacancy` (channel + closure_date + note; one per channel).
-- **`webapp/views.py`** (`VacanciesView`) — `/channels/vacancies/` lists analyst-designated vacancy channels. `ChannelDetailView` passes the vacancy to the template so the Vacancy Analysis card is rendered. `VacancyAnalysisView` (`GET /channel/<pk>/vacancy-analysis/`) is the JSON endpoint that drives the card: it accepts `months_before`, `months_after`, and `only_after_vacancy` parameters, identifies orphaned amplifiers (interesting channels that forwarded from the vacancy in the before window), then scores replacement candidates using three academically grounded metrics — Jaccard amplifier similarity (Small 1973), structural equivalence cosine score (Lorrain & White 1971), and brokerage role Jaccard (Gould & Fernandez 1989). Results are returned sorted by first activity date and rendered in a client-side sortable table.
+- **`webapp/views.py`** (`VacanciesView`) — `/channels/vacancies/` lists analyst-designated vacancy channels. `ChannelDetailView` passes the vacancy to the template so the Vacancy Analysis card is rendered. `VacancyAnalysisView` (`GET /channel/<pk>/vacancy-analysis/`) is the JSON endpoint that drives the card: it accepts `months_before`, `months_after`, and `only_after_vacancy` parameters, identifies orphaned amplifiers (in-target channels that forwarded from the vacancy in the before window), then scores replacement candidates using three academically grounded metrics — Jaccard amplifier similarity (Small 1973), structural equivalence cosine score (Lorrain & White 1971), and brokerage role Jaccard (Gould & Fernandez 1989). Results are returned sorted by first activity date and rendered in a client-side sortable table.
 - **`events/models.py`** — `EventType` (name, description, hex color; default red) and `Event` (date, subject, FK to `EventType`). Both registered in Django admin.
 - **`events/views.py`** (`EventsDataView`) — `GET /events/data/` returns all events as a JSON array `[{date, subject, action, color}, …]`.
 - **`webapp/templates/webapp/index.html`** — `buildEventAnnotations(labels, events)` groups events by month and builds `chartjs-plugin-annotation` vertical-line annotations; `renderChart(canvas, data, events)` passes them to every Chart.js instance. Lines are dashed, colored by `EventType.color`; hovering shows a popup with date, action and subject.
@@ -82,7 +82,7 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
 | `EGODENSITY` | Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = fully connected clique (echo chamber); `null` for fewer than 2 neighbours |
 | `LOCALCLUSTERING` | Directed local clustering coefficient (Fagiolo 2007); fraction of directed triangles through the node relative to all possible directed triads; 0 for nodes with total degree < 2 |
-| `AMPLIFICATION` | Forwards received from interesting channels / own message count |
+| `AMPLIFICATION` | Forwards received from in-target channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
 | `DIFFUSIONLAG` | Median hours from original post date to forward date (within a reaction window, default 30 days; set `--diffusion-window 0` to disable); `null` for channels with no dated forwards; low = early adopter, high = late amplifier |
 | `SPREADING` | SIR spreading efficiency — mean fraction infected when node seeds; Monte Carlo; runs set by `--spreading-runs` (default 200) |

@@ -11,7 +11,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ["id", "name", "color", "is_interesting", "channel_count"]
+        fields = ["id", "name", "color", "is_in_target", "channel_count"]
 
 
 class ChannelVacancySerializer(serializers.ModelSerializer):
@@ -78,9 +78,9 @@ class ChannelSerializer(serializers.ModelSerializer):
             "out_degree",
             "is_lost",
             "is_private",
-            "interesting_override",
+            "in_target_override",
             "date",
-            "uninteresting_after",
+            "out_of_target_after",
             "restriction_reason",
             "message_ttl",
             "noforwards",

@@ -65,17 +65,17 @@ An "organization" in Pulpit is a category label you define — for example *Far 
 
 Repeat for all the channels you want in your analysis. Channels without an organization are not collected or included in the map.
 
-**To create organizations:** go to **Manage → Organizations**, click **Add**, give the organization a name and a colour, and make sure **Is interesting** is ticked. Only organizations marked as interesting are included in data collection.
+**To create organizations:** go to **Manage → Organizations**, click **Add**, give the organization a name and a colour, and make sure **In target** is ticked. Only organizations marked as in target are included in data collection.
 
 > **Tip:** you can also assign organizations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organization for all of them at once.
 
-**Interesting override (optional):** each channel has an **Override** field that lets you force its interesting status independently of its organization:
+**In-target override (optional):** each channel has an **Override** field that lets you force its in-target status independently of its organization:
 
 | Value | Meaning |
 | :---- | :------ |
-| **Auto** (default) | Interesting status follows the organization — no change from normal behaviour. |
-| **Yes** | Always treated as interesting, even if unassigned or in a non-interesting organization. |
-| **No** | Always excluded, even if its organization is marked as interesting. |
+| **Auto** (default) | In-target status follows the organization — no change from normal behaviour. |
+| **Yes** | Always treated as in target, even if unassigned or in an out-of-target organization. |
+| **No** | Always excluded, even if its organization is marked as in target. |
 
 Set it from the **Override** column in the Channels list (inline dropdown) or from the channel edit page. Use *Yes* to include a one-off channel without reorganizing, and *No* to temporarily suspend a channel without removing it from its organization.
 
@@ -83,7 +83,7 @@ Set it from the **Override** column in the Channels list (inline dropdown) or fr
 
 To create groups go to **Manage → Channel groups** and click **Add**. To assign a channel to a group, open its edit page and pick from the **Groups** field.
 
-Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all interesting channels are included, as usual.
+Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all in-target channels are included, as usual.
 
 Use groups when you want to run separate analyses on a subset of your corpus without changing organizations — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
 
@@ -125,13 +125,13 @@ The options panel is organized into three independent groups — each is its own
 
 | Option | When to use it |
 | :----- | :------------- |
-| **In target channels** | On by default. Recomputes in-degree and out-degree for all interesting channels. |
-| **Out of target channels** | On by default. Recomputes citation degree for non-interesting channels referenced by interesting ones. |
+| **In target channels** | On by default. Recomputes in-degree and out-degree for all in-target channels. |
+| **Out of target channels** | On by default. Recomputes citation degree for out-of-target channels referenced by in-target ones. |
 
 **Limiting the scope:** you can restrict the crawl to a subset of channels in two ways:
 
 - **DB id filter** — enter specific channel IDs (e.g. `5, 10-20, 50`). Find a channel's ID in the Manage → Channels list.
-- **Channel groups** — tick one or more groups in the **Channel groups** fieldset. Only channels belonging to at least one selected group are crawled. Leave all unchecked to crawl all interesting channels.
+- **Channel groups** — tick one or more groups in the **Channel groups** fieldset. Only channels belonging to at least one selected group are crawled. Leave all unchecked to crawl all in-target channels.
 
 > **The first connection to Telegram:** if this is your first run, Telegram will send a verification code to your phone. Enter it in the terminal when prompted.
 
@@ -172,7 +172,7 @@ You can select multiple strategies at once; the map lets you switch between them
 | :----- | :----------- |
 | **Measures** | Which influence scores to compute for each channel (PageRank, betweenness, etc.). Start with the default (PageRank). See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
-| **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all interesting channels. |
+| **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
 | **Draw dead leaves** | Include channels that are *referenced by* your monitored channels but not themselves monitored. Useful for seeing what outside content your corpus amplifies. |
 

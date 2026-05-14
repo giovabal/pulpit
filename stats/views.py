@@ -33,9 +33,9 @@ class _GlobalTimeSeriesBase(View):
 
         from network.utils import channel_cutoff_q
 
-        interesting_pks = Channel.objects.interesting().values("pk")
+        in_target_pks = Channel.objects.in_target().values("pk")
         monthly_data = (
-            Message.objects.filter(channel__in=interesting_pks, date__isnull=False)
+            Message.objects.filter(channel__in=in_target_pks, date__isnull=False)
             .filter(channel_cutoff_q())
             .annotate(month=TruncMonth("date"))
             .values("month")
@@ -100,10 +100,10 @@ class _ChannelTimeSeriesBase(View):
     y_label: ClassVar[str]
 
     def _msg_qs(self, channel: Channel, **filters):
-        """Base Message queryset for a channel, respecting uninteresting_after."""
+        """Base Message queryset for a channel, respecting out_of_target_after."""
         qs = Message.objects.filter(channel=channel, **filters)
-        if channel.uninteresting_after:
-            qs = qs.filter(date__date__lte=channel.uninteresting_after)
+        if channel.out_of_target_after:
+            qs = qs.filter(date__date__lte=channel.out_of_target_after)
         return qs
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
@@ -176,12 +176,12 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
     y_label = "forwards received"
 
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
-        interesting_pks = Channel.objects.interesting().values("pk")
+        in_target_pks = Channel.objects.in_target().values("pk")
         from network.utils import channel_cutoff_q
 
         qs = (
             Message.objects.filter(
-                channel__in=interesting_pks,
+                channel__in=in_target_pks,
                 forwarded_from=channel,
                 date__isnull=False,
             )
@@ -214,7 +214,7 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
 class ChannelCrossRefsView(_ChannelTimeSeriesBase):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
-        interesting_pks = Channel.objects.interesting().values("pk")
+        in_target_pks = Channel.objects.in_target().values("pk")
 
         from network.utils import channel_cutoff_q
 
@@ -231,12 +231,12 @@ class ChannelCrossRefsView(_ChannelTimeSeriesBase):
         mentioned = fwd_out + ref_out
 
         fwd_in = Counter(
-            Message.objects.filter(channel__in=interesting_pks, forwarded_from=channel)
+            Message.objects.filter(channel__in=in_target_pks, forwarded_from=channel)
             .filter(channel_cutoff_q())
             .values_list("channel", flat=True)
         )
         ref_in = Counter(
-            Message.objects.filter(channel__in=interesting_pks, references=channel)
+            Message.objects.filter(channel__in=in_target_pks, references=channel)
             .filter(channel_cutoff_q())
             .exclude(channel=channel)
             .values_list("channel", flat=True)
@@ -272,11 +272,11 @@ class ReactionsHistoryDataView(View):
 
         from network.utils import channel_cutoff_q
 
-        interesting_pks = Channel.objects.interesting().values("pk")
+        in_target_pks = Channel.objects.in_target().values("pk")
         cutoff_q = channel_cutoff_q(channel_field="message__channel", date_field="message__date")
 
         top_emojis_qs = (
-            MessageReaction.objects.filter(message__channel__in=interesting_pks)
+            MessageReaction.objects.filter(message__channel__in=in_target_pks)
             .filter(cutoff_q)
             .values("emoji")
             .annotate(total=Sum("count"))
@@ -288,7 +288,7 @@ class ReactionsHistoryDataView(View):
 
         monthly = (
             MessageReaction.objects.filter(
-                message__channel__in=interesting_pks,
+                message__channel__in=in_target_pks,
                 message__date__isnull=False,
                 emoji__in=top_emojis,
             )
@@ -320,8 +320,8 @@ class ChannelReactionsHistoryView(View):
             return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
 
         top_emojis_filter = {"message__channel": channel}
-        if channel.uninteresting_after:
-            top_emojis_filter["message__date__date__lte"] = channel.uninteresting_after
+        if channel.out_of_target_after:
+            top_emojis_filter["message__date__date__lte"] = channel.out_of_target_after
         top_emojis_qs = (
             MessageReaction.objects.filter(**top_emojis_filter)
             .values("emoji")
@@ -332,7 +332,7 @@ class ChannelReactionsHistoryView(View):
         if not top_emojis:
             return JsonResponse({"labels": spine, "series": [], "y_label": "reactions"})
 
-        cutoff_kwargs = {"message__date__date__lte": channel.uninteresting_after} if channel.uninteresting_after else {}
+        cutoff_kwargs = {"message__date__date__lte": channel.out_of_target_after} if channel.out_of_target_after else {}
         monthly = (
             MessageReaction.objects.filter(
                 message__channel=channel,
@@ -363,8 +363,8 @@ class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
         msg_qs = Message.objects.filter(channel=channel)
-        if channel.uninteresting_after:
-            msg_qs = msg_qs.filter(date__date__lte=channel.uninteresting_after)
+        if channel.out_of_target_after:
+            msg_qs = msg_qs.filter(date__date__lte=channel.out_of_target_after)
         texts = msg_qs.exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
         domain_counter: Counter = Counter()
         email_counter: Counter = Counter()

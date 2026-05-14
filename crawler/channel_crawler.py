@@ -424,9 +424,9 @@ class ChannelCrawler:
         if isinstance(telegram_message, MessageService):
             return False, 0
         if (
-            channel.uninteresting_after
+            channel.out_of_target_after
             and telegram_message.date
-            and telegram_message.date.date() > channel.uninteresting_after
+            and telegram_message.date.date() > channel.out_of_target_after
         ):
             return False, 0
         downloaded_images = 0
@@ -605,8 +605,8 @@ class ChannelCrawler:
             _total_qs = _total_qs.filter(date__lt=to_cutoff)
         if iter_max_id > 0:
             _total_qs = _total_qs.filter(telegram_id__lt=iter_max_id)
-        if channel.uninteresting_after is not None:
-            _total_qs = _total_qs.filter(date__date__lte=channel.uninteresting_after)
+        if channel.out_of_target_after is not None:
+            _total_qs = _total_qs.filter(date__date__lte=channel.out_of_target_after)
         total_in_db = _total_qs.count()
         processed = 0
         updated = 0
@@ -622,9 +622,9 @@ class ChannelCrawler:
             if to_cutoff is not None and telegram_message.date is not None and telegram_message.date >= to_cutoff:
                 continue
             if (
-                channel.uninteresting_after
+                channel.out_of_target_after
                 and telegram_message.date is not None
-                and telegram_message.date.date() > channel.uninteresting_after
+                and telegram_message.date.date() > channel.out_of_target_after
             ):
                 continue
             if isinstance(telegram_message, MessageService):

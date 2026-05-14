@@ -159,7 +159,7 @@ class BuildCommunityPaletteTests(TestCase):
 
 class DetectOrganizationTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Test Org", is_interesting=True, color="#FF0000")
+        self.org = Organization.objects.create(name="Test Org", is_in_target=True, color="#FF0000")
         self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org)
         self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org)
 
@@ -185,7 +185,7 @@ class DetectOrganizationTests(TestCase):
         self.assertEqual(palette[self.org.pk], expected)
 
     def test_palette_has_one_entry_per_unique_org(self) -> None:
-        org2 = Organization.objects.create(name="Org2", is_interesting=True, color="#0000FF")
+        org2 = Organization.objects.create(name="Org2", is_in_target=True, color="#0000FF")
         ch4 = Channel.objects.create(telegram_id=4, organization=org2)
         channel_dict = {
             str(self.ch1.pk): {"channel": self.ch1, "data": {}},
@@ -414,19 +414,19 @@ class BuildCommunitiesPayloadTests(TestCase):
         self.assertIn("1", result["kcore"]["main_groups"])
 
     def test_organization_strategy_uses_db(self) -> None:
-        Organization.objects.create(name="My Org", is_interesting=True)
+        Organization.objects.create(name="My Org", is_in_target=True)
         result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
         org_names = [g[2] for g in result["organization"]["groups"]]
         self.assertIn("My Org", org_names)
 
-    def test_non_interesting_orgs_excluded_from_organization_strategy(self) -> None:
-        Organization.objects.create(name="Hidden Org", is_interesting=False)
+    def test_out_of_target_orgs_excluded_from_organization_strategy(self) -> None:
+        Organization.objects.create(name="Hidden Org", is_in_target=False)
         result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
         org_names = [g[2] for g in result["organization"]["groups"]]
         self.assertNotIn("Hidden Org", org_names)
 
     def test_organization_strategy_main_groups_uses_key_and_name(self) -> None:
-        org = Organization.objects.create(name="My Org", is_interesting=True)
+        org = Organization.objects.create(name="My Org", is_in_target=True)
         result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
         self.assertEqual(result["organization"]["main_groups"].get(org.key), org.name)
 
@@ -449,7 +449,7 @@ class BuildCommunitiesPayloadTests(TestCase):
 
 class BuildGraphTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org1", is_interesting=True, color="#FF0000")
+        self.org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
         self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org, title="Channel 1")
         self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org, title="Channel 2")
 
@@ -504,7 +504,7 @@ class BuildGraphTests(TestCase):
 
     def test_draw_dead_leaves_includes_channels_with_in_degree(self) -> None:
         ch3 = Channel.objects.create(telegram_id=3, organization=None, title="Dead Leaf")
-        # ch2 (interesting) forwards from ch3 → ch3 gets in_degree > 0
+        # ch2 (in target) forwards from ch3 → ch3 gets in_degree > 0
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=ch3)
         ch3.refresh_degrees()
         ch3.refresh_from_db()
@@ -514,7 +514,7 @@ class BuildGraphTests(TestCase):
         _, channel_dict_dl, _, _ = build_graph(draw_dead_leaves=True)
         self.assertIn(str(ch3.pk), channel_dict_dl)
 
-    def test_draw_dead_leaves_false_excludes_non_interesting(self) -> None:
+    def test_draw_dead_leaves_false_excludes_out_of_target(self) -> None:
         ch3 = Channel.objects.create(telegram_id=3, organization=None, title="Dead Leaf")
         self._create_forward()
         _, channel_dict, _, _ = build_graph(draw_dead_leaves=False)
@@ -696,7 +696,7 @@ class BuildGraphDataTests(TestCase):
 
 class ApplyBaseNodeMeasuresTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org1", is_interesting=True, color="#FF0000")
+        org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
         self.ch1 = Channel.objects.create(telegram_id=1, organization=org, title="Chan1", participants_count=500)
         self.ch2 = Channel.objects.create(telegram_id=2, organization=org, title="Chan2", participants_count=300)
         # ch1 has a message forwarded from ch2
@@ -910,7 +910,7 @@ class EnsureGraphRootTests(TestCase):
 
 class WriteGraphFilesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org1", is_interesting=True, color="#FF0000")
+        org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
         self.ch = Channel.objects.create(telegram_id=1, organization=org, title="Chan1")
         self.channel_qs = Channel.objects.filter(pk=self.ch.pk)
         self.graph_data = {"nodes": [{"id": "1", "x": 0.0, "y": 0.0}], "edges": []}
@@ -1101,7 +1101,7 @@ class DetectDispatcherTests(TestCase):
         self.graph = nx.DiGraph()
         self.graph.add_nodes_from(["a", "b"])
         self.graph.add_edge("a", "b")
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org)
         self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org)
         self.channel_dict = {
@@ -1163,7 +1163,7 @@ class DetectDispatcherTests(TestCase):
 
 class CopyChannelMediaTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
 
     def test_channel_without_username_is_skipped(self) -> None:
         ch = Channel.objects.create(telegram_id=1, organization=self.org, username="")
@@ -2022,7 +2022,7 @@ class ApplySpreadingEfficiencyTests(TestCase):
 
 class ApplyAmplificationFactorTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_interesting=True, color="#FF0000")
+        org = Organization.objects.create(name="Org", is_in_target=True, color="#FF0000")
         self.ch1 = Channel.objects.create(telegram_id=10, organization=org, title="Source")
         self.ch2 = Channel.objects.create(telegram_id=11, organization=org, title="Amplifier")
         # ch1 has 4 own messages; ch2 forwards 2 of ch1's messages into ch2's channel
@@ -2064,7 +2064,7 @@ class ApplyAmplificationFactorTests(TestCase):
 
 class ApplyContentOriginalityTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org2", is_interesting=True, color="#00FF00")
+        org = Organization.objects.create(name="Org2", is_in_target=True, color="#00FF00")
         self.ch1 = Channel.objects.create(telegram_id=20, organization=org, title="Original")
         self.ch2 = Channel.objects.create(telegram_id=21, organization=org, title="Forwarder")
         # ch1: 4 messages, 0 forwarded → originality 1.0
@@ -2097,7 +2097,7 @@ class ApplyContentOriginalityTests(TestCase):
         self.assertAlmostEqual(node_map[str(self.ch2.pk)]["content_originality"], 0.5)
 
     def test_channel_with_no_messages_gets_none(self) -> None:
-        org = Organization.objects.create(name="OrgEmpty", is_interesting=True, color="#0000FF")
+        org = Organization.objects.create(name="OrgEmpty", is_in_target=True, color="#0000FF")
         empty_ch = Channel.objects.create(telegram_id=99, organization=org, title="Empty")
         channel_dict = {str(empty_ch.pk): {"channel": empty_ch}}
         graph_data: dict = {"nodes": [{"id": str(empty_ch.pk)}], "edges": []}

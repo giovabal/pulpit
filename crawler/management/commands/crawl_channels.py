@@ -149,7 +149,7 @@ class Command(BaseCommand):
             action="store_true",
             default=False,
             help=(
-                "Fetch Telegram-recommended channels for each interesting channel and add any new ones to the database."
+                "Fetch Telegram-recommended channels for each in-target channel and add any new ones to the database."
             ),
         )
         parser.add_argument(
@@ -167,7 +167,7 @@ class Command(BaseCommand):
             "--get-new-messages",
             action="store_true",
             default=False,
-            help="Fetch new messages for each interesting channel.",
+            help="Fetch new messages for each in-target channel.",
         )
         parser.add_argument(
             "--fetch-replies",
@@ -239,13 +239,13 @@ class Command(BaseCommand):
             "--in-degrees",
             action="store_true",
             default=False,
-            help="Recompute in-degree and out-degree for all interesting channels.",
+            help="Recompute in-degree and out-degree for all in-target channels.",
         )
         parser.add_argument(
             "--out-degrees",
             action="store_true",
             default=False,
-            help="Recompute citation degree for non-interesting channels cited by interesting ones.",
+            help="Recompute citation degree for out-of-target channels cited by in-target ones.",
         )
         # ── Scope ─────────────────────────────────────────────────────────────
         parser.add_argument(
@@ -463,7 +463,7 @@ class Command(BaseCommand):
 
     def _fix_missing_media(
         self,
-        interesting_qs: Any,
+        in_target_qs: Any,
         api_client: TelegramAPIClient,
         download_temp_dir: str,
         printer: ProgressPrinter,
@@ -478,21 +478,21 @@ class Command(BaseCommand):
 
         # Messages with photo/video media_type but no corresponding record
         needs_pic: set[int] = set(
-            Message.objects.filter(channel__in=interesting_qs, media_type="photo")
+            Message.objects.filter(channel__in=in_target_qs, media_type="photo")
             .filter(messagepicture__isnull=True)
             .values_list("id", flat=True)
         )
         needs_vid: set[int] = set(
-            Message.objects.filter(channel__in=interesting_qs, media_type="video")
+            Message.objects.filter(channel__in=in_target_qs, media_type="video")
             .filter(messagevideo__isnull=True)
             .values_list("id", flat=True)
         )
 
         # Records that exist but whose file is missing on disk
-        for mp in MessagePicture.objects.filter(message__channel__in=interesting_qs).select_related("message"):
+        for mp in MessagePicture.objects.filter(message__channel__in=in_target_qs).select_related("message"):
             if mp.picture and not os.path.exists(mp.picture.path):
                 needs_pic.add(mp.message_id)
-        for mv in MessageVideo.objects.filter(message__channel__in=interesting_qs).select_related("message"):
+        for mv in MessageVideo.objects.filter(message__channel__in=in_target_qs).select_related("message"):
             if mv.video and not os.path.exists(mv.video.path):
                 needs_vid.add(mv.message_id)
 
@@ -625,15 +625,15 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        interesting_qs = Channel.objects.filter(organization__is_interesting=True).filter(
+        in_target_qs = Channel.objects.filter(organization__is_in_target=True).filter(
             channel_type_filter(channel_types)
         )
         if not retry_lost_and_private:
-            interesting_qs = interesting_qs.exclude(is_lost=True).exclude(is_private=True)
+            in_target_qs = in_target_qs.exclude(is_lost=True).exclude(is_private=True)
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
         if channel_groups:
-            interesting_qs = interesting_qs.filter(groups__key__in=channel_groups).distinct()
+            in_target_qs = in_target_qs.filter(groups__key__in=channel_groups).distinct()
 
         need_client = (
             get_channels_info
@@ -679,7 +679,7 @@ class Command(BaseCommand):
                         api_client, media_handler, reference_resolver, messages_limit=messages_limit
                     )
 
-                    channels = interesting_qs.order_by("-id")
+                    channels = in_target_qs.order_by("-id")
                     if ids_str:
                         try:
                             channels = channels.filter(parse_id_ranges(ids_str))
@@ -698,14 +698,14 @@ class Command(BaseCommand):
                             printer.newline()
 
                             # Type-excluded channels still get metadata updated.
-                            all_interesting_base = (
-                                Channel.objects.filter(organization__is_interesting=True)
+                            all_in_target_base = (
+                                Channel.objects.filter(organization__is_in_target=True)
                                 .exclude(is_lost=True)
                                 .exclude(is_private=True)
                             )
-                            excluded_by_type = all_interesting_base.exclude(
-                                channel_type_filter(channel_types)
-                            ).order_by("-id")
+                            excluded_by_type = all_in_target_base.exclude(channel_type_filter(channel_types)).order_by(
+                                "-id"
+                            )
                             if channel_groups:
                                 excluded_by_type = excluded_by_type.filter(groups__key__in=channel_groups).distinct()
                             if ids_str:
@@ -801,17 +801,17 @@ class Command(BaseCommand):
                                     self.stdout.write("\nAbout texts: all referenced channels already in DB.")
 
                         if fetch_recommended:
-                            interesting_channels = list(channels)
-                            n_rec = len(interesting_channels)
+                            in_target_channels = list(channels)
+                            n_rec = len(in_target_channels)
                             self.stdout.write(
-                                f"\nFetching recommended channels for {n_rec} interesting channels",
+                                f"\nFetching recommended channels for {n_rec} in-target channels",
                                 ending="\n" if not printer._is_tty else "",
                             )
                             self.stdout.flush()
                             _rec_len: list[int] = [0]
                             rec_total = 0
                             rec_new = 0
-                            for i, ch_rec in enumerate(interesting_channels, start=1):
+                            for i, ch_rec in enumerate(in_target_channels, start=1):
                                 line = printer._fit(f"Recommended channels [{i}/{n_rec}] {ch_rec}")
                                 padding = " " * max(0, _rec_len[0] - len(line))
                                 self.stdout.write(f"\r{line}{padding}", ending="")
@@ -942,37 +942,37 @@ class Command(BaseCommand):
         if in_degrees or out_degrees:
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
-            interesting_pks = set(interesting_qs.values_list("pk", flat=True))
+            in_target_pks = set(in_target_qs.values_list("pk", flat=True))
 
             cited_pks = (
                 set(
                     Message.objects.filter(
-                        channel__organization__is_interesting=True,
+                        channel__organization__is_in_target=True,
                         forwarded_from__isnull=False,
                     ).values_list("forwarded_from_id", flat=True)
                 )
                 | set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_interesting=True,
+                        message__channel__organization__is_in_target=True,
                     ).values_list("channel_id", flat=True)
                 )
-            ) - interesting_pks
+            ) - in_target_pks
 
-            if in_degrees and interesting_pks:
+            if in_degrees and in_target_pks:
                 self.stdout.write("Refreshing degrees: computing citation counts…")
                 self.stdout.flush()
                 fwd_cited_by = set(
                     Message.objects.filter(
-                        channel__organization__is_interesting=True,
-                        forwarded_from_id__in=interesting_pks,
+                        channel__organization__is_in_target=True,
+                        forwarded_from_id__in=in_target_pks,
                     )
                     .exclude(channel_id=F("forwarded_from_id"))
                     .values_list("id", "forwarded_from_id")
                 )
                 ref_cited_by = set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_interesting=True,
-                        channel_id__in=interesting_pks,
+                        message__channel__organization__is_in_target=True,
+                        channel_id__in=in_target_pks,
                     )
                     .exclude(message__channel_id=F("channel_id"))
                     .values_list("message_id", "channel_id")
@@ -981,23 +981,23 @@ class Command(BaseCommand):
 
                 fwd_cites = set(
                     Message.objects.filter(
-                        channel_id__in=interesting_pks,
-                        forwarded_from_id__in=interesting_pks,
+                        channel_id__in=in_target_pks,
+                        forwarded_from_id__in=in_target_pks,
                     )
                     .exclude(channel_id=F("forwarded_from_id"))
                     .values_list("channel_id", "id")
                 )
                 ref_cites = set(
                     Message.references.through.objects.filter(
-                        message__channel_id__in=interesting_pks,
-                        channel_id__in=interesting_pks,
+                        message__channel_id__in=in_target_pks,
+                        channel_id__in=in_target_pks,
                     )
                     .exclude(message__channel_id=F("channel_id"))
                     .values_list("message__channel_id", "message_id")
                 )
                 cites_counts: Counter[int] = Counter(src for src, _ in fwd_cites | ref_cites)
 
-                channels_to_update = list(Channel.objects.filter(pk__in=interesting_pks))
+                channels_to_update = list(Channel.objects.filter(pk__in=in_target_pks))
                 for ch in channels_to_update:
                     cited_by = cited_by_counts.get(ch.pk, 0)
                     cites = cites_counts.get(ch.pk, 0)
@@ -1010,14 +1010,14 @@ class Command(BaseCommand):
                 _len: list[int] = [0]
                 _deg_printer = ProgressPrinter(self.stdout, total)
                 self.stdout.write(
-                    f"\nRefreshing degrees for {total} interesting channels",
+                    f"\nRefreshing degrees for {total} in-target channels",
                     ending="\n" if not _deg_printer._is_tty else "",
                 )
                 self.stdout.flush()
                 for i in range(0, total, 100):
                     Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
                     done = min(i + 100, total)
-                    line = _deg_printer._fit(f"Refreshing degrees for {total} interesting channels [{done}/{total}]")
+                    line = _deg_printer._fit(f"Refreshing degrees for {total} in-target channels [{done}/{total}]")
                     if _deg_printer._is_tty:
                         padding = " " * max(0, _len[0] - len(line))
                         self.stdout.write(f"\r{line}{padding}", ending="")
@@ -1032,7 +1032,7 @@ class Command(BaseCommand):
             if out_degrees and cited_pks:
                 fwd_cited = set(
                     Message.objects.filter(
-                        channel__organization__is_interesting=True,
+                        channel__organization__is_in_target=True,
                         forwarded_from_id__in=cited_pks,
                     )
                     .exclude(channel_id=F("forwarded_from_id"))
@@ -1040,7 +1040,7 @@ class Command(BaseCommand):
                 )
                 ref_cited = set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_interesting=True,
+                        message__channel__organization__is_in_target=True,
                         channel_id__in=cited_pks,
                     )
                     .exclude(message__channel_id=F("channel_id"))

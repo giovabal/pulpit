@@ -31,7 +31,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "organization",
     )
     list_editable = ("organization",)
-    list_filter = ("organization__is_interesting", "broadcast", "organization", "groups")
+    list_filter = ("organization__is_in_target", "broadcast", "organization", "groups")
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
@@ -121,8 +121,8 @@ class ChannelGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("name", "color", "is_interesting")
-    list_editable = ["color", "is_interesting"]
+    list_display = ("name", "color", "is_in_target")
+    list_editable = ["color", "is_in_target"]
 
 
 class PollAnswerInline(admin.TabularInline):

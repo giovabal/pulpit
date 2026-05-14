@@ -79,7 +79,7 @@ pip install oracledb           # Oracle
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
-| `DEAD_LEAVES_COLOR` | Color for dead-leaf nodes (non-interesting referenced channels), in hex format | `#596a64` |
+| `DEAD_LEAVES_COLOR` | Color for dead-leaf nodes (out-of-target referenced channels), in hex format | `#596a64` |
 
 ---
 

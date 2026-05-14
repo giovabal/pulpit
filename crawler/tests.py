@@ -79,7 +79,7 @@ def _username_invalid_error() -> errors.rpcerrorlist.UsernameInvalidError:
 
 class FindMissingMessageIdsTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org1", is_interesting=True)
+        org = Organization.objects.create(name="Org1", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=org)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
@@ -141,7 +141,7 @@ class FindMissingMessageIdsTests(TestCase):
 
 class IterHoleRangesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_interesting=True)
+        org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=50, organization=org)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
@@ -201,7 +201,7 @@ class IterHoleRangesTests(TestCase):
 
 class FixMessageHolesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_interesting=True)
+        org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=60, organization=org)
         self.api_client = _make_api_client()
         self.telegram_channel = MagicMock()
@@ -434,7 +434,7 @@ class ResolveOneTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
 
     def test_returns_existing_db_channel_without_api_call(self) -> None:
         channel = Channel.objects.create(telegram_id=1, username="existingchan", organization=self.org)
@@ -498,7 +498,7 @@ class ResolveMessageReferencesTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
@@ -576,7 +576,7 @@ class GetMissingReferencesTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
 
     def test_message_with_empty_missing_references_is_skipped(self) -> None:
@@ -796,7 +796,7 @@ class MediaHandlerProfilePictureTests(TestCase):
 
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
 
     def _make_tg_channel(self, telegram_id: int = 1) -> MagicMock:
@@ -873,7 +873,7 @@ class MediaHandlerMessagePictureTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_images=False by default
         self.handler_dl = MediaHandler(self.api_client, download_images=True)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
@@ -936,7 +936,7 @@ class MediaHandlerMessageVideoTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_video=False by default
         self.handler_dl = MediaHandler(self.api_client, download_video=True)
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
@@ -1047,7 +1047,7 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
 
     def test_returns_channel_and_telegram_object_on_success(self) -> None:
         mock_tc = _make_telegram_channel(telegram_id=5, username="testchan")
@@ -1087,7 +1087,7 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
 
     def _make_tc(self) -> MagicMock:
@@ -1165,7 +1165,7 @@ class ChannelCrawlerSearchChannelTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
 
     def _make_search_result(self, channels: list) -> MagicMock:
         result = MagicMock()
@@ -1218,7 +1218,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.source_channel = Channel.objects.create(telegram_id=1, organization=self.org)
         self.msg = Message.objects.create(telegram_id=1, channel=self.source_channel)
 
@@ -1470,7 +1470,7 @@ _GET_CMD = "crawler.management.commands.crawl_channels"
 
 class GetChannelsCommandTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org, title="Ch1")
         self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org, title="Ch2")
 
@@ -1482,7 +1482,7 @@ class GetChannelsCommandTests(TestCase):
         resolver_patch = patch(f"{_GET_CMD}.ReferenceResolver")
         return tc_patch, api_patch, crawler_patch, media_patch, resolver_patch
 
-    def test_get_channel_called_for_each_interesting_channel(self) -> None:
+    def test_get_channel_called_for_each_in_target_channel(self) -> None:
         from django.core.management import call_command
 
         tc_p, api_p, crawler_p, media_p, resolver_p = self._patch_command()

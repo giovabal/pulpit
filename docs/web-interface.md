@@ -22,7 +22,7 @@ A paginated list of all channels in the database. Filters and controls:
 - **Sort** — by name, subscriber count, message count, in-degree, or out-degree
 - **Channel chips** — each card shows the channel's organization colour, subscriber count, message count, and group chips
 
-Channels marked `is_interesting = True` via their organization show their network position data once crawled.
+Channels marked `is_in_target = True` via their organization show their network position data once crawled.
 
 ---
 
@@ -117,8 +117,8 @@ Bulk management of the channel database:
 
 - **Assign organization** — select multiple channels and assign them to an organization in one action
 - **Group chips** — add or remove ChannelGroup memberships inline
-- **Edit individual** — click through to edit a channel's details, is_interesting status, and vacancy record
-- **Filter** — by organization, group, is_interesting status, entity type
+- **Edit individual** — click through to edit a channel's details, is_in_target status, and vacancy record
+- **Filter** — by organization, group, is_in_target status, entity type
 
 ### Organizations — `/manage/organizations/`
 
@@ -126,7 +126,7 @@ Create and edit organizations. Key fields:
 
 - **Name** — label used throughout the interface
 - **Color** — hex color used in the graph when `COMMUNITY_PALETTE=ORGANIZATION`
-- **Is interesting** — when checked, all channels in this organization are included in crawls and exports
+- **In target** — when checked, all channels in this organization are included in crawls and exports
 
 ### Groups — `/manage/channel-groups/`
 

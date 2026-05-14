@@ -10,7 +10,7 @@ class BaseMixin:
         context_data: dict[str, Any] = super().get_context_data(*args, **kwargs)  # type: ignore[misc]
         context_data.update(
             {
-                "channel_list": Channel.objects.interesting()
+                "channel_list": Channel.objects.in_target()
                 .select_related("organization")
                 .annotate(messages_count=Count("message_set"))
                 .order_by("title")

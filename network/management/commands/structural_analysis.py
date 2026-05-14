@@ -246,9 +246,7 @@ class Command(BaseCommand):
             dest="draw_dead_leaves",
             action="store_true",
             default=None,
-            help=(
-                "Include non-interesting channels that are referenced by interesting ones as leaf nodes in the graph."
-            ),
+            help=("Include out-of-target channels that are referenced by in-target ones as leaf nodes in the graph."),
         )
         parser.add_argument(
             "--leiden-coarse-resolution",
@@ -338,7 +336,7 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of ChannelGroup keys. "
                 "When provided, only channels belonging to at least one of these groups are included in the graph. "
-                "Leave unset to include all interesting channels regardless of group membership."
+                "Leave unset to include all in-target channels regardless of group membership."
             ),
         )
         parser.add_argument(

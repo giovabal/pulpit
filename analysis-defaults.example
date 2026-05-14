@@ -44,7 +44,7 @@ DEFAULT_CHANNEL_TYPES=CHANNEL,USER
 # https://python-graph-gallery.com/color-palette-finder/ (mind letter case)
 COMMUNITY_PALETTE=ORGANIZATION
 
-# Hex colour for non-interesting referenced channels ("dead leaves").
+# Hex colour for out-of-target referenced channels ("dead leaves").
 DEAD_LEAVES_COLOR=#596a64
 
 # Output directory for structural_analysis. Relative paths resolve from project root.

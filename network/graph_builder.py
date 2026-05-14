@@ -134,7 +134,7 @@ def build_graph(
     Returns (graph, channel_dict, edge_list, channel_qs).
     Raises ValueError if no edges are found between channels.
     """
-    qs_filter = Q(organization__is_interesting=True)
+    qs_filter = Q(organization__is_in_target=True)
     if draw_dead_leaves:
         # Citations are stored in in_degree when REVERSED_EDGES=True, out_degree otherwise.
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
@@ -307,7 +307,7 @@ def build_graph(
             if graph.degree(cid) == 0
             and (
                 channel_dict[cid]["channel"].organization is None
-                or not channel_dict[cid]["channel"].organization.is_interesting
+                or not channel_dict[cid]["channel"].organization.is_in_target
             )
         ]
         for cid in orphaned:

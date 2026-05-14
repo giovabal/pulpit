@@ -319,35 +319,33 @@ class AverageColorTests(TestCase):
 
 class ChannelManagerTests(TestCase):
     def setUp(self) -> None:
-        self.interesting_org = Organization.objects.create(name="Interesting", is_interesting=True)
-        self.boring_org = Organization.objects.create(name="Boring", is_interesting=False)
-        self.ch_interesting = Channel.objects.create(
-            telegram_id=1, title="Channel A", organization=self.interesting_org
-        )
+        self.in_target_org = Organization.objects.create(name="In target", is_in_target=True)
+        self.boring_org = Organization.objects.create(name="Boring", is_in_target=False)
+        self.ch_in_target = Channel.objects.create(telegram_id=1, title="Channel A", organization=self.in_target_org)
         self.ch_boring = Channel.objects.create(telegram_id=2, title="Channel B", organization=self.boring_org)
         self.ch_orphan = Channel.objects.create(telegram_id=3, title="Channel C")
 
-    def test_interesting_includes_interesting_org_channel(self) -> None:
-        self.assertIn(self.ch_interesting, Channel.objects.interesting())
+    def test_in_target_includes_in_target_org_channel(self) -> None:
+        self.assertIn(self.ch_in_target, Channel.objects.in_target())
 
-    def test_interesting_excludes_boring_org_channel(self) -> None:
-        self.assertNotIn(self.ch_boring, Channel.objects.interesting())
+    def test_in_target_excludes_boring_org_channel(self) -> None:
+        self.assertNotIn(self.ch_boring, Channel.objects.in_target())
 
-    def test_interesting_excludes_channel_with_no_org(self) -> None:
-        self.assertNotIn(self.ch_orphan, Channel.objects.interesting())
+    def test_in_target_excludes_channel_with_no_org(self) -> None:
+        self.assertNotIn(self.ch_orphan, Channel.objects.in_target())
 
     def test_objects_is_channel_manager(self) -> None:
         self.assertIsInstance(Channel.objects, ChannelManager)
 
-    def test_interesting_returns_channel_queryset(self) -> None:
-        self.assertIsInstance(Channel.objects.interesting(), ChannelQuerySet)
+    def test_in_target_returns_channel_queryset(self) -> None:
+        self.assertIsInstance(Channel.objects.in_target(), ChannelQuerySet)
 
-    def test_interesting_queryset_is_chainable(self) -> None:
-        qs = Channel.objects.interesting().filter(title="Channel A")
-        self.assertEqual(list(qs), [self.ch_interesting])
+    def test_in_target_queryset_is_chainable(self) -> None:
+        qs = Channel.objects.in_target().filter(title="Channel A")
+        self.assertEqual(list(qs), [self.ch_in_target])
 
-    def test_interesting_count(self) -> None:
-        self.assertEqual(Channel.objects.interesting().count(), 1)
+    def test_in_target_count(self) -> None:
+        self.assertEqual(Channel.objects.in_target().count(), 1)
 
 
 # ─── Channel model ─────────────────────────────────────────────────────────────
@@ -377,7 +375,7 @@ class ChannelGetAbsoluteUrlTests(TestCase):
 
 class ChannelSaveTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_interesting=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.ch1 = Channel.objects.create(telegram_id=1, title="Source", organization=self.org)
         self.ch2 = Channel.objects.create(telegram_id=2, title="Target", organization=self.org)
 
@@ -390,7 +388,7 @@ class ChannelSaveTests(TestCase):
         ch = Channel.objects.create(telegram_id=100, username="handle")
         self.assertEqual(ch.username, "handle")
 
-    def test_in_degree_counts_forwards_from_interesting_channels(self) -> None:
+    def test_in_degree_counts_forwards_from_in_target_channels(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=self.ch1)
         self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
@@ -402,15 +400,15 @@ class ChannelSaveTests(TestCase):
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.in_degree, 0)
 
-    def test_in_degree_excludes_non_interesting_org(self) -> None:
-        boring = Organization.objects.create(name="Boring", is_interesting=False)
+    def test_in_degree_excludes_out_of_target_org(self) -> None:
+        boring = Organization.objects.create(name="Boring", is_in_target=False)
         boring_ch = Channel.objects.create(telegram_id=50, organization=boring)
         Message.objects.create(telegram_id=10, channel=boring_ch, forwarded_from=self.ch1)
         self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
         self.assertEqual(self.ch1.in_degree, 0)
 
-    def test_out_degree_counts_forwards_to_interesting_channels(self) -> None:
+    def test_out_degree_counts_forwards_to_in_target_channels(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch2)
         self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()

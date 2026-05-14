@@ -1,7 +1,7 @@
 (function () {
     "use strict";
     var API      = "/manage/api/vacancies/";
-    var CH_API   = "/manage/api/channels/?status=interesting&";
+    var CH_API   = "/manage/api/channels/?status=in_target&";
     var _total   = 0;
 
     var $tbody    = document.getElementById("vac-tbody");

@@ -191,13 +191,13 @@ The average Burt's constraint score across all channels. A low mean indicates a 
 
 ### Content originality (network-level)
 
-The fraction of all messages across interesting channels that are original (not forwarded from another channel): total non-forwarded messages / total messages.
+The fraction of all messages across in-target channels that are original (not forwarded from another channel): total non-forwarded messages / total messages.
 
 **In practice:** this single number characterises the network as a production system. A value near 1.0 means the network is primarily a content-creation ecosystem; a value near 0.0 means it is primarily a redistribution and amplification machine.
 
 ### Amplification ratio
 
-The total number of forwards received by interesting channels, divided by the total number of messages published by those channels. Measures how many times, on average, each published message gets re-shared somewhere else in the network.
+The total number of forwards received by in-target channels, divided by the total number of messages published by those channels. Measures how many times, on average, each published message gets re-shared somewhere else in the network.
 
 **In practice:** amplification ratio is the network's overall virality rate. A value above 1.0 means the network produces more redistribution events than original publications.
 

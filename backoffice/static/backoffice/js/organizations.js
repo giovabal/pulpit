@@ -38,7 +38,7 @@
 
             var tdInt = document.createElement("td"); tdInt.className = "bo-td--center";
             var intChk = document.createElement("input");
-            intChk.type = "checkbox"; intChk.checked = org.is_interesting;
+            intChk.type = "checkbox"; intChk.checked = org.is_in_target;
             tdInt.appendChild(intChk); tr.appendChild(tdInt);
 
             var tdCount = document.createElement("td"); tdCount.className = "bo-td--num";
@@ -48,7 +48,7 @@
             var saveBtn = document.createElement("button"); saveBtn.className = "bo-btn bo-btn--sm"; saveBtn.textContent = "Save";
             var cancelBtn = document.createElement("button"); cancelBtn.className = "bo-btn bo-btn--sm bo-btn--ghost"; cancelBtn.textContent = "Cancel";
             saveBtn.addEventListener("click", function () {
-                apiFetch(API + org.id + "/", { method: "PATCH", body: { name: nameInput.value.trim(), color: colorInput.value, is_interesting: intChk.checked } })
+                apiFetch(API + org.id + "/", { method: "PATCH", body: { name: nameInput.value.trim(), color: colorInput.value, is_in_target: intChk.checked } })
                     .then(function (updated) {
                         Object.assign(org, updated);
                         $tbody.replaceChild(renderRow(org, false), tr);
@@ -66,7 +66,7 @@
 
             var tdI = document.createElement("td"); tdI.className = "bo-td--center";
             var icon = document.createElement("i");
-            icon.className = org.is_interesting ? "bi bi-check-circle-fill text-success" : "bi bi-x-circle text-secondary";
+            icon.className = org.is_in_target ? "bi bi-check-circle-fill text-success" : "bi bi-x-circle text-secondary";
             tdI.appendChild(icon); tr.appendChild(tdI);
 
             var tdCnt = document.createElement("td"); tdCnt.className = "bo-td--num";
@@ -105,7 +105,7 @@
     $addForm.addEventListener("submit", function (e) {
         e.preventDefault();
         var fd = new FormData($addForm);
-        apiFetch(API, { method: "POST", body: { name: fd.get("name").trim(), color: fd.get("color"), is_interesting: fd.get("is_interesting") === "on" } })
+        apiFetch(API, { method: "POST", body: { name: fd.get("name").trim(), color: fd.get("color"), is_in_target: fd.get("is_in_target") === "on" } })
             .then(function (org) {
                 org.channel_count = 0;
                 $tbody.appendChild(renderRow(org, false));

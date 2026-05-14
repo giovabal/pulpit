@@ -112,7 +112,7 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="fetch_recommended_channels" {% if ad.CRAWL_FETCH_RECOMMENDED %}checked{% endif %}>Fetch recommended channels
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Fetch Telegram-recommended channels for each interesting channel and add new ones to the database. New channels are not crawled automatically."></i>
+                       title="Fetch Telegram-recommended channels for each in-target channel and add new ones to the database. New channels are not crawled automatically."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="retry_lost_and_private" {% if ad.CRAWL_RETRY_LOST_AND_PRIVATE %}checked{% endif %}>Retry lost &amp; private
@@ -128,7 +128,7 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="get_new_messages" {% if ad.CRAWL_GET_NEW_MESSAGES %}checked{% endif %}>Get new messages
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Fetch messages published since the last crawl for each interesting channel."></i>
+                       title="Fetch messages published since the last crawl for each in-target channel."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="fetch_replies" {% if ad.CRAWL_FETCH_REPLIES %}checked{% endif %}>Fetch replies
@@ -194,12 +194,12 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="in_degrees" {% if ad.CRAWL_IN_DEGREES %}checked{% endif %}>In target channels
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Recompute in-degree and out-degree for all interesting channels."></i>
+                       title="Recompute in-degree and out-degree for all in-target channels."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="out_degrees" {% if ad.CRAWL_OUT_DEGREES %}checked{% endif %}>Out of target channels
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Recompute citation degree for non-interesting channels forwarded or mentioned by interesting ones. Does not open a Telegram connection."></i>
+                       title="Recompute citation degree for out-of-target channels forwarded or mentioned by in-target ones. Does not open a Telegram connection."></i>
                   </label>
                 </div>
               </fieldset>
@@ -322,7 +322,7 @@
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="draw_dead_leaves" {% if ad.SA_DRAW_DEAD_LEAVES %}checked{% endif %}>Include dead leaves
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Include non-interesting channels that are referenced by interesting ones as leaf nodes. Adds context but can significantly increase graph size."></i>
+                     title="Include out-of-target channels that are referenced by in-target ones as leaf nodes. Adds context but can significantly increase graph size."></i>
                 </label>
               </div>
             </fieldset>
@@ -413,7 +413,7 @@
             <fieldset class="ops-fieldset">
               <legend>Channel groups
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all interesting channels."></i>
+                   title="Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels."></i>
               </legend>
               <div class="ops-flags">
                 {% for group in channel_groups %}
@@ -610,7 +610,7 @@
               <label class="ops-flag"><input type="checkbox" name="measures" value="BURTCONSTRAINT" {% if "BURTCONSTRAINT" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Burt's Constraint<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Burt's structural constraint (0–1) — how constrained a channel's ego network is; low = structural-hole broker with diverse, non-redundant ties."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="EGODENSITY" {% if "EGODENSITY" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Ego Network Density<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = neighbours form a fully connected clique (echo chamber). null for fewer than 2 neighbours."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="LOCALCLUSTERING" {% if "LOCALCLUSTERING" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Local Clustering<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed local clustering coefficient (Fagiolo 2007) — fraction of directed triangles through this node relative to all possible directed triads. High = directly embedded in closed citation cycles. Pairs with Ego Network Density."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" {% if "AMPLIFICATION" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Amplification<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Amplification factor — forwards received from interesting channels divided by the channel's own message count."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="measures" value="AMPLIFICATION" {% if "AMPLIFICATION" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Amplification<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Amplification factor — forwards received from in-target channels divided by the channel's own message count."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="CONTENTORIGINALITY" {% if "CONTENTORIGINALITY" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i>Content Originality<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Content originality — share of messages that are not forwards; 1 = fully original, 0 = fully reposted."></i></label>
               <label class="ops-flag"><input type="checkbox" name="measures" value="DIFFUSIONLAG" {% if "DIFFUSIONLAG" in ad.sa_measures %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i>Diffusion Lag<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Diffusion lag — average hours between the original post date and when this channel forwarded it. Low = early adopter; high = late amplifier. null for channels with no dated forwards."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Diffusion window (Linked parameters)"></i></label>
             </div>

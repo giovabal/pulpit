@@ -8,10 +8,10 @@ from webapp.utils.channel_types import channel_type_filter
 
 
 class ChannelQuerySet(models.QuerySet["Channel"]):
-    def interesting(self) -> ChannelQuerySet:
+    def in_target(self) -> ChannelQuerySet:
         return (
             self.filter(
-                Q(interesting_override=True) | Q(interesting_override__isnull=True, organization__is_interesting=True)
+                Q(in_target_override=True) | Q(in_target_override__isnull=True, organization__is_in_target=True)
             )
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_private=True)
@@ -23,5 +23,5 @@ class ChannelManager(models.Manager["Channel"]):
     def get_queryset(self) -> ChannelQuerySet:
         return ChannelQuerySet(self.model, using=self._db)
 
-    def interesting(self) -> ChannelQuerySet:
-        return self.get_queryset().interesting()
+    def in_target(self) -> ChannelQuerySet:
+        return self.get_queryset().in_target()

@@ -6,7 +6,7 @@ from webapp.models.base import BaseColorModel
 
 class Organization(BaseColorModel):
     name = models.CharField(max_length=255)
-    is_interesting = models.BooleanField(default=True)
+    is_in_target = models.BooleanField(default=True)
 
     def __str__(self) -> str:
         return self.name

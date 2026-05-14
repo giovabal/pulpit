@@ -212,7 +212,7 @@
             });
             tr.appendChild(tdOrg);
 
-            /* interesting override */
+            /* in-target override */
             var tdOv = document.createElement("td");
             renderOverrideCell(tdOv, ch);
             tr.appendChild(tdOv);
@@ -253,7 +253,7 @@
     function renderOverrideCell(td, ch) {
         td.innerHTML = "";
         var sel = document.createElement("select"); sel.className = "bo-select bo-select--sm bo-override-select";
-        var cur = ch.interesting_override;
+        var cur = ch.in_target_override;
         [["", "—"], ["true", "✓ Yes"], ["false", "✗ No"]].forEach(function (pair) {
             var opt = new Option(pair[1], pair[0]);
             if ((cur === null || cur === undefined) && pair[0] === "") opt.selected = true;
@@ -265,16 +265,16 @@
         sel.addEventListener("change", function () {
             var raw = sel.value;
             var newVal = raw === "true" ? true : raw === "false" ? false : null;
-            var prev = ch.interesting_override;
-            ch.interesting_override = newVal;
+            var prev = ch.in_target_override;
+            ch.in_target_override = newVal;
             sel.style.color = newVal === true ? "var(--bs-success)" : newVal === false ? "var(--bs-danger)" : "";
             apiFetch(API_BASE + "channels/" + ch.id + "/", {
                 method: "PATCH",
-                body: { interesting_override: newVal },
+                body: { in_target_override: newVal },
             }).then(function () {
                 showToast("Override updated.");
             }).catch(function (err) {
-                ch.interesting_override = prev;
+                ch.in_target_override = prev;
                 renderOverrideCell(td, ch);
                 showToast("Error: " + err.message, "error");
             });

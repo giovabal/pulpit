@@ -592,7 +592,7 @@ def build_communities_payload(
                 str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
             }
         else:
-            orgs = list(Organization.objects.filter(is_interesting=True).annotate(channel_count=Count("channel")))
+            orgs = list(Organization.objects.filter(is_in_target=True).annotate(channel_count=Count("channel")))
             groups = [(org.id, org.channel_count, org.name, org.color) for org in orgs]
             main_groups = {org.key: org.name for org in orgs}
         if strategy == "KCORE":

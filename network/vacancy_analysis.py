@@ -410,7 +410,7 @@ def _analyze_vacancy(
     )
 
     orphaned_pks: set[int] = set(
-        Channel.objects.interesting()
+        Channel.objects.in_target()
         .filter(
             message_set__forwarded_from=ch,
             message_set__date__gte=before_start,
@@ -423,7 +423,7 @@ def _analyze_vacancy(
     raw_cands = list(
         Message.objects.filter(
             channel__in=orphaned_pks,
-            forwarded_from__in=Channel.objects.interesting(),
+            forwarded_from__in=Channel.objects.in_target(),
             date__gte=closure_dt,
             date__lte=after_end,
         )

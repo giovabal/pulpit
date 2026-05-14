@@ -21,7 +21,7 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     },
     "crawl_channels": {
         "title": "Crawl Channels",
-        "description": "Crawl all interesting channels and resolve cross-channel references.",
+        "description": "Crawl all in-target channels and resolve cross-channel references.",
         "icon": "bi-cloud-download",
     },
     "structural_analysis": {
