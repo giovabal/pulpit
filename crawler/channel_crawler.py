@@ -515,14 +515,21 @@ class ChannelCrawler:
         if telegram_message.media:
             downloaded_images += self.media_handler.download_message_picture(telegram_message)
             self.media_handler.download_message_video(telegram_message)
+            self.media_handler.download_message_audio(telegram_message)
+            self.media_handler.download_message_sticker(telegram_message)
+            self.media_handler.download_message_other_media(telegram_message)
             if hasattr(telegram_message.media, "photo"):
                 message.media_type = "photo"
             elif hasattr(telegram_message.media, "document"):
+                from crawler.media_handler import _is_audio, _is_sticker
+
                 doc = telegram_message.media.document
                 mime_type = getattr(doc, "mime_type", "") or ""
-                if mime_type.startswith("video/"):
+                if _is_sticker(doc):
+                    message.media_type = "sticker"
+                elif mime_type.startswith("video/"):
                     message.media_type = "video"
-                elif mime_type.startswith("audio/"):
+                elif _is_audio(doc):
                     message.media_type = "audio"
                 else:
                     message.media_type = "document"

@@ -129,6 +129,7 @@
                     <input type="checkbox" name="get_new_messages" {% if ad.CRAWL_GET_NEW_MESSAGES %}checked{% endif %}>Get new messages
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Fetch messages published since the last crawl for each in-target channel."></i>
+                    <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: media types"></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="fetch_replies" {% if ad.CRAWL_FETCH_REPLIES %}checked{% endif %}>Fetch replies
@@ -145,11 +146,13 @@
                     <input type="checkbox" name="fix_holes" {% if ad.CRAWL_FIXHOLES %}checked{% endif %}>Fix message holes
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Scan each channel's message ID sequence for gaps and fetch any missing messages. Can run independently of Get new messages."></i>
+                    <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: media types"></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="fix_missing_media" {% if ad.CRAWL_FIX_MISSING_MEDIA %}checked{% endif %}>Fix missing media
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Find photo and video messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
+                       title="Find photo, video, and other-media messages whose file is absent from disk or was never downloaded, and re-fetch them from Telegram."></i>
+                    <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: media types"></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="retry_lost_messages" {% if ad.CRAWL_RETRY_LOST_MESSAGES %}checked{% endif %}>Retry lost messages
@@ -222,6 +225,40 @@
                     </label>
                     <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
                   </div>
+                </div>
+              </fieldset>
+
+              <fieldset class="ops-fieldset">
+                <legend>Media types
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Which media types to download. Applies when Get new messages, Fix message holes, or Fix missing media is enabled."></i>
+                </legend>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="download_images" {% if ad.CRAWL_DOWNLOAD_IMAGES %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Image download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download photo files attached to messages."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="download_video" {% if ad.CRAWL_DOWNLOAD_VIDEO %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Video download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download video files attached to messages (includes GIFs/animations and round videos)."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="download_audio" {% if ad.CRAWL_DOWNLOAD_AUDIO %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Audio download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download audio attached to messages — both voice notes and uploaded audio documents."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="download_stickers" {% if ad.CRAWL_DOWNLOAD_STICKERS %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Sticker download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download stickers — static webp, animated TGS, and video webm stickers."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="download_other_media" {% if ad.CRAWL_DOWNLOAD_OTHER_MEDIA %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Other media download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.)."></i>
+                  </label>
                 </div>
               </fieldset>
 
@@ -1132,6 +1169,22 @@
         if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
       }
     });
+    document.querySelectorAll('[data-requires-any-flag]').forEach(function (input) {
+      var form = input.closest('form');
+      var names = input.dataset.requiresAnyFlag.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var on = names.some(function (name) {
+        var cb = form ? form.querySelector('[name="' + name + '"]') : null;
+        return !!(cb && cb.checked);
+      });
+      input.disabled = !on;
+      var paramEl = input.closest('.ops-param');
+      if (paramEl) {
+        paramEl.classList.toggle('ops-param--disabled', !on);
+      } else {
+        var flagEl = input.closest('.ops-flag');
+        if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
+      }
+    });
     document.querySelectorAll('[data-requires-vacancy]').forEach(function (input) {
       var cb = document.querySelector('input[name="vacancy_measures"][value="' + input.dataset.requiresVacancy + '"]');
       var on = cb ? cb.checked : false;
@@ -1153,6 +1206,21 @@
   document.querySelectorAll('input[name="measures"], input[name="community_strategies"], input[name="vacancy_measures"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
   });
+  // Re-run when any flag referenced by [data-requires-any-flag] toggles.
+  (function () {
+    var watched = new Set();
+    document.querySelectorAll('[data-requires-any-flag]').forEach(function (input) {
+      input.dataset.requiresAnyFlag.split(',').forEach(function (name) {
+        var trimmed = name.trim();
+        if (trimmed) watched.add(trimmed);
+      });
+    });
+    watched.forEach(function (name) {
+      document.querySelectorAll('input[name="' + name + '"]').forEach(function (cb) {
+        cb.addEventListener('change', syncLinkedInputs);
+      });
+    });
+  })();
   // All / None buttons in fieldset legends.
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.ops-legend-btn');

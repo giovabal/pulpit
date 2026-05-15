@@ -18,7 +18,14 @@ Optional context:
         channel.
 
 Views including this partial should prefetch_related("messagepicture_set",
-"messagevideo_set", "reactions") to avoid N+1 queries.
+"messagevideo_set", "messageaudio_set", "messagesticker_set",
+"messageothermedia_set", "reactions") to avoid N+1 queries.
+
+Telegram media-group albums (multiple photos/videos posted together) are
+collapsed by `_exclude_album_tails` in webapp/views.py so only the head of
+each album reaches this template; the head's `album_pictures` /
+`album_videos` / etc. properties gather media from every sibling message
+sharing the same (channel_id, grouped_id).
 {% endcomment %}
 <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and not received_view %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
   {% if show_channel_chip %}
@@ -49,7 +56,12 @@ Views including this partial should prefetch_related("messagepicture_set",
     <i class="bi bi-pin-angle" aria-hidden="true"></i> Previously pinned
   </div>
   {% endif %}
-  {% with pictures=post.messagepicture_set.all videos=post.messagevideo_set.all %}
+  {% if post.is_album %}
+  <div class="album-banner">
+    <i class="bi bi-images" aria-hidden="true"></i> Album · {{ post.album_size }} items
+  </div>
+  {% endif %}
+  {% with pictures=post.album_pictures videos=post.album_videos audios=post.album_audios stickers=post.album_stickers other_media=post.album_other_media %}
   {% if pictures %}
     {% for picture in pictures %}
     {% if picture.picture %}
@@ -76,13 +88,51 @@ Views including this partial should prefetch_related("messagepicture_set",
     <span>Video not downloaded</span>
   </div>
   {% endif %}
-  {% if post.media_type == "audio" and not videos %}
+  {% if audios %}
+    {% for audio in audios %}
+    {% if audio.audio %}
+    <figure class="mb-0">
+      <audio src="{{ audio.audio.url }}" controls aria-label="{% if audio.is_voice %}Voice note{% else %}Audio{% endif %} from {{ post.channel.title }}"></audio>
+    </figure>
+    {% endif %}
+    {% endfor %}
+  {% elif post.media_type == "audio" %}
   <div class="media-placeholder">
     <i class="bi bi-music-note-beamed" aria-hidden="true"></i>
     <span>Audio not downloaded</span>
   </div>
   {% endif %}
-  {% if post.media_type == "document" %}
+  {% if stickers %}
+    {% for sticker in stickers %}
+    {% if sticker.sticker %}
+    {% if sticker.mime_type == "image/webp" %}
+    <figure class="mb-0">
+      <img src="{{ sticker.sticker.url }}" class="post-sticker" alt="Sticker from {{ post.channel.title }}">
+    </figure>
+    {% else %}
+    <div class="media-placeholder">
+      <i class="bi bi-emoji-smile" aria-hidden="true"></i>
+      <a href="{{ sticker.sticker.url }}" download>{% if sticker.is_animated %}Animated{% else %}Video{% endif %} sticker</a>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% endfor %}
+  {% elif post.media_type == "sticker" %}
+  <div class="media-placeholder">
+    <i class="bi bi-emoji-smile" aria-hidden="true"></i>
+    <span>Sticker not downloaded</span>
+  </div>
+  {% endif %}
+  {% if other_media %}
+    {% for other in other_media %}
+    {% if other.media_file %}
+    <div class="media-placeholder">
+      <i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i>
+      <a href="{{ other.media_file.url }}" download>Download attachment</a>
+    </div>
+    {% endif %}
+    {% endfor %}
+  {% elif post.media_type == "document" %}
   <div class="media-placeholder">
     <i class="bi bi-file-earmark" aria-hidden="true"></i>
     <span>File not downloaded</span>

@@ -844,3 +844,62 @@ class DiggPaginatorTests(TestCase):
     def test_correct_objects_on_last_partial_page(self) -> None:
         p = DiggPaginator(range(25), 10)
         self.assertEqual(len(p.page(3).object_list), 5)
+
+
+# ---------------------------------------------------------------------------
+# Album / grouped_id behaviour
+# ---------------------------------------------------------------------------
+
+
+class MessageAlbumTests(TestCase):
+    """Tests for Telegram media-group (album) collapsing.
+
+    Telegram emits each photo/video of an album as a separate Message with the
+    same ``grouped_id``. The view layer hides every album member except the
+    head, and the head exposes ``album_pictures`` etc. that span every sibling.
+    """
+
+    def setUp(self) -> None:
+        from webapp.models import MessagePicture
+
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        # Album of three messages sharing grouped_id=999
+        self.head = Message.objects.create(telegram_id=100, channel=self.channel, grouped_id=999, message="caption")
+        self.tail1 = Message.objects.create(telegram_id=101, channel=self.channel, grouped_id=999)
+        self.tail2 = Message.objects.create(telegram_id=102, channel=self.channel, grouped_id=999)
+        # Standalone message — no grouped_id
+        self.standalone = Message.objects.create(telegram_id=200, channel=self.channel, grouped_id=None)
+        # Attach one picture to each message so the album-wide gallery is testable
+        for msg in (self.head, self.tail1, self.tail2, self.standalone):
+            MessagePicture.objects.create(message=msg, telegram_id=msg.telegram_id, picture="x.jpg")
+
+    def test_is_album_flag(self) -> None:
+        self.assertTrue(self.head.is_album)
+        self.assertTrue(self.tail1.is_album)
+        self.assertFalse(self.standalone.is_album)
+
+    def test_album_size(self) -> None:
+        self.assertEqual(self.head.album_size, 3)
+        self.assertEqual(self.tail1.album_size, 3)
+        self.assertEqual(self.standalone.album_size, 1)
+
+    def test_album_pictures_combines_siblings_for_head(self) -> None:
+        pics = self.head.album_pictures
+        # Head sees pictures from all three album members in telegram_id order
+        self.assertEqual([p.message_id for p in pics], [self.head.id, self.tail1.id, self.tail2.id])
+
+    def test_album_pictures_for_standalone_returns_only_self(self) -> None:
+        self.assertEqual([p.message_id for p in self.standalone.album_pictures], [self.standalone.id])
+
+    def test_exclude_album_tails_keeps_head_and_standalone_only(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        # lost=include keeps everything; default lost=exclude is the same here
+        # since none of the messages are lost.
+        params = QueryDict("lost=include")
+        visible_ids = set(_apply_message_options(qs, params).values_list("id", flat=True))
+        self.assertEqual(visible_ids, {self.head.id, self.standalone.id})

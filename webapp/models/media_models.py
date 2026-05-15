@@ -41,6 +41,8 @@ class MessageVideo(TelegramBaseModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
     video = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
     date = models.DateTimeField(null=True)
+    is_animated = models.BooleanField(default=False)
+    is_round = models.BooleanField(default=False)
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
@@ -63,4 +65,99 @@ class MessageVideo(TelegramBaseModel):
         if filename:
             with open(filename, "rb") as f:
                 obj.video.save(os.path.basename(filename), File(f), save=True)
+        return obj
+
+
+class MessageAudio(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    audio = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    mime_type = models.CharField(max_length=100, blank=True)
+    is_voice = models.BooleanField(default=False)
+    date = models.DateTimeField(null=True)
+
+    def get_media_path(self, filename: str) -> str:
+        extension = filename.split(".")[-1]
+        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
+        return os.path.join(
+            "channels",
+            channel_dir,
+            "message",
+            "audio",
+            f"{self.message.telegram_id}.{extension}",
+        )
+
+    @classmethod
+    def from_telegram_object(
+        cls, telegram_object: Any, force_update: bool = False, defaults: dict[str, Any] | None = None
+    ) -> Self:
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
+        filename = defaults.get("audio", None)
+        if filename:
+            with open(filename, "rb") as f:
+                obj.audio.save(os.path.basename(filename), File(f), save=True)
+        return obj
+
+
+class MessageSticker(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    sticker = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    mime_type = models.CharField(max_length=100, blank=True)
+    is_animated = models.BooleanField(default=False)
+    date = models.DateTimeField(null=True)
+
+    def get_media_path(self, filename: str) -> str:
+        extension = filename.split(".")[-1]
+        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
+        return os.path.join(
+            "channels",
+            channel_dir,
+            "message",
+            "sticker",
+            f"{self.message.telegram_id}.{extension}",
+        )
+
+    @classmethod
+    def from_telegram_object(
+        cls, telegram_object: Any, force_update: bool = False, defaults: dict[str, Any] | None = None
+    ) -> Self:
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
+        filename = defaults.get("sticker", None)
+        if filename:
+            with open(filename, "rb") as f:
+                obj.sticker.save(os.path.basename(filename), File(f), save=True)
+        return obj
+
+
+class MessageOtherMedia(TelegramBaseModel):
+    TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    media_file = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    mime_type = models.CharField(max_length=100, blank=True)
+    date = models.DateTimeField(null=True)
+
+    def get_media_path(self, filename: str) -> str:
+        extension = filename.split(".")[-1]
+        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
+        return os.path.join(
+            "channels",
+            channel_dir,
+            "message",
+            "other",
+            f"{self.message.telegram_id}.{extension}",
+        )
+
+    @classmethod
+    def from_telegram_object(
+        cls, telegram_object: Any, force_update: bool = False, defaults: dict[str, Any] | None = None
+    ) -> Self:
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
+        filename = defaults.get("media_file", None)
+        if filename:
+            with open(filename, "rb") as f:
+                obj.media_file.save(os.path.basename(filename), File(f), save=True)
         return obj

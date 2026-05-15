@@ -3,7 +3,14 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from webapp.models.media_models import MessagePicture, MessageVideo, ProfilePicture
+    from webapp.models.media_models import (
+        MessageAudio,
+        MessageOtherMedia,
+        MessagePicture,
+        MessageSticker,
+        MessageVideo,
+        ProfilePicture,
+    )
 
 from django.conf import settings
 from django.db import models
@@ -255,7 +262,7 @@ class Message(TelegramBaseModel):
 
     references = models.ManyToManyField(Channel, related_name="reference_message_set")
     missing_references = models.TextField(blank=True)
-    grouped_id = models.BigIntegerField(null=True)
+    grouped_id = models.BigIntegerField(null=True, db_index=True)
     views = models.PositiveBigIntegerField(null=True)
     forwards = models.PositiveBigIntegerField(null=True)
     edit_date = models.DateTimeField(null=True)
@@ -302,6 +309,76 @@ class Message(TelegramBaseModel):
     @property
     def message_video(self) -> "MessageVideo | None":
         return self.messagevideo_set.order_by("date").last()
+
+    @property
+    def message_audio(self) -> "MessageAudio | None":
+        return self.messageaudio_set.order_by("date").last()
+
+    @property
+    def message_sticker(self) -> "MessageSticker | None":
+        return self.messagesticker_set.order_by("date").last()
+
+    @property
+    def message_other_media(self) -> "MessageOtherMedia | None":
+        return self.messageothermedia_set.order_by("date").last()
+
+    @property
+    def is_album(self) -> bool:
+        return self.grouped_id is not None
+
+    def _album_media(self, related_set_name: str, model: type) -> list:
+        """Return either prefetched single-message media or all album-sibling media.
+
+        For non-album messages this returns the prefetched related set, so the
+        existing prefetch_related calls keep their N+1 protection. For album
+        heads it issues one query per media type to gather siblings' media,
+        ordered by sibling telegram_id so the gallery matches Telegram's order.
+        """
+        if not self.is_album:
+            return list(getattr(self, related_set_name).all())
+        return list(
+            model.objects.filter(
+                message__channel_id=self.channel_id,
+                message__grouped_id=self.grouped_id,
+            ).order_by("message__telegram_id")
+        )
+
+    @property
+    def album_pictures(self) -> list:
+        from webapp.models.media_models import MessagePicture
+
+        return self._album_media("messagepicture_set", MessagePicture)
+
+    @property
+    def album_videos(self) -> list:
+        from webapp.models.media_models import MessageVideo
+
+        return self._album_media("messagevideo_set", MessageVideo)
+
+    @property
+    def album_audios(self) -> list:
+        from webapp.models.media_models import MessageAudio
+
+        return self._album_media("messageaudio_set", MessageAudio)
+
+    @property
+    def album_stickers(self) -> list:
+        from webapp.models.media_models import MessageSticker
+
+        return self._album_media("messagesticker_set", MessageSticker)
+
+    @property
+    def album_other_media(self) -> list:
+        from webapp.models.media_models import MessageOtherMedia
+
+        return self._album_media("messageothermedia_set", MessageOtherMedia)
+
+    @property
+    def album_size(self) -> int:
+        """Number of messages in this album (1 for non-album messages)."""
+        if not self.is_album:
+            return 1
+        return Message.objects.filter(channel_id=self.channel_id, grouped_id=self.grouped_id).count()
 
     @property
     def telegram_url(self) -> str:

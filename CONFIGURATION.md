@@ -84,7 +84,10 @@ pip install oracledb           # Oracle
 | `TELEGRAM_SESSION_NAME` | Telethon session file name (no `.session` extension) | `anon` |
 | `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | Max messages to fetch per channel per run; `0` = no limit | `0` |
 | `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `True` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos attached to messages | `False` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos (including GIFs/animations and round videos) attached to messages | `False` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_AUDIO` | Download audio attached to messages — both voice notes and uploaded audio documents | `False` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_STICKERS` | Download stickers attached to messages (static webp, animated TGS, video webm) | `False` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA` | Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.) | `False` |
 
 > **Message statistics:** view counts, forward counts, reply counts, and reactions are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `crawl_channels` to re-fetch them; combine with `--refresh-limit N`, `--refresh-from YYYY-MM-DD`, and `--refresh-to YYYY-MM-DD` to restrict the scope.
 

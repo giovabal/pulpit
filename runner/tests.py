@@ -488,8 +488,20 @@ class ExportDetailViewTests(TestCase):
 
 
 class BuildArgsGetChannelsTests(TestCase):
-    def test_empty_post_produces_no_args(self):
-        self.assertEqual(_build_args("crawl_channels", FakePost()), [])
+    def test_empty_post_only_emits_media_defaults(self):
+        # bool_explicit specs (the five media toggles) always emit either --download-X
+        # or --no-download-X so an unchecked checkbox can override the .analysis-defaults.
+        # An empty POST therefore yields the five --no- forms and nothing else.
+        self.assertEqual(
+            _build_args("crawl_channels", FakePost()),
+            [
+                "--no-download-images",
+                "--no-download-video",
+                "--no-download-audio",
+                "--no-download-stickers",
+                "--no-download-other-media",
+            ],
+        )
 
     def test_each_boolean_flag_mapped(self):
         flags = {
@@ -515,7 +527,10 @@ class BuildArgsGetChannelsTests(TestCase):
 
     def test_do_refresh_with_limit_value(self):
         args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_limit": "200"}))
-        self.assertEqual(args, ["--refresh-messages-stats", "--refresh-limit", "200"])
+        # The three --no-download-X flags are emitted unconditionally (bool_explicit specs);
+        # filter them out to assert on just the refresh-related portion.
+        non_media = [a for a in args if not a.startswith("--no-download-") and not a.startswith("--download-")]
+        self.assertEqual(non_media, ["--refresh-messages-stats", "--refresh-limit", "200"])
 
     def test_do_refresh_with_date_value(self):
         args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_from": "2024-01-01"}))

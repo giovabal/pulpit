@@ -1,5 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.20]
+- fix missing media should fix even missing profile pictures, is it doing it?
 - dark theme
 - in homepage add a scattered graph that show number of connection / number of effective forwards (ie.: number against multiplicity)
 - regency weights should be centered on a period of time, and there must regency weights even for the future

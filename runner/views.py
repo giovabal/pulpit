@@ -69,6 +69,11 @@ class OperationsView(View):
             "CRAWL_RETRY_LOST_MESSAGES": settings.CRAWL_RETRY_LOST_MESSAGES,
             "CRAWL_RETRY_REFERENCES": settings.CRAWL_RETRY_REFERENCES,
             "CRAWL_FORCE_RETRY_UNRESOLVED": settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            "CRAWL_DOWNLOAD_IMAGES": settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES,
+            "CRAWL_DOWNLOAD_VIDEO": settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO,
+            "CRAWL_DOWNLOAD_AUDIO": settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO,
+            "CRAWL_DOWNLOAD_STICKERS": settings.TELEGRAM_CRAWLER_DOWNLOAD_STICKERS,
+            "CRAWL_DOWNLOAD_OTHER_MEDIA": settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA,
             "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
             "CRAWL_OUT_DEGREES": settings.CRAWL_OUT_DEGREES,
             # SA outputs
@@ -319,6 +324,7 @@ class ExportDetailView(View):
 #   ("csv",           post_key, cli_flag)              "post.getlist(key) joined by ','"
 #   ("csv_unique",    post_key, cli_flag)              "csv with order-preserving dedupe"
 #   ("const",         post_key, cli_flag, const_value) "fixed second arg when post[key] is truthy"
+#   ("bool_explicit", post_key, on_flag, off_flag)     "always emit on/off form (tri-state CLI)"
 #   ("channel_types", cli_flag)                        "CHANNEL/GROUP/USER triplet → csv"
 #   ("extra_terms",   post_key)                        "one --extra-term per non-blank line"
 #   ("positional",    post_key)                        "a bare argument (no flag) when set"
@@ -355,6 +361,9 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         _, key, flag, const_value = spec
         if post.get(key):
             args += [flag, const_value]
+    elif kind == "bool_explicit":
+        _, key, on_flag, off_flag = spec
+        args.append(on_flag if post.get(key) else off_flag)
     elif kind == "channel_types":
         _, flag = spec
         types = [ct for ct in _CHANNEL_TYPE_KEYS if post.get(f"channel_type_{ct.lower()}")]
@@ -394,6 +403,12 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("flag", "retry_lost_messages", "--retry-lost-messages"),
         ("flag", "retry_references", "--retry-references"),
         ("flag", "force_retry_unresolved_references", "--force-retry-unresolved-references"),
+        # Media types
+        ("bool_explicit", "download_images", "--download-images", "--no-download-images"),
+        ("bool_explicit", "download_video", "--download-video", "--no-download-video"),
+        ("bool_explicit", "download_audio", "--download-audio", "--no-download-audio"),
+        ("bool_explicit", "download_stickers", "--download-stickers", "--no-download-stickers"),
+        ("bool_explicit", "download_other_media", "--download-other-media", "--no-download-other-media"),
         # Degrees
         ("flag", "in_degrees", "--in-degrees"),
         ("flag", "out_degrees", "--out-degrees"),

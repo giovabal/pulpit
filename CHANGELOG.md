@@ -1,6 +1,6 @@
 # Changelog
 ## [0.19] - To be announced
-*Default configuration reorganized. Database maintenance. Lost messages.*
+*Media management improvements. Lost messages management improvements. Database maintenance.*
 
 ### New features
 - **In-target override on channels** — each `Channel` gains an `in_target_override` nullable boolean field (default `null`). When `null`, the channel's in-target status is determined by its organization as before. When `True`, the channel is always treated as in target regardless of its organization. When `False`, the channel is always excluded regardless of its organization. Settable from the channel edit page and inline from the channel list (new **Override** column with a compact auto/yes/no select). The channel list also gains two new status filter options: *Forced in target* and *Forced not in target*. The `Channel.objects.in_target()` manager and the `In target` status filter in the backoffice API both respect the override.
@@ -32,6 +32,7 @@
 - **Test suite hangs when `IGNORE_FLOODWAIT=False`** — `ChannelCrawlerPendingForwardsTests` now runs under `@override_settings(IGNORE_FLOODWAIT=True, TELEGRAM_FLOODWAIT_SLEEP_SECONDS=0)`, preventing `sleep(900)` in `_resolve_pending_forwards` from firing and halting the runner for 15 minutes whenever the local `.analysis-defaults` enables the flood-wait sleep.
 - **Channel count mismatch between crawler and homepage** — `Channel.objects.in_target()` (used by the homepage, channel list, and all views) excluded `is_private` channels but not `is_lost` channels, while the crawler excludes both by default. Channels marked as lost were therefore counted in the UI but silently skipped at crawl time. The manager now also excludes `is_lost=True`, making the displayed count consistent with the crawl scope.
 - **Lost channels included in structural analysis graph** — `graph_builder.build_graph()` excluded private channels but not lost ones, so lost channels were silently included in every graph export. The function now excludes both by default.
+- **`--get-channels-info` re-downloads profile pictures whose file is missing on disk** — `download_profile_picture` previously skipped any `ProfilePicture` whose `telegram_id` was already in the DB, regardless of whether its image was actually present on disk. Rows whose file had been deleted (or that never finished downloading and were saved with an empty `picture` field) were therefore stuck with no easy recovery short of removing the DB record. The skip check now also requires the file to exist on disk; rows with a missing or empty image are re-downloaded on the next `--get-channels-info` pass.
 
 
 ## [0.18] - 2026-05-11

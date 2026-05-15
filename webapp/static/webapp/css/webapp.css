@@ -435,6 +435,17 @@ body {
   border-bottom-color: var(--border);
 }
 
+.album-banner {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .3rem .875rem;
+  font-size: .7rem;
+  color: var(--muted);
+  background: var(--hover);
+  border-bottom: 1px solid var(--border);
+}
+
 .post-body {
   padding: .875rem 1rem;
   font-size: .875rem;

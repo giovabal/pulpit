@@ -833,20 +833,53 @@ class MediaHandlerProfilePictureTests(TestCase):
         self.assertEqual(result, 1)
         mock_from_tg.assert_called_once()
 
+    @patch("crawler.media_handler.os.path.exists", return_value=True)
     @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
-    def test_skips_already_downloaded_picture(self, mock_from_tg: MagicMock) -> None:
+    def test_skips_picture_when_file_on_disk(self, mock_from_tg: MagicMock, _mock_exists: MagicMock) -> None:
         from webapp.models import ProfilePicture
 
         tc = self._make_tg_channel(telegram_id=1)
         pic = self._make_tg_picture(pic_id=200)
         self.api_client.client.get_profile_photos.return_value = [pic]
-        # Pre-create the ProfilePicture in DB (without a real file)
-        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="", date=None)
+        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="profile.jpg", date=None)
 
         result = self.handler.download_profile_picture(tc)
 
         self.assertEqual(result, 0)
         mock_from_tg.assert_not_called()
+
+    @patch("crawler.media_handler.os.path.exists", return_value=False)
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_redownloads_picture_when_file_missing_on_disk(
+        self, mock_from_tg: MagicMock, _mock_exists: MagicMock
+    ) -> None:
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="profile.jpg", date=None)
+        self.handler._download_media = MagicMock(return_value=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_redownloads_picture_when_record_has_empty_file_field(self, mock_from_tg: MagicMock) -> None:
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="", date=None)
+        self.handler._download_media = MagicMock(return_value=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
 
     @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
     def test_counts_multiple_new_pictures(self, mock_from_tg: MagicMock) -> None:
@@ -987,6 +1020,258 @@ class MediaHandlerMessageVideoTests(TestCase):
             self.handler_dl.download_message_video(tm)
         except Exception:
             self.fail("download_message_video raised an unexpected exception")
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_message_audio
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerMessageAudioTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)  # download_audio=False by default
+        self.handler_dl = MediaHandler(self.api_client, download_audio=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _make_tg_message(
+        self,
+        mime_type: str = "audio/mpeg",
+        has_document: bool = True,
+        attributes: list | None = None,
+    ) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        if has_document:
+            tm.document.mime_type = mime_type
+            tm.document.attributes = attributes or []
+            tm.media.document.mime_type = mime_type
+            tm.media.document.attributes = attributes or []
+        else:
+            tm.document = None
+            tm.media.document = None
+        return tm
+
+    def test_returns_when_download_disabled(self) -> None:
+        tm = self._make_tg_message()
+        result = self.handler.download_message_audio(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_returns_when_no_document(self) -> None:
+        tm = self._make_tg_message(has_document=False)
+        tm.media = None
+        result = self.handler_dl.download_message_audio(tm)
+        self.assertEqual(result, 0)
+
+    def test_skips_non_audio_mime_without_audio_attr(self) -> None:
+        tm = self._make_tg_message(mime_type="application/pdf", attributes=[])
+        result = self.handler_dl.download_message_audio(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    @patch("crawler.media_handler.MessageAudio.from_telegram_object")
+    def test_downloads_audio_mime(self, mock_from_tg: MagicMock) -> None:
+        tm = self._make_tg_message(mime_type="audio/mpeg")
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/song.mp3")
+        result = self.handler_dl.download_message_audio(tm)
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertFalse(defaults["is_voice"])
+
+    @patch("crawler.media_handler.MessageAudio.from_telegram_object")
+    def test_downloads_voice_note_via_attribute(self, mock_from_tg: MagicMock) -> None:
+        from telethon.tl.types import DocumentAttributeAudio
+
+        attr = DocumentAttributeAudio(duration=3, voice=True)
+        tm = self._make_tg_message(mime_type="audio/ogg", attributes=[attr])
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/voice.ogg")
+        result = self.handler_dl.download_message_audio(tm)
+        self.assertEqual(result, 1)
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertTrue(defaults["is_voice"])
+
+    def test_skips_sticker_documents(self) -> None:
+        from telethon.tl.types import DocumentAttributeSticker
+
+        attr = DocumentAttributeSticker(alt="🙂", stickerset=MagicMock())
+        tm = self._make_tg_message(mime_type="audio/ogg", attributes=[attr])
+        result = self.handler_dl.download_message_audio(tm)
+        self.assertEqual(result, 0)
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_message_sticker
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerMessageStickerTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)  # download_stickers=False by default
+        self.handler_dl = MediaHandler(self.api_client, download_stickers=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _make_tg_message(
+        self,
+        mime_type: str = "image/webp",
+        has_document: bool = True,
+        attributes: list | None = None,
+    ) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        if has_document:
+            tm.document.mime_type = mime_type
+            tm.document.attributes = attributes or []
+            tm.media.document.mime_type = mime_type
+            tm.media.document.attributes = attributes or []
+        else:
+            tm.document = None
+            tm.media.document = None
+        return tm
+
+    def test_returns_when_download_disabled(self) -> None:
+        from telethon.tl.types import DocumentAttributeSticker
+
+        attr = DocumentAttributeSticker(alt="🙂", stickerset=MagicMock())
+        tm = self._make_tg_message(attributes=[attr])
+        result = self.handler.download_message_sticker(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_skips_documents_without_sticker_attribute(self) -> None:
+        tm = self._make_tg_message(mime_type="image/webp", attributes=[])
+        result = self.handler_dl.download_message_sticker(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    @patch("crawler.media_handler.MessageSticker.from_telegram_object")
+    def test_downloads_static_sticker(self, mock_from_tg: MagicMock) -> None:
+        from telethon.tl.types import DocumentAttributeSticker
+
+        attr = DocumentAttributeSticker(alt="🙂", stickerset=MagicMock())
+        tm = self._make_tg_message(mime_type="image/webp", attributes=[attr])
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/sticker.webp")
+        result = self.handler_dl.download_message_sticker(tm)
+        self.assertEqual(result, 1)
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertFalse(defaults["is_animated"])
+
+    @patch("crawler.media_handler.MessageSticker.from_telegram_object")
+    def test_marks_tgs_sticker_animated(self, mock_from_tg: MagicMock) -> None:
+        from telethon.tl.types import DocumentAttributeSticker
+
+        attr = DocumentAttributeSticker(alt="🌟", stickerset=MagicMock())
+        tm = self._make_tg_message(mime_type="application/x-tgsticker", attributes=[attr])
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/sticker.tgs")
+        result = self.handler_dl.download_message_sticker(tm)
+        self.assertEqual(result, 1)
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertTrue(defaults["is_animated"])
+
+
+# ---------------------------------------------------------------------------
+# MediaHandler — download_message_other_media
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerMessageOtherMediaTests(TestCase):
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client)  # download_other_media=False by default
+        self.handler_dl = MediaHandler(self.api_client, download_other_media=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _make_tg_message(self, mime_type: str = "application/pdf", has_document: bool = True) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        if has_document:
+            tm.document.mime_type = mime_type
+            tm.media.document.mime_type = mime_type
+        else:
+            tm.document = None
+            tm.media.document = None
+        return tm
+
+    def test_returns_when_download_disabled(self) -> None:
+        tm = self._make_tg_message()
+        result = self.handler.download_message_other_media(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_returns_when_no_document(self) -> None:
+        tm = self._make_tg_message(has_document=False)
+        tm.media = None
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_skips_video_mime_type(self) -> None:
+        tm = self._make_tg_message(mime_type="video/mp4")
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_skips_audio_mime(self) -> None:
+        # Audio mimes are claimed by download_message_audio now, not other_media.
+        tm = self._make_tg_message(mime_type="audio/ogg")
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    def test_skips_sticker_documents(self) -> None:
+        from telethon.tl.types import DocumentAttributeSticker
+
+        tm = self._make_tg_message(mime_type="application/x-tgsticker")
+        tm.document.attributes = [DocumentAttributeSticker(alt="🙂", stickerset=MagicMock())]
+        tm.media.document.attributes = tm.document.attributes
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 0)
+        self.api_client.client.download_media.assert_not_called()
+
+    @patch("crawler.media_handler.MessageOtherMedia.from_telegram_object")
+    def test_downloads_pdf_document(self, mock_from_tg: MagicMock) -> None:
+        tm = self._make_tg_message(mime_type="application/pdf")
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/doc.pdf")
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @patch("crawler.media_handler.MessageOtherMedia.from_telegram_object")
+    def test_downloads_image_as_document(self, mock_from_tg: MagicMock) -> None:
+        # Bot-posted images come as documents with image/* mime; the photo branch never sees them.
+        tm = self._make_tg_message(mime_type="image/png")
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/img.png")
+        result = self.handler_dl.download_message_other_media(tm)
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    def test_handles_file_migrate_error_gracefully(self) -> None:
+        from telethon.errors.rpcerrorlist import FileMigrateError
+
+        tm = self._make_tg_message()
+        err = FileMigrateError.__new__(FileMigrateError)
+        self.handler_dl._download_media = MagicMock(side_effect=err)
+        try:
+            self.handler_dl.download_message_other_media(tm)
+        except Exception:
+            self.fail("download_message_other_media raised an unexpected exception")
 
 
 # ---------------------------------------------------------------------------

@@ -118,7 +118,7 @@ The options panel is organized into three independent groups — each is its own
 | **Fetch replies** | Fetch reply threads from linked discussion groups for posts that have replies. |
 | **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages. Messages that Telegram no longer returns are flipped to `is_lost=True` and stop counting toward charts, edge weights, and citation measures (they still appear in the message list when the *Lost messages* filter is set to *Include* or *Only*). A previously-lost message that Telegram returns again is automatically un-marked. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
 | **Fix message holes** | Scan message ID sequences for gaps and fill them in. Can run without *Get new messages*. |
-| **Fix missing media** | Re-download photos and videos that were never saved or are missing from disk. |
+| **Fix missing media** | Re-download photos, videos, audio (voice notes and audio files), stickers, and other media that were never saved or are missing from disk. Honors the toggles in the **Media types** sidebar — uncheck a type to skip it. |
 | **Retry lost messages** | Re-fetch every message currently marked as lost. Messages that Telegram returns are unmarked and their stats refreshed; the rest stay lost. Useful after a transient outage or to clean up stale lost-flags accumulated by older refreshes that ran with a small date window. |
 | **Retry unresolved references** | Re-attempt t.me/ links that could not be resolved in a previous run. |
 
@@ -133,6 +133,14 @@ The options panel is organized into three independent groups — each is its own
 
 - **DB id filter** — enter specific channel IDs (e.g. `5, 10-20, 50`). Find a channel's ID in the Manage → Channels list.
 - **Channel groups** — tick one or more groups in the **Channel groups** fieldset. Only channels belonging to at least one selected group are crawled. Leave all unchecked to crawl all in-target channels.
+
+**Media types:** the right-hand **Media types** fieldset controls which message attachments are downloaded. The five checkboxes apply to every operation that fetches messages from Telegram — *Get new messages*, *Fix message holes*, and *Fix missing media* — and are disabled when none of those is selected. Operations that touch media show a small sliders icon next to their label as a reminder.
+
+- **Image download** — photo files attached to messages.
+- **Video download** — video files, including GIFs/animations and round videos (which carry attribute flags on the saved row).
+- **Audio download** — both voice notes and uploaded audio documents; the saved row records `is_voice` to distinguish them.
+- **Sticker download** — static webp stickers, animated TGS, and video webm stickers.
+- **Other media download** — everything else (PDFs, archives, arbitrary documents).
 
 > **The first connection to Telegram:** if this is your first run, Telegram will send a verification code to your phone. Enter it in the terminal when prompted.
 
@@ -237,6 +245,11 @@ python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
 python manage.py crawl_channels --get-new-messages --channel-groups media,activists
+
+# Media downloads (tri-state: --download-X enables, --no-download-X disables for the run only)
+python manage.py crawl_channels --get-new-messages --no-download-video --no-download-audio --no-download-stickers --no-download-other-media  # text-only
+python manage.py crawl_channels --get-new-messages --download-audio --download-stickers           # add audio + stickers to a default crawl
+python manage.py crawl_channels --fix-missing-media --download-images --no-download-video         # repair photos only
 
 # Generate the map
 python manage.py structural_analysis --2dgraph --html

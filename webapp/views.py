@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
+from django.db.models import Count, Exists, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -31,18 +31,39 @@ from .utils.dates import fmt_date, fmt_ttl
 
 # ---- message list options ------------------------------------------------
 
-_CONTENT_TYPES = ["text", "image", "video", "sound", "other"]
+_CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
 
 _CONTENT_TYPE_Q: dict[str, Q] = {
     "text": Q(media_type=""),
     "image": Q(media_type="photo"),
     "video": Q(media_type="video"),
     "sound": Q(media_type="audio"),
-    "other": ~Q(media_type__in=["", "photo", "video", "audio"]),
+    "sticker": Q(media_type="sticker"),
+    "other": ~Q(media_type__in=["", "photo", "video", "audio", "sticker"]),
 }
 
 
 _LOST_MODES = ("exclude", "include", "only")
+
+
+def _exclude_album_tails(qs: QuerySet) -> QuerySet:
+    """Hide messages that are part of a Telegram media-group album but not its head.
+
+    Telegram emits each photo/video of an album as a separate ``Message`` with
+    a shared ``grouped_id``. Treating the message with the smallest
+    ``telegram_id`` in each group as the head and dropping the rest collapses
+    multi-item albums into a single visible card; the head's
+    ``album_pictures`` / ``album_videos`` / etc. then expose the union of media
+    across siblings.
+    """
+    has_earlier_sibling = Message.objects.filter(
+        channel_id=OuterRef("channel_id"),
+        grouped_id=OuterRef("grouped_id"),
+        telegram_id__lt=OuterRef("telegram_id"),
+    )
+    return qs.annotate(_is_album_tail=Exists(has_earlier_sibling)).filter(
+        Q(grouped_id__isnull=True) | Q(_is_album_tail=False)
+    )
 
 
 def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc") -> QuerySet:
@@ -61,7 +82,7 @@ def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc"
         qs = qs.filter(is_lost=False)
     elif lost == "only":
         qs = qs.filter(is_lost=True)
-    return qs
+    return _exclude_album_tails(qs)
 
 
 def _message_options_context(params: Any, default_sort: str = "desc") -> dict[str, Any]:
@@ -108,7 +129,14 @@ class HomeView(ListView):
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
             .select_related("channel", "channel__organization", "forwarded_from")
-            .prefetch_related("messagepicture_set", "messagevideo_set", "reactions")
+            .prefetch_related(
+                "messagepicture_set",
+                "messagevideo_set",
+                "messageaudio_set",
+                "messagesticker_set",
+                "messageothermedia_set",
+                "reactions",
+            )
         )
         if q:
             qs = qs.filter(message__icontains=q)
@@ -323,7 +351,14 @@ class MessageSearchView(ListView):
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
             .select_related("channel", "channel__organization", "forwarded_from")
-            .prefetch_related("messagepicture_set", "messagevideo_set", "reactions")
+            .prefetch_related(
+                "messagepicture_set",
+                "messagevideo_set",
+                "messageaudio_set",
+                "messagesticker_set",
+                "messageothermedia_set",
+                "reactions",
+            )
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -360,7 +395,15 @@ class ChannelDetailView(ListView):
                     channel__in=Channel.objects.in_target().values("pk"),
                 )
                 .select_related("channel", "channel__organization", "forwarded_from")
-                .prefetch_related("references", "reactions", "messagepicture_set", "messagevideo_set")
+                .prefetch_related(
+                    "references",
+                    "reactions",
+                    "messagepicture_set",
+                    "messagevideo_set",
+                    "messageaudio_set",
+                    "messagesticker_set",
+                    "messageothermedia_set",
+                )
             )
             if q:
                 qs = qs.filter(message__icontains=q)
@@ -373,7 +416,15 @@ class ChannelDetailView(ListView):
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
-            .prefetch_related("references", "reactions", "messagepicture_set", "messagevideo_set")
+            .prefetch_related(
+                "references",
+                "reactions",
+                "messagepicture_set",
+                "messagevideo_set",
+                "messageaudio_set",
+                "messagesticker_set",
+                "messageothermedia_set",
+            )
         )
         if self.selected_channel.out_of_target_after:
             qs = qs.filter(date__date__lte=self.selected_channel.out_of_target_after)

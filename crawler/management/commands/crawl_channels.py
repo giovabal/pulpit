@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import tempfile
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -21,7 +21,15 @@ from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
-from webapp.models import Channel, Message, MessagePicture, MessageVideo
+from webapp.models import (
+    Channel,
+    Message,
+    MessageAudio,
+    MessageOtherMedia,
+    MessagePicture,
+    MessageSticker,
+    MessageVideo,
+)
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES, channel_type_filter
 from webapp.utils.id_ranges import parse_id_ranges
 
@@ -62,6 +70,13 @@ class CrawlOptions:
     retry_lost_messages: bool
     retry_references: bool
     force_retry: bool
+
+    # Media downloads (apply to get_new_messages, fix_holes, and fix_missing_media)
+    download_images: bool
+    download_video: bool
+    download_audio: bool
+    download_stickers: bool
+    download_other_media: bool
 
     # Degrees phase
     in_degrees: bool
@@ -341,7 +356,64 @@ class Command(BaseCommand):
             default=False,
             help=(
                 "Identify messages whose media file is absent from disk or was never downloaded "
-                "and re-fetch it from Telegram."
+                "and re-fetch it from Telegram. Honors --download-images / --download-video / "
+                "--download-audio / --download-stickers / --download-other-media (and their "
+                "--no- counterparts)."
+            ),
+        )
+        parser.add_argument(
+            "--download-images",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download photo files attached to messages. Applies to --get-new-messages, "
+                "--fixholes, and --fix-missing-media. Defaults to "
+                "TELEGRAM_CRAWLER_DOWNLOAD_IMAGES; pass --no-download-images to disable for "
+                "this run."
+            ),
+        )
+        parser.add_argument(
+            "--download-video",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download video files attached to messages. Applies to --get-new-messages, "
+                "--fixholes, and --fix-missing-media. Defaults to "
+                "TELEGRAM_CRAWLER_DOWNLOAD_VIDEO; pass --no-download-video to disable for "
+                "this run."
+            ),
+        )
+        parser.add_argument(
+            "--download-audio",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download audio files attached to messages — both voice notes and uploaded "
+                "audio documents. Applies to --get-new-messages, --fixholes, and "
+                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_AUDIO; pass "
+                "--no-download-audio to disable for this run."
+            ),
+        )
+        parser.add_argument(
+            "--download-stickers",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download stickers attached to messages — static webp, animated TGS, and "
+                "video webm stickers. Applies to --get-new-messages, --fixholes, and "
+                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_STICKERS; pass "
+                "--no-download-stickers to disable for this run."
+            ),
+        )
+        parser.add_argument(
+            "--download-other-media",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download non-photo, non-video, non-audio, non-sticker documents (PDFs, "
+                "archives, etc.). Applies to --get-new-messages, --fixholes, and "
+                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA; "
+                "pass --no-download-other-media to disable for this run."
             ),
         )
         parser.add_argument(
@@ -630,36 +702,80 @@ class Command(BaseCommand):
         api_client: TelegramAPIClient,
         download_temp_dir: str,
         printer: ProgressPrinter,
+        opts: CrawlOptions,
     ) -> None:
         """Re-download media files that are absent from disk or were never fetched."""
         fix_handler = MediaHandler(
             api_client,
             download_temp_dir=download_temp_dir,
-            download_images=True,
-            download_video=True,
+            download_images=opts.download_images,
+            download_video=opts.download_video,
+            download_audio=opts.download_audio,
+            download_stickers=opts.download_stickers,
+            download_other_media=opts.download_other_media,
         )
 
-        # Messages with photo/video media_type but no corresponding record
-        needs_pic: set[int] = set(
-            Message.objects.filter(channel__in=in_target_qs, media_type="photo")
-            .filter(messagepicture__isnull=True)
-            .values_list("id", flat=True)
-        )
-        needs_vid: set[int] = set(
-            Message.objects.filter(channel__in=in_target_qs, media_type="video")
-            .filter(messagevideo__isnull=True)
-            .values_list("id", flat=True)
-        )
+        # Messages with each media_type but no corresponding record.
+        # Each media-type bucket is only scanned when its toggle is on.
+        needs_pic: set[int] = set()
+        if opts.download_images:
+            needs_pic = set(
+                Message.objects.filter(channel__in=in_target_qs, media_type="photo")
+                .filter(messagepicture__isnull=True)
+                .values_list("id", flat=True)
+            )
+        needs_vid: set[int] = set()
+        if opts.download_video:
+            needs_vid = set(
+                Message.objects.filter(channel__in=in_target_qs, media_type="video")
+                .filter(messagevideo__isnull=True)
+                .values_list("id", flat=True)
+            )
+        needs_aud: set[int] = set()
+        if opts.download_audio:
+            needs_aud = set(
+                Message.objects.filter(channel__in=in_target_qs, media_type="audio")
+                .filter(messageaudio__isnull=True)
+                .values_list("id", flat=True)
+            )
+        needs_sticker: set[int] = set()
+        if opts.download_stickers:
+            needs_sticker = set(
+                Message.objects.filter(channel__in=in_target_qs, media_type="sticker")
+                .filter(messagesticker__isnull=True)
+                .values_list("id", flat=True)
+            )
+        needs_other: set[int] = set()
+        if opts.download_other_media:
+            needs_other = set(
+                Message.objects.filter(channel__in=in_target_qs, media_type="document")
+                .filter(messageothermedia__isnull=True)
+                .values_list("id", flat=True)
+            )
 
         # Records that exist but whose file is missing on disk
-        for mp in MessagePicture.objects.filter(message__channel__in=in_target_qs).select_related("message"):
-            if mp.picture and not os.path.exists(mp.picture.path):
-                needs_pic.add(mp.message_id)
-        for mv in MessageVideo.objects.filter(message__channel__in=in_target_qs).select_related("message"):
-            if mv.video and not os.path.exists(mv.video.path):
-                needs_vid.add(mv.message_id)
+        if opts.download_images:
+            for mp in MessagePicture.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+                if mp.picture and not os.path.exists(mp.picture.path):
+                    needs_pic.add(mp.message_id)
+        if opts.download_video:
+            for mv in MessageVideo.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+                if mv.video and not os.path.exists(mv.video.path):
+                    needs_vid.add(mv.message_id)
+        if opts.download_audio:
+            for ma in MessageAudio.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+                if ma.audio and not os.path.exists(ma.audio.path):
+                    needs_aud.add(ma.message_id)
+        if opts.download_stickers:
+            for ms in MessageSticker.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+                if ms.sticker and not os.path.exists(ms.sticker.path):
+                    needs_sticker.add(ms.message_id)
+        if opts.download_other_media:
+            for mo in MessageOtherMedia.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+                if mo.media_file and not os.path.exists(mo.media_file.path):
+                    needs_other.add(mo.message_id)
 
-        all_msg_pks = needs_pic | needs_vid
+        all_msg_pks = needs_pic | needs_vid | needs_aud | needs_sticker | needs_other
         if not all_msg_pks:
             self.stdout.write("\nNo missing media found.")
             return
@@ -731,6 +847,12 @@ class Command(BaseCommand):
                         fix_handler.download_message_picture(tg_msg)
                     if msg_pk in needs_vid:
                         fix_handler.download_message_video(tg_msg)
+                    if msg_pk in needs_aud:
+                        fix_handler.download_message_audio(tg_msg)
+                    if msg_pk in needs_sticker:
+                        fix_handler.download_message_sticker(tg_msg)
+                    if msg_pk in needs_other:
+                        fix_handler.download_message_other_media(tg_msg)
                     downloaded += 1
                     printer.status(
                         f"{channel_label} | downloaded {downloaded}/{n_messages}",
@@ -765,6 +887,13 @@ class Command(BaseCommand):
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
 
+        # The three media toggles use BooleanOptionalAction (default=None) so an explicit
+        # --no-download-X (sent by an unchecked Operations-panel checkbox) can disable a
+        # behaviour whose .analysis-defaults setting is True. The other booleans use the
+        # OR-with-settings shortcut and therefore cannot be turned off from CLI/UI.
+        def _resolve_media_toggle(option_value: bool | None, settings_value: bool) -> bool:
+            return option_value if option_value is not None else settings_value
+
         return CrawlOptions(
             get_channels_info=options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO,
             mine_about_texts=options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS,
@@ -781,6 +910,17 @@ class Command(BaseCommand):
             retry_lost_messages=options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES,
             retry_references=options["retry_references"] or settings.CRAWL_RETRY_REFERENCES,
             force_retry=options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            download_images=_resolve_media_toggle(
+                options["download_images"], settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
+            ),
+            download_video=_resolve_media_toggle(options["download_video"], settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO),
+            download_audio=_resolve_media_toggle(options["download_audio"], settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO),
+            download_stickers=_resolve_media_toggle(
+                options["download_stickers"], settings.TELEGRAM_CRAWLER_DOWNLOAD_STICKERS
+            ),
+            download_other_media=_resolve_media_toggle(
+                options["download_other_media"], settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA
+            ),
             in_degrees=options["in_degrees"] or settings.CRAWL_IN_DEGREES,
             out_degrees=options["out_degrees"] or settings.CRAWL_OUT_DEGREES,
             ids_str=options["ids"],
@@ -855,8 +995,11 @@ class Command(BaseCommand):
                     media_handler = MediaHandler(
                         api_client,
                         download_temp_dir=download_temp_dir,
-                        download_images=settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES,
-                        download_video=settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO,
+                        download_images=opts.download_images,
+                        download_video=opts.download_video,
+                        download_audio=opts.download_audio,
+                        download_stickers=opts.download_stickers,
+                        download_other_media=opts.download_other_media,
                     )
                     reference_resolver = ReferenceResolver(api_client)
                     crawler = ChannelCrawler(
@@ -1092,7 +1235,7 @@ class Command(BaseCommand):
                                 self.stdout.write("", ending="\n")
 
                         if fix_missing_media:
-                            self._fix_missing_media(channels, api_client, download_temp_dir, printer)
+                            self._fix_missing_media(channels, api_client, download_temp_dir, printer, opts)
 
                     media_handler.clean_leftovers()
                 # The TelegramClient context manager has now exited and the connection is closed.
