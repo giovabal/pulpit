@@ -35,69 +35,7 @@
 <ol class="post-list list-unstyled mt-2">
   {% for post in page_obj %}
   <li>
-    <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}">
-      <div class="search-result-channel">
-        <a href="{{ post.channel.get_absolute_url }}">
-          <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
-          {{ post.channel.title }}
-        </a>
-      </div>
-      {% if post.forwarded_from %}
-      <div class="forwarded-banner">
-        <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
-        forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
-      </div>
-      {% endif %}
-      <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
-      {% if post.post_author %}
-      <div class="pin-banner subtle">
-        <i class="bi bi-pen" aria-hidden="true"></i> {{ post.post_author }}
-      </div>
-      {% endif %}
-      <footer class="post-footer">
-        <div class="post-meta">
-          <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
-          <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
-          <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
-          {% if post.edit_date %}<span class="post-meta-item" title="Edited {{ post.edit_date }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edited</span>{% endif %}
-        </div>
-        <div class="post-footer-actions">
-          {% if post.replies %}
-          <button type="button" class="post-replies-btn"
-                  data-replies-url="{% url 'message-replies' channel_pk=post.channel.pk telegram_id=post.telegram_id %}"
-                  data-post-pk="{{ post.pk }}"
-                  aria-expanded="false"
-                  title="Replies ({{ post.replies }})">
-            <i class="bi bi-chat-left-dots" aria-hidden="true"></i>
-            <span class="post-replies-count">{{ post.replies }}</span>
-          </button>
-          {% endif %}
-          <button type="button" class="post-details-btn" data-bs-toggle="collapse" data-bs-target="#pd-{{ post.pk }}" aria-expanded="false" aria-controls="pd-{{ post.pk }}" title="More details">
-            <i class="bi bi-info-circle" aria-hidden="true"></i>
-          </button>
-          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
-            <i class="bi bi-telegram" aria-hidden="true"></i>
-          </a>
-        </div>
-      </footer>
-      <div class="post-replies-panel" id="pr-{{ post.pk }}" style="display:none">
-        <div class="post-replies-inner"></div>
-      </div>
-      <div class="collapse post-details-panel" id="pd-{{ post.pk }}">
-        <dl class="post-details-dl">
-          {% if post.replies is not None or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
-            {% if post.replies is not None %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
-            {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>#{{ post.reply_to_msg_id }}</dd>{% endif %}
-            {% if post.fwd_from_channel_post %}<dt><i class="bi bi-link-45deg" aria-hidden="true"></i> Source post</dt><dd>#{{ post.fwd_from_channel_post }}</dd>{% endif %}
-            {% if post.fwd_from_from_name %}<dt><i class="bi bi-person" aria-hidden="true"></i> Forwarded by</dt><dd>{{ post.fwd_from_from_name }}</dd>{% endif %}
-            {% if post.silent %}<dt><i class="bi bi-bell-slash" aria-hidden="true"></i> Silent</dt><dd>Sent without notification</dd>{% endif %}
-            {% if post.factcheck %}<dt><i class="bi bi-patch-check" aria-hidden="true"></i> Fact-check</dt><dd>{% if post.factcheck.need_check %}<span class="post-detail-tag warning">Needs check</span> {% endif %}{% if post.factcheck.country %}{{ post.factcheck.country }}{% if post.factcheck.text %} — {% endif %}{% endif %}{% if post.factcheck.text %}{{ post.factcheck.text }}{% endif %}</dd>{% endif %}
-          {% else %}
-            <dt class="post-details-empty">No additional details available</dt>
-          {% endif %}
-        </dl>
-      </div>
-    </article>
+    {% include "webapp/_post_card.html" with post=post show_channel_chip=True %}
   </li>
   {% endfor %}
 </ol>
@@ -106,6 +44,11 @@
 {% endblock content %}
 
 {% block extra_scripts %}
+<script>
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
+</script>
 <script src="{% static 'webapp/js/post_replies.js' %}"></script>
 {% endblock extra_scripts %}
 

@@ -105,8 +105,10 @@ class HomeView(ListView):
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         q = self.request.GET.get("q", "").strip()
-        qs = Message.objects.filter(channel__in=Channel.objects.in_target()).select_related(
-            "channel", "channel__organization", "forwarded_from"
+        qs = (
+            Message.objects.filter(channel__in=Channel.objects.in_target())
+            .select_related("channel", "channel__organization", "forwarded_from")
+            .prefetch_related("messagepicture_set", "messagevideo_set", "reactions")
         )
         if q:
             qs = qs.filter(message__icontains=q)
@@ -318,8 +320,10 @@ class MessageSearchView(ListView):
     page_kwarg = "page"
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = Message.objects.filter(channel__in=Channel.objects.in_target()).select_related(
-            "channel", "channel__organization", "forwarded_from"
+        qs = (
+            Message.objects.filter(channel__in=Channel.objects.in_target())
+            .select_related("channel", "channel__organization", "forwarded_from")
+            .prefetch_related("messagepicture_set", "messagevideo_set", "reactions")
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -356,7 +360,7 @@ class ChannelDetailView(ListView):
                     channel__in=Channel.objects.in_target().values("pk"),
                 )
                 .select_related("channel", "channel__organization", "forwarded_from")
-                .prefetch_related("references", "reactions")
+                .prefetch_related("references", "reactions", "messagepicture_set", "messagevideo_set")
             )
             if q:
                 qs = qs.filter(message__icontains=q)
@@ -369,7 +373,7 @@ class ChannelDetailView(ListView):
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
-            .prefetch_related("references", "reactions")
+            .prefetch_related("references", "reactions", "messagepicture_set", "messagevideo_set")
         )
         if self.selected_channel.out_of_target_after:
             qs = qs.filter(date__date__lte=self.selected_channel.out_of_target_after)

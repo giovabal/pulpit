@@ -1,0 +1,147 @@
+{% comment %}
+Shared message-card partial used by home.html, message_search.html, and
+channel_detail.html so all three render messages identically (images, videos,
+media placeholders, reactions, replies, details panel).
+
+Required context:
+    post  — a Message instance.
+
+Optional context:
+    show_channel_chip (bool, default False)
+        Render the channel chip at the top. True for home/search pages where
+        the post list spans multiple channels.
+
+    received_view (bool, default False)
+        Render the "forwarded BY <channel>" banner instead of the default
+        "forwarded FROM <channel>" — used by channel_detail's "Forwards
+        received" tab where each post lives in a different (forwarding)
+        channel.
+
+Views including this partial should prefetch_related("messagepicture_set",
+"messagevideo_set", "reactions") to avoid N+1 queries.
+{% endcomment %}
+<article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and not received_view %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
+  {% if show_channel_chip %}
+  <div class="search-result-channel">
+    <a href="{{ post.channel.get_absolute_url }}">
+      <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
+      {{ post.channel.title }}
+    </a>
+  </div>
+  {% endif %}
+  {% if received_view %}
+  <div class="forwarded-banner">
+    <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+    forwarded by <a href="{{ post.channel.get_absolute_url }}">{{ post.channel.title }}</a>
+  </div>
+  {% elif post.forwarded_from %}
+  <div class="forwarded-banner">
+    <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+    forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
+  </div>
+  {% endif %}
+  {% if post.pinned %}
+  <div class="pin-banner">
+    <i class="bi bi-pin-fill" aria-hidden="true"></i> Pinned
+  </div>
+  {% elif post.has_been_pinned %}
+  <div class="pin-banner subtle">
+    <i class="bi bi-pin-angle" aria-hidden="true"></i> Previously pinned
+  </div>
+  {% endif %}
+  {% with pictures=post.messagepicture_set.all videos=post.messagevideo_set.all %}
+  {% if pictures %}
+    {% for picture in pictures %}
+    {% if picture.picture %}
+    <figure class="mb-0">
+      <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ post.channel.title }}">
+    </figure>
+    {% endif %}
+    {% endfor %}
+  {% elif post.media_type == "photo" %}
+  <div class="media-placeholder">
+    <i class="bi bi-image" aria-hidden="true"></i>
+    <span>Image not downloaded</span>
+  </div>
+  {% endif %}
+  {% if videos %}
+    {% for video in videos %}
+    <figure class="mb-0">
+      <video src="{{ video.video.url }}" class="post-image" controls aria-label="Message video from {{ post.channel.title }}"></video>
+    </figure>
+    {% endfor %}
+  {% elif post.media_type == "video" %}
+  <div class="media-placeholder">
+    <i class="bi bi-film" aria-hidden="true"></i>
+    <span>Video not downloaded</span>
+  </div>
+  {% endif %}
+  {% if post.media_type == "audio" and not videos %}
+  <div class="media-placeholder">
+    <i class="bi bi-music-note-beamed" aria-hidden="true"></i>
+    <span>Audio not downloaded</span>
+  </div>
+  {% endif %}
+  {% if post.media_type == "document" %}
+  <div class="media-placeholder">
+    <i class="bi bi-file-earmark" aria-hidden="true"></i>
+    <span>File not downloaded</span>
+  </div>
+  {% endif %}
+  {% endwith %}
+  <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+  {% if post.post_author %}
+  <div class="pin-banner subtle">
+    <i class="bi bi-pen" aria-hidden="true"></i> {{ post.post_author }}
+  </div>
+  {% endif %}
+  <footer class="post-footer">
+    <div class="post-meta">
+      <span class="post-meta-item" data-bs-toggle="tooltip" title="Views"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
+      <span class="post-meta-item" data-bs-toggle="tooltip" title="Times forwarded"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
+      <time class="post-meta-item" datetime="{{ post.date|date:'c' }}" data-bs-toggle="tooltip" title="Published"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
+      {% if post.edit_date %}<span class="post-meta-item" data-bs-toggle="tooltip" title="Last edited"><i class="bi bi-pencil" aria-hidden="true"></i> {{ post.edit_date }}</span>{% endif %}
+      {% if post.is_lost %}<span class="post-lost-badge" data-bs-toggle="tooltip" title="No longer exists on Telegram">lost</span>{% endif %}
+      {% for reaction in post.reactions.all %}
+      <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
+      {% endfor %}
+    </div>
+    <div class="post-footer-actions">
+      {% if post.replies %}
+      <button type="button" class="post-replies-btn"
+              data-replies-url="{% url 'message-replies' channel_pk=post.channel.pk telegram_id=post.telegram_id %}"
+              data-post-pk="{{ post.pk }}"
+              aria-expanded="false"
+              title="Replies ({{ post.replies }})">
+        <i class="bi bi-chat-left-dots" aria-hidden="true"></i>
+        <span class="post-replies-count">{{ post.replies }}</span>
+      </button>
+      {% endif %}
+      {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
+      <button type="button" class="post-details-btn" data-bs-toggle="collapse" data-bs-target="#pd-{{ post.pk }}" aria-expanded="false" aria-controls="pd-{{ post.pk }}" title="More details">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+      </button>
+      {% endif %}
+      <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
+        <i class="bi bi-telegram" aria-hidden="true"></i>
+      </a>
+    </div>
+  </footer>
+  <div class="post-replies-panel" id="pr-{{ post.pk }}" style="display:none">
+    <div class="post-replies-inner"></div>
+  </div>
+  <div class="collapse post-details-panel" id="pd-{{ post.pk }}">
+    <dl class="post-details-dl">
+      {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
+        {% if post.replies %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
+        {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>#{{ post.reply_to_msg_id }}</dd>{% endif %}
+        {% if post.fwd_from_channel_post %}<dt><i class="bi bi-link-45deg" aria-hidden="true"></i> Source post</dt><dd>#{{ post.fwd_from_channel_post }}</dd>{% endif %}
+        {% if post.fwd_from_from_name %}<dt><i class="bi bi-person" aria-hidden="true"></i> Forwarded by</dt><dd>{{ post.fwd_from_from_name }}</dd>{% endif %}
+        {% if post.silent %}<dt><i class="bi bi-bell-slash" aria-hidden="true"></i> Silent</dt><dd>Sent without notification</dd>{% endif %}
+        {% if post.factcheck %}<dt><i class="bi bi-patch-check" aria-hidden="true"></i> Fact-check</dt><dd>{% if post.factcheck.need_check %}<span class="post-detail-tag warning">Needs check</span> {% endif %}{% if post.factcheck.country %}{{ post.factcheck.country }}{% if post.factcheck.text %} — {% endif %}{% endif %}{% if post.factcheck.text %}{{ post.factcheck.text }}{% endif %}</dd>{% endif %}
+      {% else %}
+        <dt class="post-details-empty">No additional details available</dt>
+      {% endif %}
+    </dl>
+  </div>
+</article>

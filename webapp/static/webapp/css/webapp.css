@@ -391,7 +391,6 @@ body {
 .post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #0369a1; }
 
 .post-card.is-lost { opacity: .55; }
-.post-card.is-lost .post-body { text-decoration: line-through; }
 .post-lost-badge {
   display: inline-flex;
   align-items: center;

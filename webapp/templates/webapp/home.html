@@ -85,32 +85,7 @@
   <ol class="post-list list-unstyled mt-2">
     {% for post in page_obj %}
     <li>
-      <article class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
-        <div class="search-result-channel">
-          <a href="{{ post.channel.get_absolute_url }}">
-            <span class="org-dot" style="background: {{ post.channel.organization.color }};" aria-hidden="true"></span>
-            {{ post.channel.title }}
-          </a>
-        </div>
-        {% if post.forwarded_from %}
-        <div class="forwarded-banner">
-          <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
-          forwarded from <a href="{{ post.forwarded_from.get_absolute_url }}">{{ post.forwarded_from.title }}</a>
-        </div>
-        {% endif %}
-        <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
-        <footer class="post-footer">
-          <div class="post-meta">
-            <span class="post-meta-item"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
-            <span class="post-meta-item"><i class="bi bi-arrow-right-square" aria-hidden="true"></i> {{ post.forwards|default:"0" }}</span>
-            <time class="post-meta-item" datetime="{{ post.date|date:'c' }}"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ post.date }}</time>
-            {% if post.is_lost %}<span class="post-lost-badge">lost</span>{% endif %}
-          </div>
-          <a href="{{ post.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open message on Telegram">
-            <i class="bi bi-telegram" aria-hidden="true"></i>
-          </a>
-        </footer>
-      </article>
+      {% include "webapp/_post_card.html" with post=post show_channel_chip=True %}
     </li>
     {% endfor %}
   </ol>
@@ -169,5 +144,9 @@
   document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
     new bootstrap.Popover(el);
   });
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
 </script>
+<script src="{% static 'webapp/js/post_replies.js' %}"></script>
 {% endblock extra_scripts %}

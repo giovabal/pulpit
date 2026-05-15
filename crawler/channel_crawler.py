@@ -86,10 +86,27 @@ def _save_poll(message_pk: int, telegram_message: Any) -> None:
 
 
 def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> dict:
-    """Extract the update_kwargs dict used to refresh a Message row from a Telethon object."""
+    """Build the volatile-stats update dict used to refresh a stored Message row.
+
+    Content fields (``message``, ``post_author``, ``webpage_url``, ``webpage_type``,
+    ``media_type``) are deliberately omitted: when a channel is restricted or banned,
+    Telegram replaces real post content with a stub such as
+    *"This channel can't be displayed because it violated Telegram's Terms of Service"*,
+    and an older policy of "refresh everything" would silently overwrite the original
+    text we captured at first crawl. The first-crawl record is treated as the canonical
+    copy; only fields that legitimately change over time on Telegram's side — views,
+    forwards, replies, pinned, edit_date, factcheck — are refreshed here.
+
+    Stats counters (``views``, ``forwards``, ``replies``) are only emitted when
+    Telegram returned a non-null value. Restricted/banned channels frequently
+    return ``None`` for these, and writing that back would wipe the
+    last-known-good counters; the caller layer also applies a monotonic guard
+    to refuse outright downgrades.
+
+    ``get_message`` / ``Message.from_telegram_object`` (force_update=True) is still
+    the path used to write fresh content when adding messages for the first time.
+    """
     replies_obj = getattr(telegram_message, "replies", None)
-    media = telegram_message.media
-    webpage = getattr(media, "webpage", None) if media else None
     fc = getattr(telegram_message, "factcheck", None)
     if fc is not None:
         text_obj = getattr(fc, "text", None)
@@ -101,25 +118,21 @@ def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> d
     else:
         factcheck_data = None
     update_kwargs: dict = {
-        "views": telegram_message.views,
-        "forwards": telegram_message.forwards,
-        "replies": getattr(replies_obj, "replies", None),
         "pinned": bool(telegram_message.pinned),
         "edit_date": telegram_message.edit_date,
-        "post_author": telegram_message.post_author or "",
-        "message": telegram_message.message or "",
-        "webpage_url": getattr(webpage, "url", "") or "",
-        "webpage_type": getattr(webpage, "type", "") or "",
         "factcheck": factcheck_data,
         "_updated": now,
         "stats_refreshed_at": now,
     }
-    if telegram_message.fwd_from:
-        update_kwargs["fwd_from_date"] = getattr(telegram_message.fwd_from, "date", None)
+    if telegram_message.views is not None:
+        update_kwargs["views"] = telegram_message.views
+    if telegram_message.forwards is not None:
+        update_kwargs["forwards"] = telegram_message.forwards
+    replies_count = getattr(replies_obj, "replies", None)
+    if replies_count is not None:
+        update_kwargs["replies"] = replies_count
     if telegram_message.pinned:
         update_kwargs["has_been_pinned"] = True
-    if media and hasattr(media, "poll"):
-        update_kwargs["media_type"] = "poll"
     return update_kwargs
 
 
@@ -650,6 +663,7 @@ class ChannelCrawler:
         processed = 0
         updated = 0
         service_cleaned = 0
+        newly_lost_inline = 0
         visited_ids: set[int] = set()
         limit_hit = False
         for telegram_message in self.api_client.client.iter_messages(
@@ -682,15 +696,38 @@ class ChannelCrawler:
             update_kwargs = _build_msg_update_kwargs(telegram_message, now)
             msg_row = (
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                .values("pk", "replies_unavailable", "is_lost")
+                .values("pk", "replies_unavailable", "is_lost", "views", "forwards", "replies")
                 .first()
             )
             if msg_row is not None:
                 msg_pk = msg_row["pk"]
+                # Tombstone detection: when a channel admin deletes a post Telegram
+                # sometimes still returns a Message object for that id but stripped
+                # of content. Treat that as a lost-state event — mark is_lost=True
+                # and KEEP the previously-stored text and stats intact, rather than
+                # overwriting them with the empty stub.
+                is_tombstone = not (telegram_message.message or "") and not getattr(telegram_message, "media", None)
+                if is_tombstone:
+                    if not msg_row["is_lost"]:
+                        Message.objects.filter(pk=msg_pk).update(is_lost=True)
+                        newly_lost_inline += 1
+                    visited_ids.add(telegram_message.id)
+                    continue
                 if msg_row["replies_unavailable"]:
                     update_kwargs.pop("replies", None)
                 if msg_row["is_lost"]:
                     update_kwargs["is_lost"] = False
+                # Monotonic stats guard: restricted-channel responses sometimes
+                # return zero counters even when the post is still up. Refuse to
+                # downgrade views/forwards/replies — keep the last-known-good
+                # values when Telegram reports something lower.
+                for stat in ("views", "forwards", "replies"):
+                    new_val = update_kwargs.get(stat)
+                    if new_val is None:
+                        continue
+                    old_val = msg_row.get(stat)
+                    if old_val is not None and new_val < old_val:
+                        update_kwargs.pop(stat)
                 Message.objects.filter(pk=msg_pk).update(**update_kwargs)
                 updated += 1
                 visited_ids.add(telegram_message.id)
@@ -707,8 +744,9 @@ class ChannelCrawler:
         notes: list[str] = []
         if service_cleaned:
             notes.append(f"{service_cleaned} service msg cleaned up")
-        if newly_lost:
-            notes.append(f"{newly_lost} marked lost")
+        total_lost = newly_lost + newly_lost_inline
+        if total_lost:
+            notes.append(f"{total_lost} marked lost")
         suffix = f" ({', '.join(notes)})" if notes else ""
         update_status(f"refreshing message stats … {updated}/{total_in_db}{suffix}")
         return updated
@@ -721,10 +759,17 @@ class ChannelCrawler:
     ) -> tuple[int, int]:
         """Re-fetch rows currently marked is_lost=True for *channel*.
 
-        For each batch of up to 100 telegram_ids, calls client.get_messages. A non-None
-        Telethon message updates the row's stats and clears is_lost; a None response
-        leaves the row marked lost. Returns (recovered, still_lost) where the totals
-        do not include MessageService rows, which are cleaned up like in refresh_message_stats.
+        For each batch of up to 100 telegram_ids, calls client.get_messages.
+        This is a pure existence probe: when Telegram returns a real message
+        body, the local row's ``is_lost`` flag is cleared and nothing else
+        is touched. The originally-captured text, views, forwards, reactions,
+        media metadata, etc. stay exactly as they were — this prevents the
+        Telegram-side restriction stub (e.g. "This channel can't be displayed
+        because it violated Telegram's Terms of Service") from overwriting the
+        real content we captured at first crawl.
+
+        Returns (recovered, still_lost). MessageService rows are cleaned up
+        like in refresh_message_stats.
         """
 
         def update_status(message: str) -> None:
@@ -753,18 +798,20 @@ class ChannelCrawler:
                     Message.objects.filter(channel=channel, telegram_id=tg_msg.id).delete()
                     recovered += 1
                     continue
+                # Telegram occasionally returns a Message object stripped of all
+                # content as a tombstone for a deleted post. Treat that as still
+                # lost — the row stays is_lost=True and untouched.
+                if not (tg_msg.message or "") and not getattr(tg_msg, "media", None):
+                    still_lost += 1
+                    continue
                 msg_pk = batch_pk_by_tid.get(tg_msg.id)
                 if msg_pk is None:
                     continue
-                update_kwargs = _build_msg_update_kwargs(tg_msg, now)
-                update_kwargs["is_lost"] = False
-                row = Message.objects.filter(pk=msg_pk).values("replies_unavailable").first()
-                if row and row["replies_unavailable"]:
-                    update_kwargs.pop("replies", None)
-                Message.objects.filter(pk=msg_pk).update(**update_kwargs)
+                # Pure recovery probe: clear is_lost only — never overwrite
+                # the stored text/stats/reactions. The bumped _updated marks
+                # that the probe ran successfully.
+                Message.objects.filter(pk=msg_pk).update(is_lost=False, _updated=now)
                 recovered += 1
-                _save_reactions(msg_pk, tg_msg)
-                _save_poll(msg_pk, tg_msg)
             update_status(f"retrying lost messages … {recovered + still_lost}/{total}")
         return recovered, still_lost
 
