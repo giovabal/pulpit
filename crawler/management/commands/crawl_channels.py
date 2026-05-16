@@ -54,6 +54,7 @@ class CrawlOptions:
 
     # Channels phase
     get_channels_info: bool
+    update_type_excluded_info: bool
     mine_about_texts: bool
     fetch_recommended: bool
     retry_lost_and_private: bool
@@ -274,6 +275,15 @@ class Command(BaseCommand):
             action="store_true",
             default=False,
             help="Update profile pictures and full channel details for each channel in scope.",
+        )
+        parser.add_argument(
+            "--update-type-excluded-info",
+            action="store_true",
+            default=False,
+            help=(
+                "Also update metadata for in-target channels whose type is not in --channel-types. "
+                "Requires --get-channels-info."
+            ),
         )
         parser.add_argument(
             "--mine-about-texts",
@@ -896,6 +906,8 @@ class Command(BaseCommand):
 
         return CrawlOptions(
             get_channels_info=options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO,
+            update_type_excluded_info=options["update_type_excluded_info"]
+            or settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO,
             mine_about_texts=options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS,
             fetch_recommended=options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED,
             retry_lost_and_private=options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE,
@@ -1024,7 +1036,7 @@ class Command(BaseCommand):
                                 self._refresh_channel_info_for_channel(channel, crawler, index, printer)
                             printer.newline()
 
-                            # Type-excluded channels still get metadata updated.
+                        if get_channels_info and opts.update_type_excluded_info:
                             all_in_target_base = (
                                 Channel.objects.filter(organization__is_in_target=True)
                                 .exclude(is_lost=True)

@@ -105,6 +105,11 @@
                        title="Update profile pictures and full channel details (subscribers, about text, linked group, etc.) for each channel. Does not fetch messages."></i>
                   </label>
                   <label class="ops-flag">
+                    <input type="checkbox" name="update_type_excluded_info" {% if ad.CRAWL_UPDATE_TYPE_EXCLUDED_INFO %}checked{% endif %} data-requires-flag="get_channels_info">Include type-excluded
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Also update metadata for in-target channels whose type is not in the current channel-types filter. Only applies when Get channels info is enabled."></i>
+                  </label>
+                  <label class="ops-flag">
                     <input type="checkbox" name="mine_about_texts" {% if ad.CRAWL_MINE_ABOUT_TEXTS %}checked{% endif %}>Mine about texts
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Scan the about field of all channels for t.me/ links and fetch any referenced channels not yet in the database."></i>

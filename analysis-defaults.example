@@ -58,6 +58,7 @@ GRAPH_OUTPUT_DIR=graph
 # Set True to enable each operation by default in the Operations panel and CLI.
 
 CRAWL_GET_CHANNELS_INFO=True
+CRAWL_UPDATE_TYPE_EXCLUDED_INFO=True
 CRAWL_MINE_ABOUT_TEXTS=True
 CRAWL_FETCH_RECOMMENDED=True
 CRAWL_RETRY_LOST_AND_PRIVATE=False

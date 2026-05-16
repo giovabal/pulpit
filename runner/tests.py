@@ -514,6 +514,7 @@ class BuildArgsGetChannelsTests(TestCase):
             "in_degrees": "--in-degrees",
             "out_degrees": "--out-degrees",
             "fix_missing_media": "--fix-missing-media",
+            "update_type_excluded_info": "--update-type-excluded-info",
         }
         for field, expected_flag in flags.items():
             with self.subTest(field=field):

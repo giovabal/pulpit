@@ -271,6 +271,7 @@ GRAPH_OUTPUT_DIR = _ana("GRAPH_OUTPUT_DIR", default="graph", cast=str)
 # ── Crawl Channels defaults (.analysis-defaults) ─────────────────────────────
 
 CRAWL_GET_CHANNELS_INFO = _ana("CRAWL_GET_CHANNELS_INFO", default=False, cast=bool)
+CRAWL_UPDATE_TYPE_EXCLUDED_INFO = _ana("CRAWL_UPDATE_TYPE_EXCLUDED_INFO", default=False, cast=bool)
 CRAWL_MINE_ABOUT_TEXTS = _ana("CRAWL_MINE_ABOUT_TEXTS", default=False, cast=bool)
 CRAWL_FETCH_RECOMMENDED = _ana("CRAWL_FETCH_RECOMMENDED", default=False, cast=bool)
 CRAWL_RETRY_LOST_AND_PRIVATE = _ana("CRAWL_RETRY_LOST_AND_PRIVATE", default=False, cast=bool)

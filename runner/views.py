@@ -388,6 +388,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
     "crawl_channels": [
         # Channels
         ("flag", "get_channels_info", "--get-channels-info"),
+        ("flag", "update_type_excluded_info", "--update-type-excluded-info"),
         ("flag", "mine_about_texts", "--mine-about-texts"),
         ("flag", "fetch_recommended_channels", "--fetch-recommended-channels"),
         ("flag", "retry_lost_and_private", "--retry-lost-and-private"),
