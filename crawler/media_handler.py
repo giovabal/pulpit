@@ -2,6 +2,7 @@ import asyncio
 import glob
 import inspect
 import logging
+import mimetypes
 import os
 import shutil
 from typing import Any
@@ -85,8 +86,13 @@ class MediaHandler:
         self.download_stickers = download_stickers
         self.download_other_media = download_other_media
 
-    def _download_media(self, telegram_object: Any) -> str | None:
-        kwargs = {"file": self.download_temp_dir} if self.download_temp_dir else {}
+    def _download_media(self, telegram_object: Any, thumb: Any = None) -> str | None:
+        kwargs: dict[str, Any] = {"file": self.download_temp_dir} if self.download_temp_dir else {}
+        if thumb is not None:
+            # Telethon's ``thumb`` param picks a specific size from ``photo.sizes``
+            # (ignoring ``video_sizes``), forcing a static frame for video media.
+            # ``thumb=-1`` picks the largest static variant.
+            kwargs["thumb"] = thumb
         client = self.api_client.client
         # Unwrap the sync shim added by telethon.sync to get the raw async coroutine function.
         # Falls back to a direct synchronous call when the client does not expose the shim
@@ -117,23 +123,86 @@ class MediaHandler:
         if channel is None:
             logger.warning("Channel not found for telegram_id=%s", telegram_channel.id)
             return 0
-        # A record is considered up-to-date only when its file is on disk; records
-        # with an empty picture field or a missing file get re-downloaded.
-        on_disk_picture_ids: set[int] = set()
+        # A row is considered fully captured only when:
+        #   - the main picture file is on disk
+        #   - mime_type is recorded (lets the template choose <img> vs <video>)
+        #   - for video avatars, the static thumbnail is also on disk
+        # Anything weaker forces a re-download so the missing piece can be filled.
+        fresh_picture_ids: set[int] = set()
         for pp in ProfilePicture.objects.filter(channel=channel):
-            if pp.picture and os.path.exists(pp.picture.path):
-                on_disk_picture_ids.add(pp.telegram_id)
-        for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
-            if telegram_picture.id in on_disk_picture_ids:
+            if not pp.picture or not os.path.exists(pp.picture.path):
                 continue
-            picture_filename = self._download_media(telegram_picture)
-            ProfilePicture.from_telegram_object(
-                telegram_picture,
-                force_update=True,
-                defaults={"channel": channel, "picture": picture_filename},
-            )
-            self._cleanup_downloaded_file(picture_filename)
-            pictures_downloaded += 1
+            if not pp.mime_type:
+                continue
+            if pp.mime_type.startswith("video/"):
+                if not pp.thumbnail or not os.path.exists(pp.thumbnail.path):
+                    continue
+            fresh_picture_ids.add(pp.telegram_id)
+        for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
+            if telegram_picture.id in fresh_picture_ids:
+                continue
+            # Photos are iterated newest-first, so wrap each one independently;
+            # a recoverable error on the current avatar must not abort the loop
+            # and leave older pictures unchecked.
+            try:
+                picture_filename = self._download_media(telegram_picture)
+                if not picture_filename:
+                    # Skip empty downloads outright — creating a ProfilePicture
+                    # row with an empty FieldFile would mask the failure as a
+                    # "broken" record on every subsequent --get-channels-info run.
+                    logger.warning(
+                        "Profile picture %s for channel %s: download returned no file",
+                        telegram_picture.id,
+                        telegram_channel.id,
+                    )
+                    continue
+                mime_type, _ = mimetypes.guess_type(picture_filename)
+                mime_type = mime_type or ""
+                thumbnail_filename: str | None = None
+                if mime_type.startswith("video/"):
+                    # Telegram video avatars: pull the largest static frame so
+                    # template contexts that can't render <video> (small list
+                    # rows, posters) still have something to show.
+                    try:
+                        thumbnail_filename = self._download_media(telegram_picture, thumb=-1)
+                    except (
+                        errors.rpcerrorlist.FileMigrateError,
+                        errors.rpcerrorlist.FileReferenceExpiredError,
+                        errors.rpcerrorlist.FileReferenceInvalidError,
+                        ValueError,
+                    ) as thumb_err:
+                        logger.warning(
+                            "Failed to download static thumbnail for profile picture %s of channel %s: %s",
+                            telegram_picture.id,
+                            telegram_channel.id,
+                            thumb_err,
+                        )
+                ProfilePicture.from_telegram_object(
+                    telegram_picture,
+                    force_update=True,
+                    defaults={
+                        "channel": channel,
+                        "picture": picture_filename,
+                        "mime_type": mime_type,
+                        "thumbnail": thumbnail_filename,
+                    },
+                )
+                self._cleanup_downloaded_file(picture_filename)
+                if thumbnail_filename:
+                    self._cleanup_downloaded_file(thumbnail_filename)
+                pictures_downloaded += 1
+            except (
+                errors.rpcerrorlist.FileMigrateError,
+                errors.rpcerrorlist.FileReferenceExpiredError,
+                errors.rpcerrorlist.FileReferenceInvalidError,
+                ValueError,
+            ) as e:
+                logger.warning(
+                    "Error downloading profile picture %s for channel %s: %s",
+                    telegram_picture.id,
+                    telegram_channel.id,
+                    e,
+                )
         return pictures_downloaded
 
     def download_message_picture(self, telegram_message: Any) -> int:

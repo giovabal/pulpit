@@ -10,6 +10,12 @@ from webapp.models.telegram_models import Channel, Message
 
 class ProfilePicture(TelegramBasePictureModel):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
+    mime_type = models.CharField(max_length=100, blank=True)
+    # When ``picture`` is a video avatar (mime_type starts with "video/"),
+    # ``thumbnail`` holds the largest static frame so templates can use it as
+    # ``<video poster=…>`` or fall back to ``<img>`` when video playback isn't
+    # appropriate (e.g. compact channel-list rows).
+    thumbnail = models.ImageField(upload_to=_telegram_picture_upload_to_function, max_length=255, blank=True)
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
@@ -20,6 +26,41 @@ class ProfilePicture(TelegramBasePictureModel):
             "profile",
             f"{self.channel.telegram_id}.{extension}",
         )
+
+    @property
+    def is_video(self) -> bool:
+        return bool(self.mime_type and self.mime_type.startswith("video/"))
+
+    @property
+    def display_url(self) -> str:
+        """Static URL safe to use as ``<img src>``.
+
+        Video avatars return their static thumbnail (empty when none was
+        captured); static avatars return the picture itself.
+        """
+        if self.is_video:
+            if self.thumbnail and self.thumbnail.name:
+                return self.thumbnail.url
+            return ""
+        if self.picture:
+            return self.picture.url
+        return ""
+
+    @classmethod
+    def from_telegram_object(
+        cls, telegram_object: Any, force_update: bool = False, defaults: dict[str, Any] | None = None
+    ) -> Self:
+        defaults = defaults or {}
+        obj = super().from_telegram_object(telegram_object, force_update=force_update, defaults=defaults)
+        mime_type = defaults.get("mime_type")
+        if mime_type is not None and obj.mime_type != mime_type:
+            obj.mime_type = mime_type
+            obj.save(update_fields=["mime_type"])
+        thumbnail_filename = defaults.get("thumbnail", None)
+        if thumbnail_filename:
+            with open(thumbnail_filename, "rb") as f:
+                obj.thumbnail.save(os.path.basename(thumbnail_filename), File(f), save=True)
+        return obj
 
 
 class MessagePicture(TelegramBasePictureModel):

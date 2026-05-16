@@ -10,9 +10,20 @@
     var _picModal = null;
     var $picModalEl, $picImg, $picCounter, $picFooter, $picPrev, $picNext;
 
+    function _picSrc(item) {
+        // The pictures API returns {url, mime_type, thumbnail_url} objects since
+        // profile pictures can be video avatars. The backoffice modal only has
+        // an <img> tag, so prefer the static thumbnail (for video pics) and fall
+        // back to the main url. Legacy string entries (from older API responses)
+        // are still accepted.
+        if (typeof item === "string") return item;
+        if (item && item.thumbnail_url) return item.thumbnail_url;
+        return (item && item.url) || "";
+    }
+
     function _showPic(index) {
         _picIndex = index;
-        $picImg.src = _picUrls[_picIndex];
+        $picImg.src = _picSrc(_picUrls[_picIndex]);
         $picCounter.textContent = _picUrls.length > 1 ? (_picIndex + 1) + " / " + _picUrls.length : "";
         $picPrev.disabled = _picIndex === 0;
         $picNext.disabled = _picIndex === _picUrls.length - 1;

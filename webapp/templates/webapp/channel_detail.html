@@ -9,7 +9,13 @@
     {% for picture in selected_channel.profilepicture_set.all|slice:":1" %}
     {% if picture.picture %}
     <figure class="mb-0 flex-shrink-0">
+      {% if picture.is_video %}
+      <video src="{{ picture.picture.url }}" class="channel-avatar channel-avatar--clickable" id="ch-pic-avatar"
+             {% if picture.thumbnail %}poster="{{ picture.thumbnail.url }}"{% endif %}
+             autoplay loop muted playsinline aria-label="{{ selected_channel.title }} avatar"></video>
+      {% else %}
       <img src="{{ picture.picture.url }}" class="channel-avatar channel-avatar--clickable" id="ch-pic-avatar" alt="{{ selected_channel.title }} avatar">
+      {% endif %}
     </figure>
     {% endif %}
     {% endfor %}
@@ -498,6 +504,7 @@
       </div>
       <div class="modal-body text-center p-3">
         <img id="ch-pic-modal-img" src="" alt="" class="ch-pic-modal-img">
+        <video id="ch-pic-modal-video" class="ch-pic-modal-img" controls autoplay loop muted playsinline style="display:none"></video>
       </div>
       <div class="modal-footer py-2 justify-content-between" id="ch-pic-modal-footer" style="display:none">
         <button class="ch-pic-nav-btn" id="ch-pic-modal-prev" aria-label="Previous">←</button>
@@ -532,6 +539,7 @@
   if (!$avatar || !$modalEl || typeof bootstrap === "undefined") return;
 
   var $img     = document.getElementById("ch-pic-modal-img");
+  var $video   = document.getElementById("ch-pic-modal-video");
   var $title   = document.getElementById("ch-pic-modal-title");
   var $counter = document.getElementById("ch-pic-modal-counter");
   var $footer  = document.getElementById("ch-pic-modal-footer");
@@ -539,24 +547,64 @@
   var $next    = document.getElementById("ch-pic-modal-next");
 
   var _picModal = new bootstrap.Modal($modalEl);
-  var _picUrls  = [];
+  var _picItems = [];  // array of {url, mime_type, thumbnail_url}
   var _picIndex = 0;
   var _loaded   = false;
 
+  function _normalize(item) {
+    // The API used to return a list of bare URL strings; tolerate that too.
+    if (typeof item === "string") return {url: item, mime_type: "", thumbnail_url: null};
+    return {
+      url: item.url || "",
+      mime_type: item.mime_type || "",
+      thumbnail_url: item.thumbnail_url || null,
+    };
+  }
+
+  function _renderItem(item) {
+    var isVideo = item.mime_type.indexOf("video/") === 0;
+    if (isVideo) {
+      $img.style.display = "none";
+      $img.src = "";
+      $video.style.display = "";
+      $video.src = item.url;
+      if (item.thumbnail_url) $video.setAttribute("poster", item.thumbnail_url);
+      else $video.removeAttribute("poster");
+      $video.play().catch(function () { /* autoplay may be blocked, that's fine */ });
+    } else {
+      $video.pause();
+      $video.removeAttribute("src");
+      $video.style.display = "none";
+      $img.style.display = "";
+      $img.src = item.url;
+    }
+  }
+
   function _showPic(index) {
     _picIndex = index;
-    $img.src  = _picUrls[_picIndex];
-    $counter.textContent = _picUrls.length > 1 ? (_picIndex + 1) + " / " + _picUrls.length : "";
+    _renderItem(_picItems[_picIndex]);
+    $counter.textContent = _picItems.length > 1 ? (_picIndex + 1) + " / " + _picItems.length : "";
     $prev.disabled = _picIndex === 0;
-    $next.disabled = _picIndex === _picUrls.length - 1;
-    $footer.style.display = _picUrls.length > 1 ? "" : "none";
+    $next.disabled = _picIndex === _picItems.length - 1;
+    $footer.style.display = _picItems.length > 1 ? "" : "none";
+  }
+
+  function _fallbackFromAvatar() {
+    // Quick preview using the avatar element's own src/poster, before the
+    // pictures API responds (or when it fails).
+    var isVideo = $avatar.tagName === "VIDEO";
+    return {
+      url: $avatar.src,
+      mime_type: isVideo ? ($avatar.dataset.mimeType || "video/mp4") : "",
+      thumbnail_url: $avatar.getAttribute("poster") || null,
+    };
   }
 
   $avatar.addEventListener("click", function () {
     $title.textContent = "{{ selected_channel.title|escapejs }}";
-    $img.src = $avatar.src;
     $footer.style.display = "none";
     $counter.textContent = "";
+    _renderItem(_fallbackFromAvatar());
     _picModal.show();
 
     if (_loaded) { _showPic(0); return; }
@@ -564,20 +612,27 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         _loaded = true;
-        _picUrls = data.pictures && data.pictures.length ? data.pictures : [$avatar.src];
+        var pics = data.pictures && data.pictures.length ? data.pictures : [_fallbackFromAvatar()];
+        _picItems = pics.map(_normalize);
         _showPic(0);
       })
       .catch(function () {
-        _picUrls = [$avatar.src];
+        _picItems = [_fallbackFromAvatar()];
         _showPic(0);
       });
   });
 
   $prev.addEventListener("click", function () { if (_picIndex > 0) _showPic(_picIndex - 1); });
-  $next.addEventListener("click", function () { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); });
+  $next.addEventListener("click", function () { if (_picIndex < _picItems.length - 1) _showPic(_picIndex + 1); });
   $modalEl.addEventListener("keydown", function (e) {
     if (e.key === "ArrowLeft")  { if (_picIndex > 0) _showPic(_picIndex - 1); }
-    if (e.key === "ArrowRight") { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); }
+    if (e.key === "ArrowRight") { if (_picIndex < _picItems.length - 1) _showPic(_picIndex + 1); }
+  });
+  $modalEl.addEventListener("hidden.bs.modal", function () {
+    // Pause and unload so the video doesn't keep playing in the background.
+    $video.pause();
+    $video.removeAttribute("src");
+    $video.load();
   });
 })();
 </script>

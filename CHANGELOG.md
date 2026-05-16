@@ -1,6 +1,12 @@
 # Changelog
 ## [0.20] - To be announced
 
+### New features
+- **Animated profile picture support** — Telegram channels with animated (video) avatars now render correctly throughout the interface. `ProfilePicture` gains `mime_type` and `thumbnail` (the largest static frame, fetched alongside the `.mp4` via Telethon's `thumb=-1` parameter so list rows and posters work without playback). The channel detail page emits `<video autoplay loop muted playsinline poster=…>`; the channels list and Django-admin thumbnail switch between `<video>` and `<img>` based on the recorded mime type, with the static thumbnail preferred when present. The avatar-lightbox modal swaps between `<img>` and `<video>` per item so historical avatars and the current animated one all play correctly when navigating with arrow keys; the embedded video pauses when the modal closes so it doesn't keep playing in the background. The `GET /manage/api/channels/<pk>/pictures/` endpoint changes its response shape from a list of bare URL strings to a list of `{url, mime_type, thumbnail_url}` objects (backoffice consumers tolerate both shapes). Migration `0040` backfills `mime_type` for existing rows from the file extension, and `--get-channels-info` re-processes any video row whose static thumbnail has not yet been captured so older animated avatars start rendering correctly on the first refresh after upgrade.
+
+### Fixes
+- **`--get-channels-info` no longer aborts on the first failed avatar download** — `download_profile_picture` previously had no per-iteration error handling, so a recoverable Telegram error on the current avatar (FileMigrate, FileReferenceExpired/Invalid, ValueError) terminated the entire `get_profile_photos` loop, leaving older pictures unchecked. Each iteration is now wrapped independently and the failure is logged as a specific per-pic WARNING. Failed downloads (any reason that makes `_download_media` return no file) also no longer create empty `ProfilePicture` rows that would render as broken `<img>` placeholders on every subsequent run.
+
 ## [0.19] - 2026-05-16
 *Media management improvements. Lost messages management improvements. Database maintenance.*
 

@@ -58,7 +58,10 @@ class ChannelAdmin(admin.ModelAdmin):
     @admin.display(description="Img")
     def thumb(self, obj: Channel) -> str:
         pic = next(iter(obj.profilepicture_set.all()), None)
-        src = pic.picture.url if (pic and pic.picture) else ""
+        # display_url returns the static thumbnail for video avatars (or empty
+        # when none was captured) so the admin list never renders an mp4 file
+        # inside an <img> tag.
+        src = pic.display_url if pic else ""
         if not src:
             return ""
         return format_html("<img width='60' src='{}'>", src)

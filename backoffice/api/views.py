@@ -123,8 +123,18 @@ class ChannelViewSet(
     @action(detail=True, methods=["get"], url_path="pictures")
     def pictures(self, request, pk=None):
         channel = self.get_object()
-        urls = [pic.picture.url for pic in channel.profilepicture_set.order_by("-date") if pic.picture]
-        return Response({"pictures": urls})
+        pictures = []
+        for pic in channel.profilepicture_set.order_by("-date"):
+            if not pic.picture:
+                continue
+            pictures.append(
+                {
+                    "url": pic.picture.url,
+                    "mime_type": pic.mime_type,
+                    "thumbnail_url": (pic.thumbnail.url if pic.thumbnail and pic.thumbnail.name else None),
+                }
+            )
+        return Response({"pictures": pictures})
 
     @action(detail=False, methods=["post"], url_path="bulk-assign")
     def bulk_assign(self, request):

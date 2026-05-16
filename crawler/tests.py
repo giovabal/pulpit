@@ -826,7 +826,7 @@ class MediaHandlerProfilePictureTests(TestCase):
         tc = self._make_tg_channel(telegram_id=1)
         pic = self._make_tg_picture(pic_id=100)
         self.api_client.client.get_profile_photos.return_value = [pic]
-        self.handler._download_media = MagicMock(return_value=None)
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
 
         result = self.handler.download_profile_picture(tc)
 
@@ -841,7 +841,10 @@ class MediaHandlerProfilePictureTests(TestCase):
         tc = self._make_tg_channel(telegram_id=1)
         pic = self._make_tg_picture(pic_id=200)
         self.api_client.client.get_profile_photos.return_value = [pic]
-        ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="profile.jpg", date=None)
+        # A row is "fresh" only when the file is on disk AND mime_type is recorded.
+        ProfilePicture.objects.create(
+            telegram_id=200, channel=self.channel, picture="profile.jpg", mime_type="image/jpeg", date=None
+        )
 
         result = self.handler.download_profile_picture(tc)
 
@@ -859,7 +862,7 @@ class MediaHandlerProfilePictureTests(TestCase):
         pic = self._make_tg_picture(pic_id=200)
         self.api_client.client.get_profile_photos.return_value = [pic]
         ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="profile.jpg", date=None)
-        self.handler._download_media = MagicMock(return_value=None)
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
 
         result = self.handler.download_profile_picture(tc)
 
@@ -874,7 +877,7 @@ class MediaHandlerProfilePictureTests(TestCase):
         pic = self._make_tg_picture(pic_id=200)
         self.api_client.client.get_profile_photos.return_value = [pic]
         ProfilePicture.objects.create(telegram_id=200, channel=self.channel, picture="", date=None)
-        self.handler._download_media = MagicMock(return_value=None)
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
 
         result = self.handler.download_profile_picture(tc)
 
@@ -886,12 +889,131 @@ class MediaHandlerProfilePictureTests(TestCase):
         tc = self._make_tg_channel(telegram_id=1)
         pics = [self._make_tg_picture(pic_id=i) for i in range(1, 4)]
         self.api_client.client.get_profile_photos.return_value = pics
-        self.handler._download_media = MagicMock(return_value=None)
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
 
         result = self.handler.download_profile_picture(tc)
 
         self.assertEqual(result, 3)
         self.assertEqual(mock_from_tg.call_count, 3)
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_skips_picture_and_creates_no_row_when_download_returns_none(self, mock_from_tg: MagicMock) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=300)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        self.handler._download_media = MagicMock(return_value=None)
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 0)
+        mock_from_tg.assert_not_called()
+
+    @patch("crawler.media_handler.os.remove")
+    @patch("crawler.media_handler.os.path.exists", return_value=True)
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_redownloads_when_existing_row_has_no_mime_type(
+        self, mock_from_tg: MagicMock, _mock_exists: MagicMock, _mock_remove: MagicMock
+    ) -> None:
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        # File is on disk but mime_type is missing (pre-backfill state).
+        ProfilePicture.objects.create(
+            telegram_id=200, channel=self.channel, picture="profile.jpg", mime_type="", date=None
+        )
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @patch("crawler.media_handler.os.remove")
+    @patch("crawler.media_handler.os.path.exists", return_value=True)
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_redownloads_video_row_missing_thumbnail(
+        self, mock_from_tg: MagicMock, _mock_exists: MagicMock, _mock_remove: MagicMock
+    ) -> None:
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        # Existing video row with the main .mp4 on disk but no static thumbnail
+        # captured yet — must re-process so the thumbnail download fires.
+        ProfilePicture.objects.create(
+            telegram_id=200,
+            channel=self.channel,
+            picture="profile.mp4",
+            mime_type="video/mp4",
+            thumbnail="",
+            date=None,
+        )
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.mp4")
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
+
+    @patch("crawler.media_handler.mimetypes.guess_type", return_value=("video/mp4", None))
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_video_avatar_downloads_main_file_and_static_thumbnail(
+        self, mock_from_tg: MagicMock, _mock_guess: MagicMock
+    ) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=300)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        # First _download_media call → main video file; second (with thumb=-1) → static frame.
+        self.handler._download_media = MagicMock(side_effect=["/tmp/avatar.mp4", "/tmp/avatar_thumb.jpg"])
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        # _download_media called twice: once for main, once with thumb=-1
+        self.assertEqual(self.handler._download_media.call_count, 2)
+        self.handler._download_media.assert_any_call(pic)
+        self.handler._download_media.assert_any_call(pic, thumb=-1)
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertEqual(defaults["mime_type"], "video/mp4")
+        self.assertEqual(defaults["thumbnail"], "/tmp/avatar_thumb.jpg")
+        self.assertEqual(defaults["picture"], "/tmp/avatar.mp4")
+
+    @patch("crawler.media_handler.mimetypes.guess_type", return_value=("image/jpeg", None))
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_static_avatar_does_not_request_thumbnail(self, mock_from_tg: MagicMock, _mock_guess: MagicMock) -> None:
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=300)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        self.handler._download_media = MagicMock(return_value="/tmp/avatar.jpg")
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        # No thumb=-1 follow-up for static avatars
+        self.assertEqual(self.handler._download_media.call_count, 1)
+        defaults = mock_from_tg.call_args.kwargs["defaults"]
+        self.assertEqual(defaults["mime_type"], "image/jpeg")
+        self.assertIsNone(defaults["thumbnail"])
+
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_loop_continues_after_recoverable_error_on_current_picture(self, mock_from_tg: MagicMock) -> None:
+        from telethon.errors.rpcerrorlist import FileReferenceExpiredError
+
+        tc = self._make_tg_channel(telegram_id=1)
+        current_pic = self._make_tg_picture(pic_id=400)  # iterated first → newest
+        older_pic = self._make_tg_picture(pic_id=401)
+        self.api_client.client.get_profile_photos.return_value = [current_pic, older_pic]
+        err = FileReferenceExpiredError.__new__(FileReferenceExpiredError)
+        self.handler._download_media = MagicMock(side_effect=[err, "/tmp/fake.jpg"])
+
+        result = self.handler.download_profile_picture(tc)
+
+        # The current picture fails but the older one still gets processed
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

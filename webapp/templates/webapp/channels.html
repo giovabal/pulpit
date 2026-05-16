@@ -61,7 +61,7 @@
             {% endif %}
           </span>
         </span>
-        {% with pic=channel.profile_picture %}{% if pic and pic.picture %}<img src="{{ pic.picture.url }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}
+        {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
     </li>
     {% empty %}
@@ -90,7 +90,7 @@
             {% endif %}
           </span>
         </span>
-        {% with pic=channel.profile_picture %}{% if pic and pic.picture %}<img src="{{ pic.picture.url }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}
+        {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
     </li>
     {% endfor %}
@@ -118,7 +118,7 @@
             {% endif %}
           </span>
         </span>
-        {% with pic=channel.profile_picture %}{% if pic and pic.picture %}<img src="{{ pic.picture.url }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}
+        {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
     </li>
     {% endfor %}
