@@ -106,7 +106,7 @@
       <span class="sc-value">{{ card.value }}</span>
       {% if card.note %}<span class="sc-note">{{ card.note|safe }}</span>{% endif %}
     </div>
-    {% if card.inline_secondary %}<span class="sc-secondary">{% for entry in card.secondary %}<strong>{{ entry.value }}</strong> {{ entry.label|safe }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}{% for entry in card.secondary %}<span class="sc-secondary"><strong>{{ entry.value }}</strong> {{ entry.label|safe }}</span>{% endfor %}{% endif %}
+    {% if card.inline_secondary %}<span class="sc-secondary">{% for entry in card.secondary %}{% if entry.value %}<strong>{{ entry.value }}</strong> {% endif %}{{ entry.label|safe }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}{% for entry in card.secondary %}<span class="sc-secondary">{% if entry.value %}<strong>{{ entry.value }}</strong> {% endif %}{{ entry.label|safe }}</span>{% endfor %}{% endif %}
   </div>
   {% endfor %}
 </div>

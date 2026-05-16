@@ -469,7 +469,8 @@ class ChannelDetailView(ListView):
             msg_qs = msg_qs.filter(date__date__lte=ch.out_of_target_after)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
-        total_replies = MessageReply.objects.filter(parent_message__in=msg_qs).count()
+        replies_allowed = ch.has_link or not ch.broadcast
+        total_replies = MessageReply.objects.filter(parent_message__in=msg_qs).count() if replies_allowed else 0
         media_known_types = ["photo", "video", "audio", "sticker"]
         media_agg = msg_qs.aggregate(
             pictures=Count("id", filter=Q(media_type="photo")),
@@ -534,7 +535,9 @@ class ChannelDetailView(ListView):
                 "label": "Messages",
                 "value": f"{total_messages:,}",
                 "secondary": [
-                    {"value": f"{total_replies:,}", "label": "reply" if total_replies == 1 else "replies"},
+                    {"value": f"{total_replies:,}", "label": "reply" if total_replies == 1 else "replies"}
+                    if replies_allowed
+                    else {"label": "no replies allowed"},
                 ],
             },
             {

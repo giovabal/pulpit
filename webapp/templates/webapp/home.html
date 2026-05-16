@@ -14,7 +14,7 @@
         <span class="sc-value">{{ card.value }}</span>
         {% if card.note %}<span class="sc-note">{{ card.note|safe }}</span>{% endif %}
       </div>
-      {% for entry in card.secondary %}<span class="sc-secondary"><strong>{{ entry.value }}</strong> {{ entry.label|safe }}</span>{% endfor %}
+      {% for entry in card.secondary %}<span class="sc-secondary">{% if entry.value %}<strong>{{ entry.value }}</strong> {% endif %}{{ entry.label|safe }}</span>{% endfor %}
     </div>
     {% endfor %}
   </div>
