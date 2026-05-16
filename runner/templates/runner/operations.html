@@ -1303,6 +1303,37 @@
     });
   })();
 
+  // "Fix missing media" needs at least one media type. Auto-tick "Image download"
+  // when the flag turns on with no media type selected, and silently restore the
+  // last-ticked media type if the user tries to uncheck it while the flag stays on.
+  (function () {
+    var fixCb = document.querySelector('input[name="fix_missing_media"]');
+    if (!fixCb) return;
+    var mediaCbs = Array.from(document.querySelectorAll(
+      'input[name="download_images"], input[name="download_video"], ' +
+      'input[name="download_audio"], input[name="download_stickers"], ' +
+      'input[name="download_other_media"]'
+    ));
+    if (!mediaCbs.length) return;
+    var imageCb = mediaCbs.find(function (c) { return c.name === 'download_images'; });
+
+    function ensureAtLeastOne() {
+      if (!fixCb.checked) return;
+      if (mediaCbs.some(function (c) { return c.checked; })) return;
+      if (imageCb) imageCb.checked = true;
+    }
+
+    fixCb.addEventListener('change', ensureAtLeastOne);
+    mediaCbs.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        if (!fixCb.checked) return;
+        if (mediaCbs.some(function (c) { return c.checked; })) return;
+        cb.checked = true;
+      });
+    });
+    ensureAtLeastOne();
+  })();
+
   (function () {
     var form = document.getElementById('form-structural_analysis');
     var netStatsFs = document.getElementById('network-stat-groups-fieldset');
