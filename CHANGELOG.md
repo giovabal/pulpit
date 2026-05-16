@@ -1,5 +1,5 @@
 # Changelog
-## [0.19] - To be announced
+## [0.19] - 2026-05-16
 *Media management improvements. Lost messages management improvements. Database maintenance.*
 
 ### New features
