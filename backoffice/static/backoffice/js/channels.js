@@ -185,14 +185,11 @@
                 detailBtn.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
                 tdName.appendChild(detailBtn);
             }
-            if (ch.profile_picture_url) {
-                var img = document.createElement("img");
-                img.className = "bo-ch-pic bo-ch-pic--clickable";
-                img.src = ch.profile_picture_url;
-                img.alt = "";
-                img.title = "View profile pictures";
-                img.addEventListener("click", function (e) { e.stopPropagation(); _openPicModal(ch); });
-                tdName.appendChild(img);
+            var picEl = makeProfilePicEl(ch, "bo-ch-pic bo-ch-pic--clickable");
+            if (picEl) {
+                picEl.title = "View profile pictures";
+                picEl.addEventListener("click", function (e) { e.stopPropagation(); _openPicModal(ch); });
+                tdName.appendChild(picEl);
             }
             tr.appendChild(tdName);
 
@@ -530,6 +527,7 @@
 
     var $picModalEl  = document.getElementById("pic-modal");
     var $picImg      = document.getElementById("pic-modal-img");
+    var $picVideo    = document.getElementById("pic-modal-video");
     var $picTitle    = document.getElementById("pic-modal-title");
     var $picCounter  = document.getElementById("pic-modal-counter");
     var $picFooter   = document.getElementById("pic-modal-footer");
@@ -540,31 +538,61 @@
         _picModal = new bootstrap.Modal($picModalEl);
     }
 
-    function _picSrc(item) {
-        // The pictures API returns {url, mime_type, thumbnail_url} objects since
-        // profile pictures can be video avatars. This modal only has an <img>
-        // tag, so prefer the static thumbnail (for video pics) and fall back to
-        // the main url. Legacy string entries still work.
-        if (typeof item === "string") return item;
-        if (item && item.thumbnail_url) return item.thumbnail_url;
-        return (item && item.url) || "";
+    function _normalizeItem(item) {
+        // The pictures API returns {url, mime_type, thumbnail_url} objects.
+        // Tolerate plain URL strings from legacy fallbacks.
+        if (!item) return {url: "", mime_type: "", thumbnail_url: null};
+        if (typeof item === "string") return {url: item, mime_type: "", thumbnail_url: null};
+        return {
+            url: item.url || "",
+            mime_type: item.mime_type || "",
+            thumbnail_url: item.thumbnail_url || null,
+        };
+    }
+
+    function _renderItem(item) {
+        var isVideo = item.mime_type.indexOf("video/") === 0;
+        if (isVideo) {
+            $picImg.style.display = "none";
+            $picImg.src = "";
+            $picVideo.style.display = "";
+            $picVideo.src = item.url;
+            if (item.thumbnail_url) $picVideo.setAttribute("poster", item.thumbnail_url);
+            else $picVideo.removeAttribute("poster");
+            $picVideo.play().catch(function () { /* autoplay may be blocked */ });
+        } else {
+            $picVideo.pause();
+            $picVideo.removeAttribute("src");
+            $picVideo.style.display = "none";
+            $picImg.style.display = "";
+            $picImg.src = item.url;
+        }
     }
 
     function _showPic(index) {
         _picIndex = index;
-        $picImg.src = _picSrc(_picUrls[_picIndex]);
+        _renderItem(_normalizeItem(_picUrls[_picIndex]));
         $picCounter.textContent = (_picUrls.length > 1) ? (_picIndex + 1) + " / " + _picUrls.length : "";
         $picPrev.disabled = _picIndex === 0;
         $picNext.disabled = _picIndex === _picUrls.length - 1;
         $picFooter.style.display = _picUrls.length > 1 ? "" : "none";
     }
 
+    function _chSeed(ch) {
+        return {
+            url: ch.profile_picture_url,
+            mime_type: ch.profile_picture_mime_type || "",
+            thumbnail_url: ch.profile_picture_thumbnail_url || null,
+        };
+    }
+
     function _openPicModal(ch) {
         if (!_picModal) return;
         $picTitle.textContent = ch.title || ("Channel #" + ch.id);
-        $picImg.src = ch.profile_picture_url;  /* show thumbnail immediately */
         $picCounter.textContent = "";
         $picFooter.style.display = "none";
+        _picUrls = [_chSeed(ch)];
+        _renderItem(_normalizeItem(_picUrls[0]));  /* show channel avatar immediately */
         _picModal.show();
 
         if (_picCache[ch.id]) {
@@ -574,12 +602,12 @@
         }
         apiFetch("/manage/api/channels/" + ch.id + "/pictures/")
             .then(function (data) {
-                _picCache[ch.id] = data.pictures.length ? data.pictures : [ch.profile_picture_url];
+                _picCache[ch.id] = data.pictures.length ? data.pictures : [_chSeed(ch)];
                 _picUrls = _picCache[ch.id];
                 _showPic(0);
             })
             .catch(function () {
-                _picUrls = [ch.profile_picture_url];
+                _picUrls = [_chSeed(ch)];
                 _showPic(0);
             });
     }
@@ -589,5 +617,10 @@
     $picModalEl.addEventListener("keydown", function (e) {
         if (e.key === "ArrowLeft")  { if (_picIndex > 0) _showPic(_picIndex - 1); }
         if (e.key === "ArrowRight") { if (_picIndex < _picUrls.length - 1) _showPic(_picIndex + 1); }
+    });
+    $picModalEl.addEventListener("hidden.bs.modal", function () {
+        $picVideo.pause();
+        $picVideo.removeAttribute("src");
+        $picVideo.load();
     });
 })();

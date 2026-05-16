@@ -8,22 +8,42 @@
     var _picUrls  = [];
     var _picIndex = 0;
     var _picModal = null;
-    var $picModalEl, $picImg, $picCounter, $picFooter, $picPrev, $picNext;
+    var $picModalEl, $picImg, $picVideo, $picCounter, $picFooter, $picPrev, $picNext;
 
-    function _picSrc(item) {
-        // The pictures API returns {url, mime_type, thumbnail_url} objects since
-        // profile pictures can be video avatars. The backoffice modal only has
-        // an <img> tag, so prefer the static thumbnail (for video pics) and fall
-        // back to the main url. Legacy string entries (from older API responses)
-        // are still accepted.
-        if (typeof item === "string") return item;
-        if (item && item.thumbnail_url) return item.thumbnail_url;
-        return (item && item.url) || "";
+    function _normalizeItem(item) {
+        // The pictures API returns {url, mime_type, thumbnail_url} objects.
+        // Tolerate plain URL strings from legacy fallbacks.
+        if (!item) return {url: "", mime_type: "", thumbnail_url: null};
+        if (typeof item === "string") return {url: item, mime_type: "", thumbnail_url: null};
+        return {
+            url: item.url || "",
+            mime_type: item.mime_type || "",
+            thumbnail_url: item.thumbnail_url || null,
+        };
+    }
+
+    function _renderItem(item) {
+        var isVideo = item.mime_type.indexOf("video/") === 0;
+        if (isVideo) {
+            $picImg.style.display = "none";
+            $picImg.src = "";
+            $picVideo.style.display = "";
+            $picVideo.src = item.url;
+            if (item.thumbnail_url) $picVideo.setAttribute("poster", item.thumbnail_url);
+            else $picVideo.removeAttribute("poster");
+            $picVideo.play().catch(function () { /* autoplay may be blocked */ });
+        } else {
+            $picVideo.pause();
+            $picVideo.removeAttribute("src");
+            $picVideo.style.display = "none";
+            $picImg.style.display = "";
+            $picImg.src = item.url;
+        }
     }
 
     function _showPic(index) {
         _picIndex = index;
-        $picImg.src = _picSrc(_picUrls[_picIndex]);
+        _renderItem(_normalizeItem(_picUrls[_picIndex]));
         $picCounter.textContent = _picUrls.length > 1 ? (_picIndex + 1) + " / " + _picUrls.length : "";
         $picPrev.disabled = _picIndex === 0;
         $picNext.disabled = _picIndex === _picUrls.length - 1;
@@ -44,7 +64,10 @@
                   '<span class="modal-title fw-semibold" id="cu-pic-title"></span>' +
                   '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
                 '</div>' +
-                '<div class="modal-body text-center p-3"><img id="cu-pic-img" src="" alt="" class="bo-pic-modal-img"></div>' +
+                '<div class="modal-body text-center p-3">' +
+                  '<img id="cu-pic-img" src="" alt="" class="bo-pic-modal-img">' +
+                  '<video id="cu-pic-video" class="bo-pic-modal-img" controls autoplay loop muted playsinline style="display:none"></video>' +
+                '</div>' +
                 '<div class="modal-footer py-2 justify-content-between" id="cu-pic-footer">' +
                   '<button class="bo-btn bo-btn--sm" id="cu-pic-prev">←</button>' +
                   '<span class="text-muted small" id="cu-pic-counter"></span>' +
@@ -54,6 +77,7 @@
             '</div>';
         document.body.appendChild($picModalEl);
         $picImg     = document.getElementById("cu-pic-img");
+        $picVideo   = document.getElementById("cu-pic-video");
         $picCounter = document.getElementById("cu-pic-counter");
         $picFooter  = document.getElementById("cu-pic-footer");
         $picPrev    = document.getElementById("cu-pic-prev");
@@ -63,6 +87,11 @@
         $picModalEl.addEventListener("keydown", function (e) {
             if (e.key === "ArrowLeft" && _picIndex > 0) _showPic(_picIndex - 1);
             if (e.key === "ArrowRight" && _picIndex < _picUrls.length - 1) _showPic(_picIndex + 1);
+        });
+        $picModalEl.addEventListener("hidden.bs.modal", function () {
+            $picVideo.pause();
+            $picVideo.removeAttribute("src");
+            $picVideo.load();
         });
         if (typeof bootstrap !== "undefined") _picModal = new bootstrap.Modal($picModalEl);
     }
@@ -78,24 +107,31 @@
         header.appendChild(back);
 
         var titleWrap = document.createElement("div"); titleWrap.className = "bo-ch-update-title";
-        if (ch.profile_picture_url) {
+        var pic = makeProfilePicEl(ch, "bo-ch-update-pic bo-ch-pic--clickable");
+        if (pic) {
             var picWrap = document.createElement("div"); picWrap.className = "bo-ch-update-pic-wrap";
-            var pic = document.createElement("img");
-            pic.className = "bo-ch-update-pic bo-ch-pic--clickable"; pic.src = ch.profile_picture_url; pic.alt = "";
             pic.addEventListener("click", function () {
                 _showPic(0);
                 _openPicModal();
             });
             picWrap.appendChild(pic);
+            /* seed with the channel's current picture so the modal can open
+             * before the API responds (or if it fails) */
+            var _seed = [{
+                url: ch.profile_picture_url,
+                mime_type: ch.profile_picture_mime_type || "",
+                thumbnail_url: ch.profile_picture_thumbnail_url || null,
+            }];
+            _picUrls = _seed;
             /* fetch all pictures to show count badge */
             apiFetch("/manage/api/channels/" + ch.id + "/pictures/").then(function (data) {
-                _picUrls = data.pictures.length ? data.pictures : [ch.profile_picture_url];
+                _picUrls = data.pictures.length ? data.pictures : _seed;
                 if (_picUrls.length > 1) {
                     var badge = document.createElement("span"); badge.className = "bo-pic-badge";
                     badge.textContent = _picUrls.length;
                     picWrap.appendChild(badge);
                 }
-            }).catch(function () { _picUrls = [ch.profile_picture_url]; });
+            }).catch(function () { _picUrls = _seed; });
             titleWrap.appendChild(picWrap);
         }
         var nameBlock = document.createElement("div");

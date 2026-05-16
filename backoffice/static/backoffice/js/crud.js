@@ -93,3 +93,26 @@ function makeEditBtn() {
     btn.innerHTML = '<i class="bi bi-pencil" aria-hidden="true"></i>';
     return btn;
 }
+
+function makeProfilePicEl(ch, className) {
+    if (!ch || !ch.profile_picture_url) return null;
+    var mime = ch.profile_picture_mime_type || "";
+    var thumb = ch.profile_picture_thumbnail_url;
+    var el;
+    if (mime.indexOf("video/") === 0) {
+        el = document.createElement("video");
+        el.src = ch.profile_picture_url;
+        if (thumb) el.setAttribute("poster", thumb);
+        el.autoplay = true;
+        el.loop = true;
+        el.muted = true;
+        el.playsInline = true;
+        el.setAttribute("aria-hidden", "true");
+    } else {
+        el = document.createElement("img");
+        el.src = ch.profile_picture_url;
+        el.alt = "";
+    }
+    if (className) el.className = className;
+    return el;
+}

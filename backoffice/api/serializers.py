@@ -49,12 +49,24 @@ class ChannelSerializer(serializers.ModelSerializer):
     )
     channel_type = serializers.CharField(read_only=True)
     profile_picture_url = serializers.SerializerMethodField()
+    profile_picture_mime_type = serializers.SerializerMethodField()
+    profile_picture_thumbnail_url = serializers.SerializerMethodField()
     detail_url = serializers.SerializerMethodField()
 
     def get_profile_picture_url(self, obj):
         pic = obj.profile_picture
         if pic and pic.picture:
             return pic.picture.url
+        return None
+
+    def get_profile_picture_mime_type(self, obj):
+        pic = obj.profile_picture
+        return pic.mime_type if pic else ""
+
+    def get_profile_picture_thumbnail_url(self, obj):
+        pic = obj.profile_picture
+        if pic and pic.thumbnail and pic.thumbnail.name:
+            return pic.thumbnail.url
         return None
 
     def get_detail_url(self, obj):
@@ -68,6 +80,8 @@ class ChannelSerializer(serializers.ModelSerializer):
             "username",
             "channel_type",
             "profile_picture_url",
+            "profile_picture_mime_type",
+            "profile_picture_thumbnail_url",
             "detail_url",
             "organization_id",
             "organization_name",
@@ -103,6 +117,8 @@ class ChannelSerializer(serializers.ModelSerializer):
             "username",
             "channel_type",
             "profile_picture_url",
+            "profile_picture_mime_type",
+            "profile_picture_thumbnail_url",
             "participants_count",
             "in_degree",
             "out_degree",
