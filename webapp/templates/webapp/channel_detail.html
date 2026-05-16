@@ -53,8 +53,8 @@
         {% if selected_channel.date and is_in_target %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Date the channel was created on Telegram"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Created {{ selected_channel.date|date:"N j, Y" }}</span>{% endif %}
         {% if is_in_target %}<time class="ch-meta-item" datetime="{{ selected_channel.updated|date:'c' }}" data-bs-toggle="tooltip" title="Date this channel was last crawled by Pulpit"><i class="bi bi-clock" aria-hidden="true"></i>Updated {{ selected_channel.updated|date:"N j, Y" }}</time>{% endif %}
         {% if selected_channel.telegram_location %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Geographic location set on the channel"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ selected_channel.telegram_location }}</span>{% endif %}
-        {% if selected_channel.in_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of in-target channels that forward from or mention this channel"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
-        {% if is_in_target and selected_channel.out_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of in-target channels this channel forwards from or mentions"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
+        {% if selected_channel.in_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of forwards and mentions of this channel from in-target channels"><i class="bi bi-arrow-down-left" aria-hidden="true"></i>In-degree: {{ selected_channel.in_degree }}</span>{% endif %}
+        {% if is_in_target and selected_channel.out_degree is not None %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Number of forwards and mentions from this channel to in-target channels"><i class="bi bi-arrow-up-right" aria-hidden="true"></i>Out-degree: {{ selected_channel.out_degree }}</span>{% endif %}
         {% if selected_channel.level %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Channel boost level — higher levels unlock extra Telegram features. Earned through paid boosts from subscribers."><i class="bi bi-lightning-fill" aria-hidden="true"></i>Level {{ selected_channel.level }}</span>{% endif %}
         {% if selected_channel.forum %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Forum mode is active — messages are organized into topics (threads) rather than a single feed"><i class="bi bi-chat-square-dots" aria-hidden="true"></i>Forum</span>{% endif %}
         {% if selected_channel.has_link %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="This channel has a linked discussion group where subscribers can comment on posts"><i class="bi bi-link-45deg" aria-hidden="true"></i>Linked group</span>{% endif %}
@@ -96,20 +96,25 @@
 </div>
 {% endif %}
 
+{% for row in summary_rows %}
 <div class="ch-summary-grid">
-  {% for card in summary %}
+  {% for card in row %}
   <div class="summary-card{% if card.dim %} summary-card--dim{% endif %}">
     <i class="bi {{ card.icon }} sc-icon" aria-hidden="true"></i>
     <span class="sc-label">{{ card.label }}</span>
-    <span class="sc-value">{{ card.value }}</span>
-    {% if card.note %}<span class="sc-note">{{ card.note }}</span>{% endif %}
+    <div class="sc-value-row">
+      <span class="sc-value">{{ card.value }}</span>
+      {% if card.note %}<span class="sc-note">{{ card.note|safe }}</span>{% endif %}
+    </div>
+    {% if card.inline_secondary %}<span class="sc-secondary">{% for entry in card.secondary %}<strong>{{ entry.value }}</strong> {{ entry.label|safe }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}{% for entry in card.secondary %}<span class="sc-secondary"><strong>{{ entry.value }}</strong> {{ entry.label|safe }}</span>{% endfor %}{% endif %}
   </div>
   {% endfor %}
 </div>
+{% endfor %}
 
 {% if top_reactions %}
 <div class="ch-reactions-block">
-  <span class="ch-reactions-label">Reactions</span>
+  <span class="ch-reactions-label">{{ total_reactions }} reactions</span>
   <div class="ch-reactions-pills">
     {% for r in top_reactions %}
     <span class="reaction-pill">{{ r.emoji }} <span class="reaction-pill-count">{{ r.total }}</span></span>

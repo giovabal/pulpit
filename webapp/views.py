@@ -182,7 +182,7 @@ class HomeView(ListView):
                 "icon": "bi-chat-left-text",
                 "label": "Messages collected",
                 "value": f"{total_messages:,}",
-                "secondary": {"value": f"{total_replies:,}", "label": "replies"},
+                "secondary": [{"value": f"{total_replies:,}", "label": "replies"}],
             },
             {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
             {
@@ -196,7 +196,7 @@ class HomeView(ListView):
                 "label": "Forwards",
                 "value": f"{total_forwards:,}",
                 "note": "cross-channel amplifications",
-                "secondary": {"value": f"{total_forward_edges:,}", "label": "distinct connections"},
+                "secondary": [{"value": f"{total_forward_edges:,}", "label": "distinct connections"}],
             },
         ]
         ctx["panels"] = [
@@ -469,33 +469,122 @@ class ChannelDetailView(ListView):
             msg_qs = msg_qs.filter(date__date__lte=ch.out_of_target_after)
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
-        total_forwards_sent = msg_qs.filter(forwarded_from__isnull=False).count()
-        total_forwards_received = (
-            Message.objects.alive()
-            .filter(channel__in=Channel.objects.in_target().values("pk"), forwarded_from=ch)
-            .count()
+        media_known_types = ["photo", "video", "audio", "sticker"]
+        media_agg = msg_qs.aggregate(
+            pictures=Count("id", filter=Q(media_type="photo")),
+            videos=Count("id", filter=Q(media_type="video")),
+            audio=Count("id", filter=Q(media_type="audio")),
+            stickers=Count("id", filter=Q(media_type="sticker")),
+            other=Count("id", filter=~Q(media_type__in=["", *media_known_types])),
         )
+        total_media = sum(media_agg.values())
+        media_breakdown = [
+            (media_agg["pictures"], "picture", "pictures"),
+            (media_agg["videos"], "video", "videos"),
+            (media_agg["audio"], "audio", "audio"),
+            (media_agg["stickers"], "sticker", "stickers"),
+            (media_agg["other"], "other", "other"),
+        ]
+        in_target_pks = Channel.objects.in_target().values("pk")
+        fwd_sent_in_target_qs = msg_qs.filter(forwarded_from__in=in_target_pks).exclude(forwarded_from=ch)
+        fwd_sent_out_of_target_qs = msg_qs.filter(forwarded_from__isnull=False).exclude(
+            forwarded_from__in=in_target_pks
+        )
+        fwd_received_qs = (
+            Message.objects.alive().filter(channel__in=in_target_pks, forwarded_from=ch).exclude(channel=ch)
+        )
+        total_forwards_sent_in_target = fwd_sent_in_target_qs.count()
+        total_forwards_sent_self = msg_qs.filter(forwarded_from=ch).count()
+        total_forwards_sent_out_of_target = fwd_sent_out_of_target_qs.count()
+        total_forwards_received = fwd_received_qs.count()
+        fwd_sent_in_target_channels = fwd_sent_in_target_qs.values("forwarded_from").distinct().count()
+        fwd_sent_out_of_target_channels = fwd_sent_out_of_target_qs.values("forwarded_from").distinct().count()
+        fwd_received_channels = fwd_received_qs.values("channel").distinct().count()
+
+        refs_through = Message.references.through.objects
+        mentions_sent_in_target_qs = refs_through.filter(
+            message__channel=ch, message__is_lost=False, channel__in=in_target_pks
+        ).exclude(channel=ch)
+        mentions_sent_out_of_target_qs = (
+            refs_through.filter(message__channel=ch, message__is_lost=False)
+            .exclude(channel__in=in_target_pks)
+            .exclude(channel=ch)
+        )
+        mentions_received_qs = refs_through.filter(
+            message__channel__in=in_target_pks, message__is_lost=False, channel=ch
+        ).exclude(message__channel=ch)
+        total_mentions_sent_in_target = mentions_sent_in_target_qs.count()
+        total_mentions_sent_self = refs_through.filter(message__channel=ch, message__is_lost=False, channel=ch).count()
+        total_mentions_sent_out_of_target = mentions_sent_out_of_target_qs.count()
+        total_mentions_received = mentions_received_qs.count()
+        mentions_sent_in_target_channels = mentions_sent_in_target_qs.values("channel").distinct().count()
+        mentions_sent_out_of_target_channels = mentions_sent_out_of_target_qs.values("channel").distinct().count()
+        mentions_received_channels = mentions_received_qs.values("message__channel").distinct().count()
+
+        def channels_phrase(prefix: str, count: int, kind: str) -> str:
+            word = "channel" if count == 1 else "channels"
+            return f"{prefix} <strong>{count:,}</strong> {kind} {word}"
+
         date_agg = msg_qs.filter(date__isnull=False).aggregate(earliest=Min("date"), latest=Max("date"))
 
         summary = [
             {"icon": "bi-chat-left-text", "label": "Messages", "value": f"{total_messages:,}"},
+            {
+                "icon": "bi-images",
+                "label": "Media",
+                "value": f"{total_media:,}",
+                "inline_secondary": True,
+                "secondary": [
+                    {"value": f"{n:,}", "label": singular if n == 1 else plural}
+                    for n, singular, plural in media_breakdown
+                    if n
+                ],
+            },
             {"icon": "bi-eye", "label": "Total views", "value": f"{total_views:,}"},
             {
                 "icon": "bi-calendar-range",
                 "label": "Date range",
                 "value": f"{fmt_date(date_agg['earliest'])} – {fmt_date(date_agg['latest'])}",
             },
+        ]
+        engagement = [
             {
                 "icon": "bi-forward",
                 "label": "Forwards sent",
-                "value": f"{total_forwards_sent:,}",
-                "note": "to other channels",
+                "value": f"{total_forwards_sent_in_target:,}",
+                "note": channels_phrase("from", fwd_sent_in_target_channels, "other in-target"),
+                "secondary": [
+                    {"value": f"{total_forwards_sent_self:,}", "label": "self-forwards"},
+                    {
+                        "value": f"{total_forwards_sent_out_of_target:,}",
+                        "label": channels_phrase("from", fwd_sent_out_of_target_channels, "non-in-target"),
+                    },
+                ],
+            },
+            {
+                "icon": "bi-at",
+                "label": "Mentions sent",
+                "value": f"{total_mentions_sent_in_target:,}",
+                "note": channels_phrase("of", mentions_sent_in_target_channels, "other in-target"),
+                "secondary": [
+                    {"value": f"{total_mentions_sent_self:,}", "label": "self-mentions"},
+                    {
+                        "value": f"{total_mentions_sent_out_of_target:,}",
+                        "label": channels_phrase("of", mentions_sent_out_of_target_channels, "non-in-target"),
+                    },
+                ],
             },
             {
                 "icon": "bi-arrow-return-right",
                 "label": "Forwards received",
                 "value": f"{total_forwards_received:,}",
-                "note": "from other channels",
+                "note": channels_phrase("by", fwd_received_channels, "other in-target"),
+            },
+            {
+                "icon": "bi-chat-quote",
+                "label": "Mentions received",
+                "value": f"{total_mentions_received:,}",
+                "note": channels_phrase("by", mentions_received_channels, "other in-target"),
             },
         ]
         top_reactions_qs = (
@@ -507,12 +596,13 @@ class ChannelDetailView(ListView):
         top_reactions_raw = list(top_reactions_qs)
         total_reactions = sum(r["total"] for r in top_reactions_raw)
         top_reactions = [{"emoji": r["emoji"], "total": f"{r['total']:,}"} for r in top_reactions_raw]
-        if total_reactions:
-            summary.append({"icon": "bi-emoji-smile", "label": "Total reactions", "value": f"{total_reactions:,}"})
 
         if not is_in_target:
-            for card in summary[:-1]:
+            for card in summary:
                 card["dim"] = True
+            for card in engagement:
+                if card["label"] not in ("Forwards received", "Mentions received"):
+                    card["dim"] = True
 
         panels = [
             {
@@ -591,11 +681,12 @@ class ChannelDetailView(ListView):
         context_data.update(
             {
                 "selected_channel": ch,
-                "summary": summary,
+                "summary_rows": [summary, engagement],
                 "panels": panels,
                 "is_in_target": is_in_target,
                 "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
+                "total_reactions": f"{total_reactions:,}",
                 "channel_groups": list(ch.groups.order_by("name")),
                 "vacancy": vacancy,
                 "linked_channel": linked_channel,

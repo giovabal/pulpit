@@ -10,9 +10,11 @@
     <div class="summary-card">
       <i class="bi {{ card.icon }} sc-icon" aria-hidden="true"></i>
       <span class="sc-label">{{ card.label }}</span>
-      <span class="sc-value">{{ card.value }}</span>
-      {% if card.secondary %}<span class="sc-secondary"><strong>{{ card.secondary.value }}</strong> {{ card.secondary.label }}</span>{% endif %}
-      {% if card.note %}<span class="sc-note">{{ card.note }}</span>{% endif %}
+      <div class="sc-value-row">
+        <span class="sc-value">{{ card.value }}</span>
+        {% if card.note %}<span class="sc-note">{{ card.note|safe }}</span>{% endif %}
+      </div>
+      {% for entry in card.secondary %}<span class="sc-secondary"><strong>{{ entry.value }}</strong> {{ entry.label|safe }}</span>{% endfor %}
     </div>
     {% endfor %}
   </div>
