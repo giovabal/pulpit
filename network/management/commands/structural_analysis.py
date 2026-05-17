@@ -1009,6 +1009,13 @@ class Command(BaseCommand):
         reference_positions_3d: dict | None = None,
         extra_layout_names: list[str] | None = None,
         extra_layout_names_3d: list[str] | None = None,
+        do_robustness: bool = False,
+        robustness_alpha: float = 0.05,
+        robustness_runs: int = 100,
+        robustness_null: int = 20,
+        robustness_dynamic: bool = False,
+        robustness_seed: int = 42,
+        robustness_sample: int = 500,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
@@ -1143,6 +1150,27 @@ class Command(BaseCommand):
                 tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
                 tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
 
+            rob_payload: dict | None = None
+            if do_robustness:
+                rob_partitions = {
+                    s.lower(): strategy_results[s][0]
+                    for s in communities_strategy
+                    if len(set(strategy_results[s][0].values())) > 1
+                }
+                rob_payload = robustness.run_robustness(
+                    graph,
+                    partitions=rob_partitions or None,
+                    config=robustness.RobustnessConfig(
+                        alpha=robustness_alpha,
+                        n_random_runs=robustness_runs,
+                        n_null=robustness_null,
+                        dynamic=robustness_dynamic,
+                        seed=robustness_seed,
+                        reach_sample=robustness_sample,
+                    ),
+                )
+                exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
+
             year_data_dst = os.path.join(root_target, f"data_{year}")
             if os.path.exists(year_data_dst):
                 shutil.rmtree(year_data_dst)
@@ -1166,9 +1194,11 @@ class Command(BaseCommand):
             "has_channel_html": True,
             "has_network_html": True,
             "has_community_html": True,
+            "has_robustness": do_robustness and rob_payload is not None,
             # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
+            "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
@@ -1551,6 +1581,7 @@ class Command(BaseCommand):
             )
             self.stdout.write("- vacancy_analysis.html")
 
+        global_rob_payload: dict | None = None
         if opts.do_robustness:
             self.stdout.write("\nRobustness analysis")
             _rob_first = [True]
@@ -1569,7 +1600,7 @@ class Command(BaseCommand):
                 for s in opts.communities_strategy
                 if len(set(strategy_results[s][0].values())) > 1
             }
-            rob_payload = robustness.run_robustness(
+            global_rob_payload = robustness.run_robustness(
                 graph,
                 partitions=partitions or None,
                 config=robustness.RobustnessConfig(
@@ -1585,7 +1616,7 @@ class Command(BaseCommand):
             if not _rob_first[0]:
                 self.stdout.write("done")
             os.makedirs(root_target, exist_ok=True)
-            exporter.write_robustness_json(rob_payload, root_target)
+            exporter.write_robustness_json(global_rob_payload, root_target)
             self.stdout.write("- robustness.json")
             if opts.do_html:
                 tables.write_robustness_table_html(
@@ -1594,13 +1625,8 @@ class Command(BaseCommand):
                     project_title=project_title,
                 )
                 self.stdout.write("- robustness_table.html")
-            if opts.do_xlsx:
-                tables.write_robustness_table_xlsx(
-                    rob_payload,
-                    output_filename=os.path.join(root_target, "robustness_table.xlsx"),
-                    project_title=project_title,
-                )
-                self.stdout.write("- robustness_table.xlsx")
+            # Excel write is deferred until after the timeline loop so per-year
+            # robustness payloads can be folded into the same workbook.
 
         timeline_entries: list[dict] = []
         if opts.timeline_step == "year":
@@ -1634,6 +1660,13 @@ class Command(BaseCommand):
                         reference_positions_3d=positions_3d if opts.do_3dgraph else None,
                         extra_layout_names=opts.extra_layout_names or None,
                         extra_layout_names_3d=opts.extra_layout_names_3d or None,
+                        do_robustness=opts.do_robustness,
+                        robustness_alpha=opts.robustness_alpha,
+                        robustness_runs=opts.robustness_runs,
+                        robustness_null=opts.robustness_null,
+                        robustness_dynamic=opts.robustness_dynamic,
+                        robustness_seed=opts.robustness_seed,
+                        robustness_sample=opts.robustness_sample,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
@@ -1673,6 +1706,19 @@ class Command(BaseCommand):
                 project_title=project_title,
                 year_data=network_years,
             )
+            if opts.do_robustness and global_rob_payload is not None:
+                robustness_years = [
+                    (e["year"], e["_xlsx_robustness_data"])
+                    for e in timeline_entries
+                    if e.get("_xlsx_robustness_data") is not None
+                ] or None
+                self.stdout.write("- robustness table (xlsx)")
+                tables.write_robustness_table_xlsx(
+                    global_rob_payload,
+                    output_filename=os.path.join(root_target, "robustness_table.xlsx"),
+                    project_title=project_title,
+                    year_data=robustness_years,
+                )
 
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)

@@ -54,6 +54,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 - How did the network evolve year by year? Which channels rose, fell, or switched communities? *([Timeline export](docs/workflow.md#timeline-see-how-the-network-changed-over-time))*
 - How does the network today compare to a snapshot from six months ago? *([Network comparison](docs/workflow.md#compare-two-networks))*
 - After a key channel went silent — removed, banned, or simply abandoned — who filled its structural role? *([Vacancy Analysis](docs/vacancy-analysis.md))*
+- How resilient is this ecosystem if a moderation wave starts pulling channels offline — and which kinds of removals would damage it most? *([Robustness Analysis](docs/robustness-analysis.md))*
 
 ---
 
@@ -211,6 +212,31 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 The six scores span two analytical perspectives: A–C characterise structural position topologically; D–F characterise dynamics and timing. A channel scoring high on all six is a strong structural heir. A channel scoring high only on D–F was already well-positioned in the broader diffusion network but does not mirror the vacancy's immediate neighbourhood — a lateral successor rather than a direct replacement.
 
 See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score interpretation patterns, and the batch export API.
+
+---
+
+## Robustness analysis — 8 attack strategies
+
+How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment information flow across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
+
+The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#what-gets-attacked) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under eight attack strategies and tracks how the residual network shrinks:
+
+| Strategy | Mode | What it models |
+| :------- | :--- | :------------- |
+| Random | Static (averaged over N runs) | Indiscriminate node loss — the baseline against which targeted attacks should look much worse |
+| In-strength | Static | Take down everything that's heavily cited — moderation aimed at popular destinations |
+| Out-strength | Static | Take down everything that cites heavily — moderation aimed at aggregators |
+| PageRank | Static | Take down the highest-prestige nodes — moderation aware of inherited prestige |
+| Betweenness | Static | Take down the brokers — moderation aimed at fragmenting cross-community flow |
+| In-strength (dyn) | Dynamic — re-rank after every removal | Strength-based attack with cascade awareness |
+| PageRank (dyn) | Dynamic — re-rank after every removal | PageRank attack with cascade awareness |
+| Betweenness (dyn) | Dynamic — re-rank after every removal | The most destructive attack class; also the most expensive |
+
+For each (strategy, "size" metric) Pulpit reports the **Schneider et al. (2011) R-index** — the average residual size across the entire attack — plus a 5%-collapse threshold and a **z-score** against a weight-rewiring null model that preserves topology and the weight multiset but reshuffles weights among edges. R values lower than random failure mean the network has critical channels; |z| ≥ 2 means the deviation didn't happen by chance under the null. When community partitions are active, the analysis additionally tracks intra-community vs inter-community edge survival — a network where bridges go first behaves very differently from one that loses cohesive cliques first.
+
+Three size metrics are tracked simultaneously: largest weakly-connected component, largest strongly-connected component (the mutually-reinforcing core), and the fraction of directed source→target pairs still reachable. When `--timeline-step year` is also active, the whole battery runs once per calendar year alongside the global one, with the HTML page surfacing a year navigator over the per-year results.
+
+See [Robustness analysis](docs/robustness-analysis.md) for the formal definitions, the null-model limits (what it does *not* preserve), interpretation guidance, and the academic references.
 
 ---
 

@@ -10,7 +10,21 @@
 // charts stay legible when several strategies are active.  A per-strategy null band
 // would clutter the line chart with 3 extra datasets per strategy.
 
+import { build_year_nav } from './year_nav.js';
+import { strategy_label } from './labels.js';
+
 var _dd = window.DATA_DIR || "data/";
+
+// Year-switcher state — mirrors the pattern used by community_table.js and
+// network_table.js: when the page was opened from a per-year data dir (e.g.
+// data_2019/), _current_year holds that year and _base_dd points back at the
+// global data/ root so the "All" button can fetch the global payload.
+var _ym = _dd.match(/data_(\d{4,})\//);
+var _current_year = _ym ? parseInt(_ym[1]) : "all";
+var _base_dd = _ym ? "data/" : _dd;
+var _cache = {};
+var _ty = [];  // timeline years filtered to those with robustness data
+var _loading = false;
 
 var _METRICS = ["wcc", "scc", "reach"];
 var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
@@ -147,6 +161,7 @@ function _buildLineDataset(label, color, data, fractionRemoved) {
 
 function _renderCurves(payload) {
     var container = document.getElementById("rb-curves");
+    container.innerHTML = "";  // idempotent — wipe stale charts when re-rendering on year switch
     var strategies = _orderedStrategies(payload);
     if (!strategies.length) {
         container.innerHTML = "<p class=\"rb-empty\">No attack strategies were run.</p>";
@@ -216,11 +231,15 @@ function _renderCurves(payload) {
 // ── Modular section ─────────────────────────────────────────────────────────
 
 function _renderModular(payload) {
-    var modular = payload.modular;
-    if (!modular || !Object.keys(modular).length) return;
-
-    document.getElementById("rb-modular-section").classList.remove("d-none");
+    var section = document.getElementById("rb-modular-section");
     var container = document.getElementById("rb-modular-tabs");
+    container.innerHTML = "";
+    var modular = payload.modular;
+    if (!modular || !Object.keys(modular).length) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
     var strategies = _orderedStrategies(payload);
     var partitions = Object.keys(modular);
 
@@ -230,7 +249,7 @@ function _renderModular(payload) {
     partitions.forEach(function (p, i) {
         var id = "rb-modular-" + p.replace(/[^a-z0-9_-]/gi, "_");
         navHtml += "<li class=\"nav-item\"><a class=\"nav-link" + (i === 0 ? " active" : "") + "\"" +
-            " data-bs-toggle=\"tab\" href=\"#" + id + "\" role=\"tab\">" + p + "</a></li>";
+            " data-bs-toggle=\"tab\" href=\"#" + id + "\" role=\"tab\">" + strategy_label(p) + "</a></li>";
         paneHtml += "<div class=\"tab-pane fade" + (i === 0 ? " show active" : "") + "\" id=\"" + id + "\" role=\"tabpanel\">" +
             "<div class=\"rb-grid\" data-partition=\"" + p + "\"></div></div>";
     });
@@ -250,7 +269,7 @@ function _renderModular(payload) {
             var card = document.createElement("div");
             card.className = "rb-chart-card";
             var title = document.createElement("h5");
-            title.innerHTML = _STRATEGY_LABEL[s] + " <span class=\"text-muted small\">(" + p + ")</span>";
+            title.innerHTML = _STRATEGY_LABEL[s] + " <span class=\"text-muted small\">(" + strategy_label(p) + ")</span>";
             card.appendChild(title);
             var wrap = document.createElement("div");
             wrap.className = "rb-chart-canvas";
@@ -298,16 +317,48 @@ function _renderModular(payload) {
     });
 }
 
+// ── Year-aware load / render / switch ───────────────────────────────────────
+
+function _render(payload) {
+    _renderHeaderSummary(payload);
+    _renderSummaryTable(payload);
+    _renderCurves(payload);
+    _renderModular(payload);
+}
+
+function _load(year) {
+    if (_cache[year]) return Promise.resolve(_cache[year]);
+    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    return fetch(dd + "robustness.json")
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+        .then(function (payload) { _cache[year] = payload; return payload; });
+}
+
+function _switch_year(year) {
+    if (year === _current_year || _loading) return;
+    _loading = true;
+    _load(year).then(function (payload) {
+        _current_year = year;
+        _render(payload);
+        if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    }).catch(function () {
+        document.getElementById("rb-summary").textContent = "Failed to load robustness data for " + year + ".";
+    }).finally(function () {
+        _loading = false;
+    });
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
-fetch(_dd + "robustness.json")
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
-    .then(function (payload) {
-        _renderHeaderSummary(payload);
-        _renderSummaryTable(payload);
-        _renderCurves(payload);
-        _renderModular(payload);
-    })
-    .catch(function () {
-        document.getElementById("rb-summary").textContent = "Failed to load robustness.json.";
-    });
+Promise.all([
+    _load(_current_year),
+    fetch(_base_dd + "timeline.json").then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+]).then(function (results) {
+    var payload = results[0];
+    var timeline = results[1];
+    _render(payload);
+    _ty = timeline ? (timeline.years || []).filter(function (y) { return y.has_robustness; }) : [];
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+}).catch(function () {
+    document.getElementById("rb-summary").textContent = "Failed to load robustness.json.";
+});

@@ -3341,3 +3341,45 @@ class WriteRobustnessTableXlsxTests(TestCase):
             write_robustness_table_xlsx(payload, output_filename=out)
             wb = openpyxl.load_workbook(out)
             self.assertIn("Summary", wb.sheetnames)
+
+    def test_year_data_produces_year_suffixed_sheets(self) -> None:
+        # With year_data the workbook becomes one contiguous block of sheets per
+        # scope: All first, then each year.  Sheet names get a space-separated
+        # suffix; the legacy "Summary" sheet (no suffix) must not appear.
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        global_payload = self._payload()
+        year_payload = self._payload()
+        year_data = [(2019, year_payload), (2020, year_payload)]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(global_payload, output_filename=out, year_data=year_data)
+            wb = openpyxl.load_workbook(out)
+            for expected in (
+                "Summary All",
+                "Summary 2019",
+                "Summary 2020",
+                "Curve pagerank All",
+                "Curve pagerank 2019",
+                "Curve pagerank 2020",
+                "Modular leiden All",
+                "Modular leiden 2019",
+                "Modular leiden 2020",
+            ):
+                self.assertIn(expected, wb.sheetnames, msg=f"missing sheet {expected!r}")
+            # Legacy un-suffixed sheets must not coexist with the year-grouped layout.
+            self.assertNotIn("Summary", wb.sheetnames)
+            self.assertNotIn("Curve pagerank", wb.sheetnames)
+
+    def test_sheet_name_helper_respects_31_char_cap(self) -> None:
+        # Long partition name + year suffix must stay within Excel's 31-char limit.
+        from network.tables import _robustness_sheet_name
+
+        self.assertEqual(_robustness_sheet_name("Summary", ""), "Summary")
+        self.assertEqual(_robustness_sheet_name("Summary", "All"), "Summary All")
+        long_partition = "Modular leiden_directed_super_long"
+        out = _robustness_sheet_name(long_partition, "2020")
+        self.assertLessEqual(len(out), 31)
+        self.assertTrue(out.endswith(" 2020"))

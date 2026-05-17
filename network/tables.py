@@ -577,64 +577,52 @@ def write_robustness_table_html(
 _ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach")
 
 
-def write_robustness_table_xlsx(
-    rob_payload: dict,
-    output_filename: str,
-    project_title: str = "",
-) -> None:
-    """Write the robustness payload as an Excel workbook.
+def _robustness_sheet_name(prefix: str, suffix: str) -> str:
+    """Excel sheet names are capped at 31 chars.  With a non-empty *suffix*
+    (e.g. ``"All"``, ``"2019"``), the prefix is truncated to make room for
+    ``"<prefix> <suffix>"`` while keeping the suffix intact."""
+    if not suffix:
+        return prefix[:31]
+    full = f"{prefix} {suffix}"
+    if len(full) <= 31:
+        return full
+    return f"{prefix[: 30 - len(suffix)]} {suffix}"
 
-    Sheets produced:
-        - "Summary": one row per (strategy, metric) with R, R_null mean/std,
-          z-score, and f_c.
-        - "Curve <strategy>": one sheet per attack strategy with columns
-          ``q``, ``S_wcc``, ``S_scc``, ``S_reach`` and (when the null model
-          ran) ``null_<metric>_mean`` / ``null_<metric>_std``.
-        - "Modular <partition>": one sheet per partition with ``q``,
-          ``intra_<strategy>``, ``inter_<strategy>``, ``ratio_<strategy>``.
-    """
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
 
-    strategies = list(rob_payload.get("strategies", {}).keys())
-
-    # ── Summary ─────────────────────────────────────────────────────────────
-    ws_sum = wb.create_sheet(title="Summary")
+def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
+    ws = wb.create_sheet(title=_robustness_sheet_name("Summary", suffix))
     headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "f_c"]
-    ws_sum.append(headers)
-    for cell in ws_sum[1]:
+    ws.append(headers)
+    for cell in ws[1]:
         cell.font = Font(bold=True)
-    for s in strategies:
-        payload = rob_payload["strategies"][s]
-        null = payload.get("null") or {}
+    for s in payload.get("strategies", {}):
+        strat = payload["strategies"][s]
+        null = strat.get("null") or {}
         for m in _ROBUSTNESS_METRICS:
             null_m = null.get(f"r_{m}") or {}
-            ws_sum.append(
+            ws.append(
                 [
                     s,
                     m.upper(),
-                    payload.get(f"r_{m}"),
+                    strat.get(f"r_{m}"),
                     null_m.get("mean"),
                     null_m.get("std"),
                     null_m.get("z"),
-                    payload.get(f"fc_{m}"),
+                    strat.get(f"fc_{m}"),
                 ]
             )
 
-    # ── Per-strategy curves ─────────────────────────────────────────────────
-    for s in strategies:
-        payload = rob_payload["strategies"][s]
-        null = payload.get("null") or {}
-        # Sheet names are capped at 31 chars in Excel
-        ws = wb.create_sheet(title=f"Curve {s}"[:31])
+
+def _fill_robustness_curves(wb: Any, payload: dict, suffix: str) -> None:
+    for s in payload.get("strategies", {}):
+        strat = payload["strategies"][s]
+        null = strat.get("null") or {}
+        ws = wb.create_sheet(title=_robustness_sheet_name(f"Curve {s}", suffix))
         cols: list[tuple[str, list]] = [
-            ("q", list(range(len(payload["curve_wcc"])))),
-            ("S_wcc", payload["curve_wcc"]),
-            ("S_scc", payload["curve_scc"]),
-            ("S_reach", payload["curve_reach"]),
+            ("q", list(range(len(strat["curve_wcc"])))),
+            ("S_wcc", strat["curve_wcc"]),
+            ("S_scc", strat["curve_scc"]),
+            ("S_reach", strat["curve_reach"]),
         ]
         if null:
             for m in _ROBUSTNESS_METRICS:
@@ -646,11 +634,12 @@ def write_robustness_table_xlsx(
         for q in range(len(cols[0][1])):
             ws.append([col[1][q] if q < len(col[1]) else None for col in cols])
 
-    # ── Modular curves per partition ────────────────────────────────────────
-    modular = rob_payload.get("modular") or {}
+
+def _fill_robustness_modular(wb: Any, payload: dict, suffix: str) -> None:
+    strategies = list(payload.get("strategies", {}).keys())
+    modular = payload.get("modular") or {}
     for partition_name, per_strategy in modular.items():
-        ws = wb.create_sheet(title=f"Modular {partition_name}"[:31])
-        # Build column list dynamically: q, then for each strategy intra/inter/ratio
+        ws = wb.create_sheet(title=_robustness_sheet_name(f"Modular {partition_name}", suffix))
         any_strategy = next(iter(per_strategy.values()))
         n_points = len(any_strategy["intra"])
         header = ["q"]
@@ -667,6 +656,44 @@ def write_robustness_table_xlsx(
             cell.font = Font(bold=True)
         for q in range(n_points):
             ws.append([col[q] if q < len(col) else None for col in rows_cols])
+
+
+def write_robustness_table_xlsx(
+    rob_payload: dict,
+    output_filename: str,
+    project_title: str = "",
+    year_data: "list[tuple[int, dict]] | None" = None,
+) -> None:
+    """Write the robustness payload(s) as an Excel workbook.
+
+    Without *year_data* sheets are named ``"Summary"``, ``"Curve <strategy>"``,
+    and ``"Modular <partition>"``.
+
+    With *year_data* (a list of ``(year, year_payload)`` from the timeline
+    loop), one contiguous block of sheets is emitted per scope — ``"All"``
+    for the global payload first, then ``"<year>"`` for each per-year
+    payload — so sheet names become ``"Summary All"``, ``"Curve pagerank
+    All"``, …, ``"Summary 2019"``, ``"Curve pagerank 2019"``, etc.  Sheet
+    titles are truncated to fit Excel's 31-char cap while preserving the
+    year suffix.
+    """
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+
+    if year_data:
+        scopes: list[tuple[str, dict]] = [("All", rob_payload)]
+        for yr, yr_payload in year_data:
+            scopes.append((str(yr), yr_payload))
+    else:
+        scopes = [("", rob_payload)]
+
+    for suffix, payload in scopes:
+        _fill_robustness_summary(wb, payload, suffix)
+        _fill_robustness_curves(wb, payload, suffix)
+        _fill_robustness_modular(wb, payload, suffix)
 
     wb.save(output_filename)
 
