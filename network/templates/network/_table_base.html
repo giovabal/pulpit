@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    (function () {
+      try {
+        var pref = localStorage.getItem("pulpit_theme") || "auto";
+        var dark = pref === "dark" || (pref === "auto" &&
+          window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var theme = dark ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.setAttribute("data-bs-theme", theme);
+      } catch (e) {}
+    })();
+  </script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
@@ -20,12 +32,46 @@
       <a href="index.html" class="export-topnav-brand">
         <img src="pulpit_logo.svg" alt="Pulpit">
       </a>
+      <div class="theme-toggle btn-group btn-group-sm ms-auto" role="group" aria-label="Theme">
+        <button type="button" class="btn btn-outline-secondary" data-theme-set="light" title="Light theme" aria-label="Light theme"><i class="bi bi-sun" aria-hidden="true"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-theme-set="auto" title="Auto (follow system)" aria-label="Auto theme"><i class="bi bi-circle-half" aria-hidden="true"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-theme-set="dark" title="Dark theme" aria-label="Dark theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
+      </div>
     </div>
   </nav>
   <div class="export-wrap">
     {% block content %}{% endblock %}
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      var STORAGE_KEY = "pulpit_theme";
+      function currentPref() { try { return localStorage.getItem(STORAGE_KEY) || "auto"; } catch (e) { return "auto"; } }
+      function systemDark() { return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches; }
+      function applyTheme(pref) {
+        var dark = pref === "dark" || (pref === "auto" && systemDark());
+        var theme = dark ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.setAttribute("data-bs-theme", theme);
+        document.querySelectorAll("[data-theme-set]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-theme-set") === pref);
+        });
+      }
+      applyTheme(currentPref());
+      document.querySelectorAll("[data-theme-set]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var pref = b.getAttribute("data-theme-set");
+          try { localStorage.setItem(STORAGE_KEY, pref); } catch (e) {}
+          location.reload();
+        });
+      });
+      if (window.matchMedia) {
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+          if (currentPref() === "auto") applyTheme("auto");
+        });
+      }
+    })();
+  </script>
   <script src="js/tables_sort.js"></script>
   <footer class="export-footer">
     <span class="export-footer-title">{{ title }}</span>

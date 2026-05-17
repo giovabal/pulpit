@@ -57,7 +57,78 @@
   --bs-link-color-rgb: 67, 56, 202;
   --bs-link-hover-color: #3730a3;
   --bs-link-hover-color-rgb: 55, 48, 163;
+  /* card border accent (only seen in dark mode; left transparent in light) */
+  --card-border: transparent;
 }
+
+/* ---------- Dark theme ---------- */
+:root[data-theme="dark"] {
+  --accent:        #818cf8;
+  --accent-hover:  #a5b4fc;
+  --accent-bg:     #1e1b4b;
+  --hover:         #26262d;
+  --surface:       #1a1a1f;
+  --bg:            #0f0f12;
+  --border:        #2a2a31;
+  --text:          #e7e5e4;
+  --muted:         #a8a29e;
+  --shadow-sm:     0 1px 2px rgba(0,0,0,.4);
+  --shadow:        0 4px 12px rgba(0,0,0,.55);
+  --card-border:   #2a2a31;
+  /* charts */
+  --chart-line:   #818cf8;
+  --chart-fill:   rgba(129,140,248,.14);
+  --chart-grid:   #2a2a31;
+  --chart-label:  #a8a29e;
+  /* semantic — lift backgrounds toward dark, keep accents readable */
+  --danger:         #f87171;
+  --danger-hover:   #fca5a5;
+  --danger-bg:      #2a1313;
+  --danger-bg-soft: #3a1818;
+  --danger-border:  #5a1f1f;
+  --danger-accent:  #b91c1c;
+  --warning:        #fbbf24;
+  --warning-hover:  #fcd34d;
+  --warning-bg:     #2a1f0a;
+  --warning-bg-soft:#3a2a0e;
+  --warning-border: #5a3f15;
+  --warning-accent: #d97706;
+  --success:        #4ade80;
+  --success-bg:     #0f2a1a;
+  --success-border: #1f5a35;
+  --info:           #60a5fa;
+  --info-bg:        #0f1f3a;
+  --info-border:    #1f3a5a;
+  /* Bootstrap remap */
+  --bs-primary: #818cf8;
+  --bs-primary-rgb: 129, 140, 248;
+  --bs-link-color: #818cf8;
+  --bs-link-color-rgb: 129, 140, 248;
+  --bs-link-hover-color: #a5b4fc;
+  --bs-link-hover-color-rgb: 165, 180, 252;
+  --bs-body-color: #e7e5e4;
+  --bs-body-bg: #0f0f12;
+  --bs-secondary-color: #a8a29e;
+  --bs-border-color: #2a2a31;
+}
+
+/* Remap btn-primary inside dark theme so the indigo accent stays cohesive */
+[data-theme="dark"] .btn-primary {
+  --bs-btn-color: #0f0f12;
+  --bs-btn-bg: #818cf8;
+  --bs-btn-border-color: #818cf8;
+  --bs-btn-hover-color: #0f0f12;
+  --bs-btn-hover-bg: #a5b4fc;
+  --bs-btn-hover-border-color: #a5b4fc;
+  --bs-btn-active-bg: #a5b4fc;
+  --bs-btn-active-border-color: #a5b4fc;
+  --bs-btn-disabled-bg: #818cf8;
+  --bs-btn-disabled-border-color: #818cf8;
+  --bs-btn-focus-shadow-rgb: 129, 140, 248;
+}
+
+/* Body / global text colour follows tokens */
+html, body { background: var(--bg); color: var(--text); }
 
 /* Remap Bootstrap btn-primary to accent */
 .btn-primary {
@@ -340,7 +411,7 @@ body {
   white-space: nowrap;
 }
 
-.ch-badge--verified { background: #e0e7ff; color: var(--accent); }
+.ch-badge--verified { background: var(--accent-bg); color: var(--accent); }
 .ch-badge--danger   { background: var(--danger-bg-soft); color: var(--danger); }
 .ch-badge--warn     { background: var(--warning-bg-soft); color: var(--warning); }
 .ch-badge--muted    { background: var(--border); color: var(--text-muted); }
@@ -385,10 +456,11 @@ body {
   transition: border-color .15s;
 }
 
-.post-card:hover { border-color: #c9c5bf; }
+.post-card:hover { border-color: var(--muted); }
 .post-card.is-pinned { border-left-color: #f59e0b; }
-.post-card.was-pinned { border-left-color: #c7c0b8; }
+.post-card.was-pinned { border-left-color: var(--muted); }
 .post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #0369a1; }
+[data-theme="dark"] .post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #38bdf8; }
 
 .post-card.is-lost { opacity: .55; }
 .post-lost-badge {
@@ -417,6 +489,14 @@ body {
 
 .forwarded-banner a { color: #0369a1; font-weight: 500; }
 .forwarded-banner a:hover { color: #075985; }
+
+[data-theme="dark"] .forwarded-banner {
+  color: #7dd3fc;
+  background: #082f49;
+  border-bottom-color: #075985;
+}
+[data-theme="dark"] .forwarded-banner a { color: #7dd3fc; }
+[data-theme="dark"] .forwarded-banner a:hover { color: #38bdf8; }
 
 .pin-banner {
   display: flex;
@@ -520,7 +600,7 @@ body {
 .post-details-btn:hover,
 .post-details-btn[aria-expanded="true"] {
   background: var(--hover);
-  border-color: #aaa;
+  border-color: var(--muted);
   color: var(--text);
 }
 
@@ -625,7 +705,7 @@ body {
 }
 
 .pagination .page-item.active .page-link { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pagination .page-item.disabled .page-link { color: #a9a29d; }
+.pagination .page-item.disabled .page-link { color: var(--muted); }
 
 /* ---------- Summary cards ---------- */
 .summary-card {
@@ -781,7 +861,7 @@ body {
 .home-icon {
   width: 52px;
   height: 52px;
-  background: #e0e7ff;
+  background: var(--accent-bg);
   border-radius: .625rem;
   display: flex;
   align-items: center;
@@ -900,7 +980,7 @@ body {
 .post-replies-btn:hover,
 .post-replies-btn[aria-expanded="true"] {
   background: var(--hover);
-  border-color: #aaa;
+  border-color: var(--muted);
   color: var(--text);
 }
 
@@ -1030,7 +1110,7 @@ body {
   transition: background .12s;
 }
 
-.search-btn:hover { background: #3730a3; }
+.search-btn:hover { background: var(--accent-hover); }
 
 /* ---------- Channel message tabs ---------- */
 .ch-msg-tabs {
@@ -1319,7 +1399,7 @@ body {
 }
 
 .channel-row-link:hover {
-  border-color: #b8b2aa;
+  border-color: var(--muted);
   color: var(--text);
 }
 
