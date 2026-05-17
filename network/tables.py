@@ -559,6 +559,118 @@ def write_vacancy_analysis_html(
     )
 
 
+def write_robustness_table_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    _write_page(
+        "network/robustness_table.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Robustness",
+        seo_title_part="Network robustness analysis",
+    )
+
+
+_ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach")
+
+
+def write_robustness_table_xlsx(
+    rob_payload: dict,
+    output_filename: str,
+    project_title: str = "",
+) -> None:
+    """Write the robustness payload as an Excel workbook.
+
+    Sheets produced:
+        - "Summary": one row per (strategy, metric) with R, R_null mean/std,
+          z-score, and f_c.
+        - "Curve <strategy>": one sheet per attack strategy with columns
+          ``q``, ``S_wcc``, ``S_scc``, ``S_reach`` and (when the null model
+          ran) ``null_<metric>_mean`` / ``null_<metric>_std``.
+        - "Modular <partition>": one sheet per partition with ``q``,
+          ``intra_<strategy>``, ``inter_<strategy>``, ``ratio_<strategy>``.
+    """
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+
+    strategies = list(rob_payload.get("strategies", {}).keys())
+
+    # ── Summary ─────────────────────────────────────────────────────────────
+    ws_sum = wb.create_sheet(title="Summary")
+    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "f_c"]
+    ws_sum.append(headers)
+    for cell in ws_sum[1]:
+        cell.font = Font(bold=True)
+    for s in strategies:
+        payload = rob_payload["strategies"][s]
+        null = payload.get("null") or {}
+        for m in _ROBUSTNESS_METRICS:
+            null_m = null.get(f"r_{m}") or {}
+            ws_sum.append(
+                [
+                    s,
+                    m.upper(),
+                    payload.get(f"r_{m}"),
+                    null_m.get("mean"),
+                    null_m.get("std"),
+                    null_m.get("z"),
+                    payload.get(f"fc_{m}"),
+                ]
+            )
+
+    # ── Per-strategy curves ─────────────────────────────────────────────────
+    for s in strategies:
+        payload = rob_payload["strategies"][s]
+        null = payload.get("null") or {}
+        # Sheet names are capped at 31 chars in Excel
+        ws = wb.create_sheet(title=f"Curve {s}"[:31])
+        cols: list[tuple[str, list]] = [
+            ("q", list(range(len(payload["curve_wcc"])))),
+            ("S_wcc", payload["curve_wcc"]),
+            ("S_scc", payload["curve_scc"]),
+            ("S_reach", payload["curve_reach"]),
+        ]
+        if null:
+            for m in _ROBUSTNESS_METRICS:
+                cols.append((f"null_{m}_mean", null.get(f"curve_{m}_mean", [])))
+                cols.append((f"null_{m}_std", null.get(f"curve_{m}_std", [])))
+        ws.append([c[0] for c in cols])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for q in range(len(cols[0][1])):
+            ws.append([col[1][q] if q < len(col[1]) else None for col in cols])
+
+    # ── Modular curves per partition ────────────────────────────────────────
+    modular = rob_payload.get("modular") or {}
+    for partition_name, per_strategy in modular.items():
+        ws = wb.create_sheet(title=f"Modular {partition_name}"[:31])
+        # Build column list dynamically: q, then for each strategy intra/inter/ratio
+        any_strategy = next(iter(per_strategy.values()))
+        n_points = len(any_strategy["intra"])
+        header = ["q"]
+        rows_cols: list[list] = [list(range(n_points))]
+        for s in strategies:
+            curves = per_strategy.get(s)
+            if curves is None:
+                continue
+            for key in ("intra", "inter", "ratio"):
+                header.append(f"{key}_{s}")
+                rows_cols.append(curves[key])
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for q in range(n_points):
+            ws.append([col[q] if q < len(col) else None for col in rows_cols])
+
+    wb.save(output_filename)
+
+
 def write_index_html(
     output_filename: str,
     seo: bool = False,
@@ -578,6 +690,8 @@ def write_index_html(
     strategies: list[str] | None = None,
     timeline_entries: list[dict] | None = None,
     include_vacancy_analysis: bool = False,
+    include_robustness_html: bool = False,
+    include_robustness_xlsx: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -605,6 +719,8 @@ def write_index_html(
         "strategies": [s.capitalize() for s in (strategies or [])],
         "timeline_entries": timeline_entries or [],
         "include_vacancy_analysis": include_vacancy_analysis,
+        "include_robustness_html": include_robustness_html,
+        "include_robustness_xlsx": include_robustness_xlsx,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

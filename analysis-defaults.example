@@ -176,3 +176,33 @@ SA_VACANCY_MONTHS_BEFORE=12
 SA_VACANCY_MONTHS_AFTER=24
 SA_VACANCY_MAX_CANDIDATES=30
 SA_VACANCY_PPR_ALPHA=0.85
+
+
+# ── Structural Analysis — robustness ──────────────────────────────────────────
+# Resistance to node removal: residual-size R-index per attack strategy,
+# z-score against a weight-rewiring null, and intra/inter community edge
+# survival. Off by default — set SA_ROBUSTNESS=True to enable.
+
+SA_ROBUSTNESS=False
+
+# Disparity-filter threshold (Serrano et al. 2009) applied before the attacks.
+# 0 disables the filter and uses the full graph; (0, 1) keeps statistically
+# significant edges only.
+SA_ROBUSTNESS_ALPHA=0.05
+
+# Number of independent random-failure runs averaged for the "random" strategy.
+SA_ROBUSTNESS_RUNS=100
+
+# Number of weight-rewiring null-model simulations per strategy. 0 disables.
+SA_ROBUSTNESS_NULL=20
+
+# When True, also run dynamic strategies (in_strength_dyn, pagerank_dyn,
+# betweenness_dyn) that recompute the ranking after every removal.
+# Costly: O(N²) for strength/pagerank, O(N²·|E|) for betweenness.
+SA_ROBUSTNESS_DYNAMIC=False
+
+# Seed driving every stochastic component of the analysis.
+SA_ROBUSTNESS_SEED=42
+
+# Source-sample size for the R_reach metric on graphs larger than this many nodes.
+SA_ROBUSTNESS_SAMPLE=500

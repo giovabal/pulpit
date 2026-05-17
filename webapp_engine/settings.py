@@ -324,6 +324,13 @@ SA_VACANCY_MONTHS_BEFORE = _ana("SA_VACANCY_MONTHS_BEFORE", default=12, cast=int
 SA_VACANCY_MONTHS_AFTER = _ana("SA_VACANCY_MONTHS_AFTER", default=24, cast=int)
 SA_VACANCY_MAX_CANDIDATES = _ana("SA_VACANCY_MAX_CANDIDATES", default=30, cast=int)
 SA_VACANCY_PPR_ALPHA = _ana("SA_VACANCY_PPR_ALPHA", default=0.85, cast=float)
+SA_ROBUSTNESS = _ana("SA_ROBUSTNESS", default=False, cast=bool)
+SA_ROBUSTNESS_ALPHA = _ana("SA_ROBUSTNESS_ALPHA", default=0.05, cast=float)
+SA_ROBUSTNESS_RUNS = _ana("SA_ROBUSTNESS_RUNS", default=100, cast=int)
+SA_ROBUSTNESS_NULL = _ana("SA_ROBUSTNESS_NULL", default=20, cast=int)
+SA_ROBUSTNESS_DYNAMIC = _ana("SA_ROBUSTNESS_DYNAMIC", default=False, cast=bool)
+SA_ROBUSTNESS_SEED = _ana("SA_ROBUSTNESS_SEED", default=42, cast=int)
+SA_ROBUSTNESS_SAMPLE = _ana("SA_ROBUSTNESS_SAMPLE", default=500, cast=int)
 
 # ── System constants (.system-options — managed by project, do not edit) ──────
 

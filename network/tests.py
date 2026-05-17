@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import tempfile
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -60,6 +61,7 @@ from webapp.models import Channel, Message, Organization
 from webapp.utils.colors import parse_color
 
 import networkx as nx
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # community.py — normalize_community_map
@@ -2262,3 +2264,1080 @@ class ComputeCommunityMetricsTests(TestCase):
         )
         # callback called once for "network" and once per strategy
         self.assertGreaterEqual(len(calls), 2)
+
+
+class DisparityFilterTests(TestCase):
+    def _star(self, n_leaves: int, weights: "list[float] | None" = None) -> nx.DiGraph:
+        """Directed star ``A → L0, L1, …`` with the given outgoing weights."""
+        g = nx.DiGraph()
+        if weights is None:
+            weights = [1.0] * n_leaves
+        for i, w in enumerate(weights):
+            g.add_edge("A", f"L{i}", weight=w)
+        return g
+
+    def test_single_outgoing_edge_kept_under_strict_threshold(self) -> None:
+        # A → B (only outgoing), B has only incoming from A: k_out=k_in=1 → α=0 both sides
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=42.0)
+        from network.robustness import disparity_filter
+
+        backbone = disparity_filter(g, alpha=1e-12)
+        self.assertEqual(set(backbone.edges()), {("A", "B")})
+
+    def test_uniform_distribution_is_filtered_out(self) -> None:
+        # Source A fans out to 4 targets with equal weight; each target also has
+        # 4 incoming edges of equal weight from background sources. With p = 1/4
+        # and k = 4 the disparity α = (3/4)^3 = 0.4219… well above the 0.05
+        # threshold from *both* sides, so A's outgoing edges should be removed.
+        from network.robustness import disparity_filter
+
+        g = nx.DiGraph()
+        for tgt in ("B", "C", "D", "E"):
+            g.add_edge("A", tgt, weight=1.0)
+            for src in range(3):  # 3 extra background sources → target k_in = 4
+                g.add_edge(f"S{tgt}{src}", tgt, weight=1.0)
+        backbone = disparity_filter(g, alpha=0.05)
+        for tgt in ("B", "C", "D", "E"):
+            self.assertNotIn(("A", tgt), backbone.edges())
+
+    def test_dominant_edge_survives_strict_threshold(self) -> None:
+        # Hub A: one dominant edge to B (weight 100), nine background edges of weight 1.
+        # B also has many incoming edges so α_in is not trivially 0.
+        # α_out for (A, B) = (1 - 100/109)^9 = (9/109)^9 ≈ 2.4e-10 ≪ 0.05.
+        from network.robustness import disparity_filter
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=100.0)
+        for i in range(9):
+            g.add_edge("A", f"X{i}", weight=1.0)
+        for i in range(9):
+            g.add_edge(f"Y{i}", "B", weight=1.0)
+        backbone = disparity_filter(g, alpha=0.05)
+        self.assertIn(("A", "B"), backbone.edges())
+        # The nine background edges of A are not concentrated enough on either side
+        # (each target has k_in = 1, though, so α_in = 0 from that side → kept).
+        # So this test only checks the dominant edge — see next test for full filtering.
+
+    def test_alpha_threshold_at_one_keeps_every_edge(self) -> None:
+        # min(α_in, α_out) is always < 1 for any positive-weight edge, so α=1 → everything kept.
+        from network.robustness import disparity_filter
+
+        g = self._star(5, weights=[1.0, 2.0, 3.0, 4.0, 5.0])
+        backbone = disparity_filter(g, alpha=1.0)
+        self.assertEqual(g.number_of_edges(), backbone.number_of_edges())
+
+    def test_invalid_alpha_raises(self) -> None:
+        from network.robustness import disparity_filter
+
+        g = self._star(2)
+        with self.assertRaises(ValueError):
+            disparity_filter(g, alpha=0.0)
+        with self.assertRaises(ValueError):
+            disparity_filter(g, alpha=1.5)
+        with self.assertRaises(ValueError):
+            disparity_filter(g, alpha=-0.1)
+
+    def test_nodes_and_node_attributes_preserved(self) -> None:
+        from network.robustness import disparity_filter
+
+        g = nx.DiGraph()
+        g.add_node("A", color="red", label="source")
+        g.add_node("B", color="blue", label="target")
+        g.add_edge("A", "B", weight=1.0)
+        backbone = disparity_filter(g, alpha=0.5)
+        self.assertEqual(set(backbone.nodes()), {"A", "B"})
+        self.assertEqual(backbone.nodes["A"]["color"], "red")
+        self.assertEqual(backbone.nodes["B"]["label"], "target")
+
+    def test_edge_attributes_preserved_on_retained_edges(self) -> None:
+        from network.robustness import disparity_filter
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0, color="green", tag="forward")
+        backbone = disparity_filter(g, alpha=0.5)
+        self.assertEqual(backbone.edges["A", "B"]["color"], "green")
+        self.assertEqual(backbone.edges["A", "B"]["tag"], "forward")
+
+    def test_isolated_nodes_remain_in_backbone(self) -> None:
+        # Filtering may strip all of a node's edges; the node itself is kept.
+        from network.robustness import disparity_filter
+
+        g = nx.DiGraph()
+        # uniform 4-fan with k_in = 4 on every target → α ≈ 0.42 > 0.05 from both sides
+        for tgt in ("B", "C", "D", "E"):
+            g.add_edge("A", tgt, weight=1.0)
+            for src in range(3):
+                g.add_edge(f"S{tgt}{src}", tgt, weight=1.0)
+        backbone = disparity_filter(g, alpha=0.05)
+        self.assertIn("A", backbone.nodes())  # A may be isolated but must be present
+
+    def test_compute_alpha_values_returns_pair_per_edge_in_unit_interval(self) -> None:
+        from network.robustness import compute_alpha_values
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=10.0)
+        g.add_edge("A", "C", weight=1.0)
+        g.add_edge("D", "B", weight=1.0)
+        alphas = compute_alpha_values(g)
+        self.assertEqual(set(alphas.keys()), {("A", "B"), ("A", "C"), ("D", "B")})
+        for a_in, a_out in alphas.values():
+            self.assertGreaterEqual(a_in, 0.0)
+            self.assertLessEqual(a_in, 1.0)
+            self.assertGreaterEqual(a_out, 0.0)
+            self.assertLessEqual(a_out, 1.0)
+
+    def test_compute_alpha_values_matches_serrano_formula(self) -> None:
+        # Source A has k_out = 3, weights [1, 1, 1] → p = 1/3, α = (2/3)^2 ≈ 0.4444
+        # Target B/C/D each has k_in = 1 → α_in = 0
+        from network.robustness import compute_alpha_values
+
+        g = nx.DiGraph()
+        for tgt in ("B", "C", "D"):
+            g.add_edge("A", tgt, weight=1.0)
+        alphas = compute_alpha_values(g)
+        expected_alpha_out = (2.0 / 3.0) ** 2
+        for tgt in ("B", "C", "D"):
+            a_in, a_out = alphas[("A", tgt)]
+            self.assertAlmostEqual(a_out, expected_alpha_out, places=10)
+            self.assertEqual(a_in, 0.0)
+
+
+class AttackCurveTests(TestCase):
+    def test_wcc_curve_on_directed_chain_matches_closed_form(self) -> None:
+        # Chain A → B → C → D, removed in order. WCC is computed undirected, so
+        # the residual chain shrinks one node at a time: S(q) = (N - q) / N.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C"), ("C", "D")])
+        curve = attack_curve(g, ["A", "B", "C", "D"], "WCC")
+        self.assertEqual(curve, [1.0, 0.75, 0.5, 0.25, 0.0])
+
+    def test_wcc_curve_on_clique_decreases_linearly(self) -> None:
+        # In a directed clique every removal leaves a smaller clique, fully connected.
+        from network.robustness import attack_curve
+
+        g = nx.complete_graph(5, create_using=nx.DiGraph)
+        curve = attack_curve(g, list(g.nodes()), "WCC")
+        for q, s in enumerate(curve):
+            self.assertAlmostEqual(s, (5 - q) / 5)
+
+    def test_wcc_curve_on_star_center_first_collapses_immediately(self) -> None:
+        # Removing the centre of a star isolates every leaf → S(1) = 1/N.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("C", "L1"), ("C", "L2"), ("C", "L3"), ("C", "L4")])
+        curve = attack_curve(g, ["C", "L1", "L2", "L3", "L4"], "WCC")
+        # S(0)=1, S(1..4)=1/5 (each leaf is its own singleton WCC), S(5)=0
+        self.assertEqual(curve, [1.0, 0.2, 0.2, 0.2, 0.2, 0.0])
+
+    def test_wcc_curve_on_star_leaves_first_decreases_smoothly(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("C", "L1"), ("C", "L2"), ("C", "L3"), ("C", "L4")])
+        curve = attack_curve(g, ["L1", "L2", "L3", "L4", "C"], "WCC")
+        self.assertEqual(curve, [1.0, 0.8, 0.6, 0.4, 0.2, 0.0])
+
+    def test_scc_curve_on_directed_cycle(self) -> None:
+        # A → B → C → A: one SCC of size 3, then only singletons after any removal.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C"), ("C", "A")])
+        curve = attack_curve(g, ["A", "B", "C"], "SCC")
+        self.assertAlmostEqual(curve[0], 1.0)
+        self.assertAlmostEqual(curve[1], 1.0 / 3.0)
+        self.assertAlmostEqual(curve[2], 1.0 / 3.0)
+        self.assertAlmostEqual(curve[3], 0.0)
+
+    def test_reach_curve_on_directed_chain_matches_closed_form(self) -> None:
+        # A → B → C → D: reachable pairs = AB, AC, AD, BC, BD, CD = 6.
+        # Total ordered pairs = 4*3 = 12. S(0) = 6/12 = 0.5.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C"), ("C", "D")])
+        curve = attack_curve(g, ["A", "B", "C", "D"], "REACH", reach_sample=None)
+        self.assertAlmostEqual(curve[0], 0.5)
+        # Removing A drops 3 pairs (A→B, A→C, A→D) → 3/12 = 0.25
+        self.assertAlmostEqual(curve[1], 0.25)
+
+    def test_reach_curve_with_sampling_stays_in_unit_interval(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.gnp_random_graph(50, 0.1, seed=42, directed=True)
+        rng = np.random.default_rng(7)
+        curve = attack_curve(g, list(g.nodes()), "REACH", reach_sample=10, rng=rng)
+        for s in curve:
+            self.assertGreaterEqual(s, 0.0)
+            self.assertLessEqual(s, 1.0)
+
+    def test_reach_sampling_reproducible_with_seed(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.gnp_random_graph(40, 0.15, seed=42, directed=True)
+        order = list(g.nodes())
+        c1 = attack_curve(g, order, "REACH", reach_sample=8, rng=np.random.default_rng(0))
+        c2 = attack_curve(g, order, "REACH", reach_sample=8, rng=np.random.default_rng(0))
+        self.assertEqual(c1, c2)
+
+    def test_invalid_metric_raises(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B")
+        with self.assertRaises(ValueError):
+            attack_curve(g, ["A"], "INVALID")  # type: ignore[arg-type]
+
+    def test_empty_graph_returns_single_zero(self) -> None:
+        from network.robustness import attack_curve
+
+        self.assertEqual(attack_curve(nx.DiGraph(), [], "WCC"), [0.0])
+
+    def test_removal_order_with_missing_nodes_is_silently_skipped(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B")
+        curve = attack_curve(g, ["A", "X", "B"], "WCC")
+        # S(0)=1 (one WCC of 2 over 2), S(1)=0.5 after A, X is missing → 0.5, S(3)=0
+        self.assertEqual(curve, [1.0, 0.5, 0.5, 0.0])
+
+    def test_does_not_mutate_input_graph(self) -> None:
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C")])
+        before = (set(g.nodes()), set(g.edges()))
+        attack_curve(g, ["A", "B"], "WCC")
+        after = (set(g.nodes()), set(g.edges()))
+        self.assertEqual(before, after)
+
+
+class RIndexAndThresholdTests(TestCase):
+    def test_r_index_on_chain_matches_closed_form(self) -> None:
+        # Closed form for a chain removed sequentially: R = (N-1) / (2N).
+        from network.robustness import attack_curve, r_index
+
+        g = nx.DiGraph()
+        g.add_edges_from([(str(i), str(i + 1)) for i in range(3)])
+        curve = attack_curve(g, ["0", "1", "2", "3"], "WCC")
+        self.assertAlmostEqual(r_index(curve), 3.0 / 8.0)
+
+    def test_r_index_on_clique_matches_closed_form(self) -> None:
+        from network.robustness import attack_curve, r_index
+
+        g = nx.complete_graph(5, create_using=nx.DiGraph)
+        curve = attack_curve(g, list(g.nodes()), "WCC")
+        self.assertAlmostEqual(r_index(curve), (5 - 1) / (2 * 5))
+
+    def test_r_index_star_center_first_lower_than_leaves_first(self) -> None:
+        # Targeted hub removal must give a strictly lower R than peripheral.
+        from network.robustness import attack_curve, r_index
+
+        g = nx.DiGraph()
+        g.add_edges_from([("C", "L1"), ("C", "L2"), ("C", "L3"), ("C", "L4")])
+        r_center = r_index(attack_curve(g, ["C", "L1", "L2", "L3", "L4"], "WCC"))
+        r_leaves = r_index(attack_curve(g, ["L1", "L2", "L3", "L4", "C"], "WCC"))
+        self.assertLess(r_center, r_leaves)
+        # And matches the analytical values exactly: 0.16 vs 0.40.
+        self.assertAlmostEqual(r_center, 0.16)
+        self.assertAlmostEqual(r_leaves, 0.40)
+
+    def test_r_index_zero_on_empty_or_single_point_curve(self) -> None:
+        from network.robustness import r_index
+
+        self.assertEqual(r_index([]), 0.0)
+        self.assertEqual(r_index([1.0]), 0.0)
+
+    def test_critical_threshold_returns_fraction_at_collapse(self) -> None:
+        from network.robustness import critical_threshold
+
+        # N=4, S(0)=1, threshold = 0.05*1 = 0.05; first drop below at q=2.
+        curve = [1.0, 0.5, 0.04, 0.0, 0.0]
+        self.assertAlmostEqual(critical_threshold(curve, drop_to=0.05), 0.5)
+
+    def test_critical_threshold_none_when_never_reached(self) -> None:
+        from network.robustness import critical_threshold
+
+        self.assertIsNone(critical_threshold([1.0, 0.9, 0.8, 0.7, 0.6, 0.5], drop_to=0.05))
+
+    def test_critical_threshold_handles_degenerate_inputs(self) -> None:
+        from network.robustness import critical_threshold
+
+        self.assertIsNone(critical_threshold([], 0.05))
+        self.assertIsNone(critical_threshold([0.0, 0.0], 0.05))
+        self.assertIsNone(critical_threshold([0.0], 0.05))
+
+
+class WeightedGlobalEfficiencyTests(TestCase):
+    def test_returns_zero_for_acyclic_graph(self) -> None:
+        # A → B has no two-node SCC, so efficiency is 0.
+        from network.robustness import weighted_global_efficiency
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=2.0)
+        self.assertEqual(weighted_global_efficiency(g), 0.0)
+
+    def test_two_node_bidirectional_matches_formula(self) -> None:
+        # Distance = 1/weight = 0.5; 1/d = 2.0 per ordered pair; sum / (n*(n-1)) = 4/2 = 2.0.
+        from network.robustness import weighted_global_efficiency
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=2.0)
+        g.add_edge("B", "A", weight=2.0)
+        self.assertAlmostEqual(weighted_global_efficiency(g), 2.0)
+
+    def test_two_node_unit_weight_matches_unweighted_value(self) -> None:
+        # With weight 1 the weighted form coincides with the unweighted efficiency = 1.
+        from network.robustness import weighted_global_efficiency
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        g.add_edge("B", "A", weight=1.0)
+        self.assertAlmostEqual(weighted_global_efficiency(g), 1.0)
+
+    def test_empty_and_singleton_graphs_return_zero(self) -> None:
+        from network.robustness import weighted_global_efficiency
+
+        self.assertEqual(weighted_global_efficiency(nx.DiGraph()), 0.0)
+        g = nx.DiGraph()
+        g.add_node("A")
+        self.assertEqual(weighted_global_efficiency(g), 0.0)
+
+    def test_nodes_argument_restricts_before_scc_search(self) -> None:
+        # Full graph: bidirectional triangle A↔B↔C↔A → one SCC = {A, B, C}.
+        # Restricted to {A, B}: only the A↔B pair, SCC = {A, B}, efficiency = 1.
+        from network.robustness import weighted_global_efficiency
+
+        g = nx.DiGraph()
+        for u, v in [("A", "B"), ("B", "A"), ("B", "C"), ("C", "B"), ("A", "C"), ("C", "A")]:
+            g.add_edge(u, v, weight=1.0)
+        self.assertAlmostEqual(weighted_global_efficiency(g), 1.0)  # full triangle
+        self.assertAlmostEqual(weighted_global_efficiency(g, nodes={"A", "B"}), 1.0)
+
+
+class RemovalOrderTests(TestCase):
+    def test_strategy_constants_partition_correctly(self) -> None:
+        from network.robustness import ALL_STRATEGIES, DYNAMIC_STRATEGIES, STATIC_STRATEGIES
+
+        self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
+        self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
+        self.assertEqual(len(STATIC_STRATEGIES), 5)
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 3)
+        self.assertEqual(len(ALL_STRATEGIES), 8)
+
+    def test_random_returns_permutation_of_nodes(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C"), ("C", "D")])
+        order = removal_order(g, "random", rng=np.random.default_rng(0))
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_random_reproducible_with_same_seed(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(20, 0.2, seed=42, directed=True)
+        o1 = removal_order(g, "random", rng=np.random.default_rng(0))
+        o2 = removal_order(g, "random", rng=np.random.default_rng(0))
+        self.assertEqual(o1, o2)
+        # Different seeds should diverge (probability ≈ 1 for a 20-node permutation)
+        o3 = removal_order(g, "random", rng=np.random.default_rng(1))
+        self.assertNotEqual(o1, o3)
+
+    def test_in_strength_static_sorted_descending(self) -> None:
+        from network.robustness import removal_order
+
+        # B in_str=3, C in_str=2, A and X both in_str=0
+        g = nx.DiGraph()
+        g.add_edge("X", "B", weight=3.0)
+        g.add_edge("X", "C", weight=2.0)
+        g.add_node("A")
+        order = removal_order(g, "in_strength")
+        # Sort: B(3), C(2), A(0), X(0)  — A before X by ascending ID
+        self.assertEqual(order, ["B", "C", "A", "X"])
+
+    def test_out_strength_static_sorted_descending(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=5.0)
+        g.add_edge("A", "C", weight=3.0)
+        g.add_edge("D", "C", weight=1.0)
+        # A out_str=8, D out_str=1, B and C out_str=0
+        order = removal_order(g, "out_strength")
+        self.assertEqual(order, ["A", "D", "B", "C"])
+
+    def test_static_tie_breaking_is_ascending_node_id(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        for nid in ("Z", "A", "M"):
+            g.add_node(nid)
+        order = removal_order(g, "in_strength")
+        self.assertEqual(order, ["A", "M", "Z"])
+
+    def test_in_strength_dyn_differs_from_static_on_chain(self) -> None:
+        # Chain A → B → C → D, all weight 1.
+        # Static in_strength: B, C, D tied at 1; sort by ID; A=0 last → [B, C, D, A].
+        # Dynamic: B picked first (tie at 1, smallest ID). Removing B disconnects C, so C and D
+        # now both have in_str 0 except D which still has in_edge from C → D picked next.
+        # Then A and C both 0 → A (smaller ID), then C.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        g.add_edge("B", "C", weight=1.0)
+        g.add_edge("C", "D", weight=1.0)
+        self.assertEqual(removal_order(g, "in_strength"), ["B", "C", "D", "A"])
+        self.assertEqual(removal_order(g, "in_strength_dyn"), ["B", "D", "A", "C"])
+
+    def test_pagerank_returns_permutation_of_nodes(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(15, 0.2, seed=42, directed=True)
+        order = removal_order(g, "pagerank")
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_pagerank_dyn_returns_permutation_of_nodes(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(15, 0.2, seed=42, directed=True)
+        order = removal_order(g, "pagerank_dyn")
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_betweenness_picks_center_first_on_bidirectional_star(self) -> None:
+        # Bidirectional star: every leaf-to-leaf shortest path passes through the centre.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        for leaf in ("L1", "L2", "L3", "L4"):
+            g.add_edge("C", leaf, weight=1.0)
+            g.add_edge(leaf, "C", weight=1.0)
+        order = removal_order(g, "betweenness")
+        self.assertEqual(order[0], "C")
+
+    def test_betweenness_dyn_returns_permutation_of_nodes(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
+        order = removal_order(g, "betweenness_dyn")
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_empty_graph_returns_empty_order(self) -> None:
+        from network.robustness import removal_order
+
+        self.assertEqual(removal_order(nx.DiGraph(), "in_strength"), [])
+        self.assertEqual(removal_order(nx.DiGraph(), "random", rng=np.random.default_rng(0)), [])
+        self.assertEqual(removal_order(nx.DiGraph(), "pagerank_dyn"), [])
+        self.assertEqual(removal_order(nx.DiGraph(), "betweenness_dyn"), [])
+
+    def test_invalid_strategy_raises(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_node("A")
+        with self.assertRaises(ValueError):
+            removal_order(g, "no-such-strategy")
+
+    def test_does_not_mutate_input_graph(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C"), ("C", "A")])
+        before_nodes, before_edges = set(g.nodes()), set(g.edges())
+        for strat in ("in_strength", "pagerank", "betweenness", "pagerank_dyn", "betweenness_dyn"):
+            removal_order(g, strat)
+        self.assertEqual((set(g.nodes()), set(g.edges())), (before_nodes, before_edges))
+
+
+class RewireWeightsTests(TestCase):
+    def _gnp(self, n: int = 30, p: float = 0.15, seed: int = 42) -> nx.DiGraph:
+        g = nx.gnp_random_graph(n, p, seed=seed, directed=True)
+        rng = np.random.default_rng(seed)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = float(rng.uniform(0.5, 5.0))
+        return g
+
+    def test_topology_preserved(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        h = rewire_weights(g, rng=np.random.default_rng(0))
+        self.assertEqual(set(g.nodes()), set(h.nodes()))
+        self.assertEqual(set(g.edges()), set(h.edges()))
+
+    def test_total_weight_preserved(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        before = sum(d["weight"] for _, _, d in g.edges(data=True))
+        h = rewire_weights(g, rng=np.random.default_rng(0))
+        after = sum(d["weight"] for _, _, d in h.edges(data=True))
+        self.assertAlmostEqual(before, after, places=10)
+
+    def test_weight_multiset_preserved(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        before = sorted(d["weight"] for _, _, d in g.edges(data=True))
+        h = rewire_weights(g, rng=np.random.default_rng(0))
+        after = sorted(d["weight"] for _, _, d in h.edges(data=True))
+        for a, b in zip(before, after, strict=True):
+            self.assertAlmostEqual(a, b, places=10)
+
+    def test_default_n_swaps_actually_moves_weights(self) -> None:
+        # With 10|E| attempts the probability of an identity permutation is ≈ 0.
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        h = rewire_weights(g, rng=np.random.default_rng(0))
+        moved = sum(g.edges[e]["weight"] != h.edges[e]["weight"] for e in g.edges())
+        self.assertGreater(moved, g.number_of_edges() // 2)
+
+    def test_reproducible_with_same_seed(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        h1 = rewire_weights(g, rng=np.random.default_rng(7))
+        h2 = rewire_weights(g, rng=np.random.default_rng(7))
+        for e in g.edges():
+            self.assertEqual(h1.edges[e]["weight"], h2.edges[e]["weight"])
+
+    def test_does_not_mutate_input(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        snapshot = {e: g.edges[e]["weight"] for e in g.edges()}
+        rewire_weights(g, rng=np.random.default_rng(0))
+        for e, w in snapshot.items():
+            self.assertEqual(g.edges[e]["weight"], w)
+
+    def test_n_swaps_zero_returns_identical_weights(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = self._gnp()
+        h = rewire_weights(g, n_swaps=0, rng=np.random.default_rng(0))
+        for e in g.edges():
+            self.assertEqual(g.edges[e]["weight"], h.edges[e]["weight"])
+
+    def test_small_graph_returns_copy_unchanged(self) -> None:
+        from network.robustness import rewire_weights
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=3.0)  # only 1 edge → nothing to swap
+        h = rewire_weights(g, rng=np.random.default_rng(0))
+        self.assertEqual(h.edges["A", "B"]["weight"], 3.0)
+        # And empty graph
+        h2 = rewire_weights(nx.DiGraph(), rng=np.random.default_rng(0))
+        self.assertEqual(h2.number_of_nodes(), 0)
+
+
+class NullDistributionTests(TestCase):
+    def test_yields_requested_number_of_graphs(self) -> None:
+        from network.robustness import null_distribution
+
+        g = nx.gnp_random_graph(20, 0.2, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        result = list(null_distribution(g, n_simulations=5, rng=np.random.default_rng(0)))
+        self.assertEqual(len(result), 5)
+        for h in result:
+            self.assertEqual(set(h.edges()), set(g.edges()))  # same topology
+
+    def test_zero_simulations_yields_nothing(self) -> None:
+        from network.robustness import null_distribution
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        self.assertEqual(list(null_distribution(g, n_simulations=0)), [])
+
+    def test_successive_simulations_differ_under_shared_rng(self) -> None:
+        # Two consecutive nulls drawn from the same rng should be different
+        # (since the rng state advances between calls).
+        from network.robustness import null_distribution
+
+        g = nx.gnp_random_graph(30, 0.3, seed=42, directed=True)
+        rng_seed = np.random.default_rng(42)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = float(rng_seed.uniform(0.5, 5.0))
+        nulls = list(null_distribution(g, n_simulations=2, rng=np.random.default_rng(0)))
+        w1 = [nulls[0].edges[e]["weight"] for e in g.edges()]
+        w2 = [nulls[1].edges[e]["weight"] for e in g.edges()]
+        self.assertNotEqual(w1, w2)
+
+
+class ZScoreTests(TestCase):
+    def test_basic_computation(self) -> None:
+        from network.robustness import z_score
+
+        # samples have mean 5, sample std (ddof=1) = sqrt(2.5) ≈ 1.5811
+        z, mu, sigma = z_score(observed=10.0, null_samples=[3.0, 4.0, 5.0, 6.0, 7.0])
+        self.assertAlmostEqual(mu, 5.0)
+        self.assertAlmostEqual(sigma, np.std([3.0, 4.0, 5.0, 6.0, 7.0], ddof=1))
+        self.assertAlmostEqual(z, (10.0 - 5.0) / sigma)
+
+    def test_zero_std_returns_nan_z(self) -> None:
+        from network.robustness import z_score
+
+        z, mu, sigma = z_score(observed=10.0, null_samples=[5.0, 5.0, 5.0])
+        self.assertEqual(mu, 5.0)
+        self.assertEqual(sigma, 0.0)
+        self.assertTrue(np.isnan(z))
+
+    def test_single_sample_treated_as_zero_std(self) -> None:
+        from network.robustness import z_score
+
+        z, mu, sigma = z_score(observed=10.0, null_samples=[3.0])
+        self.assertEqual(mu, 3.0)
+        self.assertEqual(sigma, 0.0)
+        self.assertTrue(np.isnan(z))
+
+    def test_empty_samples_returns_nan_triple(self) -> None:
+        from network.robustness import z_score
+
+        z, mu, sigma = z_score(observed=10.0, null_samples=[])
+        self.assertTrue(np.isnan(z))
+        self.assertTrue(np.isnan(mu))
+        self.assertTrue(np.isnan(sigma))
+
+    def test_negative_z_when_observed_below_mean(self) -> None:
+        from network.robustness import z_score
+
+        z, _, _ = z_score(observed=1.0, null_samples=[5.0, 5.5, 6.0, 6.5, 7.0])
+        self.assertLess(z, 0)
+
+
+class ModularRobustnessCurvesTests(TestCase):
+    def _two_cliques_with_bridge(self) -> tuple[nx.DiGraph, dict[str, int]]:
+        # Two 3-node directed cliques + a single inter-community bridge A → D.
+        # Each clique contributes 6 directed edges (3 pairs × 2 directions).
+        g = nx.DiGraph()
+        for u, v in [("A", "B"), ("B", "A"), ("A", "C"), ("C", "A"), ("B", "C"), ("C", "B")]:
+            g.add_edge(u, v)
+        for u, v in [("D", "E"), ("E", "D"), ("D", "F"), ("F", "D"), ("E", "F"), ("F", "E")]:
+            g.add_edge(u, v)
+        g.add_edge("A", "D")  # the only inter-community edge
+        partition = {"A": 0, "B": 0, "C": 0, "D": 1, "E": 1, "F": 1}
+        return g, partition
+
+    def test_curve_length_matches_removal_order_plus_one(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        g, part = self._two_cliques_with_bridge()
+        curves = modular_robustness_curves(g, ["A", "B", "C"], part)
+        for key in ("intra", "inter", "ratio"):
+            self.assertEqual(len(curves[key]), 4)
+
+    def test_baselines_at_q_zero(self) -> None:
+        # 12 intra edges (6 per clique) + 1 inter; both baselines = 1.0
+        from network.robustness import modular_robustness_curves
+
+        g, part = self._two_cliques_with_bridge()
+        curves = modular_robustness_curves(g, [], part)
+        self.assertEqual(curves["intra"], [1.0])
+        self.assertEqual(curves["inter"], [1.0])
+        # ratio = 12 / 1 = 12.0
+        self.assertEqual(curves["ratio"], [12.0])
+
+    def test_bridge_endpoint_removal_strips_inter_edge(self) -> None:
+        # Removing A drops the single inter edge (A→D) and four intra edges
+        # incident on A (A→B, A→C, B→A, C→A).  Expected after q=1:
+        #   intra_q = 12 - 4 = 8  →  intra[1] = 8/12 ≈ 0.667
+        #   inter_q = 1 - 1 = 0    →  inter[1] = 0.0; ratio[1] = None
+        from network.robustness import modular_robustness_curves
+
+        g, part = self._two_cliques_with_bridge()
+        curves = modular_robustness_curves(g, ["A"], part)
+        self.assertAlmostEqual(curves["intra"][1], 8 / 12)
+        self.assertEqual(curves["inter"][1], 0.0)
+        self.assertIsNone(curves["ratio"][1])
+
+    def test_all_same_community_inter_curve_is_zero(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C")])
+        part = {"A": 0, "B": 0, "C": 0}
+        curves = modular_robustness_curves(g, ["A", "B", "C"], part)
+        # inter_0 == 0 → entire inter curve is 0.0
+        self.assertEqual(curves["inter"], [0.0, 0.0, 0.0, 0.0])
+        # ratio is always None when inter is 0 throughout
+        self.assertEqual(curves["ratio"], [None, None, None, None])
+
+    def test_all_different_communities_intra_curve_is_zero(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C")])
+        part = {"A": 0, "B": 1, "C": 2}
+        curves = modular_robustness_curves(g, ["A"], part)
+        self.assertEqual(curves["intra"], [0.0, 0.0])
+        # inter_0 = 2, after removing A → 1 inter edge gone
+        self.assertAlmostEqual(curves["inter"][0], 1.0)
+        self.assertAlmostEqual(curves["inter"][1], 0.5)
+        self.assertAlmostEqual(curves["ratio"][0], 0.0)
+        self.assertAlmostEqual(curves["ratio"][1], 0.0)
+
+    def test_self_loop_counted_once(self) -> None:
+        # A→A (self-loop), A→B, B→A. All same community.  Removing A should
+        # drop all 3 edges, not 4 (which would be the bug from counting the
+        # self-loop both in out_edges and in_edges).
+        from network.robustness import modular_robustness_curves
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "A"), ("A", "B"), ("B", "A")])
+        part = {"A": 0, "B": 0}
+        curves = modular_robustness_curves(g, ["A"], part)
+        # intra_0 = 3 → intra[0] = 1.0, intra[1] = 0/3 = 0.0
+        self.assertEqual(curves["intra"], [1.0, 0.0])
+
+    def test_unassigned_nodes_treated_as_inter(self) -> None:
+        # B has no entry in partition → A→B counts as inter even though B's
+        # community is conceptually "unknown".
+        from network.robustness import modular_robustness_curves
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B")
+        part = {"A": 0}  # B missing
+        curves = modular_robustness_curves(g, [], part)
+        self.assertEqual(curves["intra"], [0.0])  # intra_0 == 0
+        self.assertEqual(curves["inter"], [1.0])  # the one edge is inter
+
+    def test_missing_nodes_in_removal_order_are_skipped(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        g = nx.DiGraph()
+        g.add_edges_from([("A", "B"), ("B", "C")])
+        part = {"A": 0, "B": 0, "C": 0}
+        # "X" is not in the graph
+        curves = modular_robustness_curves(g, ["A", "X", "B"], part)
+        # After A: lose A→B → intra = 1, fraction = 1/2 = 0.5
+        # After X (skipped): unchanged → 0.5
+        # After B: lose B→C → intra = 0, fraction = 0.0
+        self.assertEqual(curves["intra"], [1.0, 0.5, 0.5, 0.0])
+
+    def test_does_not_mutate_input_graph(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        g, part = self._two_cliques_with_bridge()
+        before_nodes, before_edges = set(g.nodes()), set(g.edges())
+        modular_robustness_curves(g, ["A", "B", "D"], part)
+        self.assertEqual((set(g.nodes()), set(g.edges())), (before_nodes, before_edges))
+
+    def test_empty_graph_returns_single_zero_baselines(self) -> None:
+        from network.robustness import modular_robustness_curves
+
+        curves = modular_robustness_curves(nx.DiGraph(), [], {})
+        self.assertEqual(curves["intra"], [0.0])
+        self.assertEqual(curves["inter"], [0.0])
+        self.assertEqual(curves["ratio"], [None])
+
+
+class RobustnessRunnerTests(TestCase):
+    def _toy_graph(self, n: int = 20, p: float = 0.2, seed: int = 42) -> nx.DiGraph:
+        g = nx.gnp_random_graph(n, p, seed=seed, directed=True)
+        rng = np.random.default_rng(seed)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = float(rng.uniform(0.5, 5.0))
+        return g
+
+    def _fast_cfg(self, **kwargs: Any) -> Any:
+        from network.robustness import RobustnessConfig
+
+        defaults: dict[str, Any] = {
+            "alpha": None,
+            "n_random_runs": 3,
+            "n_null": 0,
+            "dynamic": False,
+            "seed": 0,
+            "reach_sample": 10,
+        }
+        defaults.update(kwargs)
+        return RobustnessConfig(**defaults)
+
+    # -- config validation ----------------------------------------------------
+
+    def test_config_defaults_match_spec(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        c = RobustnessConfig()
+        self.assertEqual((c.alpha, c.n_random_runs, c.n_null, c.dynamic, c.seed), (0.05, 100, 20, False, 42))
+
+    def test_config_rejects_invalid_values(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        with self.assertRaises(ValueError):
+            RobustnessConfig(n_random_runs=0)
+        with self.assertRaises(ValueError):
+            RobustnessConfig(n_null=-1)
+        with self.assertRaises(ValueError):
+            RobustnessConfig(alpha=1.5)
+        with self.assertRaises(ValueError):
+            RobustnessConfig(reach_sample=0)
+
+    # -- payload shape --------------------------------------------------------
+
+    def test_payload_top_level_keys(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg())
+        self.assertEqual(set(out.keys()), {"config", "graph", "efficiency", "strategies", "modular"})
+
+    def test_payload_strategy_keys_static_only(self) -> None:
+        from network.robustness import STATIC_STRATEGIES, run_robustness
+
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg(dynamic=False))
+        self.assertEqual(set(out["strategies"].keys()), set(STATIC_STRATEGIES))
+
+    def test_payload_strategy_keys_with_dynamic(self) -> None:
+        from network.robustness import DYNAMIC_STRATEGIES, STATIC_STRATEGIES, run_robustness
+
+        out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(dynamic=True))
+        self.assertEqual(set(out["strategies"].keys()), set(STATIC_STRATEGIES) | set(DYNAMIC_STRATEGIES))
+
+    def test_each_strategy_has_three_curves_and_r_fc(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg())
+        for s, payload in out["strategies"].items():
+            for m in ("wcc", "scc", "reach"):
+                self.assertIn(f"curve_{m}", payload, msg=f"strategy {s!r} missing curve_{m}")
+                self.assertIn(f"r_{m}", payload)
+                self.assertIn(f"fc_{m}", payload)
+            self.assertIsNone(payload["null"])  # n_null=0
+
+    def test_curve_length_matches_backbone_node_count_plus_one(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(n=12), config=self._fast_cfg())
+        n_plus_1 = out["graph"]["backbone_n"] + 1
+        for payload in out["strategies"].values():
+            for m in ("wcc", "scc", "reach"):
+                self.assertEqual(len(payload[f"curve_{m}"]), n_plus_1)
+
+    # -- disparity filter ------------------------------------------------------
+
+    def test_alpha_none_skips_filter(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph()
+        out = run_robustness(g, config=self._fast_cfg(alpha=None))
+        self.assertFalse(out["graph"]["filtered"])
+        self.assertEqual(out["graph"]["backbone_m"], g.number_of_edges())
+
+    def test_alpha_zero_skips_filter(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph()
+        out = run_robustness(g, config=self._fast_cfg(alpha=0))
+        self.assertFalse(out["graph"]["filtered"])
+        self.assertEqual(out["graph"]["backbone_m"], g.number_of_edges())
+
+    def test_alpha_within_range_applies_filter(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph()
+        out = run_robustness(g, config=self._fast_cfg(alpha=0.5))
+        self.assertTrue(out["graph"]["filtered"])
+        self.assertLessEqual(out["graph"]["backbone_m"], g.number_of_edges())
+
+    # -- null model -----------------------------------------------------------
+
+    def test_null_populated_when_n_null_positive(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(n=12), config=self._fast_cfg(n_null=3))
+        for payload in out["strategies"].values():
+            self.assertIsNotNone(payload["null"])
+            for m in ("wcc", "scc", "reach"):
+                self.assertIn(f"r_{m}", payload["null"])
+                self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z"})
+                self.assertIn(f"curve_{m}_mean", payload["null"])
+                self.assertIn(f"curve_{m}_std", payload["null"])
+
+    def test_null_curves_have_matching_length(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(n_null=2))
+        n_plus_1 = out["graph"]["backbone_n"] + 1
+        for payload in out["strategies"].values():
+            for m in ("wcc", "scc", "reach"):
+                self.assertEqual(len(payload["null"][f"curve_{m}_mean"]), n_plus_1)
+                self.assertEqual(len(payload["null"][f"curve_{m}_std"]), n_plus_1)
+
+    # -- modular --------------------------------------------------------------
+
+    def test_modular_none_when_no_partitions(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg())
+        self.assertIsNone(out["modular"])
+
+    def test_modular_populated_when_partitions_given(self) -> None:
+        from network.robustness import STATIC_STRATEGIES, run_robustness
+
+        g = self._toy_graph(n=10)
+        # Hand-built two-block partition
+        partition = {n: (0 if n < 5 else 1) for n in g.nodes()}
+        out = run_robustness(g, partitions={"hand": partition}, config=self._fast_cfg())
+        self.assertIsNotNone(out["modular"])
+        self.assertEqual(set(out["modular"].keys()), {"hand"})
+        self.assertEqual(set(out["modular"]["hand"].keys()), set(STATIC_STRATEGIES))
+        # Each per-strategy entry is the modular_robustness_curves dict.
+        for payload in out["modular"]["hand"].values():
+            self.assertEqual(set(payload.keys()), {"intra", "inter", "ratio"})
+
+    # -- reproducibility ------------------------------------------------------
+
+    def test_same_seed_produces_identical_payloads(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph()
+        out1 = run_robustness(g, config=self._fast_cfg(n_null=2, seed=99))
+        out2 = run_robustness(g, config=self._fast_cfg(n_null=2, seed=99))
+        # Compare every strategy's R values; both whole payloads must match.
+        for s in out1["strategies"]:
+            for m in ("wcc", "scc", "reach"):
+                self.assertEqual(out1["strategies"][s][f"r_{m}"], out2["strategies"][s][f"r_{m}"])
+                self.assertEqual(
+                    out1["strategies"][s]["null"][f"r_{m}"]["z"],
+                    out2["strategies"][s]["null"][f"r_{m}"]["z"],
+                )
+
+    # -- progress callback ----------------------------------------------------
+
+    def test_progress_callback_receives_expected_labels(self) -> None:
+        from network.robustness import run_robustness
+
+        labels: list[str] = []
+        g = self._toy_graph(n=8)
+        partition = {n: (n % 2) for n in g.nodes()}
+        run_robustness(g, partitions={"hand": partition}, config=self._fast_cfg(n_null=1), progress=labels.append)
+        self.assertIn("disparity", labels)
+        self.assertIn("baseline-efficiency", labels)
+        self.assertIn("pagerank", labels)
+        self.assertTrue(any(s.startswith("null/") for s in labels))
+        self.assertTrue(any(s.startswith("modular/") for s in labels))
+
+    # -- JSON serialisability -------------------------------------------------
+
+    def test_payload_is_json_serialisable(self) -> None:
+        import json
+
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=8)
+        out = run_robustness(
+            g,
+            partitions={"hand": {n: n % 2 for n in g.nodes()}},
+            config=self._fast_cfg(n_null=1, dynamic=False),
+        )
+        # Round-trip must not fail (no inf/nan in the curves; None used for undefined ratios).
+        encoded = json.dumps(out)
+        self.assertIsInstance(encoded, str)
+        decoded = json.loads(encoded)
+        self.assertEqual(set(decoded.keys()), {"config", "graph", "efficiency", "strategies", "modular"})
+
+
+class WriteRobustnessJsonTests(TestCase):
+    def test_round_trip_under_tempdir(self) -> None:
+        from network.exporter import write_robustness_json
+
+        payload = {"strategies": {"pagerank": {"r_wcc": 0.42}}, "config": {"seed": 1}}
+        with tempfile.TemporaryDirectory() as tmp:
+            write_robustness_json(payload, tmp)
+            path = os.path.join(tmp, "data", "robustness.json")
+            self.assertTrue(os.path.isfile(path))
+            with open(path) as f:
+                decoded = json.load(f)
+            self.assertEqual(decoded, payload)
+
+
+class WriteRobustnessTableXlsxTests(TestCase):
+    def _payload(self) -> dict[str, Any]:
+        return {
+            "config": {"seed": 0},
+            "graph": {"n": 3, "m": 3, "alpha": 0.05, "backbone_n": 3, "backbone_m": 3, "filtered": True},
+            "efficiency": {"baseline": 1.0},
+            "strategies": {
+                "pagerank": {
+                    "curve_wcc": [1.0, 0.5, 0.0, 0.0],
+                    "curve_scc": [1.0, 0.5, 0.0, 0.0],
+                    "curve_reach": [0.5, 0.25, 0.0, 0.0],
+                    "r_wcc": 0.125,
+                    "r_scc": 0.125,
+                    "r_reach": 0.0625,
+                    "fc_wcc": 0.5,
+                    "fc_scc": 0.5,
+                    "fc_reach": 0.5,
+                    "null": {
+                        "r_wcc": {"mean": 0.12, "std": 0.01, "z": 0.5},
+                        "r_scc": {"mean": 0.12, "std": 0.01, "z": 0.5},
+                        "r_reach": {"mean": 0.06, "std": 0.005, "z": 1.25},
+                        "curve_wcc_mean": [1.0, 0.45, 0.0, 0.0],
+                        "curve_wcc_std": [0.0, 0.05, 0.0, 0.0],
+                        "curve_scc_mean": [1.0, 0.45, 0.0, 0.0],
+                        "curve_scc_std": [0.0, 0.05, 0.0, 0.0],
+                        "curve_reach_mean": [0.5, 0.2, 0.0, 0.0],
+                        "curve_reach_std": [0.0, 0.05, 0.0, 0.0],
+                    },
+                },
+            },
+            "modular": {
+                "leiden": {
+                    "pagerank": {
+                        "intra": [1.0, 0.5, 0.0, 0.0],
+                        "inter": [1.0, 0.0, 0.0, 0.0],
+                        "ratio": [1.0, None, None, None],
+                    }
+                }
+            },
+        }
+
+    def test_workbook_has_summary_curve_and_modular_sheets(self) -> None:
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(self._payload(), output_filename=out, project_title="Test")
+            self.assertTrue(os.path.isfile(out))
+            wb = openpyxl.load_workbook(out)
+            self.assertIn("Summary", wb.sheetnames)
+            self.assertTrue(any(name.startswith("Curve") for name in wb.sheetnames))
+            self.assertTrue(any(name.startswith("Modular") for name in wb.sheetnames))
+
+    def test_summary_sheet_has_one_row_per_strategy_metric_combo(self) -> None:
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(self._payload(), output_filename=out)
+            wb = openpyxl.load_workbook(out)
+            ws = wb["Summary"]
+            self.assertEqual(ws.max_row, 4)  # header + 3 metrics × 1 strategy
+            r_values = [ws.cell(row=r, column=3).value for r in range(2, ws.max_row + 1)]
+            self.assertIn(0.125, r_values)
+            self.assertIn(0.0625, r_values)
+
+    def test_handles_payload_without_null(self) -> None:
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        payload = self._payload()
+        payload["strategies"]["pagerank"]["null"] = None
+        payload.pop("modular")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(payload, output_filename=out)
+            wb = openpyxl.load_workbook(out)
+            self.assertIn("Summary", wb.sheetnames)

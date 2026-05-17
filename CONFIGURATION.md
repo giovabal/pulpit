@@ -201,6 +201,20 @@ Toggle each step on or off by default in the Operations panel and CLI. Override 
 | `SA_VACANCY_MAX_CANDIDATES` | Maximum candidates ranked per vacancy | `30` |
 | `SA_VACANCY_PPR_ALPHA` | Damping factor α for Personalized PageRank | `0.85` |
 
+### Robustness analysis
+
+Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. Off by default — set `SA_ROBUSTNESS=True` to enable, or pass `--robustness` on the CLI. See [Robustness analysis](docs/robustness-analysis.md).
+
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `SA_ROBUSTNESS` | Master switch — enable the robustness analysis | `False` |
+| `SA_ROBUSTNESS_ALPHA` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
+| `SA_ROBUSTNESS_RUNS` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
+| `SA_ROBUSTNESS_NULL` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores) | `20` |
+| `SA_ROBUSTNESS_DYNAMIC` | Also run dynamic attack strategies (`in_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`) that recompute the ranking after each removal. Costly: O(N²) for strength/PageRank, O(N²·\|E\|) for betweenness | `False` |
+| `SA_ROBUSTNESS_SEED` | Single seed driving every stochastic component of the robustness analysis | `42` |
+| `SA_ROBUSTNESS_SAMPLE` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+
 ---
 
 # `.system-options` — project-managed metadata

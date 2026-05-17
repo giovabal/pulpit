@@ -150,6 +150,22 @@
   </div>
   {% endif %}
 
+  {% if include_robustness_html or include_robustness_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-shield-exclamation text-secondary me-2" aria-hidden="true"></i>Robustness</h5>
+        <p class="card-text text-muted small">Resistance to node removal: residual-size R per attack strategy, z-score vs a weight-rewiring null model, and intra/inter community edge survival curves.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if include_robustness_html %}<a href="robustness_table.html" class="btn btn-outline-primary btn-sm">Open analysis</a>{% endif %}
+          {% if include_robustness_xlsx %}<a href="robustness_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="{{ repository_url }}/blob/main/docs/robustness-analysis.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 
 {% if include_vacancy_analysis %}

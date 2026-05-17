@@ -1,0 +1,59 @@
+{% extends "network/_table_base.html" %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<style>
+  .rb-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 1100px) { .rb-grid { grid-template-columns: 1fr; } }
+  .rb-chart-card { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: 1rem; background: var(--bs-body-bg, #fff); }
+  .rb-chart-card h5 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; }
+  .rb-chart-card .rb-chart-canvas { position: relative; height: 280px; }
+  .rb-summary-table th, .rb-summary-table td { font-variant-numeric: tabular-nums; }
+  .rb-z-significant { font-weight: 600; }
+  .rb-z-pos { color: #198754; }
+  .rb-z-neg { color: #dc3545; }
+  .rb-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h2 class="mb-0">Robustness Analysis</h2>
+  <div class="d-flex gap-2">
+    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network stats</a>
+    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+    <a href="{{ repository_url }}/blob/main/docs/robustness-analysis.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+  </div>
+</div>
+
+<p class="text-muted small mb-3" id="rb-summary">Loading…</p>
+
+<h4 class="mt-4 mb-2">Summary</h4>
+<div class="table-responsive export-wide mb-4">
+  <table class="table table-sm rb-summary-table" id="rb-summary-table" aria-label="Robustness summary">
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h4 class="mt-4 mb-2">Residual size <code>S(f)</code> under each attack strategy</h4>
+<p class="text-muted small mb-3">
+  The shaded band shows the mean ± standard deviation of the same curves on the weight-rewiring null model.
+  A curve below the band indicates a strategy that fragments the network faster than chance.
+</p>
+<div class="rb-grid export-wide mb-4" id="rb-curves"></div>
+
+<div id="rb-modular-section" class="export-wide d-none">
+  <h4 class="mt-4 mb-2">Modular robustness</h4>
+  <p class="text-muted small mb-3">
+    Fraction of intra-community vs inter-community edges surviving the attack, normalised to
+    the q = 0 baseline.  Strategies that strip inter-community ties first (red below blue) tend
+    to decouple sub-ecosystems before eroding individual community cohesion.
+  </p>
+  <div id="rb-modular-tabs"></div>
+</div>
+
+<script type="module" src="js/robustness_table.js"></script>
+{% endblock %}

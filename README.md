@@ -117,6 +117,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Structural similarity matrix** (`structural_similarity.html`) | Pairwise cosine similarity between all channels across all computed measures, sortable by community or by measure [more](docs/export-formats.md) |
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across all detection strategies [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by six algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
+| **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
 | **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
@@ -237,6 +238,7 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 | [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 6 algorithms for identifying structural replacement channels after a node disappears |
+| [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
 | [Configuration](CONFIGURATION.md) | All `.env` settings |

@@ -789,6 +789,62 @@
               </div>
             </div>
           </fieldset>
+
+          <fieldset class="ops-fieldset">
+            <legend>Robustness Analysis
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge-survival curves. Generates data/robustness.json (always), robustness_table.html (with HTML tables), and robustness_table.xlsx (with Excel)."></i>
+            </legend>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag">
+                <input type="checkbox" name="robustness" value="1" {% if ad.SA_ROBUSTNESS %}checked{% endif %}>Enable robustness analysis
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Master switch. When off, none of the parameters below have any effect."></i>
+              </label>
+              <label class="ops-flag">
+                <input type="checkbox" name="robustness_dynamic" value="1" {% if ad.SA_ROBUSTNESS_DYNAMIC %}checked{% endif %}>Dynamic strategies
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Also run in_strength_dyn, pagerank_dyn, betweenness_dyn — strategies that recompute the ranking after every removal. Costly: O(N²) for strength/PageRank, O(N²·|E|) for betweenness. Off by default."></i>
+              </label>
+            </div>
+            <div class="ops-params mt-2">
+              <div class="ops-param">
+                <label for="robustness_alpha">Disparity-filter α
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Serrano-Boguñá-Vespignani threshold applied before the attacks. Values in (0, 1) keep statistically significant edges only; 0 disables the filter and uses the full graph. Default: 0.05."></i>
+                </label>
+                <input type="number" name="robustness_alpha" id="robustness_alpha" placeholder="{{ ad.SA_ROBUSTNESS_ALPHA }}" min="0" max="1" step="0.001">
+              </div>
+              <div class="ops-param">
+                <label for="robustness_runs">Random runs
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Number of independent random-failure runs averaged for the 'random' strategy. Default: 100."></i>
+                </label>
+                <input type="number" name="robustness_runs" id="robustness_runs" placeholder="{{ ad.SA_ROBUSTNESS_RUNS }}" min="1" max="10000">
+              </div>
+              <div class="ops-param">
+                <label for="robustness_null">Null simulations
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Number of weight-rewiring null-model simulations per strategy. 0 disables the null model (no z-scores). Default: 20."></i>
+                </label>
+                <input type="number" name="robustness_null" id="robustness_null" placeholder="{{ ad.SA_ROBUSTNESS_NULL }}" min="0" max="1000">
+              </div>
+              <div class="ops-param">
+                <label for="robustness_seed">Seed
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Single seed driving every stochastic component of the analysis — random removal, sampling, null-model rewiring. Identical seed → identical payload. Default: 42."></i>
+                </label>
+                <input type="number" name="robustness_seed" id="robustness_seed" placeholder="{{ ad.SA_ROBUSTNESS_SEED }}" min="0">
+              </div>
+              <div class="ops-param">
+                <label for="robustness_sample">R_reach sample
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Source-sample size for the R_reach metric on graphs larger than this many nodes. Smaller = faster but noisier curves. Default: 500."></i>
+                </label>
+                <input type="number" name="robustness_sample" id="robustness_sample" placeholder="{{ ad.SA_ROBUSTNESS_SAMPLE }}" min="10" max="100000">
+              </div>
+            </div>
+          </fieldset>
           </div>
 
           {% elif task.name == "compare_analysis" %}
@@ -1566,6 +1622,15 @@
         setVal('vacancy_months_after',     opts.vacancy_months_after  != null ? opts.vacancy_months_after  : '');
         setVal('vacancy_max_candidates',   opts.vacancy_max_candidates != null ? opts.vacancy_max_candidates : '');
         setVal('vacancy_ppr_alpha',        opts.vacancy_ppr_alpha != null ? opts.vacancy_ppr_alpha : '');
+
+        // Robustness analysis
+        if (opts.robustness         !== undefined) setCheck('robustness',         opts.robustness);
+        if (opts.robustness_dynamic !== undefined) setCheck('robustness_dynamic', opts.robustness_dynamic);
+        setVal('robustness_alpha',  opts.robustness_alpha  != null ? opts.robustness_alpha  : '');
+        setVal('robustness_runs',   opts.robustness_runs   != null ? opts.robustness_runs   : '');
+        setVal('robustness_null',   opts.robustness_null   != null ? opts.robustness_null   : '');
+        setVal('robustness_seed',   opts.robustness_seed   != null ? opts.robustness_seed   : '');
+        setVal('robustness_sample', opts.robustness_sample != null ? opts.robustness_sample : '');
 
         showToast('Options loaded from "' + name + '".');
       })

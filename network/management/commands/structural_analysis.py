@@ -12,7 +12,17 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Max, Min
 
-from network import community, community_stats, exporter, graph_builder, layout, measures, tables, vacancy_analysis
+from network import (
+    community,
+    community_stats,
+    exporter,
+    graph_builder,
+    layout,
+    measures,
+    robustness,
+    tables,
+    vacancy_analysis,
+)
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
 from webapp.models import Message
@@ -152,6 +162,15 @@ class ResolvedOptions:
     vacancy_max_candidates: int = 0
     vacancy_ppr_alpha: float = 0.85
 
+    # Robustness analysis
+    do_robustness: bool = False
+    robustness_alpha: float = 0.05
+    robustness_runs: int = 100
+    robustness_null: int = 20
+    robustness_dynamic: bool = False
+    robustness_seed: int = 42
+    robustness_sample: int = 500
+
     # Export naming
     export_name: str = ""
 
@@ -190,6 +209,13 @@ class ResolvedOptions:
             "vacancy_months_after": self.vacancy_months_after,
             "vacancy_max_candidates": self.vacancy_max_candidates,
             "vacancy_ppr_alpha": self.vacancy_ppr_alpha,
+            "robustness": self.do_robustness,
+            "robustness_alpha": self.robustness_alpha,
+            "robustness_runs": self.robustness_runs,
+            "robustness_null": self.robustness_null,
+            "robustness_dynamic": self.robustness_dynamic,
+            "robustness_seed": self.robustness_seed,
+            "robustness_sample": self.robustness_sample,
             "recency_weights": self.recency_weights,
         }
 
@@ -583,6 +609,77 @@ class Command(BaseCommand):
                 "Damping factor for Personalized PageRank (PPR measure). "
                 "Higher values weight long-range connections more. Default: 0.85."
             ),
+        )
+        # ── Robustness analysis ───────────────────────────────────────────────
+        parser.add_argument(
+            "--robustness",
+            dest="robustness",
+            action="store_true",
+            default=None,
+            help=(
+                "Enable the robustness analysis: residual-size R-index per attack strategy on "
+                "the (optionally disparity-filtered) backbone, with z-score against a "
+                "weight-rewiring null model and intra/inter community edge-survival curves. "
+                "Writes data/robustness.json and (with --html) robustness_table.html."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-alpha",
+            dest="robustness_alpha",
+            type=float,
+            default=None,
+            metavar="α",
+            help=(
+                "Disparity-filter threshold (Serrano et al. 2009) applied before the attacks. "
+                "Values in (0, 1) keep statistically significant edges; 0 disables the filter "
+                "and uses the full graph. Default: 0.05."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-runs",
+            dest="robustness_runs",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Number of independent random-failure runs averaged for the 'random' strategy. Default: 100.",
+        )
+        parser.add_argument(
+            "--robustness-null",
+            dest="robustness_null",
+            type=int,
+            default=None,
+            metavar="K",
+            help=(
+                "Number of weight-rewiring null-model simulations per strategy. "
+                "0 disables the null model (no z-scores computed). Default: 20."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-dynamic",
+            dest="robustness_dynamic",
+            action="store_true",
+            default=None,
+            help=(
+                "Also run dynamic attack strategies (in_strength_dyn, pagerank_dyn, "
+                "betweenness_dyn) that recompute the ranking after every removal. "
+                "Costly: O(N²) for strength/PageRank, O(N²·|E|) for betweenness."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-seed",
+            dest="robustness_seed",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Seed driving every stochastic component of the robustness analysis. Default: 42.",
+        )
+        parser.add_argument(
+            "--robustness-sample",
+            dest="robustness_sample",
+            type=int,
+            default=None,
+            metavar="N",
+            help=("Source-sample size for the R_reach metric on graphs larger than this many nodes. Default: 500."),
         )
         parser.add_argument(
             "--name",
@@ -1173,6 +1270,13 @@ class Command(BaseCommand):
             vacancy_months_after=_o("vacancy_months_after", settings.SA_VACANCY_MONTHS_AFTER),
             vacancy_max_candidates=_o("vacancy_max_candidates", settings.SA_VACANCY_MAX_CANDIDATES),
             vacancy_ppr_alpha=_o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA),
+            do_robustness=_o("robustness", settings.SA_ROBUSTNESS),
+            robustness_alpha=_o("robustness_alpha", settings.SA_ROBUSTNESS_ALPHA),
+            robustness_runs=_o("robustness_runs", settings.SA_ROBUSTNESS_RUNS),
+            robustness_null=_o("robustness_null", settings.SA_ROBUSTNESS_NULL),
+            robustness_dynamic=_o("robustness_dynamic", settings.SA_ROBUSTNESS_DYNAMIC),
+            robustness_seed=_o("robustness_seed", settings.SA_ROBUSTNESS_SEED),
+            robustness_sample=_o("robustness_sample", settings.SA_ROBUSTNESS_SAMPLE),
             export_name=export_name,
         )
 
@@ -1274,6 +1378,7 @@ class Command(BaseCommand):
             or opts.do_consensus_matrix
             or opts.do_structural_similarity
             or opts.do_vacancy
+            or opts.do_robustness
         )
         if need_static_assets:
             exporter.ensure_graph_root(root_target)
@@ -1446,6 +1551,57 @@ class Command(BaseCommand):
             )
             self.stdout.write("- vacancy_analysis.html")
 
+        if opts.do_robustness:
+            self.stdout.write("\nRobustness analysis")
+            _rob_first = [True]
+
+            def _rob_progress(label: str) -> None:
+                if not _rob_first[0]:
+                    self.stdout.write("done")
+                _rob_first[0] = False
+                self.stdout.write(f"  - {label} … ", ending="")
+                self.stdout.flush()
+
+            # Only feed partitions with more than one community — trivial partitions
+            # would make every edge intra and produce a flat modular curve.
+            partitions = {
+                s.lower(): strategy_results[s][0]
+                for s in opts.communities_strategy
+                if len(set(strategy_results[s][0].values())) > 1
+            }
+            rob_payload = robustness.run_robustness(
+                graph,
+                partitions=partitions or None,
+                config=robustness.RobustnessConfig(
+                    alpha=opts.robustness_alpha,
+                    n_random_runs=opts.robustness_runs,
+                    n_null=opts.robustness_null,
+                    dynamic=opts.robustness_dynamic,
+                    seed=opts.robustness_seed,
+                    reach_sample=opts.robustness_sample,
+                ),
+                progress=_rob_progress,
+            )
+            if not _rob_first[0]:
+                self.stdout.write("done")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_robustness_json(rob_payload, root_target)
+            self.stdout.write("- robustness.json")
+            if opts.do_html:
+                tables.write_robustness_table_html(
+                    output_filename=os.path.join(root_target, "robustness_table.html"),
+                    seo=opts.seo,
+                    project_title=project_title,
+                )
+                self.stdout.write("- robustness_table.html")
+            if opts.do_xlsx:
+                tables.write_robustness_table_xlsx(
+                    rob_payload,
+                    output_filename=os.path.join(root_target, "robustness_table.xlsx"),
+                    project_title=project_title,
+                )
+                self.stdout.write("- robustness_table.xlsx")
+
         timeline_entries: list[dict] = []
         if opts.timeline_step == "year":
             year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
@@ -1539,6 +1695,8 @@ class Command(BaseCommand):
             include_structural_similarity=opts.do_structural_similarity,
             timeline_entries=timeline_entries or None,
             include_vacancy_analysis=opts.do_vacancy,
+            include_robustness_html=opts.do_robustness and opts.do_html,
+            include_robustness_xlsx=opts.do_robustness and opts.do_xlsx,
         )
 
         exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))

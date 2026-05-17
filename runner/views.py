@@ -107,6 +107,14 @@ class OperationsView(View):
             "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
             "SA_VACANCY_MAX_CANDIDATES": settings.SA_VACANCY_MAX_CANDIDATES,
             "SA_VACANCY_PPR_ALPHA": settings.SA_VACANCY_PPR_ALPHA,
+            # SA robustness params
+            "SA_ROBUSTNESS": settings.SA_ROBUSTNESS,
+            "SA_ROBUSTNESS_ALPHA": settings.SA_ROBUSTNESS_ALPHA,
+            "SA_ROBUSTNESS_RUNS": settings.SA_ROBUSTNESS_RUNS,
+            "SA_ROBUSTNESS_NULL": settings.SA_ROBUSTNESS_NULL,
+            "SA_ROBUSTNESS_DYNAMIC": settings.SA_ROBUSTNESS_DYNAMIC,
+            "SA_ROBUSTNESS_SEED": settings.SA_ROBUSTNESS_SEED,
+            "SA_ROBUSTNESS_SAMPLE": settings.SA_ROBUSTNESS_SAMPLE,
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
             # SA expanded sets for checkbox groups
@@ -464,6 +472,13 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "vacancy_months_after", "--vacancy-months-after"),
         ("value", "vacancy_max_candidates", "--vacancy-max-candidates"),
         ("value", "vacancy_ppr_alpha", "--vacancy-ppr-alpha"),
+        ("flag", "robustness", "--robustness"),
+        ("value", "robustness_alpha", "--robustness-alpha"),
+        ("value", "robustness_runs", "--robustness-runs"),
+        ("value", "robustness_null", "--robustness-null"),
+        ("flag", "robustness_dynamic", "--robustness-dynamic"),
+        ("value", "robustness_seed", "--robustness-seed"),
+        ("value", "robustness_sample", "--robustness-sample"),
     ],
     "compare_analysis": [
         ("positional", "project_dir"),

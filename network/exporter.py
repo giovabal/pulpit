@@ -500,6 +500,13 @@ def write_summary_json(
         "vacancy_months_after",
         "vacancy_max_candidates",
         "vacancy_ppr_alpha",
+        "robustness",
+        "robustness_alpha",
+        "robustness_runs",
+        "robustness_null",
+        "robustness_dynamic",
+        "robustness_seed",
+        "robustness_sample",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -528,6 +535,14 @@ def write_vacancy_analysis_json(payload: dict, graph_dir: str) -> None:
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "vacancy_analysis.json"), "w") as f:
+        f.write(json.dumps(payload))
+
+
+def write_robustness_json(payload: dict, graph_dir: str) -> None:
+    """Write data/robustness.json from the run_robustness payload."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "robustness.json"), "w") as f:
         f.write(json.dumps(payload))
 
 

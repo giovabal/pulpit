@@ -203,6 +203,18 @@ Run a second export — perhaps with a later date range or a different set of ch
 
 Go to **Manage → Event types** to define categories like *Election* or *Policy change*, then **Manage → Events** to add specific dates and descriptions. Pulpit draws vertical lines at those dates on all channel activity charts, making it easy to see whether the event affected a channel's behaviour.
 
+### Robustness: resistance to node removal
+
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). For each of eight attack strategies (`random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`, plus the three `*_dyn` variants when `--robustness-dynamic` is on), Pulpit:
+
+- optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
+- records the residual-size curves `S(q)` for WCC, SCC, and directed reachability,
+- compresses each curve into the Schneider et al. R-index plus a 5%-collapse threshold `f_c`,
+- compares both against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores,
+- if at least one community partition is active, also produces intra/inter community edge-survival curves per partition.
+
+Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
+
 ---
 
 ## Viewing your results
@@ -267,6 +279,13 @@ python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --2dgraph --timeline-step year
 python manage.py structural_analysis --2dgraph --html --channel-groups media,activists
 
+# Robustness analysis (resistance to node removal)
+python manage.py structural_analysis --robustness --html --xlsx               # default: α=0.05, N_runs=100, K_null=20, static strategies only
+python manage.py structural_analysis --robustness --robustness-alpha 0        # skip disparity filter, attack the full graph
+python manage.py structural_analysis --robustness --robustness-null 0         # observed R only, no null model (no z-scores)
+python manage.py structural_analysis --robustness --robustness-dynamic        # also recompute centralities after every removal — expensive
+python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
+
 # Compare two exports
 python manage.py compare_analysis /path/to/exports/<other-name>
 # Windows: use backslashes or quote the path
@@ -277,6 +296,6 @@ See `python manage.py <command> --help` for the full list of flags for any comma
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">

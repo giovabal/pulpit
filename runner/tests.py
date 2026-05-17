@@ -668,3 +668,59 @@ class BuildArgsCompareAnalysisTests(TestCase):
 
     def test_empty_project_dir_not_added(self):
         self.assertEqual(_build_args("compare_analysis", FakePost({"project_dir": ""})), [])
+
+
+# ---------------------------------------------------------------------------
+# runner/views.py — _build_args: structural_analysis (robustness flags)
+# ---------------------------------------------------------------------------
+
+
+class BuildArgsStructuralRobustnessTests(TestCase):
+    def test_empty_post_emits_no_robustness_flags(self) -> None:
+        args = _build_args("structural_analysis", FakePost())
+        for flag in (
+            "--robustness",
+            "--robustness-alpha",
+            "--robustness-runs",
+            "--robustness-null",
+            "--robustness-dynamic",
+            "--robustness-seed",
+            "--robustness-sample",
+        ):
+            self.assertNotIn(flag, args)
+
+    def test_master_switch_emits_flag(self) -> None:
+        args = _build_args("structural_analysis", FakePost({"robustness": "1"}))
+        self.assertIn("--robustness", args)
+
+    def test_dynamic_switch_emits_flag(self) -> None:
+        args = _build_args("structural_analysis", FakePost({"robustness_dynamic": "1"}))
+        self.assertIn("--robustness-dynamic", args)
+
+    def test_numeric_params_emit_flag_value_pairs(self) -> None:
+        post = FakePost(
+            {
+                "robustness": "1",
+                "robustness_alpha": "0.1",
+                "robustness_runs": "50",
+                "robustness_null": "10",
+                "robustness_seed": "7",
+                "robustness_sample": "200",
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        for flag, value in (
+            ("--robustness-alpha", "0.1"),
+            ("--robustness-runs", "50"),
+            ("--robustness-null", "10"),
+            ("--robustness-seed", "7"),
+            ("--robustness-sample", "200"),
+        ):
+            self.assertIn(flag, args)
+            self.assertEqual(args[args.index(flag) + 1], value)
+
+    def test_empty_value_field_skipped(self) -> None:
+        # value-kind specs drop the flag entirely when the field is blank.
+        args = _build_args("structural_analysis", FakePost({"robustness": "1", "robustness_alpha": ""}))
+        self.assertIn("--robustness", args)
+        self.assertNotIn("--robustness-alpha", args)
