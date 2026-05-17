@@ -952,19 +952,24 @@ class Command(BaseCommand):
     @contextmanager
     def _connect_telegram(self) -> Iterator[Any]:
         """Open a Telethon ``TelegramClient`` configured from settings, then close it."""
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        self.stdout.write("Connecting to Telegram…", ending="")
-        self.stdout.flush()
-        with TelegramClient(
-            settings.TELEGRAM_SESSION_NAME,
-            settings.TELEGRAM_API_ID,
-            settings.TELEGRAM_API_HASH,
-            connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
-            retry_delay=settings.TELEGRAM_RETRY_DELAY,
-            flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
-        ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
-            self.stdout.write(" done")
-            yield client
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            self.stdout.write("Connecting to Telegram…", ending="")
+            self.stdout.flush()
+            with TelegramClient(
+                settings.TELEGRAM_SESSION_NAME,
+                settings.TELEGRAM_API_ID,
+                settings.TELEGRAM_API_HASH,
+                connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
+                retry_delay=settings.TELEGRAM_RETRY_DELAY,
+                flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
+            ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
+                self.stdout.write(" done")
+                yield client
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
