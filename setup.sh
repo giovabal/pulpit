@@ -52,6 +52,15 @@ if [ ! -f ".analysis-defaults" ]; then
     fi
 fi
 
+# Install dev tooling (html-validate for the static-export HTML lint)
+# npm is optional — skip with a friendly note if it's not on PATH.
+if command -v npm >/dev/null 2>&1; then
+    npm install --no-audit --no-fund --loglevel=error
+else
+    echo "Note: npm not found — skipping html-validate install."
+    echo "Install Node.js to enable 'npm run lint:html'."
+fi
+
 # Apply database migrations
 python manage.py migrate
 

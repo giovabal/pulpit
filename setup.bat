@@ -43,6 +43,16 @@ if not exist ".analysis-defaults" (
     )
 )
 
+rem Install dev tooling (html-validate for the static-export HTML lint).
+rem npm is optional -- skip with a friendly note if it is not on PATH.
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo Note: npm not found -- skipping html-validate install.
+    echo Install Node.js to enable 'npm run lint:html'.
+) else (
+    call npm install --no-audit --no-fund --loglevel=error
+)
+
 rem Apply database migrations
 python manage.py migrate
 
