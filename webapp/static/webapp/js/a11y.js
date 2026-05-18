@@ -31,7 +31,11 @@
 
   function _buildSrTable(opts) {
     var table = document.createElement("table");
-    table.className = "sr-only sr-chart-table";
+    // No sr-only here: the surrounding .sr-chart-table-wrap owns the hide/show
+    // behaviour. If we duplicated sr-only on the table, removing the class from
+    // the wrap would still leave the table itself absolutely positioned and
+    // clipped to 1×1, so toggling the button would just open empty space.
+    table.className = "sr-chart-table";
     if (opts.label) {
       var caption = document.createElement("caption");
       caption.textContent = opts.label;
