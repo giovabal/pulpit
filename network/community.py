@@ -98,9 +98,15 @@ def build_community_palette(community_map: CommunityMap, palette_name: str) -> C
     total = max(community_map.values())
     # ``palette_name="ORGANIZATION"`` is only meaningful for the ORGANIZATION strategy
     # (which builds its palette directly from Organization.color). Other strategies that
-    # land here fall back to a generic qualitative palette so they still get distinct colours.
-    effective_palette = _NON_ORGANIZATION_FALLBACK_PALETTE if palette_name == "ORGANIZATION" else palette_name
-    source_colors = palette_colors(effective_palette)
+    # land here fall back to the vaporwave palette so they still get distinct colours.
+    # The colour list is reversed in the fallback case so the most-vivid end of the
+    # vaporwave sequence lands on the largest communities (community #1 is the biggest)
+    # rather than starting from the muted greys at the head of the canonical sequence.
+    # An explicit ``COMMUNITY_PALETTE=vaporwave`` is left in canonical order.
+    if palette_name == "ORGANIZATION":
+        source_colors = list(palette_colors(_NON_ORGANIZATION_FALLBACK_PALETTE))[::-1]
+    else:
+        source_colors = palette_colors(palette_name)
     colors = expand_colors(source_colors, total)
     return {
         index: parse_color(colors[index - 1]) if index <= len(colors) else DEFAULT_FALLBACK_COLOR
