@@ -65,13 +65,19 @@ html, body {
 .menu-button:hover {
     color: rgba(var(--c-fg-raw), 0.90);
     padding: .6em 1.1em;
+    background: none;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
 }
 
 .menu-button:hover {
     color: rgba(var(--c-fg-raw), 1);
 }
 
-.menu-button:hover p {
+.menu-button:hover p,
+.menu-button:hover .menu-button-label {
     color: rgba(var(--c-fg-raw), 0.90);
 }
 
@@ -80,7 +86,8 @@ html, body {
 }
 
 #loading_message,
-.menu-button p {
+.menu-button p,
+.menu-button .menu-button-label {
     color: rgba(var(--c-fg-raw), 0.65);
     font-size: 0.65rem;
     letter-spacing: 0.1em;
