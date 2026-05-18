@@ -2622,13 +2622,17 @@ class WeightedGlobalEfficiencyTests(TestCase):
 
 class RemovalOrderTests(TestCase):
     def test_strategy_constants_partition_correctly(self) -> None:
-        from network.robustness import ALL_STRATEGIES, DYNAMIC_STRATEGIES, STATIC_STRATEGIES
+        from network.robustness import ALL_STRATEGIES, DEFAULT_STRATEGIES, DYNAMIC_STRATEGIES, STATIC_STRATEGIES
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        self.assertEqual(len(STATIC_STRATEGIES), 5)
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 3)
-        self.assertEqual(len(ALL_STRATEGIES), 8)
+        # Static includes random + degree (2) + prestige (4) + reach (2) + brokerage (4) + spreading (1) = 14
+        self.assertEqual(len(STATIC_STRATEGIES), 14)
+        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, katz_dyn, hits_hub_dyn, hits_authority_dyn, betweenness_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 7)
+        self.assertEqual(len(ALL_STRATEGIES), 21)
+        # The default set is the original 5 (preserves backwards-compatible behaviour)
+        self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
 
     def test_random_returns_permutation_of_nodes(self) -> None:
         from network.robustness import removal_order
@@ -2753,6 +2757,95 @@ class RemovalOrderTests(TestCase):
         for strat in ("in_strength", "pagerank", "betweenness", "pagerank_dyn", "betweenness_dyn"):
             removal_order(g, strat)
         self.assertEqual((set(g.nodes()), set(g.edges())), (before_nodes, before_edges))
+
+    def test_new_static_scorers_return_permutations(self) -> None:
+        # Every new graph-based static scorer should produce a permutation of the node set.
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(15, 0.25, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        for strat in (
+            "katz",
+            "hits_hub",
+            "hits_authority",
+            "harmonic",
+            "closeness",
+            "flow_betweenness",
+            "burt_constraint",
+            "spreading",
+        ):
+            with self.subTest(strategy=strat):
+                order = removal_order(g, strat)
+                self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_new_dynamic_scorers_return_permutations(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        for strat in ("out_strength_dyn", "katz_dyn", "hits_hub_dyn", "hits_authority_dyn"):
+            with self.subTest(strategy=strat):
+                order = removal_order(g, strat)
+                self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_burt_constraint_sorts_ascending(self) -> None:
+        # A bridge node between two cliques has low constraint (~0); clique-internal
+        # nodes have higher constraint.  Ascending sort puts the bridge first.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        # Two 3-cliques (A,B,C) and (D,E,F) connected via bridge node X
+        for a, b in [("A", "B"), ("B", "C"), ("C", "A"), ("B", "A"), ("C", "B"), ("A", "C")]:
+            g.add_edge(a, b, weight=1.0)
+        for a, b in [("D", "E"), ("E", "F"), ("F", "D"), ("E", "D"), ("F", "E"), ("D", "F")]:
+            g.add_edge(a, b, weight=1.0)
+        g.add_edge("A", "X", weight=1.0)
+        g.add_edge("X", "A", weight=1.0)
+        g.add_edge("X", "D", weight=1.0)
+        g.add_edge("D", "X", weight=1.0)
+        order = removal_order(g, "burt_constraint")
+        # X is the only bridge node — should have the lowest constraint and be removed first.
+        self.assertEqual(order[0], "X")
+
+    def test_bridging_with_explicit_partition_basis(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        partition = {n: (n % 2) for n in g.nodes()}
+        order = removal_order(g, "bridging(louvain)", partitions={"louvain": partition})
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_bridging_bare_defaults_to_leiden(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        partition = {n: (n % 3) for n in g.nodes()}
+        order = removal_order(g, "bridging", partitions={"leiden": partition})
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_bridging_missing_partition_raises(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        with self.assertRaises(ValueError):
+            removal_order(g, "bridging")  # no partitions kwarg
+        with self.assertRaises(ValueError):
+            removal_order(g, "bridging(louvain)", partitions={"leiden": {"A": 0, "B": 0}})
+
+    def test_strategy_names_are_case_insensitive(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        self.assertEqual(removal_order(g, "PageRank"), removal_order(g, "pagerank"))
+        self.assertEqual(removal_order(g, "BETWEENNESS"), removal_order(g, "betweenness"))
 
 
 class RewireWeightsTests(TestCase):
@@ -3053,7 +3146,6 @@ class RobustnessRunnerTests(TestCase):
             "alpha": None,
             "n_random_runs": 3,
             "n_null": 0,
-            "dynamic": False,
             "seed": 0,
             "reach_sample": 10,
         }
@@ -3066,7 +3158,10 @@ class RobustnessRunnerTests(TestCase):
         from network.robustness import RobustnessConfig
 
         c = RobustnessConfig()
-        self.assertEqual((c.alpha, c.n_random_runs, c.n_null, c.dynamic, c.seed), (0.05, 100, 20, False, 42))
+        self.assertEqual(
+            (c.alpha, c.n_random_runs, c.n_null, c.seed, c.reach_sample, c.strategies),
+            (0.05, 100, 20, 42, 500, None),
+        )
 
     def test_config_rejects_invalid_values(self) -> None:
         from network.robustness import RobustnessConfig
@@ -3080,6 +3175,24 @@ class RobustnessRunnerTests(TestCase):
         with self.assertRaises(ValueError):
             RobustnessConfig(reach_sample=0)
 
+    def test_config_rejects_empty_strategies_list(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        with self.assertRaises(ValueError):
+            RobustnessConfig(strategies=[])
+
+    def test_config_rejects_unknown_strategy(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        with self.assertRaises(ValueError):
+            RobustnessConfig(strategies=["no-such-strategy"])
+
+    def test_config_accepts_bridging_with_partition(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        # parse_strategy treats bridging(LEIDEN) as a valid token
+        RobustnessConfig(strategies=["pagerank", "bridging(leiden)"])
+
     # -- payload shape --------------------------------------------------------
 
     def test_payload_top_level_keys(self) -> None:
@@ -3088,17 +3201,24 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(self._toy_graph(), config=self._fast_cfg())
         self.assertEqual(set(out.keys()), {"config", "graph", "efficiency", "strategies", "modular"})
 
-    def test_payload_strategy_keys_static_only(self) -> None:
-        from network.robustness import STATIC_STRATEGIES, run_robustness
+    def test_payload_strategy_keys_defaults_to_default_set(self) -> None:
+        from network.robustness import DEFAULT_STRATEGIES, run_robustness
 
-        out = run_robustness(self._toy_graph(), config=self._fast_cfg(dynamic=False))
-        self.assertEqual(set(out["strategies"].keys()), set(STATIC_STRATEGIES))
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg())
+        self.assertEqual(set(out["strategies"].keys()), set(DEFAULT_STRATEGIES))
 
-    def test_payload_strategy_keys_with_dynamic(self) -> None:
-        from network.robustness import DYNAMIC_STRATEGIES, STATIC_STRATEGIES, run_robustness
+    def test_payload_strategy_keys_match_explicit_selection(self) -> None:
+        from network.robustness import run_robustness
 
-        out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(dynamic=True))
-        self.assertEqual(set(out["strategies"].keys()), set(STATIC_STRATEGIES) | set(DYNAMIC_STRATEGIES))
+        chosen = ["pagerank", "betweenness_dyn", "hits_authority", "spreading"]
+        out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(strategies=chosen))
+        self.assertEqual(set(out["strategies"].keys()), set(chosen))
+
+    def test_payload_strategy_label_present_per_strategy(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(), config=self._fast_cfg(strategies=["pagerank"]))
+        self.assertEqual(out["strategies"]["pagerank"]["label"], "PageRank")
 
     def test_each_strategy_has_three_curves_and_r_fc(self) -> None:
         from network.robustness import run_robustness
@@ -3179,7 +3299,7 @@ class RobustnessRunnerTests(TestCase):
         self.assertIsNone(out["modular"])
 
     def test_modular_populated_when_partitions_given(self) -> None:
-        from network.robustness import STATIC_STRATEGIES, run_robustness
+        from network.robustness import DEFAULT_STRATEGIES, run_robustness
 
         g = self._toy_graph(n=10)
         # Hand-built two-block partition
@@ -3187,10 +3307,29 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(g, partitions={"hand": partition}, config=self._fast_cfg())
         self.assertIsNotNone(out["modular"])
         self.assertEqual(set(out["modular"].keys()), {"hand"})
-        self.assertEqual(set(out["modular"]["hand"].keys()), set(STATIC_STRATEGIES))
+        self.assertEqual(set(out["modular"]["hand"].keys()), set(DEFAULT_STRATEGIES))
         # Each per-strategy entry is the modular_robustness_curves dict.
         for payload in out["modular"]["hand"].values():
             self.assertEqual(set(payload.keys()), {"intra", "inter", "ratio"})
+
+    def test_bridging_needs_named_partition(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=10)
+        # bridging(louvain) requires "louvain" in partitions; we only supply "leiden".
+        partition = {n: (n % 2) for n in g.nodes()}
+        with self.assertRaises(ValueError):
+            run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging(louvain)"]))
+
+    def test_bridging_runs_with_matching_partition(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=10)
+        partition = {n: (n % 2) for n in g.nodes()}
+        out = run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging"]))
+        # The payload key encodes the resolved bridging basis.
+        self.assertIn("bridging(leiden)", out["strategies"])
+        self.assertEqual(out["strategies"]["bridging(leiden)"]["label"], "Bridging centrality (leiden)")
 
     # -- reproducibility ------------------------------------------------------
 
@@ -3235,7 +3374,7 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(
             g,
             partitions={"hand": {n: n % 2 for n in g.nodes()}},
-            config=self._fast_cfg(n_null=1, dynamic=False),
+            config=self._fast_cfg(n_null=1),
         )
         # Round-trip must not fail (no inf/nan in the curves; None used for undefined ratios).
         encoded = json.dumps(out)

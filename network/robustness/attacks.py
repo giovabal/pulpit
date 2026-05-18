@@ -1,20 +1,24 @@
 """Removal-order strategies for network robustness analysis.
 
 A *removal order* is a list of node IDs ordered from "first to remove" to
-"last to remove".  Two families of strategies:
+"last to remove".  Strategies are partitioned into:
 
-- **Static** strategies rank the nodes once and remove them in that fixed
-  order.  Cheap: a single centrality pass.
-- **Dynamic** strategies recompute the ranking on the residual graph after
-  every removal — a much more aggressive (and costlier) attack model.
-  Dynamic variants carry the ``_dyn`` suffix.
+- **Random** — uniform shuffle, averaged over `n_random_runs` in the runner.
+- **Static** — rank the nodes once on the full backbone and remove them in
+  that fixed order.  One centrality pass per attack.
+- **Dynamic** — recompute the ranking on the residual graph after every
+  removal (``_dyn`` suffix).  Much more aggressive and much costlier.
 
 Tie-breaking is deterministic (ascending node ID) so non-random strategies
-are reproducible without an ``rng``.  Only ``"random"`` consults ``rng``.
+are reproducible without an ``rng``.  Most strategies sort *descending* by
+score; Burt's constraint sorts *ascending* (low constraint = broker).
 
-Centrality computation is delegated to existing wrappers where one exists
-(``network.measures.compute_betweenness``) and to ``networkx`` directly
-otherwise, so the robustness module never duplicates centrality logic.
+A single registry — :data:`STRATEGY_SPECS` — drives the available
+strategies, their human labels, score functions, and sort direction.
+``bridging`` is the one parameterised strategy: it accepts an optional
+community basis as ``bridging(<strategy>)`` (case-insensitive, defaults to
+``leiden``); the named strategy must also be present in the runner's
+partitions dict.
 
 References:
     Albert, R., Jeong, H. & Barabási, A.-L. (2000). Error and attack
@@ -25,42 +29,272 @@ References:
         https://doi.org/10.1103/PhysRevE.65.056109
 """
 
+import re
 from collections.abc import Callable
-from typing import Any
+from dataclasses import dataclass
+from math import isnan, log
+from typing import Any, Literal
 
 from network.measures import compute_betweenness
+from network.measures._spreading import _run_sir
 
 import networkx as nx
 import numpy as np
 
-STATIC_STRATEGIES: frozenset[str] = frozenset(
-    {
-        "random",
-        "in_strength",
-        "out_strength",
-        "pagerank",
-        "betweenness",
-    }
-)
+# ── Spec registry ────────────────────────────────────────────────────────────
 
-DYNAMIC_STRATEGIES: frozenset[str] = frozenset(
-    {
-        "in_strength_dyn",
-        "pagerank_dyn",
-        "betweenness_dyn",
-    }
-)
 
-ALL_STRATEGIES: list[str] = [
-    "random",
-    "in_strength",
-    "out_strength",
-    "pagerank",
-    "betweenness",
-    "in_strength_dyn",
-    "pagerank_dyn",
-    "betweenness_dyn",
-]
+@dataclass(frozen=True)
+class StrategySpec:
+    """Describes a removal strategy.
+
+    ``label``           human-readable name (used by HTML / XLSX renderers)
+    ``score_fn``        ``(g: nx.DiGraph) -> dict[node, float]``; ignored for
+                        ``"random"``
+    ``inverse``         when True, sort *ascending* — used for measures where
+                        low values flag critical nodes (e.g. Burt's constraint)
+    ``kind``            ``"random"``, ``"static"``, or ``"dynamic"``
+    """
+
+    label: str
+    score_fn: Callable[[nx.DiGraph], dict[Any, float]] | None
+    inverse: bool = False
+    kind: Literal["random", "static", "dynamic"] = "static"
+
+
+# ── Score functions ─────────────────────────────────────────────────────────
+# Each scorer returns a {node: float} dict.  All are pure: they take a graph
+# and return scores without mutating it.
+
+
+def _in_strength(g: nx.DiGraph) -> dict[Any, float]:
+    return dict(g.in_degree(weight="weight"))
+
+
+def _out_strength(g: nx.DiGraph) -> dict[Any, float]:
+    return dict(g.out_degree(weight="weight"))
+
+
+def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
+    # Power iteration can fail on adversarial residual graphs; fall back to
+    # in-strength as a structural proxy so the attack loop never aborts.
+    try:
+        return nx.pagerank(g)
+    except nx.PowerIterationFailedConvergence:
+        return _in_strength(g)
+
+
+def _safe_katz(g: nx.DiGraph) -> dict[Any, float]:
+    try:
+        return nx.katz_centrality(g, weight="weight")
+    except (nx.PowerIterationFailedConvergence, Exception):
+        try:
+            return nx.katz_centrality_numpy(g, weight="weight")
+        except Exception:
+            return _in_strength(g)
+
+
+def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
+    # SciPy's SVDS backend behind nx.hits can raise ArpackError on tiny or
+    # degenerate residual graphs (typical during the dynamic re-ranking loop);
+    # catch broadly and fall back to out-strength as a structural proxy.
+    try:
+        hubs, _ = nx.hits(g)
+        return hubs
+    except Exception:
+        return _out_strength(g)
+
+
+def _hits_authority(g: nx.DiGraph) -> dict[Any, float]:
+    try:
+        _, auth = nx.hits(g)
+        return auth
+    except Exception:
+        return _in_strength(g)
+
+
+def _harmonic(g: nx.DiGraph) -> dict[Any, float]:
+    n = g.number_of_nodes()
+    norm = (n - 1) if n > 1 else 1
+    return {nid: v / norm for nid, v in nx.harmonic_centrality(g).items()}
+
+
+def _closeness(g: nx.DiGraph) -> dict[Any, float]:
+    return nx.closeness_centrality(g)
+
+
+def _flow_betweenness(g: nx.DiGraph) -> dict[Any, float]:
+    # Random-walk (current-flow) betweenness needs a connected undirected
+    # graph; we restrict to the largest WCC and assign 0 to every other node.
+    ug = g.to_undirected()
+    scores: dict[Any, float] = dict.fromkeys(g.nodes(), 0.0)
+    if ug.number_of_nodes() < 2:
+        return scores
+    if nx.is_connected(ug):
+        sub = ug
+    else:
+        sub = ug.subgraph(max(nx.connected_components(ug), key=len))
+    try:
+        scores.update(nx.current_flow_betweenness_centrality(sub, weight="weight"))
+    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError):
+        pass
+    return scores
+
+
+def _burt_constraint(g: nx.DiGraph) -> dict[Any, float]:
+    # Low constraint = structural-hole broker.  Sort direction reversed via the
+    # ``inverse`` flag on the StrategySpec.  Isolated nodes get NaN from
+    # NetworkX; we coerce to +infinity so they sort last under ascending order
+    # (treated as "not a broker").
+    out: dict[Any, float] = {}
+    for nid, val in nx.constraint(g).items():
+        out[nid] = float("inf") if val is None or isnan(val) else val
+    return out
+
+
+_BRIDGING_RE = re.compile(r"^bridging(?:\((\w+)\))?$", re.IGNORECASE)
+
+
+def _bridging_with_partition(g: nx.DiGraph, partition: dict[Any, Any]) -> dict[Any, float]:
+    """Bridging centrality = betweenness × Shannon entropy of the community
+    distribution among the node's weighted neighbours.
+
+    Mirrors the formula in :func:`network.measures._centrality.apply_bridging_centrality`
+    but returns the raw {node: score} dict rather than mutating graph_data.
+    """
+    betweenness = compute_betweenness(g)
+    scores: dict[Any, float] = {}
+    for node in g.nodes():
+        bt = betweenness.get(node, 0.0)
+        weights: dict[Any, float] = {}
+        for pred in g.predecessors(node):
+            w = g.edges[pred, node].get("weight", 1.0)
+            c = partition.get(pred)
+            if c is not None:
+                weights[c] = weights.get(c, 0.0) + w
+        for succ in g.successors(node):
+            w = g.edges[node, succ].get("weight", 1.0)
+            c = partition.get(succ)
+            if c is not None:
+                weights[c] = weights.get(c, 0.0) + w
+        total = sum(weights.values())
+        if total == 0.0 or len(weights) <= 1:
+            entropy = 0.0
+        else:
+            entropy = -sum((w / total) * log(w / total) for w in weights.values())
+        scores[node] = bt * entropy
+    return scores
+
+
+def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generator | None = None) -> dict[Any, float]:
+    """Per-node SIR spreading efficiency — mean fraction infected when each
+    node seeds the cascade.  Reuses :func:`network.measures._spreading._run_sir`.
+
+    Cost: O(runs × N × mean outbreak size) per call.  Used as an attack
+    strategy, this runs once per ranking computation — heavy but feasible
+    on moderately-sized backbones.
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+    n = g.number_of_nodes()
+    if n <= 1:
+        return dict.fromkeys(g.nodes(), 0.0)
+    adj: dict[Any, list[tuple[Any, float]]] = {
+        nid: [(s, min(d.get("weight", 1.0), 1.0)) for s, d in g[nid].items()] for nid in g.nodes()
+    }
+    norm = n - 1
+    scores: dict[Any, float] = {}
+    for nid in g.nodes():
+        total = sum(_run_sir(adj, nid, rng) for _ in range(runs))
+        scores[nid] = (total / runs - 1) / norm
+    return scores
+
+
+# Wrapper so the spreading scorer matches the generic ``(g) -> dict`` shape
+# expected by the registry (rng/runs come from the runner via closure).
+def _spreading_default(g: nx.DiGraph) -> dict[Any, float]:
+    return _spreading_scores(g)
+
+
+# ── Registry ────────────────────────────────────────────────────────────────
+
+
+STRATEGY_SPECS: dict[str, StrategySpec] = {
+    # Baseline
+    "random": StrategySpec("Random failure", None, kind="random"),
+    # Degree
+    "in_strength": StrategySpec("In-strength", _in_strength),
+    "out_strength": StrategySpec("Out-strength", _out_strength),
+    # Prestige
+    "pagerank": StrategySpec("PageRank", _safe_pagerank),
+    "katz": StrategySpec("Katz centrality", _safe_katz),
+    "hits_hub": StrategySpec("HITS hub", _hits_hub),
+    "hits_authority": StrategySpec("HITS authority", _hits_authority),
+    # Reach
+    "harmonic": StrategySpec("Harmonic centrality", _harmonic),
+    "closeness": StrategySpec("Closeness centrality", _closeness),
+    # Brokerage
+    "betweenness": StrategySpec("Betweenness", compute_betweenness),
+    "flow_betweenness": StrategySpec("Flow betweenness", _flow_betweenness),
+    "burt_constraint": StrategySpec("Burt's constraint (low = broker)", _burt_constraint, inverse=True),
+    # bridging is parameterised; the "bridging" key here is a placeholder for
+    # the registry (label / kind) — the score function is invoked separately
+    # via _bridging_with_partition because it needs the chosen partition.
+    "bridging": StrategySpec("Bridging centrality", None),
+    # Dynamical
+    "spreading": StrategySpec("Spreading efficiency (SIR)", _spreading_default),
+    # Dynamic variants
+    "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
+    "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
+    "pagerank_dyn": StrategySpec("PageRank (dyn)", _safe_pagerank, kind="dynamic"),
+    "katz_dyn": StrategySpec("Katz (dyn)", _safe_katz, kind="dynamic"),
+    "hits_hub_dyn": StrategySpec("HITS hub (dyn)", _hits_hub, kind="dynamic"),
+    "hits_authority_dyn": StrategySpec("HITS authority (dyn)", _hits_authority, kind="dynamic"),
+    "betweenness_dyn": StrategySpec("Betweenness (dyn)", compute_betweenness, kind="dynamic"),
+}
+
+DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank", "betweenness"]
+
+# Derived sets so existing imports keep working.
+STATIC_STRATEGIES: frozenset[str] = frozenset(name for name, spec in STRATEGY_SPECS.items() if spec.kind != "dynamic")
+DYNAMIC_STRATEGIES: frozenset[str] = frozenset(name for name, spec in STRATEGY_SPECS.items() if spec.kind == "dynamic")
+ALL_STRATEGIES: list[str] = list(STRATEGY_SPECS.keys())
+
+
+# ── Strategy-name parsing / validation ──────────────────────────────────────
+
+
+def parse_strategy(name: str) -> tuple[str, str | None]:
+    """Normalise a strategy token to ``(canonical_name, bridging_partition_key)``.
+
+    Bare strategy names normalise to lowercase: ``"PageRank"`` → ``("pagerank", None)``.
+    Bridging accepts an optional partition: ``"bridging(LEIDEN)"`` →
+    ``("bridging", "leiden")``; bare ``"bridging"`` → ``("bridging", "leiden")``.
+
+    Raises ``ValueError`` for unknown names.
+    """
+    raw = name.strip()
+    m = _BRIDGING_RE.match(raw)
+    if m:
+        return ("bridging", (m.group(1) or "leiden").lower())
+    canonical = raw.lower()
+    if canonical not in STRATEGY_SPECS:
+        raise ValueError(
+            f"unknown attack strategy {name!r}; choose from {sorted(STRATEGY_SPECS.keys())} "
+            f"or bridging(<community-strategy>)"
+        )
+    return (canonical, None)
+
+
+def strategy_label(name: str, partition_key: str | None = None) -> str:
+    """Human-readable label, including the partition basis for bridging."""
+    base = STRATEGY_SPECS[name].label
+    if name == "bridging" and partition_key:
+        return f"{base} ({partition_key})"
+    return base
+
+
+# ── Removal order ───────────────────────────────────────────────────────────
 
 
 def removal_order(
@@ -68,43 +302,46 @@ def removal_order(
     strategy: str,
     *,
     rng: np.random.Generator | None = None,
+    partitions: dict[str, dict[Any, Any]] | None = None,
 ) -> list[Any]:
     """Compute the node-removal order for *G* under *strategy*.
 
-    Static strategies — one-shot ranking; ``rng`` consulted only for
-    ``"random"``:
-        ``"random"``        uniform shuffle
-        ``"in_strength"``   decreasing weighted in-degree
-        ``"out_strength"``  decreasing weighted out-degree
-        ``"pagerank"``      decreasing PageRank
-        ``"betweenness"``   decreasing weighted betweenness centrality
+    See :data:`STRATEGY_SPECS` for the available strategies.  Tie-breaking is
+    deterministic (ascending by node ID).  Empty graph returns ``[]``.
 
-    Dynamic strategies — re-rank after every deletion:
-        ``"in_strength_dyn"``  recomputed weighted in-degree
-        ``"pagerank_dyn"``     recomputed PageRank
-        ``"betweenness_dyn"``  recomputed weighted betweenness
+    ``rng`` is consulted only for ``"random"``.  ``partitions`` (a dict
+    ``{strategy_name: {node: community_id}}``) is required only for
+    ``"bridging"`` / ``"bridging(...)"``.
 
-    Tie-breaking is deterministic (ascending by node ID).  Empty graph
-    returns ``[]``.  Worst-case dynamic complexity (|V| = N, |E| = m):
-
-        ``in_strength_dyn``   O(N · (N + m))
-        ``pagerank_dyn``      O(N · pagerank-iteration)
-        ``betweenness_dyn``   O(N² · m)  — keep this off for large graphs
+    Worst-case dynamic complexity (|V| = N, |E| = m):
+        ``in_strength_dyn`` / ``out_strength_dyn``   O(N · (N + m))
+        ``pagerank_dyn`` / ``katz_dyn`` / ``hits_*_dyn``   O(N · power-iter)
+        ``betweenness_dyn``                                 O(N² · m)
     """
-    if strategy not in STATIC_STRATEGIES and strategy not in DYNAMIC_STRATEGIES:
-        raise ValueError(f"strategy must be one of {sorted(STATIC_STRATEGIES | DYNAMIC_STRATEGIES)}; got {strategy!r}")
+    canonical, bridging_key = parse_strategy(strategy)
 
     if G.number_of_nodes() == 0:
         return []
 
-    if strategy == "random":
+    if canonical == "random":
         return _random_order(G, rng)
-    if strategy in STATIC_STRATEGIES:
-        return _static_order(G, strategy)
-    return _dynamic_order(G, strategy)
 
+    if canonical == "bridging":
+        if partitions is None or bridging_key not in partitions:
+            raise ValueError(
+                f"bridging strategy needs partition {bridging_key!r} in --community-strategies; "
+                f"available: {sorted((partitions or {}).keys())}"
+            )
+        scores = _bridging_with_partition(G, partitions[bridging_key])
+        return _sort_by_scores(G, scores, inverse=False)
 
-# ── static ───────────────────────────────────────────────────────────────────
+    spec = STRATEGY_SPECS[canonical]
+    if spec.kind == "dynamic":
+        return _dynamic_order(G, spec)
+    if spec.score_fn is None:
+        raise ValueError(f"strategy {canonical!r} has no score function and isn't a recognised special case")
+    scores = spec.score_fn(G)
+    return _sort_by_scores(G, scores, inverse=spec.inverse)
 
 
 def _random_order(G: nx.DiGraph, rng: np.random.Generator | None) -> list[Any]:
@@ -115,44 +352,17 @@ def _random_order(G: nx.DiGraph, rng: np.random.Generator | None) -> list[Any]:
     return [nodes[i] for i in indices]
 
 
-def _static_order(G: nx.DiGraph, strategy: str) -> list[Any]:
-    scores = _static_scores(G, strategy)
+def _sort_by_scores(G: nx.DiGraph, scores: dict[Any, float], *, inverse: bool) -> list[Any]:
+    # Descending by score (or ascending if ``inverse``), ascending by node ID for ties.
+    if inverse:
+        return sorted(G.nodes(), key=lambda n: (scores.get(n, float("inf")), n))
     return sorted(G.nodes(), key=lambda n: (-scores.get(n, 0.0), n))
 
 
-def _static_scores(G: nx.DiGraph, strategy: str) -> dict[Any, float]:
-    if strategy == "in_strength":
-        return dict(G.in_degree(weight="weight"))
-    if strategy == "out_strength":
-        return dict(G.out_degree(weight="weight"))
-    if strategy == "pagerank":
-        return _safe_pagerank(G)
-    if strategy == "betweenness":
-        return compute_betweenness(G)
-    raise ValueError(f"unsupported static strategy: {strategy!r}")
-
-
-def _safe_pagerank(G: nx.DiGraph) -> dict[Any, float]:
-    # Power iteration can fail on adversarial residual graphs; fall back to
-    # in-strength as a structural proxy so the attack loop never aborts.
-    try:
-        return nx.pagerank(G)
-    except nx.PowerIterationFailedConvergence:
-        return dict(G.in_degree(weight="weight"))
-
-
-# ── dynamic ──────────────────────────────────────────────────────────────────
-
-
-_DYNAMIC_SCORE_FNS: dict[str, Callable[[nx.DiGraph], dict[Any, float]]] = {
-    "in_strength_dyn": lambda g: dict(g.in_degree(weight="weight")),
-    "pagerank_dyn": _safe_pagerank,
-    "betweenness_dyn": compute_betweenness,
-}
-
-
-def _dynamic_order(G: nx.DiGraph, strategy: str) -> list[Any]:
-    score_fn = _DYNAMIC_SCORE_FNS[strategy]
+def _dynamic_order(G: nx.DiGraph, spec: StrategySpec) -> list[Any]:
+    score_fn = spec.score_fn
+    if score_fn is None:
+        raise ValueError(f"dynamic strategy {spec.label!r} has no score function")
     g = G.copy()
     order: list[Any] = []
     while g.number_of_nodes() > 0:
@@ -160,7 +370,10 @@ def _dynamic_order(G: nx.DiGraph, strategy: str) -> list[Any]:
         if not scores:
             order.extend(sorted(g.nodes()))
             break
-        nid = min(g.nodes(), key=lambda n: (-scores.get(n, 0.0), n))
+        if spec.inverse:
+            nid = min(g.nodes(), key=lambda n: (scores.get(n, float("inf")), n))
+        else:
+            nid = min(g.nodes(), key=lambda n: (-scores.get(n, 0.0), n))
         order.append(nid)
         g.remove_node(nid)
     return order

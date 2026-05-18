@@ -1,4 +1,13 @@
-from network.robustness.attacks import ALL_STRATEGIES, DYNAMIC_STRATEGIES, STATIC_STRATEGIES, removal_order
+from network.robustness.attacks import (
+    ALL_STRATEGIES,
+    DEFAULT_STRATEGIES,
+    DYNAMIC_STRATEGIES,
+    STATIC_STRATEGIES,
+    STRATEGY_SPECS,
+    parse_strategy,
+    removal_order,
+    strategy_label,
+)
 from network.robustness.disparity_filter import compute_alpha_values, disparity_filter
 from network.robustness.metrics import (
     attack_curve,
@@ -12,8 +21,10 @@ from network.robustness.runner import RobustnessConfig, run_robustness
 
 __all__ = [
     "ALL_STRATEGIES",
+    "DEFAULT_STRATEGIES",
     "DYNAMIC_STRATEGIES",
     "STATIC_STRATEGIES",
+    "STRATEGY_SPECS",
     "RobustnessConfig",
     "attack_curve",
     "compute_alpha_values",
@@ -21,10 +32,12 @@ __all__ = [
     "disparity_filter",
     "modular_robustness_curves",
     "null_distribution",
+    "parse_strategy",
     "r_index",
     "removal_order",
     "rewire_weights",
     "run_robustness",
+    "strategy_label",
     "weighted_global_efficiency",
     "z_score",
 ]

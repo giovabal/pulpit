@@ -165,9 +165,9 @@ class ResolvedOptions:
     # Robustness analysis
     do_robustness: bool = False
     robustness_alpha: float = 0.05
+    robustness_strategies: list[str] = field(default_factory=list)
     robustness_runs: int = 100
     robustness_null: int = 20
-    robustness_dynamic: bool = False
     robustness_seed: int = 42
     robustness_sample: int = 500
 
@@ -211,9 +211,9 @@ class ResolvedOptions:
             "vacancy_ppr_alpha": self.vacancy_ppr_alpha,
             "robustness": self.do_robustness,
             "robustness_alpha": self.robustness_alpha,
+            "robustness_strategies": ",".join(self.robustness_strategies) if self.robustness_strategies else "",
             "robustness_runs": self.robustness_runs,
             "robustness_null": self.robustness_null,
-            "robustness_dynamic": self.robustness_dynamic,
             "robustness_seed": self.robustness_seed,
             "robustness_sample": self.robustness_sample,
             "recency_weights": self.recency_weights,
@@ -655,14 +655,20 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--robustness-dynamic",
-            dest="robustness_dynamic",
-            action="store_true",
+            "--robustness-strategies",
+            dest="robustness_strategies",
             default=None,
+            metavar="STRATEGIES",
             help=(
-                "Also run dynamic attack strategies (in_strength_dyn, pagerank_dyn, "
-                "betweenness_dyn) that recompute the ranking after every removal. "
-                "Costly: O(N²) for strength/PageRank, O(N²·|E|) for betweenness."
+                "Comma-separated list of attack strategies to run. Any of: "
+                "random, in_strength, out_strength, pagerank, katz, hits_hub, hits_authority, "
+                "harmonic, closeness, betweenness, flow_betweenness, burt_constraint, "
+                "bridging[(<community-strategy>)], spreading, and the dynamic variants "
+                "in_strength_dyn, out_strength_dyn, pagerank_dyn, katz_dyn, hits_hub_dyn, "
+                "hits_authority_dyn, betweenness_dyn. Use ALL for every strategy. "
+                "Default: random,in_strength,out_strength,pagerank,betweenness. "
+                "Bridging defaults to leiden as the community basis; bridging(louvain) etc. picks a different one. "
+                "At least one strategy must be selected."
             ),
         )
         parser.add_argument(
@@ -1011,9 +1017,9 @@ class Command(BaseCommand):
         extra_layout_names_3d: list[str] | None = None,
         do_robustness: bool = False,
         robustness_alpha: float = 0.05,
+        robustness_strategies: list[str] | None = None,
         robustness_runs: int = 100,
         robustness_null: int = 20,
-        robustness_dynamic: bool = False,
         robustness_seed: int = 42,
         robustness_sample: int = 500,
     ) -> dict | None:
@@ -1162,9 +1168,9 @@ class Command(BaseCommand):
                     partitions=rob_partitions or None,
                     config=robustness.RobustnessConfig(
                         alpha=robustness_alpha,
+                        strategies=list(robustness_strategies) if robustness_strategies else None,
                         n_random_runs=robustness_runs,
                         n_null=robustness_null,
-                        dynamic=robustness_dynamic,
                         seed=robustness_seed,
                         reach_sample=robustness_sample,
                     ),
@@ -1239,6 +1245,34 @@ class Command(BaseCommand):
             list(selected_vacancy_measures),
         )
 
+        # Robustness strategies — parse, validate, expand ALL.  Bridging tokens
+        # of the form ``bridging(LEIDEN)`` keep their parenthesised form so
+        # the runner can route them to the right community partition.
+        _raw_rob = _o("robustness_strategies", settings.SA_ROBUSTNESS_STRATEGIES) or ""
+        _raw_rob_tokens = _parse_csv(_raw_rob) if _raw_rob else []
+        if "ALL" in _raw_rob_tokens:
+            robustness_strategies = list(robustness.ALL_STRATEGIES)
+        else:
+            robustness_strategies = [t.lower() for t in _raw_rob_tokens]
+        for token in robustness_strategies:
+            try:
+                robustness.parse_strategy(token)
+            except ValueError as exc:
+                raise CommandError(f"--robustness-strategies: {exc}") from exc
+        # Bridging tokens need their community basis to be in --community-strategies
+        for token in robustness_strategies:
+            canonical, bridging_key = robustness.parse_strategy(token)
+            if canonical == "bridging" and bridging_key.upper() not in communities_strategy:
+                raise CommandError(
+                    f"--robustness-strategies includes {token!r} but the community basis "
+                    f"{bridging_key.upper()!r} is not in --community-strategies. "
+                    f"Add it or change the bridging basis."
+                )
+        # Empty strategies list is only fatal when robustness is actually enabled —
+        # caught at runtime so a typo in the defaults doesn't break unrelated runs.
+        if not robustness_strategies:
+            robustness_strategies = list(robustness.DEFAULT_STRATEGIES)
+
         extra_layout_names = _parse_csv(_o("layouts_2d", settings.SA_LAYOUTS_2D) or "")
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
@@ -1302,9 +1336,9 @@ class Command(BaseCommand):
             vacancy_ppr_alpha=_o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA),
             do_robustness=_o("robustness", settings.SA_ROBUSTNESS),
             robustness_alpha=_o("robustness_alpha", settings.SA_ROBUSTNESS_ALPHA),
+            robustness_strategies=robustness_strategies,
             robustness_runs=_o("robustness_runs", settings.SA_ROBUSTNESS_RUNS),
             robustness_null=_o("robustness_null", settings.SA_ROBUSTNESS_NULL),
-            robustness_dynamic=_o("robustness_dynamic", settings.SA_ROBUSTNESS_DYNAMIC),
             robustness_seed=_o("robustness_seed", settings.SA_ROBUSTNESS_SEED),
             robustness_sample=_o("robustness_sample", settings.SA_ROBUSTNESS_SAMPLE),
             export_name=export_name,
@@ -1605,9 +1639,9 @@ class Command(BaseCommand):
                 partitions=partitions or None,
                 config=robustness.RobustnessConfig(
                     alpha=opts.robustness_alpha,
+                    strategies=list(opts.robustness_strategies) if opts.robustness_strategies else None,
                     n_random_runs=opts.robustness_runs,
                     n_null=opts.robustness_null,
-                    dynamic=opts.robustness_dynamic,
                     seed=opts.robustness_seed,
                     reach_sample=opts.robustness_sample,
                 ),
@@ -1662,9 +1696,9 @@ class Command(BaseCommand):
                         extra_layout_names_3d=opts.extra_layout_names_3d or None,
                         do_robustness=opts.do_robustness,
                         robustness_alpha=opts.robustness_alpha,
+                        robustness_strategies=opts.robustness_strategies,
                         robustness_runs=opts.robustness_runs,
                         robustness_null=opts.robustness_null,
-                        robustness_dynamic=opts.robustness_dynamic,
                         robustness_seed=opts.robustness_seed,
                         robustness_sample=opts.robustness_sample,
                     )

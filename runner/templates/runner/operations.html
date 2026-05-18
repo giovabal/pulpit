@@ -801,13 +801,51 @@
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Master switch. When off, none of the parameters below have any effect."></i>
               </label>
-              <label class="ops-flag">
-                <input type="checkbox" name="robustness_dynamic" value="1" {% if ad.SA_ROBUSTNESS_DYNAMIC %}checked{% endif %}>Dynamic strategies
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Also run in_strength_dyn, pagerank_dyn, betweenness_dyn — strategies that recompute the ranking after every removal. Costly: O(N²) for strength/PageRank, O(N²·|E|) for betweenness. Off by default."></i>
-              </label>
             </div>
+
+            <div class="ops-subheader mt-2">Attack strategies
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="robustness_strategies">All</button>
+                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="robustness_strategies">None</button>
+              </span>
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="At least one strategy must be selected when robustness is enabled. Each strategy gives a different attack scenario — see docs/robustness-analysis.md for what each one models. Dynamic variants (_dyn) recompute the ranking after every removal — much costlier than static."></i>
+            </div>
+            <div class="ops-flags ops-flags--grid">
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="random" {% if "RANDOM" in ad.sa_robustness_strategies %}checked{% endif %}>Random failure<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Uniform shuffle, averaged over Random runs. The baseline that targeted attacks should look much worse than."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength" {% if "IN_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted in-degree. Removes the most-cited channels first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength" {% if "OUT_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted out-degree. Removes the most-active aggregators first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank" {% if "PAGERANK" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing PageRank. Removes the highest-prestige channels first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="katz" {% if "KATZ" in ad.sa_robustness_strategies %}checked{% endif %}>Katz<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing Katz centrality. Path-based prestige with attenuation."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="hits_hub" {% if "HITS_HUB" in ad.sa_robustness_strategies %}checked{% endif %}>HITS hub<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing HITS hub score. Removes the primary distributors first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="hits_authority" {% if "HITS_AUTHORITY" in ad.sa_robustness_strategies %}checked{% endif %}>HITS authority<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing HITS authority score. Removes the primary content producers first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="harmonic" {% if "HARMONIC" in ad.sa_robustness_strategies %}checked{% endif %}>Harmonic<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing harmonic centrality. Removes channels best-positioned to reach the rest of the network."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="closeness" {% if "CLOSENESS" in ad.sa_robustness_strategies %}checked{% endif %}>Closeness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing closeness centrality. Removes the most-easily-reached channels first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness" {% if "BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted betweenness. Removes the brokers — channels on the bridges between sub-networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="flow_betweenness" {% if "FLOW_BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Flow betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Random-walk (current-flow) betweenness. Removes brokers that geodesic betweenness misses (Newman 2005)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="burt_constraint" {% if "BURT_CONSTRAINT" in ad.sa_robustness_strategies %}checked{% endif %}>Burt's constraint<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="ASCENDING Burt's constraint — low values flag structural-hole brokers. Removes the quiet bridges first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="bridging" {% if "BRIDGING" in ad.sa_robustness_strategies %}checked{% endif %}>Bridging<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing bridging centrality (betweenness × neighbour-community entropy). Targets bridges between genuinely distinct communities. Needs a community basis — defaults to LEIDEN; pick another via the dropdown below."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="spreading" {% if "SPREADING" in ad.sa_robustness_strategies %}checked{% endif %}>Spreading (SIR)<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing SIR spreading efficiency — removes the dynamical superspreaders. Expensive: Monte Carlo per ranking, scales with Random runs."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="In-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Out-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank_dyn" {% if "PAGERANK_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank recomputed after every removal. Cost: O(N · pagerank-iteration)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="katz_dyn" {% if "KATZ_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Katz dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Katz recomputed after every removal. Cost: O(N · pagerank-iteration)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="hits_hub_dyn" {% if "HITS_HUB_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>HITS hub dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS hub recomputed after every removal."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="hits_authority_dyn" {% if "HITS_AUTHORITY_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>HITS authority dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS authority recomputed after every removal."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness_dyn" {% if "BETWEENNESS_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Betweenness recomputed after every removal — the most destructive attack class. Cost: O(N²·m). Keep off for large graphs."></i></label>
+            </div>
+
             <div class="ops-params mt-2">
+              <div class="ops-param">
+                <label for="robustness_bridging_basis">Bridging basis
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Community partition used to compute the bridging entropy. Must also be in Community strategies. Default: LEIDEN. Only applied when 'Bridging' is checked above."></i>
+                </label>
+                <select name="robustness_bridging_basis" id="robustness_bridging_basis">
+                  <option value="">(LEIDEN — default)</option>
+                  {% for s in robustness_bridging_choices %}<option value="{{ s|lower }}">{{ s }}</option>{% endfor %}
+                </select>
+              </div>
               <div class="ops-param">
                 <label for="robustness_alpha">Disparity-filter α
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -1624,8 +1662,20 @@
         setVal('vacancy_ppr_alpha',        opts.vacancy_ppr_alpha != null ? opts.vacancy_ppr_alpha : '');
 
         // Robustness analysis
-        if (opts.robustness         !== undefined) setCheck('robustness',         opts.robustness);
-        if (opts.robustness_dynamic !== undefined) setCheck('robustness_dynamic', opts.robustness_dynamic);
+        if (opts.robustness !== undefined) setCheck('robustness', opts.robustness);
+        // Strategies: comma-separated, may include bridging(<basis>) — split out the basis
+        // into the bridging dropdown and feed the bare token to the checkbox setter.
+        if (opts.robustness_strategies !== undefined) {
+            var raw = (opts.robustness_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            var basis = '';
+            var tokens = raw.map(function (t) {
+                var m = t.match(/^bridging\((\w+)\)$/i);
+                if (m) { basis = m[1].toLowerCase(); return 'bridging'; }
+                return t.toLowerCase();
+            });
+            setMulti('robustness_strategies', tokens.join(','));
+            setVal('robustness_bridging_basis', basis);
+        }
         setVal('robustness_alpha',  opts.robustness_alpha  != null ? opts.robustness_alpha  : '');
         setVal('robustness_runs',   opts.robustness_runs   != null ? opts.robustness_runs   : '');
         setVal('robustness_null',   opts.robustness_null   != null ? opts.robustness_null   : '');

@@ -502,9 +502,9 @@ def write_summary_json(
         "vacancy_ppr_alpha",
         "robustness",
         "robustness_alpha",
+        "robustness_strategies",
         "robustness_runs",
         "robustness_null",
-        "robustness_dynamic",
         "robustness_seed",
         "robustness_sample",
     )

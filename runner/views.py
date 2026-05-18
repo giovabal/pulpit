@@ -9,7 +9,12 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from network import community as net_community, measures as net_measures, vacancy_analysis
+from network import (
+    community as net_community,
+    measures as net_measures,
+    robustness as net_robustness,
+    vacancy_analysis,
+)
 from runner import tasks
 from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
 
@@ -112,7 +117,6 @@ class OperationsView(View):
             "SA_ROBUSTNESS_ALPHA": settings.SA_ROBUSTNESS_ALPHA,
             "SA_ROBUSTNESS_RUNS": settings.SA_ROBUSTNESS_RUNS,
             "SA_ROBUSTNESS_NULL": settings.SA_ROBUSTNESS_NULL,
-            "SA_ROBUSTNESS_DYNAMIC": settings.SA_ROBUSTNESS_DYNAMIC,
             "SA_ROBUSTNESS_SEED": settings.SA_ROBUSTNESS_SEED,
             "SA_ROBUSTNESS_SAMPLE": settings.SA_ROBUSTNESS_SAMPLE,
             # SA string params
@@ -124,6 +128,9 @@ class OperationsView(View):
             "sa_layouts_2d": {s.strip().upper() for s in settings.SA_LAYOUTS_2D.split(",") if s.strip()},
             "sa_layouts_3d": {s.strip().upper() for s in settings.SA_LAYOUTS_3D.split(",") if s.strip()},
             "sa_vacancy_measures": _expand(settings.SA_VACANCY_MEASURES, set(vacancy_analysis.ALL_VACANCY_MEASURES)),
+            "sa_robustness_strategies": _expand(
+                settings.SA_ROBUSTNESS_STRATEGIES, {s.upper() for s in net_robustness.ALL_STRATEGIES}
+            ),
         }
 
         return render(
@@ -134,6 +141,7 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
                 "has_vacancies": has_vacancies,
+                "robustness_bridging_choices": sorted(net_community.VALID_STRATEGIES - {"ORGANIZATION"}),
                 "ad": ad,
             },
         )
@@ -377,6 +385,21 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         types = [ct for ct in _CHANNEL_TYPE_KEYS if post.get(f"channel_type_{ct.lower()}")]
         if types:
             args += [flag, ",".join(types)]
+    elif kind == "robustness_strategies":
+        # Multi-select checkboxes; the "bridging" entry gets its community basis
+        # appended in parenthesised form when the dropdown picks a non-default
+        # ("bridging" alone defaults to leiden in the backend).
+        _, flag = spec
+        chosen = post.getlist("robustness_strategies")
+        bridging_basis = (post.get("robustness_bridging_basis") or "").strip().lower()
+        tokens: list[str] = []
+        for s in chosen:
+            if s == "bridging" and bridging_basis:
+                tokens.append(f"bridging({bridging_basis})")
+            else:
+                tokens.append(s)
+        if tokens:
+            args += [flag, ",".join(tokens)]
     elif kind == "extra_terms":
         _, key = spec
         for line in post.get(key, "").splitlines():
@@ -474,9 +497,9 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "vacancy_ppr_alpha", "--vacancy-ppr-alpha"),
         ("flag", "robustness", "--robustness"),
         ("value", "robustness_alpha", "--robustness-alpha"),
+        ("robustness_strategies", "--robustness-strategies"),
         ("value", "robustness_runs", "--robustness-runs"),
         ("value", "robustness_null", "--robustness-null"),
-        ("flag", "robustness_dynamic", "--robustness-dynamic"),
         ("value", "robustness_seed", "--robustness-seed"),
         ("value", "robustness_sample", "--robustness-sample"),
     ],

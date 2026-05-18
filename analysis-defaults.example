@@ -190,16 +190,21 @@ SA_ROBUSTNESS=False
 # significant edges only.
 SA_ROBUSTNESS_ALPHA=0.05
 
+# Comma-separated list of attack strategies. Use ALL for every strategy.
+# Available: RANDOM, IN_STRENGTH, OUT_STRENGTH, PAGERANK, KATZ, HITS_HUB,
+#   HITS_AUTHORITY, HARMONIC, CLOSENESS, BETWEENNESS, FLOW_BETWEENNESS,
+#   BURT_CONSTRAINT, BRIDGING[(<community-strategy>)], SPREADING, and the
+#   dynamic variants IN_STRENGTH_DYN, OUT_STRENGTH_DYN, PAGERANK_DYN,
+#   KATZ_DYN, HITS_HUB_DYN, HITS_AUTHORITY_DYN, BETWEENNESS_DYN.
+# Bridging defaults to LEIDEN; bridging(LOUVAIN) etc. picks a different one
+# (the chosen community strategy must also be in SA_COMMUNITY_STRATEGIES).
+SA_ROBUSTNESS_STRATEGIES=RANDOM,IN_STRENGTH,OUT_STRENGTH,PAGERANK,BETWEENNESS
+
 # Number of independent random-failure runs averaged for the "random" strategy.
 SA_ROBUSTNESS_RUNS=100
 
 # Number of weight-rewiring null-model simulations per strategy. 0 disables.
 SA_ROBUSTNESS_NULL=20
-
-# When True, also run dynamic strategies (in_strength_dyn, pagerank_dyn,
-# betweenness_dyn) that recompute the ranking after every removal.
-# Costly: O(N²) for strength/pagerank, O(N²·|E|) for betweenness.
-SA_ROBUSTNESS_DYNAMIC=False
 
 # Seed driving every stochastic component of the analysis.
 SA_ROBUSTNESS_SEED=42

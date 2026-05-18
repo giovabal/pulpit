@@ -681,9 +681,9 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         for flag in (
             "--robustness",
             "--robustness-alpha",
+            "--robustness-strategies",
             "--robustness-runs",
             "--robustness-null",
-            "--robustness-dynamic",
             "--robustness-seed",
             "--robustness-sample",
         ):
@@ -693,9 +693,48 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         args = _build_args("structural_analysis", FakePost({"robustness": "1"}))
         self.assertIn("--robustness", args)
 
-    def test_dynamic_switch_emits_flag(self) -> None:
-        args = _build_args("structural_analysis", FakePost({"robustness_dynamic": "1"}))
-        self.assertIn("--robustness-dynamic", args)
+    def test_strategy_checkboxes_emit_csv(self) -> None:
+        post = FakePost(
+            {
+                "robustness": "1",
+                "robustness_strategies": ["pagerank", "betweenness_dyn", "hits_authority"],
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        self.assertIn("--robustness-strategies", args)
+        idx = args.index("--robustness-strategies")
+        self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,hits_authority")
+
+    def test_bridging_basis_dropdown_rewrites_to_parenthesised_form(self) -> None:
+        post = FakePost(
+            {
+                "robustness": "1",
+                "robustness_strategies": ["pagerank", "bridging"],
+                "robustness_bridging_basis": "louvain",
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--robustness-strategies")
+        self.assertEqual(args[idx + 1], "pagerank,bridging(louvain)")
+
+    def test_bridging_basis_blank_leaves_bare_bridging(self) -> None:
+        # Empty dropdown value means "use the default (leiden)" — emit bare bridging.
+        post = FakePost(
+            {
+                "robustness": "1",
+                "robustness_strategies": ["bridging"],
+                "robustness_bridging_basis": "",
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--robustness-strategies")
+        self.assertEqual(args[idx + 1], "bridging")
+
+    def test_no_strategies_checked_omits_flag(self) -> None:
+        # When no strategy checkbox is ticked, the flag is absent altogether — the
+        # backend then uses its own default set.
+        args = _build_args("structural_analysis", FakePost({"robustness": "1"}))
+        self.assertNotIn("--robustness-strategies", args)
 
     def test_numeric_params_emit_flag_value_pairs(self) -> None:
         post = FakePost(
