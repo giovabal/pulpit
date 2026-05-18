@@ -265,7 +265,7 @@ The SIR model is the standard epidemiological model for rumour propagation and m
 
 Bridging centrality is a composite measure combining betweenness centrality (how often a channel sits on the shortest paths between others) and the Shannon entropy of its immediate neighbours' community memberships. The final score is the product of the two. A channel scores high only if it is simultaneously on important paths *and* those paths cross ideological or topical boundaries.
 
-The community basis for the entropy calculation is set by the strategy name in parentheses — for example, `BRIDGING(LOUVAIN)` uses the Louvain partition. Without a strategy name, `LEIDEN` is used. The chosen strategy must also appear in `--community-strategies`.
+The community basis for the entropy calculation is set by the strategy name in parentheses — for example, `BRIDGING(LOUVAIN)` uses the Louvain partition. Without a strategy name, `LEIDEN_DIRECTED` is used (the directed null model respects citation direction, which matches the brokerage question). The chosen strategy must also appear in `--community-strategies`. In the Operations panel the basis is picked from the **Bridging basis** dropdown in the *Linked parameters* fieldset; the same dropdown also drives the bridging robustness attack strategy, so both pick up the same partition.
 
 **In practice:** bridging centrality fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a densely connected region of the network, even if all its neighbours belong to the same ideological cluster. Bridging centrality penalises that: the entropy factor discounts intra-community connectors and elevates genuine cross-community bridges.
 

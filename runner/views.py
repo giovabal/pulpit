@@ -141,7 +141,17 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
                 "has_vacancies": has_vacancies,
-                "robustness_bridging_choices": sorted(net_community.VALID_STRATEGIES - {"ORGANIZATION"}),
+                # (key, label) pairs for the bridging-basis dropdown.  ORGANIZATION is excluded
+                # because organisation membership isn't a community-detection result —
+                # entropy across pre-declared categories doesn't carry the same meaning.
+                "bridging_basis_choices": sorted(
+                    (
+                        (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
+                        for key in net_community.VALID_STRATEGIES
+                        if key != "ORGANIZATION"
+                    ),
+                    key=lambda kv: kv[1],
+                ),
                 "ad": ad,
             },
         )
@@ -385,13 +395,31 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         types = [ct for ct in _CHANNEL_TYPE_KEYS if post.get(f"channel_type_{ct.lower()}")]
         if types:
             args += [flag, ",".join(types)]
+    elif kind == "measures_with_bridging":
+        # Like a normal csv kind, but the BRIDGING entry gets its community basis
+        # appended in parenthesised form when the shared bridging-basis dropdown
+        # picks a non-default value.  Bare BRIDGING falls through to the backend
+        # default (LEIDEN_DIRECTED).
+        _, flag = spec
+        chosen = post.getlist("measures")
+        bridging_basis = (post.get("bridging_basis") or "").strip().upper()
+        tokens: list[str] = []
+        for m in chosen:
+            if m == "BRIDGING" and bridging_basis:
+                tokens.append(f"BRIDGING({bridging_basis})")
+            else:
+                tokens.append(m)
+        if tokens:
+            args += [flag, ",".join(tokens)]
     elif kind == "robustness_strategies":
         # Multi-select checkboxes; the "bridging" entry gets its community basis
-        # appended in parenthesised form when the dropdown picks a non-default
-        # ("bridging" alone defaults to leiden in the backend).
+        # appended in parenthesised form when the shared bridging-basis dropdown
+        # picks a non-default value (the field is shared with the BRIDGING measure
+        # — see measures_with_bridging above).  Bare bridging falls through to the
+        # backend default (leiden_directed).
         _, flag = spec
         chosen = post.getlist("robustness_strategies")
-        bridging_basis = (post.get("robustness_bridging_basis") or "").strip().lower()
+        bridging_basis = (post.get("bridging_basis") or "").strip().lower()
         tokens: list[str] = []
         for s in chosen:
             if s == "bridging" and bridging_basis:
@@ -470,7 +498,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "startdate", "--startdate"),
         ("value", "enddate", "--enddate"),
         ("flag", "draw_dead_leaves", "--draw-dead-leaves"),
-        ("csv", "measures", "--measures"),
+        ("measures_with_bridging", "--measures"),
         ("csv", "community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
         ("inverted_flag", "include_mentions", "--no-mentions"),

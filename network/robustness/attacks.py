@@ -17,8 +17,8 @@ A single registry — :data:`STRATEGY_SPECS` — drives the available
 strategies, their human labels, score functions, and sort direction.
 ``bridging`` is the one parameterised strategy: it accepts an optional
 community basis as ``bridging(<strategy>)`` (case-insensitive, defaults to
-``leiden``); the named strategy must also be present in the runner's
-partitions dict.
+``leiden_directed``); the named strategy must also be present in the
+runner's partitions dict.
 
 References:
     Albert, R., Jeong, H. & Barabási, A.-L. (2000). Error and attack
@@ -269,14 +269,17 @@ def parse_strategy(name: str) -> tuple[str, str | None]:
 
     Bare strategy names normalise to lowercase: ``"PageRank"`` → ``("pagerank", None)``.
     Bridging accepts an optional partition: ``"bridging(LEIDEN)"`` →
-    ``("bridging", "leiden")``; bare ``"bridging"`` → ``("bridging", "leiden")``.
+    ``("bridging", "leiden")``; bare ``"bridging"`` →
+    ``("bridging", "leiden_directed")`` (the default basis, since the directed
+    Leiden variant respects citation direction — closer to what a brokerage
+    attack on a directed citation network is asking).
 
     Raises ``ValueError`` for unknown names.
     """
     raw = name.strip()
     m = _BRIDGING_RE.match(raw)
     if m:
-        return ("bridging", (m.group(1) or "leiden").lower())
+        return ("bridging", (m.group(1) or "leiden_directed").lower())
     canonical = raw.lower()
     if canonical not in STRATEGY_SPECS:
         raise ValueError(

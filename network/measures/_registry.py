@@ -22,8 +22,12 @@ VALID_MEASURES: frozenset[str] = frozenset(
     }
 )
 
-_BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z]+)\))?$")
-_BRIDGING_DEFAULT_STRATEGY = "LEIDEN"
+# [A-Z_]+ — underscore required so multi-word strategies like LEIDEN_DIRECTED
+# or LEIDEN_CPM_COARSE can be passed as a bridging basis.  Defaults to
+# LEIDEN_DIRECTED because the directed null model respects citation direction,
+# matching what a brokerage-flavoured measure on a directed graph is asking.
+_BRIDGING_RE = re.compile(r"^BRIDGING(?:\(([A-Z_]+)\))?$")
+_BRIDGING_DEFAULT_STRATEGY = "LEIDEN_DIRECTED"
 
 ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
 
@@ -83,6 +87,6 @@ def find_bridging_token(network_measures: list[str]) -> str | None:
 
 
 def bridging_strategy(token: str) -> str:
-    """Return the community strategy encoded in a BRIDGING token (defaults to LEIDEN)."""
+    """Return the community strategy encoded in a BRIDGING token (defaults to LEIDEN_DIRECTED)."""
     m = _BRIDGING_RE.match(token)
     return (m.group(1) or _BRIDGING_DEFAULT_STRATEGY) if m else _BRIDGING_DEFAULT_STRATEGY

@@ -627,6 +627,16 @@
                   </label>
                   <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="{{ ad.SA_MCL_INFLATION }}" value="{{ ad.SA_MCL_INFLATION }}" min="1" max="10" step="0.1" data-requires-strategy="MCL">
                 </div>
+                <div class="ops-param">
+                  <label for="bridging_basis">Bridging basis
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Community partition used to compute the bridging entropy. Shared between the BRIDGING measure and the bridging robustness attack strategy — both use the same basis. Must also be in Community strategies. Default: Leiden directed (its directed null model respects citation direction, matching the brokerage question)."></i>
+                  </label>
+                  <select name="bridging_basis" id="bridging_basis" data-requires-bridging="1">
+                    <option value="">(Leiden directed — default)</option>
+                    {% for key, label in bridging_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                  </select>
+                </div>
               </div>
             </fieldset>
           </div>
@@ -824,7 +834,7 @@
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness" {% if "BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted betweenness. Removes the brokers — channels on the bridges between sub-networks."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="flow_betweenness" {% if "FLOW_BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Flow betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Random-walk (current-flow) betweenness. Removes brokers that geodesic betweenness misses (Newman 2005)."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="burt_constraint" {% if "BURT_CONSTRAINT" in ad.sa_robustness_strategies %}checked{% endif %}>Burt's constraint<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="ASCENDING Burt's constraint — low values flag structural-hole brokers. Removes the quiet bridges first."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="bridging" {% if "BRIDGING" in ad.sa_robustness_strategies %}checked{% endif %}>Bridging<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing bridging centrality (betweenness × neighbour-community entropy). Targets bridges between genuinely distinct communities. Needs a community basis — defaults to LEIDEN; pick another via the dropdown below."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="bridging" {% if "BRIDGING" in ad.sa_robustness_strategies %}checked{% endif %}>Bridging<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing bridging centrality (betweenness × neighbour-community entropy). Targets bridges between genuinely distinct communities. Needs a community basis — defaults to LEIDEN_DIRECTED; pick another via the dropdown below."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="spreading" {% if "SPREADING" in ad.sa_robustness_strategies %}checked{% endif %}>Spreading (SIR)<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing SIR spreading efficiency — removes the dynamical superspreaders. Expensive: Monte Carlo per ranking, scales with Random runs."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="In-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Out-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
@@ -836,16 +846,6 @@
             </div>
 
             <div class="ops-params mt-2">
-              <div class="ops-param">
-                <label for="robustness_bridging_basis">Bridging basis
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Community partition used to compute the bridging entropy. Must also be in Community strategies. Default: LEIDEN. Only applied when 'Bridging' is checked above."></i>
-                </label>
-                <select name="robustness_bridging_basis" id="robustness_bridging_basis">
-                  <option value="">(LEIDEN — default)</option>
-                  {% for s in robustness_bridging_choices %}<option value="{{ s|lower }}">{{ s }}</option>{% endfor %}
-                </select>
-              </div>
               <div class="ops-param">
                 <label for="robustness_alpha">Disparity-filter α
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -1290,6 +1290,16 @@
       input.disabled = !on;
       input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
     });
+    // Bridging basis is shared between the BRIDGING measure and the bridging
+    // robustness attack — enable the dropdown when either is checked.
+    document.querySelectorAll('[data-requires-bridging]').forEach(function (input) {
+      var on = !!(
+        document.querySelector('input[name="measures"][value="BRIDGING"]:checked') ||
+        document.querySelector('input[name="robustness_strategies"][value="bridging"]:checked')
+      );
+      input.disabled = !on;
+      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+    });
     // CASCADE_OVERLAP also needs Spreading runs — override the disable if it is selected.
     var spreadingRunsEl = document.querySelector('[name="spreading_runs"]');
     if (spreadingRunsEl && spreadingRunsEl.disabled) {
@@ -1302,7 +1312,7 @@
     }
   }
   syncLinkedInputs();
-  document.querySelectorAll('input[name="measures"], input[name="community_strategies"], input[name="vacancy_measures"]').forEach(function (cb) {
+  document.querySelectorAll('input[name="measures"], input[name="community_strategies"], input[name="vacancy_measures"], input[name="robustness_strategies"]').forEach(function (cb) {
     cb.addEventListener('change', syncLinkedInputs);
   });
   // Re-run when any flag referenced by [data-requires-any-flag] toggles.
@@ -1635,8 +1645,21 @@
         setVal('leiden_fine_resolution',         opts.leiden_fine_resolution);
         setVal('mcl_inflation',                  opts.mcl_inflation);
 
-        // Multi-checkbox groups
-        setMulti('measures',           opts.measures);
+        // Multi-checkbox groups.  The shared bridging basis (in Linked parameters)
+        // is the union of any BRIDGING(<X>) in measures and any bridging(<X>) in
+        // robustness_strategies — robustness wins if both are set but differ.
+        var bridgingBasis = '';
+        if (opts.measures) {
+            var measureTokens = opts.measures.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            var rewrittenMeasures = measureTokens.map(function (t) {
+                var m = t.match(/^BRIDGING\((\w+)\)$/i);
+                if (m) { bridgingBasis = m[1].toUpperCase(); return 'BRIDGING'; }
+                return t;
+            });
+            setMulti('measures', rewrittenMeasures.join(','));
+        } else {
+            setMulti('measures', opts.measures);
+        }
         setMulti('community_strategies', opts.community_strategies);
         setMulti('network_stat_groups',  opts.network_stat_groups);
         setMulti('layouts_2d',           opts.layouts_2d || '');
@@ -1664,18 +1687,20 @@
         // Robustness analysis
         if (opts.robustness !== undefined) setCheck('robustness', opts.robustness);
         // Strategies: comma-separated, may include bridging(<basis>) — split out the basis
-        // into the bridging dropdown and feed the bare token to the checkbox setter.
+        // into the shared bridging-basis dropdown (Linked parameters) and feed the bare
+        // token to the checkbox setter.  Robustness wins over measures if both specify
+        // a bridging basis but they differ — it's the more granular configuration.
         if (opts.robustness_strategies !== undefined) {
             var raw = (opts.robustness_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-            var basis = '';
-            var tokens = raw.map(function (t) {
+            var rTokens = raw.map(function (t) {
                 var m = t.match(/^bridging\((\w+)\)$/i);
-                if (m) { basis = m[1].toLowerCase(); return 'bridging'; }
+                if (m) { bridgingBasis = m[1].toUpperCase(); return 'bridging'; }
                 return t.toLowerCase();
             });
-            setMulti('robustness_strategies', tokens.join(','));
-            setVal('robustness_bridging_basis', basis);
+            setMulti('robustness_strategies', rTokens.join(','));
         }
+        // Finally set the shared dropdown to the resolved basis (empty = default).
+        setVal('bridging_basis', bridgingBasis);
         setVal('robustness_alpha',  opts.robustness_alpha  != null ? opts.robustness_alpha  : '');
         setVal('robustness_runs',   opts.robustness_runs   != null ? opts.robustness_runs   : '');
         setVal('robustness_null',   opts.robustness_null   != null ? opts.robustness_null   : '');

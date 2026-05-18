@@ -6,9 +6,9 @@
 //   - curves:    three Chart.js line charts (WCC / SCC / REACH), one line per strategy
 //   - modular:   per-partition section with intra/inter curves per strategy
 //
-// The null model details live in the summary table rather than in the charts so the
-// charts stay legible when several strategies are active.  A per-strategy null band
-// would clutter the line chart with 3 extra datasets per strategy.
+// Every chart card carries a discreet "expand" button in the top-right corner;
+// clicking it opens the same chart in a large Bootstrap modal so dense plots
+// can be inspected without zooming the browser.
 
 import { build_year_nav } from './year_nav.js';
 import { strategy_label } from './labels.js';
@@ -25,38 +25,71 @@ var _base_dd = _ym ? "data/" : _dd;
 var _cache = {};
 var _ty = [];  // timeline years filtered to those with robustness data
 var _loading = false;
+var _modalChart = null;  // tracks the modal's current Chart.js instance for clean teardown
 
 var _METRICS = ["wcc", "scc", "reach"];
 var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
 
-// Strategy ordering (matches network.robustness.attacks.ALL_STRATEGIES) so the
-// rendered tables and charts present the same order as the CLI / docs.
+// Strategy ordering — matches network.robustness.attacks.ALL_STRATEGIES.
+// Bridging variants (bridging(LEIDEN), bridging(LOUVAIN), …) are slotted in
+// after bare "bridging" in alphabetical order at render time; see _orderedStrategies.
 var _STRATEGY_ORDER = [
-    "random", "in_strength", "out_strength", "pagerank", "betweenness",
-    "in_strength_dyn", "pagerank_dyn", "betweenness_dyn",
+    "random",
+    "in_strength", "out_strength",
+    "pagerank", "katz", "hits_hub", "hits_authority",
+    "harmonic", "closeness",
+    "betweenness", "flow_betweenness", "burt_constraint", "bridging",
+    "spreading",
+    "in_strength_dyn", "out_strength_dyn",
+    "pagerank_dyn", "katz_dyn", "hits_hub_dyn", "hits_authority_dyn",
+    "betweenness_dyn",
 ];
-var _STRATEGY_LABEL = {
+
+// Compact short labels — kept terse so the legend stays readable when many
+// strategies overlap.  The full label (with bridging basis, etc.) comes from
+// the payload's per-strategy "label" field; this map is the fallback.
+var _STRATEGY_SHORT = {
     "random": "Random",
-    "in_strength": "In-strength",
-    "out_strength": "Out-strength",
-    "pagerank": "PageRank",
-    "betweenness": "Betweenness",
-    "in_strength_dyn": "In-strength (dyn)",
-    "pagerank_dyn": "PageRank (dyn)",
-    "betweenness_dyn": "Betweenness (dyn)",
+    "in_strength": "In-strength", "out_strength": "Out-strength",
+    "pagerank": "PageRank", "katz": "Katz",
+    "hits_hub": "HITS hub", "hits_authority": "HITS authority",
+    "harmonic": "Harmonic", "closeness": "Closeness",
+    "betweenness": "Betweenness", "flow_betweenness": "Flow betweenness",
+    "burt_constraint": "Burt's constraint", "bridging": "Bridging",
+    "spreading": "Spreading (SIR)",
+    "in_strength_dyn": "In-strength dyn", "out_strength_dyn": "Out-strength dyn",
+    "pagerank_dyn": "PageRank dyn", "katz_dyn": "Katz dyn",
+    "hits_hub_dyn": "HITS hub dyn", "hits_authority_dyn": "HITS authority dyn",
+    "betweenness_dyn": "Betweenness dyn",
 };
 
-// Distinct, accessible colour palette (matching the rest of Pulpit's table charts).
+// 21-colour accessible palette grouped by attack-family hue.
 var _STRATEGY_COLOR = {
     "random": "#94a3b8",
-    "in_strength": "#3b82f6",
-    "out_strength": "#06b6d4",
-    "pagerank": "#ef4444",
-    "betweenness": "#f59e0b",
-    "in_strength_dyn": "#1d4ed8",
-    "pagerank_dyn": "#b91c1c",
+    "in_strength": "#3b82f6", "out_strength": "#06b6d4",
+    "pagerank": "#ef4444", "katz": "#dc2626",
+    "hits_hub": "#a855f7", "hits_authority": "#7c3aed",
+    "harmonic": "#10b981", "closeness": "#059669",
+    "betweenness": "#f59e0b", "flow_betweenness": "#d97706",
+    "burt_constraint": "#8b5cf6", "bridging": "#ec4899",
+    "spreading": "#14b8a6",
+    "in_strength_dyn": "#1d4ed8", "out_strength_dyn": "#0e7490",
+    "pagerank_dyn": "#b91c1c", "katz_dyn": "#991b1b",
+    "hits_hub_dyn": "#6b21a8", "hits_authority_dyn": "#5b21b6",
     "betweenness_dyn": "#b45309",
 };
+
+function _labelOf(payload, key) {
+    var s = payload && payload.strategies && payload.strategies[key];
+    if (s && s.label) return s.label;
+    return _STRATEGY_SHORT[key] || key;
+}
+
+function _colorOf(key) {
+    // bridging(LEIDEN) and similar variants share the bridging base colour.
+    if (key.indexOf("bridging(") === 0) return _STRATEGY_COLOR["bridging"];
+    return _STRATEGY_COLOR[key] || "#6b7280";
+}
 
 function _fmt(v, dp) {
     if (v === null || v === undefined) return "—";
@@ -77,7 +110,22 @@ function _fmtFc(fc) {
 
 function _orderedStrategies(payload) {
     var present = new Set(Object.keys(payload.strategies || {}));
-    return _STRATEGY_ORDER.filter(function (s) { return present.has(s); });
+    var ordered = [];
+    _STRATEGY_ORDER.forEach(function (s) {
+        if (s === "bridging") {
+            // Sweep up bare bridging plus every bridging(<basis>) variant in alphabetical order.
+            var bridgings = Array.from(present)
+                .filter(function (k) { return k === "bridging" || k.indexOf("bridging(") === 0; })
+                .sort();
+            bridgings.forEach(function (b) { ordered.push(b); present.delete(b); });
+        } else if (present.has(s)) {
+            ordered.push(s);
+            present.delete(s);
+        }
+    });
+    // Anything else (custom keys) lands at the end in alphabetical order.
+    Array.from(present).sort().forEach(function (s) { ordered.push(s); });
+    return ordered;
 }
 
 // ── Header summary ───────────────────────────────────────────────────────────
@@ -128,7 +176,7 @@ function _renderSummaryTable(payload) {
             var r = p["r_" + m];
             var fc = p["fc_" + m];
             var cells = [
-                "<td>" + _STRATEGY_LABEL[s] + "</td>",
+                "<td>" + _labelOf(payload, s) + "</td>",
                 "<td><code>" + _METRIC_LABEL[m] + "</code></td>",
                 "<td class=\"text-end\">" + _fmt(r) + "</td>",
             ];
@@ -144,7 +192,7 @@ function _renderSummaryTable(payload) {
     tbody.innerHTML = rows.join("");
 }
 
-// ── Curve charts (one per metric) ───────────────────────────────────────────
+// ── Chart config builders (pure — used for both small cards and modal) ──────
 
 function _buildLineDataset(label, color, data, fractionRemoved) {
     return {
@@ -158,6 +206,130 @@ function _buildLineDataset(label, color, data, fractionRemoved) {
         tension: 0.1,
     };
 }
+
+function _curveChartConfig(payload, metric, strategies, fractionRemoved) {
+    var datasets = strategies.map(function (s) {
+        return _buildLineDataset(
+            _labelOf(payload, s),
+            _colorOf(s),
+            payload.strategies[s]["curve_" + metric],
+            fractionRemoved
+        );
+    });
+    return {
+        type: "line",
+        data: { datasets: datasets },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        title: function (items) {
+                            return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
+                        },
+                        label: function (ctx) {
+                            return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: "linear", min: 0, max: 1,
+                    title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
+                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                },
+                y: {
+                    min: 0,
+                    title: { display: true, text: "S(f)", font: { size: 12 } },
+                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                },
+            },
+        },
+    };
+}
+
+function _modularChartConfig(curves, fractionRemoved) {
+    return {
+        type: "line",
+        data: {
+            datasets: [
+                _buildLineDataset("intra-community", "#3b82f6", curves.intra, fractionRemoved),
+                _buildLineDataset("inter-community", "#ef4444", curves.inter, fractionRemoved),
+            ],
+        },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        title: function (items) {
+                            return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: "linear", min: 0, max: 1,
+                    title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
+                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                },
+                y: {
+                    min: 0,
+                    title: { display: true, text: "Fraction of edges surviving", font: { size: 12 } },
+                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                },
+            },
+        },
+    };
+}
+
+// ── Modal expansion of charts ─────────────────────────────────────────────────
+
+function _attachExpandButton(card, title, configBuilder) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "rb-expand-btn";
+    btn.title = "Expand chart";
+    btn.setAttribute("aria-label", "Expand chart");
+    btn.innerHTML = '<i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>';
+    btn.addEventListener("click", function () { _openChartModal(title, configBuilder); });
+    card.appendChild(btn);
+}
+
+function _openChartModal(title, configBuilder) {
+    if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+    document.getElementById("rb-chart-modal-title").textContent = title;
+    var canvas = document.getElementById("rb-chart-modal-canvas");
+    // Build a fresh config each time so the modal chart is fully independent of
+    // the small card chart (no shared dataset arrays).
+    _modalChart = new Chart(canvas, configBuilder());
+    var modalEl = document.getElementById("rb-chart-modal");
+    if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+function _closeChartModal() {
+    var modalEl = document.getElementById("rb-chart-modal");
+    var inst = window.bootstrap && bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+}
+
+// Free the modal chart instance once the modal finishes its hide animation.
+document.addEventListener("DOMContentLoaded", function () {
+    var modalEl = document.getElementById("rb-chart-modal");
+    if (modalEl) {
+        modalEl.addEventListener("hidden.bs.modal", function () {
+            if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+        });
+    }
+});
+
+// ── Curve charts (one per metric) ───────────────────────────────────────────
 
 function _renderCurves(payload) {
     var container = document.getElementById("rb-curves");
@@ -177,7 +349,8 @@ function _renderCurves(payload) {
         var card = document.createElement("div");
         card.className = "rb-chart-card";
         var title = document.createElement("h5");
-        title.textContent = "S(f) — " + _METRIC_LABEL[m];
+        var titleText = "S(f) — " + _METRIC_LABEL[m];
+        title.textContent = titleText;
         card.appendChild(title);
         var wrap = document.createElement("div");
         wrap.className = "rb-chart-canvas";
@@ -186,45 +359,9 @@ function _renderCurves(payload) {
         card.appendChild(wrap);
         container.appendChild(card);
 
-        var datasets = strategies.map(function (s) {
-            return _buildLineDataset(_STRATEGY_LABEL[s], _STRATEGY_COLOR[s],
-                                     payload.strategies[s]["curve_" + m], fractionRemoved);
-        });
-
-        new Chart(canvas, {
-            type: "line",
-            data: { datasets: datasets },
-            options: {
-                animation: false, responsive: true, maintainAspectRatio: false,
-                interaction: { mode: "index", intersect: false },
-                plugins: {
-                    legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
-                    tooltip: {
-                        callbacks: {
-                            title: function (items) {
-                                var f = items[0].parsed.x;
-                                return "Removed: " + (f * 100).toFixed(1) + "%";
-                            },
-                            label: function (ctx) {
-                                return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
-                            },
-                        },
-                    },
-                },
-                scales: {
-                    x: {
-                        type: "linear", min: 0, max: 1,
-                        title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
-                        grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                    },
-                    y: {
-                        min: 0,
-                        title: { display: true, text: "S(f)", font: { size: 12 } },
-                        grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                    },
-                },
-            },
-        });
+        var buildConfig = function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); };
+        new Chart(canvas, buildConfig());
+        _attachExpandButton(card, titleText, buildConfig);
     });
 }
 
@@ -269,7 +406,7 @@ function _renderModular(payload) {
             var card = document.createElement("div");
             card.className = "rb-chart-card";
             var title = document.createElement("h5");
-            title.innerHTML = _STRATEGY_LABEL[s] + " <span class=\"text-muted small\">(" + strategy_label(p) + ")</span>";
+            title.innerHTML = _labelOf(payload, s) + " <span class=\"text-muted small\">(" + strategy_label(p) + ")</span>";
             card.appendChild(title);
             var wrap = document.createElement("div");
             wrap.className = "rb-chart-canvas";
@@ -278,41 +415,10 @@ function _renderModular(payload) {
             card.appendChild(wrap);
             grid.appendChild(card);
 
-            new Chart(canvas, {
-                type: "line",
-                data: {
-                    datasets: [
-                        _buildLineDataset("intra-community", "#3b82f6", curves.intra, fractionRemoved),
-                        _buildLineDataset("inter-community", "#ef4444", curves.inter, fractionRemoved),
-                    ],
-                },
-                options: {
-                    animation: false, responsive: true, maintainAspectRatio: false,
-                    interaction: { mode: "index", intersect: false },
-                    plugins: {
-                        legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
-                        tooltip: {
-                            callbacks: {
-                                title: function (items) {
-                                    return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
-                                },
-                            },
-                        },
-                    },
-                    scales: {
-                        x: {
-                            type: "linear", min: 0, max: 1,
-                            title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
-                            grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                        },
-                        y: {
-                            min: 0,
-                            title: { display: true, text: "Fraction of edges surviving", font: { size: 12 } },
-                            grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                        },
-                    },
-                },
-            });
+            var buildConfig = function () { return _modularChartConfig(curves, fractionRemoved); };
+            new Chart(canvas, buildConfig());
+            // Plain-text title (HTML in the card heading; modal needs a string).
+            _attachExpandButton(card, _labelOf(payload, s) + " (" + strategy_label(p) + ")", buildConfig);
         });
     });
 }
@@ -337,6 +443,8 @@ function _load(year) {
 function _switch_year(year) {
     if (year === _current_year || _loading) return;
     _loading = true;
+    // Close any open modal — its chart is built from the previous year's data.
+    _closeChartModal();
     _load(year).then(function (payload) {
         _current_year = year;
         _render(payload);

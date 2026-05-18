@@ -706,11 +706,13 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,hits_authority")
 
     def test_bridging_basis_dropdown_rewrites_to_parenthesised_form(self) -> None:
+        # The bridging-basis dropdown is shared between the BRIDGING measure and
+        # the bridging robustness attack — both pick it up under the same field name.
         post = FakePost(
             {
                 "robustness": "1",
                 "robustness_strategies": ["pagerank", "bridging"],
-                "robustness_bridging_basis": "louvain",
+                "bridging_basis": "LOUVAIN",
             }
         )
         args = _build_args("structural_analysis", post)
@@ -718,17 +720,41 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         self.assertEqual(args[idx + 1], "pagerank,bridging(louvain)")
 
     def test_bridging_basis_blank_leaves_bare_bridging(self) -> None:
-        # Empty dropdown value means "use the default (leiden)" — emit bare bridging.
+        # Empty dropdown value means "use the backend default" — emit bare bridging
+        # so the runner picks leiden_directed.
         post = FakePost(
             {
                 "robustness": "1",
                 "robustness_strategies": ["bridging"],
-                "robustness_bridging_basis": "",
+                "bridging_basis": "",
             }
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "bridging")
+
+    def test_bridging_basis_also_rewrites_measures(self) -> None:
+        # Shared field — BRIDGING in measures gets the same basis appended.
+        post = FakePost(
+            {
+                "measures": ["PAGERANK", "BRIDGING"],
+                "bridging_basis": "LOUVAIN",
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--measures")
+        self.assertEqual(args[idx + 1], "PAGERANK,BRIDGING(LOUVAIN)")
+
+    def test_measures_without_bridging_unchanged_by_basis(self) -> None:
+        post = FakePost(
+            {
+                "measures": ["PAGERANK", "BETWEENNESS"],
+                "bridging_basis": "LOUVAIN",
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--measures")
+        self.assertEqual(args[idx + 1], "PAGERANK,BETWEENNESS")
 
     def test_no_strategies_checked_omits_flag(self) -> None:
         # When no strategy checkbox is ticked, the flag is absent altogether — the

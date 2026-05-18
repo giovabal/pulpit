@@ -6,14 +6,32 @@
 <style>
   .rb-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
   @media (max-width: 1100px) { .rb-grid { grid-template-columns: 1fr; } }
-  .rb-chart-card { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: 1rem; background: var(--bs-body-bg, #fff); }
-  .rb-chart-card h5 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; }
+  .rb-chart-card { position: relative; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: 1rem; background: var(--bs-body-bg, #fff); }
+  .rb-chart-card h5 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; padding-right: 2rem; }
   .rb-chart-card .rb-chart-canvas { position: relative; height: 280px; }
   .rb-summary-table th, .rb-summary-table td { font-variant-numeric: tabular-nums; }
   .rb-z-significant { font-weight: 600; }
   .rb-z-pos { color: #198754; }
   .rb-z-neg { color: #dc3545; }
   .rb-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
+  .rb-expand-btn {
+    position: absolute; top: .5rem; right: .5rem;
+    background: transparent; border: 1px solid transparent;
+    color: var(--bs-secondary-color, #6c757d);
+    padding: .15rem .35rem; border-radius: .25rem;
+    font-size: .9rem; line-height: 1;
+    opacity: .35;
+    transition: opacity .15s, background .15s, border-color .15s;
+    cursor: pointer;
+  }
+  .rb-expand-btn:hover, .rb-expand-btn:focus-visible {
+    opacity: 1;
+    background: var(--bs-light, #f8f9fa);
+    border-color: var(--bs-border-color, #dee2e6);
+    outline: none;
+  }
+  #rb-chart-modal .modal-body { padding: 1rem 1.25rem; }
+  #rb-chart-modal-canvas-wrap { position: relative; height: 70vh; }
 </style>
 {% endblock %}
 
@@ -54,6 +72,22 @@
     to decouple sub-ecosystems before eroding individual community cohesion.
   </p>
   <div id="rb-modular-tabs"></div>
+</div>
+
+<div class="modal fade" id="rb-chart-modal" tabindex="-1" aria-labelledby="rb-chart-modal-title" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="rb-chart-modal-title"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="rb-chart-modal-canvas-wrap">
+          <canvas id="rb-chart-modal-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="js/robustness_table.js"></script>

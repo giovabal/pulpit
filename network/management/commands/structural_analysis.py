@@ -667,7 +667,8 @@ class Command(BaseCommand):
                 "in_strength_dyn, out_strength_dyn, pagerank_dyn, katz_dyn, hits_hub_dyn, "
                 "hits_authority_dyn, betweenness_dyn. Use ALL for every strategy. "
                 "Default: random,in_strength,out_strength,pagerank,betweenness. "
-                "Bridging defaults to leiden as the community basis; bridging(louvain) etc. picks a different one. "
+                "Bridging defaults to leiden_directed as the community basis (directional brokerage); "
+                "bridging(louvain) etc. picks a different one. "
                 "At least one strategy must be selected."
             ),
         )

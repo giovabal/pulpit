@@ -196,7 +196,7 @@ SA_ROBUSTNESS_ALPHA=0.05
 #   BURT_CONSTRAINT, BRIDGING[(<community-strategy>)], SPREADING, and the
 #   dynamic variants IN_STRENGTH_DYN, OUT_STRENGTH_DYN, PAGERANK_DYN,
 #   KATZ_DYN, HITS_HUB_DYN, HITS_AUTHORITY_DYN, BETWEENNESS_DYN.
-# Bridging defaults to LEIDEN; bridging(LOUVAIN) etc. picks a different one
+# Bridging defaults to LEIDEN_DIRECTED (directional brokerage); bridging(LOUVAIN) etc. picks a different one
 # (the chosen community strategy must also be in SA_COMMUNITY_STRATEGIES).
 SA_ROBUSTNESS_STRATEGIES=RANDOM,IN_STRENGTH,OUT_STRENGTH,PAGERANK,BETWEENNESS
 

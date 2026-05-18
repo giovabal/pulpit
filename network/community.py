@@ -51,6 +51,26 @@ COMMUNITY_ALGORITHMS = {
 }
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
+# Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
+# webapp_engine/map/js/labels.js so the same display text shows up in browser
+# pages and in the server-side Operations panel.
+COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
+    "ORGANIZATION": "Organization",
+    "LEIDEN": "Leiden",
+    "LEIDEN_DIRECTED": "Leiden directed",
+    "LEIDEN_CPM_COARSE": "Leiden CPM coarse",
+    "LEIDEN_CPM_FINE": "Leiden CPM fine",
+    "LOUVAIN": "Louvain",
+    "LABELPROPAGATION": "Label propagation",
+    "KCORE": "K-core",
+    "INFOMAP": "Infomap",
+    "INFOMAP_MEMORY": "Memory Infomap",
+    "MCL": "MCL",
+    "WALKTRAP": "Walktrap",
+    "WEAKCC": "Weakly connected components",
+    "STRONGCC": "Strongly connected components",
+}
+
 type CommunityMap = dict[str, int]
 type CommunityPalette = dict[int, ColorTuple]
 

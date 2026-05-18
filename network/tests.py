@@ -2819,15 +2819,19 @@ class RemovalOrderTests(TestCase):
         order = removal_order(g, "bridging(louvain)", partitions={"louvain": partition})
         self.assertEqual(sorted(order), sorted(g.nodes()))
 
-    def test_bridging_bare_defaults_to_leiden(self) -> None:
+    def test_bridging_bare_defaults_to_leiden_directed(self) -> None:
         from network.robustness import removal_order
 
         g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
         partition = {n: (n % 3) for n in g.nodes()}
-        order = removal_order(g, "bridging", partitions={"leiden": partition})
+        # Bare "bridging" must look up "leiden_directed" — not "leiden".
+        order = removal_order(g, "bridging", partitions={"leiden_directed": partition})
         self.assertEqual(sorted(order), sorted(g.nodes()))
+        # Sanity: with only "leiden" available, bare "bridging" must error.
+        with self.assertRaises(ValueError):
+            removal_order(g, "bridging", partitions={"leiden": partition})
 
     def test_bridging_missing_partition_raises(self) -> None:
         from network.robustness import removal_order
@@ -3326,10 +3330,15 @@ class RobustnessRunnerTests(TestCase):
 
         g = self._toy_graph(n=10)
         partition = {n: (n % 2) for n in g.nodes()}
-        out = run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging"]))
-        # The payload key encodes the resolved bridging basis.
-        self.assertIn("bridging(leiden)", out["strategies"])
-        self.assertEqual(out["strategies"]["bridging(leiden)"]["label"], "Bridging centrality (leiden)")
+        # Bare "bridging" defaults to leiden_directed.
+        out = run_robustness(
+            g, partitions={"leiden_directed": partition}, config=self._fast_cfg(strategies=["bridging"])
+        )
+        self.assertIn("bridging(leiden_directed)", out["strategies"])
+        self.assertEqual(
+            out["strategies"]["bridging(leiden_directed)"]["label"],
+            "Bridging centrality (leiden_directed)",
+        )
 
     # -- reproducibility ------------------------------------------------------
 
