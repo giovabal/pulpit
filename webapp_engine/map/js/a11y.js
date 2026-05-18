@@ -72,9 +72,15 @@
     canvas.setAttribute("aria-label", summary);
     if (!Array.isArray(opts.rows) || opts.rows.length === 0) return null;
     var table = _buildSrTable(opts);
-    table.hidden = !opts.visible;
+    // The table lives inside a wrapper so that, once revealed by the toggle,
+    // overflow + max-height contain it instead of letting hundreds of rows of a
+    // wide table spill out and overlap the surrounding chart cards.
+    var wrap = document.createElement("div");
+    wrap.className = "sr-chart-table-wrap sr-only";
+    wrap.hidden = !opts.visible;
+    wrap.appendChild(table);
     if (canvas.parentNode) {
-      canvas.parentNode.insertBefore(table, canvas.nextSibling);
+      canvas.parentNode.insertBefore(wrap, canvas.nextSibling);
     }
     if (opts.toggle) {
       var btn = document.createElement("button");
@@ -83,9 +89,9 @@
       btn.textContent = "Show data table";
       btn.setAttribute("aria-expanded", "false");
       btn.addEventListener("click", function () {
-        var nowHidden = !table.hidden;
-        table.hidden = nowHidden;
-        table.classList.toggle("sr-only", nowHidden);
+        var nowHidden = !wrap.hidden;
+        wrap.hidden = nowHidden;
+        wrap.classList.toggle("sr-only", nowHidden);
         btn.setAttribute("aria-expanded", nowHidden ? "false" : "true");
         btn.textContent = nowHidden ? "Show data table" : "Hide data table";
       });
