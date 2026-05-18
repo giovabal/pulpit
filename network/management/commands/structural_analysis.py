@@ -1459,6 +1459,8 @@ class Command(BaseCommand):
                 vertical_layout=opts.vertical_layout,
                 extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
                 extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
+                node_count=len(graph_data.get("nodes", [])),
+                edge_count=len(graph_data.get("edges", [])),
             )
             exporter.write_robots_txt(root_target, opts.seo)
 

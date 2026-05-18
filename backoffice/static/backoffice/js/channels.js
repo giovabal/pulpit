@@ -65,9 +65,11 @@
             if (field === _sortField) {
                 indicator.textContent = _sortDir === "asc" ? " ▲" : " ▼";
                 th.classList.add("bo-th--sorted");
+                th.setAttribute("aria-sort", _sortDir === "asc" ? "ascending" : "descending");
             } else {
                 indicator.textContent = " ⇅";
                 th.classList.remove("bo-th--sorted");
+                th.setAttribute("aria-sort", "none");
             }
         });
     }
@@ -82,6 +84,12 @@
         _offset = 0;
         _updateSortHeaders();
         loadChannels("push");
+        if (window.PulpitA11y) {
+            var th = document.querySelector('[id^="ch-th-"].bo-th--sorted');
+            var labelEl = th && (th.querySelector(".bo-th-sort-btn") || th);
+            var label = labelEl ? labelEl.textContent.replace(/[⇅▲▼]/g, "").trim() : field;
+            window.PulpitA11y.announce("Sorted by " + label + ", " + (_sortDir === "asc" ? "ascending" : "descending"));
+        }
     }
 
     /* ── URL state ──────────────────────────────────────────────────────── */

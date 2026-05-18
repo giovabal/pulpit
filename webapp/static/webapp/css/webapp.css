@@ -71,7 +71,7 @@
   --bg:            #0f0f12;
   --border:        #2a2a31;
   --text:          #e7e5e4;
-  --muted:         #a8a29e;
+  --muted:         #c7c1bb;
   --shadow-sm:     0 1px 2px rgba(0,0,0,.4);
   --shadow:        0 4px 12px rgba(0,0,0,.55);
   --card-border:   #2a2a31;
@@ -79,14 +79,14 @@
   --chart-line:   #818cf8;
   --chart-fill:   rgba(129,140,248,.14);
   --chart-grid:   #2a2a31;
-  --chart-label:  #a8a29e;
+  --chart-label:  #c7c1bb;
   /* semantic — lift backgrounds toward dark, keep accents readable */
   --danger:         #f87171;
   --danger-hover:   #fca5a5;
   --danger-bg:      #2a1313;
   --danger-bg-soft: #3a1818;
   --danger-border:  #5a1f1f;
-  --danger-accent:  #b91c1c;
+  --danger-accent:  #fca5a5;
   --warning:        #fbbf24;
   --warning-hover:  #fcd34d;
   --warning-bg:     #2a1f0a;
@@ -108,7 +108,7 @@
   --bs-link-hover-color-rgb: 165, 180, 252;
   --bs-body-color: #e7e5e4;
   --bs-body-bg: #0f0f12;
-  --bs-secondary-color: #a8a29e;
+  --bs-secondary-color: #c7c1bb;
   --bs-border-color: #2a2a31;
 }
 
@@ -778,7 +778,7 @@ body {
   border-radius: 50%;
   transition: color .12s, background .12s;
 }
-.panel-info-btn:hover, .panel-info-btn:focus { color: var(--text); background: var(--hover); outline: none; }
+.panel-info-btn:hover, .panel-info-btn:focus { color: var(--text); background: var(--hover); }
 
 .stats-panel-body {
   position: relative;
@@ -1090,7 +1090,6 @@ body {
 .search-input {
   flex: 1;
   border: none;
-  outline: none;
   background: transparent;
   padding: .625rem 0;
   font-size: .875rem;
@@ -1265,7 +1264,6 @@ body {
 .channel-filter-input {
   flex: 1;
   border: none;
-  outline: none;
   background: transparent;
   padding: .5rem .5rem .5rem 0;
   font-size: .8rem;
@@ -1717,7 +1715,7 @@ body {
   background: var(--surface);
   color: var(--text);
 }
-.vacancy-form-input:focus { outline: none; border-color: var(--danger); }
+.vacancy-form-input:focus { border-color: var(--danger); }
 /* .vacancy-form-btn was a bespoke red button — now uses ``.btn .btn-danger .btn-sm``
    from the global Bootstrap override above. */
 .vacancy-form-check { gap: .35rem; cursor: pointer; }

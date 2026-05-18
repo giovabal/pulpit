@@ -115,6 +115,8 @@ def _patch_html_file(
     vertical_layout: bool = False,
     extra_layouts: "list[str] | None" = None,
     extra_layouts_3d: "list[str] | None" = None,
+    node_count: int = 0,
+    edge_count: int = 0,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
     if not os.path.exists(path):
@@ -138,6 +140,9 @@ def _patch_html_file(
     app_version = getattr(settings, "APP_VERSION", "")
     if repo_url:
         content = content.replace("https://github.com/giovabal/pulpit", repo_url)
+    # Accessibility: replace placeholders in the screen-reader-only network summary.
+    content = content.replace("__NODE_COUNT__", f"{node_count:,}")
+    content = content.replace("__EDGE_COUNT__", f"{edge_count:,}")
     vl_value = "true" if vertical_layout else "false"
     layouts_json = json.dumps(extra_layouts or [])
     layouts_3d_json = json.dumps(extra_layouts_3d or [])
@@ -165,10 +170,19 @@ def apply_robots_to_graph_html(
     vertical_layout: bool = False,
     extra_layouts: "list[str] | None" = None,
     extra_layouts_3d: "list[str] | None" = None,
+    node_count: int = 0,
+    edge_count: int = 0,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in the static graph HTML files after they are copied."""
     _patch_html_file(
-        os.path.join(root_target, "graph.html"), seo, project_title, vertical_layout, extra_layouts, extra_layouts_3d
+        os.path.join(root_target, "graph.html"),
+        seo,
+        project_title,
+        vertical_layout,
+        extra_layouts,
+        extra_layouts_3d,
+        node_count=node_count,
+        edge_count=edge_count,
     )
     if include_3d:
         _patch_html_file(
@@ -178,6 +192,8 @@ def apply_robots_to_graph_html(
             vertical_layout,
             extra_layouts,
             extra_layouts_3d,
+            node_count=node_count,
+            edge_count=edge_count,
         )
 
 

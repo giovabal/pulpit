@@ -1,0 +1,12 @@
+{
+  "name": "pulpit-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev tooling for Pulpit. Currently: html-validate for the static export bundle and any rendered exports/.",
+  "scripts": {
+    "lint:html": "html-validate --config .htmlvalidate.json 'webapp_engine/map/*.html'"
+  },
+  "devDependencies": {
+    "html-validate": "^9.0.0"
+  }
+}

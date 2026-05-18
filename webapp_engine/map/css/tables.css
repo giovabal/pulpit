@@ -51,7 +51,7 @@
   --bg:            #0f0f12;
   --surface:       #1a1a1f;
   --text:          #e7e5e4;
-  --muted:         #a8a29e;
+  --muted:         #c7c1bb;
   --border:        #2a2a31;
   --shadow-sm:     0 1px 2px rgba(0,0,0,.4);
   --shadow:        0 4px 12px rgba(0,0,0,.55);
@@ -63,7 +63,7 @@
   --bs-link-hover-color-rgb: 165, 180, 252;
   --bs-body-color: #e7e5e4;
   --bs-body-bg: #0f0f12;
-  --bs-secondary-color: #a8a29e;
+  --bs-secondary-color: #c7c1bb;
   --bs-border-color: #2a2a31;
 }
 
@@ -228,6 +228,20 @@ td.number, th.number {
 th a { text-decoration: none; color: inherit; }
 th[data-sort-direction="asc"] a::after { content: " ↑"; font-size: 0.75em; opacity: 0.6; }
 th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: 0.75em; opacity: 0.6; }
+th .th-sort-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  text-align: inherit;
+  width: 100%;
+}
+th[data-sort-direction="asc"] .th-sort-btn::after { content: " ↑"; font-size: 0.75em; opacity: 0.6; }
+th[data-sort-direction="desc"] .th-sort-btn::after { content: " ↓"; font-size: 0.75em; opacity: 0.6; }
 .community-channels summary { cursor: pointer; user-select: none; }
 .community-channels summary::-webkit-details-marker { color: var(--muted); }
 .community-channels-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; }

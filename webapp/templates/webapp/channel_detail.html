@@ -134,12 +134,12 @@
   </div>
   <div class="vacancy-analysis-body">
     <form class="vacancy-analysis-form" id="vacancy-analysis-form" autocomplete="off">
-      <label class="vacancy-form-label">Months before <input class="vacancy-form-input" type="number" name="months_before" value="12" min="1" max="240"></label>
-      <label class="vacancy-form-label">Months after <input class="vacancy-form-input" type="number" name="months_after" value="24" min="1" max="240"></label>
-      <label class="vacancy-form-label vacancy-form-check"><input type="checkbox" name="only_after_vacancy" checked> Only after vacancy</label>
+      <label class="vacancy-form-label" for="vacancy-months-before">Months before <input id="vacancy-months-before" class="vacancy-form-input" type="number" name="months_before" value="12" min="1" max="240"></label>
+      <label class="vacancy-form-label" for="vacancy-months-after">Months after <input id="vacancy-months-after" class="vacancy-form-input" type="number" name="months_after" value="24" min="1" max="240"></label>
+      <label class="vacancy-form-label vacancy-form-check" for="vacancy-only-after"><input id="vacancy-only-after" type="checkbox" name="only_after_vacancy" checked> Only after vacancy</label>
       <button class="btn btn-danger btn-sm" type="submit">Analyse</button>
     </form>
-    <div id="vacancy-analysis-results"></div>
+    <div id="vacancy-analysis-results" aria-live="polite" aria-busy="false"></div>
   </div>
 </div>
 <script>
@@ -174,14 +174,15 @@
     });
 
     var thead = '<tr>' + COLS.map(function(col) {
-      var arrow = col.key === _sortCol ? (_sortDir === 1 ? ' ↑' : ' ↓') : ' <span class="vac-sort-idle">↕</span>';
-      return '<th class="vac-sort-th ' + col.cls + '" data-col="' + col.key + '">' + col.label + arrow + '</th>';
+      var arrow = col.key === _sortCol ? (_sortDir === 1 ? ' ↑' : ' ↓') : ' <span class="vac-sort-idle" aria-hidden="true">↕</span>';
+      var sortState = col.key === _sortCol ? (_sortDir === 1 ? 'ascending' : 'descending') : 'none';
+      return '<th scope="col" aria-sort="' + sortState + '" class="vac-sort-th ' + col.cls + '" data-col="' + col.key + '"><button type="button" class="vac-sort-btn">' + col.label + arrow + '</button></th>';
     }).join('') + '</tr>';
 
     var tbody = sorted.map(function(c) {
       var dot = c.org_color ? '<span class="org-dot" style="background:' + c.org_color + ';" aria-hidden="true"></span>' : '';
       return '<tr>' +
-        '<td>' + dot + '<a href="' + c.url + '">' + c.title + '</a></td>' +
+        '<th scope="row">' + dot + '<a href="' + c.url + '">' + c.title + '</a></th>' +
         '<td>' + (c.first_activity || '—') + '</td>' +
         '<td class="text-end">' + fmtScore(c.score_b) + '</td>' +
         '<td class="text-end">' + fmtScore(c.score_c) + '</td>' +
@@ -192,13 +193,19 @@
 
     var tableEl = document.createElement('table');
     tableEl.className = 'stats-table vacancy-candidates-table';
-    tableEl.innerHTML = '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody>';
+    tableEl.innerHTML = '<caption class="sr-only">Replacement candidates for ' + (document.querySelector('.vacancy-impact-title') ? 'this vacancy' : 'the vacancy') + ', sorted by ' + _sortCol + '.</caption><thead>' + thead + '</thead><tbody>' + tbody + '</tbody>';
     tableEl.querySelectorAll('th[data-col]').forEach(function(th) {
-      th.addEventListener('click', function() {
-        var col = this.dataset.col;
+      var btn = th.querySelector('.vac-sort-btn') || th;
+      btn.addEventListener('click', function() {
+        var col = th.dataset.col;
         if (_sortCol === col) { _sortDir = -_sortDir; }
         else { _sortCol = col; _sortDir = COLS.find(function(c){return c.key===col;}).dir; }
         renderTable();
+        if (window.PulpitA11y) {
+          var colMeta = COLS.find(function(c){return c.key===_sortCol;});
+          var name = colMeta ? colMeta.label : _sortCol;
+          PulpitA11y.announce('Sorted by ' + name + ', ' + (_sortDir === 1 ? 'ascending' : 'descending'));
+        }
       });
     });
 
@@ -230,14 +237,22 @@
     var url = API + '?months_before=' + encodeURIComponent(fd.get('months_before')) +
                     '&months_after='  + encodeURIComponent(fd.get('months_after')) +
                     '&only_after_vacancy=' + (fd.get('only_after_vacancy') ? '1' : '0');
+    results.setAttribute('aria-busy', 'true');
     results.innerHTML = '<p class="vacancy-empty">Loading…</p>';
     fetch(url)
       .then(function(r) {
         if (!r.ok) return Promise.reject(new Error(r.status));
         return r.json();
       })
-      .then(render)
-      .catch(function() { results.innerHTML = '<p class="vacancy-empty">Failed to load results.</p>'; });
+      .then(function(data) {
+        render(data);
+        results.setAttribute('aria-busy', 'false');
+      })
+      .catch(function() {
+        results.innerHTML = '<p class="vacancy-empty">Failed to load results.</p>';
+        results.setAttribute('aria-busy', 'false');
+        if (window.PulpitA11y) PulpitA11y.announce('Failed to load vacancy analysis results.', 'assertive');
+      });
   }
 
   form.addEventListener('submit', function(e) { e.preventDefault(); run(); });

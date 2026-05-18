@@ -7,7 +7,7 @@
 </div>
 
 <form class="bo-add-form bo-add-form--inline" id="st-add-form" autocomplete="off">
-  <input class="bo-input bo-input--wide" id="st-input" name="word" placeholder="New search term… (press Enter to add)" required>
+  <input class="bo-input bo-input--wide" id="st-input" name="word" placeholder="New search term… (press Enter to add)" required aria-label="New search term">
   <button type="submit" class="bo-btn">Add</button>
 </form>
 
@@ -17,11 +17,12 @@
 </div>
 <div class="table-responsive">
   <table class="bo-table" id="st-table">
+    <caption class="sr-only">Search terms</caption>
     <thead>
       <tr>
-        <th>Term</th>
-        <th>Last check</th>
-        <th></th>
+        <th scope="col">Term</th>
+        <th scope="col">Last check</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody id="st-tbody">

@@ -306,6 +306,8 @@ function _openChartModal(title, configBuilder) {
     if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
     document.getElementById("rb-chart-modal-title").textContent = title;
     var canvas = document.getElementById("rb-chart-modal-canvas");
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", title);
     // Build a fresh config each time so the modal chart is fully independent of
     // the small card chart (no shared dataset arrays).
     _modalChart = new Chart(canvas, configBuilder());
@@ -360,6 +362,24 @@ function _renderCurves(payload) {
         container.appendChild(card);
 
         var buildConfig = function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); };
+        if (window.PulpitA11y) {
+            var rows = fractionRemoved.map(function (f, i) {
+                var row = [f.toFixed(3)];
+                strategies.forEach(function (s) {
+                    var sData = payload.strategies[s];
+                    var key = "curve_" + m;
+                    row.push(sData && sData[key] ? sData[key][i] : null);
+                });
+                return row;
+            });
+            window.PulpitA11y.accessibleChart(canvas, {
+                label: titleText,
+                summary: strategies.length + " strategies, " + fractionRemoved.length + " removal steps",
+                columns: ["Fraction removed"].concat(strategies.map(function (s) { return _labelOf(payload, s); })),
+                rows: rows,
+                toggle: true,
+            });
+        }
         new Chart(canvas, buildConfig());
         _attachExpandButton(card, titleText, buildConfig);
     });
@@ -416,9 +436,26 @@ function _renderModular(payload) {
             grid.appendChild(card);
 
             var buildConfig = function () { return _modularChartConfig(curves, fractionRemoved); };
+            var modularTitle = _labelOf(payload, s) + " (" + strategy_label(p) + ")";
+            if (window.PulpitA11y) {
+                var rows = fractionRemoved.map(function (f, i) {
+                    return [
+                        f.toFixed(3),
+                        curves.intra ? curves.intra[i] : null,
+                        curves.inter ? curves.inter[i] : null,
+                    ];
+                });
+                window.PulpitA11y.accessibleChart(canvas, {
+                    label: "Modular robustness: " + modularTitle,
+                    summary: "Intra- vs inter-community edge survival across " + fractionRemoved.length + " removal steps",
+                    columns: ["Fraction removed", "Intra-community", "Inter-community"],
+                    rows: rows,
+                    toggle: true,
+                });
+            }
             new Chart(canvas, buildConfig());
             // Plain-text title (HTML in the card heading; modal needs a string).
-            _attachExpandButton(card, _labelOf(payload, s) + " (" + strategy_label(p) + ")", buildConfig);
+            _attachExpandButton(card, modularTitle, buildConfig);
         });
     });
 }

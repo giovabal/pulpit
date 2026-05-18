@@ -252,6 +252,8 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 
 **CLI access.** Every operation is also available as a management command for scripting, scheduling, and automation. See the [Workflow](docs/workflow.md#advanced-running-from-the-command-line) documentation for the full command reference.
 
+**Accessibility.** Even though Pulpit is a data-intensive interface, we care about accessibility, and most of the interface tries to be friendly in this regard: keyboard-reachable controls, visible focus indicators, screen-reader announcements for asynchronous updates, hidden data-table companions for charts, labelled landmarks, and a skip-to-content link on every page.
+
 ---
 
 ## Documentation

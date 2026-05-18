@@ -49,15 +49,16 @@
 
 <p class="text-muted small mb-3" id="rb-summary">Loading…</p>
 
-<h4 class="mt-4 mb-2">Summary</h4>
+<h3 class="mt-4 mb-2">Summary</h3>
 <div class="table-responsive export-wide mb-4">
   <table class="table table-sm rb-summary-table" id="rb-summary-table" aria-label="Robustness summary">
+    <caption class="sr-only">Robustness summary: R-index, critical fraction and z-scores per attack strategy.</caption>
     <thead></thead>
     <tbody></tbody>
   </table>
 </div>
 
-<h4 class="mt-4 mb-2">Residual size <code>S(f)</code> under each attack strategy</h4>
+<h3 class="mt-4 mb-2">Residual size <code>S(f)</code> under each attack strategy</h3>
 <p class="text-muted small mb-3">
   The shaded band shows the mean ± standard deviation of the same curves on the weight-rewiring null model.
   A curve below the band indicates a strategy that fragments the network faster than chance.
@@ -65,7 +66,7 @@
 <div class="rb-grid export-wide mb-4" id="rb-curves"></div>
 
 <div id="rb-modular-section" class="export-wide d-none">
-  <h4 class="mt-4 mb-2">Modular robustness</h4>
+  <h3 class="mt-4 mb-2">Modular robustness</h3>
   <p class="text-muted small mb-3">
     Fraction of intra-community vs inter-community edges surviving the attack, normalised to
     the q = 0 baseline.  Strategies that strip inter-community ties first (red below blue) tend

@@ -27,8 +27,8 @@
         </div>
       </div>
       <div class="ops-card-actions">
-        <span class="ops-badge ops-badge--{{ task.status }}" id="badge-{{ task.name }}">
-          {% if task.status == "running" %}<span class="dot"></span>{% endif %}
+        <span class="ops-badge ops-badge--{{ task.status }}" id="badge-{{ task.name }}" aria-live="polite" aria-atomic="true" aria-label="Task status: {{ task.status }}">
+          {% if task.status == "running" %}<span class="dot" aria-hidden="true"></span>{% endif %}
           {{ task.status }}
         </span>
         <button class="btn btn-sm btn-outline-secondary"
@@ -952,7 +952,7 @@
           {% if task.end_time %}data-end="{{ task.end_time }}"{% endif %}
           {% if task.exit_code is not None %}data-exit="{{ task.exit_code }}"{% endif %}></span>
       </div>
-      <pre class="ops-log" id="log-{{ task.name }}"></pre>
+      <pre class="ops-log" id="log-{{ task.name }}" role="log" aria-live="polite" aria-relevant="additions" aria-label="Task output for {{ task.title }}" tabindex="0"></pre>
     </div>
 
     {% if task.args and task.status != "running" %}
@@ -1042,8 +1042,15 @@
     }
 
     _setBadge(status) {
+      const prev = (this.badge.dataset.status || '').trim();
       this.badge.className = 'ops-badge ops-badge--' + status;
-      this.badge.innerHTML = (status === 'running' ? '<span class="dot"></span> ' : '') + status;
+      this.badge.innerHTML = (status === 'running' ? '<span class="dot" aria-hidden="true"></span> ' : '') + status;
+      this.badge.setAttribute('aria-label', 'Task status: ' + status);
+      this.badge.dataset.status = status;
+      if (window.PulpitA11y && prev && prev !== status) {
+        const politeness = status === 'failed' ? 'assertive' : 'polite';
+        window.PulpitA11y.announce(this.name + ' ' + status, politeness);
+      }
     }
 
     _setButtons(status) {
@@ -1243,32 +1250,42 @@
 
 (function () {
   'use strict';
+  // Toggle a dependent input + its visual wrapper, and keep aria-disabled in sync
+  // so screen readers know the field is unavailable (CSS pointer-events alone is
+  // invisible to AT).
+  function _setDependentInputEnabled(input, on) {
+    input.disabled = !on;
+    if (on) {
+      input.removeAttribute('aria-disabled');
+    } else {
+      input.setAttribute('aria-disabled', 'true');
+    }
+    var paramEl = input.closest('.ops-param');
+    if (paramEl) {
+      paramEl.classList.toggle('ops-param--disabled', !on);
+    } else {
+      var flagEl = input.closest('.ops-flag');
+      if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
+    }
+  }
+
   // Disable computation inputs whose measure/strategy is not selected.
   function syncLinkedInputs() {
     document.querySelectorAll('[data-requires-measure]').forEach(function (input) {
       var cb = document.querySelector('input[name="measures"][value="' + input.dataset.requiresMeasure + '"]');
       var on = cb ? cb.checked : false;
-      input.disabled = !on;
-      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+      _setDependentInputEnabled(input, on);
     });
     document.querySelectorAll('[data-requires-strategy]').forEach(function (input) {
       var cb = document.querySelector('input[name="community_strategies"][value="' + input.dataset.requiresStrategy + '"]');
       var on = cb ? cb.checked : false;
-      input.disabled = !on;
-      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+      _setDependentInputEnabled(input, on);
     });
     document.querySelectorAll('[data-requires-flag]').forEach(function (input) {
       var form = input.closest('form');
       var cb = form ? form.querySelector('[name="' + input.dataset.requiresFlag + '"]') : null;
       var on = cb ? cb.checked : false;
-      input.disabled = !on;
-      var paramEl = input.closest('.ops-param');
-      if (paramEl) {
-        paramEl.classList.toggle('ops-param--disabled', !on);
-      } else {
-        var flagEl = input.closest('.ops-flag');
-        if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
-      }
+      _setDependentInputEnabled(input, on);
     });
     document.querySelectorAll('[data-requires-any-flag]').forEach(function (input) {
       var form = input.closest('form');
@@ -1277,20 +1294,12 @@
         var cb = form ? form.querySelector('[name="' + name + '"]') : null;
         return !!(cb && cb.checked);
       });
-      input.disabled = !on;
-      var paramEl = input.closest('.ops-param');
-      if (paramEl) {
-        paramEl.classList.toggle('ops-param--disabled', !on);
-      } else {
-        var flagEl = input.closest('.ops-flag');
-        if (flagEl) { flagEl.classList.toggle('ops-flag--disabled', !on); }
-      }
+      _setDependentInputEnabled(input, on);
     });
     document.querySelectorAll('[data-requires-vacancy]').forEach(function (input) {
       var cb = document.querySelector('input[name="vacancy_measures"][value="' + input.dataset.requiresVacancy + '"]');
       var on = cb ? cb.checked : false;
-      input.disabled = !on;
-      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+      _setDependentInputEnabled(input, on);
     });
     // Bridging basis is shared between the BRIDGING measure and the bridging
     // robustness attack — enable the dropdown when either is checked.
@@ -1299,8 +1308,7 @@
         document.querySelector('input[name="measures"][value="BRIDGING"]:checked') ||
         document.querySelector('input[name="robustness_strategies"][value="bridging"]:checked')
       );
-      input.disabled = !on;
-      input.closest('.ops-param').classList.toggle('ops-param--disabled', !on);
+      _setDependentInputEnabled(input, on);
     });
     // CASCADE_OVERLAP also needs Spreading runs — override the disable if it is selected.
     var spreadingRunsEl = document.querySelector('[name="spreading_runs"]');

@@ -7,7 +7,7 @@
 </div>
 <p class="text-muted small mb-2" id="va-summary">Loading…</p>
 <div class="mb-4">
-  <label class="d-inline-flex align-items-center gap-2" style="font-size:.875rem;cursor:pointer;user-select:none">
+  <label class="d-inline-flex align-items-center gap-2" for="va-only-after" style="font-size:.875rem;cursor:pointer;user-select:none">
     <input type="checkbox" id="va-only-after" checked>
     <span>Only after vacancy</span>
   </label>
@@ -142,13 +142,13 @@
     });
 
     var head = "<thead><tr>" +
-      '<th>Channel</th>' +
-      '<th class="date">First active</th>' +
+      '<th scope="col">Channel</th>' +
+      '<th class="date" scope="col">First active</th>' +
       measures.map(function (m) {
-        return '<th class="number">' + esc(labels[m] || m) + "</th>";
+        return '<th class="number" scope="col">' + esc(labels[m] || m) + "</th>";
       }).join("") +
-      '<th class="number">Amplifiers</th>' +
-      '<th class="date">Last forwarded</th>' +
+      '<th class="number" scope="col">Amplifiers</th>' +
+      '<th class="date" scope="col">Last forwarded</th>' +
       "</tr></thead>";
 
     var body = "<tbody>" +
@@ -180,7 +180,10 @@
       "</tbody>";
 
     return '<div class="table-responsive">' +
-      '<table class="table table-hover table-sm sortable">' + head + body + "</table>" +
+      '<table class="table table-hover table-sm sortable">' +
+        '<caption class="sr-only">Replacement candidates for ' + esc(vac.title) +
+        ', closed ' + esc(vac.closure_date) + '.</caption>' +
+        head + body + "</table>" +
       "</div>";
   }
 

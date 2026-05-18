@@ -89,7 +89,7 @@
   font-family: var(--font-sans);
   cursor: pointer;
 }
-.bo-select:focus { outline: none; border-color: var(--accent); }
+.bo-select:focus { border-color: var(--accent); }
 .bo-select--sm { padding: .25rem .5rem; font-size: .8125rem; }
 
 .bo-count {

@@ -133,6 +133,8 @@ function _render(d) {
     var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
+    svg.setAttribute("role", "grid");
+    svg.setAttribute("aria-label", "Consensus matrix, " + n + " by " + n + " channels, " + maxCount + " partitions");
 
     var gridG = document.createElementNS(NS, "g");
     gridG.setAttribute("stroke", "#e4e4e4"); gridG.setAttribute("stroke-width", "0.5");
@@ -191,9 +193,14 @@ function _render(d) {
             var circ = document.createElementNS(NS, "circle");
             circ.setAttribute("cx", ccx); circ.setAttribute("cy", ccy); circ.setAttribute("r", cr);
             circ.setAttribute("fill", _agreementColor(cnt, maxCount)); circ.setAttribute("opacity", "0.85");
+            circ.setAttribute("role", "gridcell");
+            circ.setAttribute("tabindex", "0");
+            circ.setAttribute("aria-label", channelList[ri] + " and " + channelList[rj] + ", " + cnt + " of " + maxCount + " partitions agree");
             (function(lA, lB, c) {
                 circ.addEventListener("mouseenter", function(e) { _showTip(e, lA + " × " + lB + ": " + c + "/" + maxCount + " partitions agree"); });
                 circ.addEventListener("mousemove", _moveTip);
+                circ.addEventListener("focus", function(e) { _showTip(e, lA + " × " + lB + ": " + c + "/" + maxCount + " partitions agree"); });
+                circ.addEventListener("blur", _hideTip);
             })(channelList[ri], channelList[rj], cnt);
             circleG.appendChild(circ);
         }

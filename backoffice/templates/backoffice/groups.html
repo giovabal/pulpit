@@ -8,9 +8,9 @@
 </div>
 
 <form class="bo-add-form d-none" id="grp-add-form" autocomplete="off">
-  <input class="bo-input" name="name" placeholder="Name" required>
-  <textarea class="bo-input bo-input--wide bo-input--full" name="description" rows="4" placeholder="Description (optional)"></textarea>
-  <textarea class="bo-input bo-input--wide bo-input--full" name="note" rows="4" placeholder="Note (optional)"></textarea>
+  <input class="bo-input" name="name" placeholder="Name" required aria-label="Group name">
+  <textarea class="bo-input bo-input--wide bo-input--full" name="description" rows="4" placeholder="Description (optional)" aria-label="Group description"></textarea>
+  <textarea class="bo-input bo-input--wide bo-input--full" name="note" rows="4" placeholder="Note (optional)" aria-label="Group note"></textarea>
   <button type="submit" class="bo-btn">Save</button>
   <button type="button" class="bo-btn bo-btn--ghost" id="grp-add-cancel">Cancel</button>
 </form>
@@ -21,13 +21,14 @@
 </div>
 <div class="table-responsive">
   <table class="bo-table" id="grp-table">
+    <caption class="sr-only">Channel groups</caption>
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Description</th>
-        <th>Note</th>
-        <th class="bo-th--num">Channels</th>
-        <th></th>
+        <th scope="col">Name</th>
+        <th scope="col">Description</th>
+        <th scope="col">Note</th>
+        <th class="bo-th--num" scope="col">Channels</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody id="grp-tbody">

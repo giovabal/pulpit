@@ -906,8 +906,7 @@ class Command(BaseCommand):
 
         return CrawlOptions(
             get_channels_info=options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO,
-            update_type_excluded_info=options["update_type_excluded_info"]
-            or settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO,
+            update_type_excluded_info=options["update_type_excluded_info"] or settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO,
             mine_about_texts=options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS,
             fetch_recommended=options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED,
             retry_lost_and_private=options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE,

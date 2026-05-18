@@ -18,3 +18,5 @@ exports/*
 *.sqlite3*
 *.session
 *.session-journal
+node_modules/
+package-lock.json

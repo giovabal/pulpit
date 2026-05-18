@@ -24,12 +24,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="{% static 'webapp/css/webapp.css' %}">
+    <link rel="stylesheet" href="{% static 'webapp/css/a11y.css' %}">
     {% block extra_styles %}{% endblock extra_styles %}
   </head>
 
   <body>
+    {% include "webapp/_skip_link.html" %}
     {% with url_name=request.resolver_match.url_name %}
-    <nav class="topnav navbar navbar-expand-md">
+    <nav class="topnav navbar navbar-expand-md" aria-label="Primary">
       <div class="topnav-inner">
         <a class="topnav-brand" href="{% url 'home' %}">
           <img src="{% static 'webapp/pulpit_logo.svg' %}" height="34" alt="Pulpit">
@@ -80,11 +82,14 @@
     </nav>
     {% endwith %}
 
-    <main class="main-content">
+    <main id="main-content" class="main-content" tabindex="-1">
       {% block content %}
       {% endblock content %}
     </main>
 
+    {% include "webapp/_a11y_live.html" %}
+
+    <script src="{% static 'webapp/js/a11y.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script>
       // Theme toggle: wire the navbar buttons to localStorage + system listener.
@@ -163,6 +168,12 @@
         return annotations;
       }
 
+      function _pulpitChartLabel(canvas) {
+        var panel = canvas && canvas.closest && canvas.closest('.stats-panel');
+        var title = panel && panel.querySelector('.stats-toggle');
+        return title ? title.textContent.replace(/\s+/g, ' ').trim() : '';
+      }
+
       function renderReactionsChart(canvas, data, events) {
         var PALETTE = [
           '#4338ca','#0891b2','#16a34a','#d97706',
@@ -180,6 +191,20 @@
             stack: 'reactions',
           };
         });
+        if (window.PulpitA11y) {
+          var seriesLabels = datasets.map(function (d) { return d.label; });
+          var rows = (data.labels || []).map(function (lbl, i) {
+            return [lbl].concat(datasets.map(function (d) { return d.data[i]; }));
+          });
+          var name = _pulpitChartLabel(canvas) || (data.y_label || 'Reactions') + ' per period';
+          PulpitA11y.accessibleChart(canvas, {
+            label: name,
+            summary: (data.labels || []).length + ' periods, ' + seriesLabels.length + ' reaction types',
+            columns: ['Period'].concat(seriesLabels),
+            rows: rows,
+            toggle: true,
+          });
+        }
         new Chart(canvas, {
           type: 'bar',
           data: { labels: data.labels, datasets: datasets },
@@ -215,6 +240,20 @@
         const chartFill  = css.getPropertyValue("--chart-fill").trim();
         const chartGrid  = css.getPropertyValue("--chart-grid").trim();
         const chartLabel = css.getPropertyValue("--chart-label").trim();
+        if (window.PulpitA11y) {
+          const yLabel = data.y_label || 'Value';
+          const rows = (data.labels || []).map(function (lbl, i) {
+            return [lbl, data.values[i]];
+          });
+          const name = _pulpitChartLabel(canvas) || yLabel + ' over time';
+          PulpitA11y.accessibleChart(canvas, {
+            label: name,
+            summary: (data.labels || []).length + ' periods',
+            columns: ['Period', yLabel],
+            rows: rows,
+            toggle: true,
+          });
+        }
         new Chart(canvas, {
           type: "line",
           data: {

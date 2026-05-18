@@ -7,7 +7,7 @@
 
 {% block content %}
 <div class="bo-page">
-  <nav class="bo-subnav">
+  <nav class="bo-subnav" aria-label="Backoffice sections">
     <a href="{% url 'backoffice:channels' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'channels' %} active{% endif %}">
       <i class="bi bi-broadcast me-1" aria-hidden="true"></i>Channels

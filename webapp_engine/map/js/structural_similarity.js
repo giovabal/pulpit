@@ -147,6 +147,8 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
     var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
+    svg.setAttribute("role", "grid");
+    svg.setAttribute("aria-label", "Structural similarity heatmap, " + n + " by " + n + " channels");
 
     // Grid lines
     var gridG = document.createElementNS(NS, "g");
@@ -213,15 +215,20 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
             rect.setAttribute("width", cellSize);
             rect.setAttribute("height", cellSize);
             rect.setAttribute("fill", ri === rj ? "#64748b" : _simColor(v));
+            rect.setAttribute("role", "gridcell");
+            var labelA = String(simData.node_labels[origI] || origI);
+            var labelB = String(simData.node_labels[origJ] || origJ);
             if (ri !== rj) {
+                rect.setAttribute("tabindex", "0");
+                rect.setAttribute("aria-label", labelA + " by " + labelB + ", similarity " + v.toFixed(4));
                 (function(lA, lB, val) {
                     rect.addEventListener("mouseenter", function(e) { _showTip(e, lA + " × " + lB + ": " + val.toFixed(4)); });
                     rect.addEventListener("mousemove", _moveTip);
-                })(
-                    String(simData.node_labels[origI] || origI),
-                    String(simData.node_labels[origJ] || origJ),
-                    v
-                );
+                    rect.addEventListener("focus", function(e) { _showTip(e, lA + " × " + lB + ": " + val.toFixed(4)); });
+                    rect.addEventListener("blur", _hideTip);
+                })(labelA, labelB, v);
+            } else {
+                rect.setAttribute("aria-label", labelA + " diagonal");
             }
             rectG.appendChild(rect);
         }

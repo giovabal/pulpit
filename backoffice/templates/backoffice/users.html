@@ -8,8 +8,8 @@
     <button class="bo-btn" id="usr-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add user</button>
   </div>
   <form class="bo-add-form d-none" id="usr-add-form" autocomplete="off">
-    <input class="bo-input" type="email" name="email" placeholder="Email" required>
-    <input class="bo-input" type="password" name="password" placeholder="Password" required autocomplete="new-password">
+    <input class="bo-input" type="email" name="email" placeholder="Email" required aria-label="Email address">
+    <input class="bo-input" type="password" name="password" placeholder="Password" required autocomplete="new-password" aria-label="Password">
     <label class="bo-check-label"><input type="checkbox" name="is_staff"> Staff</label>
     <label class="bo-check-label"><input type="checkbox" name="is_active" checked> Active</label>
     <button type="submit" class="bo-btn">Save</button>
@@ -20,13 +20,14 @@
     <div class="bo-pagination" id="usr-pagination-top"></div>
   </div>
   <table class="bo-table" id="usr-table">
+    <caption class="sr-only">Users</caption>
     <thead>
       <tr>
-        <th>Email</th>
-        <th class="bo-th--center">Staff</th>
-        <th class="bo-th--center">Active</th>
-        <th>Joined</th>
-        <th></th>
+        <th scope="col">Email</th>
+        <th class="bo-th--center" scope="col">Staff</th>
+        <th class="bo-th--center" scope="col">Active</th>
+        <th scope="col">Joined</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody id="usr-tbody">

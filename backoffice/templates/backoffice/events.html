@@ -10,14 +10,15 @@
       <button class="bo-btn" id="et-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add type</button>
     </div>
     <form class="bo-add-form d-none" id="et-add-form" autocomplete="off">
-      <input class="bo-input bo-input--wide" name="name" placeholder="Name" required>
-      <input class="bo-input bo-input--color" type="color" name="color" value="#4338ca">
+      <input class="bo-input bo-input--wide" name="name" placeholder="Name" required aria-label="Event type name">
+      <input class="bo-input bo-input--color" type="color" name="color" value="#4338ca" aria-label="Event type color">
       <button type="submit" class="bo-btn">Save</button>
       <button type="button" class="bo-btn bo-btn--ghost" id="et-add-cancel">Cancel</button>
     </form>
     <table class="bo-table" id="et-table">
+      <caption class="sr-only">Event types</caption>
       <thead>
-        <tr><th>Color</th><th>Name</th><th class="bo-th--num">Events</th><th></th></tr>
+        <tr><th scope="col">Color</th><th scope="col">Name</th><th class="bo-th--num" scope="col">Events</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
       </thead>
       <tbody id="et-tbody">
         <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
@@ -31,25 +32,26 @@
       <button class="bo-btn" id="ev-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add event</button>
     </div>
     <form class="bo-add-form d-none" id="ev-add-form" autocomplete="off">
-      <input class="bo-input" type="date" name="date" required>
-      <input class="bo-input bo-input--wide" name="subject" placeholder="Subject" required>
-      <select class="bo-select" name="action_id" id="ev-type-select" required></select>
+      <input class="bo-input" type="date" name="date" required aria-label="Event date">
+      <input class="bo-input bo-input--wide" name="subject" placeholder="Subject" required aria-label="Event subject">
+      <select class="bo-select" name="action_id" id="ev-type-select" required aria-label="Event type"></select>
       <button type="submit" class="bo-btn">Save</button>
       <button type="button" class="bo-btn bo-btn--ghost" id="ev-add-cancel">Cancel</button>
     </form>
     <div class="bo-toolbar bo-toolbar--compact">
-      <select class="bo-select bo-select--sm" id="ev-type-filter">
+      <select class="bo-select bo-select--sm" id="ev-type-filter" aria-label="Filter events by type">
         <option value="">All types</option>
       </select>
-      <select class="bo-select bo-select--sm" id="ev-year-filter">
+      <select class="bo-select bo-select--sm" id="ev-year-filter" aria-label="Filter events by year">
         <option value="">All years</option>
       </select>
       <span class="bo-count" id="ev-count"></span>
       <div class="bo-pagination" id="ev-pagination-top"></div>
     </div>
     <table class="bo-table" id="ev-table">
+      <caption class="sr-only">Events</caption>
       <thead>
-        <tr><th>Date</th><th>Type</th><th>Subject</th><th></th></tr>
+        <tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Subject</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
       </thead>
       <tbody id="ev-tbody">
         <tr><td colspan="4" class="bo-empty">Loading…</td></tr>

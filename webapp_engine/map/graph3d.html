@@ -15,6 +15,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/graph.css" type="text/css" media="screen">
+  <link rel="stylesheet" href="css/a11y.css" type="text/css">
   <style>
     #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
     .node-label {
@@ -38,7 +39,16 @@
 </head>
 <body>
 
-  <div id="canvas-container" aria-label="3D network graph"></div>
+  <a class="skip-link sr-only-focusable" href="#menu_container">Skip to map controls</a>
+  <main id="canvas-container" aria-label="3D network graph"></main>
+  <section class="sr-only" aria-label="Network summary">
+    <h2>Network summary</h2>
+    <p>Interactive 3D force-directed graph of <strong>__NODE_COUNT__</strong> Telegram channels and <strong>__EDGE_COUNT__</strong> directed edges. Node color encodes community. Because the rendering is WebGL-based, screen-reader users can browse the equivalent data in the table reports:
+      <a href="channel_table.html">per-channel measures</a>,
+      <a href="community_table.html">community statistics</a>, and
+      <a href="network_table.html">whole-network statistics</a>.
+    </p>
+  </section>
 
   <div id="graph-info-bar" aria-label="Active settings" role="status">
     <button type="button" id="graph-info-toggle" aria-expanded="false" aria-controls="graph-info-chips" aria-label="Show active settings">
@@ -48,9 +58,9 @@
   </div>
 
   <nav id="menu_container" class="d-flex align-items-center" aria-label="Map controls">
-    <a href="#" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal">
-      <i class="bi bi-search" aria-hidden="true"></i><p class="d-none d-sm-block">Search</p>
-    </a>
+    <button type="button" id="search_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#search_modal" aria-label="Search channels">
+      <i class="bi bi-search" aria-hidden="true"></i><span class="d-none d-sm-block">Search</span>
+    </button>
 
     <div class="menu-button text-center">
       <div id="zoom_menu" class="d-flex align-items-center gap-1">
@@ -58,20 +68,24 @@
         <button type="button" class="menu-icon-btn" id="zoom_reset" aria-label="Reset zoom"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
         <button type="button" class="menu-icon-btn" id="zoom_out" aria-label="Zoom out"><i class="bi bi-zoom-out" aria-hidden="true"></i></button>
       </div>
-      <p class="d-none d-sm-block">Zoom</p>
+      <span class="d-none d-sm-block">Zoom</span>
     </div>
 
-    <a href="#" id="data_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#data_modal">
-      <i class="bi bi-table" aria-hidden="true"></i><p class="d-none d-sm-block">Data</p>
-    </a>
+    <button type="button" id="motion_toggle" class="menu-button text-decoration-none text-center" aria-pressed="false" aria-label="Pause animation">
+      <i class="bi bi-pause-circle" id="motion_toggle_icon" aria-hidden="true"></i><span class="d-none d-sm-block" id="motion_toggle_label">Pause</span>
+    </button>
 
-    <a href="#" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal">
-      <i class="bi bi-info-circle" aria-hidden="true"></i><p class="d-none d-sm-block">About</p>
-    </a>
+    <button type="button" id="data_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#data_modal" aria-label="Open data exports">
+      <i class="bi bi-table" aria-hidden="true"></i><span class="d-none d-sm-block">Data</span>
+    </button>
 
-    <a href="#" id="options_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#options_modal">
-      <i class="bi bi-gear" aria-hidden="true"></i><p class="d-none d-sm-block">Options</p>
-    </a>
+    <button type="button" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal" aria-label="About this map">
+      <i class="bi bi-info-circle" aria-hidden="true"></i><span class="d-none d-sm-block">About</span>
+    </button>
+
+    <button type="button" id="options_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#options_modal" aria-label="Map options">
+      <i class="bi bi-gear" aria-hidden="true"></i><span class="d-none d-sm-block">Options</span>
+    </button>
 
     <div id="year-switcher" style="display:none" role="group" aria-label="Year filter"></div>
 
@@ -310,6 +324,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+  <script src="js/a11y.js"></script>
   <script type="module" src="js/graph3d.js"></script>
 </body>
 </html>

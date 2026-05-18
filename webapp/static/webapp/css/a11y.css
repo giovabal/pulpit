@@ -1,0 +1,52 @@
+/* Shared accessibility primitives for the live Django UI.
+   Mirror lives at webapp_engine/map/css/a11y.css for the export bundle. */
+
+.sr-only,
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.skip-link {
+  position: absolute;
+  top: -64px;
+  left: 8px;
+  z-index: 1080;
+  padding: 8px 14px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  border-radius: var(--radius, .5rem);
+  text-decoration: none;
+  transition: top .15s ease-in-out;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  color: #fff;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.sr-chart-table {
+  caption-side: top;
+}
+.sr-chart-toggle {
+  margin: .25rem 0 .5rem;
+  font-size: .8125rem;
+}

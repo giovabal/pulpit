@@ -162,11 +162,42 @@ function init_three() {
     animate();
 }
 
+var motion_paused = false;
 function animate() {
     requestAnimationFrame(animate);
+    if (motion_paused) return;
     controls.update();
     renderer.render(scene, camera);
     label_renderer.render(scene, camera);
+}
+
+function setup_motion_toggle() {
+    var btn = document.getElementById('motion_toggle');
+    if (!btn) return;
+    var icon = document.getElementById('motion_toggle_icon');
+    var label = document.getElementById('motion_toggle_label');
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function apply(paused) {
+        motion_paused = paused;
+        btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+        btn.setAttribute('aria-label', paused ? 'Resume animation' : 'Pause animation');
+        if (icon) icon.className = paused ? 'bi bi-play-circle' : 'bi bi-pause-circle';
+        if (label) label.textContent = paused ? 'Resume' : 'Pause';
+        if (window.PulpitA11y) window.PulpitA11y.announce(paused ? 'Animation paused' : 'Animation resumed');
+        if (!paused) {
+            // Force a fresh frame after resume.
+            controls.update();
+            renderer.render(scene, camera);
+            label_renderer.render(scene, camera);
+        }
+    }
+    btn.addEventListener('click', function () { apply(!motion_paused); });
+    if (reduced) apply(true);
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup_motion_toggle);
+} else {
+    setup_motion_toggle();
 }
 
 function on_resize() {

@@ -246,7 +246,6 @@
   color: var(--text);
   font-size: .8rem;
   padding: .32rem .6rem;
-  outline: none;
   transition: border-color .12s, box-shadow .12s;
   width: 9rem;
 }
@@ -267,7 +266,6 @@
   color: var(--text);
   font-size: .8rem;
   padding: .2rem;
-  outline: none;
   transition: border-color .12s, box-shadow .12s;
   width: 14rem;
 }
@@ -392,7 +390,6 @@
   color: var(--text);
   font-size: .8rem;
   padding: .32rem .6rem;
-  outline: none;
   transition: border-color .12s, box-shadow .12s;
   resize: vertical;
   width: 100%;

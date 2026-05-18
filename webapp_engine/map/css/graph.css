@@ -102,7 +102,6 @@ html, body {
 .menu-icon-btn:hover,
 .menu-icon-btn:focus {
     color: rgba(var(--c-fg-raw), 1);
-    outline: none;
 }
 
 @media screen {
@@ -296,7 +295,6 @@ html, body {
 .year-btn:focus:not(:disabled) {
     color: rgba(var(--c-fg-raw), 0.85);
     border-color: rgba(var(--c-fg-raw), 0.42);
-    outline: none;
 }
 
 .year-btn.active {
@@ -501,7 +499,7 @@ body[data-theme3d="print"]   .node-label { color: #111; text-shadow: 0 0 3px #ff
     }
 
     #graph-info-toggle:hover,
-    #graph-info-toggle:focus { color: rgba(var(--c-fg-raw), 1); outline: none; }
+    #graph-info-toggle:focus { color: rgba(var(--c-fg-raw), 1); }
 
     #graph-info-chips {
         display: flex;

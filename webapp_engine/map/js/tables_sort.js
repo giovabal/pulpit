@@ -36,12 +36,14 @@ function initSortableTables() {
             if (headers.length === 0) continue;
             table.setAttribute('data-sort-initialized', 'true');
             for (j = 0; j < headers.length; j++) {
+                if (!headers[j].hasAttribute('scope')) headers[j].setAttribute('scope', 'col');
                 headers[j].setAttribute('aria-sort', 'none');
-                var anchor = document.createElement('a');
-                anchor.href = '#';
-                anchor.textContent = headers[j].textContent;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'th-sort-btn';
+                btn.textContent = headers[j].textContent;
                 headers[j].textContent = '';
-                headers[j].appendChild(anchor);
+                headers[j].appendChild(btn);
             }
             if (table._sortListener) thead.removeEventListener("click", table._sortListener);
             table._sortListener = sortTableFunction(table);
@@ -56,22 +58,28 @@ if (document.readyState === "loading") {
 }
 function sortTableFunction(table) {
     return function(ev) {
-        if (ev.target.tagName.toLowerCase() === 'a') {
-            var header = ev.target.parentNode;
-            var currentDirection = header.getAttribute('data-sort-direction');
-            var direction = currentDirection === 'desc' ? 'asc' : 'desc';
-            var siblingHeaders = header.parentNode.children;
-            for (var i = 0; i < siblingHeaders.length; i++) {
-                if (siblingHeaders[i] !== header) {
-                    siblingHeaders[i].removeAttribute('data-sort-direction');
-                    siblingHeaders[i].setAttribute('aria-sort', 'none');
-                }
+        var target = ev.target;
+        var trigger = target.closest && target.closest('button.th-sort-btn, a');
+        if (!trigger) return;
+        var header = trigger.parentNode;
+        if (!header || header.tagName.toLowerCase() !== 'th') return;
+        var currentDirection = header.getAttribute('data-sort-direction');
+        var direction = currentDirection === 'desc' ? 'asc' : 'desc';
+        var siblingHeaders = header.parentNode.children;
+        for (var i = 0; i < siblingHeaders.length; i++) {
+            if (siblingHeaders[i] !== header) {
+                siblingHeaders[i].removeAttribute('data-sort-direction');
+                siblingHeaders[i].setAttribute('aria-sort', 'none');
             }
-            header.setAttribute('data-sort-direction', direction);
-            header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
-            sortRows(table, siblingIndex(header), direction);
-            ev.preventDefault();
         }
+        header.setAttribute('data-sort-direction', direction);
+        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        sortRows(table, siblingIndex(header), direction);
+        if (window.PulpitA11y) {
+            var label = trigger.textContent.trim() || 'column';
+            window.PulpitA11y.announce('Sorted by ' + label + ', ' + (direction === 'asc' ? 'ascending' : 'descending'));
+        }
+        ev.preventDefault();
     };
 }
 function siblingIndex(node) {

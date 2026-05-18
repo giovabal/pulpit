@@ -9,18 +9,18 @@
 
 <form class="bo-add-form d-none" id="vac-add-form" autocomplete="off">
   <div class="bo-add-field" style="flex: 3 1 27rem">
-    <label class="bo-add-label">Channel</label>
+    <label class="bo-add-label" for="vac-ch-search">Channel</label>
     <div style="position:relative">
-      <input class="bo-input bo-input--full" id="vac-ch-search" placeholder="Search channel by name…" autocomplete="off">
-      <div class="bo-typeahead" id="vac-ch-dropdown" style="display:none"></div>
+      <input class="bo-input bo-input--full" id="vac-ch-search" placeholder="Search channel by name…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="vac-ch-dropdown" aria-autocomplete="list">
+      <div class="bo-typeahead" id="vac-ch-dropdown" role="listbox" style="display:none"></div>
     </div>
     <input type="hidden" id="vac-ch-id">
   </div>
   <div class="bo-add-field">
-    <label class="bo-add-label">Closure date</label>
+    <label class="bo-add-label" for="vac-closure-date">Closure date</label>
     <input class="bo-input" type="date" id="vac-closure-date" required>
   </div>
-  <textarea class="bo-input bo-input--wide bo-input--full" id="vac-note" rows="3" placeholder="Note (optional)"></textarea>
+  <textarea class="bo-input bo-input--wide bo-input--full" id="vac-note" rows="3" placeholder="Note (optional)" aria-label="Vacancy note"></textarea>
   <button type="submit" class="bo-btn">Save</button>
   <button type="button" class="bo-btn bo-btn--ghost" id="vac-add-cancel">Cancel</button>
 </form>
@@ -30,12 +30,13 @@
 </div>
 <div class="table-responsive">
   <table class="bo-table" id="vac-table">
+    <caption class="sr-only">Vacancies</caption>
     <thead>
       <tr>
-        <th>Channel</th>
-        <th>Closure date</th>
-        <th>Note</th>
-        <th></th>
+        <th scope="col">Channel</th>
+        <th scope="col">Closure date</th>
+        <th scope="col">Note</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody id="vac-tbody">
