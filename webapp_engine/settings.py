@@ -1,7 +1,8 @@
+import sys
 import warnings
 from pathlib import Path
 
-from decouple import Config, Csv, RepositoryEnv, config
+from decouple import Config, Csv, RepositoryEnv, UndefinedValueError, config
 
 # Telethon calls the deprecated asyncio.get_event_loop() during initialisation
 # when no loop is running yet (Python 3.12+). The warning is attributed to
@@ -27,6 +28,49 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 MEDIA_ROOT_DIRNAME = "media"
 MEDIA_ROOT = BASE_DIR / MEDIA_ROOT_DIRNAME
+
+
+_ENV_HINTS = {
+    "SECRET_KEY": (
+        "Generate one with:\n"
+        "  python -c \"from django.core.management.utils import get_random_secret_key; "
+        "print('SECRET_KEY=' + get_random_secret_key())\" >> .env"
+    ),
+    "ALLOWED_HOSTS": "Add a comma-separated list, e.g.:\n  ALLOWED_HOSTS=localhost,127.0.0.1",
+    "TELEGRAM_API_ID": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_ID=...",
+    "TELEGRAM_API_HASH": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_HASH=...",
+    "TELEGRAM_PHONE_NUMBER": (
+        "Add your Telegram-registered phone number in international format, e.g.:\n  "
+        "TELEGRAM_PHONE_NUMBER=+33611223344"
+    ),
+    "DB_NAME": "Required when DB_ENGINE is postgresql / mysql / mariadb / oracle. Add:\n  DB_NAME=...",
+}
+
+
+def _required(key, cast=str):
+    """Read a required setting from .env, exiting with a helpful message when missing.
+
+    Bare ``decouple.config(key)`` raises ``UndefinedValueError`` whose default
+    stack trace buries the actual problem in a wall of import frames. Catch it
+    here and print a focused, actionable error pointing the user at the .env
+    file and (where useful) the one-liner that fixes it.
+    """
+    try:
+        return config(key, cast=cast)
+    except UndefinedValueError:
+        env_path = BASE_DIR / ".env"
+        sys.stderr.write(f"\nMissing required configuration: {key} is not set in {env_path}\n")
+        if not env_path.exists():
+            example = BASE_DIR / "env.example"
+            sys.stderr.write(
+                f"The .env file does not exist. Bootstrap it with:\n  cp {example.name} .env\n"
+                "then edit .env to fill in the required values.\n"
+            )
+        hint = _ENV_HINTS.get(key)
+        if hint:
+            sys.stderr.write(hint + "\n")
+        sys.stderr.write("See env.example for the full list of expected keys.\n\n")
+        sys.exit(1)
 
 
 # ── Secondary config files ────────────────────────────────────────────────────
@@ -57,13 +101,13 @@ _sys = Config(RepositoryEnv(str(_SYSTEM_PATH)) if _SYSTEM_PATH.exists() else _Em
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config("SECRET_KEY", cast=str)
+SECRET_KEY = _required("SECRET_KEY")
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv())
+ALLOWED_HOSTS = _required("ALLOWED_HOSTS", cast=Csv())
 
 
 # Application definition
@@ -138,7 +182,7 @@ if _DB_ENGINE == "postgresql":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": config("DB_NAME", cast=str),
+            "NAME": _required("DB_NAME"),
             "USER": config("DB_USER", default=""),
             "PASSWORD": config("DB_PASSWORD", default=""),
             "HOST": config("DB_HOST", default="localhost"),
@@ -149,7 +193,7 @@ elif _DB_ENGINE in ("mysql", "mariadb"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": config("DB_NAME", cast=str),
+            "NAME": _required("DB_NAME"),
             "USER": config("DB_USER", default=""),
             "PASSWORD": config("DB_PASSWORD", default=""),
             "HOST": config("DB_HOST", default="localhost"),
@@ -163,7 +207,7 @@ elif _DB_ENGINE == "oracle":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.oracle",
-            "NAME": config("DB_NAME", cast=str),
+            "NAME": _required("DB_NAME"),
             "USER": config("DB_USER", default=""),
             "PASSWORD": config("DB_PASSWORD", default=""),
             "HOST": config("DB_HOST", default="localhost"),
@@ -229,9 +273,9 @@ DJANGO_ADMIN_LOGS_ENABLED = False
 
 # ── Telegram credentials (.env) ───────────────────────────────────────────────
 
-TELEGRAM_API_ID = config("TELEGRAM_API_ID", cast=str)
-TELEGRAM_API_HASH = config("TELEGRAM_API_HASH", cast=str)
-TELEGRAM_PHONE_NUMBER = config("TELEGRAM_PHONE_NUMBER", cast=str)
+TELEGRAM_API_ID = _required("TELEGRAM_API_ID")
+TELEGRAM_API_HASH = _required("TELEGRAM_API_HASH")
+TELEGRAM_PHONE_NUMBER = _required("TELEGRAM_PHONE_NUMBER")
 
 # ── Crawler behaviour (.analysis-defaults) ────────────────────────────────────
 
