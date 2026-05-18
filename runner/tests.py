@@ -590,8 +590,9 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 class BuildArgsExportNetworkTests(TestCase):
     def test_export_name_appended(self):
+        # No robustness strategy ticked ⇒ --no-robustness is always trailing.
         args = _build_args("structural_analysis", FakePost({"export_name": "baseline", "include_mentions": "on"}))
-        self.assertEqual(args, ["--name", "baseline"])
+        self.assertEqual(args, ["--name", "baseline", "--no-robustness"])
 
     def test_boolean_output_flags(self):
         for field, flag in [
@@ -643,8 +644,9 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertEqual(args[idx + 1], "year")
 
     def test_empty_strings_not_added(self):
+        # All value-kind fields blank ⇒ only the implicit --no-robustness survives.
         post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": "", "include_mentions": "on"})
-        self.assertEqual(_build_args("structural_analysis", post), [])
+        self.assertEqual(_build_args("structural_analysis", post), ["--no-robustness"])
 
 
 # ---------------------------------------------------------------------------
@@ -676,10 +678,16 @@ class BuildArgsCompareAnalysisTests(TestCase):
 
 
 class BuildArgsStructuralRobustnessTests(TestCase):
-    def test_empty_post_emits_no_robustness_flags(self) -> None:
+    # In the Operations panel, the robustness master switch is implicit: at least
+    # one strategy ticked ⇒ --robustness, none ticked ⇒ --no-robustness. The CLI
+    # --robustness/--no-robustness pair (BooleanOptionalAction) lets the UI fully
+    # override the SA_ROBUSTNESS default in .analysis-defaults.
+
+    def test_empty_post_emits_no_robustness(self) -> None:
         args = _build_args("structural_analysis", FakePost())
+        self.assertIn("--no-robustness", args)
+        self.assertNotIn("--robustness", args)
         for flag in (
-            "--robustness",
             "--robustness-alpha",
             "--robustness-strategies",
             "--robustness-runs",
@@ -689,18 +697,11 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         ):
             self.assertNotIn(flag, args)
 
-    def test_master_switch_emits_flag(self) -> None:
-        args = _build_args("structural_analysis", FakePost({"robustness": "1"}))
-        self.assertIn("--robustness", args)
-
-    def test_strategy_checkboxes_emit_csv(self) -> None:
-        post = FakePost(
-            {
-                "robustness": "1",
-                "robustness_strategies": ["pagerank", "betweenness_dyn", "hits_authority"],
-            }
-        )
+    def test_strategy_checkboxes_imply_robustness_and_emit_csv(self) -> None:
+        post = FakePost({"robustness_strategies": ["pagerank", "betweenness_dyn", "hits_authority"]})
         args = _build_args("structural_analysis", post)
+        self.assertIn("--robustness", args)
+        self.assertNotIn("--no-robustness", args)
         self.assertIn("--robustness-strategies", args)
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,hits_authority")
@@ -710,7 +711,6 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         # the bridging robustness attack — both pick it up under the same field name.
         post = FakePost(
             {
-                "robustness": "1",
                 "robustness_strategies": ["pagerank", "bridging"],
                 "bridging_basis": "LOUVAIN",
             }
@@ -722,13 +722,7 @@ class BuildArgsStructuralRobustnessTests(TestCase):
     def test_bridging_basis_blank_leaves_bare_bridging(self) -> None:
         # Empty dropdown value means "use the backend default" — emit bare bridging
         # so the runner picks leiden_directed.
-        post = FakePost(
-            {
-                "robustness": "1",
-                "robustness_strategies": ["bridging"],
-                "bridging_basis": "",
-            }
-        )
+        post = FakePost({"robustness_strategies": ["bridging"], "bridging_basis": ""})
         args = _build_args("structural_analysis", post)
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "bridging")
@@ -756,16 +750,19 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         idx = args.index("--measures")
         self.assertEqual(args[idx + 1], "PAGERANK,BETWEENNESS")
 
-    def test_no_strategies_checked_omits_flag(self) -> None:
-        # When no strategy checkbox is ticked, the flag is absent altogether — the
-        # backend then uses its own default set.
-        args = _build_args("structural_analysis", FakePost({"robustness": "1"}))
+    def test_no_strategies_omits_robustness(self) -> None:
+        # Without any strategy ticked, the analysis is explicitly turned off.
+        args = _build_args("structural_analysis", FakePost())
+        self.assertIn("--no-robustness", args)
         self.assertNotIn("--robustness-strategies", args)
 
     def test_numeric_params_emit_flag_value_pairs(self) -> None:
+        # Tuning fields still emit their flag/value pair regardless of whether
+        # robustness is on — they are ignored by the backend when --no-robustness
+        # wins, but kept in sync with the form's current values.
         post = FakePost(
             {
-                "robustness": "1",
+                "robustness_strategies": ["pagerank"],
                 "robustness_alpha": "0.1",
                 "robustness_runs": "50",
                 "robustness_null": "10",
@@ -774,6 +771,7 @@ class BuildArgsStructuralRobustnessTests(TestCase):
             }
         )
         args = _build_args("structural_analysis", post)
+        self.assertIn("--robustness", args)
         for flag, value in (
             ("--robustness-alpha", "0.1"),
             ("--robustness-runs", "50"),
@@ -786,6 +784,8 @@ class BuildArgsStructuralRobustnessTests(TestCase):
 
     def test_empty_value_field_skipped(self) -> None:
         # value-kind specs drop the flag entirely when the field is blank.
-        args = _build_args("structural_analysis", FakePost({"robustness": "1", "robustness_alpha": ""}))
+        args = _build_args(
+            "structural_analysis", FakePost({"robustness_strategies": ["pagerank"], "robustness_alpha": ""})
+        )
         self.assertIn("--robustness", args)
         self.assertNotIn("--robustness-alpha", args)

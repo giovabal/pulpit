@@ -807,21 +807,13 @@
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge-survival curves. Generates data/robustness.json (always), robustness_table.html (with HTML tables), and robustness_table.xlsx (with Excel)."></i>
             </legend>
-            <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag">
-                <input type="checkbox" name="robustness" value="1" {% if ad.SA_ROBUSTNESS %}checked{% endif %}>Enable robustness analysis
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Master switch. When off, none of the parameters below have any effect."></i>
-              </label>
-            </div>
-
-            <div class="ops-subheader mt-2">Attack strategies
+            <div class="ops-subheader">Attack strategies
               <span class="ops-legend-actions">
                 <button type="button" class="ops-legend-btn" data-action="all" data-target-name="robustness_strategies">All</button>
                 <button type="button" class="ops-legend-btn" data-action="none" data-target-name="robustness_strategies">None</button>
               </span>
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="At least one strategy must be selected when robustness is enabled. Each strategy gives a different attack scenario — see docs/robustness-analysis.md for what each one models. Dynamic variants (_dyn) recompute the ranking after every removal — much costlier than static."></i>
+                 title="Selecting at least one strategy turns the robustness analysis on; deselecting them all turns it off. Each strategy gives a different attack scenario — see docs/robustness-analysis.md for what each one models. Dynamic variants (_dyn) recompute the ranking after every removal — much costlier than static."></i>
             </div>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="random" {% if "RANDOM" in ad.sa_robustness_strategies %}checked{% endif %}>Random failure<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Uniform shuffle, averaged over Random runs. The baseline that targeted attacks should look much worse than."></i></label>
@@ -1694,8 +1686,7 @@
         setVal('vacancy_max_candidates',   opts.vacancy_max_candidates != null ? opts.vacancy_max_candidates : '');
         setVal('vacancy_ppr_alpha',        opts.vacancy_ppr_alpha != null ? opts.vacancy_ppr_alpha : '');
 
-        // Robustness analysis
-        if (opts.robustness !== undefined) setCheck('robustness', opts.robustness);
+        // Robustness analysis — the master switch is implicit (any strategy ⇒ on).
         // Strategies: comma-separated, may include bridging(<basis>) — split out the basis
         // into the shared bridging-basis dropdown (Linked parameters) and feed the bare
         // token to the checkbox setter.  Robustness wins over measures if both specify

@@ -417,6 +417,11 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         # picks a non-default value (the field is shared with the BRIDGING measure
         # — see measures_with_bridging above).  Bare bridging falls through to the
         # backend default (leiden_directed).
+        #
+        # The strategy list also doubles as the master switch: at least one strategy
+        # checked ⇒ pass --robustness, none checked ⇒ pass --no-robustness
+        # (BooleanOptionalAction) so the UI's "off" intent overrides any
+        # SA_ROBUSTNESS=True default in .analysis-defaults.
         _, flag = spec
         chosen = post.getlist("robustness_strategies")
         bridging_basis = (post.get("bridging_basis") or "").strip().lower()
@@ -427,7 +432,9 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
             else:
                 tokens.append(s)
         if tokens:
-            args += [flag, ",".join(tokens)]
+            args += ["--robustness", flag, ",".join(tokens)]
+        else:
+            args.append("--no-robustness")
     elif kind == "extra_terms":
         _, key = spec
         for line in post.get(key, "").splitlines():
@@ -523,7 +530,6 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "vacancy_months_after", "--vacancy-months-after"),
         ("value", "vacancy_max_candidates", "--vacancy-max-candidates"),
         ("value", "vacancy_ppr_alpha", "--vacancy-ppr-alpha"),
-        ("flag", "robustness", "--robustness"),
         ("value", "robustness_alpha", "--robustness-alpha"),
         ("robustness_strategies", "--robustness-strategies"),
         ("value", "robustness_runs", "--robustness-runs"),

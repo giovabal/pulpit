@@ -614,13 +614,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--robustness",
             dest="robustness",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Enable the robustness analysis: residual-size R-index per attack strategy on "
                 "the (optionally disparity-filtered) backbone, with z-score against a "
                 "weight-rewiring null model and intra/inter community edge-survival curves. "
-                "Writes data/robustness.json and (with --html) robustness_table.html."
+                "Writes data/robustness.json and (with --html) robustness_table.html. "
+                "Use --no-robustness to disable explicitly (overrides SA_ROBUSTNESS)."
             ),
         )
         parser.add_argument(
