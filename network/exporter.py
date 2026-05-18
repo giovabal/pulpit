@@ -554,12 +554,37 @@ def write_vacancy_analysis_json(payload: dict, graph_dir: str) -> None:
         f.write(json.dumps(payload))
 
 
+def _sanitize_nan_inf(obj):
+    """Replace NaN and Inf floats with None so the result is strict-JSON safe.
+
+    The robustness pipeline can legitimately emit NaN z-scores (when the null
+    model's stddev collapses to zero) and Inf values from divisions; Python's
+    json.dumps writes them as the literal tokens NaN / Infinity / -Infinity by
+    default (allow_nan=True), but those are not valid JSON and JSON.parse()
+    rejects them in browsers.
+    """
+    import math
+
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_nan_inf(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nan_inf(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_sanitize_nan_inf(v) for v in obj)
+    return obj
+
+
 def write_robustness_json(payload: dict, graph_dir: str) -> None:
     """Write data/robustness.json from the run_robustness payload."""
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "robustness.json"), "w") as f:
-        f.write(json.dumps(payload))
+        # allow_nan=False ensures we fail loudly if any NaN/Inf slips through
+        # the sanitizer rather than silently producing JSON the browser cannot
+        # parse (cf. SyntaxError: Unexpected token 'N' on JSON.parse).
+        f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:
