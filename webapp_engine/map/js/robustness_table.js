@@ -504,6 +504,17 @@ Promise.all([
     _render(payload);
     _ty = timeline ? (timeline.years || []).filter(function (y) { return y.has_robustness; }) : [];
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
-}).catch(function () {
-    document.getElementById("rb-summary").textContent = "Failed to load robustness.json.";
+}).catch(function (err) {
+    // Surface the actual exception in the console — silently swallowing it here
+    // hides whether the failure is fetch (network / file:// scheme / 404) or a
+    // downstream render bug.
+    console.error("robustness_table: failed to load or render", err);
+    var msg = "Failed to load robustness.json.";
+    if (window.location.protocol === "file:") {
+        msg += " The export bundle uses fetch() to load its JSON payloads, which most browsers refuse on file:// URLs. " +
+               "Open the bundle via the bundled start.sh (\"python -m http.server\") and browse it over http://localhost:8001 instead.";
+    } else if (err && err.message) {
+        msg += " (" + err.message + ")";
+    }
+    document.getElementById("rb-summary").textContent = msg;
 });
