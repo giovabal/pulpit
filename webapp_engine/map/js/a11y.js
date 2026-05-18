@@ -75,17 +75,24 @@
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", summary);
     if (!Array.isArray(opts.rows) || opts.rows.length === 0) return null;
+
+    // Where to mount the button + data-table wrap. By default we sit them
+    // alongside the canvas in its direct parent; callers that wrap the canvas
+    // inside a fixed-height container (e.g. .rb-chart-canvas with height:
+    // 280px) must pass an outer `host` so the data table doesn't overflow the
+    // chart container and bleed onto the next card.
+    var host = opts.host || canvas.parentNode;
+    if (!host) return null;
+    var anchor = canvas;
+    while (anchor && anchor.parentNode !== host) anchor = anchor.parentNode;
+    if (!anchor) return null;
+
     var table = _buildSrTable(opts);
-    // The table lives inside a wrapper so that, once revealed by the toggle,
-    // overflow + max-height contain it instead of letting hundreds of rows of a
-    // wide table spill out and overlap the surrounding chart cards.
     var wrap = document.createElement("div");
     wrap.className = "sr-chart-table-wrap sr-only";
     wrap.hidden = !opts.visible;
     wrap.appendChild(table);
-    if (canvas.parentNode) {
-      canvas.parentNode.insertBefore(wrap, canvas.nextSibling);
-    }
+    host.insertBefore(wrap, anchor.nextSibling);
     if (opts.toggle) {
       var btn = document.createElement("button");
       btn.type = "button";
@@ -99,9 +106,7 @@
         btn.setAttribute("aria-expanded", nowHidden ? "false" : "true");
         btn.textContent = nowHidden ? "Show data table" : "Hide data table";
       });
-      if (canvas.parentNode) {
-        canvas.parentNode.insertBefore(btn, canvas);
-      }
+      host.insertBefore(btn, anchor);
     }
     return table;
   }

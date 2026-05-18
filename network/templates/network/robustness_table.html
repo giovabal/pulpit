@@ -9,6 +9,10 @@
   .rb-chart-card { position: relative; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: 1rem; background: var(--bs-body-bg, #fff); }
   .rb-chart-card h5 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; padding-right: 2rem; }
   .rb-chart-card .rb-chart-canvas { position: relative; height: 280px; }
+  /* The top S(f) cards carry a 22-strategy legend (5 rows on the WCC card);
+     bumping the height for that grid only keeps the plot from touching the
+     legend without bloating the modular cards which need only 2 entries. */
+  #rb-curves .rb-chart-canvas { height: 400px; }
   .rb-summary-table th, .rb-summary-table td { font-variant-numeric: tabular-nums; }
   .rb-z-significant { font-weight: 600; }
   .rb-z-pos { color: #198754; }

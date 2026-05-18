@@ -378,6 +378,9 @@ function _renderCurves(payload) {
                 columns: ["Fraction removed"].concat(strategies.map(function (s) { return _labelOf(payload, s); })),
                 rows: rows,
                 toggle: true,
+                // Mount on the card so the toggled data-table sits below the
+                // fixed-height .rb-chart-canvas instead of overflowing it.
+                host: card,
             });
         }
         new Chart(canvas, buildConfig());
@@ -451,6 +454,7 @@ function _renderModular(payload) {
                     columns: ["Fraction removed", "Intra-community", "Inter-community"],
                     rows: rows,
                     toggle: true,
+                    host: card,
                 });
             }
             new Chart(canvas, buildConfig());
