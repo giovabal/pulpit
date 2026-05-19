@@ -1,5 +1,5 @@
 # Changelog
-## [0.20] - To be announced
+## [0.20] - 2026-05-19
 *Robustness analysis. Dark mode and accessibility.*
 
 ### New features
