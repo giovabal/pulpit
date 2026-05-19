@@ -88,8 +88,16 @@ class _EmptyRepository:
         raise KeyError(key)
 
 
+# Tests must be hermetic — a developer's local .analysis-defaults can flip
+# safety-critical knobs like IGNORE_FLOODWAIT=False or CRAWL_FETCH_RECOMMENDED=True,
+# which then leak into mocked crawler tests and either hang on 900-second sleeps
+# or run code paths the test never primed. When running under `manage.py test`,
+# bypass the file so every _ana(...) falls back to its hardcoded default.
+_RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == "test"
 _ANALYSIS_PATH = BASE_DIR / ".analysis-defaults"
-_ana = Config(RepositoryEnv(str(_ANALYSIS_PATH)) if _ANALYSIS_PATH.exists() else _EmptyRepository())
+_ana = Config(
+    RepositoryEnv(str(_ANALYSIS_PATH)) if _ANALYSIS_PATH.exists() and not _RUNNING_TESTS else _EmptyRepository()
+)
 
 _SYSTEM_PATH = BASE_DIR / ".system-options"
 _sys = Config(RepositoryEnv(str(_SYSTEM_PATH)) if _SYSTEM_PATH.exists() else _EmptyRepository())
