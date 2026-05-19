@@ -195,7 +195,7 @@
 
     $purgeRefreshBtn.addEventListener("click", loadPurgePreview);
     $purgeRunBtn.addEventListener("click", runPurge);
-    loadPurgePreview();
+    // Preview is opt-in (counts can be expensive); user clicks "Preview" to scan.
 
     // ── Purge orphan media files ─────────────────────────────────────────────
     var ORPHAN_PREVIEW = "/manage/api/maintenance/orphan-media-preview/";
@@ -267,5 +267,6 @@
 
     $orphanRefreshBtn.addEventListener("click", loadOrphanPreview);
     $orphanRunBtn.addEventListener("click", runOrphanCleanup);
-    loadOrphanPreview();
+    // Preview is opt-in (the scan walks the whole media tree and can take many
+    // seconds on a large install); user clicks "Preview" to start it.
 })();
