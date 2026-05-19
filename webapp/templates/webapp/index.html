@@ -6,7 +6,7 @@
       // Apply persisted theme before first paint to avoid flash.
       (function () {
         try {
-          var pref = localStorage.getItem("pulpit_theme") || "auto";
+          var pref = localStorage.getItem("pulpit_theme") || "light";
           var dark = pref === "dark" || (pref === "auto" &&
             window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
           var theme = dark ? "dark" : "light";
@@ -96,7 +96,7 @@
       // Theme toggle: wire the navbar buttons to localStorage + system listener.
       (function () {
         var STORAGE_KEY = "pulpit_theme";
-        function currentPref() { try { return localStorage.getItem(STORAGE_KEY) || "auto"; } catch (e) { return "auto"; } }
+        function currentPref() { try { return localStorage.getItem(STORAGE_KEY) || "light"; } catch (e) { return "light"; } }
         function systemDark() { return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches; }
         function applyTheme(pref) {
           var dark = pref === "dark" || (pref === "auto" && systemDark());
