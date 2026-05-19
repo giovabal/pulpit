@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, Exists, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -441,12 +442,7 @@ class ChannelDetailView(ListView):
             extra += "&forwards_only=1"
         context_data["original_query"] = context_data["original_query"] + extra
 
-        is_in_target = (
-            Channel.objects.filter(organization__is_in_target=True)
-            .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
-            .filter(pk=ch.pk)
-            .exists()
-        )
+        is_in_target = Channel.objects.in_target().filter(pk=ch.pk).exists()
 
         msg_qs = Message.objects.alive().filter(channel=ch)
         if ch.out_of_target_after:
@@ -704,6 +700,8 @@ def _shift_months(d: datetime.date, n: int) -> datetime.date:
 class VacancyAnalysisView(View):
     """JSON endpoint: replacement candidates for a vacancy channel."""
 
+    _CACHE_TTL = 60  # seconds; brief enough that fresh crawl data shows up quickly
+
     def get(self, request: HttpRequest, pk: int) -> JsonResponse:
         ch = get_object_or_404(Channel, pk=pk)
         try:
@@ -717,6 +715,11 @@ class VacancyAnalysisView(View):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid parameters"}, status=400)
         only_after_vacancy = request.GET.get("only_after_vacancy", "1") != "0"
+
+        cache_key = f"vacancy_analysis:{pk}:{months_before}:{months_after}:{int(only_after_vacancy)}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return JsonResponse(cached)
 
         closure_date = vacancy.closure_date
         before_start = datetime.datetime.combine(
@@ -877,15 +880,15 @@ class VacancyAnalysisView(View):
             )
         candidates.sort(key=lambda r: r["first_activity_iso"] or "")
 
-        return JsonResponse(
-            {
-                "candidates": candidates,
-                "orphaned_count": total_orphaned,
-                "months_before": months_before,
-                "months_after": months_after,
-                "only_after_vacancy": only_after_vacancy,
-            }
-        )
+        payload = {
+            "candidates": candidates,
+            "orphaned_count": total_orphaned,
+            "months_before": months_before,
+            "months_after": months_after,
+            "only_after_vacancy": only_after_vacancy,
+        }
+        cache.set(cache_key, payload, self._CACHE_TTL)
+        return JsonResponse(payload)
 
 
 class MessageRepliesView(View):

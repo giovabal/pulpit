@@ -196,8 +196,18 @@ def launch(task: str, args: list[str]) -> None:
                 env=env,
             )
 
-        meta["pid"] = proc.pid
-        meta_path.write_text(json.dumps(meta))
+        # Re-read the on-disk meta before writing the pid: if the wrapper
+        # finished between Popen returning and this line (a fast-failing
+        # task — bad path, import error, argparse error) it has already
+        # written end_time/exit_code, and a blind overwrite with our local
+        # dict would wipe that out and leave get_status() reporting "failed"
+        # via the pid-not-running branch.
+        try:
+            persisted = json.loads(meta_path.read_text())
+        except (ValueError, OSError):
+            persisted = meta
+        persisted["pid"] = proc.pid
+        meta_path.write_text(json.dumps(persisted))
 
 
 def abort(task: str) -> bool:

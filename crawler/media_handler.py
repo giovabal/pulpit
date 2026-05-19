@@ -416,7 +416,13 @@ class MediaHandler:
         return 0
 
     def clean_leftovers(self) -> None:
-        for file_path in glob.glob(f"{settings.BASE_DIR}/photo_*.jpg"):
+        # Telethon's default profile-photo download filename is ``photo_<digits>.jpg``
+        # in the working directory (which is BASE_DIR when invoked via manage.py).
+        # Match the digit-suffix pattern strictly so unrelated ``photo_*.jpg`` files
+        # a developer might keep in the project root aren't swept by the cleanup.
+        for file_path in glob.glob(f"{settings.BASE_DIR}/photo_[0-9]*.jpg"):
+            if not os.path.isfile(file_path) or os.path.islink(file_path):
+                continue
             try:
                 os.remove(file_path)
             except OSError as error:

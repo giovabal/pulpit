@@ -5,6 +5,7 @@ from time import sleep
 from typing import Any
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.db.models import Max, Min, Q
 from django.utils import timezone
 
@@ -181,7 +182,7 @@ class ChannelCrawler:
                     Channel.from_telegram_object(
                         linked_tg, force_update=False, defaults={"organization": channel.organization}
                     )
-                except Exception as exc:
+                except DatabaseError as exc:
                     logger.warning("Could not create linked channel %s: %s", linked_chat_id, exc)
         channel.available_min_id = getattr(full, "available_min_id", None) or None
         channel.slowmode_seconds = getattr(full, "slowmode_seconds", None) or None
@@ -639,7 +640,9 @@ class ChannelCrawler:
             else None
         )
         to_cutoff: datetime.datetime | None = (
-            datetime.datetime(max_date.year, max_date.month, max_date.day + 1, tzinfo=datetime.timezone.utc)
+            datetime.datetime.combine(
+                max_date + datetime.timedelta(days=1), datetime.time.min, tzinfo=datetime.timezone.utc
+            )
             if max_date is not None
             else None
         )
@@ -835,7 +838,7 @@ class ChannelCrawler:
             )
         except errors.FloodWaitError:
             raise
-        except Exception as e:
+        except errors.RPCError as e:
             logger.warning("get_recommended_channels failed for channel_id=%s: %s", channel.telegram_id, e)
             return 0, 0
         total = 0
@@ -945,18 +948,16 @@ class ChannelCrawler:
                 raise
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
-            except Exception as exc:
-                exc_str = str(exc).lower()
-                if "message id" in exc_str and "invalid" in exc_str:
-                    logger.debug(
-                        "MessageIdInvalid for post %s in %s [%s]; marking unavailable",
-                        msg_telegram_id,
-                        channel,
-                        type(exc).__name__,
-                    )
-                    Message.objects.filter(pk=msg_pk).update(replies_unavailable=True, replies_fetched=True)
-                else:
-                    logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
+            except errors.rpcerrorlist.MessageIdInvalidError as exc:
+                logger.debug(
+                    "MessageIdInvalid for post %s in %s [%s]; marking unavailable",
+                    msg_telegram_id,
+                    channel,
+                    type(exc).__name__,
+                )
+                Message.objects.filter(pk=msg_pk).update(replies_unavailable=True, replies_fetched=True)
+            except errors.RPCError as exc:
+                logger.warning("Error fetching replies for post %s in %s: %s", msg_telegram_id, channel, exc)
 
         return total_upserted
 

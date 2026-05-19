@@ -23,6 +23,27 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
 
+def _validate_id_list(raw) -> list[int] | None:
+    """Coerce request data into a clean list[int], or None on malformed input.
+
+    Reject non-list payloads (a JSON string body like ``{"ids": "abc"}`` would
+    otherwise be iterated character-by-character by ``filter(pk__in=…)``, which
+    then raises a confusing 500). Bools are rejected explicitly because they're
+    an ``int`` subclass in Python but never valid as a primary key.
+    """
+    if not isinstance(raw, list):
+        return None
+    out: list[int] = []
+    for item in raw:
+        if isinstance(item, bool):
+            return None
+        try:
+            out.append(int(item))
+        except (TypeError, ValueError):
+            return None
+    return out
+
+
 class ChannelVacancyViewSet(viewsets.ModelViewSet):
     serializer_class = ChannelVacancySerializer
 
@@ -45,16 +66,20 @@ class ChannelGroupViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="channels")
     def add_channels(self, request, pk=None):
+        ids = _validate_id_list(request.data.get("ids", []))
+        if ids is None:
+            return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
         group = self.get_object()
-        ids = request.data.get("ids", [])
         channels = Channel.objects.filter(pk__in=ids)
         group.channels.add(*channels)
         return Response({"added": channels.count()})
 
     @action(detail=True, methods=["delete"], url_path="channels")
     def remove_channels(self, request, pk=None):
+        ids = _validate_id_list(request.data.get("ids", []))
+        if ids is None:
+            return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
         group = self.get_object()
-        ids = request.data.get("ids", [])
         channels = Channel.objects.filter(pk__in=ids)
         group.channels.remove(*channels)
         return Response({"removed": channels.count()})
@@ -138,13 +163,19 @@ class ChannelViewSet(
 
     @action(detail=False, methods=["post"], url_path="bulk-assign")
     def bulk_assign(self, request):
-        ids = request.data.get("ids", [])
-        organization_id = request.data.get("organization_id")
-        add_group_ids = request.data.get("add_group_ids", [])
-        remove_group_ids = request.data.get("remove_group_ids", [])
-
+        ids = _validate_id_list(request.data.get("ids", []))
+        if ids is None:
+            return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
         if not ids:
             return Response({"error": "No channel ids provided."}, status=status.HTTP_400_BAD_REQUEST)
+        organization_id = request.data.get("organization_id")
+        add_group_ids = _validate_id_list(request.data.get("add_group_ids", []))
+        remove_group_ids = _validate_id_list(request.data.get("remove_group_ids", []))
+        if add_group_ids is None or remove_group_ids is None:
+            return Response(
+                {"error": "'add_group_ids' and 'remove_group_ids' must be lists of integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         channels = Channel.objects.filter(pk__in=ids)
 
