@@ -70,6 +70,7 @@ class OperationsView(View):
         ad = {
             # Crawl defaults
             "CRAWL_GET_CHANNELS_INFO": settings.CRAWL_GET_CHANNELS_INFO,
+            "CRAWL_UPDATE_TYPE_EXCLUDED_INFO": settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO,
             "CRAWL_MINE_ABOUT_TEXTS": settings.CRAWL_MINE_ABOUT_TEXTS,
             "CRAWL_FETCH_RECOMMENDED": settings.CRAWL_FETCH_RECOMMENDED,
             "CRAWL_RETRY_LOST_AND_PRIVATE": settings.CRAWL_RETRY_LOST_AND_PRIVATE,
@@ -102,6 +103,7 @@ class OperationsView(View):
             "SA_DEAD_LEAVES_COLOR": settings.DEAD_LEAVES_COLOR,
             "SA_COMMUNITY_PALETTE": settings.COMMUNITY_PALETTE,
             "SA_COMMUNITY_PALETTE_REVERSED": settings.COMMUNITY_PALETTE_REVERSED,
+            "SA_BRIDGING_BASIS": settings.SA_BRIDGING_BASIS,
             "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
             "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,

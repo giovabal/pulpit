@@ -609,7 +609,7 @@
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Apply recency decay: messages up to N days old carry full weight; older messages decay as exp(-(age-N)/N). Leave blank to weight all messages equally."></i>
                   </label>
-                  <input type="number" name="recency_weights" id="recency_weights" placeholder="–" min="1">
+                  <input type="number" name="recency_weights" id="recency_weights" placeholder="–" value="{{ ad.SA_RECENCY_WEIGHTS }}" min="1">
                 </div>
                 <div class="ops-param">
                   <label for="community_distribution_threshold">Distribution threshold %
@@ -667,8 +667,8 @@
                        title="Community partition used to compute the bridging entropy. Shared between the BRIDGING measure and the bridging robustness attack strategy — both use the same basis. Must also be in Community strategies. Default: Leiden directed (its directed null model respects citation direction, matching the brokerage question)."></i>
                   </label>
                   <select name="bridging_basis" id="bridging_basis" data-requires-bridging="1">
-                    <option value="">(Leiden directed — default)</option>
-                    {% for key, label in bridging_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                    <option value="" {% if not ad.SA_BRIDGING_BASIS %}selected{% endif %}>(Leiden directed — default)</option>
+                    {% for key, label in bridging_basis_choices %}<option value="{{ key }}" {% if key == ad.SA_BRIDGING_BASIS %}selected{% endif %}>{{ label }}</option>{% endfor %}
                   </select>
                 </div>
               </div>
@@ -807,28 +807,28 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Look-back window before the vacancy closure date to identify orphaned channels and the vacancy's source portfolio. Default: 12."></i>
                 </label>
-                <input type="number" name="vacancy_months_before" id="vacancy_months_before" placeholder="12" min="1">
+                <input type="number" name="vacancy_months_before" id="vacancy_months_before" placeholder="{{ ad.SA_VACANCY_MONTHS_BEFORE }}" value="{{ ad.SA_VACANCY_MONTHS_BEFORE }}" min="1">
               </div>
               <div class="ops-param">
                 <label for="vacancy_months_after">Months after
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Forward window after the vacancy closure date to observe candidate adoption. Default: 24."></i>
                 </label>
-                <input type="number" name="vacancy_months_after" id="vacancy_months_after" placeholder="24" min="1">
+                <input type="number" name="vacancy_months_after" id="vacancy_months_after" placeholder="{{ ad.SA_VACANCY_MONTHS_AFTER }}" value="{{ ad.SA_VACANCY_MONTHS_AFTER }}" min="1">
               </div>
               <div class="ops-param">
                 <label for="vacancy_max_candidates">Max candidates
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Maximum replacement candidates scored per vacancy, ranked by orphaned-amplifier count. Default: 30."></i>
                 </label>
-                <input type="number" name="vacancy_max_candidates" id="vacancy_max_candidates" placeholder="30" min="1" max="200">
+                <input type="number" name="vacancy_max_candidates" id="vacancy_max_candidates" placeholder="{{ ad.SA_VACANCY_MAX_CANDIDATES }}" value="{{ ad.SA_VACANCY_MAX_CANDIDATES }}" min="1" max="200">
               </div>
               <div class="ops-param">
                 <label for="vacancy_ppr_alpha">PPR α
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Damping factor for Personalized PageRank. Higher values weight long-range connections more. Only active when PPR is selected. Default: 0.85."></i>
                 </label>
-                <input type="number" name="vacancy_ppr_alpha" id="vacancy_ppr_alpha" placeholder="0.85"
+                <input type="number" name="vacancy_ppr_alpha" id="vacancy_ppr_alpha" placeholder="{{ ad.SA_VACANCY_PPR_ALPHA }}" value="{{ ad.SA_VACANCY_PPR_ALPHA }}"
                        min="0.01" max="0.99" step="0.01" data-requires-vacancy="PPR">
               </div>
             </div>
@@ -879,35 +879,35 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Serrano-Boguñá-Vespignani threshold applied before the attacks. Values in (0, 1) keep statistically significant edges only; 0 disables the filter and uses the full graph. Default: 0.05."></i>
                 </label>
-                <input type="number" name="robustness_alpha" id="robustness_alpha" placeholder="{{ ad.SA_ROBUSTNESS_ALPHA }}" min="0" max="1" step="0.001">
+                <input type="number" name="robustness_alpha" id="robustness_alpha" placeholder="{{ ad.SA_ROBUSTNESS_ALPHA }}" value="{{ ad.SA_ROBUSTNESS_ALPHA }}" min="0" max="1" step="0.001">
               </div>
               <div class="ops-param">
                 <label for="robustness_runs">Random runs
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Number of independent random-failure runs averaged for the 'random' strategy. Default: 100."></i>
                 </label>
-                <input type="number" name="robustness_runs" id="robustness_runs" placeholder="{{ ad.SA_ROBUSTNESS_RUNS }}" min="1" max="10000">
+                <input type="number" name="robustness_runs" id="robustness_runs" placeholder="{{ ad.SA_ROBUSTNESS_RUNS }}" value="{{ ad.SA_ROBUSTNESS_RUNS }}" min="1" max="10000">
               </div>
               <div class="ops-param">
                 <label for="robustness_null">Null simulations
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Number of weight-rewiring null-model simulations per strategy. 0 disables the null model (no z-scores). Default: 20."></i>
                 </label>
-                <input type="number" name="robustness_null" id="robustness_null" placeholder="{{ ad.SA_ROBUSTNESS_NULL }}" min="0" max="1000">
+                <input type="number" name="robustness_null" id="robustness_null" placeholder="{{ ad.SA_ROBUSTNESS_NULL }}" value="{{ ad.SA_ROBUSTNESS_NULL }}" min="0" max="1000">
               </div>
               <div class="ops-param">
                 <label for="robustness_seed">Seed
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Single seed driving every stochastic component of the analysis — random removal, sampling, null-model rewiring. Identical seed → identical payload. Default: 42."></i>
                 </label>
-                <input type="number" name="robustness_seed" id="robustness_seed" placeholder="{{ ad.SA_ROBUSTNESS_SEED }}" min="0">
+                <input type="number" name="robustness_seed" id="robustness_seed" placeholder="{{ ad.SA_ROBUSTNESS_SEED }}" value="{{ ad.SA_ROBUSTNESS_SEED }}" min="0">
               </div>
               <div class="ops-param">
                 <label for="robustness_sample">R_reach sample
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Source-sample size for the R_reach metric on graphs larger than this many nodes. Smaller = faster but noisier curves. Default: 500."></i>
                 </label>
-                <input type="number" name="robustness_sample" id="robustness_sample" placeholder="{{ ad.SA_ROBUSTNESS_SAMPLE }}" min="10" max="100000">
+                <input type="number" name="robustness_sample" id="robustness_sample" placeholder="{{ ad.SA_ROBUSTNESS_SAMPLE }}" value="{{ ad.SA_ROBUSTNESS_SAMPLE }}" min="10" max="100000">
               </div>
             </div>
           </fieldset>

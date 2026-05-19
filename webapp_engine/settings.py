@@ -378,6 +378,7 @@ SA_FA2_ITERATIONS = _structural.computation.fa2_iterations
 SA_LAYOUTS_2D = ",".join(_structural.layouts.two_d)
 SA_LAYOUTS_3D = ",".join(_structural.layouts.three_d)
 SA_MEASURES = ",".join(_structural.measures.selected)
+SA_BRIDGING_BASIS = _structural.measures.bridging_basis
 SA_COMMUNITY_STRATEGIES = ",".join(_structural.communities.strategies)
 SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
