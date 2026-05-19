@@ -281,6 +281,23 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DJANGO_ADMIN_LOGS_ENABLED = False
 
 
+# ── Cache ─────────────────────────────────────────────────────────────────────
+# File-based cache (rather than the default in-memory LocMemCache) so that the
+# crawl_channels management-command process and the webserver process share
+# the same cache — crawler-side invalidations must reach the page renderer.
+# Tests use DummyCache so cached state can't leak between cases.
+
+if _RUNNING_TESTS:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": str(BASE_DIR / "tmp" / "django-cache"),
+        }
+    }
+
+
 # ── Telegram credentials (.env) ───────────────────────────────────────────────
 
 TELEGRAM_API_ID = _required("TELEGRAM_API_ID")

@@ -169,59 +169,18 @@ class HomeView(ListView):
         from django.urls import reverse
 
         ctx = super().get_context_data(*args, **kwargs)
+        Message.attach_album_data(ctx["object_list"])
 
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET))
 
-        in_target_qs = Channel.objects.in_target()
-        in_target_channels = in_target_qs.count()
-        in_target_msgs = Message.objects.alive().filter(channel__in=in_target_qs.values("pk"))
-        msg_agg = in_target_msgs.aggregate(
-            total=Count("id"),
-            earliest=Min("date"),
-            latest=Max("date"),
-            forwards=Count("id", filter=Q(forwarded_from__isnull=False)),
-        )
-        total_messages = msg_agg["total"]
-        total_forwards = msg_agg["forwards"]
-        total_subscribers = (
-            in_target_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"]
-            or 0
-        )
-        total_forward_edges = (
-            in_target_msgs.filter(forwarded_from__in=in_target_qs.values("pk"))
-            .values("channel_id", "forwarded_from_id")
-            .distinct()
-            .count()
-        )
-        total_replies = MessageReply.objects.filter(
-            parent_message__channel__in=in_target_qs.values("pk"), parent_message__is_lost=False
-        ).count()
+        # Five sequential aggregates over the Message + Channel tables. Cached
+        # for an hour and invalidated at the start of every crawl_channels run
+        # — see webapp/cache.py.
+        from webapp.cache import get_home_summary
 
-        ctx["summary"] = [
-            {"icon": "bi-broadcast", "label": "Channels", "value": f"{in_target_channels:,}"},
-            {
-                "icon": "bi-chat-left-text",
-                "label": "Messages collected",
-                "value": f"{total_messages:,}",
-                "secondary": [{"value": f"{total_replies:,}", "label": "replies"}],
-            },
-            {"icon": "bi-people", "label": "Total subscribers", "value": f"{total_subscribers:,}"},
-            {
-                "icon": "bi-calendar-range",
-                "label": "Date range",
-                "value": f"{fmt_date(msg_agg['earliest'])} – {fmt_date(msg_agg['latest'])}",
-                "note": "first message - last message",
-            },
-            {
-                "icon": "bi-forward",
-                "label": "Forwards",
-                "value": f"{total_forwards:,}",
-                "note": "cross-channel amplifications",
-                "secondary": [{"value": f"{total_forward_edges:,}", "label": "distinct connections"}],
-            },
-        ]
+        ctx["summary"] = get_home_summary()
         ctx["panels"] = [
             {
                 "id": "messages-history",
@@ -390,6 +349,7 @@ class MessageSearchView(ListView):
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(*args, **kwargs)
+        Message.attach_album_data(ctx["object_list"])
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET))
@@ -461,6 +421,7 @@ class ChannelDetailView(ListView):
         from django.urls import reverse
 
         context_data = super().get_context_data(*args, **kwargs)
+        Message.attach_album_data(context_data["object_list"])
         ch = self.selected_channel
         q = self.request.GET.get("q", "").strip()
         context_data["query"] = q

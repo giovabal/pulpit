@@ -1,5 +1,6 @@
 import datetime
 import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
@@ -285,6 +286,16 @@ class Message(TelegramBaseModel):
     factcheck = models.JSONField(null=True, blank=True)
     stats_refreshed_at = models.DateTimeField(null=True)
 
+    class Meta:
+        indexes = [
+            # Speeds up the in_target() + Message.alive() pattern used by every
+            # home / search / channel-detail page aggregate.
+            models.Index(fields=["channel", "is_lost"], name="webapp_msg_chan_lost_idx"),
+            # Speeds up Min/Max(date) aggregates and per-channel date-range
+            # filters (channel-detail timeline, structural_analysis).
+            models.Index(fields=["channel", "date"], name="webapp_msg_chan_date_idx"),
+        ]
+
     def __str__(self) -> str:
         return f"{self.channel.title} [{self.date or self.telegram_id}]"
 
@@ -326,16 +337,21 @@ class Message(TelegramBaseModel):
     def is_album(self) -> bool:
         return self.grouped_id is not None
 
-    def _album_media(self, related_set_name: str, model: type) -> list:
+    def _album_media(self, cache_key: str, related_set_name: str, model: type) -> list:
         """Return either prefetched single-message media or all album-sibling media.
 
         For non-album messages this returns the prefetched related set, so the
         existing prefetch_related calls keep their N+1 protection. For album
-        heads it issues one query per media type to gather siblings' media,
-        ordered by sibling telegram_id so the gallery matches Telegram's order.
+        heads it returns the cache populated by :meth:`attach_album_data`
+        (when the view called it on the paginated page), or falls back to a
+        per-message query — ordered by sibling telegram_id so the gallery
+        matches Telegram's order.
         """
         if not self.is_album:
             return list(getattr(self, related_set_name).all())
+        cache = getattr(self, "_album_cache", None)
+        if cache is not None:
+            return cache.get(cache_key, [])
         return list(
             model.objects.filter(
                 message__channel_id=self.channel_id,
@@ -347,38 +363,114 @@ class Message(TelegramBaseModel):
     def album_pictures(self) -> list:
         from webapp.models.media_models import MessagePicture
 
-        return self._album_media("messagepicture_set", MessagePicture)
+        return self._album_media("pictures", "messagepicture_set", MessagePicture)
 
     @property
     def album_videos(self) -> list:
         from webapp.models.media_models import MessageVideo
 
-        return self._album_media("messagevideo_set", MessageVideo)
+        return self._album_media("videos", "messagevideo_set", MessageVideo)
 
     @property
     def album_audios(self) -> list:
         from webapp.models.media_models import MessageAudio
 
-        return self._album_media("messageaudio_set", MessageAudio)
+        return self._album_media("audios", "messageaudio_set", MessageAudio)
 
     @property
     def album_stickers(self) -> list:
         from webapp.models.media_models import MessageSticker
 
-        return self._album_media("messagesticker_set", MessageSticker)
+        return self._album_media("stickers", "messagesticker_set", MessageSticker)
 
     @property
     def album_other_media(self) -> list:
         from webapp.models.media_models import MessageOtherMedia
 
-        return self._album_media("messageothermedia_set", MessageOtherMedia)
+        return self._album_media("other_media", "messageothermedia_set", MessageOtherMedia)
 
     @property
     def album_size(self) -> int:
         """Number of messages in this album (1 for non-album messages)."""
         if not self.is_album:
             return 1
+        cached = getattr(self, "_album_size_cache", None)
+        if cached is not None:
+            return cached
         return Message.objects.filter(channel_id=self.channel_id, grouped_id=self.grouped_id).count()
+
+    _ALBUM_CACHE_KEYS: ClassVar[tuple[str, ...]] = ("pictures", "videos", "audios", "stickers", "other_media")
+
+    @classmethod
+    def attach_album_data(cls, messages: "Iterable[Message]") -> None:
+        """Bulk-load album sibling media and sizes for a page of messages.
+
+        Without this, every album message on the page fires one query per
+        media model in :meth:`_album_media` (and another for ``album_size``)
+        when the template iterates the gallery. This method collapses those
+        N × 6 round-trips into 6 queries total:
+
+        * 1 query to find all album-sibling Message rows for the page and
+          count them per ``(channel_id, grouped_id)`` pair.
+        * 5 queries, one per media model, fetching every sibling media row
+          and grouping by the same key.
+
+        The results are stored on each album head as ``_album_cache`` (a
+        dict keyed by media type) and ``_album_size_cache`` (an int). The
+        property getters read these caches first; if absent (e.g. the view
+        didn't call this) they fall back to the original per-message query
+        so existing call sites stay correct.
+        """
+        from collections import defaultdict
+        from functools import reduce
+        from operator import or_
+
+        from webapp.models.media_models import (
+            MessageAudio,
+            MessageOtherMedia,
+            MessagePicture,
+            MessageSticker,
+            MessageVideo,
+        )
+
+        materialised = list(messages)
+        album_keys = {(m.channel_id, m.grouped_id) for m in materialised if m.is_album}
+        if not album_keys:
+            return
+
+        q = reduce(or_, (Q(channel_id=c, grouped_id=g) for c, g in album_keys))
+        sibling_rows = list(cls.objects.filter(q).values("id", "channel_id", "grouped_id"))
+
+        sibling_ids: list[int] = []
+        sizes: dict[tuple[int, int], int] = defaultdict(int)
+        for row in sibling_rows:
+            sibling_ids.append(row["id"])
+            sizes[(row["channel_id"], row["grouped_id"])] += 1
+
+        media_lookups: dict[tuple[int, int], dict[str, list]] = {}
+        media_configs = (
+            ("pictures", MessagePicture),
+            ("videos", MessageVideo),
+            ("audios", MessageAudio),
+            ("stickers", MessageSticker),
+            ("other_media", MessageOtherMedia),
+        )
+        for cache_key, media_model in media_configs:
+            qs = media_model.objects.filter(message_id__in=sibling_ids).select_related("message")
+            for media in qs.order_by("message__telegram_id"):
+                key = (media.message.channel_id, media.message.grouped_id)
+                bucket = media_lookups.get(key)
+                if bucket is None:
+                    bucket = {k: [] for k in cls._ALBUM_CACHE_KEYS}
+                    media_lookups[key] = bucket
+                bucket[cache_key].append(media)
+
+        for msg in materialised:
+            if not msg.is_album:
+                continue
+            key = (msg.channel_id, msg.grouped_id)
+            msg._album_cache = media_lookups.get(key, {k: [] for k in cls._ALBUM_CACHE_KEYS})
+            msg._album_size_cache = sizes.get(key, 1)
 
     @property
     def telegram_url(self) -> str:

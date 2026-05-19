@@ -974,6 +974,13 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
+        # The home-page ecosystem summary is cached for an hour; drop it now so
+        # newly crawled data shows up on the next page hit rather than waiting
+        # for the TTL to expire.
+        from webapp.cache import invalidate_home_summary_cache
+
+        invalidate_home_summary_cache()
+
         opts = self._resolve_options(options)
         in_target_qs = self._build_in_target_qs(opts)
 

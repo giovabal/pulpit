@@ -903,3 +903,53 @@ class MessageAlbumTests(TestCase):
         params = QueryDict("lost=include")
         visible_ids = set(_apply_message_options(qs, params).values_list("id", flat=True))
         self.assertEqual(visible_ids, {self.head.id, self.standalone.id})
+
+    def test_attach_album_data_avoids_n_plus_one(self) -> None:
+        """Bulk-loading album media should issue 6 queries regardless of page size."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        # A page-of-three (one album head + standalone): media access without
+        # the bulk loader fires per-property queries; with it, those queries
+        # are replaced by 6 batched fetches in attach_album_data itself.
+        page = list(
+            Message.objects.filter(channel=self.channel, grouped_id__isnull=False)
+            .exclude(telegram_id__in=[self.tail1.telegram_id, self.tail2.telegram_id])
+            .union(Message.objects.filter(pk=self.standalone.pk))
+            .order_by("telegram_id")
+        )
+        self.assertEqual({m.pk for m in page}, {self.head.pk, self.standalone.pk})
+
+        with CaptureQueriesContext(connection) as ctx:
+            Message.attach_album_data(page)
+            attach_queries = len(ctx.captured_queries)
+            for msg in page:
+                _ = msg.album_pictures
+                _ = msg.album_videos
+                _ = msg.album_audios
+                _ = msg.album_stickers
+                _ = msg.album_other_media
+                _ = msg.album_size
+
+        # attach_album_data does 1 sibling-Messages query + 5 media-model
+        # queries (one per media type) = 6. Subsequent property access on
+        # album messages reads the cache (0 queries); on non-album messages
+        # it hits the prefetched related set (0 queries here because we
+        # never prefetched, but Django still doesn't issue a count for
+        # album_size since the message isn't an album).
+        self.assertEqual(attach_queries, 6)
+        # The standalone (non-album) message will issue one query per
+        # media-set property since we didn't prefetch_related; the album
+        # head's six property accesses are all cache hits.
+        property_access_queries = len(ctx.captured_queries) - attach_queries
+        self.assertLessEqual(property_access_queries, 5)  # at most one per media type for the standalone
+
+    def test_attach_album_data_is_idempotent_when_no_albums(self) -> None:
+        """No-op fast path when the page has zero album messages."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            Message.attach_album_data([self.standalone])
+        self.assertEqual(len(ctx.captured_queries), 0)
+        self.assertFalse(hasattr(self.standalone, "_album_cache"))
