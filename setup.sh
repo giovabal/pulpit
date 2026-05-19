@@ -29,28 +29,23 @@ source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt -r requirements_dev.txt
 
-# Bootstrap .env from env.example if not present
-if [ ! -f ".env" ]; then
-    if [ -f "env.example" ]; then
-        cp env.example .env
+# Bootstrap configuration/.env from configuration/env.example if not present
+mkdir -p configuration
+if [ ! -f "configuration/.env" ]; then
+    if [ -f "configuration/env.example" ]; then
+        cp configuration/env.example configuration/.env
         echo ""
-        echo "Created .env from env.example."
-        echo "Edit .env and fill in TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_PHONE_NUMBER before running the server."
+        echo "Created configuration/.env from configuration/env.example."
+        echo "Edit configuration/.env and fill in TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_PHONE_NUMBER before running the server."
     else
-        echo "Warning: env.example not found — create .env manually before running the server." >&2
+        echo "Warning: configuration/env.example not found — create configuration/.env manually before running the server." >&2
     fi
 fi
 
-# Bootstrap .analysis-defaults from analysis-defaults.example if not present
-if [ ! -f ".analysis-defaults" ]; then
-    if [ -f "analysis-defaults.example" ]; then
-        cp analysis-defaults.example .analysis-defaults
-        echo "Created .analysis-defaults from analysis-defaults.example."
-        echo "Edit .analysis-defaults to tune crawling and analysis options."
-    else
-        echo "Warning: analysis-defaults.example not found — .analysis-defaults will use built-in defaults." >&2
-    fi
-fi
+# Crawler and structural-analysis defaults live in webapp_engine/config/defaults.py.
+# A configuration/.operations-crawl or configuration/.operations-structural file is
+# only created when the user clicks "Save as defaults" in the Operations panel
+# (or hand-writes one). Until then, the built-in defaults apply.
 
 # Install dev tooling (html-validate for the static-export HTML lint)
 # npm is optional — skip with a friendly note if it's not on PATH.

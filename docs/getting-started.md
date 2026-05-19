@@ -54,12 +54,13 @@ Think of this step as authorising Pulpit to use your Telegram account — the sa
 
 ## Step 3 — Fill in your credentials
 
-The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created two configuration files for you:
+The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created your credentials file:
 
-- **`.env`** — credentials and deployment settings. Open it and fill in your Telegram credentials.
-- **`.analysis-defaults`** — crawler behaviour and analysis options. The defaults work for a first run; edit later to tune things like download limits or channel types.
+- **`configuration/.env`** — credentials and deployment settings. Open it and fill in your Telegram credentials.
 
-Open `.env` in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
+Crawler and analysis options ship with sensible built-in defaults — there is no separate file to edit at first. Once you have run the Operations panel a few times and settled on values you like, click **Save as defaults** below the Crawl Channels or Structural Analysis form to write them to `configuration/.operations-crawl` or `configuration/.operations-structural` respectively.
+
+Open `configuration/.env` in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
 
 ```
 TELEGRAM_API_ID=your_api_id_here
@@ -93,7 +94,7 @@ You are now looking at the Pulpit interface. Proceed to [Workflow](workflow.md) 
 
 If you are running Pulpit on your own laptop or desktop, you do not need to change anything here — the default settings are fine.
 
-If you plan to run Pulpit on a server that other people can reach over a network, you can restrict who can access the interface. Set the `WEB_ACCESS` value in your `.env` file:
+If you plan to run Pulpit on a server that other people can reach over a network, you can restrict who can access the interface. Set the `WEB_ACCESS` value in your `configuration/.env` file:
 
 | Value | Effect |
 | :---- | :----- |
@@ -122,8 +123,8 @@ Git is not installed. Download it from [git-scm.com/downloads](https://git-scm.c
 **"No module named …"**
 The setup script may not have run completely. Try: `pip install -r requirements.txt`.
 
-**Missing `.env` or `.analysis-defaults`**
-Run `setup.sh` (or `setup.bat`) — it creates both from their example files automatically. If you prefer to create them manually: `cp env.example .env` and `cp analysis-defaults.example .analysis-defaults` (use `copy` on Windows).
+**Missing `configuration/.env`**
+Run `setup.sh` (or `setup.bat`) — it creates it from `configuration/env.example` automatically. If you prefer to create it manually: `cp configuration/env.example configuration/.env` (use `copy` on Windows). The `.operations-crawl` and `.operations-structural` files have no example — built-in defaults apply until you click "Save as defaults" in the Operations panel.
 
 **The server starts but the browser shows an error**
 Check the terminal for error messages. If the error mentions missing tables, run `python manage.py migrate` manually — this can happen if `setup.sh` was interrupted before it finished.

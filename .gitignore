@@ -13,8 +13,9 @@ media/*
 channels/*
 static/*
 exports/*
-.env
-.analysis-defaults
+configuration/.env
+configuration/.operations-crawl
+configuration/.operations-structural
 *.sqlite3*
 *.session
 *.session-journal

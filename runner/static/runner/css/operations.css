@@ -480,3 +480,18 @@
 
 /* ---- Analysis page ---- */
 .analysis-date-cell { font-size: .875rem; white-space: nowrap; }
+
+/* ---- Save-as-defaults footer ---- */
+.ops-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .75rem;
+  padding: .5rem 0 0;
+  margin-top: .75rem;
+  border-top: 1px solid var(--border);
+}
+.save-defaults-status {
+  font-size: .75rem;
+  color: var(--muted);
+}

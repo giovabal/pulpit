@@ -2,7 +2,15 @@ import sys
 import warnings
 from pathlib import Path
 
-from decouple import Config, Csv, RepositoryEnv, UndefinedValueError, config
+from webapp_engine.config import (
+    ENV_PATH,
+    SYSTEM_PATH,
+    load_crawl_settings,
+    load_structural_settings,
+    optional_int,
+)
+
+from decouple import Config, Csv, RepositoryEnv, UndefinedValueError
 
 # Telethon calls the deprecated asyncio.get_event_loop() during initialisation
 # when no loop is running yet (Python 3.12+). The warning is attributed to
@@ -15,14 +23,6 @@ warnings.filterwarnings(
 )
 
 
-def optional_int(value):
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in {"none", ""}:
-        return None
-    return int(value)
-
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -30,52 +30,11 @@ MEDIA_ROOT_DIRNAME = "media"
 MEDIA_ROOT = BASE_DIR / MEDIA_ROOT_DIRNAME
 
 
-_ENV_HINTS = {
-    "SECRET_KEY": (
-        "Generate one with:\n"
-        '  python -c "from django.core.management.utils import get_random_secret_key; '
-        "print('SECRET_KEY=' + get_random_secret_key())\" >> .env"
-    ),
-    "ALLOWED_HOSTS": "Add a comma-separated list, e.g.:\n  ALLOWED_HOSTS=localhost,127.0.0.1",
-    "TELEGRAM_API_ID": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_ID=...",
-    "TELEGRAM_API_HASH": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_HASH=...",
-    "TELEGRAM_PHONE_NUMBER": (
-        "Add your Telegram-registered phone number in international format, e.g.:\n  TELEGRAM_PHONE_NUMBER=+33611223344"
-    ),
-    "DB_NAME": "Required when DB_ENGINE is postgresql / mysql / mariadb / oracle. Add:\n  DB_NAME=...",
-}
-
-
-def _required(key, cast=str):
-    """Read a required setting from .env, exiting with a helpful message when missing.
-
-    Bare ``decouple.config(key)`` raises ``UndefinedValueError`` whose default
-    stack trace buries the actual problem in a wall of import frames. Catch it
-    here and print a focused, actionable error pointing the user at the .env
-    file and (where useful) the one-liner that fixes it.
-    """
-    try:
-        return config(key, cast=cast)
-    except UndefinedValueError:
-        env_path = BASE_DIR / ".env"
-        sys.stderr.write(f"\nMissing required configuration: {key} is not set in {env_path}\n")
-        if not env_path.exists():
-            example = BASE_DIR / "env.example"
-            sys.stderr.write(
-                f"The .env file does not exist. Bootstrap it with:\n  cp {example.name} .env\n"
-                "then edit .env to fill in the required values.\n"
-            )
-        hint = _ENV_HINTS.get(key)
-        if hint:
-            sys.stderr.write(hint + "\n")
-        sys.stderr.write("See env.example for the full list of expected keys.\n\n")
-        sys.exit(1)
-
-
-# ── Secondary config files ────────────────────────────────────────────────────
-# config()  → AutoConfig: reads .env + os.environ (credentials, deployment)
-# _ana(...) → .analysis-defaults (crawler behaviour, graph options)
-# _sys(...) → .system-options   (version, repo URL — managed by project)
+# ── Configuration loading ─────────────────────────────────────────────────────
+# .env (credentials, deployment, Django runtime)  → decouple `config(...)`
+# .operations-crawl (TOML)                        → webapp_engine.config.load_crawl_settings()
+# .operations-structural (TOML)                   → webapp_engine.config.load_structural_settings()
+# .system (APP_VERSION, REPOSITORY_URL)           → decouple `_sys(...)`
 
 
 class _EmptyRepository:
@@ -88,19 +47,60 @@ class _EmptyRepository:
         raise KeyError(key)
 
 
-# Tests must be hermetic — a developer's local .analysis-defaults can flip
+# Tests must be hermetic — a developer's local .operations-crawl can flip
 # safety-critical knobs like IGNORE_FLOODWAIT=False or CRAWL_FETCH_RECOMMENDED=True,
 # which then leak into mocked crawler tests and either hang on 900-second sleeps
 # or run code paths the test never primed. When running under `manage.py test`,
-# bypass the file so every _ana(...) falls back to its hardcoded default.
+# bypass both .operations-* files so every read falls back to its hardcoded default.
 _RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == "test"
-_ANALYSIS_PATH = BASE_DIR / ".analysis-defaults"
-_ana = Config(
-    RepositoryEnv(str(_ANALYSIS_PATH)) if _ANALYSIS_PATH.exists() and not _RUNNING_TESTS else _EmptyRepository()
-)
 
-_SYSTEM_PATH = BASE_DIR / ".system-options"
-_sys = Config(RepositoryEnv(str(_SYSTEM_PATH)) if _SYSTEM_PATH.exists() else _EmptyRepository())
+config = Config(RepositoryEnv(str(ENV_PATH)) if ENV_PATH.exists() else _EmptyRepository())
+_sys = Config(RepositoryEnv(str(SYSTEM_PATH)) if SYSTEM_PATH.exists() else _EmptyRepository())
+
+_crawl = load_crawl_settings(hermetic=_RUNNING_TESTS)
+_structural = load_structural_settings(hermetic=_RUNNING_TESTS)
+
+
+_ENV_HINTS = {
+    "SECRET_KEY": (
+        "Generate one with:\n"
+        '  python -c "from django.core.management.utils import get_random_secret_key; '
+        "print('SECRET_KEY=' + get_random_secret_key())\" >> configuration/.env"
+    ),
+    "ALLOWED_HOSTS": "Add a comma-separated list, e.g.:\n  ALLOWED_HOSTS=localhost,127.0.0.1",
+    "TELEGRAM_API_ID": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_ID=...",
+    "TELEGRAM_API_HASH": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_HASH=...",
+    "TELEGRAM_PHONE_NUMBER": (
+        "Add your Telegram-registered phone number in international format, e.g.:\n  TELEGRAM_PHONE_NUMBER=+33611223344"
+    ),
+    "DB_NAME": "Required when DB_ENGINE is postgresql / mysql / mariadb / oracle. Add:\n  DB_NAME=...",
+}
+
+
+def _required(key, cast=str):
+    """Read a required setting from configuration/.env, exiting with a helpful message when missing.
+
+    Bare ``decouple.config(key)`` raises ``UndefinedValueError`` whose default
+    stack trace buries the actual problem in a wall of import frames. Catch it
+    here and print a focused, actionable error pointing the user at the .env
+    file and (where useful) the one-liner that fixes it.
+    """
+    try:
+        return config(key, cast=cast)
+    except UndefinedValueError:
+        sys.stderr.write(f"\nMissing required configuration: {key} is not set in {ENV_PATH}\n")
+        if not ENV_PATH.exists():
+            example = ENV_PATH.parent / "env.example"
+            sys.stderr.write(
+                f"The .env file does not exist. Bootstrap it with:\n  cp {example} {ENV_PATH}\n"
+                "then edit configuration/.env to fill in the required values.\n"
+            )
+        hint = _ENV_HINTS.get(key)
+        if hint:
+            sys.stderr.write(hint + "\n")
+        sys.stderr.write("See configuration/env.example for the full list of expected keys.\n\n")
+        sys.exit(1)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -287,108 +287,102 @@ TELEGRAM_API_ID = _required("TELEGRAM_API_ID")
 TELEGRAM_API_HASH = _required("TELEGRAM_API_HASH")
 TELEGRAM_PHONE_NUMBER = _required("TELEGRAM_PHONE_NUMBER")
 
-# ── Crawler behaviour (.analysis-defaults) ────────────────────────────────────
+# ── Crawler behaviour (configuration/.operations-crawl) ──────────────────────
 
-TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL = _ana(
-    "TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL", default=100, cast=optional_int
-)
-TELEGRAM_CRAWLER_DOWNLOAD_IMAGES = _ana("TELEGRAM_CRAWLER_DOWNLOAD_IMAGES", default=False, cast=bool)
-TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = _ana("TELEGRAM_CRAWLER_DOWNLOAD_VIDEO", default=False, cast=bool)
-TELEGRAM_CRAWLER_DOWNLOAD_AUDIO = _ana("TELEGRAM_CRAWLER_DOWNLOAD_AUDIO", default=False, cast=bool)
-TELEGRAM_CRAWLER_DOWNLOAD_STICKERS = _ana("TELEGRAM_CRAWLER_DOWNLOAD_STICKERS", default=False, cast=bool)
-TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA = _ana("TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA", default=False, cast=bool)
-TELEGRAM_CRAWLER_GRACE_TIME = _ana("TELEGRAM_CRAWLER_GRACE_TIME", default=1, cast=int)
-TELEGRAM_CONNECTION_RETRIES = _ana("TELEGRAM_CONNECTION_RETRIES", default=10, cast=int)
-TELEGRAM_RETRY_DELAY = _ana("TELEGRAM_RETRY_DELAY", default=5, cast=int)
-TELEGRAM_FLOOD_SLEEP_THRESHOLD = _ana("TELEGRAM_FLOOD_SLEEP_THRESHOLD", default=60, cast=int)
-IGNORE_FLOODWAIT = _ana("IGNORE_FLOODWAIT", default=True, cast=bool)
-TELEGRAM_FLOODWAIT_SLEEP_SECONDS = _ana("TELEGRAM_FLOODWAIT_SLEEP_SECONDS", default=900, cast=int)
-TELEGRAM_SESSION_NAME = _ana("TELEGRAM_SESSION_NAME", default="anon", cast=str)
+TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL = optional_int(_crawl.telegram.messages_limit_per_channel)
+TELEGRAM_CRAWLER_DOWNLOAD_IMAGES = _crawl.downloads.images
+TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = _crawl.downloads.video
+TELEGRAM_CRAWLER_DOWNLOAD_AUDIO = _crawl.downloads.audio
+TELEGRAM_CRAWLER_DOWNLOAD_STICKERS = _crawl.downloads.stickers
+TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA = _crawl.downloads.other_media
+TELEGRAM_CRAWLER_GRACE_TIME = _crawl.telegram.grace_time
+TELEGRAM_CONNECTION_RETRIES = _crawl.telegram.connection_retries
+TELEGRAM_RETRY_DELAY = _crawl.telegram.retry_delay
+TELEGRAM_FLOOD_SLEEP_THRESHOLD = _crawl.telegram.flood_sleep_threshold
+IGNORE_FLOODWAIT = _crawl.telegram.ignore_floodwait
+TELEGRAM_FLOODWAIT_SLEEP_SECONDS = _crawl.telegram.floodwait_sleep_seconds
+TELEGRAM_SESSION_NAME = _crawl.telegram.session_name
 
 # ── Project identity (.env) ───────────────────────────────────────────────────
 
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).upper()
 
-# ── Network and analysis options (.analysis-defaults) ─────────────────────────
+# ── Network and analysis options (configuration/.operations-structural) ──────
 
-REVERSED_EDGES = _ana("REVERSED_EDGES", default=True, cast=bool)
+REVERSED_EDGES = _structural.graph.reversed_edges
 
-DEFAULT_CHANNEL_TYPES: list[str] = [
-    t.strip().upper() for t in _ana("DEFAULT_CHANNEL_TYPES", default="CHANNEL", cast=str).split(",") if t.strip()
-]
+DEFAULT_CHANNEL_TYPES: list[str] = [t.strip().upper() for t in _crawl.scope.channel_types if str(t).strip()]
 
-DEAD_LEAVES_COLOR = _ana("DEAD_LEAVES_COLOR", default="#596a64", cast=str)
-COMMUNITY_PALETTE = _ana("COMMUNITY_PALETTE", default="ORGANIZATION", cast=str)
-GRAPH_OUTPUT_DIR = _ana("GRAPH_OUTPUT_DIR", default="graph", cast=str)
+DEAD_LEAVES_COLOR = _structural.graph.dead_leaves_color
+COMMUNITY_PALETTE = _structural.graph.community_palette
+GRAPH_OUTPUT_DIR = _structural.graph.output_dir
 
-# ── Crawl Channels defaults (.analysis-defaults) ─────────────────────────────
+# ── Crawl Channels defaults (configuration/.operations-crawl) ────────────────
 
-CRAWL_GET_CHANNELS_INFO = _ana("CRAWL_GET_CHANNELS_INFO", default=False, cast=bool)
-CRAWL_UPDATE_TYPE_EXCLUDED_INFO = _ana("CRAWL_UPDATE_TYPE_EXCLUDED_INFO", default=False, cast=bool)
-CRAWL_MINE_ABOUT_TEXTS = _ana("CRAWL_MINE_ABOUT_TEXTS", default=False, cast=bool)
-CRAWL_FETCH_RECOMMENDED = _ana("CRAWL_FETCH_RECOMMENDED", default=False, cast=bool)
-CRAWL_RETRY_LOST_AND_PRIVATE = _ana("CRAWL_RETRY_LOST_AND_PRIVATE", default=False, cast=bool)
-CRAWL_GET_NEW_MESSAGES = _ana("CRAWL_GET_NEW_MESSAGES", default=False, cast=bool)
-CRAWL_FETCH_REPLIES = _ana("CRAWL_FETCH_REPLIES", default=False, cast=bool)
-CRAWL_REFRESH_MESSAGES_STATS = _ana("CRAWL_REFRESH_MESSAGES_STATS", default=False, cast=bool)
-CRAWL_FIXHOLES = _ana("CRAWL_FIXHOLES", default=False, cast=bool)
-CRAWL_FIX_MISSING_MEDIA = _ana("CRAWL_FIX_MISSING_MEDIA", default=False, cast=bool)
-CRAWL_RETRY_LOST_MESSAGES = _ana("CRAWL_RETRY_LOST_MESSAGES", default=False, cast=bool)
-CRAWL_RETRY_REFERENCES = _ana("CRAWL_RETRY_REFERENCES", default=False, cast=bool)
-CRAWL_FORCE_RETRY_UNRESOLVED = _ana("CRAWL_FORCE_RETRY_UNRESOLVED", default=False, cast=bool)
-CRAWL_IN_DEGREES = _ana("CRAWL_IN_DEGREES", default=False, cast=bool)
-CRAWL_OUT_DEGREES = _ana("CRAWL_OUT_DEGREES", default=False, cast=bool)
+CRAWL_GET_CHANNELS_INFO = _crawl.channels.get_channels_info
+CRAWL_UPDATE_TYPE_EXCLUDED_INFO = _crawl.channels.update_type_excluded_info
+CRAWL_MINE_ABOUT_TEXTS = _crawl.channels.mine_about_texts
+CRAWL_FETCH_RECOMMENDED = _crawl.channels.fetch_recommended
+CRAWL_RETRY_LOST_AND_PRIVATE = _crawl.channels.retry_lost_and_private
+CRAWL_GET_NEW_MESSAGES = _crawl.messages.get_new_messages
+CRAWL_FETCH_REPLIES = _crawl.messages.fetch_replies
+CRAWL_REFRESH_MESSAGES_STATS = _crawl.messages.refresh_messages_stats
+CRAWL_FIXHOLES = _crawl.messages.fixholes
+CRAWL_FIX_MISSING_MEDIA = _crawl.messages.fix_missing_media
+CRAWL_RETRY_LOST_MESSAGES = _crawl.messages.retry_lost_messages
+CRAWL_RETRY_REFERENCES = _crawl.messages.retry_references
+CRAWL_FORCE_RETRY_UNRESOLVED = _crawl.messages.force_retry_unresolved
+CRAWL_IN_DEGREES = _crawl.degrees.in_degrees
+CRAWL_OUT_DEGREES = _crawl.degrees.out_degrees
 
-# ── Structural Analysis defaults (.analysis-defaults) ─────────────────────────
+# ── Structural Analysis defaults (configuration/.operations-structural) ──────
 
-SA_OUTPUT_GRAPH = _ana("SA_OUTPUT_GRAPH", default=False, cast=bool)
-SA_OUTPUT_3DGRAPH = _ana("SA_OUTPUT_3DGRAPH", default=False, cast=bool)
-SA_OUTPUT_HTML = _ana("SA_OUTPUT_HTML", default=False, cast=bool)
-SA_OUTPUT_XLSX = _ana("SA_OUTPUT_XLSX", default=False, cast=bool)
-SA_OUTPUT_GEXF = _ana("SA_OUTPUT_GEXF", default=False, cast=bool)
-SA_OUTPUT_GRAPHML = _ana("SA_OUTPUT_GRAPHML", default=False, cast=bool)
-SA_OUTPUT_CSV = _ana("SA_OUTPUT_CSV", default=False, cast=bool)
-SA_SEO = _ana("SA_SEO", default=False, cast=bool)
-SA_VERTICAL_LAYOUT = _ana("SA_VERTICAL_LAYOUT", default=False, cast=bool)
-SA_FA2_ITERATIONS = _ana("SA_FA2_ITERATIONS", default=5000, cast=int)
-SA_LAYOUTS_2D = _ana("SA_LAYOUTS_2D", default="FA2", cast=str)
-SA_LAYOUTS_3D = _ana("SA_LAYOUTS_3D", default="FA2", cast=str)
-SA_MEASURES = _ana("SA_MEASURES", default="PAGERANK", cast=str)
-SA_COMMUNITY_STRATEGIES = _ana("SA_COMMUNITY_STRATEGIES", default="ORGANIZATION", cast=str)
-SA_NETWORK_STAT_GROUPS = _ana("SA_NETWORK_STAT_GROUPS", default="ALL", cast=str)
-SA_INCLUDE_MENTIONS = _ana("SA_INCLUDE_MENTIONS", default=True, cast=bool)
-SA_INCLUDE_SELF_REFERENCES = _ana("SA_INCLUDE_SELF_REFERENCES", default=False, cast=bool)
-SA_EDGE_WEIGHT_STRATEGY = _ana("SA_EDGE_WEIGHT_STRATEGY", default="PARTIAL_REFERENCES", cast=str)
-SA_RECENCY_WEIGHTS = _ana("SA_RECENCY_WEIGHTS", default=None, cast=optional_int)
-SA_SPREADING_RUNS = _ana("SA_SPREADING_RUNS", default=200, cast=int)
-SA_DIFFUSION_WINDOW = _ana("SA_DIFFUSION_WINDOW", default=30, cast=int)
-SA_DRAW_DEAD_LEAVES = _ana("SA_DRAW_DEAD_LEAVES", default=False, cast=bool)
-SA_STRUCTURAL_SIMILARITY = _ana("SA_STRUCTURAL_SIMILARITY", default=False, cast=bool)
-SA_CONSENSUS_MATRIX = _ana("SA_CONSENSUS_MATRIX", default=False, cast=bool)
-SA_LEIDEN_COARSE_RESOLUTION = _ana("SA_LEIDEN_COARSE_RESOLUTION", default=0.01, cast=float)
-SA_LEIDEN_FINE_RESOLUTION = _ana("SA_LEIDEN_FINE_RESOLUTION", default=0.05, cast=float)
-SA_MCL_INFLATION = _ana("SA_MCL_INFLATION", default=2.0, cast=float)
-SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _ana("SA_COMMUNITY_DISTRIBUTION_THRESHOLD", default=10, cast=int)
-SA_INCLUDE_LOST = _ana("SA_INCLUDE_LOST", default=False, cast=bool)
-SA_INCLUDE_PRIVATE = _ana("SA_INCLUDE_PRIVATE", default=False, cast=bool)
-SA_TIMELINE_STEP = _ana("SA_TIMELINE_STEP", default="none", cast=str)
-SA_VACANCY_MEASURES = _ana("SA_VACANCY_MEASURES", default="", cast=str)
-SA_VACANCY_MONTHS_BEFORE = _ana("SA_VACANCY_MONTHS_BEFORE", default=12, cast=int)
-SA_VACANCY_MONTHS_AFTER = _ana("SA_VACANCY_MONTHS_AFTER", default=24, cast=int)
-SA_VACANCY_MAX_CANDIDATES = _ana("SA_VACANCY_MAX_CANDIDATES", default=30, cast=int)
-SA_VACANCY_PPR_ALPHA = _ana("SA_VACANCY_PPR_ALPHA", default=0.85, cast=float)
-SA_ROBUSTNESS = _ana("SA_ROBUSTNESS", default=False, cast=bool)
-SA_ROBUSTNESS_ALPHA = _ana("SA_ROBUSTNESS_ALPHA", default=0.05, cast=float)
-SA_ROBUSTNESS_STRATEGIES = _ana(
-    "SA_ROBUSTNESS_STRATEGIES", default="RANDOM,IN_STRENGTH,OUT_STRENGTH,PAGERANK,BETWEENNESS", cast=str
-)
-SA_ROBUSTNESS_RUNS = _ana("SA_ROBUSTNESS_RUNS", default=100, cast=int)
-SA_ROBUSTNESS_NULL = _ana("SA_ROBUSTNESS_NULL", default=20, cast=int)
-SA_ROBUSTNESS_SEED = _ana("SA_ROBUSTNESS_SEED", default=42, cast=int)
-SA_ROBUSTNESS_SAMPLE = _ana("SA_ROBUSTNESS_SAMPLE", default=500, cast=int)
+SA_OUTPUT_GRAPH = _structural.outputs.graph
+SA_OUTPUT_3DGRAPH = _structural.outputs.graph_3d
+SA_OUTPUT_HTML = _structural.outputs.html
+SA_OUTPUT_XLSX = _structural.outputs.xlsx
+SA_OUTPUT_GEXF = _structural.outputs.gexf
+SA_OUTPUT_GRAPHML = _structural.outputs.graphml
+SA_OUTPUT_CSV = _structural.outputs.csv
+SA_SEO = _structural.outputs.seo
+SA_VERTICAL_LAYOUT = _structural.outputs.vertical_layout
+SA_FA2_ITERATIONS = _structural.computation.fa2_iterations
+SA_LAYOUTS_2D = ",".join(_structural.layouts.two_d)
+SA_LAYOUTS_3D = ",".join(_structural.layouts.three_d)
+SA_MEASURES = ",".join(_structural.measures.selected)
+SA_COMMUNITY_STRATEGIES = ",".join(_structural.communities.strategies)
+SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
+SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
+SA_INCLUDE_SELF_REFERENCES = _structural.edges.include_self_references
+SA_EDGE_WEIGHT_STRATEGY = _structural.edges.weight_strategy
+SA_RECENCY_WEIGHTS = optional_int(_structural.edges.recency_weights)
+SA_SPREADING_RUNS = _structural.computation.spreading_runs
+SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
+SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
+SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
+SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
+SA_LEIDEN_COARSE_RESOLUTION = _structural.computation.leiden_coarse_resolution
+SA_LEIDEN_FINE_RESOLUTION = _structural.computation.leiden_fine_resolution
+SA_MCL_INFLATION = _structural.computation.mcl_inflation
+SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold
+SA_INCLUDE_LOST = _structural.scope.include_lost
+SA_INCLUDE_PRIVATE = _structural.scope.include_private
+SA_TIMELINE_STEP = _structural.outputs.timeline_step
+SA_VACANCY_MEASURES = ",".join(_structural.vacancy.measures)
+SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before
+SA_VACANCY_MONTHS_AFTER = _structural.vacancy.months_after
+SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
+SA_VACANCY_PPR_ALPHA = _structural.vacancy.ppr_alpha
+SA_ROBUSTNESS = _structural.robustness.enabled
+SA_ROBUSTNESS_ALPHA = _structural.robustness.alpha
+SA_ROBUSTNESS_STRATEGIES = ",".join(_structural.robustness.strategies)
+SA_ROBUSTNESS_RUNS = _structural.robustness.runs
+SA_ROBUSTNESS_NULL = _structural.robustness.null
+SA_ROBUSTNESS_SEED = _structural.robustness.seed
+SA_ROBUSTNESS_SAMPLE = _structural.robustness.sample
 
-# ── System constants (.system-options — managed by project, do not edit) ──────
+# ── System constants (.system — managed by project, do not edit) ─────────────
 
 APP_VERSION = _sys("APP_VERSION", default="0.19")
 REPOSITORY_URL = _sys("REPOSITORY_URL", default="https://github.com/giovabal/pulpit")

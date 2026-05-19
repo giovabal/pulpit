@@ -104,14 +104,22 @@ Edge weight = (forwards + references) / total messages from source channel. Dire
 
 ### Configuration
 
-Configuration is split across three files:
+Configuration is split across four files:
 
-| File | Content | Gitignored | Example |
-|:-----|:--------|:----------:|:-------:|
-| `.env` | Credentials + deployment (Telegram creds, DB, secret key, web access, locale) | ✓ | `env.example` |
-| `.analysis-defaults` | Crawler behaviour and network/graph options | ✓ | `analysis-defaults.example` |
-| `.system-options` | `APP_VERSION`, `REPOSITORY_URL` — managed by the project, do not edit | ✗ | — |
+| File | Content | Gitignored | Example | Format |
+|:-----|:--------|:----------:|:-------:|:-------|
+| `configuration/.env` | Credentials + deployment (Telegram creds, DB, secret key, web access, locale) | ✓ | `configuration/env.example` | KEY=value |
+| `configuration/.operations-crawl` | Crawler behaviour and per-channel defaults for `crawl_channels` | ✓ | — | TOML |
+| `configuration/.operations-structural` | Outputs, layouts, measures, communities, vacancy, and robustness defaults for `structural_analysis` | ✓ | — | TOML |
+| `.system` (repo root) | `APP_VERSION`, `REPOSITORY_URL` — managed by the project, do not edit | ✗ | — | KEY=value |
 
-Required (in `.env`): `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
+Required (in `configuration/.env`): `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Key options (in `.analysis-defaults`): `REVERSED_EDGES` (default `True`), `DEFAULT_CHANNEL_TYPES` (default `CHANNEL`), `COMMUNITY_PALETTE` (default `ORGANIZATION`; non-organisation strategies fall back to `vaporwave` *reversed* — so the most-vivid colours land on the largest communities; an explicit `COMMUNITY_PALETTE=vaporwave` is kept in canonical order), `DEAD_LEAVES_COLOR` (default `#596a64`), `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` / `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` / `TELEGRAM_CRAWLER_DOWNLOAD_AUDIO` / `TELEGRAM_CRAWLER_DOWNLOAD_STICKERS` / `TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA` (each default `False`). Each can be overridden per run with the matching `--download-X` / `--no-download-X` CLI flag, or via the **Media types** sidebar fieldset on the Operations panel (applies to `--get-new-messages`, `--fixholes`, and `--fix-missing-media` — the three operations that fetch messages from Telegram). Media is dispatched into five disjoint models: `MessagePicture`, `MessageVideo` (with `is_animated` and `is_round` flags for GIFs/animations and round videos), `MessageAudio` (with `is_voice` flag), `MessageSticker` (with `is_animated` flag), and `MessageOtherMedia`. Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see [docs/workflow.md](docs/workflow.md).
+Both `.operations-*` files are optional: built-in defaults live in `webapp_engine/config/defaults.py` and apply when a file is missing or omits a key. Each file starts with a `pulpit_version = "X.Y"` field so future Django data migrations can detect the writing release and rewrite the file when key names change. Click **Save as defaults** in the Operations panel under either form to persist the current selections — `tomlkit` writes the file with comments preserved and a refreshed `generated_at` header.
+
+Key options:
+- `[graph]` in `.operations-structural` — `reversed_edges` (default `true`), `community_palette` (default `ORGANIZATION`; non-organisation strategies fall back to `vaporwave` *reversed* — so the most-vivid colours land on the largest communities; an explicit `community_palette = "vaporwave"` is kept in canonical order), `dead_leaves_color` (default `#596a64`), `output_dir` (default `graph`).
+- `[scope].channel_types` in `.operations-crawl` (default `["CHANNEL"]`) — channel types in scope; matches `DEFAULT_CHANNEL_TYPES`.
+- `[downloads]` in `.operations-crawl` — `images` / `video` / `audio` / `stickers` / `other_media` (each default `false`). Each can be overridden per run with the matching `--download-X` / `--no-download-X` CLI flag, or via the **Media types** sidebar fieldset on the Operations panel (applies to `--get-new-messages`, `--fixholes`, and `--fix-missing-media` — the three operations that fetch messages from Telegram).
+
+Media is dispatched into five disjoint models: `MessagePicture`, `MessageVideo` (with `is_animated` and `is_round` flags for GIFs/animations and round videos), `MessageAudio` (with `is_voice` flag), `MessageSticker` (with `is_animated` flag), and `MessageOtherMedia`. Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see [docs/workflow.md](docs/workflow.md).

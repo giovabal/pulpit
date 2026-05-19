@@ -566,9 +566,9 @@
                 <div class="ops-param">
                   <label for="fa2_iterations">FA2 iterations
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Number of ForceAtlas2 layout iterations. Higher values improve node separation but take longer. Default: 5000."></i>
+                       title="Number of ForceAtlas2 layout iterations. Either an integer (e.g. 5000) or a multiplier of the channel count (e.g. 7x → 7 × channels). Floored at 100 regardless. Default: 7x."></i>
                   </label>
-                  <input type="number" name="fa2_iterations" id="fa2_iterations" placeholder="{{ ad.SA_FA2_ITERATIONS }}" value="{{ ad.SA_FA2_ITERATIONS }}" min="1">
+                  <input type="text" name="fa2_iterations" id="fa2_iterations" placeholder="{{ ad.SA_FA2_ITERATIONS }}" value="{{ ad.SA_FA2_ITERATIONS }}" pattern="^\d+(\.\d+)?[xX]?$" title="An integer or a multiplier like 7x">
                 </div>
                 <div class="ops-param">
                   <label for="recency_weights">Recency weights
@@ -930,6 +930,18 @@
 
           {% endif %}
 
+          {% if task.name == "crawl_channels" or task.name == "structural_analysis" %}
+          <div class="ops-form-footer">
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary save-defaults-btn"
+                    data-task="{{ task.name }}"
+                    data-target-file="configuration/.operations-{% if task.name == 'crawl_channels' %}crawl{% else %}structural{% endif %}">
+              <i class="bi bi-bookmark-fill me-1" aria-hidden="true"></i>Save as defaults
+            </button>
+            <span class="save-defaults-status" id="save-defaults-status-{{ task.name }}" aria-live="polite"></span>
+          </div>
+          {% endif %}
+
         </form>
       </div>
     </div>
@@ -975,6 +987,28 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary btn-sm" id="export-overwrite-confirm">Overwrite</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="save-defaults-modal" tabindex="-1"
+     aria-labelledby="save-defaults-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="save-defaults-modal-label">Save current options as defaults</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">The current form values will overwrite
+          <code id="save-defaults-target"></code>.</p>
+        <p class="mb-0 small text-muted">They become the new defaults for every future Operations
+          panel session and command-line invocation.</p>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="save-defaults-confirm">Save defaults</button>
       </div>
     </div>
   </div>
@@ -1725,6 +1759,61 @@
     t.textContent = msg;
     c.appendChild(t);
     setTimeout(function() { t.remove(); }, 3200);
+  }
+
+  // ── Save-as-defaults ─────────────────────────────────────────────────────
+  // One shared confirmation modal; each "Save as defaults" button stamps the
+  // current task into the modal body. Disabled fieldsets/inputs are temporarily
+  // re-enabled during FormData serialization so the user's preferences for
+  // currently-off features (e.g. 3D layouts when graph_3d is unchecked) are
+  // preserved across the round-trip.
+  var saveDefaultsModalEl = document.getElementById('save-defaults-modal');
+  if (saveDefaultsModalEl) {
+    var saveDefaultsModal = bootstrap.Modal.getOrCreateInstance(saveDefaultsModalEl);
+    var saveDefaultsConfirmBtn = document.getElementById('save-defaults-confirm');
+    var saveDefaultsPendingTask = null;
+
+    document.querySelectorAll('.save-defaults-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        saveDefaultsPendingTask = btn.dataset.task;
+        document.getElementById('save-defaults-target').textContent = btn.dataset.targetFile;
+        saveDefaultsModal.show();
+      });
+    });
+
+    saveDefaultsConfirmBtn.addEventListener('click', function () {
+      if (!saveDefaultsPendingTask) return;
+      var task = saveDefaultsPendingTask;
+      var form = document.getElementById('form-' + task);
+      // Temporarily re-enable any disabled inputs so the user's preferences
+      // for currently-off features survive the round-trip.
+      var reenabled = form.querySelectorAll('[disabled]');
+      reenabled.forEach(function (el) { el.removeAttribute('disabled'); });
+      var fd = new FormData(form);
+      reenabled.forEach(function (el) { el.setAttribute('disabled', ''); });
+
+      saveDefaultsConfirmBtn.disabled = true;
+      fetch('/operations/save-defaults/' + task + '/', {
+        method: 'POST',
+        body: fd,
+        headers: { 'X-CSRFToken': getCsrfToken() },
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function () {
+          saveDefaultsModal.hide();
+          showToast('Saved defaults for ' + task + '.');
+        })
+        .catch(function (err) {
+          saveDefaultsModal.hide();
+          showToast('Failed to save defaults: ' + err.message, 'error');
+        })
+        .finally(function () {
+          saveDefaultsConfirmBtn.disabled = false;
+        });
+    });
   }
 })();
 </script>

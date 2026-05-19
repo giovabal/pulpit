@@ -12,4 +12,9 @@ urlpatterns = [
     path("graph-dirs/", views.GraphDirsView.as_view(), name="operations-graph-dirs"),
     path("exports/", views.ExportsListView.as_view(), name="operations-exports"),
     path("exports/<str:name>/", views.ExportDetailView.as_view(), name="operations-export-detail"),
+    path(
+        "save-defaults/<str:task>/",
+        views.SaveDefaultsView.as_view(),
+        name="operations-save-defaults",
+    ),
 ]

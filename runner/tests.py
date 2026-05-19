@@ -490,7 +490,8 @@ class ExportDetailViewTests(TestCase):
 class BuildArgsGetChannelsTests(TestCase):
     def test_empty_post_only_emits_media_defaults(self):
         # bool_explicit specs (the five media toggles) always emit either --download-X
-        # or --no-download-X so an unchecked checkbox can override the .analysis-defaults.
+        # or --no-download-X so an unchecked checkbox can override the [downloads] section
+        # of configuration/.operations-crawl.
         # An empty POST therefore yields the five --no- forms and nothing else.
         self.assertEqual(
             _build_args("crawl_channels", FakePost()),
@@ -681,7 +682,7 @@ class BuildArgsStructuralRobustnessTests(TestCase):
     # In the Operations panel, the robustness master switch is implicit: at least
     # one strategy ticked ⇒ --robustness, none ticked ⇒ --no-robustness. The CLI
     # --robustness/--no-robustness pair (BooleanOptionalAction) lets the UI fully
-    # override the SA_ROBUSTNESS default in .analysis-defaults.
+    # override the robustness.enabled default in configuration/.operations-structural.
 
     def test_empty_post_emits_no_robustness(self) -> None:
         args = _build_args("structural_analysis", FakePost())
@@ -789,3 +790,142 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         )
         self.assertIn("--robustness", args)
         self.assertNotIn("--robustness-alpha", args)
+
+
+# ---------------------------------------------------------------------------
+# SaveDefaultsView — POST /operations/save-defaults/<task>/
+# ---------------------------------------------------------------------------
+
+
+class _RedirectConfigPathsForRunner:
+    """Test helper that redirects the config-module path constants to a temp dir."""
+
+    def __init__(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self._orig: dict = {}
+
+    def __enter__(self):
+        from webapp_engine.config import loader, paths, writer
+
+        for attr in ("CONFIG_DIR", "CRAWL_PATH", "STRUCTURAL_PATH"):
+            self._orig[attr] = getattr(paths, attr)
+        paths.CONFIG_DIR = self.tmp
+        paths.CRAWL_PATH = self.tmp / ".operations-crawl"
+        paths.STRUCTURAL_PATH = self.tmp / ".operations-structural"
+        loader.CRAWL_PATH = paths.CRAWL_PATH
+        loader.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
+        writer.CRAWL_PATH = paths.CRAWL_PATH
+        writer.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
+        writer.CONFIG_DIR = paths.CONFIG_DIR
+        return self.tmp
+
+    def __exit__(self, *exc):
+        from webapp_engine.config import loader, paths, writer
+
+        for attr, value in self._orig.items():
+            setattr(paths, attr, value)
+        loader.CRAWL_PATH = paths.CRAWL_PATH
+        loader.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
+        writer.CRAWL_PATH = paths.CRAWL_PATH
+        writer.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
+        writer.CONFIG_DIR = paths.CONFIG_DIR
+
+
+class SaveDefaultsViewTests(TestCase):
+    def test_unknown_task_returns_404(self) -> None:
+        resp = self.client.post(reverse("operations-save-defaults", args=["nope"]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_crawl_save_writes_file(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["crawl_channels"]),
+                data={
+                    "get_channels_info": "on",
+                    "download_video": "on",
+                    "channel_type_channel": "on",
+                    "channel_type_group": "on",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(resp.json()["saved"])
+
+            content = (tmp / ".operations-crawl").read_text()
+            self.assertIn("video = true", content)
+            self.assertIn("get_channels_info = true", content)
+            self.assertIn('channel_types = ["CHANNEL", "GROUP"]', content)
+
+    def test_structural_save_round_trip(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={
+                    "graph": "on",
+                    "html": "on",
+                    "fa2_iterations": "3000",
+                    "measures": ["PAGERANK", "BETWEENNESS"],
+                    "bridging_basis": "LEIDEN",
+                    "timeline_step": "on",
+                    "robustness_strategies": ["pagerank", "random"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn("graph = true", content)
+            self.assertIn("fa2_iterations = 3000", content)
+            self.assertIn('selected = ["PAGERANK", "BETWEENNESS"]', content)
+            self.assertIn('bridging_basis = "LEIDEN"', content)
+            self.assertIn('timeline_step = "year"', content)
+            self.assertIn('strategies = ["pagerank", "random"]', content)
+            self.assertIn("enabled = true", content)
+
+    def test_robustness_enabled_false_when_no_strategies(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"html": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn("enabled = false", content)
+            self.assertIn("strategies = []", content)
+
+    def test_blank_int_falls_back_to_default(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"community_distribution_threshold": "", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn("community_distribution_threshold = 10", content)
+
+    def test_fa2_iterations_multiplier_form_saved_as_string(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"fa2_iterations": "10x", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn('fa2_iterations = "10x"', content)
+
+    def test_fa2_iterations_integer_form_saved_as_int(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"fa2_iterations": "3000", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn("fa2_iterations = 3000", content)
+
+    def test_fa2_iterations_blank_falls_back_to_default(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"fa2_iterations": "", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn('fa2_iterations = "7x"', content)

@@ -17,6 +17,12 @@ from network import (
 )
 from runner import tasks
 from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
+from webapp_engine.config import (
+    CRAWL_DEFAULTS,
+    STRUCTURAL_DEFAULTS,
+    save_crawl_settings,
+    save_structural_settings,
+)
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "search_channels": {
@@ -421,7 +427,7 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         # The strategy list also doubles as the master switch: at least one strategy
         # checked ⇒ pass --robustness, none checked ⇒ pass --no-robustness
         # (BooleanOptionalAction) so the UI's "off" intent overrides any
-        # SA_ROBUSTNESS=True default in .analysis-defaults.
+        # robustness.enabled=true default in configuration/.operations-structural.
         _, flag = spec
         chosen = post.getlist("robustness_strategies")
         bridging_basis = (post.get("bridging_basis") or "").strip().lower()
@@ -550,3 +556,193 @@ def _build_args(task: str, post: Any) -> list[str]:
     for spec in TASK_ARG_SPECS.get(task, []):
         _apply_spec(spec, post, args)
     return args
+
+
+# ── Save-as-defaults specs ────────────────────────────────────────────────────
+# Translate Operations-panel form fields into nested paths inside
+# .operations-crawl / .operations-structural. Each entry is
+# (post_key | (key1, key2, …), "section.field", kind).
+#
+# kinds:
+#   "bool"                     post.get(key) truthy → True else False
+#   "list"                     post.getlist(key) verbatim
+#   "value"                    post.get(key, "").strip()
+#   "value_optional"           same as value, empty string preserved
+#   "int" / "float"            cast; empty → fall back to defaults.py value
+#   "bool_to_enum:<off>,<on>"  checkbox → on-string or off-string
+#   "channel_types_triplet"    three checkboxes (CHANNEL/GROUP/USER) → list
+#   "list_with_enabled"        list goes to robustness.strategies AND sets
+#                              robustness.enabled = bool(list)
+
+TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
+    "crawl_channels": [
+        ("get_channels_info", "channels.get_channels_info", "bool"),
+        ("update_type_excluded_info", "channels.update_type_excluded_info", "bool"),
+        ("mine_about_texts", "channels.mine_about_texts", "bool"),
+        ("fetch_recommended_channels", "channels.fetch_recommended", "bool"),
+        ("retry_lost_and_private", "channels.retry_lost_and_private", "bool"),
+        ("get_new_messages", "messages.get_new_messages", "bool"),
+        ("fetch_replies", "messages.fetch_replies", "bool"),
+        ("do_refresh", "messages.refresh_messages_stats", "bool"),
+        ("fix_holes", "messages.fixholes", "bool"),
+        ("fix_missing_media", "messages.fix_missing_media", "bool"),
+        ("retry_lost_messages", "messages.retry_lost_messages", "bool"),
+        ("retry_references", "messages.retry_references", "bool"),
+        ("force_retry_unresolved_references", "messages.force_retry_unresolved", "bool"),
+        ("in_degrees", "degrees.in_degrees", "bool"),
+        ("out_degrees", "degrees.out_degrees", "bool"),
+        ("download_images", "downloads.images", "bool"),
+        ("download_video", "downloads.video", "bool"),
+        ("download_audio", "downloads.audio", "bool"),
+        ("download_stickers", "downloads.stickers", "bool"),
+        ("download_other_media", "downloads.other_media", "bool"),
+        (
+            ("channel_type_channel", "channel_type_group", "channel_type_user"),
+            "scope.channel_types",
+            "channel_types_triplet",
+        ),
+    ],
+    "structural_analysis": [
+        ("graph", "outputs.graph", "bool"),
+        ("graph_3d", "outputs.graph_3d", "bool"),
+        ("html", "outputs.html", "bool"),
+        ("xlsx", "outputs.xlsx", "bool"),
+        ("gexf", "outputs.gexf", "bool"),
+        ("graphml", "outputs.graphml", "bool"),
+        ("csv", "outputs.csv", "bool"),
+        ("seo", "outputs.seo", "bool"),
+        ("vertical_layout", "outputs.vertical_layout", "bool"),
+        ("structural_similarity", "outputs.structural_similarity", "bool"),
+        ("consensus_matrix", "outputs.consensus_matrix", "bool"),
+        ("draw_dead_leaves", "outputs.draw_dead_leaves", "bool"),
+        ("timeline_step", "outputs.timeline_step", "bool_to_enum:none,year"),
+        ("edge_weight_strategy", "edges.weight_strategy", "value"),
+        ("include_mentions", "edges.include_mentions", "bool"),
+        ("include_self_references", "edges.include_self_references", "bool"),
+        ("recency_weights", "edges.recency_weights", "value_optional"),
+        ("include_lost", "scope.include_lost", "bool"),
+        ("include_private", "scope.include_private", "bool"),
+        ("fa2_iterations", "computation.fa2_iterations", "fa2_iterations"),
+        ("community_distribution_threshold", "computation.community_distribution_threshold", "int"),
+        ("leiden_coarse_resolution", "computation.leiden_coarse_resolution", "float"),
+        ("leiden_fine_resolution", "computation.leiden_fine_resolution", "float"),
+        ("mcl_inflation", "computation.mcl_inflation", "float"),
+        ("spreading_runs", "computation.spreading_runs", "int"),
+        ("diffusion_window", "computation.diffusion_window", "int"),
+        ("layouts_2d", "layouts.two_d", "list"),
+        ("layouts_3d", "layouts.three_d", "list"),
+        ("measures", "measures.selected", "list"),
+        ("bridging_basis", "measures.bridging_basis", "value_optional"),
+        ("community_strategies", "communities.strategies", "list"),
+        ("network_stat_groups", "network_stats.groups", "list"),
+        ("vacancy_measures", "vacancy.measures", "list"),
+        ("vacancy_months_before", "vacancy.months_before", "int"),
+        ("vacancy_months_after", "vacancy.months_after", "int"),
+        ("vacancy_max_candidates", "vacancy.max_candidates", "int"),
+        ("vacancy_ppr_alpha", "vacancy.ppr_alpha", "float"),
+        ("robustness_alpha", "robustness.alpha", "float"),
+        ("robustness_strategies", "robustness.strategies", "list_with_enabled"),
+        ("robustness_runs", "robustness.runs", "int"),
+        ("robustness_null", "robustness.null", "int"),
+        ("robustness_seed", "robustness.seed", "int"),
+        ("robustness_sample", "robustness.sample", "int"),
+    ],
+}
+
+
+def _read_default(defaults: dict, dotted_path: str):
+    cur: Any = defaults
+    for part in dotted_path.split("."):
+        cur = cur[part]
+    return cur
+
+
+def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
+    parts = dotted_path.split(".")
+    for p in parts[:-1]:
+        d = d.setdefault(p, {})
+    d[parts[-1]] = value
+
+
+def _form_to_toml_payload(task: str, post: Any) -> dict:
+    defaults = CRAWL_DEFAULTS if task == "crawl_channels" else STRUCTURAL_DEFAULTS
+    payload: dict = {}
+    for post_key, toml_path, kind in TASK_DEFAULT_SPECS[task]:
+        if kind == "bool":
+            value = bool(post.get(post_key))
+        elif kind == "list":
+            value = list(post.getlist(post_key))
+        elif kind == "value":
+            value = post.get(post_key, "").strip()
+        elif kind == "value_optional":
+            value = post.get(post_key, "").strip()
+        elif kind == "int":
+            raw = post.get(post_key, "").strip()
+            try:
+                value = int(raw) if raw else _read_default(defaults, toml_path)
+            except (ValueError, TypeError):
+                value = _read_default(defaults, toml_path)
+        elif kind == "float":
+            raw = post.get(post_key, "").strip()
+            try:
+                value = float(raw) if raw else _read_default(defaults, toml_path)
+            except (ValueError, TypeError):
+                value = _read_default(defaults, toml_path)
+        elif kind == "fa2_iterations":
+            # Either an integer (saved as int) or "Nx" multiplier (saved as str).
+            # Empty input falls back to the schema default (which is also "7x").
+            raw = post.get(post_key, "").strip().lower()
+            if not raw:
+                value = _read_default(defaults, toml_path)
+            elif raw.endswith("x"):
+                try:
+                    float(raw[:-1])  # validate the number part
+                    value = raw
+                except (ValueError, TypeError):
+                    value = _read_default(defaults, toml_path)
+            else:
+                try:
+                    value = int(float(raw))
+                except (ValueError, TypeError):
+                    value = _read_default(defaults, toml_path)
+        elif kind == "channel_types_triplet":
+            labels = ("CHANNEL", "GROUP", "USER")
+            value = [labels[i] for i, k in enumerate(post_key) if post.get(k)]
+        elif kind.startswith("bool_to_enum:"):
+            off, on = kind.split(":", 1)[1].split(",", 1)
+            value = on if post.get(post_key) else off
+        elif kind == "list_with_enabled":
+            chosen = list(post.getlist(post_key))
+            _set_nested(payload, toml_path, chosen)
+            _set_nested(payload, "robustness.enabled", bool(chosen))
+            continue
+        else:
+            raise ValueError(f"Unknown default-spec kind: {kind!r}")
+        _set_nested(payload, toml_path, value)
+    return payload
+
+
+class SaveDefaultsView(View):
+    """Persist the current Operations-panel form state as the new default.
+
+    The save-defaults endpoint mirrors the Run endpoint: same form, same CSRF,
+    same gating from WebAccessMiddleware. The translation table is
+    ``TASK_DEFAULT_SPECS``; the file format is TOML and the writer preserves
+    user-added comments across saves.
+    """
+
+    def post(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFAULT_SPECS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        try:
+            payload = _form_to_toml_payload(task, request.POST)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        try:
+            if task == "crawl_channels":
+                save_crawl_settings(payload)
+            else:
+                save_structural_settings(payload)
+        except OSError as exc:
+            return JsonResponse({"error": f"write failed: {exc}"}, status=500)
+        return JsonResponse({"saved": True})

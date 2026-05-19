@@ -44,7 +44,7 @@ from dataclasses import dataclass  # noqa: E402
 
 @dataclass(frozen=True)
 class CrawlOptions:
-    """All crawl_channels options resolved from CLI flags and .analysis-defaults.
+    """All crawl_channels options resolved from CLI flags and configuration/.operations-crawl.
 
     Built once at the top of ``handle`` so subsequent code doesn't have to keep
     repeating ``options["x"] or settings.CRAWL_X`` (which silently demotes
@@ -899,8 +899,9 @@ class Command(BaseCommand):
 
         # The three media toggles use BooleanOptionalAction (default=None) so an explicit
         # --no-download-X (sent by an unchecked Operations-panel checkbox) can disable a
-        # behaviour whose .analysis-defaults setting is True. The other booleans use the
-        # OR-with-settings shortcut and therefore cannot be turned off from CLI/UI.
+        # behaviour whose configuration/.operations-crawl [downloads] entry is True. The
+        # other booleans use the OR-with-settings shortcut and therefore cannot be turned
+        # off from CLI/UI.
         def _resolve_media_toggle(option_value: bool | None, settings_value: bool) -> bool:
             return option_value if option_value is not None else settings_value
 

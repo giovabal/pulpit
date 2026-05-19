@@ -3553,3 +3553,44 @@ class WriteRobustnessTableXlsxTests(TestCase):
         out = _robustness_sheet_name(long_partition, "2020")
         self.assertLessEqual(len(out), 31)
         self.assertTrue(out.endswith(" 2020"))
+
+
+# ---------------------------------------------------------------------------
+# network.layout.resolve_iterations
+# ---------------------------------------------------------------------------
+
+
+class ResolveIterationsTests(TestCase):
+    """fa2_iterations accepts an integer or an Nx multiplier; floored at 100."""
+
+    def test_integer_returned_as_is(self) -> None:
+        from network.layout import resolve_iterations
+
+        self.assertEqual(resolve_iterations(5000, num_nodes=100), 5000)
+        self.assertEqual(resolve_iterations("5000", num_nodes=100), 5000)
+
+    def test_multiplier_scaled_by_node_count(self) -> None:
+        from network.layout import resolve_iterations
+
+        self.assertEqual(resolve_iterations("7x", num_nodes=1000), 7000)
+        self.assertEqual(resolve_iterations("2.5x", num_nodes=400), 1000)
+
+    def test_floored_at_100(self) -> None:
+        from network.layout import resolve_iterations
+
+        self.assertEqual(resolve_iterations(50, num_nodes=1000), 100)
+        self.assertEqual(resolve_iterations("0.01x", num_nodes=10), 100)
+        self.assertEqual(resolve_iterations("7x", num_nodes=0), 100)
+
+    def test_default_used_when_blank_or_none(self) -> None:
+        from network.layout import FA2_ITERATIONS_DEFAULT, resolve_iterations
+
+        # FA2_ITERATIONS_DEFAULT is "7x", so 7 × 50 = 350.
+        self.assertEqual(FA2_ITERATIONS_DEFAULT, "7x")
+        self.assertEqual(resolve_iterations(None, num_nodes=50), 350)
+        self.assertEqual(resolve_iterations("", num_nodes=50), 350)
+
+    def test_case_insensitive_x(self) -> None:
+        from network.layout import resolve_iterations
+
+        self.assertEqual(resolve_iterations("3X", num_nodes=200), 600)

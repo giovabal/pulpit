@@ -2,7 +2,6 @@
 ## [0.21]
 - FA2 iterations should be expressed even in terms of numbers of channels: a 7x value means 7 times the number of channels. 7x is the new default. But 100 iterations is the minimum in any case.
 - choosing a palette in operations, for 2D and 3D graphs. Create a smart widget. Or include a few and then let choose them in graph.
-- persistence of operations options
 - Organization changes overtime.
 - Community evolution visualization: when `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.
 - Home page and channels page seems slow, find a way to have them faster.

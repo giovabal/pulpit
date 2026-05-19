@@ -17,6 +17,33 @@ LAYOUT_VERTICAL = "VERTICAL"
 EXTRA_LAYOUT_CHOICES_2D = {"FA2", "CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMAP", "HYPERBOLIC"}
 EXTRA_LAYOUT_CHOICES_3D = {"FA2", "SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"}
 
+FA2_ITERATIONS_DEFAULT = "7x"
+FA2_ITERATIONS_FLOOR = 100
+
+
+def resolve_iterations(value: str | int | None, num_nodes: int) -> int:
+    """Resolve ``fa2_iterations`` to a concrete iteration count.
+
+    Accepted forms:
+      * integer or numeric string (``5000``, ``"5000"``) — used verbatim.
+      * multiplier-of-N form (``"7x"``, ``"2.5x"``) — returns ``N × num_nodes``.
+
+    Empty / ``None`` falls back to :data:`FA2_ITERATIONS_DEFAULT`. The result
+    is floored at :data:`FA2_ITERATIONS_FLOOR` so a tiny graph never gets a
+    pathologically short FA2 run.
+    """
+    if value is None:
+        value = FA2_ITERATIONS_DEFAULT
+    s = str(value).strip().lower()
+    if not s:
+        s = FA2_ITERATIONS_DEFAULT
+    if s.endswith("x"):
+        multiplier = float(s[:-1])
+        iterations = int(multiplier * num_nodes)
+    else:
+        iterations = int(float(s))
+    return max(FA2_ITERATIONS_FLOOR, iterations)
+
 
 def _build_forceatlas2(dim: int = 2) -> ForceAtlas2:
     """Return a ForceAtlas2 instance with standard settings for 2D or 3D layout.

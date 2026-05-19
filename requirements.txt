@@ -13,6 +13,7 @@ django-colorfield==0.14.0
 django-extensions==4.1
 lxml==6.1.0
 python-decouple==3.8
+tomlkit>=0.13
 telethon==1.43.2
 pypalettes==0.2.1
 infomap==2.10.1

@@ -1,4 +1,18 @@
 # Changelog
+## [0.21] - To be announced
+*New configuration system*
+
+### New features
+- **`fa2_iterations` accepts an `Nx` multiplier of the channel count** — the ForceAtlas2 iteration count can now be expressed as a multiplier (e.g. `"7x"` → 7 × the number of channels in the graph) instead of a fixed integer, so the layout scales naturally with graph size. The new default is `"7x"`. Integers (`5000`) still work for users who prefer absolute counts. The resolved count is floored at 100 regardless, so tiny graphs never get a pathologically short FA2 run. Configurable via `computation.fa2_iterations` in `configuration/.operations-structural`, the `--fa2-iterations N|Nx` flag on `structural_analysis`, or the FA2 iterations field on the Operations panel (now a text input that accepts both forms).
+- **Configuration split across four files** — `.env` and `.analysis-defaults` are replaced by a four-file layout that separates credentials, crawling options, structural-analysis options, and project metadata. Crawling and analysis defaults move into two TOML files under `configuration/`:
+  - `configuration/.env` — Telegram credentials, database, Django settings (was `.env` at the repo root).
+  - `configuration/env.example` — versioned template (was at the repo root).
+  - `configuration/.operations-crawl` — TOML, all crawler knobs (`[telegram]`, `[downloads]`, `[scope]`, `[channels]`, `[messages]`, `[degrees]`).
+  - `configuration/.operations-structural` — TOML, structural-analysis knobs (`[graph]`, `[outputs]`, `[edges]`, `[scope]`, `[computation]`, `[layouts]`, `[measures]`, `[communities]`, `[network_stats]`, `[vacancy]`, `[robustness]`).
+  - `.system` at the repo root — versioned, holds `APP_VERSION` + `REPOSITORY_URL` (was `.system-options`; only the file name changed).
+  Built-in defaults now live in `webapp_engine/config/defaults.py` and apply whenever a `.operations-*` file is missing or omits a key. The two `.operations-*` files are optional — Pulpit runs fine without either of them, and the analyst can create them piece by piece through the new "Save as defaults" button (see below). Each file starts with a comment header plus a `pulpit_version = "X.Y"` field so future Django data migrations can detect the writing release and rewrite the file in place when section/key names change. A new `webapp_engine/config/` package owns reading (`load_crawl_settings`/`load_structural_settings`, via stdlib `tomllib`) and writing (`save_crawl_settings`/`save_structural_settings`, via `tomlkit` with comment preservation across round-trips). Existing installs need to move `.env`/`env.example` into `configuration/`, rename `.system-options` → `.system`, and translate any `.analysis-defaults` overrides into the new TOML files by hand (or click "Save as defaults" after picking the right values in the Operations panel).
+- **"Save as defaults" button on the Operations panel** — both the **Crawl Channels** and **Structural Analysis** forms gain a footer button that, after a confirmation modal, writes the current form selections to the corresponding `.operations-*` TOML file. Disabled fieldsets are temporarily re-enabled during serialization so preferences for currently-off features (e.g. 3D layouts when the 3D-graph output is unchecked) survive the round-trip. The writer preserves user-added comments and refreshes the `pulpit_version` + `generated_at` header on every save. New endpoint `POST /operations/save-defaults/<task>/` inherits the same CSRF and `WebAccessMiddleware` gating as the existing run/abort endpoints.
+
 ## [0.20] - 2026-05-19
 *Robustness analysis. Dark mode and accessibility.*
 

@@ -1,20 +1,23 @@
 # Configuration
 
-Pulpit's configuration is split across three files in the project root:
+Pulpit's configuration is split across four files:
 
-| File | Content | Bootstrapped from |
-| :--- | :------ | :---------------- |
-| `.env` | Credentials and deployment — Telegram API keys, database, secret key, web access, locale. | `env.example` |
-| `.analysis-defaults` | Crawler behaviour, network/graph options, and the default values for every `crawl_channels` / `structural_analysis` flag. Override individual flags from the Operations panel or the command line; this file is the fallback. | `analysis-defaults.example` |
-| `.system-options` | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. | — |
+| File | Content | Format | Bootstrapped from |
+| :--- | :------ | :----- | :---------------- |
+| `configuration/.env` | Credentials and deployment — Telegram API keys, database, secret key, web access, locale. | KEY=value | `configuration/env.example` |
+| `configuration/.operations-crawl` | Crawler behaviour and per-channel defaults for `crawl_channels`. | TOML | — (built-in defaults) |
+| `configuration/.operations-structural` | Outputs, layouts, measures, communities, vacancy, and robustness defaults for `structural_analysis`. | TOML | — (built-in defaults) |
+| `.system` (repo root) | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. | KEY=value | — |
 
-`setup.sh` and `setup.bat` copy the two `*.example` files into place on first install. Each file is read by `webapp_engine/settings.py` through its own `decouple.Config` object; missing files fall back to built-in defaults gracefully. Both `.env` and `.analysis-defaults` are gitignored.
+`setup.sh` and `setup.bat` copy `configuration/env.example` into `configuration/.env` on first install. Both `.operations-*` files are optional: built-in defaults live in `webapp_engine/config/defaults.py` and apply when the file is missing or omits a key. Click **Save as defaults** in the Operations panel under either form to write your current selections to the corresponding file (`tomlkit` preserves any comments you added by hand).
 
-Fill in at least the three Telegram credentials in `.env` before running any management command. All other settings have working defaults.
+Each `.operations-*` file starts with a `pulpit_version = "X.Y"` field and a timestamp; future Django data migrations can read these and rewrite the file in place when section/key names change.
+
+Fill in at least the three Telegram credentials in `configuration/.env` before running any management command. All other settings have working defaults.
 
 ---
 
-# `.env` — credentials and deployment
+# `configuration/.env` — credentials and deployment
 
 ## Telegram
 
@@ -67,159 +70,189 @@ pip install oracledb           # Oracle
 
 ---
 
-# `.analysis-defaults` — crawler behaviour and analysis defaults
+# `configuration/.operations-crawl` — crawler defaults
 
-`analysis-defaults.example` ships with every option enabled as a starting point; trim it to taste. Every value in this file is also overridable at run time — from the Operations panel form, or from the corresponding command-line flag on `crawl_channels` / `structural_analysis`.
+TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:CRAWL_DEFAULTS`. Each value is also overridable at run time — from the **Crawl Channels** form on the Operations panel, or from the matching command-line flag on `crawl_channels` (e.g. `--get-channels-info`, `--download-images`). Click **Save as defaults** below the form to persist the current form state to this file.
 
-## Crawler behaviour
+## `[telegram]` — connection and rate-limit behaviour
 
-| Option | Description | Default in example |
-| :----- | :---------- | -----------------: |
-| `TELEGRAM_CRAWLER_GRACE_TIME` | Seconds to wait between API requests | `1` |
-| `TELEGRAM_CONNECTION_RETRIES` | How many times Telethon retries a failed connection before giving up | `10` |
-| `TELEGRAM_RETRY_DELAY` | Seconds to wait between connection retry attempts | `5` |
-| `TELEGRAM_FLOOD_SLEEP_THRESHOLD` | Telethon auto-sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions | `60` |
-| `IGNORE_FLOODWAIT` | `False` = sleep `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` on FloodWait (recommended); `True` = skip the operation silently and continue | `False` |
-| `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` | Seconds to sleep when `IGNORE_FLOODWAIT=False` and a long flood-wait fires | `900` |
-| `TELEGRAM_SESSION_NAME` | Telethon session file name (no `.session` extension) | `anon` |
-| `TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL` | Max messages to fetch per channel per run; `0` = no limit | `0` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_IMAGES` | Download images attached to messages | `True` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_VIDEO` | Download videos (including GIFs/animations and round videos) attached to messages | `False` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_AUDIO` | Download audio attached to messages — both voice notes and uploaded audio documents | `False` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_STICKERS` | Download stickers attached to messages (static webp, animated TGS, video webm) | `False` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA` | Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.) | `False` |
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `telegram.grace_time` | Seconds to wait between API requests | `1` |
+| `telegram.connection_retries` | How many times Telethon retries a failed connection before giving up | `10` |
+| `telegram.retry_delay` | Seconds to wait between connection retry attempts | `5` |
+| `telegram.flood_sleep_threshold` | Telethon auto-sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions | `60` |
+| `telegram.ignore_floodwait` | `false` = sleep `floodwait_sleep_seconds` on FloodWait; `true` = skip the operation silently and continue | `true` |
+| `telegram.floodwait_sleep_seconds` | Seconds to sleep when `ignore_floodwait=false` and a long flood-wait fires | `900` |
+| `telegram.session_name` | Telethon session file name (no `.session` extension) | `anon` |
+| `telegram.messages_limit_per_channel` | Max messages to fetch per channel per run; `0` = no limit | `100` |
+
+## `[downloads]` — media type toggles
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `downloads.images` | Download images attached to messages | `false` |
+| `downloads.video` | Download videos (including GIFs/animations and round videos) attached to messages | `false` |
+| `downloads.audio` | Download audio attached to messages — both voice notes and uploaded audio documents | `false` |
+| `downloads.stickers` | Download stickers attached to messages (static webp, animated TGS, video webm) | `false` |
+| `downloads.other_media` | Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.) | `false` |
 
 > **Message statistics:** view counts, forward counts, reply counts, and reactions are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `crawl_channels` to re-fetch them; combine with `--refresh-limit N`, `--refresh-from YYYY-MM-DD`, and `--refresh-to YYYY-MM-DD` to restrict the scope.
 
----
+## `[scope]` — channel-type filter
 
-## Network and graph
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `scope.channel_types` | Telegram entity types considered monitored: any of `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Default for `crawl_channels` and `structural_analysis`. | `["CHANNEL"]` |
 
-| Option | Description | Default in example |
-| :----- | :---------- | -----------------: |
-| `REVERSED_EDGES` | When `True`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `True` |
-| `DEFAULT_CHANNEL_TYPES` | Comma-separated Telegram entity types considered monitored: `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Default for `crawl_channels` and `structural_analysis`. | `CHANNEL,USER` |
-| `COMMUNITY_PALETTE` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin (non-organisation strategies fall back to `vaporwave` *reversed*, so the most-vivid colours land on the largest communities), or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order) | `ORGANIZATION` |
-| `DEAD_LEAVES_COLOR` | Hex colour for dead-leaf nodes (out-of-target referenced channels) | `#596a64` |
-| `GRAPH_OUTPUT_DIR` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
+## `[channels]` — channel-pass step toggles
 
----
+Toggle each channel-side step on or off by default in the Operations panel and CLI. Override per run with the corresponding flag (e.g. `--get-channels-info`).
 
-## `crawl_channels` defaults
+| Path | Step | Built-in default |
+| :--- | :--- | ---------------: |
+| `channels.get_channels_info` | Update channel metadata (profile pictures, subscriber counts, about text, …) | `false` |
+| `channels.update_type_excluded_info` | When `get_channels_info` runs, also refresh metadata for in-target channels whose type is excluded by the current `scope.channel_types` filter | `false` |
+| `channels.mine_about_texts` | Scan channel descriptions for `t.me/` links and ingest referenced channels | `false` |
+| `channels.fetch_recommended` | Ask Telegram for related-channel suggestions and add them to the database | `false` |
+| `channels.retry_lost_and_private` | Re-attempt channels previously marked inaccessible | `false` |
 
-Toggle each step on or off by default in the Operations panel and CLI. Override per run with the corresponding flag (e.g. `--get-channels-info`, `--get-new-messages`).
+## `[messages]` — message-pass step toggles
 
-| Option | Step | Default in example |
-| :----- | :--- | -----------------: |
-| `CRAWL_GET_CHANNELS_INFO` | Update channel metadata (profile pictures, subscriber counts, about text, …) | `True` |
-| `CRAWL_MINE_ABOUT_TEXTS` | Scan channel descriptions for `t.me/` links and ingest referenced channels | `True` |
-| `CRAWL_FETCH_RECOMMENDED` | Ask Telegram for related-channel suggestions and add them to the database | `True` |
-| `CRAWL_RETRY_LOST_AND_PRIVATE` | Re-attempt channels previously marked inaccessible | `False` |
-| `CRAWL_GET_NEW_MESSAGES` | Download messages published since the last crawl | `True` |
-| `CRAWL_FETCH_REPLIES` | Fetch reply threads from linked discussion groups | `True` |
-| `CRAWL_REFRESH_MESSAGES_STATS` | Re-fetch view counts, forward counts, edited text, reactions, fact-check labels | `False` |
-| `CRAWL_FIXHOLES` | Scan per-channel message ID sequences for gaps and refetch missing messages | `False` |
-| `CRAWL_FIX_MISSING_MEDIA` | Re-download photos and videos that were never saved or are missing from disk | `False` |
-| `CRAWL_RETRY_LOST_MESSAGES` | Bulk-refetch every message currently marked `is_lost=True`; rows Telegram returns are unmarked | `False` |
-| `CRAWL_RETRY_REFERENCES` | Re-attempt `t.me/` references that could not be resolved in a previous run | `True` |
-| `CRAWL_FORCE_RETRY_UNRESOLVED` | Together with `CRAWL_RETRY_REFERENCES`, also retries references previously marked permanently unresolvable | `False` |
-| `CRAWL_IN_DEGREES` | Recompute in-degree and out-degree for all in-target channels (pure DB; no Telegram connection) | `True` |
-| `CRAWL_OUT_DEGREES` | Recompute citation degree for out-of-target channels referenced by in-target ones | `True` |
+| Path | Step | Built-in default |
+| :--- | :--- | ---------------: |
+| `messages.get_new_messages` | Download messages published since the last crawl | `false` |
+| `messages.fetch_replies` | Fetch reply threads from linked discussion groups | `false` |
+| `messages.refresh_messages_stats` | Re-fetch view counts, forward counts, edited text, reactions, fact-check labels | `false` |
+| `messages.fixholes` | Scan per-channel message ID sequences for gaps and refetch missing messages | `false` |
+| `messages.fix_missing_media` | Re-download photos and videos that were never saved or are missing from disk | `false` |
+| `messages.retry_lost_messages` | Bulk-refetch every message currently marked `is_lost=True`; rows Telegram returns are unmarked | `false` |
+| `messages.retry_references` | Re-attempt `t.me/` references that could not be resolved in a previous run | `false` |
+| `messages.force_retry_unresolved` | Together with `messages.retry_references`, also retries references previously marked permanently unresolvable | `false` |
 
----
+## `[degrees]` — bulk degree-recompute toggles
 
-## `structural_analysis` defaults
-
-### Outputs
-
-| Option | Effect | Default |
-| :----- | :----- | ------: |
-| `SA_OUTPUT_GRAPH` | Write `graph.html` (interactive 2D map) | `True` |
-| `SA_OUTPUT_3DGRAPH` | Write `graph3d.html` (Three.js 3D map) | `True` |
-| `SA_OUTPUT_HTML` | Write HTML tables (channel, network, community) | `True` |
-| `SA_OUTPUT_XLSX` | Write Excel workbooks alongside HTML tables | `True` |
-| `SA_OUTPUT_GEXF` | Write `network.gexf` (Gephi-compatible) | `True` |
-| `SA_OUTPUT_GRAPHML` | Write `network.graphml` (igraph / Cytoscape) | `True` |
-| `SA_OUTPUT_CSV` | Write `nodes.csv` and `edges.csv` | `True` |
-| `SA_SEO` | Set indexable robots meta tags on the export HTML | `False` |
-| `SA_VERTICAL_LAYOUT` | Orient the graph viewport vertically | `False` |
-| `SA_STRUCTURAL_SIMILARITY` | Generate the pairwise structural similarity matrix | `True` |
-| `SA_CONSENSUS_MATRIX` | Generate the community-detection consensus matrix | `True` |
-| `SA_TIMELINE_STEP` | Timeline granularity: `none` or `year` | `year` |
-
-### Layouts
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_FA2_ITERATIONS` | ForceAtlas2 iteration count | `5000` |
-| `SA_LAYOUTS_2D` | Comma-separated 2D layouts to pre-compute. Available: `FA2`, `CIRCULAR`, `KAMADA_KAWAI`, `COMMUNITY_SHELL`, `TSNE`, `UMAP`, `HYPERBOLIC`, `ALL` | `FA2,CIRCULAR,KAMADA_KAWAI,COMMUNITY_SHELL,TSNE,UMAP,HYPERBOLIC` |
-| `SA_LAYOUTS_3D` | Comma-separated 3D layouts to pre-compute. Available: `FA2`, `SPECTRAL`, `SPRING`, `KAMADA_KAWAI`, `TSNE`, `UMAP`, `ALL` | `FA2,SPECTRAL,SPRING,KAMADA_KAWAI,TSNE,UMAP` |
-
-### Measures
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_MEASURES` | Comma-separated measure list, or `ALL`. See [Network measures](docs/network-measures.md) for the catalogue. | `ALL` |
-| `SA_SPREADING_RUNS` | Monte Carlo SIR simulations per node for `SPREADING` | `200` |
-| `SA_DIFFUSION_WINDOW` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
-
-### Community detection
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_COMMUNITY_STRATEGIES` | Comma-separated strategy list, or `ALL`. See [Community detection](docs/community-detection.md). | `ALL` |
-| `SA_LEIDEN_COARSE_RESOLUTION` | CPM resolution γ for `LEIDEN_CPM_COARSE` (few large communities) | `0.01` |
-| `SA_LEIDEN_FINE_RESOLUTION` | CPM resolution γ for `LEIDEN_CPM_FINE` (many small communities) | `0.05` |
-| `SA_MCL_INFLATION` | Inflation parameter r for `MCL` (typical range 1.5–4.0) | `2.0` |
-| `SA_COMMUNITY_DISTRIBUTION_THRESHOLD` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables | `10` |
-
-### Network statistics
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_NETWORK_STAT_GROUPS` | Comma-separated stat-group list, or `ALL`. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. See [Whole-network statistics](docs/whole-network-statistics.md). | `ALL` |
-
-### Edge weights and graph scope
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_EDGE_WEIGHT_STRATEGY` | Edge-weighting method: `PARTIAL_REFERENCES` (default), `PARTIAL_MESSAGES`, `TOTAL`, `NONE` | `PARTIAL_REFERENCES` |
-| `SA_INCLUDE_MENTIONS` | Treat inline `t.me/` mentions as edges alongside forwards | `True` |
-| `SA_INCLUDE_SELF_REFERENCES` | Include self-loop edges where a channel forwards or mentions itself | `True` |
-| `SA_DRAW_DEAD_LEAVES` | Include out-of-target referenced channels as leaf nodes in the graph | `True` |
-| `SA_INCLUDE_LOST` | Include channels currently flagged `is_lost=True` | `False` |
-| `SA_INCLUDE_PRIVATE` | Include channels currently flagged `is_private=True` | `False` |
-| `SA_RECENCY_WEIGHTS` | Recency decay half-life in days. Empty (or removed) = weight all messages equally. | _(empty)_ |
-
-### Vacancy analysis
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_VACANCY_MEASURES` | Comma-separated vacancy-succession algorithms, or `ALL`. Leave blank to disable. Available: `AMPLIFIER_JACCARD`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `CASCADE_OVERLAP`, `PPR`, `TEMPORAL`. See [Vacancy analysis](docs/vacancy-analysis.md). | `ALL` |
-| `SA_VACANCY_MONTHS_BEFORE` | Look-back window (months) for orphaned-amplifier detection | `12` |
-| `SA_VACANCY_MONTHS_AFTER` | Forward window (months) for candidate adoption | `24` |
-| `SA_VACANCY_MAX_CANDIDATES` | Maximum candidates ranked per vacancy | `30` |
-| `SA_VACANCY_PPR_ALPHA` | Damping factor α for Personalized PageRank | `0.85` |
-
-### Robustness analysis
-
-Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. Off by default — set `SA_ROBUSTNESS=True` to enable, or pass `--robustness` on the CLI. See [Robustness analysis](docs/robustness-analysis.md).
-
-| Option | Description | Default |
-| :----- | :---------- | ------: |
-| `SA_ROBUSTNESS` | Master switch — enable the robustness analysis | `False` |
-| `SA_ROBUSTNESS_ALPHA` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
-| `SA_ROBUSTNESS_RUNS` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
-| `SA_ROBUSTNESS_NULL` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores) | `20` |
-| `SA_ROBUSTNESS_STRATEGIES` | Comma-separated attack strategies (or `ALL`). Static: `RANDOM`, `IN_STRENGTH`, `OUT_STRENGTH`, `PAGERANK`, `KATZ`, `HITS_HUB`, `HITS_AUTHORITY`, `HARMONIC`, `CLOSENESS`, `BETWEENNESS`, `FLOW_BETWEENNESS`, `BURT_CONSTRAINT`, `BRIDGING[(<community-strategy>)]`, `SPREADING`. Dynamic (re-rank per removal): `IN_STRENGTH_DYN`, `OUT_STRENGTH_DYN`, `PAGERANK_DYN`, `KATZ_DYN`, `HITS_HUB_DYN`, `HITS_AUTHORITY_DYN`, `BETWEENNESS_DYN`. At least one strategy must be selected. Bridging defaults to `LEIDEN_DIRECTED` as the community basis (directional brokerage); override with e.g. `BRIDGING(LEIDEN)` or `BRIDGING(LOUVAIN)` | `RANDOM,IN_STRENGTH,OUT_STRENGTH,PAGERANK,BETWEENNESS` |
-| `SA_ROBUSTNESS_SEED` | Single seed driving every stochastic component of the robustness analysis | `42` |
-| `SA_ROBUSTNESS_SAMPLE` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `degrees.in_degrees` | Recompute in-degree and out-degree for all in-target channels (pure DB; no Telegram connection) | `false` |
+| `degrees.out_degrees` | Recompute citation degree for out-of-target channels referenced by in-target ones | `false` |
 
 ---
 
-# `.system-options` — project-managed metadata
+# `configuration/.operations-structural` — structural-analysis defaults
 
-A small, committed file containing `APP_VERSION` and `REPOSITORY_URL`. These values are surfaced in the About modal and the export footer. The project maintains them — do not edit.
+TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURAL_DEFAULTS`. Each value is also overridable at run time — from the **Structural Analysis** form on the Operations panel, or from the matching command-line flag on `structural_analysis`. Click **Save as defaults** below the form to persist the current form state to this file.
+
+## `[graph]` — palette, base options
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `graph.reversed_edges` | When `true`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `true` |
+| `graph.community_palette` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin (non-organisation strategies fall back to `vaporwave` *reversed*, so the most-vivid colours land on the largest communities), or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order) | `ORGANIZATION` |
+| `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target referenced channels) | `#596a64` |
+| `graph.output_dir` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
+
+## `[outputs]` — what to write
+
+| Path | Effect | Built-in default |
+| :--- | :----- | ---------------: |
+| `outputs.graph` | Write `graph.html` (interactive 2D map) | `false` |
+| `outputs.graph_3d` | Write `graph3d.html` (Three.js 3D map) | `false` |
+| `outputs.html` | Write HTML tables (channel, network, community) | `false` |
+| `outputs.xlsx` | Write Excel workbooks alongside HTML tables | `false` |
+| `outputs.gexf` | Write `network.gexf` (Gephi-compatible) | `false` |
+| `outputs.graphml` | Write `network.graphml` (igraph / Cytoscape) | `false` |
+| `outputs.csv` | Write `nodes.csv` and `edges.csv` | `false` |
+| `outputs.seo` | Set indexable robots meta tags on the export HTML | `false` |
+| `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
+| `outputs.structural_similarity` | Generate the pairwise structural similarity matrix | `false` |
+| `outputs.consensus_matrix` | Generate the community-detection consensus matrix | `false` |
+| `outputs.draw_dead_leaves` | Include out-of-target referenced channels as leaf nodes in the graph | `false` |
+| `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
+
+## `[layouts]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `layouts.two_d` | 2D layouts to pre-compute. Available: `FA2`, `CIRCULAR`, `KAMADA_KAWAI`, `COMMUNITY_SHELL`, `TSNE`, `UMAP`, `HYPERBOLIC` | `["FA2"]` |
+| `layouts.three_d` | 3D layouts to pre-compute. Available: `FA2`, `SPECTRAL`, `SPRING`, `KAMADA_KAWAI`, `TSNE`, `UMAP` | `["FA2"]` |
+
+## `[computation]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. | `"7x"` |
+| `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables | `10` |
+| `computation.leiden_coarse_resolution` | CPM resolution γ for `LEIDEN_CPM_COARSE` (few large communities) | `0.01` |
+| `computation.leiden_fine_resolution` | CPM resolution γ for `LEIDEN_CPM_FINE` (many small communities) | `0.05` |
+| `computation.mcl_inflation` | Inflation parameter r for `MCL` (typical range 1.5–4.0) | `2.0` |
+| `computation.spreading_runs` | Monte Carlo SIR simulations per node for `SPREADING` | `200` |
+| `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
+
+## `[measures]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `measures.selected` | Measures to compute. See [Network measures](docs/network-measures.md) for the catalogue. Use the literal value `["ALL"]` to enable every measure. | `["PAGERANK"]` |
+| `measures.bridging_basis` | Community partition driving the BRIDGING measure (entropy across neighbour communities) and the `bridging` robustness strategy. Empty → uses `LEIDEN_DIRECTED`. | `""` |
+
+## `[communities]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `communities.strategies` | Community detection strategies. See [Community detection](docs/community-detection.md). Use `["ALL"]` for every strategy. | `["ORGANIZATION"]` |
+
+## `[network_stats]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](docs/whole-network-statistics.md). | `["ALL"]` |
+
+## `[edges]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `edges.weight_strategy` | Edge-weighting method: `PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`, `TOTAL`, `NONE` | `PARTIAL_REFERENCES` |
+| `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `true` |
+| `edges.include_self_references` | Include self-loop edges where a channel forwards or mentions itself | `false` |
+| `edges.recency_weights` | Recency decay half-life in days as an integer string. Empty string `""` = weight all messages equally. | `""` |
+
+## `[scope]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `scope.include_lost` | Include channels currently flagged `is_lost=True` | `false` |
+| `scope.include_private` | Include channels currently flagged `is_private=True` | `false` |
+
+## `[vacancy]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `vacancy.measures` | Vacancy-succession algorithms. Available: `AMPLIFIER_JACCARD`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `CASCADE_OVERLAP`, `PPR`, `TEMPORAL`. Empty list disables vacancy analysis. See [Vacancy analysis](docs/vacancy-analysis.md). | `[]` |
+| `vacancy.months_before` | Look-back window (months) for orphaned-amplifier detection | `12` |
+| `vacancy.months_after` | Forward window (months) for candidate adoption | `24` |
+| `vacancy.max_candidates` | Maximum candidates ranked per vacancy | `30` |
+| `vacancy.ppr_alpha` | Damping factor α for Personalized PageRank | `0.85` |
+
+## `[robustness]`
+
+Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. Off by default — set `robustness.enabled = true` (or click "Save as defaults" after checking a strategy in the panel; the writer also sets `enabled = bool(strategies)`). See [Robustness analysis](docs/robustness-analysis.md).
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `robustness.enabled` | Master switch — enable the robustness analysis | `false` |
+| `robustness.alpha` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
+| `robustness.runs` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
+| `robustness.null` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores) | `20` |
+| `robustness.strategies` | Attack strategies. Static: `RANDOM`, `IN_STRENGTH`, `OUT_STRENGTH`, `PAGERANK`, `KATZ`, `HITS_HUB`, `HITS_AUTHORITY`, `HARMONIC`, `CLOSENESS`, `BETWEENNESS`, `FLOW_BETWEENNESS`, `BURT_CONSTRAINT`, `BRIDGING[(<community-strategy>)]`, `SPREADING`. Dynamic (re-rank per removal): `IN_STRENGTH_DYN`, `OUT_STRENGTH_DYN`, `PAGERANK_DYN`, `KATZ_DYN`, `HITS_HUB_DYN`, `HITS_AUTHORITY_DYN`, `BETWEENNESS_DYN`. Use `["ALL"]` for every strategy. At least one strategy must be selected. Bridging defaults to `LEIDEN_DIRECTED` as the community basis (directional brokerage); override via `measures.bridging_basis` | `["RANDOM", "IN_STRENGTH", "OUT_STRENGTH", "PAGERANK", "BETWEENNESS"]` |
+| `robustness.seed` | Single seed driving every stochastic component of the robustness analysis | `42` |
+| `robustness.sample` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+
+---
+
+# `.system` — project-managed metadata
+
+A small, committed file containing `APP_VERSION` and `REPOSITORY_URL`. These values are surfaced in the About modal and the export footer, and the writer stamps `APP_VERSION` into every `.operations-*` file it writes. The project maintains them — do not edit.
 
 ---
 

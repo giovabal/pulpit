@@ -99,7 +99,7 @@ def _atomic_publish(staging: str, final_target: str) -> None:
 
 @dataclass(frozen=True)
 class ResolvedOptions:
-    """All options the command needs, with .analysis-defaults applied.
+    """All options the command needs, with configuration/.operations-structural applied.
 
     Built once at the top of ``handle`` so downstream helpers can take a single
     object rather than 30 individual kwargs.
@@ -120,7 +120,10 @@ class ResolvedOptions:
     seo: bool
     vertical_layout: bool
     target_layout: str
-    fa2_iterations: int
+    # Raw value: either an int (e.g. 5000) or a string with optional "x" suffix
+    # (e.g. "7x" = 7 × channel count). Resolved against the graph node count
+    # inside _compute_layout via layout.resolve_iterations().
+    fa2_iterations: str | int
     extra_layout_names: list[str]
     extra_layout_names_3d: list[str]
 
@@ -298,10 +301,15 @@ class Command(BaseCommand):
         parser.add_argument(
             "--fa2-iterations",
             dest="fa2_iterations",
-            type=int,
+            type=str,
             default=None,
-            metavar="N",
-            help="Number of ForceAtlas2 iterations for the 2D and 3D layout. Default: 5000.",
+            metavar="N|Nx",
+            help=(
+                "Number of ForceAtlas2 iterations for the 2D and 3D layout. "
+                "Either an integer (e.g. 5000) or a multiplier of the number of "
+                "channels in the graph (e.g. 7x → 7 × channel count). "
+                "Floored at 100 iterations regardless. Default: 7x."
+            ),
         )
         parser.add_argument(
             "--vertical-layout",
@@ -805,7 +813,7 @@ class Command(BaseCommand):
         graph: nx.DiGraph,
         do_graph: bool,
         do_3dgraph: bool,
-        fa2_iterations: int,
+        fa2_iterations: str | int,
         target_layout: str,
         reference_positions: "dict | None" = None,
         reference_positions_3d: "dict | None" = None,
@@ -821,6 +829,10 @@ class Command(BaseCommand):
         positions_3d: dict | None = None
         if not (do_graph or do_3dgraph):
             return {}, None
+
+        # Resolve "Nx" multiplier form to a concrete iteration count using the
+        # current graph's node count (floored at 100).
+        fa2_iterations = layout.resolve_iterations(fa2_iterations, graph.number_of_nodes())
 
         self.stdout.write("\nSet spatial distribution of nodes")
 
@@ -1210,7 +1222,7 @@ class Command(BaseCommand):
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
-        """Apply .analysis-defaults fallbacks and parse CSV/date options into a typed bundle."""
+        """Apply configuration/.operations-structural fallbacks and parse CSV/date options into a typed bundle."""
 
         def _o(key: str, setting_val: Any) -> Any:
             v = options[key]
