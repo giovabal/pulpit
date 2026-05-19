@@ -1,5 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.21]
+- FA2 iterations should be expressed even in terms of numbers of channels: a 7x value means 7 times the number of channels. 7x is the new default. But 100 iterations is the minimum in any case.
 - choosing a palette in operations, for 2D and 3D graphs. Create a smart widget. Or include a few and then let choose them in graph.
 - persistence of operations options
 - Organization changes overtime.

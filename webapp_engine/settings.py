@@ -33,15 +33,14 @@ MEDIA_ROOT = BASE_DIR / MEDIA_ROOT_DIRNAME
 _ENV_HINTS = {
     "SECRET_KEY": (
         "Generate one with:\n"
-        "  python -c \"from django.core.management.utils import get_random_secret_key; "
+        '  python -c "from django.core.management.utils import get_random_secret_key; '
         "print('SECRET_KEY=' + get_random_secret_key())\" >> .env"
     ),
     "ALLOWED_HOSTS": "Add a comma-separated list, e.g.:\n  ALLOWED_HOSTS=localhost,127.0.0.1",
     "TELEGRAM_API_ID": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_ID=...",
     "TELEGRAM_API_HASH": "Get your API credentials at https://my.telegram.org/apps then add:\n  TELEGRAM_API_HASH=...",
     "TELEGRAM_PHONE_NUMBER": (
-        "Add your Telegram-registered phone number in international format, e.g.:\n  "
-        "TELEGRAM_PHONE_NUMBER=+33611223344"
+        "Add your Telegram-registered phone number in international format, e.g.:\n  TELEGRAM_PHONE_NUMBER=+33611223344"
     ),
     "DB_NAME": "Required when DB_ENGINE is postgresql / mysql / mariadb / oracle. Add:\n  DB_NAME=...",
 }
