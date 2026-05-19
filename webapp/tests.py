@@ -953,3 +953,260 @@ class MessageAlbumTests(TestCase):
             Message.attach_album_data([self.standalone])
         self.assertEqual(len(ctx.captured_queries), 0)
         self.assertFalse(hasattr(self.standalone, "_album_cache"))
+
+
+# ─── purge_out_of_target_messages ──────────────────────────────────────────────
+
+
+class PurgeOutOfTargetTests(TestCase):
+    """``purge_out_of_target_messages`` deletes the right rows and the right files."""
+
+    def setUp(self) -> None:
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        # An in-target organisation; channels under it survive the purge.
+        self.in_target_org = Organization.objects.create(name="Org-A", is_in_target=True)
+        # Plain in-target channel — survives.
+        self.healthy = Channel.objects.create(telegram_id=1, title="healthy", organization=self.in_target_org)
+        # Marked in-target but currently lost — MUST survive (Bug 1).
+        self.lost = Channel.objects.create(
+            telegram_id=2, title="lost-chan", organization=self.in_target_org, is_lost=True
+        )
+        # Marked in-target but currently private — MUST survive (Bug 1).
+        self.private = Channel.objects.create(
+            telegram_id=3, title="private-chan", organization=self.in_target_org, is_private=True
+        )
+        # Marked in-target but a gigagroup (excluded by DEFAULT_CHANNEL_TYPES=CHANNEL) — MUST survive (Bug 1).
+        self.giga = Channel.objects.create(
+            telegram_id=4, title="giga-chan", organization=self.in_target_org, gigagroup=True
+        )
+        # Out-of-target organisation; channels under it get purged unless they're forward sources.
+        self.out_org = Organization.objects.create(name="Org-B", is_in_target=False)
+        self.purgeable = Channel.objects.create(telegram_id=5, title="purge-me", organization=self.out_org)
+        # Forward source — out-of-target but referenced by an in-target message (Bug 2 fix).
+        self.fwd_source = Channel.objects.create(telegram_id=6, title="fwd-source", organization=self.out_org)
+        # Mention target — out-of-target, linked only via the references M2M.
+        self.mention_target = Channel.objects.create(telegram_id=7, title="mention-target", organization=self.out_org)
+
+        # Messages: each surviving channel gets one, plus the purgeable + fwd_source ones.
+        Message.objects.create(telegram_id=100, channel=self.healthy)
+        Message.objects.create(telegram_id=101, channel=self.lost)
+        Message.objects.create(telegram_id=102, channel=self.private)
+        Message.objects.create(telegram_id=103, channel=self.giga)
+        self.purge_msg = Message.objects.create(telegram_id=200, channel=self.purgeable)
+        self.fwd_msg = Message.objects.create(telegram_id=201, channel=self.fwd_source)
+        self.mention_msg = Message.objects.create(telegram_id=202, channel=self.mention_target)
+
+        # The healthy in-target channel has a message that forwards-from fwd_source.
+        Message.objects.create(telegram_id=104, channel=self.healthy, forwarded_from=self.fwd_source)
+        # And another in-target message that *mentions* mention_target via references M2M.
+        mention_in_target = Message.objects.create(telegram_id=105, channel=self.healthy)
+        mention_in_target.references.add(self.mention_target)
+
+        # Attach one picture to the purgeable message so we can assert the file
+        # is unlinked from disk (and not just from the DB).
+        self.pic = MessagePicture.objects.create(message=self.purge_msg, telegram_id=999)
+        self.pic.picture.save("purgeable.jpg", ContentFile(b"fake-jpeg-bytes"), save=True)
+
+    def _run_purge(self, **kwargs):
+        from webapp.management.commands.purge_out_of_target_messages import purge
+
+        return purge(**kwargs)
+
+    def test_dry_run_changes_nothing(self) -> None:
+        before = Message.objects.count()
+        report = self._run_purge(dry_run=True)
+        self.assertEqual(Message.objects.count(), before)
+        self.assertEqual(report.candidate_messages, 2)  # purge_msg + mention_msg
+        self.assertEqual(report.candidate_media_files, 1)
+        self.assertEqual(report.deleted_messages, 0)
+
+    def test_marked_in_target_kept_even_when_lost_or_private_or_wrong_type(self) -> None:
+        """Bug 1 fix: lost/private/wrong-type channels still keep their messages."""
+        self._run_purge()
+        for ch in (self.healthy, self.lost, self.private, self.giga):
+            self.assertTrue(
+                Message.objects.filter(channel=ch).exists(),
+                f"channel {ch.title} lost its messages despite being marked in-target",
+            )
+
+    def test_forward_source_messages_kept(self) -> None:
+        """Bug 2 fix: forward-source channel survives because in-target msgs forward from it."""
+        self._run_purge()
+        self.assertTrue(Message.objects.filter(pk=self.fwd_msg.pk).exists())
+
+    def test_purgeable_channel_messages_deleted(self) -> None:
+        self._run_purge()
+        self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
+
+    def test_mention_only_target_messages_deleted(self) -> None:
+        """Channels reached only via t.me/ mentions don't shield their messages from the purge.
+
+        The Channel row itself stays (it's used as a dead-leaf node in structural analysis);
+        only its crawled messages go.
+        """
+        self._run_purge()
+        self.assertFalse(Message.objects.filter(pk=self.mention_msg.pk).exists())
+        # The Channel itself survives — it's still referenceable for analysis.
+        self.assertTrue(Channel.objects.filter(pk=self.mention_target.pk).exists())
+
+    def test_media_file_removed_from_disk(self) -> None:
+        """Bug 3 fix: the actual .jpg file gets unlinked, not just the DB row."""
+        import os
+
+        # ``self.pic.picture`` was saved in setUp using whatever MEDIA_ROOT was
+        # active then; the path is absolute so we can re-check it here.
+        path = self.pic.picture.path
+        self.assertTrue(os.path.exists(path), "test setup did not create the file")
+        try:
+            report = self._run_purge()
+            self.assertEqual(report.removed_files, 1)
+            self.assertFalse(os.path.exists(path))
+        finally:
+            # Belt-and-braces: if the purge failed mid-test, clean up the orphan.
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_refuses_when_no_in_target_channels(self) -> None:
+        """Refuse to delete every message when no channel is marked in-target."""
+        from django.core.management.base import CommandError
+
+        self.in_target_org.is_in_target = False
+        self.in_target_org.save()
+        Channel.objects.update(in_target_override=None)
+        with self.assertRaises(CommandError):
+            self._run_purge()
+        # Nothing was touched.
+        self.assertGreater(Message.objects.count(), 0)
+
+    def test_in_target_override_protects_channel(self) -> None:
+        """Bug 1 fix: a channel under a non-in-target org but with in_target_override=True survives."""
+        ch = Channel.objects.create(telegram_id=999, title="override-protected", organization=self.out_org)
+        ch.in_target_override = True
+        ch.save()
+        msg = Message.objects.create(telegram_id=900, channel=ch)
+        self._run_purge()
+        self.assertTrue(Message.objects.filter(pk=msg.pk).exists())
+
+
+# ─── purge_orphan_media ────────────────────────────────────────────────────────
+
+
+class PurgeOrphanMediaTests(TestCase):
+    """``purge_orphan_media`` removes only un-referenced files under media/channels."""
+
+    def _make_layout(self, media_root: str):
+        """Plant one referenced file + one orphan + one out-of-scope file."""
+        import os
+        from pathlib import Path
+
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=1, organization=self.org, username="ch")
+        msg = Message.objects.create(telegram_id=1, channel=self.channel)
+        pic = MessagePicture.objects.create(message=msg, telegram_id=1)
+        pic.picture.save("kept.jpg", ContentFile(b"referenced bytes"), save=True)
+        self.referenced_path = Path(pic.picture.path)
+
+        # Orphan inside channels/ (target of cleanup).
+        channels_dir = Path(media_root) / "channels"
+        orphan_dir = channels_dir / "ch" / "message"
+        orphan_dir.mkdir(parents=True, exist_ok=True)
+        self.orphan_path = orphan_dir / "orphan.jpg"
+        self.orphan_path.write_bytes(b"orphan bytes")
+
+        # Empty-on-cleanup directory: an isolated subdir under channels/ that will be empty
+        # once we delete its only file.
+        empty_parent = channels_dir / "abandoned" / "message"
+        empty_parent.mkdir(parents=True, exist_ok=True)
+        self.empty_parent_orphan = empty_parent / "lone.jpg"
+        self.empty_parent_orphan.write_bytes(b"lone")
+        self.empty_parent = empty_parent
+
+        # Out-of-scope file: lives directly under MEDIA_ROOT (not under channels/),
+        # so the cleanup must not touch it.
+        outside = Path(media_root) / "exports"
+        outside.mkdir(parents=True, exist_ok=True)
+        self.outside_path = outside / "user-managed.txt"
+        self.outside_path.write_bytes(b"do not touch")
+
+        # Symlink pointing at the referenced file: the cleanup must skip symlinks.
+        if hasattr(os, "symlink"):
+            self.symlink_path = channels_dir / "ch" / "message" / "link.jpg"
+            try:
+                self.symlink_path.symlink_to(self.referenced_path)
+            except OSError:
+                self.symlink_path = None
+        else:
+            self.symlink_path = None
+
+    def test_dry_run_reports_orphans_without_deleting(self) -> None:
+        import tempfile
+
+        from django.test import override_settings
+
+        from webapp.management.commands.purge_orphan_media import purge_orphans
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self._make_layout(media_root)
+            report = purge_orphans(dry_run=True)
+            self.assertEqual(report.candidate_files, 2)  # orphan + empty_parent_orphan
+            self.assertGreater(report.candidate_bytes, 0)
+            self.assertEqual(report.removed_files, 0)
+            self.assertTrue(self.orphan_path.exists())  # not actually deleted
+            self.assertTrue(self.referenced_path.exists())
+
+    def test_run_deletes_orphans_only(self) -> None:
+        import tempfile
+
+        from django.test import override_settings
+
+        from webapp.management.commands.purge_orphan_media import purge_orphans
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self._make_layout(media_root)
+            report = purge_orphans(dry_run=False)
+            self.assertEqual(report.removed_files, 2)
+            self.assertGreater(report.removed_bytes, 0)
+            # Orphans gone, referenced file preserved.
+            self.assertFalse(self.orphan_path.exists())
+            self.assertFalse(self.empty_parent_orphan.exists())
+            self.assertTrue(self.referenced_path.exists())
+            # Out-of-scope path is untouched.
+            self.assertTrue(self.outside_path.exists())
+            # Empty subdirectory was tidied up.
+            self.assertFalse(self.empty_parent.exists())
+
+    def test_symlinks_are_skipped(self) -> None:
+        import tempfile
+
+        from django.test import override_settings
+
+        from webapp.management.commands.purge_orphan_media import purge_orphans
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self._make_layout(media_root)
+            if self.symlink_path is None:
+                self.skipTest("symlinks unavailable on this platform")
+            self.assertTrue(self.symlink_path.is_symlink())
+            purge_orphans(dry_run=False)
+            # The symlink survives (we never unlink the link itself).
+            self.assertTrue(self.symlink_path.is_symlink())
+
+    def test_missing_channels_root_returns_empty_report(self) -> None:
+        import tempfile
+
+        from django.test import override_settings
+
+        from webapp.management.commands.purge_orphan_media import purge_orphans
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            # MEDIA_ROOT exists but channels/ does not — the cleanup is a no-op.
+            report = purge_orphans(dry_run=True)
+            self.assertEqual(report.candidate_files, 0)
+            self.assertEqual(report.candidate_bytes, 0)

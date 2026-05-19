@@ -383,6 +383,11 @@ tr:hover .bo-detail-btn { opacity: 1; }
   padding: var(--space-4);
 }
 
+/* Stack adjacent panels on the Maintenance page with breathing room — the
+   two operations (DB optimisation, message purge) are unrelated and the gap
+   makes that visually clear. */
+.bo-maint .bo-panel + .bo-panel { margin-top: var(--space-7); }
+
 /* ── Channel update page ────────────────────────────────────────────────── */
 
 .bo-ch-update { max-width: 680px; }

@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Organization, SearchTerm
+from webapp.models import Channel, ChannelGroup, Message, Organization, SearchTerm
 
 # ---------------------------------------------------------------------------
 # backoffice/api/utils.py — _normalize
@@ -526,3 +526,113 @@ class UserViewSetTests(_ApiTestCase):
         resp = self.jpost(_api("users/"), {"email": "staff@example.com", "password": "x", "is_staff": True})
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(User.objects.get(email="staff@example.com").is_staff)
+
+
+# ---------------------------------------------------------------------------
+# backoffice/api/maintenance — purge_preview and purge_run
+# ---------------------------------------------------------------------------
+
+
+class MaintenancePurgeApiTests(_ApiTestCase):
+    """Endpoints powering the "Purge out-of-target messages" panel."""
+
+    def setUp(self):
+        in_target = Organization.objects.create(name="In", is_in_target=True)
+        out = Organization.objects.create(name="Out", is_in_target=False)
+        self.kept = Channel.objects.create(telegram_id=1, title="kept", organization=in_target)
+        self.purgeable = Channel.objects.create(telegram_id=2, title="purge", organization=out)
+        Message.objects.create(telegram_id=10, channel=self.kept)
+        Message.objects.create(telegram_id=20, channel=self.purgeable)
+        Message.objects.create(telegram_id=21, channel=self.purgeable)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_preview_returns_counts(self):
+        resp = self.jget(_api("maintenance/purge-preview/"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body["supported"])
+        self.assertEqual(body["marked_in_target_channels"], 1)
+        self.assertEqual(body["messages"], 2)  # the two purgeable messages
+        self.assertEqual(body["media_files"], 0)
+        # Database untouched by preview.
+        self.assertEqual(Message.objects.count(), 3)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_preview_reports_unsupported_when_no_in_target(self):
+        Channel.objects.update(organization=Organization.objects.create(name="Z", is_in_target=False))
+        Organization.objects.filter(is_in_target=True).update(is_in_target=False)
+        resp = self.jget(_api("maintenance/purge-preview/"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertFalse(body["supported"])
+        self.assertEqual(body["messages"], 0)
+        self.assertIn("No channels are marked in-target", body["detail"])
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_deletes_and_returns_counts(self):
+        resp = self.jpost(_api("maintenance/purge/"), {})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["deleted_messages"], 2)
+        self.assertEqual(body["candidate_media_files"], 0)
+        self.assertEqual(Message.objects.count(), 1)  # only the in-target message remains
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_refuses_when_no_in_target(self):
+        Organization.objects.filter(is_in_target=True).update(is_in_target=False)
+        Channel.objects.update(in_target_override=None)
+        resp = self.jpost(_api("maintenance/purge/"), {})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No channels are marked in-target", resp.json()["detail"])
+        self.assertEqual(Message.objects.count(), 3)  # nothing deleted
+
+
+class MaintenanceOrphanMediaApiTests(_ApiTestCase):
+    """Endpoints powering the "Purge orphan media files" panel."""
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_preview_reports_unsupported_when_channels_root_missing(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                resp = self.jget(_api("maintenance/orphan-media-preview/"))
+                self.assertEqual(resp.status_code, 200)
+                body = resp.json()
+                self.assertFalse(body["supported"])
+                self.assertEqual(body["files"], 0)
+                self.assertIn("does not exist", body["detail"])
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_preview_reports_orphan_counts(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as media_root:
+            (Path(media_root) / "channels" / "x").mkdir(parents=True)
+            orphan = Path(media_root) / "channels" / "x" / "orphan.jpg"
+            orphan.write_bytes(b"abc")
+            with override_settings(MEDIA_ROOT=media_root):
+                resp = self.jget(_api("maintenance/orphan-media-preview/"))
+                self.assertEqual(resp.status_code, 200)
+                body = resp.json()
+                self.assertTrue(body["supported"])
+                self.assertEqual(body["files"], 1)
+                self.assertEqual(body["bytes"], 3)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_deletes_orphans(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as media_root:
+            (Path(media_root) / "channels" / "x").mkdir(parents=True)
+            orphan = Path(media_root) / "channels" / "x" / "orphan.jpg"
+            orphan.write_bytes(b"abc")
+            with override_settings(MEDIA_ROOT=media_root):
+                resp = self.jpost(_api("maintenance/orphan-media/"), {})
+                self.assertEqual(resp.status_code, 200)
+                body = resp.json()
+                self.assertEqual(body["removed_files"], 1)
+                self.assertEqual(body["removed_bytes"], 3)
+            self.assertFalse(orphan.exists())

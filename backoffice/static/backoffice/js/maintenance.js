@@ -108,4 +108,164 @@
 
     $runBtn.addEventListener("click", run);
     loadInfo();
+
+    // ── Purge out-of-target messages ─────────────────────────────────────────
+    var PURGE_PREVIEW = "/manage/api/maintenance/purge-preview/";
+    var PURGE_RUN     = "/manage/api/maintenance/purge/";
+
+    var $purgeMarked      = document.getElementById("bo-purge-marked");
+    var $purgeMsgs        = document.getElementById("bo-purge-msgs");
+    var $purgeFiles       = document.getElementById("bo-purge-files");
+    var $purgeRefreshBtn  = document.getElementById("bo-purge-refresh");
+    var $purgeRunBtn      = document.getElementById("bo-purge-run");
+    var $purgeHint        = document.getElementById("bo-purge-hint");
+    var $purgeResult      = document.getElementById("bo-purge-result");
+    var $purgeResultSum   = document.getElementById("bo-purge-result-summary");
+
+    function fmtCount(n) {
+        if (n === null || n === undefined) return "—";
+        return Number(n).toLocaleString();
+    }
+
+    function loadPurgePreview() {
+        $purgeMarked.textContent = "…";
+        $purgeMsgs.textContent = "…";
+        $purgeFiles.textContent = "…";
+        $purgeRunBtn.disabled = true;
+        $purgeHint.textContent = "";
+        apiFetch(PURGE_PREVIEW).then(function (data) {
+            $purgeMarked.textContent = fmtCount(data.marked_in_target_channels);
+            $purgeMsgs.textContent = fmtCount(data.messages);
+            $purgeFiles.textContent = fmtCount(data.media_files);
+            if (!data.supported) {
+                $purgeHint.textContent = data.detail || "Purge unavailable.";
+                $purgeRunBtn.disabled = true;
+                return;
+            }
+            $purgeRunBtn.disabled = data.messages === 0;
+            if (data.messages === 0) $purgeHint.textContent = "Nothing to delete.";
+        }).catch(function (e) {
+            $purgeHint.textContent = "Preview failed: " + e.message;
+            showToast("Error: " + e.message, "error");
+        });
+    }
+
+    function runPurge() {
+        var msgs = $purgeMsgs.textContent;
+        var files = $purgeFiles.textContent;
+        var msg = "Delete " + msgs + " messages and remove " + files +
+                  " media files from disk?\n\nThis cannot be undone.";
+        if (!confirm(msg)) return;
+
+        var originalHtml = $purgeRunBtn.innerHTML;
+        $purgeRunBtn.disabled = true;
+        $purgeRunBtn.innerHTML = '<i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Purging…';
+        $purgeRefreshBtn.disabled = true;
+
+        apiFetch(PURGE_RUN, { method: "POST", body: {} })
+            .then(function (data) {
+                $purgeResult.classList.remove("d-none");
+                var parts = [
+                    "Deleted " + fmtCount(data.deleted_messages) + " messages",
+                    "removed " + fmtCount(data.removed_files) + " of " + fmtCount(data.candidate_media_files) + " media files",
+                    "in " + fmtDuration(data.total_duration_seconds),
+                ];
+                if (data.failed_files) {
+                    parts.push(fmtCount(data.failed_files) + " files could not be removed");
+                }
+                if (data.size_before_bytes !== null && data.size_after_bytes !== null) {
+                    parts.push("DB size " + fmtBytes(data.size_before_bytes) + " → " + fmtBytes(data.size_after_bytes));
+                }
+                $purgeResultSum.textContent = parts.join(" · ");
+                showToast(data.failed_files
+                    ? "Purge completed with file errors."
+                    : "Purge complete. Run VACUUM above to reclaim DB pages.",
+                    data.failed_files ? "error" : "success");
+                loadPurgePreview();
+                loadInfo();  // refresh disk-size readout
+            })
+            .catch(function (e) {
+                showToast("Purge failed: " + e.message, "error");
+            })
+            .finally(function () {
+                $purgeRunBtn.innerHTML = originalHtml;
+                $purgeRefreshBtn.disabled = false;
+            });
+    }
+
+    $purgeRefreshBtn.addEventListener("click", loadPurgePreview);
+    $purgeRunBtn.addEventListener("click", runPurge);
+    loadPurgePreview();
+
+    // ── Purge orphan media files ─────────────────────────────────────────────
+    var ORPHAN_PREVIEW = "/manage/api/maintenance/orphan-media-preview/";
+    var ORPHAN_RUN     = "/manage/api/maintenance/orphan-media/";
+
+    var $orphanFiles      = document.getElementById("bo-orphan-files");
+    var $orphanBytes      = document.getElementById("bo-orphan-bytes");
+    var $orphanRefreshBtn = document.getElementById("bo-orphan-refresh");
+    var $orphanRunBtn     = document.getElementById("bo-orphan-run");
+    var $orphanHint       = document.getElementById("bo-orphan-hint");
+    var $orphanResult     = document.getElementById("bo-orphan-result");
+    var $orphanResultSum  = document.getElementById("bo-orphan-result-summary");
+
+    function loadOrphanPreview() {
+        $orphanFiles.textContent = "scanning…";
+        $orphanBytes.textContent = "…";
+        $orphanRunBtn.disabled = true;
+        $orphanHint.textContent = "";
+        apiFetch(ORPHAN_PREVIEW).then(function (data) {
+            $orphanFiles.textContent = fmtCount(data.files);
+            $orphanBytes.textContent = fmtBytes(data.bytes);
+            if (!data.supported) {
+                $orphanHint.textContent = data.detail || "Scan unavailable.";
+                $orphanRunBtn.disabled = true;
+                return;
+            }
+            $orphanRunBtn.disabled = data.files === 0;
+            if (data.files === 0) $orphanHint.textContent = "Nothing to remove.";
+        }).catch(function (e) {
+            $orphanHint.textContent = "Preview failed: " + e.message;
+            showToast("Error: " + e.message, "error");
+        });
+    }
+
+    function runOrphanCleanup() {
+        var files = $orphanFiles.textContent;
+        var size = $orphanBytes.textContent;
+        if (!confirm("Remove " + files + " orphan files (" + size + ") from disk?\n\nThis cannot be undone.")) return;
+
+        var originalHtml = $orphanRunBtn.innerHTML;
+        $orphanRunBtn.disabled = true;
+        $orphanRunBtn.innerHTML = '<i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Removing…';
+        $orphanRefreshBtn.disabled = true;
+
+        apiFetch(ORPHAN_RUN, { method: "POST", body: {} })
+            .then(function (data) {
+                $orphanResult.classList.remove("d-none");
+                var parts = [
+                    "Removed " + fmtCount(data.removed_files) + " files (" + fmtBytes(data.removed_bytes) + ")",
+                    "in " + fmtDuration(data.total_duration_seconds),
+                ];
+                if (data.failed_files) {
+                    parts.push(fmtCount(data.failed_files) + " files could not be removed");
+                }
+                if (data.empty_dirs_removed) {
+                    parts.push("cleaned up " + fmtCount(data.empty_dirs_removed) + " empty directories");
+                }
+                $orphanResultSum.textContent = parts.join(" · ");
+                showToast(data.failed_files ? "Cleanup completed with errors." : "Cleanup complete.",
+                    data.failed_files ? "error" : "success");
+                loadOrphanPreview();
+            })
+            .catch(function (e) { showToast("Cleanup failed: " + e.message, "error"); })
+            .finally(function () {
+                $orphanRunBtn.innerHTML = originalHtml;
+                $orphanRefreshBtn.disabled = false;
+            });
+    }
+
+    $orphanRefreshBtn.addEventListener("click", loadOrphanPreview);
+    $orphanRunBtn.addEventListener("click", runOrphanCleanup);
+    loadOrphanPreview();
 })();

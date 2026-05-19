@@ -18,6 +18,8 @@ python manage.py runserver           # Web UI at localhost:8000
 python manage.py search_channels     # Find channels via search terms
 python manage.py crawl_channels        # Crawl channels and resolve references
 python manage.py structural_analysis      # Build graph, detect communities, export
+python manage.py purge_out_of_target_messages --dry-run   # Preview cleanup of out-of-target channels' messages and media
+python manage.py purge_orphan_media --dry-run             # Preview cleanup of media files with no DB reference
 ```
 
 See [docs/workflow.md](docs/workflow.md) for all flags and options.

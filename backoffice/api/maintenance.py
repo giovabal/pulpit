@@ -122,6 +122,122 @@ def maintenance_info(request: Any) -> Response:
     )
 
 
+@api_view(["GET"])
+def purge_preview(request: Any) -> Response:
+    """Count messages and media files that would be deleted by a purge run.
+
+    Mirrors ``manage.py purge_out_of_target_messages --dry-run`` but as a
+    JSON endpoint so the Maintenance page can show the impact before the
+    analyst commits.
+    """
+    from webapp.management.commands.purge_out_of_target_messages import marked_in_target_channels, purge
+
+    marked_count = marked_in_target_channels().count()
+    if marked_count == 0:
+        return Response(
+            {
+                "marked_in_target_channels": 0,
+                "messages": 0,
+                "media_files": 0,
+                "supported": False,
+                "detail": (
+                    "No channels are marked in-target. Mark at least one channel or organisation "
+                    "before previewing — a purge with no in-target scope would delete every message."
+                ),
+            }
+        )
+    report = purge(dry_run=True)
+    return Response(
+        {
+            "marked_in_target_channels": marked_count,
+            "messages": report.candidate_messages,
+            "media_files": report.candidate_media_files,
+            "supported": True,
+        }
+    )
+
+
+@api_view(["GET"])
+def orphan_media_preview(request: Any) -> Response:
+    """Count files under MEDIA_ROOT/channels with no row reference, and their total size."""
+    from webapp.management.commands.purge_orphan_media import channels_root, purge_orphans
+
+    if not channels_root().is_dir():
+        return Response(
+            {
+                "files": 0,
+                "bytes": 0,
+                "supported": False,
+                "detail": f"{channels_root()} does not exist — nothing to scan.",
+            }
+        )
+    report = purge_orphans(dry_run=True)
+    return Response(
+        {
+            "files": report.candidate_files,
+            "bytes": report.candidate_bytes,
+            "supported": True,
+        }
+    )
+
+
+@api_view(["POST"])
+def orphan_media_run(request: Any) -> Response:
+    """Delete orphan media files from disk; tidy up the empty directories left behind."""
+    from webapp.management.commands.purge_orphan_media import channels_root, purge_orphans
+
+    if not channels_root().is_dir():
+        return Response(
+            {"detail": f"{channels_root()} does not exist — nothing to scan."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    overall_t = time.perf_counter()
+    report = purge_orphans(dry_run=False)
+    return Response(
+        {
+            "candidate_files": report.candidate_files,
+            "candidate_bytes": report.candidate_bytes,
+            "removed_files": report.removed_files,
+            "removed_bytes": report.removed_bytes,
+            "failed_files": report.failed_files,
+            "empty_dirs_removed": report.empty_dirs_removed,
+            "total_duration_seconds": time.perf_counter() - overall_t,
+        }
+    )
+
+
+@api_view(["POST"])
+def purge_run(request: Any) -> Response:
+    """Delete messages (and on-disk media) for channels outside the in-target scope.
+
+    Backs the "Purge out-of-target messages" button on the Maintenance page.
+    Refuses to run when no channel is marked in-target (would otherwise nuke
+    the entire message table).
+    """
+    from django.core.management.base import CommandError
+
+    from webapp.management.commands.purge_out_of_target_messages import purge
+
+    size_before = _db_size_bytes()
+    overall_t = time.perf_counter()
+    try:
+        report = purge(dry_run=False)
+    except CommandError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(
+        {
+            "candidate_messages": report.candidate_messages,
+            "candidate_media_files": report.candidate_media_files,
+            "deleted_messages": report.deleted_messages,
+            "removed_files": report.removed_files,
+            "failed_files": report.failed_files,
+            "size_before_bytes": size_before,
+            "size_after_bytes": _db_size_bytes(),
+            "total_duration_seconds": time.perf_counter() - overall_t,
+        }
+    )
+
+
 @api_view(["POST"])
 def maintenance_optimize(request: Any) -> Response:
     engine = connection.vendor

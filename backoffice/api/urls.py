@@ -1,6 +1,13 @@
 from django.urls import path
 
-from .maintenance import maintenance_info, maintenance_optimize
+from .maintenance import (
+    maintenance_info,
+    maintenance_optimize,
+    orphan_media_preview,
+    orphan_media_run,
+    purge_preview,
+    purge_run,
+)
 from .views import (
     ChannelGroupViewSet,
     ChannelVacancyViewSet,
@@ -28,4 +35,16 @@ urlpatterns = [
     *router.urls,
     path("maintenance/", maintenance_info, name="api-maintenance-info"),
     path("maintenance/optimize/", maintenance_optimize, name="api-maintenance-optimize"),
+    path("maintenance/purge-preview/", purge_preview, name="api-maintenance-purge-preview"),
+    path("maintenance/purge/", purge_run, name="api-maintenance-purge"),
+    path(
+        "maintenance/orphan-media-preview/",
+        orphan_media_preview,
+        name="api-maintenance-orphan-media-preview",
+    ),
+    path(
+        "maintenance/orphan-media/",
+        orphan_media_run,
+        name="api-maintenance-orphan-media",
+    ),
 ]

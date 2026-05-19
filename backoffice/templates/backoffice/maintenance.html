@@ -45,6 +45,76 @@
       <p class="bo-maint-result-summary" id="bo-maint-result-summary"></p>
     </div>
   </div>
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Purge out-of-target messages</h2>
+    </div>
+
+    <p class="bo-maint-intro">
+      Delete messages — and their on-disk media — for channels that are not part of the in-target
+      scope. A channel is kept if (a) it is explicitly marked in-target (override or organisation),
+      or (b) it is a forward source for at least one in-target message. Lost or private in-target
+      channels are <em>always</em> kept; their messages are part of your data, not crawler waste.
+      Run database <strong>VACUUM</strong> above afterwards to reclaim the freed pages on disk.
+    </p>
+
+    <div class="bo-maint-status">
+      <div><span class="bo-maint-status-label">In-target channels:</span> <span id="bo-purge-marked">…</span></div>
+      <div><span class="bo-maint-status-label">Messages to delete:</span> <span id="bo-purge-msgs">…</span></div>
+      <div><span class="bo-maint-status-label">Media files to remove:</span> <span id="bo-purge-files">…</span></div>
+    </div>
+
+    <div class="bo-maint-actions">
+      <button class="bo-btn" id="bo-purge-refresh" type="button">
+        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh preview
+      </button>
+      <button class="bo-btn bo-btn--danger" id="bo-purge-run" type="button" disabled>
+        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Purge now
+      </button>
+      <span class="bo-maint-hint" id="bo-purge-hint"></span>
+    </div>
+
+    <div id="bo-purge-result" class="bo-maint-result d-none">
+      <h3 class="bo-maint-result-title">Last purge</h3>
+      <p class="bo-maint-result-summary" id="bo-purge-result-summary"></p>
+    </div>
+  </div>
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Purge orphan media files</h2>
+    </div>
+
+    <p class="bo-maint-intro">
+      Walk <code>MEDIA_ROOT/channels</code> and remove files that no longer have any
+      reference in the database — left behind by interrupted crawls, deleted
+      messages, or by older versions of the cleanup script that removed rows but
+      not their payloads. Only files under <code>channels/</code> are considered;
+      everything else under <code>MEDIA_ROOT</code> stays untouched. Empty
+      directories are cleaned up afterwards.
+    </p>
+
+    <div class="bo-maint-status">
+      <div><span class="bo-maint-status-label">Orphan files:</span> <span id="bo-orphan-files">…</span></div>
+      <div><span class="bo-maint-status-label">Disk space to reclaim:</span> <span id="bo-orphan-bytes">…</span></div>
+    </div>
+
+    <div class="bo-maint-actions">
+      <button class="bo-btn" id="bo-orphan-refresh" type="button">
+        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh preview
+      </button>
+      <button class="bo-btn bo-btn--danger" id="bo-orphan-run" type="button" disabled>
+        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Remove orphans
+      </button>
+      <span class="bo-maint-hint" id="bo-orphan-hint"></span>
+    </div>
+
+    <div id="bo-orphan-result" class="bo-maint-result d-none">
+      <h3 class="bo-maint-result-title">Last cleanup</h3>
+      <p class="bo-maint-result-summary" id="bo-orphan-result-summary"></p>
+    </div>
+  </div>
 </div>
 {% endblock bo_content %}
 
