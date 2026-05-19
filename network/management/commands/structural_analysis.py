@@ -131,6 +131,7 @@ class ResolvedOptions:
     start_date: datetime.date | None
     end_date: datetime.date | None
     draw_dead_leaves: bool
+    dead_leaves_color: str | None
     include_mentions: bool
     include_self_references: bool
     include_lost: bool
@@ -197,6 +198,7 @@ class ResolvedOptions:
             "vertical_layout": self.vertical_layout,
             "fa2_iterations": self.fa2_iterations,
             "draw_dead_leaves": self.draw_dead_leaves,
+            "dead_leaves_color": self.dead_leaves_color,
             "include_mentions": self.include_mentions,
             "include_self_references": self.include_self_references,
             "include_lost": self.include_lost,
@@ -449,7 +451,22 @@ class Command(BaseCommand):
             dest="draw_dead_leaves",
             action="store_true",
             default=None,
-            help=("Include out-of-target channels that are referenced by in-target ones as leaf nodes in the graph."),
+            help=(
+                "Include dead leaves in the graph: out-of-target channels that an in-target channel has "
+                "forwarded from or mentioned via a t.me/ link."
+            ),
+        )
+        parser.add_argument(
+            "--dead-leaves-color",
+            dest="dead_leaves_color",
+            type=str,
+            default=None,
+            metavar="#RRGGBB",
+            help=(
+                "Override the hex colour applied to dead-leaf nodes (out-of-target channels forwarded "
+                "from or mentioned by in-target ones). Only effective when --draw-dead-leaves is set. "
+                "Falls back to the dead_leaves_color entry in configuration/.operations-structural."
+            ),
         )
         parser.add_argument(
             "--leiden-coarse-resolution",
@@ -1047,6 +1064,7 @@ class Command(BaseCommand):
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
                 draw_dead_leaves=options["draw_dead_leaves"],
+                dead_leaves_color=options.get("dead_leaves_color"),
                 start_date=start_date,
                 end_date=end_date,
                 recency_weights=options["recency_weights"],
@@ -1321,6 +1339,7 @@ class Command(BaseCommand):
             start_date=self._parse_date(options["startdate"], "--startdate"),
             end_date=self._parse_date(options["enddate"], "--enddate"),
             draw_dead_leaves=_o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES),
+            dead_leaves_color=options.get("dead_leaves_color") or settings.DEAD_LEAVES_COLOR,
             include_mentions=_o("include_mentions", settings.SA_INCLUDE_MENTIONS),
             include_self_references=_o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES),
             include_lost=_o("include_lost", settings.SA_INCLUDE_LOST),
@@ -1369,6 +1388,7 @@ class Command(BaseCommand):
         try:
             graph, channel_dict, edge_list, channel_qs = graph_builder.build_graph(
                 draw_dead_leaves=opts.draw_dead_leaves,
+                dead_leaves_color=opts.dead_leaves_color,
                 start_date=opts.start_date,
                 end_date=opts.end_date,
                 recency_weights=opts.recency_weights,

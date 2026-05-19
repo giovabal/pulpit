@@ -183,7 +183,7 @@ You can select multiple strategies at once; the map lets you switch between them
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
 | **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
-| **Draw dead leaves** | Include channels that are *referenced by* your monitored channels but not themselves monitored. Useful for seeing what outside content your corpus amplifies. |
+| **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned via a `t.me/` link. Useful for seeing what outside content your corpus amplifies. |
 
 When the export finishes, click **Data** in the navigation bar to browse your exports and open the map.
 

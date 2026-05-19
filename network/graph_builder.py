@@ -20,17 +20,26 @@ def channel_network_data(
     channel: Channel,
     default: dict | None = None,
     skip: frozenset[str] | set[str] = frozenset(),
+    dead_leaves_color: str | None = None,
 ) -> dict:
-    """Build the graph-node dict for a channel."""
+    """Build the graph-node dict for a channel.
+
+    Node colour comes from the channel's ``organization.color`` when one is
+    attached; channels without an organisation fall back to
+    ``dead_leaves_color`` (or, when ``None``, ``settings.DEAD_LEAVES_COLOR``).
+    In practice the orgless-fallback branch is taken by *dead-leaf* nodes —
+    out-of-target channels that an in-target channel has forwarded from or
+    mentioned via a ``t.me/`` link, which is why the override is named after
+    them — but any orgless channel in the graph picks up the same colour.
+    """
     default = default or {}
+    leaf_color = dead_leaves_color or settings.DEAD_LEAVES_COLOR
     data: dict = {
         "pk": str(channel.pk),
         "id": channel.telegram_id,
         "label": channel.title,
         "communities": {},
-        "color": ",".join(
-            map(str, hex_to_rgb(channel.organization.color if channel.organization else settings.DEAD_LEAVES_COLOR))
-        ),
+        "color": ",".join(map(str, hex_to_rgb(channel.organization.color if channel.organization else leaf_color))),
         "pic": channel.profile_picture.picture.url[1:]
         if channel.profile_picture and channel.profile_picture.picture
         else "",
@@ -128,15 +137,25 @@ def build_graph(
     include_self_references: bool = False,
     include_lost: bool = False,
     include_private: bool = False,
+    dead_leaves_color: str | None = None,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
     Returns (graph, channel_dict, edge_list, channel_qs).
     Raises ValueError if no edges are found between channels.
+
+    A *dead-leaf* node is an out-of-target channel that at least one in-target
+    channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
+    gated by ``draw_dead_leaves``: ``Channel.refresh_cited_degree()`` counts
+    every such forward/mention from the in-target set and stores the total in
+    ``in_degree`` (when ``REVERSED_EDGES=True``) or ``out_degree`` (otherwise),
+    so a non-zero degree on that side is exactly the dead-leaf criterion.
     """
     qs_filter = Q(organization__is_in_target=True)
     if draw_dead_leaves:
-        # Citations are stored in in_degree when REVERSED_EDGES=True, out_degree otherwise.
+        # Dead-leaf criterion: an out-of-target channel cited (forwarded or
+        # mentioned) at least once by some in-target channel. The cited count
+        # lives in in_degree when REVERSED_EDGES=True, out_degree otherwise.
         qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
     channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
     if not include_private:
@@ -157,7 +176,10 @@ def build_graph(
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
     for channel in channel_qs:
-        channel_dict[str(channel.pk)] = {"channel": channel, "data": channel_network_data(channel, skip=_skip)}
+        channel_dict[str(channel.pk)] = {
+            "channel": channel,
+            "data": channel_network_data(channel, skip=_skip, dead_leaves_color=dead_leaves_color),
+        }
         graph.add_node(str(channel.pk), data=channel_dict[str(channel.pk)]["data"])
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]

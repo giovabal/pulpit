@@ -149,7 +149,7 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 | :--- | :---------- | ---------------: |
 | `graph.reversed_edges` | When `true`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `true` |
 | `graph.community_palette` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin (non-organisation strategies fall back to `vaporwave` *reversed*, so the most-vivid colours land on the largest communities), or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order) | `ORGANIZATION` |
-| `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target referenced channels) | `#596a64` |
+| `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link) | `#596a64` |
 | `graph.output_dir` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
 
 ## `[outputs]` — what to write
@@ -167,7 +167,7 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
 | `outputs.structural_similarity` | Generate the pairwise structural similarity matrix | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix | `false` |
-| `outputs.draw_dead_leaves` | Include out-of-target referenced channels as leaf nodes in the graph | `false` |
+| `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
 
 ## `[layouts]`
