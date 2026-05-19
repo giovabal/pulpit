@@ -1121,7 +1121,17 @@ function showToast(msg, type) {
     _setBadge(status) {
       const prev = (this.badge.dataset.status || '').trim();
       this.badge.className = 'ops-badge ops-badge--' + status;
-      this.badge.innerHTML = (status === 'running' ? '<span class="dot" aria-hidden="true"></span> ' : '') + status;
+      // Build via DOM nodes — `status` comes from the runner's status endpoint,
+      // a controlled enum today, but interpolating it via innerHTML would turn
+      // any future free-text value into a script-injection path.
+      if (status === 'running') {
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.setAttribute('aria-hidden', 'true');
+        this.badge.replaceChildren(dot, document.createTextNode(' ' + status));
+      } else {
+        this.badge.replaceChildren(document.createTextNode(status));
+      }
       this.badge.setAttribute('aria-label', 'Task status: ' + status);
       this.badge.dataset.status = status;
       if (window.PulpitA11y && prev && prev !== status) {
@@ -1179,6 +1189,13 @@ function showToast(msg, type) {
       let data;
       try {
         const resp = await fetch('/operations/status/' + this.name + '/?offset=' + this.offset);
+        if (!resp.ok) {
+          // Without this guard a JSON 5xx body would parse to an unrelated shape,
+          // leave offset undefined, and re-stream the whole log on the next tick.
+          this.stopPolling();
+          this._setBadge('failed');
+          return;
+        }
         data = await resp.json();
       } catch (_) {
         return;
@@ -1208,6 +1225,20 @@ function showToast(msg, type) {
 
     stopPolling() {
       if (this.poller) { clearInterval(this.poller); this.poller = null; }
+    }
+
+    pauseForVisibility() {
+      if (this.poller) {
+        this._pausedForVisibility = true;
+        this.stopPolling();
+      }
+    }
+
+    resumeFromVisibility() {
+      if (this._pausedForVisibility) {
+        this._pausedForVisibility = false;
+        this.startPolling();
+      }
     }
 
     async _confirmExportName() {
@@ -1321,6 +1352,18 @@ function showToast(msg, type) {
       if (metaEl.dataset.end) meta += ' · ended ' + formatTimestamp(metaEl.dataset.end);
       if (metaEl.dataset.exit !== undefined) meta += ' · exit ' + metaEl.dataset.exit;
       metaEl.textContent = meta;
+    }
+  });
+
+  // Pause polling while the tab is hidden so a long-running task doesn't keep
+  // hitting the status endpoint once a second from a background tab. Resume on
+  // re-show. Background polling is browser-throttled anyway, but the request
+  // chatter is wasted work.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      Object.values(monitors).forEach(function (m) { m.pauseForVisibility(); });
+    } else {
+      Object.values(monitors).forEach(function (m) { m.resumeFromVisibility(); });
     }
   });
 })();

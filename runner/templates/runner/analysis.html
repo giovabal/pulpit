@@ -68,9 +68,15 @@
     if (opts.vertical_layout) pills.push('vertical');
     if (opts.timeline_step === 'year') pills.push('timeline');
     if (opts.vacancy_measures) pills.push(opts.vacancy_measures.split(',').length + ' vacancy');
+    // Return DOM nodes (not an HTML string) so options stored in summary.json — which
+    // may include user-supplied date strings or future free-text fields — can't slip
+    // past escaping when concatenated into innerHTML by the caller.
     return pills.map(function(p) {
-      return '<span class="ch-badge ch-badge--muted">' + p + '</span>';
-    }).join(' ');
+      var span = document.createElement('span');
+      span.className = 'ch-badge ch-badge--muted';
+      span.textContent = p;
+      return span;
+    });
   }
 
   function load() {
@@ -114,7 +120,10 @@
           tr.appendChild(tdEdges);
 
           var tdOpts = document.createElement('td');
-          tdOpts.innerHTML = optionPills(exp.options);
+          optionPills(exp.options).forEach(function(span, i) {
+            if (i > 0) tdOpts.appendChild(document.createTextNode(' '));
+            tdOpts.appendChild(span);
+          });
           tr.appendChild(tdOpts);
 
           var tdVer = document.createElement('td');

@@ -207,6 +207,35 @@ function _buildLineDataset(label, color, data, fractionRemoved) {
     };
 }
 
+function _baseChartOptions(yAxisTitle) {
+    return {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
+            tooltip: {
+                callbacks: {
+                    title: function (items) {
+                        return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
+                    },
+                },
+            },
+        },
+        scales: {
+            x: {
+                type: "linear", min: 0, max: 1,
+                title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
+                grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+            },
+            y: {
+                min: 0,
+                title: { display: true, text: yAxisTitle, font: { size: 12 } },
+                grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+            },
+        },
+    };
+}
+
 function _curveChartConfig(payload, metric, strategies, fractionRemoved) {
     var datasets = strategies.map(function (s) {
         return _buildLineDataset(
@@ -216,39 +245,11 @@ function _curveChartConfig(payload, metric, strategies, fractionRemoved) {
             fractionRemoved
         );
     });
-    return {
-        type: "line",
-        data: { datasets: datasets },
-        options: {
-            animation: false, responsive: true, maintainAspectRatio: false,
-            interaction: { mode: "index", intersect: false },
-            plugins: {
-                legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: {
-                        title: function (items) {
-                            return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
-                        },
-                        label: function (ctx) {
-                            return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    type: "linear", min: 0, max: 1,
-                    title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
-                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                },
-                y: {
-                    min: 0,
-                    title: { display: true, text: "S(f)", font: { size: 12 } },
-                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                },
-            },
-        },
+    var options = _baseChartOptions("S(f)");
+    options.plugins.tooltip.callbacks.label = function (ctx) {
+        return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
     };
+    return { type: "line", data: { datasets: datasets }, options: options };
 }
 
 function _modularChartConfig(curves, fractionRemoved) {
@@ -260,32 +261,7 @@ function _modularChartConfig(curves, fractionRemoved) {
                 _buildLineDataset("inter-community", "#ef4444", curves.inter, fractionRemoved),
             ],
         },
-        options: {
-            animation: false, responsive: true, maintainAspectRatio: false,
-            interaction: { mode: "index", intersect: false },
-            plugins: {
-                legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: {
-                        title: function (items) {
-                            return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    type: "linear", min: 0, max: 1,
-                    title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
-                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                },
-                y: {
-                    min: 0,
-                    title: { display: true, text: "Fraction of edges surviving", font: { size: 12 } },
-                    grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
-                },
-            },
-        },
+        options: _baseChartOptions("Fraction of edges surviving"),
     };
 }
 

@@ -1,6 +1,6 @@
 /* Shared backoffice utilities */
 
-var BACKOFFICE_PAGE_SIZE = 100;
+const BACKOFFICE_PAGE_SIZE = 100;
 
 function renderPagination(container, offset, total, pageSize, onPageChange) {
     container.innerHTML = "";

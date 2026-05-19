@@ -629,7 +629,10 @@
 
     if (_loaded) { _showPic(0); return; }
     fetch("/manage/api/channels/{{ selected_channel.pk }}/pictures/")
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
       .then(function (data) {
         _loaded = true;
         var pics = data.pictures && data.pictures.length ? data.pictures : [_fallbackFromAvatar()];

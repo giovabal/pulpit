@@ -485,7 +485,17 @@
                 if (updateUrl === "replace") history.replaceState(null, "", _buildQueryString());
             })
             .catch(function (err) {
-                $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Error loading channels: ' + err.message + "</td></tr>";
+                // textContent (via replaceChildren) — apiFetch threads DRF's error
+                // string through err.message, and DRF sometimes echoes request-supplied
+                // values (e.g. an invalid `ordering` param). Building the row with
+                // innerHTML would turn that into an XSS via a crafted /manage/channels/ URL.
+                var tr = document.createElement("tr");
+                var td = document.createElement("td");
+                td.colSpan = 8;
+                td.className = "bo-empty";
+                td.textContent = "Error loading channels: " + err.message;
+                tr.appendChild(td);
+                $tbody.replaceChildren(tr);
             })
             .finally(function () { _loading = false; });
     }

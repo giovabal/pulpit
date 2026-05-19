@@ -30,9 +30,12 @@
     }
 
     function renderStrategies(strategies, engine) {
-        $strategies.innerHTML = "";
+        $strategies.replaceChildren();
         if (!strategies.length) {
-            $strategies.innerHTML = '<p class="bo-empty">Engine "' + engine + '" has no supported optimization strategies.</p>';
+            var p = document.createElement("p");
+            p.className = "bo-empty";
+            p.textContent = 'Engine "' + engine + '" has no supported optimization strategies.';
+            $strategies.appendChild(p);
             return;
         }
         strategies.forEach(function (s) {
