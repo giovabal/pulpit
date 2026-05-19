@@ -17,4 +17,5 @@ urlpatterns = [
         views.SaveDefaultsView.as_view(),
         name="operations-save-defaults",
     ),
+    path("palette/<str:name>/", views.PaletteColorsView.as_view(), name="operations-palette"),
 ]

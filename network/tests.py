@@ -154,26 +154,23 @@ class BuildCommunityPaletteTests(TestCase):
         self.assertEqual(set(result.keys()), {1, 2, 3})
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_organization_fallback_uses_reversed_palette(self, _mock: MagicMock) -> None:
-        # ``palette_name="ORGANIZATION"`` falls back to vaporwave with the colour
-        # list reversed, so community #1 (the largest) gets the most-vivid end.
-        # With the mocked palette [#ff0000, #00ff00, #0000ff], community #1 should
-        # receive #0000ff (the last colour) rather than #ff0000.
-        community_map = {"a": 1, "b": 2, "c": 3}
-        result = build_community_palette(community_map, "ORGANIZATION")
-        self.assertEqual(result[1], parse_color("#0000ff"))
-        self.assertEqual(result[2], parse_color("#00ff00"))
-        self.assertEqual(result[3], parse_color("#ff0000"))
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_explicit_palette_name_is_not_reversed(self, _mock: MagicMock) -> None:
-        # Picking the palette by name (anything other than ORGANIZATION) preserves
-        # the canonical order — only the default fallback is reversed.
+    def test_canonical_order_when_reverse_false(self, _mock: MagicMock) -> None:
         community_map = {"a": 1, "b": 2, "c": 3}
         result = build_community_palette(community_map, "vaporwave")
         self.assertEqual(result[1], parse_color("#ff0000"))
         self.assertEqual(result[2], parse_color("#00ff00"))
         self.assertEqual(result[3], parse_color("#0000ff"))
+
+    def test_reverse_kwarg_forwards_to_palette_colors(self) -> None:
+        # palette_colors honours its own ``reverse`` kwarg (it forwards it to
+        # pypalettes.load_palette); build_community_palette only has to pass it through.
+        community_map = {"a": 1, "b": 2, "c": 3}
+        with patch("network.community.palette_colors") as mock:
+            mock.return_value = ["#0000ff", "#00ff00", "#ff0000"]
+            result = build_community_palette(community_map, "vaporwave", reverse=True)
+        mock.assert_called_once_with("vaporwave", reverse=True)
+        self.assertEqual(result[1], parse_color("#0000ff"))
+        self.assertEqual(result[3], parse_color("#ff0000"))
 
 
 # ---------------------------------------------------------------------------
@@ -1139,7 +1136,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("LOUVAIN", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette")
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_kcore")
     def test_kcore_strategy_calls_detect_kcore(self, mock_detect: MagicMock) -> None:
@@ -1147,7 +1144,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("KCORE", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette")
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_infomap")
     def test_infomap_strategy_calls_detect_infomap(self, mock_detect: MagicMock) -> None:
@@ -1155,7 +1152,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("INFOMAP", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette")
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_leiden")
     def test_leiden_strategy_calls_detect_leiden(self, mock_detect: MagicMock) -> None:
@@ -1163,7 +1160,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("LEIDEN", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette")
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_organization")
     def test_unknown_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:

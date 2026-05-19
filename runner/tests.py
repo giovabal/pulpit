@@ -591,9 +591,11 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 class BuildArgsExportNetworkTests(TestCase):
     def test_export_name_appended(self):
-        # No robustness strategy ticked ⇒ --no-robustness is always trailing.
+        # No robustness strategy ticked ⇒ --no-robustness trails; ``community_palette_reversed``
+        # is a ``bool_explicit`` spec so an explicit --no-community-palette-reversed slips in
+        # whenever the form omits the checkbox.
         args = _build_args("structural_analysis", FakePost({"export_name": "baseline", "include_mentions": "on"}))
-        self.assertEqual(args, ["--name", "baseline", "--no-robustness"])
+        self.assertEqual(args, ["--name", "baseline", "--no-community-palette-reversed", "--no-robustness"])
 
     def test_boolean_output_flags(self):
         for field, flag in [
@@ -645,9 +647,13 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertEqual(args[idx + 1], "year")
 
     def test_empty_strings_not_added(self):
-        # All value-kind fields blank ⇒ only the implicit --no-robustness survives.
+        # All value-kind fields blank ⇒ only the implicit --no-community-palette-reversed
+        # (from the bool_explicit spec) and --no-robustness survive.
         post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": "", "include_mentions": "on"})
-        self.assertEqual(_build_args("structural_analysis", post), ["--no-robustness"])
+        self.assertEqual(
+            _build_args("structural_analysis", post),
+            ["--no-community-palette-reversed", "--no-robustness"],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -929,3 +935,60 @@ class SaveDefaultsViewTests(TestCase):
             self.assertEqual(resp.status_code, 200)
             content = (tmp / ".operations-structural").read_text()
             self.assertIn('fa2_iterations = "7x"', content)
+
+    def test_community_palette_round_trip(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={
+                    "community_palette": "vaporwave",
+                    "community_palette_reversed": "on",
+                    "graph": "on",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn('community_palette = "vaporwave"', content)
+            self.assertIn("community_palette_reversed = true", content)
+
+    def test_community_palette_reversed_unchecked_persists_false(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"community_palette": "vaporwave", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn("community_palette_reversed = false", content)
+
+    def test_save_rejects_unknown_palette(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-save-defaults", args=["structural_analysis"]),
+                data={"community_palette": "NOT_A_REAL_PALETTE", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("Unknown palette", resp.json()["error"])
+
+
+class PaletteColorsViewTests(TestCase):
+    def test_known_palette_returns_hex_list(self) -> None:
+        resp = self.client.get(reverse("operations-palette", args=["vaporwave"]))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["name"], "vaporwave")
+        self.assertFalse(data["reverse"])
+        self.assertTrue(data["colors"])
+        for hex_value in data["colors"]:
+            self.assertRegex(hex_value, r"^#[0-9a-fA-F]{6}$")
+
+    def test_reverse_query_param_returns_reversed_colours(self) -> None:
+        canonical = self.client.get(reverse("operations-palette", args=["vaporwave"])).json()["colors"]
+        reversed_colors = self.client.get(reverse("operations-palette", args=["vaporwave"]) + "?reverse=1").json()[
+            "colors"
+        ]
+        self.assertEqual(reversed_colors, list(reversed(canonical)))
+
+    def test_unknown_palette_returns_404(self) -> None:
+        resp = self.client.get(reverse("operations-palette", args=["NOT_A_REAL_PALETTE"]))
+        self.assertEqual(resp.status_code, 404)

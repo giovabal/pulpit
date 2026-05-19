@@ -115,6 +115,32 @@ class RoundTripTests(TestCase):
             self.assertEqual(ns.robustness.strategies, ["pagerank"])
             self.assertEqual(ns.communities.strategies, ["ORGANIZATION"])
 
+    def test_save_then_load_community_palette_fields(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            save_structural_settings({"graph": {"community_palette": "Abbott", "community_palette_reversed": False}})
+            content = (tmp / ".operations-structural").read_text()
+            self.assertIn('community_palette = "Abbott"', content)
+            self.assertIn("community_palette_reversed = false", content)
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.graph.community_palette, "Abbott")
+            self.assertEqual(ns.graph.community_palette_reversed, False)
+
+
+class LegacyOrganizationPaletteShimTests(TestCase):
+    """A pre-existing ``community_palette = "ORGANIZATION"`` value still loads fine
+    but is silently rewritten into (vaporwave, reversed=True) by the settings shim.
+    The TOML file itself must not be touched on load."""
+
+    def test_legacy_value_loads_without_rewrite(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                'pulpit_version = "0.0"\n[graph]\ncommunity_palette = "ORGANIZATION"\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.graph.community_palette, "ORGANIZATION")
+            # The file is unchanged after load.
+            self.assertIn('community_palette = "ORGANIZATION"', (tmp / ".operations-structural").read_text())
+
 
 class VersionStampTests(TestCase):
     def test_pulpit_version_field_written_and_readable(self) -> None:

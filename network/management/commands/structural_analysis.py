@@ -27,6 +27,7 @@ from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
 from webapp.models import Message
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
+from webapp.utils.colors import is_known_palette
 
 import networkx as nx
 
@@ -132,6 +133,8 @@ class ResolvedOptions:
     end_date: datetime.date | None
     draw_dead_leaves: bool
     dead_leaves_color: str | None
+    community_palette: str
+    community_palette_reversed: bool
     include_mentions: bool
     include_self_references: bool
     include_lost: bool
@@ -199,6 +202,8 @@ class ResolvedOptions:
             "fa2_iterations": self.fa2_iterations,
             "draw_dead_leaves": self.draw_dead_leaves,
             "dead_leaves_color": self.dead_leaves_color,
+            "community_palette": self.community_palette,
+            "community_palette_reversed": self.community_palette_reversed,
             "include_mentions": self.include_mentions,
             "include_self_references": self.include_self_references,
             "include_lost": self.include_lost,
@@ -466,6 +471,29 @@ class Command(BaseCommand):
                 "Override the hex colour applied to dead-leaf nodes (out-of-target channels forwarded "
                 "from or mentioned by in-target ones). Only effective when --draw-dead-leaves is set. "
                 "Falls back to the dead_leaves_color entry in configuration/.operations-structural."
+            ),
+        )
+        parser.add_argument(
+            "--community-palette",
+            dest="community_palette",
+            type=str,
+            default=None,
+            metavar="NAME",
+            help=(
+                "pypalettes palette name used to colour communities for every non-ORGANIZATION "
+                "strategy. Falls back to the community_palette entry in "
+                "configuration/.operations-structural. Default: vaporwave."
+            ),
+        )
+        parser.add_argument(
+            "--community-palette-reversed",
+            dest="community_palette_reversed",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Reverse the palette colour order so community #1 (the largest) receives the last "
+                "colour. Default: on (matches the historical vaporwave-reversed look). Pair with "
+                "--no-community-palette-reversed to apply the palette in its canonical order."
             ),
         )
         parser.add_argument(
@@ -808,9 +836,10 @@ class Command(BaseCommand):
             try:
                 community_map, community_palette = community.detect(
                     strategy,
-                    settings.COMMUNITY_PALETTE,
+                    options["community_palette"],
                     graph,
                     channel_dict,
+                    reverse=options["community_palette_reversed"],
                     leiden_coarse_resolution=options["leiden_coarse_resolution"],
                     leiden_fine_resolution=options["leiden_fine_resolution"],
                     mcl_inflation=options["mcl_inflation"],
@@ -1320,6 +1349,22 @@ class Command(BaseCommand):
         if not export_name:
             export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
+        raw_palette = _o("community_palette", settings.COMMUNITY_PALETTE)
+        if raw_palette == "ORGANIZATION":
+            # Same legacy alias as in settings.py: the old default doubled as a
+            # "use organisation colours for ORG, vaporwave-reversed for everything else"
+            # marker. Map it explicitly here so a CLI override of "ORGANIZATION" still works.
+            raw_palette = "vaporwave"
+            reversed_default = True
+        else:
+            reversed_default = settings.COMMUNITY_PALETTE_REVERSED
+        if not is_known_palette(raw_palette):
+            raise CommandError(
+                f"Unknown --community-palette: {raw_palette!r}. Pick a name from the pypalettes catalogue."
+            )
+        community_palette = raw_palette
+        community_palette_reversed = _o("community_palette_reversed", reversed_default)
+
         return ResolvedOptions(
             do_graph=_o("graph", settings.SA_OUTPUT_GRAPH),
             do_3dgraph=_o("graph_3d", settings.SA_OUTPUT_3DGRAPH),
@@ -1340,6 +1385,8 @@ class Command(BaseCommand):
             end_date=self._parse_date(options["enddate"], "--enddate"),
             draw_dead_leaves=_o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES),
             dead_leaves_color=options.get("dead_leaves_color") or settings.DEAD_LEAVES_COLOR,
+            community_palette=community_palette,
+            community_palette_reversed=community_palette_reversed,
             include_mentions=_o("include_mentions", settings.SA_INCLUDE_MENTIONS),
             include_self_references=_o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES),
             include_lost=_o("include_lost", settings.SA_INCLUDE_LOST),

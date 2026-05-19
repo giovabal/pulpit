@@ -17,6 +17,7 @@ from network import (
 )
 from runner import tasks
 from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
+from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
     STRUCTURAL_DEFAULTS,
@@ -99,6 +100,8 @@ class OperationsView(View):
             "SA_VERTICAL_LAYOUT": settings.SA_VERTICAL_LAYOUT,
             "SA_DRAW_DEAD_LEAVES": settings.SA_DRAW_DEAD_LEAVES,
             "SA_DEAD_LEAVES_COLOR": settings.DEAD_LEAVES_COLOR,
+            "SA_COMMUNITY_PALETTE": settings.COMMUNITY_PALETTE,
+            "SA_COMMUNITY_PALETTE_REVERSED": settings.COMMUNITY_PALETTE_REVERSED,
             "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
             "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,
@@ -159,6 +162,7 @@ class OperationsView(View):
                     ),
                     key=lambda kv: kv[1],
                 ),
+                "palette_names": palette_utils.list_palette_names(),
                 "ad": ad,
             },
         )
@@ -513,6 +517,13 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "enddate", "--enddate"),
         ("flag", "draw_dead_leaves", "--draw-dead-leaves"),
         ("value", "dead_leaves_color", "--dead-leaves-color"),
+        ("value", "community_palette", "--community-palette"),
+        (
+            "bool_explicit",
+            "community_palette_reversed",
+            "--community-palette-reversed",
+            "--no-community-palette-reversed",
+        ),
         ("measures_with_bridging", "--measures"),
         ("csv", "community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
@@ -618,6 +629,8 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("consensus_matrix", "outputs.consensus_matrix", "bool"),
         ("draw_dead_leaves", "outputs.draw_dead_leaves", "bool"),
         ("dead_leaves_color", "graph.dead_leaves_color", "value"),
+        ("community_palette", "graph.community_palette", "palette_name"),
+        ("community_palette_reversed", "graph.community_palette_reversed", "bool"),
         ("timeline_step", "outputs.timeline_step", "bool_to_enum:none,year"),
         ("edge_weight_strategy", "edges.weight_strategy", "value"),
         ("include_mentions", "edges.include_mentions", "bool"),
@@ -679,6 +692,12 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
             value = post.get(post_key, "").strip()
         elif kind == "value_optional":
             value = post.get(post_key, "").strip()
+        elif kind == "palette_name":
+            value = post.get(post_key, "").strip()
+            if value and not palette_utils.is_known_palette(value):
+                raise ValueError(f"Unknown palette: {value!r}")
+            if not value:
+                value = _read_default(defaults, toml_path)
         elif kind == "int":
             raw = post.get(post_key, "").strip()
             try:
@@ -723,6 +742,22 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
             raise ValueError(f"Unknown default-spec kind: {kind!r}")
         _set_nested(payload, toml_path, value)
     return payload
+
+
+class PaletteColorsView(View):
+    """Return the colour list of a single pypalettes palette so the Operations form
+    can render a live swatch preview without embedding the whole 2707-palette catalogue."""
+
+    def get(self, request: HttpRequest, name: str) -> JsonResponse:
+        if not palette_utils.is_known_palette(name):
+            return JsonResponse({"error": "unknown palette"}, status=404)
+        reverse = request.GET.get("reverse", "").lower() in {"1", "true", "on", "yes"}
+        try:
+            raw = palette_utils.palette_colors(name, reverse=reverse)
+        except (ValueError, KeyError) as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
+        hex_list = [palette_utils.rgb_to_hex(palette_utils.parse_color(c)) for c in raw]
+        return JsonResponse({"name": name, "reverse": reverse, "colors": hex_list})
 
 
 class SaveDefaultsView(View):

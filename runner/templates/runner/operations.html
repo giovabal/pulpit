@@ -568,6 +568,27 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Orient the graph vertically. By default the layout is horizontal. The graph is rotated 90° when the computed aspect ratio does not match."></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="community_palette_reversed" id="community_palette_reversed" {% if ad.SA_COMMUNITY_PALETTE_REVERSED %}checked{% endif %}>Reversed palette
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Apply the community palette in reverse order so community #1 (the largest) gets the last colour rather than the first. Default: on."></i>
+                </label>
+              </div>
+              <div class="ops-params">
+                <div class="ops-param ops-param--full">
+                  <label for="community_palette">Community palette
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="pypalettes palette name used for non-ORGANIZATION community strategies. Type the first letters to filter the catalogue (2707 palettes). Default: vaporwave."></i>
+                  </label>
+                  <input type="text" name="community_palette" id="community_palette"
+                         list="community_palette_options"
+                         value="{{ ad.SA_COMMUNITY_PALETTE }}"
+                         autocomplete="off" spellcheck="false" data-width="lg"
+                         data-palette-url="{% url 'operations-palette' 'PLACEHOLDER' %}">
+                  <datalist id="community_palette_options">
+                    {% for name in palette_names %}<option value="{{ name }}">{% endfor %}
+                  </datalist>
+                  <div id="community_palette_preview" class="ops-palette-preview" aria-live="polite"></div>
+                </div>
               </div>
             </fieldset>
           </div>
@@ -1030,16 +1051,33 @@
 
 {% block extra_scripts %}
 <script>
+// Shared helpers used by multiple IIFEs in this file. They live at script-top-level
+// (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
+// community-palette preview — can call them without crossing closure boundaries.
+function getCsrfToken() {
+  const m = document.cookie.match(/csrftoken=([^;]+)/);
+  return m ? m[1] : '';
+}
+
+function showToast(msg, type) {
+  type = type || 'success';
+  var c = document.getElementById('ops-toast-container');
+  if (!c) { c = document.createElement('div'); c.id = 'ops-toast-container'; c.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;'; document.body.appendChild(c); }
+  var t = document.createElement('div');
+  t.style.cssText = 'padding:.5rem 1rem;border-radius:.375rem;font-size:.875rem;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.15);';
+  t.style.background = type === 'error' ? '#fef2f2' : '#dcfce7';
+  t.style.color      = type === 'error' ? '#991b1b'  : '#166534';
+  t.style.border     = '1px solid ' + (type === 'error' ? '#fecaca' : '#bbf7d0');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(function() { t.remove(); }, 3200);
+}
+
 (function () {
   'use strict';
   document.querySelectorAll('.ops-tip').forEach(function (el) {
     new bootstrap.Tooltip(el, { trigger: 'hover focus' });
   });
-
-  function getCsrfToken() {
-    const m = document.cookie.match(/csrftoken=([^;]+)/);
-    return m ? m[1] : '';
-  }
 
   function formatTimestamp(iso) {
     if (!iso) return '';
@@ -1761,20 +1799,6 @@
       .catch(function(e) { showToast('Failed to load options: ' + e.message, 'error'); });
   };
 
-  function showToast(msg, type) {
-    type = type || 'success';
-    var c = document.getElementById('ops-toast-container');
-    if (!c) { c = document.createElement('div'); c.id = 'ops-toast-container'; c.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;'; document.body.appendChild(c); }
-    var t = document.createElement('div');
-    t.style.cssText = 'padding:.5rem 1rem;border-radius:.375rem;font-size:.875rem;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.15);';
-    t.style.background = type === 'error' ? '#fef2f2' : '#dcfce7';
-    t.style.color      = type === 'error' ? '#991b1b'  : '#166534';
-    t.style.border     = '1px solid ' + (type === 'error' ? '#fecaca' : '#bbf7d0');
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(function() { t.remove(); }, 3200);
-  }
-
   // ── Save-as-defaults ─────────────────────────────────────────────────────
   // One shared confirmation modal; each "Save as defaults" button stamps the
   // current task into the modal body. Disabled fieldsets/inputs are temporarily
@@ -1829,6 +1853,54 @@
         });
     });
   }
+})();
+
+// Community-palette live preview.
+//   - Pulls colours lazily from operations-palette and caches the canonical order.
+//   - "Reversed" is applied client-side, so each palette costs at most one round trip.
+(function () {
+  'use strict';
+  var input = document.getElementById('community_palette');
+  var rev = document.getElementById('community_palette_reversed');
+  var preview = document.getElementById('community_palette_preview');
+  if (!input || !rev || !preview) return;
+  var urlTpl = input.dataset.paletteUrl;
+  var cache = Object.create(null); // { paletteName: ["#rrggbb", ...] }   canonical order
+
+  function render(colors) {
+    preview.replaceChildren();
+    colors.forEach(function (hex) {
+      var sw = document.createElement('span');
+      sw.className = 'ops-palette-swatch';
+      sw.style.background = hex;
+      sw.title = hex;
+      preview.appendChild(sw);
+    });
+  }
+
+  function refresh() {
+    var name = (input.value || '').trim();
+    if (!name) { preview.replaceChildren(); return; }
+    if (cache[name]) {
+      render(rev.checked ? cache[name].slice().reverse() : cache[name]);
+      return;
+    }
+    var url = urlTpl.replace('PLACEHOLDER', encodeURIComponent(name));
+    fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('unknown')); })
+      .then(function (data) {
+        cache[name] = data.colors || [];
+        render(rev.checked ? cache[name].slice().reverse() : cache[name]);
+      })
+      .catch(function () { preview.replaceChildren(); });
+  }
+
+  input.addEventListener('change', refresh);
+  // 'input' covers datalist picks: in some browsers the 'change' event doesn't fire
+  // when a suggestion is selected by keyboard/mouse — 'input' always does.
+  input.addEventListener('input', refresh);
+  rev.addEventListener('change', refresh);
+  refresh();
 })();
 </script>
 {% endblock extra_scripts %}

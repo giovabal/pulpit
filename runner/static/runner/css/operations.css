@@ -161,6 +161,7 @@
 }
 .ops-fieldset .ops-flags { margin-bottom: 0; }
 .ops-fieldset .ops-flags + .ops-params { margin-top: .5rem; }
+.ops-fieldset .ops-params + .ops-flags { margin-top: .5rem; }
 
 /* flag chips */
 .ops-flags {
@@ -400,6 +401,23 @@
   box-shadow: 0 0 0 2px rgba(67,56,202,.15);
 }
 .ops-param textarea::placeholder { color: var(--muted); opacity: .6; }
+
+/* ---- community palette swatch preview ---- */
+.ops-palette-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: .4rem;
+  min-height: 1.2rem;
+}
+.ops-palette-swatch {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: .2rem;
+  border: 1px solid rgba(0, 0, 0, .15);
+  display: inline-block;
+}
+
 .ops-global-badge {
   font-size: .68rem;
   color: var(--muted);

@@ -62,7 +62,8 @@ STRUCTURAL_DEFAULTS: dict = {
     "graph": {
         "reversed_edges": True,
         "dead_leaves_color": "#596a64",
-        "community_palette": "ORGANIZATION",
+        "community_palette": "vaporwave",
+        "community_palette_reversed": True,
         "output_dir": "graph",
     },
     "outputs": {

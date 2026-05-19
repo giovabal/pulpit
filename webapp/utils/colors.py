@@ -1,4 +1,7 @@
+import csv
+import functools
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 from typing import Any, TypeAlias
 
 import pypalettes
@@ -102,10 +105,11 @@ def parse_color(value: Any) -> ColorTuple:
     return DEFAULT_FALLBACK_COLOR
 
 
-def palette_colors(name: str) -> list[Any]:
+def palette_colors(name: str, *, reverse: bool = False) -> list[Any]:
     palette = None
     if hasattr(pypalettes, "load_palette"):
-        palette = pypalettes.load_palette(name)
+        # load_palette accepts a native ``reverse`` kwarg; preferred path.
+        palette = pypalettes.load_palette(name, reverse=reverse)
     elif hasattr(pypalettes, "get_palette"):
         palette = pypalettes.get_palette(name)
     elif hasattr(pypalettes, "Palette"):
@@ -122,7 +126,29 @@ def palette_colors(name: str) -> list[Any]:
         colors = palette
     if not isinstance(colors, (list, tuple)):
         colors = list(colors)
+    # Fallback reversal for the get_palette / Palette code paths that lack a
+    # native ``reverse`` kwarg — load_palette already honoured it above.
+    if reverse and not hasattr(pypalettes, "load_palette"):
+        colors = list(colors)[::-1]
     return colors
+
+
+@functools.lru_cache(maxsize=1)
+def list_palette_names() -> list[str]:
+    """Return every palette name shipped with pypalettes, sorted alphabetically."""
+    csv_path = Path(pypalettes.__file__).with_name("palettes.csv")
+    with csv_path.open(encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        return sorted(row["name"] for row in reader if row.get("name"))
+
+
+@functools.lru_cache(maxsize=1)
+def _palette_name_set() -> frozenset[str]:
+    return frozenset(list_palette_names())
+
+
+def is_known_palette(name: str) -> bool:
+    return name in _palette_name_set()
 
 
 def expand_colors(colors: Sequence[Any], count: int) -> list[Any]:

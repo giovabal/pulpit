@@ -332,7 +332,17 @@ REVERSED_EDGES = _structural.graph.reversed_edges
 DEFAULT_CHANNEL_TYPES: list[str] = [t.strip().upper() for t in _crawl.scope.channel_types if str(t).strip()]
 
 DEAD_LEAVES_COLOR = _structural.graph.dead_leaves_color
-COMMUNITY_PALETTE = _structural.graph.community_palette
+# Legacy shim: a stale ``community_palette = "ORGANIZATION"`` value (the old
+# default, which meant "use Organization colours for ORG, vaporwave reversed
+# elsewhere") is silently translated to the explicit pair below. The TOML file
+# itself is not rewritten — analysts can update it on their next Save-as-defaults.
+_raw_community_palette = _structural.graph.community_palette
+if _raw_community_palette == "ORGANIZATION":
+    COMMUNITY_PALETTE = "vaporwave"
+    COMMUNITY_PALETTE_REVERSED = True
+else:
+    COMMUNITY_PALETTE = _raw_community_palette
+    COMMUNITY_PALETTE_REVERSED = getattr(_structural.graph, "community_palette_reversed", True)
 GRAPH_OUTPUT_DIR = _structural.graph.output_dir
 
 # ── Crawl Channels defaults (configuration/.operations-crawl) ────────────────

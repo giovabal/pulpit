@@ -86,27 +86,16 @@ def normalize_community_map(community_map: CommunityMap) -> CommunityMap:
     return {node_id: remap[community_id] for node_id, community_id in community_map.items()}
 
 
-# Default palette used by non-organisation strategies when ``COMMUNITY_PALETTE=ORGANIZATION``
-# (which only makes sense for the ORGANIZATION strategy itself). Lets Leiden/Louvain/etc.
-# still produce a distinct, attractive palette without the user having to override the setting.
-_NON_ORGANIZATION_FALLBACK_PALETTE = "vaporwave"
-
-
-def build_community_palette(community_map: CommunityMap, palette_name: str) -> CommunityPalette:
+def build_community_palette(
+    community_map: CommunityMap,
+    palette_name: str,
+    *,
+    reverse: bool = False,
+) -> CommunityPalette:
     if not community_map:
         return {}
     total = max(community_map.values())
-    # ``palette_name="ORGANIZATION"`` is only meaningful for the ORGANIZATION strategy
-    # (which builds its palette directly from Organization.color). Other strategies that
-    # land here fall back to the vaporwave palette so they still get distinct colours.
-    # The colour list is reversed in the fallback case so the most-vivid end of the
-    # vaporwave sequence lands on the largest communities (community #1 is the biggest)
-    # rather than starting from the muted greys at the head of the canonical sequence.
-    # An explicit ``COMMUNITY_PALETTE=vaporwave`` is left in canonical order.
-    if palette_name == "ORGANIZATION":
-        source_colors = list(palette_colors(_NON_ORGANIZATION_FALLBACK_PALETTE))[::-1]
-    else:
-        source_colors = palette_colors(palette_name)
+    source_colors = palette_colors(palette_name, reverse=reverse)
     colors = expand_colors(source_colors, total)
     return {
         index: parse_color(colors[index - 1]) if index <= len(colors) else DEFAULT_FALLBACK_COLOR
@@ -169,6 +158,7 @@ def _finalize_partition(
     community_map: CommunityMap,
     palette_name: str,
     *,
+    reverse: bool = False,
     merge_isolated: bool = True,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Common closing for every detect_* function: optional isolated-node merge,
@@ -176,13 +166,15 @@ def _finalize_partition(
     if merge_isolated:
         community_map = _merge_isolated_nodes(graph, community_map)
     community_map = normalize_community_map(community_map)
-    return community_map, build_community_palette(community_map, palette_name)
+    return community_map, build_community_palette(community_map, palette_name, reverse=reverse)
 
 
 # ── Detection algorithms ──────────────────────────────────────────────────────
 
 
-def detect_label_propagation(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_label_propagation(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Label propagation community detection — Cordasco & Gargano 2010 / Raghavan et al. 2007.
 
     Each node is initialised with a unique label; at each step every node adopts
@@ -195,14 +187,16 @@ def detect_label_propagation(graph: nx.DiGraph, palette_name: str) -> tuple[Comm
     The graph is symmetrised to undirected before running.
     """
     communities = sorted(nx.community.label_propagation_communities(graph.to_undirected()), key=len, reverse=True)
-    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name)
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
-def detect_louvain(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_louvain(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     communities = sorted(
         nx.community.louvain_communities(graph.to_undirected(), weight="weight", seed=0), key=len, reverse=True
     )
-    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name)
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
 def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
@@ -220,7 +214,9 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
     return community_map, community_palette
 
 
-def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_kcore(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     coreness = nx.core_number(graph.to_undirected())
     # Nodes with coreness 0 (isolated) are grouped together at shell 1
     raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
@@ -230,10 +226,12 @@ def detect_kcore(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, Co
     shells = sorted(set(raw.values()), reverse=True)
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
-    return community_map, build_community_palette(community_map, palette_name)
+    return community_map, build_community_palette(community_map, palette_name, reverse=reverse)
 
 
-def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_infomap(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     node_ids, node_id_map = _node_id_index(graph)
     infomap = Infomap("--two-level --directed --silent")
     for source, target, edge_data in graph.edges(data=True):
@@ -252,20 +250,30 @@ def detect_infomap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, 
         if node_id not in community_map:
             community_map[node_id] = next_community
 
-    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
+    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
 
 
-def detect_weakcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_weakcc(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     components = sorted(nx.weakly_connected_components(graph), key=len, reverse=True)
-    return _finalize_partition(graph, _assign_from_node_sets(components), palette_name, merge_isolated=False)
+    return _finalize_partition(
+        graph, _assign_from_node_sets(components), palette_name, reverse=reverse, merge_isolated=False
+    )
 
 
-def detect_strongcc(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_strongcc(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     components = sorted(nx.strongly_connected_components(graph), key=len, reverse=True)
-    return _finalize_partition(graph, _assign_from_node_sets(components), palette_name, merge_isolated=False)
+    return _finalize_partition(
+        graph, _assign_from_node_sets(components), palette_name, reverse=reverse, merge_isolated=False
+    )
 
 
-def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_leiden(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
     if weights:
@@ -276,10 +284,12 @@ def detect_leiden(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, C
         weights="weight" if weights else None,
         seed=0,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
-def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_leiden_directed(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Directed modularity (Leicht & Newman 2008) via leidenalg.
 
     Uses ModularityVertexPartition on a directed igraph so the null model is
@@ -299,7 +309,7 @@ def detect_leiden_directed(graph: nx.DiGraph, palette_name: str) -> tuple[Commun
         weights="weight",
         seed=0,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
 def _build_undirected_igraph(
@@ -316,7 +326,9 @@ def _build_undirected_igraph(
     return ig_graph, weights
 
 
-def detect_leiden_cpm(graph: nx.DiGraph, palette_name: str, resolution: float) -> tuple[CommunityMap, CommunityPalette]:
+def detect_leiden_cpm(
+    graph: nx.DiGraph, palette_name: str, resolution: float, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Leiden algorithm with Constant Potts Model (CPM) objective.
 
     Unlike modularity, CPM has no resolution limit: communities are defined as
@@ -335,10 +347,12 @@ def detect_leiden_cpm(graph: nx.DiGraph, palette_name: str, resolution: float) -
         resolution_parameter=resolution,
         seed=0,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
-def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[CommunityMap, CommunityPalette]:
+def detect_mcl(
+    graph: nx.DiGraph, palette_name: str, inflation: float, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Markov Clustering (MCL) — van Dongen 2000.
 
     Works natively on the directed weighted graph: alternates matrix expansion
@@ -368,10 +382,12 @@ def detect_mcl(graph: nx.DiGraph, palette_name: str, inflation: float) -> tuple[
             community_map[node_id] = next_id
             next_id += 1
 
-    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
+    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
 
 
-def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_infomap_memory(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Second-order (memory) Infomap — Rosvall et al., Nature Communications 2014.
 
     Builds a higher-order state network: each state node represents the context
@@ -434,10 +450,12 @@ def detect_infomap_memory(graph: nx.DiGraph, palette_name: str) -> tuple[Communi
             community_map[node_id] = next_id
             next_id += 1
 
-    return _finalize_partition(graph, community_map, palette_name, merge_isolated=False)
+    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
 
 
-def detect_walktrap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap, CommunityPalette]:
+def detect_walktrap(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
     """Walktrap community detection — Pons & Latapy 2005.
 
     Computes short random-walk distances between nodes (default 4 steps): two
@@ -453,7 +471,7 @@ def detect_walktrap(graph: nx.DiGraph, palette_name: str) -> tuple[CommunityMap,
     if weights:
         ig_graph.es["weight"] = weights
     partition = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4).as_clustering()
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name)
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
 def detect(
@@ -462,38 +480,41 @@ def detect(
     graph: nx.DiGraph,
     channel_dict: dict[str, Any],
     *,
+    reverse: bool = False,
     leiden_coarse_resolution: float = 0.01,
     leiden_fine_resolution: float = 0.05,
     mcl_inflation: float = 2.0,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Run community detection. Returns (community_map, community_palette)."""
     if strategy == "LABELPROPAGATION":
-        return detect_label_propagation(graph, palette_name)
+        return detect_label_propagation(graph, palette_name, reverse=reverse)
     if strategy == "LOUVAIN":
-        return detect_louvain(graph, palette_name)
+        return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "KCORE":
-        return detect_kcore(graph, palette_name)
+        return detect_kcore(graph, palette_name, reverse=reverse)
     if strategy == "INFOMAP":
-        return detect_infomap(graph, palette_name)
+        return detect_infomap(graph, palette_name, reverse=reverse)
     if strategy == "INFOMAP_MEMORY":
-        return detect_infomap_memory(graph, palette_name)
+        return detect_infomap_memory(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":
-        return detect_leiden(graph, palette_name)
+        return detect_leiden(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_DIRECTED":
-        return detect_leiden_directed(graph, palette_name)
+        return detect_leiden_directed(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_CPM_COARSE":
-        return detect_leiden_cpm(graph, palette_name, leiden_coarse_resolution)
+        return detect_leiden_cpm(graph, palette_name, leiden_coarse_resolution, reverse=reverse)
     if strategy == "LEIDEN_CPM_FINE":
-        return detect_leiden_cpm(graph, palette_name, leiden_fine_resolution)
+        return detect_leiden_cpm(graph, palette_name, leiden_fine_resolution, reverse=reverse)
     if strategy == "MCL":
-        return detect_mcl(graph, palette_name, mcl_inflation)
+        return detect_mcl(graph, palette_name, mcl_inflation, reverse=reverse)
     if strategy == "WALKTRAP":
-        return detect_walktrap(graph, palette_name)
+        return detect_walktrap(graph, palette_name, reverse=reverse)
     if strategy == "WEAKCC":
-        return detect_weakcc(graph, palette_name)
+        return detect_weakcc(graph, palette_name, reverse=reverse)
     if strategy == "STRONGCC":
-        return detect_strongcc(graph, palette_name)
+        return detect_strongcc(graph, palette_name, reverse=reverse)
     if strategy == "ORGANIZATION":
+        # ORGANIZATION builds its palette from Organization.color directly, so the
+        # palette_name / reverse flags don't apply.
         return detect_organization(channel_dict)
     raise ValueError(f"Unknown community strategy: {strategy!r}. Choose from {sorted(VALID_STRATEGIES)}.")
 
