@@ -69,15 +69,9 @@ Repeat for all the channels you want in your analysis. Channels without an organ
 
 > **Tip:** you can also assign organizations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organization for all of them at once.
 
-**In-target override (optional):** each channel has an **Override** field that lets you force its in-target status independently of its organization:
+**Inspect flag (optional, for discovery):** each channel has an **Inspect** checkbox that asks the crawler to fetch the channel's messages even when its organization is not in target. Inspected channels are *not* added to the analysis set — they remain out-of-target for measures, communities, and graph building — but their crawled messages are kept so you can discover new in-target candidates from the channels they forward and mention.
 
-| Value | Meaning |
-| :---- | :------ |
-| **Auto** (default) | In-target status follows the organization — no change from normal behaviour. |
-| **Yes** | Always treated as in target, even if unassigned or in an out-of-target organization. |
-| **No** | Always excluded, even if its organization is marked as in target. |
-
-Set it from the **Override** column in the Channels list (inline dropdown) or from the channel edit page. Use *Yes* to include a one-off channel without reorganizing, and *No* to temporarily suspend a channel without removing it from its organization.
+Set it from the **Inspect** column in the Channels list (inline checkbox) or from the channel edit page. Use this to try out a channel for a while before deciding whether to attach it to an in-target organization.
 
 **Channel groups (optional):** channel groups let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organization. A channel can belong to any number of groups.
 

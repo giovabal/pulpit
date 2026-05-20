@@ -92,7 +92,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "out_degree",
             "is_lost",
             "is_private",
-            "in_target_override",
+            "to_inspect",
             "date",
             "out_of_target_after",
             "restriction_reason",

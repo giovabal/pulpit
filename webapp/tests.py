@@ -1075,17 +1075,17 @@ class PurgeOutOfTargetTests(TestCase):
 
         self.in_target_org.is_in_target = False
         self.in_target_org.save()
-        Channel.objects.update(in_target_override=None)
+        Channel.objects.update(to_inspect=False)
         with self.assertRaises(CommandError):
             self._run_purge()
         # Nothing was touched.
         self.assertGreater(Message.objects.count(), 0)
 
-    def test_in_target_override_protects_channel(self) -> None:
-        """Bug 1 fix: a channel under a non-in-target org but with in_target_override=True survives."""
-        ch = Channel.objects.create(telegram_id=999, title="override-protected", organization=self.out_org)
-        ch.in_target_override = True
-        ch.save()
+    def test_to_inspect_protects_channel(self) -> None:
+        """A channel under a non-in-target org but with to_inspect=True keeps its crawled messages."""
+        ch = Channel.objects.create(
+            telegram_id=999, title="inspect-protected", organization=self.out_org, to_inspect=True
+        )
         msg = Message.objects.create(telegram_id=900, channel=ch)
         self._run_purge()
         self.assertTrue(Message.objects.filter(pk=msg.pk).exists())

@@ -52,8 +52,8 @@
     </div>
 
     <p class="bo-maint-intro">
-      Delete messages — and their on-disk media — for channels that are not part of the in-target
-      scope. A channel is kept if (a) it is explicitly marked in-target (override or organisation),
+      Delete messages — and their on-disk media — for channels that are not part of the crawl
+      scope. A channel is kept if (a) its organisation is in target or it is marked to inspect,
       or (b) it is a forward source for at least one in-target message. Lost or private in-target
       channels are <em>always</em> kept; their messages are part of your data, not crawler waste.
       Run database <strong>VACUUM</strong> above afterwards to reclaim the freed pages on disk.

@@ -2,11 +2,11 @@
 
 A message survives the purge iff its channel is either:
 
-* explicitly marked in-target (``in_target_override=True`` or
-  ``organization.is_in_target=True``) — **regardless** of whether the channel
-  is currently flagged ``is_lost`` / ``is_private`` or has a type excluded by
-  the current ``DEFAULT_CHANNEL_TYPES`` filter. The marker is the analyst's
-  declaration of scope; transient flags shouldn't erase history.
+* explicitly marked for crawling (``organization.is_in_target=True`` or
+  ``to_inspect=True``) — **regardless** of whether the channel is currently
+  flagged ``is_lost`` / ``is_private`` or has a type excluded by the current
+  ``DEFAULT_CHANNEL_TYPES`` filter. The marker is the analyst's declaration
+  of scope; transient flags shouldn't erase history.
 * a forward source for at least one in-target channel (``Message.forwarded_from``
   joins back to an in-target channel). Channels referenced only via ``t.me/``
   mentions are *not* preserved — only forward sources are. The mention-target
@@ -68,16 +68,16 @@ class PurgeReport:
 
 
 def marked_in_target_channels() -> QuerySet[Channel]:
-    """Channels the analyst has declared in-target, regardless of transient flags.
+    """Channels the analyst has declared in scope for crawling, regardless of transient flags.
 
+    Includes channels under an in-target organization and those flagged
+    ``to_inspect=True`` (crawled for discovery even when not in target).
     Distinct from ``Channel.objects.in_target()``, which *also* filters by
     ``DEFAULT_CHANNEL_TYPES`` and drops ``is_lost`` / ``is_private`` — using
     that for keep-set computation silently nukes history of channels that
     just happen to be lost or of a type outside the current view.
     """
-    return Channel.objects.filter(
-        Q(in_target_override=True) | Q(in_target_override__isnull=True, organization__is_in_target=True)
-    )
+    return Channel.objects.filter(Q(organization__is_in_target=True) | Q(to_inspect=True))
 
 
 def find_purgeable_messages() -> QuerySet[Message]:

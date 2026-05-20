@@ -127,21 +127,13 @@ class ChannelViewSet(
         if status_filter == "unassigned":
             qs = qs.filter(organization__isnull=True)
         elif status_filter == "in_target":
-            qs = (
-                qs.filter(
-                    Q(in_target_override=True) | Q(in_target_override__isnull=True, organization__is_in_target=True)
-                )
-                .exclude(is_lost=True)
-                .exclude(is_private=True)
-            )
+            qs = qs.filter(organization__is_in_target=True).exclude(is_lost=True).exclude(is_private=True)
         elif status_filter == "lost":
             qs = qs.filter(is_lost=True)
         elif status_filter == "private":
             qs = qs.filter(is_private=True)
-        elif status_filter == "override_in_target":
-            qs = qs.filter(in_target_override=True)
-        elif status_filter == "override_not_in_target":
-            qs = qs.filter(in_target_override=False)
+        elif status_filter == "to_inspect":
+            qs = qs.filter(to_inspect=True)
 
         return qs
 

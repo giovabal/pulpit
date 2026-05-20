@@ -580,7 +580,7 @@ class MaintenancePurgeApiTests(_ApiTestCase):
     @override_settings(WEB_ACCESS="ALL")
     def test_run_refuses_when_no_in_target(self):
         Organization.objects.filter(is_in_target=True).update(is_in_target=False)
-        Channel.objects.update(in_target_override=None)
+        Channel.objects.update(to_inspect=False)
         resp = self.jpost(_api("maintenance/purge/"), {})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("No channels are marked in-target", resp.json()["detail"])

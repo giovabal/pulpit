@@ -217,10 +217,10 @@
             });
             tr.appendChild(tdOrg);
 
-            /* in-target override */
-            var tdOv = document.createElement("td");
-            renderOverrideCell(tdOv, ch);
-            tr.appendChild(tdOv);
+            /* to-inspect */
+            var tdInspect = document.createElement("td");
+            renderInspectCell(tdInspect, ch);
+            tr.appendChild(tdInspect);
 
             /* groups */
             var tdGrp = document.createElement("td");
@@ -255,36 +255,29 @@
         }
     }
 
-    function renderOverrideCell(td, ch) {
+    function renderInspectCell(td, ch) {
         td.innerHTML = "";
-        var sel = document.createElement("select"); sel.className = "bo-select bo-select--sm bo-override-select";
-        var cur = ch.in_target_override;
-        [["", "—"], ["true", "✓ Yes"], ["false", "✗ No"]].forEach(function (pair) {
-            var opt = new Option(pair[1], pair[0]);
-            if ((cur === null || cur === undefined) && pair[0] === "") opt.selected = true;
-            if (cur === true  && pair[0] === "true")  opt.selected = true;
-            if (cur === false && pair[0] === "false") opt.selected = true;
-            sel.appendChild(opt);
-        });
-        sel.style.color = cur === true ? "var(--bs-success)" : cur === false ? "var(--bs-danger)" : "";
-        sel.addEventListener("change", function () {
-            var raw = sel.value;
-            var newVal = raw === "true" ? true : raw === "false" ? false : null;
-            var prev = ch.in_target_override;
-            ch.in_target_override = newVal;
-            sel.style.color = newVal === true ? "var(--bs-success)" : newVal === false ? "var(--bs-danger)" : "";
+        var chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.className = "bo-inspect-checkbox";
+        chk.checked = !!ch.to_inspect;
+        chk.title = "Crawl this channel even when its organization isn't in target";
+        chk.addEventListener("change", function () {
+            var newVal = chk.checked;
+            var prev = ch.to_inspect;
+            ch.to_inspect = newVal;
             apiFetch(API_BASE + "channels/" + ch.id + "/", {
                 method: "PATCH",
-                body: { in_target_override: newVal },
+                body: { to_inspect: newVal },
             }).then(function () {
-                showToast("Override updated.");
+                showToast("Inspect flag updated.");
             }).catch(function (err) {
-                ch.in_target_override = prev;
-                renderOverrideCell(td, ch);
+                ch.to_inspect = prev;
+                renderInspectCell(td, ch);
                 showToast("Error: " + err.message, "error");
             });
         });
-        td.appendChild(sel);
+        td.appendChild(chk);
     }
 
     function openOrgSelect(td, ch) {

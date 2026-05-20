@@ -207,18 +207,15 @@
         });
         fgFlags.appendChild(flagsWrap); form.appendChild(fgFlags);
 
-        /* In-target override */
-        var fgOverride = makeFieldGroup("In-target override");
-        var selOverride = document.createElement("select"); selOverride.name = "in_target_override"; selOverride.className = "bo-select";
-        [["", "— auto (follows organization)"], ["true", "Yes — force in target"], ["false", "No — force not in target"]].forEach(function (pair) {
-            var opt = new Option(pair[1], pair[0]);
-            var cur = ch.in_target_override;
-            if ((cur === null || cur === undefined) && pair[0] === "") opt.selected = true;
-            if (cur === true  && pair[0] === "true")  opt.selected = true;
-            if (cur === false && pair[0] === "false") opt.selected = true;
-            selOverride.appendChild(opt);
-        });
-        fgOverride.appendChild(selOverride); form.appendChild(fgOverride);
+        /* To-inspect */
+        var fgInspect = makeFieldGroup("Inspect");
+        var inspectWrap = document.createElement("label"); inspectWrap.className = "bo-check-label";
+        var chkInspect = document.createElement("input");
+        chkInspect.type = "checkbox"; chkInspect.name = "to_inspect";
+        if (ch.to_inspect) chkInspect.checked = true;
+        inspectWrap.appendChild(chkInspect);
+        inspectWrap.appendChild(document.createTextNode(" Crawl this channel even when its organization isn't in target (for discovery; excluded from analysis)"));
+        fgInspect.appendChild(inspectWrap); form.appendChild(fgInspect);
 
         /* Out-of-target after */
         var fgCutoff = makeFieldGroup("Out-of-target after");
@@ -259,14 +256,12 @@
         var orgVal = fd.get("organization_id");
         var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
         var cutoffVal = form.querySelector("input[name=out_of_target_after]").value;
-        var overrideRaw = form.querySelector("select[name=in_target_override]").value;
-        var overrideVal = overrideRaw === "true" ? true : overrideRaw === "false" ? false : null;
         var body = {
             organization_id: orgVal ? parseInt(orgVal) : null,
             group_ids: groupIds,
             is_lost: form.querySelector("input[name=is_lost]").checked,
             is_private: form.querySelector("input[name=is_private]").checked,
-            in_target_override: overrideVal,
+            to_inspect: form.querySelector("input[name=to_inspect]").checked,
             out_of_target_after: cutoffVal || null,
         };
         apiFetch(API_CH, { method: "PATCH", body: body })

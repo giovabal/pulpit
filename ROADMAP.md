@@ -26,35 +26,6 @@ get_recommended_channels failed for channel_id=6517578024: Invalid channel objec
 Recommended channels [37/83] 6101608700
 get_recommended_channels failed for channel_id=6101608700: Invalid channel object. Make sure to pass the right types, for instance making sure that the request is designed for channels or otherwise look for a different one more suited (caused by GetChannelRecommendationsRequest)
 
---------------------
-
-[23/38] [id=42] Sample Channel (Censored) | hole-fix limit reached, checkpoint saved
-
--------------------
-
-[63/83] [id=60] 6549155363 | fetching profile pictures
-[63/83] [id=60] 6549155363 | fetching channel details
-Error updating info for 6549155363: Cannot cast InputPeerUser to any kind of InputChannel.
-updating info failed for 6549155363
-Traceback (most recent call last):
-  File "/path/to/pulpit/crawler/management/commands/crawl_channels.py", line 128, in per_channel_step
-  File "/path/to/pulpit/crawler/management/commands/crawl_channels.py", line 505, in _refresh_channel_info_for_channel
-  File "/path/to/pulpit/crawler/channel_crawler.py", line 333, in refresh_channel_info
-  File "/path/to/pulpit/crawler/channel_crawler.py", line 154, in set_more_channel_details
-    channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/sync.py", line 39, in syncified
-    return loop.run_until_complete(coro)
-  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
-    return future.result()
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/client/users.py", line 30, in __call__
-    return await self._call(self._sender, request, ordered=ordered)
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/client/users.py", line 44, in _call
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/tl/functions/channels.py", line 805, in resolve
-    self.channel = utils.get_input_channel(await client.get_input_entity(self.channel))
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/utils.py", line 258, in get_input_channel
-  File "/path/to/pulpit/.venv/lib/python3.12/site-packages/telethon/utils.py", line 133, in _raise_cast_fail
-    raise TypeError('Cannot cast {} to any kind of {}.'.format(
-TypeError: Cannot cast InputPeerUser to any kind of InputChannel.
 
 
 ----------------------------
