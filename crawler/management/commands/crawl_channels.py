@@ -1138,7 +1138,10 @@ class Command(BaseCommand):
                                     self.stdout.write("\nAbout texts: all referenced channels already in DB.")
 
                         if fetch_recommended:
-                            in_target_channels = list(channels)
+                            # GetChannelRecommendationsRequest only works on broadcast channels.
+                            in_target_channels = [
+                                ch for ch in channels if not (ch.is_user_account or ch.megagroup or ch.gigagroup)
+                            ]
                             n_rec = len(in_target_channels)
                             printer.announce(f"\nFetching recommended channels for {n_rec} in-target channels")
                             rec_total = 0

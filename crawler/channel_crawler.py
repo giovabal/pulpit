@@ -820,6 +820,10 @@ class ChannelCrawler:
         """Fetch Telegram-recommended channels for *channel*. Returns (total_found, new_to_db)."""
         if not channel.access_hash:
             return 0, 0
+        # GetChannelRecommendationsRequest only accepts broadcast channels; groups
+        # and user accounts trigger an "Invalid channel object" RPC error.
+        if channel.is_user_account or channel.megagroup or channel.gigagroup:
+            return 0, 0
         self.api_client.wait()
         try:
             result = self.api_client.client(
