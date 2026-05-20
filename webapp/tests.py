@@ -962,9 +962,23 @@ class PurgeOutOfTargetTests(TestCase):
     """``purge_out_of_target_messages`` deletes the right rows and the right files."""
 
     def setUp(self) -> None:
+        import tempfile
+
         from django.core.files.base import ContentFile
+        from django.test import override_settings
 
         from webapp.models import MessagePicture
+
+        # Sandbox MEDIA_ROOT to a temp dir — without this, ``self.pic.picture.save``
+        # below lands in the real media tree (e.g. ``media/channels/5/message/200.jpg``)
+        # and leaves a 15-byte ``fake-jpeg-bytes`` file behind on every test run.
+        # Each subsequent run collides on the path and Django generates a suffix,
+        # producing accumulating orphans like ``200_XxXxXxX.jpg``.
+        self._media_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._media_tmp.cleanup)
+        self._media_override = override_settings(MEDIA_ROOT=self._media_tmp.name)
+        self._media_override.enable()
+        self.addCleanup(self._media_override.disable)
 
         # An in-target organisation; channels under it survive the purge.
         self.in_target_org = Organization.objects.create(name="Org-A", is_in_target=True)
