@@ -278,6 +278,11 @@ MEDIA_URL = "media/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Opt into Django 7.0's HTTPS default for the `urlize` template filter so
+# bare-domain links rendered in post bodies and channel descriptions get
+# `https://` prepended. Silences the RemovedInDjango70Warning.
+URLIZE_ASSUME_HTTPS = True
+
 DJANGO_ADMIN_LOGS_ENABLED = False
 
 
