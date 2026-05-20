@@ -943,7 +943,7 @@ class ChannelCrawler:
                 raise
             except errors.rpcerrorlist.ChannelPrivateError:
                 logger.warning("ChannelPrivateError fetching replies for post %s in %s", msg_telegram_id, channel)
-            except errors.rpcerrorlist.MessageIdInvalidError as exc:
+            except (errors.rpcerrorlist.MessageIdInvalidError, errors.rpcerrorlist.MsgIdInvalidError) as exc:
                 logger.debug(
                     "MessageIdInvalid for post %s in %s [%s]; marking unavailable",
                     msg_telegram_id,
