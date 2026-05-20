@@ -270,16 +270,21 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         # ── Channels ──────────────────────────────────────────────────────────
+        # All toggles use BooleanOptionalAction with default=None so that an
+        # explicit --no-<flag> from the CLI or the Operations panel can disable
+        # the operation regardless of the configuration/.operations-crawl
+        # default. The settings default applies only when neither --<flag> nor
+        # --no-<flag> is passed.
         parser.add_argument(
             "--get-channels-info",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Update profile pictures and full channel details for each channel in scope.",
         )
         parser.add_argument(
             "--update-type-excluded-info",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Also update metadata for in-target channels whose type is not in --channel-types. "
                 "Requires --get-channels-info."
@@ -287,8 +292,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--mine-about-texts",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Scan the 'about' field of all channels in the database for t.me/ links "
                 "and fetch any referenced channels not yet in the database."
@@ -296,16 +301,16 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--fetch-recommended-channels",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Fetch Telegram-recommended channels for each in-target channel and add any new ones to the database."
             ),
         )
         parser.add_argument(
             "--retry-lost-and-private",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Include channels marked as lost or private in the crawl scope. "
                 "Each such channel is resolved at its turn: if now accessible its flag is cleared; "
@@ -315,14 +320,14 @@ class Command(BaseCommand):
         # ── Messages ──────────────────────────────────────────────────────────
         parser.add_argument(
             "--get-new-messages",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Fetch new messages for each in-target channel.",
         )
         parser.add_argument(
             "--fetch-replies",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Fetch reply messages from linked discussion groups. "
                 "When combined with --get-new-messages, fetches replies for newly crawled posts; "
@@ -360,14 +365,14 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--fixholes",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Scan each channel's message ID sequence for gaps and fetch any missing messages.",
         )
         parser.add_argument(
             "--fix-missing-media",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Identify messages whose media file is absent from disk or was never downloaded "
                 "and re-fetch it from Telegram. Honors --download-images / --download-video / "
@@ -432,8 +437,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--retry-lost-messages",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "Re-fetch every message marked is_lost=True. Messages that come back are unmarked and "
                 "their stats refreshed; messages that Telegram still doesn't return stay lost."
@@ -441,14 +446,14 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--retry-references",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Retry all pending unresolved t.me/ references found in messages.",
         )
         parser.add_argument(
             "--force-retry-unresolved-references",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help=(
                 "When retrying references, also re-attempt those already marked as permanently "
                 "unresolvable. Requires --retry-references."
@@ -457,14 +462,14 @@ class Command(BaseCommand):
         # ── Degrees ───────────────────────────────────────────────────────────
         parser.add_argument(
             "--in-degrees",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Recompute in-degree and out-degree for all in-target channels.",
         )
         parser.add_argument(
             "--out-degrees",
-            action="store_true",
-            default=False,
+            action=BooleanOptionalAction,
+            default=None,
             help="Recompute citation degree for out-of-target channels cited by in-target ones.",
         )
         # ── Scope ─────────────────────────────────────────────────────────────
@@ -900,31 +905,42 @@ class Command(BaseCommand):
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
 
-        # Toggles using BooleanOptionalAction (default=None) can be explicitly disabled
-        # from CLI/UI even when their configuration/.operations-crawl default is True —
-        # the unchecked Operations-panel checkbox sends --no-<flag> which beats the
-        # settings default. The remaining booleans use the OR-with-settings shortcut
-        # and therefore cannot be turned off from CLI/UI.
+        # Every toggle uses BooleanOptionalAction (default=None): an explicit
+        # --<flag> / --no-<flag> wins over the configuration/.operations-crawl
+        # default. The Operations panel emits both forms (checked → --<flag>,
+        # unchecked → --no-<flag>), so an unchecked checkbox always disables
+        # the operation even when the saved default is True. When neither form
+        # is passed (bare CLI invocation), the settings default takes over.
         def _resolve_optional_bool(option_value: bool | None, settings_value: bool) -> bool:
             return option_value if option_value is not None else settings_value
 
         return CrawlOptions(
-            get_channels_info=options["get_channels_info"] or settings.CRAWL_GET_CHANNELS_INFO,
-            update_type_excluded_info=options["update_type_excluded_info"] or settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO,
-            mine_about_texts=options["mine_about_texts"] or settings.CRAWL_MINE_ABOUT_TEXTS,
-            fetch_recommended=options["fetch_recommended_channels"] or settings.CRAWL_FETCH_RECOMMENDED,
-            retry_lost_and_private=options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE,
-            get_new_messages=options["get_new_messages"] or settings.CRAWL_GET_NEW_MESSAGES,
-            fetch_replies=options["fetch_replies"] or settings.CRAWL_FETCH_REPLIES,
+            get_channels_info=_resolve_optional_bool(options["get_channels_info"], settings.CRAWL_GET_CHANNELS_INFO),
+            update_type_excluded_info=_resolve_optional_bool(
+                options["update_type_excluded_info"], settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO
+            ),
+            mine_about_texts=_resolve_optional_bool(options["mine_about_texts"], settings.CRAWL_MINE_ABOUT_TEXTS),
+            fetch_recommended=_resolve_optional_bool(
+                options["fetch_recommended_channels"], settings.CRAWL_FETCH_RECOMMENDED
+            ),
+            retry_lost_and_private=_resolve_optional_bool(
+                options["retry_lost_and_private"], settings.CRAWL_RETRY_LOST_AND_PRIVATE
+            ),
+            get_new_messages=_resolve_optional_bool(options["get_new_messages"], settings.CRAWL_GET_NEW_MESSAGES),
+            fetch_replies=_resolve_optional_bool(options["fetch_replies"], settings.CRAWL_FETCH_REPLIES),
             do_refresh=_resolve_optional_bool(options["refresh_messages_stats"], settings.CRAWL_REFRESH_MESSAGES_STATS),
             refresh_limit=options["refresh_limit"],
             refresh_from=_parse_date(options.get("refresh_from"), "--refresh-from"),
             refresh_to=_parse_date(options.get("refresh_to"), "--refresh-to"),
-            fix_holes=options["fixholes"] or settings.CRAWL_FIXHOLES,
-            fix_missing_media=options["fix_missing_media"] or settings.CRAWL_FIX_MISSING_MEDIA,
-            retry_lost_messages=options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES,
-            retry_references=options["retry_references"] or settings.CRAWL_RETRY_REFERENCES,
-            force_retry=options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            fix_holes=_resolve_optional_bool(options["fixholes"], settings.CRAWL_FIXHOLES),
+            fix_missing_media=_resolve_optional_bool(options["fix_missing_media"], settings.CRAWL_FIX_MISSING_MEDIA),
+            retry_lost_messages=_resolve_optional_bool(
+                options["retry_lost_messages"], settings.CRAWL_RETRY_LOST_MESSAGES
+            ),
+            retry_references=_resolve_optional_bool(options["retry_references"], settings.CRAWL_RETRY_REFERENCES),
+            force_retry=_resolve_optional_bool(
+                options["force_retry_unresolved_references"], settings.CRAWL_FORCE_RETRY_UNRESOLVED
+            ),
             download_images=_resolve_optional_bool(
                 options["download_images"], settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
             ),
@@ -936,8 +952,8 @@ class Command(BaseCommand):
             download_other_media=_resolve_optional_bool(
                 options["download_other_media"], settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA
             ),
-            in_degrees=options["in_degrees"] or settings.CRAWL_IN_DEGREES,
-            out_degrees=options["out_degrees"] or settings.CRAWL_OUT_DEGREES,
+            in_degrees=_resolve_optional_bool(options["in_degrees"], settings.CRAWL_IN_DEGREES),
+            out_degrees=_resolve_optional_bool(options["out_degrees"], settings.CRAWL_OUT_DEGREES),
             ids_str=options["ids"],
             channel_types=channel_types,
             channel_groups=channel_groups,

@@ -489,19 +489,32 @@ class ExportDetailViewTests(TestCase):
 
 class BuildArgsGetChannelsTests(TestCase):
     def test_empty_post_only_emits_explicit_bool_defaults(self):
-        # bool_explicit specs (the refresh-messages-stats toggle and the five media
-        # toggles) always emit either the on-flag or its --no- form so an unchecked
-        # checkbox can override the matching configuration/.operations-crawl entry.
-        # An empty POST therefore yields the --no- forms and nothing else.
+        # Every crawl_channels toggle is a bool_explicit spec so an unchecked
+        # Operations-panel checkbox emits the --no-<flag> form. An empty POST
+        # therefore yields the --no- form of every toggle (and nothing else).
         self.assertEqual(
             _build_args("crawl_channels", FakePost()),
             [
+                "--no-get-channels-info",
+                "--no-update-type-excluded-info",
+                "--no-mine-about-texts",
+                "--no-fetch-recommended-channels",
+                "--no-retry-lost-and-private",
+                "--no-get-new-messages",
+                "--no-fetch-replies",
                 "--no-refresh-messages-stats",
+                "--no-fixholes",
+                "--no-fix-missing-media",
+                "--no-retry-lost-messages",
+                "--no-retry-references",
+                "--no-force-retry-unresolved-references",
                 "--no-download-images",
                 "--no-download-video",
                 "--no-download-audio",
                 "--no-download-stickers",
                 "--no-download-other-media",
+                "--no-in-degrees",
+                "--no-out-degrees",
             ],
         )
 
@@ -530,10 +543,11 @@ class BuildArgsGetChannelsTests(TestCase):
 
     def test_do_refresh_with_limit_value(self):
         args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_limit": "200"}))
-        # The five --no-download-X flags are emitted unconditionally (bool_explicit specs);
-        # filter them out to assert on just the refresh-related portion.
-        non_media = [a for a in args if not a.startswith("--no-download-") and not a.startswith("--download-")]
-        self.assertEqual(non_media, ["--refresh-messages-stats", "--refresh-limit", "200"])
+        # Every crawl_channels toggle is a bool_explicit spec, so the empty
+        # checkboxes emit a constellation of --no-<flag> entries. Filter them
+        # out to assert on just the refresh-related portion.
+        non_no = [a for a in args if not a.startswith("--no-")]
+        self.assertEqual(non_no, ["--refresh-messages-stats", "--refresh-limit", "200"])
 
     def test_do_refresh_with_date_value(self):
         args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_from": "2024-01-01"}))

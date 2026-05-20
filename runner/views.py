@@ -465,24 +465,41 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
 
 TASK_ARG_SPECS: dict[str, list[tuple]] = {
     "crawl_channels": [
-        # Channels
-        ("flag", "get_channels_info", "--get-channels-info"),
-        ("flag", "update_type_excluded_info", "--update-type-excluded-info"),
-        ("flag", "mine_about_texts", "--mine-about-texts"),
-        ("flag", "fetch_recommended_channels", "--fetch-recommended-channels"),
-        ("flag", "retry_lost_and_private", "--retry-lost-and-private"),
+        # Channels — every toggle uses bool_explicit so an unchecked Operations
+        # panel checkbox sends --no-<flag>, which overrides any configuration
+        # default that would otherwise re-enable the operation.
+        ("bool_explicit", "get_channels_info", "--get-channels-info", "--no-get-channels-info"),
+        (
+            "bool_explicit",
+            "update_type_excluded_info",
+            "--update-type-excluded-info",
+            "--no-update-type-excluded-info",
+        ),
+        ("bool_explicit", "mine_about_texts", "--mine-about-texts", "--no-mine-about-texts"),
+        (
+            "bool_explicit",
+            "fetch_recommended_channels",
+            "--fetch-recommended-channels",
+            "--no-fetch-recommended-channels",
+        ),
+        ("bool_explicit", "retry_lost_and_private", "--retry-lost-and-private", "--no-retry-lost-and-private"),
         # Messages
-        ("flag", "get_new_messages", "--get-new-messages"),
-        ("flag", "fetch_replies", "--fetch-replies"),
+        ("bool_explicit", "get_new_messages", "--get-new-messages", "--no-get-new-messages"),
+        ("bool_explicit", "fetch_replies", "--fetch-replies", "--no-fetch-replies"),
         ("bool_explicit", "do_refresh", "--refresh-messages-stats", "--no-refresh-messages-stats"),
         ("value", "refresh_limit", "--refresh-limit"),
         ("value", "refresh_from", "--refresh-from"),
         ("value", "refresh_to", "--refresh-to"),
-        ("flag", "fix_holes", "--fixholes"),
-        ("flag", "fix_missing_media", "--fix-missing-media"),
-        ("flag", "retry_lost_messages", "--retry-lost-messages"),
-        ("flag", "retry_references", "--retry-references"),
-        ("flag", "force_retry_unresolved_references", "--force-retry-unresolved-references"),
+        ("bool_explicit", "fix_holes", "--fixholes", "--no-fixholes"),
+        ("bool_explicit", "fix_missing_media", "--fix-missing-media", "--no-fix-missing-media"),
+        ("bool_explicit", "retry_lost_messages", "--retry-lost-messages", "--no-retry-lost-messages"),
+        ("bool_explicit", "retry_references", "--retry-references", "--no-retry-references"),
+        (
+            "bool_explicit",
+            "force_retry_unresolved_references",
+            "--force-retry-unresolved-references",
+            "--no-force-retry-unresolved-references",
+        ),
         # Media types
         ("bool_explicit", "download_images", "--download-images", "--no-download-images"),
         ("bool_explicit", "download_video", "--download-video", "--no-download-video"),
@@ -490,8 +507,8 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("bool_explicit", "download_stickers", "--download-stickers", "--no-download-stickers"),
         ("bool_explicit", "download_other_media", "--download-other-media", "--no-download-other-media"),
         # Degrees
-        ("flag", "in_degrees", "--in-degrees"),
-        ("flag", "out_degrees", "--out-degrees"),
+        ("bool_explicit", "in_degrees", "--in-degrees", "--no-in-degrees"),
+        ("bool_explicit", "out_degrees", "--out-degrees", "--no-out-degrees"),
         # Scope
         ("value", "ids", "--ids"),
         ("channel_types", "--channel-types"),
