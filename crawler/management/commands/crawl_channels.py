@@ -959,6 +959,22 @@ class Command(BaseCommand):
         """Open a Telethon ``TelegramClient`` configured from settings, then close it."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+        # Telethon's internal auto-reconnect spawns fresh Connection._send_loop /
+        # _recv_loop tasks and abandons the old ones. The abandoned tasks are
+        # logically replaced but stay pending until GC collects them — at which
+        # point asyncio invokes the loop's exception handler with "Task was
+        # destroyed but it is pending!". The warnings are pure noise (the tasks
+        # were superseded on purpose) but they interrupt the crawl progress log,
+        # so suppress that one message and forward everything else to the default
+        # handler.
+        def _suppress_destroyed_pending(loop_arg: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+            if "was destroyed but it is pending" in context.get("message", ""):
+                return
+            loop_arg.default_exception_handler(context)
+
+        loop.set_exception_handler(_suppress_destroyed_pending)
+
         try:
             self.stdout.write("Connecting to Telegram…", ending="")
             self.stdout.flush()
@@ -973,6 +989,19 @@ class Command(BaseCommand):
                 self.stdout.write(" done")
                 yield client
         finally:
+            # Cancel any tasks still pending after disconnect — typically the
+            # leftover send/recv loops from the last reconnect — and let them
+            # finish unwinding before closing the loop. Without this drain,
+            # those tasks would be GC'd later, sometimes mid-print, and emit
+            # "Exception ignored in: <coroutine ...>" tracebacks on stderr.
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                try:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception:
+                    pass
             loop.close()
             asyncio.set_event_loop(None)
 
