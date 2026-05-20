@@ -22,7 +22,6 @@ CRAWL_DEFAULTS: dict = {
         "ignore_floodwait": True,
         "floodwait_sleep_seconds": 900,
         "grace_time": 1,
-        "messages_limit_per_channel": 100,
     },
     "downloads": {
         "images": False,

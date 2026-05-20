@@ -228,7 +228,6 @@ class FixMessageHolesTests(TestCase):
 
     def _run(
         self,
-        remaining_limit: int | None = None,
         get_message_fn=None,
     ) -> tuple[int, int]:
         if get_message_fn is None:
@@ -238,7 +237,6 @@ class FixMessageHolesTests(TestCase):
             self.telegram_channel,
             self.api_client,
             get_message_fn,
-            remaining_limit,
             self._status,
             "CHAN",
             0,
@@ -292,39 +290,6 @@ class FixMessageHolesTests(TestCase):
         self._create_messages([1, 103])  # 101 holes
         self._run()
         self.assertEqual(self.api_client.client.get_messages.call_count, 2)
-
-    # -- remaining_limit --
-
-    def test_remaining_limit_truncates_fetch_count(self) -> None:
-        self._create_messages([1, 152])  # 150 holes
-        result = self._run(remaining_limit=50)
-        self.assertEqual(result, (50, 0))
-
-    def test_remaining_limit_emits_limit_reached_status(self) -> None:
-        self._create_messages([1, 152])  # 150 holes
-        self._run(remaining_limit=50)
-        self.assertIn("CHAN | hole-fix limit reached, checkpoint saved", self.status_messages)
-
-    def test_remaining_limit_checkpoint_at_last_processed_id(self) -> None:
-        self._create_messages([1, 152])  # holes start at 2
-        self._run(remaining_limit=50)
-        # 50 holes processed: IDs 2..51 → last batch[-1] = 51
-        self.assertEqual(self.channel.last_hole_check_max_telegram_id, 51)
-
-    def test_remaining_limit_exceeds_holes_no_limit_status(self) -> None:
-        self._create_messages([1, 6])  # 4 holes
-        self._run(remaining_limit=100)
-        self.assertNotIn("CHAN | hole-fix limit reached, checkpoint saved", self.status_messages)
-
-    def test_remaining_limit_exceeds_holes_processes_all(self) -> None:
-        self._create_messages([1, 6])  # 4 holes
-        result = self._run(remaining_limit=100)
-        self.assertEqual(result, (4, 0))
-
-    def test_remaining_limit_none_processes_all(self) -> None:
-        self._create_messages([1, 102])  # 100 holes
-        result = self._run(remaining_limit=None)
-        self.assertEqual(result, (100, 0))
 
     # -- None / image handling --
 
@@ -1412,18 +1377,26 @@ class MediaHandlerCleanLeftoversTests(TestCase):
     def test_no_leftover_files_no_error(self, _mock_glob: MagicMock) -> None:
         self.handler.clean_leftovers()  # must not raise
 
+    @patch("crawler.media_handler.os.path.islink", return_value=False)
+    @patch("crawler.media_handler.os.path.isfile", return_value=True)
     @patch("crawler.media_handler.os.remove")
     @patch("crawler.media_handler.glob.glob")
-    def test_removes_all_leftover_photo_files(self, mock_glob: MagicMock, mock_remove: MagicMock) -> None:
+    def test_removes_all_leftover_photo_files(
+        self, mock_glob: MagicMock, mock_remove: MagicMock, _isfile: MagicMock, _islink: MagicMock
+    ) -> None:
         mock_glob.return_value = ["/base/photo_1.jpg", "/base/photo_2.jpg"]
         self.handler.clean_leftovers()
         self.assertEqual(mock_remove.call_count, 2)
         mock_remove.assert_any_call("/base/photo_1.jpg")
         mock_remove.assert_any_call("/base/photo_2.jpg")
 
+    @patch("crawler.media_handler.os.path.islink", return_value=False)
+    @patch("crawler.media_handler.os.path.isfile", return_value=True)
     @patch("crawler.media_handler.os.remove", side_effect=OSError("permission denied"))
     @patch("crawler.media_handler.glob.glob")
-    def test_oserror_on_remove_is_logged_not_raised(self, mock_glob: MagicMock, _mock_remove: MagicMock) -> None:
+    def test_oserror_on_remove_is_logged_not_raised(
+        self, mock_glob: MagicMock, _mock_remove: MagicMock, _isfile: MagicMock, _islink: MagicMock
+    ) -> None:
         mock_glob.return_value = ["/base/photo_1.jpg"]
         try:
             self.handler.clean_leftovers()

@@ -143,12 +143,10 @@ class ChannelCrawler:
         api_client: TelegramAPIClient,
         media_handler: MediaHandler,
         reference_resolver: ReferenceResolver,
-        messages_limit: int | None = 100,
     ) -> None:
         self.api_client = api_client
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
-        self.messages_limit_per_channel = messages_limit
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
@@ -387,17 +385,12 @@ class ChannelCrawler:
         id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
         last_known_id = id_agg["max_id"] or 0
         message_count = 0
-        if self.messages_limit_per_channel is None or self.messages_limit_per_channel <= 0:
-            remaining_limit: int | None = None
-        else:
-            remaining_limit = self.messages_limit_per_channel
         update_status(f"{channel_label} | downloading recent messages")
         batch_count = 0
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             min_id=last_known_id,
             wait_time=self.api_client.wait_time,
-            limit=remaining_limit,
             reverse=True,
         ):
             stored, imgs = self.get_message(channel, telegram_message)
@@ -407,18 +400,6 @@ class ChannelCrawler:
             update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
         message_count += batch_count
-        if remaining_limit is not None:
-            remaining_limit -= batch_count
-            if remaining_limit <= 0:
-                self._resolve_pending_forwards(status_callback)
-                channel.are_messages_crawled = True
-                channel.is_lost = False
-                channel.is_private = False
-                channel.save()
-                update_status(
-                    f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
-                )
-                return last_known_id
 
         max_id = id_agg["min_id"] if not channel.are_messages_crawled else None
 
@@ -426,7 +407,7 @@ class ChannelCrawler:
         if max_id is not None:
             update_status(f"{channel_label} | downloading history")
             for telegram_message in self.api_client.client.iter_messages(
-                telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time, limit=remaining_limit
+                telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time
             ):
                 stored, imgs = self.get_message(channel, telegram_message)
                 image_count += imgs
@@ -435,18 +416,6 @@ class ChannelCrawler:
                 update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
 
         message_count += batch_count
-        if remaining_limit is not None:
-            remaining_limit -= batch_count
-            if remaining_limit <= 0:
-                self._resolve_pending_forwards(status_callback)
-                channel.are_messages_crawled = True
-                channel.is_lost = False
-                channel.is_private = False
-                channel.save()
-                update_status(
-                    f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)"
-                )
-                return last_known_id
 
         if fix_holes:
             update_status(f"{channel_label} | checking for message holes")
@@ -455,7 +424,6 @@ class ChannelCrawler:
                 telegram_channel,
                 self.api_client,
                 self.get_message,
-                remaining_limit,
                 update_status,
                 channel_label,
                 message_count,

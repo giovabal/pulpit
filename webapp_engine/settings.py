@@ -306,7 +306,6 @@ TELEGRAM_PHONE_NUMBER = _required("TELEGRAM_PHONE_NUMBER")
 
 # ── Crawler behaviour (configuration/.operations-crawl) ──────────────────────
 
-TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL = optional_int(_crawl.telegram.messages_limit_per_channel)
 TELEGRAM_CRAWLER_DOWNLOAD_IMAGES = _crawl.downloads.images
 TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = _crawl.downloads.video
 TELEGRAM_CRAWLER_DOWNLOAD_AUDIO = _crawl.downloads.audio

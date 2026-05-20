@@ -1006,7 +1006,6 @@ class Command(BaseCommand):
         channel_types = opts.channel_types
         channel_groups = opts.channel_groups
 
-        messages_limit: int | None = settings.TELEGRAM_CRAWLER_MESSAGES_LIMIT_PER_CHANNEL
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
         download_temp_dir = tempfile.mkdtemp(prefix="crawl_channels_", dir=temp_root)
@@ -1026,9 +1025,7 @@ class Command(BaseCommand):
                         download_other_media=opts.download_other_media,
                     )
                     reference_resolver = ReferenceResolver(api_client)
-                    crawler = ChannelCrawler(
-                        api_client, media_handler, reference_resolver, messages_limit=messages_limit
-                    )
+                    crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
 
                     channels = in_target_qs.order_by("-id")
                     if ids_str:
