@@ -43,51 +43,6 @@
   outline: none;
 }
 
-.sr-chart-table {
-  caption-side: top;
-  border-collapse: collapse;
-  font-size: .75rem;
-  font-variant-numeric: tabular-nums;
-}
-.sr-chart-table caption {
-  font-weight: 600;
-  padding: .5rem .75rem;
-  text-align: left;
-  background: var(--bg, #f5f4f0);
-  border-bottom: 1px solid var(--border, #e3e0d8);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-.sr-chart-table th,
-.sr-chart-table td {
-  padding: .2rem .55rem;
-  border-bottom: 1px solid var(--border, #e3e0d8);
-  white-space: nowrap;
-  text-align: right;
-}
-.sr-chart-table thead th {
-  background: var(--surface, #fff);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-.sr-chart-table tbody th {
-  text-align: left;
-}
-.sr-chart-table-wrap {
-  max-height: 360px;
-  max-width: 100%;
-  overflow: auto;
-  margin: .25rem 0 1rem;
-  border: 1px solid var(--border, #e3e0d8);
-  border-radius: .375rem;
-}
-.sr-chart-toggle {
-  margin: .25rem 0 .5rem;
-  font-size: .8125rem;
-}
-
 /* Keyboard-accessible heatmap cells (structural_similarity, consensus_matrix). */
 [role="grid"] [role="gridcell"]:focus-visible {
   outline: 2px solid var(--accent);

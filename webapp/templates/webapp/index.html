@@ -193,17 +193,10 @@
           };
         });
         if (window.PulpitA11y) {
-          var seriesLabels = datasets.map(function (d) { return d.label; });
-          var rows = (data.labels || []).map(function (lbl, i) {
-            return [lbl].concat(datasets.map(function (d) { return d.data[i]; }));
-          });
           var name = _pulpitChartLabel(canvas) || (data.y_label || 'Reactions') + ' per period';
           PulpitA11y.accessibleChart(canvas, {
             label: name,
-            summary: (data.labels || []).length + ' periods, ' + seriesLabels.length + ' reaction types',
-            columns: ['Period'].concat(seriesLabels),
-            rows: rows,
-            toggle: true,
+            summary: (data.labels || []).length + ' periods, ' + datasets.length + ' reaction types',
           });
         }
         new Chart(canvas, {
@@ -243,16 +236,10 @@
         const chartLabel = css.getPropertyValue("--chart-label").trim();
         if (window.PulpitA11y) {
           const yLabel = data.y_label || 'Value';
-          const rows = (data.labels || []).map(function (lbl, i) {
-            return [lbl, data.values[i]];
-          });
           const name = _pulpitChartLabel(canvas) || yLabel + ' over time';
           PulpitA11y.accessibleChart(canvas, {
             label: name,
             summary: (data.labels || []).length + ' periods',
-            columns: ['Period', yLabel],
-            rows: rows,
-            toggle: true,
           });
         }
         new Chart(canvas, {

@@ -339,24 +339,9 @@ function _renderCurves(payload) {
 
         var buildConfig = function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); };
         if (window.PulpitA11y) {
-            var rows = fractionRemoved.map(function (f, i) {
-                var row = [f.toFixed(3)];
-                strategies.forEach(function (s) {
-                    var sData = payload.strategies[s];
-                    var key = "curve_" + m;
-                    row.push(sData && sData[key] ? sData[key][i] : null);
-                });
-                return row;
-            });
             window.PulpitA11y.accessibleChart(canvas, {
                 label: titleText,
                 summary: strategies.length + " strategies, " + fractionRemoved.length + " removal steps",
-                columns: ["Fraction removed"].concat(strategies.map(function (s) { return _labelOf(payload, s); })),
-                rows: rows,
-                toggle: true,
-                // Mount on the card so the toggled data-table sits below the
-                // fixed-height .rb-chart-canvas instead of overflowing it.
-                host: card,
             });
         }
         new Chart(canvas, buildConfig());
@@ -417,20 +402,9 @@ function _renderModular(payload) {
             var buildConfig = function () { return _modularChartConfig(curves, fractionRemoved); };
             var modularTitle = _labelOf(payload, s) + " (" + strategy_label(p) + ")";
             if (window.PulpitA11y) {
-                var rows = fractionRemoved.map(function (f, i) {
-                    return [
-                        f.toFixed(3),
-                        curves.intra ? curves.intra[i] : null,
-                        curves.inter ? curves.inter[i] : null,
-                    ];
-                });
                 window.PulpitA11y.accessibleChart(canvas, {
                     label: "Modular robustness: " + modularTitle,
                     summary: "Intra- vs inter-community edge survival across " + fractionRemoved.length + " removal steps",
-                    columns: ["Fraction removed", "Intra-community", "Inter-community"],
-                    rows: rows,
-                    toggle: true,
-                    host: card,
                 });
             }
             new Chart(canvas, buildConfig());
