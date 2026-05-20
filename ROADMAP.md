@@ -21,15 +21,6 @@ Only in that period of time messages are crawled, relationships are measured and
 - Explore the Django template code looking for factorizations, propose them to me and wait for approval.
 ------------------------------
 
-Recommended channels [36/83] 6517578024
-get_recommended_channels failed for channel_id=6517578024: Invalid channel object. Make sure to pass the right types, for instance making sure that the request is designed for channels or otherwise look for a different one more suited (caused by GetChannelRecommendationsRequest)
-Recommended channels [37/83] 6101608700
-get_recommended_channels failed for channel_id=6101608700: Invalid channel object. Make sure to pass the right types, for instance making sure that the request is designed for channels or otherwise look for a different one more suited (caused by GetChannelRecommendationsRequest)
-
-
-
-----------------------------
-
 [6/83] [id=233] SAMPLE CHANNEL | replies for post #12 (1/10)
 Error fetching replies for post 12 in SAMPLE CHANNEL: The message ID used in the peer was invalid (caused by GetRepliesRequest)
 [6/83] [id=233] SAMPLE CHANNEL | replies for post #14 (2/10)
