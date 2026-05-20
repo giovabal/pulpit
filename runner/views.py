@@ -474,7 +474,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Messages
         ("flag", "get_new_messages", "--get-new-messages"),
         ("flag", "fetch_replies", "--fetch-replies"),
-        ("flag", "do_refresh", "--refresh-messages-stats"),
+        ("bool_explicit", "do_refresh", "--refresh-messages-stats", "--no-refresh-messages-stats"),
         ("value", "refresh_limit", "--refresh-limit"),
         ("value", "refresh_from", "--refresh-from"),
         ("value", "refresh_to", "--refresh-to"),

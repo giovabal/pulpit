@@ -14,7 +14,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import F
+from django.db.models import F, Q
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
@@ -331,9 +331,13 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--refresh-messages-stats",
-            action="store_true",
-            default=False,
-            help="Re-fetch views, forwards, pinned status, and reactions for already-stored messages.",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Re-fetch views, forwards, pinned status, and reactions for already-stored messages. "
+                "Defaults to CRAWL_REFRESH_MESSAGES_STATS; pass --no-refresh-messages-stats to disable "
+                "for this run even when the configuration default is true."
+            ),
         )
         parser.add_argument(
             "--refresh-limit",
@@ -533,7 +537,6 @@ class Command(BaseCommand):
                 telegram_channel,
                 crawler.api_client,
                 crawler.get_message,
-                None,
                 lambda message, idx=index: printer.status(message, idx),
                 channel_label,
                 0,
@@ -708,7 +711,7 @@ class Command(BaseCommand):
 
     def _fix_missing_media(
         self,
-        in_target_qs: Any,
+        crawl_qs: Any,
         api_client: TelegramAPIClient,
         download_temp_dir: str,
         printer: ProgressPrinter,
@@ -730,58 +733,58 @@ class Command(BaseCommand):
         needs_pic: set[int] = set()
         if opts.download_images:
             needs_pic = set(
-                Message.objects.filter(channel__in=in_target_qs, media_type="photo")
+                Message.objects.filter(channel__in=crawl_qs, media_type="photo")
                 .filter(messagepicture__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_vid: set[int] = set()
         if opts.download_video:
             needs_vid = set(
-                Message.objects.filter(channel__in=in_target_qs, media_type="video")
+                Message.objects.filter(channel__in=crawl_qs, media_type="video")
                 .filter(messagevideo__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_aud: set[int] = set()
         if opts.download_audio:
             needs_aud = set(
-                Message.objects.filter(channel__in=in_target_qs, media_type="audio")
+                Message.objects.filter(channel__in=crawl_qs, media_type="audio")
                 .filter(messageaudio__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_sticker: set[int] = set()
         if opts.download_stickers:
             needs_sticker = set(
-                Message.objects.filter(channel__in=in_target_qs, media_type="sticker")
+                Message.objects.filter(channel__in=crawl_qs, media_type="sticker")
                 .filter(messagesticker__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_other: set[int] = set()
         if opts.download_other_media:
             needs_other = set(
-                Message.objects.filter(channel__in=in_target_qs, media_type="document")
+                Message.objects.filter(channel__in=crawl_qs, media_type="document")
                 .filter(messageothermedia__isnull=True)
                 .values_list("id", flat=True)
             )
 
         # Records that exist but whose file is missing on disk
         if opts.download_images:
-            for mp in MessagePicture.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+            for mp in MessagePicture.objects.filter(message__channel__in=crawl_qs).select_related("message"):
                 if mp.picture and not os.path.exists(mp.picture.path):
                     needs_pic.add(mp.message_id)
         if opts.download_video:
-            for mv in MessageVideo.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+            for mv in MessageVideo.objects.filter(message__channel__in=crawl_qs).select_related("message"):
                 if mv.video and not os.path.exists(mv.video.path):
                     needs_vid.add(mv.message_id)
         if opts.download_audio:
-            for ma in MessageAudio.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+            for ma in MessageAudio.objects.filter(message__channel__in=crawl_qs).select_related("message"):
                 if ma.audio and not os.path.exists(ma.audio.path):
                     needs_aud.add(ma.message_id)
         if opts.download_stickers:
-            for ms in MessageSticker.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+            for ms in MessageSticker.objects.filter(message__channel__in=crawl_qs).select_related("message"):
                 if ms.sticker and not os.path.exists(ms.sticker.path):
                     needs_sticker.add(ms.message_id)
         if opts.download_other_media:
-            for mo in MessageOtherMedia.objects.filter(message__channel__in=in_target_qs).select_related("message"):
+            for mo in MessageOtherMedia.objects.filter(message__channel__in=crawl_qs).select_related("message"):
                 if mo.media_file and not os.path.exists(mo.media_file.path):
                     needs_other.add(mo.message_id)
 
@@ -897,12 +900,12 @@ class Command(BaseCommand):
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
 
-        # The three media toggles use BooleanOptionalAction (default=None) so an explicit
-        # --no-download-X (sent by an unchecked Operations-panel checkbox) can disable a
-        # behaviour whose configuration/.operations-crawl [downloads] entry is True. The
-        # other booleans use the OR-with-settings shortcut and therefore cannot be turned
-        # off from CLI/UI.
-        def _resolve_media_toggle(option_value: bool | None, settings_value: bool) -> bool:
+        # Toggles using BooleanOptionalAction (default=None) can be explicitly disabled
+        # from CLI/UI even when their configuration/.operations-crawl default is True —
+        # the unchecked Operations-panel checkbox sends --no-<flag> which beats the
+        # settings default. The remaining booleans use the OR-with-settings shortcut
+        # and therefore cannot be turned off from CLI/UI.
+        def _resolve_optional_bool(option_value: bool | None, settings_value: bool) -> bool:
             return option_value if option_value is not None else settings_value
 
         return CrawlOptions(
@@ -913,7 +916,7 @@ class Command(BaseCommand):
             retry_lost_and_private=options["retry_lost_and_private"] or settings.CRAWL_RETRY_LOST_AND_PRIVATE,
             get_new_messages=options["get_new_messages"] or settings.CRAWL_GET_NEW_MESSAGES,
             fetch_replies=options["fetch_replies"] or settings.CRAWL_FETCH_REPLIES,
-            do_refresh=options["refresh_messages_stats"] or settings.CRAWL_REFRESH_MESSAGES_STATS,
+            do_refresh=_resolve_optional_bool(options["refresh_messages_stats"], settings.CRAWL_REFRESH_MESSAGES_STATS),
             refresh_limit=options["refresh_limit"],
             refresh_from=_parse_date(options.get("refresh_from"), "--refresh-from"),
             refresh_to=_parse_date(options.get("refresh_to"), "--refresh-to"),
@@ -922,15 +925,15 @@ class Command(BaseCommand):
             retry_lost_messages=options["retry_lost_messages"] or settings.CRAWL_RETRY_LOST_MESSAGES,
             retry_references=options["retry_references"] or settings.CRAWL_RETRY_REFERENCES,
             force_retry=options["force_retry_unresolved_references"] or settings.CRAWL_FORCE_RETRY_UNRESOLVED,
-            download_images=_resolve_media_toggle(
+            download_images=_resolve_optional_bool(
                 options["download_images"], settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
             ),
-            download_video=_resolve_media_toggle(options["download_video"], settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO),
-            download_audio=_resolve_media_toggle(options["download_audio"], settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO),
-            download_stickers=_resolve_media_toggle(
+            download_video=_resolve_optional_bool(options["download_video"], settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO),
+            download_audio=_resolve_optional_bool(options["download_audio"], settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO),
+            download_stickers=_resolve_optional_bool(
                 options["download_stickers"], settings.TELEGRAM_CRAWLER_DOWNLOAD_STICKERS
             ),
-            download_other_media=_resolve_media_toggle(
+            download_other_media=_resolve_optional_bool(
                 options["download_other_media"], settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA
             ),
             in_degrees=options["in_degrees"] or settings.CRAWL_IN_DEGREES,
@@ -940,9 +943,11 @@ class Command(BaseCommand):
             channel_groups=channel_groups,
         )
 
-    def _build_in_target_qs(self, opts: CrawlOptions) -> Any:
-        """Build the in-target channel queryset with type/group/lost-private filters applied."""
-        qs = Channel.objects.filter(organization__is_in_target=True).filter(channel_type_filter(opts.channel_types))
+    def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
+        """Channels included in this crawl: in-target channels and to_inspect candidates."""
+        qs = Channel.objects.filter(Q(organization__is_in_target=True) | Q(to_inspect=True)).filter(
+            channel_type_filter(opts.channel_types)
+        )
         if not opts.retry_lost_and_private:
             qs = qs.exclude(is_lost=True).exclude(is_private=True)
         if opts.channel_groups:
@@ -982,7 +987,7 @@ class Command(BaseCommand):
         invalidate_home_summary_cache()
 
         opts = self._resolve_options(options)
-        in_target_qs = self._build_in_target_qs(opts)
+        crawl_qs = self._build_crawl_qs(opts)
 
         # Locals kept for backward-compatibility with the rest of the (still-inlined)
         # crawl pipeline. Once that is split into per-phase helpers these can go.
@@ -1027,7 +1032,7 @@ class Command(BaseCommand):
                     reference_resolver = ReferenceResolver(api_client)
                     crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
 
-                    channels = in_target_qs.order_by("-id")
+                    channels = crawl_qs.order_by("-id")
                     if ids_str:
                         try:
                             channels = channels.filter(parse_id_ranges(ids_str))
@@ -1269,7 +1274,7 @@ class Command(BaseCommand):
         if in_degrees or out_degrees:
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
-            in_target_pks = set(in_target_qs.values_list("pk", flat=True))
+            in_target_pks = set(crawl_qs.filter(organization__is_in_target=True).values_list("pk", flat=True))
 
             cited_pks = (
                 set(

@@ -488,14 +488,15 @@ class ExportDetailViewTests(TestCase):
 
 
 class BuildArgsGetChannelsTests(TestCase):
-    def test_empty_post_only_emits_media_defaults(self):
-        # bool_explicit specs (the five media toggles) always emit either --download-X
-        # or --no-download-X so an unchecked checkbox can override the [downloads] section
-        # of configuration/.operations-crawl.
-        # An empty POST therefore yields the five --no- forms and nothing else.
+    def test_empty_post_only_emits_explicit_bool_defaults(self):
+        # bool_explicit specs (the refresh-messages-stats toggle and the five media
+        # toggles) always emit either the on-flag or its --no- form so an unchecked
+        # checkbox can override the matching configuration/.operations-crawl entry.
+        # An empty POST therefore yields the --no- forms and nothing else.
         self.assertEqual(
             _build_args("crawl_channels", FakePost()),
             [
+                "--no-refresh-messages-stats",
                 "--no-download-images",
                 "--no-download-video",
                 "--no-download-audio",
@@ -529,7 +530,7 @@ class BuildArgsGetChannelsTests(TestCase):
 
     def test_do_refresh_with_limit_value(self):
         args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_limit": "200"}))
-        # The three --no-download-X flags are emitted unconditionally (bool_explicit specs);
+        # The five --no-download-X flags are emitted unconditionally (bool_explicit specs);
         # filter them out to assert on just the refresh-related portion.
         non_media = [a for a in args if not a.startswith("--no-download-") and not a.startswith("--download-")]
         self.assertEqual(non_media, ["--refresh-messages-stats", "--refresh-limit", "200"])
