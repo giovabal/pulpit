@@ -56,9 +56,9 @@ Think of this step as authorising Pulpit to use your Telegram account — the sa
 
 The setup script (`setup.sh` on Mac/Linux, `setup.bat` on Windows) already created your credentials file:
 
-- **`configuration/.env`** — credentials and deployment settings. Open it and fill in your Telegram credentials.
+- **`configuration/.env`** — credentials and deployment settings. Open it and fill in your Telegram credentials. Also holds optional Telegram-client tuning (`TELEGRAM_SESSION_NAME`, `TELEGRAM_CONNECTION_RETRIES`, `TELEGRAM_FLOOD_SLEEP_THRESHOLD`, etc.); see the commented block in `configuration/env.example`. Sensible defaults apply when these are unset.
 
-Crawler and analysis options ship with sensible built-in defaults — there is no separate file to edit at first. Once you have run the Operations panel a few times and settled on values you like, click **Save as defaults** below the Crawl Channels or Structural Analysis form to write them to `configuration/.operations-crawl` or `configuration/.operations-structural` respectively.
+Crawler and analysis form defaults ship in two committed TOML files under `configuration/` — **`.operations-crawl`** and **`.operations-structural`** — that pre-populate the Operations panel. You don't need to edit them by hand. After you've configured a Crawl Channels or Structural Analysis form to taste, click **Save as defaults**, type a title, and a timestamped snapshot is written alongside the baseline. Click **Load defaults** on a later visit to pick from any saved snapshot (the committed baseline is always available as "Pulpit defaults"). See [Operations defaults & configuration](operations-defaults.md) for the full picture.
 
 Open `configuration/.env` in any text editor (Notepad on Windows; TextEdit on Mac; any editor on Linux). Find these three lines and replace the placeholders with your values:
 
@@ -124,7 +124,7 @@ Git is not installed. Download it from [git-scm.com/downloads](https://git-scm.c
 The setup script may not have run completely. Try: `pip install -r requirements.txt`.
 
 **Missing `configuration/.env`**
-Run `setup.sh` (or `setup.bat`) — it creates it from `configuration/env.example` automatically. If you prefer to create it manually: `cp configuration/env.example configuration/.env` (use `copy` on Windows). The `.operations-crawl` and `.operations-structural` files have no example — built-in defaults apply until you click "Save as defaults" in the Operations panel.
+Run `setup.sh` (or `setup.bat`) — it creates it from `configuration/env.example` automatically. If you prefer to create it manually: `cp configuration/env.example configuration/.env` (use `copy` on Windows). The `.operations-crawl` / `.operations-structural` files are committed in the repository and pre-populate the Operations-panel form on first run; "Save as defaults" later writes timestamped snapshots alongside them. See [Operations defaults & configuration](operations-defaults.md).
 
 **The server starts but the browser shows an error**
 Check the terminal for error messages. If the error mentions missing tables, run `python manage.py migrate` manually — this can happen if `setup.sh` was interrupted before it finished.

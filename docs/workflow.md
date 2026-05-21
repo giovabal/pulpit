@@ -223,6 +223,8 @@ You can also share an export by copying the whole `exports/<name>/` folder to a 
 
 If you prefer to work in a terminal — for example to automate or schedule runs — every operation has a CLI equivalent.
 
+> **Bare invocations do nothing.** `python manage.py crawl_channels` and `python manage.py structural_analysis` with no flags exit immediately without doing any work. Saved Operations-panel defaults pre-populate the *form*; they do **not** apply to the CLI. Always pass explicit flags. The easiest way to discover the right flag combination is the **Write CLI command** button next to Save / Load defaults in the panel — it generates the exact `python manage.py …` line for the current form. See [Operations defaults & configuration](operations-defaults.md).
+
 > **Windows users:** use **PowerShell** for these examples — it supports `#` comments just like bash. In Command Prompt, replace `#` comment lines with `rem`. All `python manage.py ...` commands work identically on both platforms.
 
 ```sh
@@ -235,17 +237,18 @@ python manage.py search_channels --amount 15
 python manage.py search_channels --extra-term "keyword"
 
 # Collect messages — the three independent groups
-python manage.py crawl_channels --get-channels-info           # 1. update channel metadata only
-python manage.py crawl_channels --get-new-messages            # 2. fetch new messages only
-python manage.py crawl_channels --in-degrees --out-degrees    # 3. refresh degrees only (no Telegram connection)
+python manage.py crawl_channels --get-channels-info --channel-types CHANNEL          # 1. update channel metadata only
+python manage.py crawl_channels --get-new-messages --channel-types CHANNEL           # 2. fetch new messages only
+python manage.py crawl_channels --in-degrees --out-degrees                            # 3. refresh degrees only (no Telegram connection)
 
-# Combine as needed
+# Combine as needed (--channel-types omitted below for brevity — pass it on every crawl that
+# touches Telegram, or the in-target queryset filters down to nothing)
 python manage.py crawl_channels --get-channels-info --get-new-messages
-python manage.py crawl_channels --get-new-messages --fixholes
+python manage.py crawl_channels --get-new-messages --fix-holes
 python manage.py crawl_channels --get-new-messages --retry-references
 python manage.py crawl_channels --get-new-messages --fetch-replies
 python manage.py crawl_channels --mine-about-texts
-python manage.py crawl_channels --fetch-recommended-channels
+python manage.py crawl_channels --fetch-recommended
 python manage.py crawl_channels --refresh-messages-stats
 python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-01 --refresh-to 2024-06-30
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
