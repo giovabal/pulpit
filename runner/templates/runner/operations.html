@@ -967,19 +967,19 @@
           {% if task.name == "crawl_channels" or task.name == "structural_analysis" %}
           <div class="ops-form-footer">
             <button type="button"
-                    class="btn btn-sm btn-outline-primary save-defaults-btn"
+                    class="ops-footer-btn save-defaults-btn"
                     data-task="{{ task.name }}">
-              <i class="bi bi-bookmark-fill me-1" aria-hidden="true"></i>Save as defaults
+              <i class="bi bi-bookmark-fill" aria-hidden="true"></i>Save as defaults
             </button>
             <button type="button"
-                    class="btn btn-sm btn-outline-secondary load-defaults-btn"
+                    class="ops-footer-btn load-defaults-btn"
                     data-task="{{ task.name }}">
-              <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Load defaults
+              <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Load defaults
             </button>
             <button type="button"
-                    class="btn btn-sm btn-outline-info write-cli-btn"
+                    class="ops-footer-btn write-cli-btn"
                     data-task="{{ task.name }}">
-              <i class="bi bi-terminal me-1" aria-hidden="true"></i>Write CLI command
+              <i class="bi bi-terminal" aria-hidden="true"></i>Write CLI command
             </button>
             <span class="save-defaults-status" id="save-defaults-status-{{ task.name }}" aria-live="polite"></span>
           </div>
