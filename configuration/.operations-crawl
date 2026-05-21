@@ -1,0 +1,49 @@
+# Pulpit operations defaults — crawling
+# Saved through the Operations panel ("Save as defaults") or hand-edited.
+# The [meta] section's `title` and `pulpit_version` identify the snapshot;
+# future Pulpit releases use `pulpit_version` to migrate the file in place.
+
+[meta]
+title = "Pulpit default"
+pulpit_version = "0.21dev"
+generated_at = "2026-05-21T05:21:28Z"
+
+[telegram]
+session_name = "anon"
+connection_retries = 10
+retry_delay = 5
+flood_sleep_threshold = 60
+ignore_floodwait = true
+floodwait_sleep_seconds = 900
+grace_time = 1
+
+[downloads]
+images = true
+video = false
+audio = false
+stickers = true
+other_media = false
+
+[scope]
+channel_types = ["CHANNEL", "USER"]
+
+[channels]
+get_channels_info = true
+update_type_excluded_info = true
+mine_about_texts = true
+fetch_recommended = false
+retry_lost_and_private = false
+
+[messages]
+get_new_messages = true
+fetch_replies = true
+refresh_messages_stats = false
+fixholes = true
+fix_missing_media = false
+retry_lost_messages = false
+retry_references = false
+force_retry_unresolved = false
+
+[degrees]
+in_degrees = true
+out_degrees = true

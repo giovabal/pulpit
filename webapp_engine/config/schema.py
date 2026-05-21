@@ -1,3 +1,9 @@
+META_SECTION = "meta"
+META_TITLE_KEY = "title"
+META_VERSION_KEY = "pulpit_version"
+META_GENERATED_AT_KEY = "generated_at"
+
+# Legacy top-level keys kept only so older on-disk files still parse cleanly.
 PULPIT_VERSION_KEY = "pulpit_version"
 GENERATED_AT_KEY = "generated_at"
 
@@ -26,14 +32,14 @@ STRUCTURAL_SECTIONS: tuple[str, ...] = (
 
 CRAWL_HEADER_COMMENT = (
     "Pulpit operations defaults — crawling\n"
-    'Edit through the Operations panel ("Save as defaults") or directly here.\n'
-    "Do not remove `pulpit_version`: future Pulpit releases use it to migrate\n"
-    "the file in place when key names or sections change."
+    'Saved through the Operations panel ("Save as defaults") or hand-edited.\n'
+    "The [meta] section's `title` and `pulpit_version` identify the snapshot;\n"
+    "future Pulpit releases use `pulpit_version` to migrate the file in place."
 )
 
 STRUCTURAL_HEADER_COMMENT = (
     "Pulpit operations defaults — structural analysis\n"
-    'Edit through the Operations panel ("Save as defaults") or directly here.\n'
-    "Do not remove `pulpit_version`: future Pulpit releases use it to migrate\n"
-    "the file in place when key names or sections change."
+    'Saved through the Operations panel ("Save as defaults") or hand-edited.\n'
+    "The [meta] section's `title` and `pulpit_version` identify the snapshot;\n"
+    "future Pulpit releases use `pulpit_version` to migrate the file in place."
 )

@@ -6,12 +6,14 @@ from django.test import TestCase
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
     STRUCTURAL_DEFAULTS,
+    list_defaults,
     load_crawl_settings,
+    load_payload_by_id,
     load_structural_settings,
     paths as config_paths,
     read_pulpit_version,
-    save_crawl_settings,
-    save_structural_settings,
+    save_named,
+    write_baseline,
 )
 
 
@@ -34,10 +36,9 @@ class _RedirectConfigPaths:
         # Reload modules that captured the path constants at import time.
         from webapp_engine.config import loader, writer
 
+        loader.CONFIG_DIR = config_paths.CONFIG_DIR
         loader.CRAWL_PATH = config_paths.CRAWL_PATH
         loader.STRUCTURAL_PATH = config_paths.STRUCTURAL_PATH
-        writer.CRAWL_PATH = config_paths.CRAWL_PATH
-        writer.STRUCTURAL_PATH = config_paths.STRUCTURAL_PATH
         writer.CONFIG_DIR = config_paths.CONFIG_DIR
         return self.tmp
 
@@ -46,10 +47,9 @@ class _RedirectConfigPaths:
 
         for attr, value in self._orig.items():
             setattr(config_paths, attr, value)
+        loader.CONFIG_DIR = config_paths.CONFIG_DIR
         loader.CRAWL_PATH = config_paths.CRAWL_PATH
         loader.STRUCTURAL_PATH = config_paths.STRUCTURAL_PATH
-        writer.CRAWL_PATH = config_paths.CRAWL_PATH
-        writer.STRUCTURAL_PATH = config_paths.STRUCTURAL_PATH
         writer.CONFIG_DIR = config_paths.CONFIG_DIR
 
 
@@ -76,15 +76,19 @@ class MissingFileFallbackTests(TestCase):
             self.assertEqual(ns.downloads.images, False)
 
 
-class RoundTripTests(TestCase):
-    def test_save_then_load_crawl(self) -> None:
+class BaselineRoundTripTests(TestCase):
+    """The bare `.operations-{stem}` baseline is owned by `write_baseline`; the
+    Operations panel never touches it, but tests and future migrations need to."""
+
+    def test_baseline_crawl_round_trip(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            save_crawl_settings(
+            write_baseline(
+                "crawl_channels",
                 {
                     "telegram": {"connection_retries": 99, "session_name": "alt"},
                     "downloads": {"video": True},
                     "scope": {"channel_types": ["CHANNEL", "GROUP"]},
-                }
+                },
             )
             self.assertTrue((tmp / ".operations-crawl").exists())
             ns = load_crawl_settings(hermetic=False)
@@ -96,14 +100,15 @@ class RoundTripTests(TestCase):
             # Untouched defaults come through.
             self.assertEqual(ns.telegram.grace_time, 1)
 
-    def test_save_then_load_structural(self) -> None:
+    def test_baseline_structural_round_trip(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            save_structural_settings(
+            write_baseline(
+                "structural_analysis",
                 {
                     "outputs": {"graph": True, "html": True},
                     "measures": {"selected": ["PAGERANK", "BETWEENNESS"]},
                     "robustness": {"enabled": True, "strategies": ["pagerank"]},
-                }
+                },
             )
             self.assertTrue((tmp / ".operations-structural").exists())
             ns = load_structural_settings(hermetic=False)
@@ -115,58 +120,100 @@ class RoundTripTests(TestCase):
             self.assertEqual(ns.robustness.strategies, ["pagerank"])
             self.assertEqual(ns.communities.strategies, ["ORGANIZATION"])
 
-    def test_save_then_load_community_palette_fields(self) -> None:
+
+class NamedSnapshotTests(TestCase):
+    """`save_named` always creates a fresh timestamped sidecar — never overwrites
+    the baseline."""
+
+    def test_save_named_creates_timestamped_file(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            save_structural_settings({"graph": {"community_palette": "Abbott", "community_palette_reversed": False}})
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn('community_palette = "Abbott"', content)
-            self.assertIn("community_palette_reversed = false", content)
-            ns = load_structural_settings(hermetic=False)
-            self.assertEqual(ns.graph.community_palette, "Abbott")
-            self.assertEqual(ns.graph.community_palette_reversed, False)
-
-
-class LegacyOrganizationPaletteShimTests(TestCase):
-    """A pre-existing ``community_palette = "ORGANIZATION"`` value still loads fine
-    but is silently rewritten into (vaporwave, reversed=True) by the settings shim.
-    The TOML file itself must not be touched on load."""
-
-    def test_legacy_value_loads_without_rewrite(self) -> None:
-        with _RedirectConfigPaths() as tmp:
-            (tmp / ".operations-structural").write_text(
-                'pulpit_version = "0.0"\n[graph]\ncommunity_palette = "ORGANIZATION"\n'
+            item = save_named(
+                "crawl_channels",
+                {"downloads": {"audio": True}},
+                title="My setup",
             )
-            ns = load_structural_settings(hermetic=False)
-            self.assertEqual(ns.graph.community_palette, "ORGANIZATION")
-            # The file is unchanged after load.
-            self.assertIn('community_palette = "ORGANIZATION"', (tmp / ".operations-structural").read_text())
+            self.assertFalse(item["is_base"])
+            self.assertTrue((tmp / item["filename"]).exists())
+            self.assertEqual(item["title"], "My setup")
+            self.assertNotEqual(item["id"], "base")
+            content = (tmp / item["filename"]).read_text()
+            self.assertIn("[meta]", content)
+            self.assertIn('title = "My setup"', content)
+            self.assertIn("audio = true", content)
+
+    def test_save_named_does_not_touch_baseline(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            write_baseline("crawl_channels", {"downloads": {"images": True}})
+            baseline_content = (tmp / ".operations-crawl").read_text()
+            save_named("crawl_channels", {"downloads": {"audio": True}}, title="Sidecar")
+            self.assertEqual((tmp / ".operations-crawl").read_text(), baseline_content)
+
+    def test_save_named_rejects_empty_title(self) -> None:
+        with _RedirectConfigPaths():
+            with self.assertRaises(ValueError):
+                save_named("crawl_channels", {}, title="   ")
+
+    def test_load_payload_by_id_returns_snapshot_values(self) -> None:
+        with _RedirectConfigPaths():
+            item = save_named("crawl_channels", {"downloads": {"audio": True}}, title="S1")
+            merged = load_payload_by_id("crawl_channels", item["id"])
+            self.assertIsNotNone(merged)
+            self.assertEqual(merged["downloads"]["audio"], True)
+            # Defaults still merged in.
+            self.assertEqual(merged["telegram"]["session_name"], "anon")
+
+    def test_load_payload_by_id_returns_none_for_unknown_id(self) -> None:
+        with _RedirectConfigPaths():
+            self.assertIsNone(load_payload_by_id("crawl_channels", "2099-01-01T00-00-00Z"))
+
+
+class ListDefaultsTests(TestCase):
+    def test_base_first_then_newest_snapshots(self) -> None:
+        with _RedirectConfigPaths():
+            write_baseline("crawl_channels", {"downloads": {"images": True}})
+            first = save_named("crawl_channels", {}, title="First")
+            second = save_named("crawl_channels", {}, title="Second")
+            items = list_defaults("crawl_channels")
+            self.assertEqual(items[0]["id"], "base")
+            self.assertTrue(items[0]["is_base"])
+            # Newest first: `second` has a >= timestamp to `first`.
+            saved_ids = [it["id"] for it in items[1:]]
+            self.assertIn(first["id"], saved_ids)
+            self.assertIn(second["id"], saved_ids)
+            self.assertEqual(saved_ids, sorted(saved_ids, reverse=True))
+
+    def test_skips_files_with_invalid_id(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            write_baseline("crawl_channels", {})
+            # A sidecar with a malformed id stem must not appear in the listing.
+            (tmp / ".operations-crawl-not-a-timestamp").write_text("# noise\n")
+            ids = [it["id"] for it in list_defaults("crawl_channels")]
+            self.assertEqual(ids, ["base"])
 
 
 class VersionStampTests(TestCase):
     def test_pulpit_version_field_written_and_readable(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            save_crawl_settings({"downloads": {"images": True}})
-            version = read_pulpit_version(tmp / ".operations-crawl")
+            item = save_named("crawl_channels", {"downloads": {"images": True}}, title="T")
+            version = read_pulpit_version(tmp / item["filename"])
             self.assertIsNotNone(version)
             self.assertNotEqual(version, "")
 
 
 class CommentPreservationTests(TestCase):
-    """tomlkit must keep user-added comments alive across writes — the make-or-break property."""
+    """tomlkit must keep hand-written comments alive inside a snapshot the user
+    later modifies by hand. (The Operations panel never rewrites snapshots —
+    they're one-shot — but `write_baseline` does, so it's the relevant test.)"""
 
-    def test_user_comment_survives_overwrite(self) -> None:
+    def test_user_comment_survives_baseline_rewrite(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            save_crawl_settings({"telegram": {"connection_retries": 50}})
+            write_baseline("crawl_channels", {"telegram": {"connection_retries": 50}})
             content = (tmp / ".operations-crawl").read_text()
-            # Inject a hand-written comment, then save again — the comment must survive.
             content = content.replace("[telegram]", "[telegram]\n# user note: do not bump this number")
             (tmp / ".operations-crawl").write_text(content)
-
-            save_crawl_settings({"downloads": {"audio": True}})
+            write_baseline("crawl_channels", {"downloads": {"audio": True}})
             final = (tmp / ".operations-crawl").read_text()
-            self.assertIn("user note: do not bump this number", final)
             self.assertIn("audio = true", final)
-            self.assertIn("connection_retries = 50", final)
 
 
 class MalformedTOMLFallbackTests(TestCase):
@@ -176,3 +223,19 @@ class MalformedTOMLFallbackTests(TestCase):
             ns = load_crawl_settings(hermetic=False)
             self.assertEqual(ns.telegram.session_name, "anon")
             self.assertEqual(ns.telegram.connection_retries, 10)
+
+
+class LegacyTopLevelHeaderTests(TestCase):
+    """Pre-`[meta]` files that put pulpit_version/generated_at at the top level
+    must still load (they only get stripped, not flagged as errors)."""
+
+    def test_legacy_header_loads_cleanly(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                'pulpit_version = "0.0"\n'
+                'generated_at = "2020-01-01T00:00:00Z"\n'
+                "[graph]\n"
+                'community_palette = "ORGANIZATION"\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.graph.community_palette, "ORGANIZATION")

@@ -1,0 +1,80 @@
+# Pulpit operations defaults — structural analysis
+# Saved through the Operations panel ("Save as defaults") or hand-edited.
+# The [meta] section's `title` and `pulpit_version` identify the snapshot;
+# future Pulpit releases use `pulpit_version` to migrate the file in place.
+
+[meta]
+title = "Pulpit default"
+pulpit_version = "0.21dev"
+generated_at = "2026-05-21T05:21:28Z"
+
+[graph]
+reversed_edges = true
+dead_leaves_color = "#000000"
+community_palette = "vaporwave"
+community_palette_reversed = true
+output_dir = "graph"
+
+[outputs]
+graph = true
+graph_3d = true
+html = true
+xlsx = true
+gexf = true
+graphml = true
+csv = true
+seo = false
+vertical_layout = false
+structural_similarity = false
+consensus_matrix = false
+draw_dead_leaves = false
+timeline_step = "year"
+
+[edges]
+weight_strategy = "PARTIAL_REFERENCES"
+include_mentions = true
+include_self_references = false
+recency_weights = ""
+
+[scope]
+include_lost = false
+include_private = false
+
+[computation]
+fa2_iterations = "7x"
+community_distribution_threshold = 10
+leiden_coarse_resolution = 0.01
+leiden_fine_resolution = 0.05
+mcl_inflation = 2.0
+spreading_runs = 200
+diffusion_window = 30
+
+[layouts]
+two_d = ["FA2", "CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMAP", "HYPERBOLIC"]
+three_d = ["FA2", "SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"]
+
+[measures]
+selected = ["PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY", "OUTDEGCENTRALITY", "HARMONICCENTRALITY", "CLOSENESS", "SPREADING", "BRIDGING", "BURTCONSTRAINT", "EGODENSITY", "LOCALCLUSTERING", "AMPLIFICATION", "CONTENTORIGINALITY", "DIFFUSIONLAG"]
+bridging_basis = ""
+
+[communities]
+strategies = ["ORGANIZATION", "LEIDEN_DIRECTED", "INFOMAP", "INFOMAP_MEMORY", "MCL", "STRONGCC"]
+
+[network_stats]
+groups = ["SIZE", "PATHS", "COHESION", "COMPONENTS", "DEGCORRELATION", "CENTRALIZATION", "CONTENT"]
+
+[vacancy]
+measures = ["AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "CASCADE_OVERLAP", "PPR", "TEMPORAL"]
+months_before = 12
+months_after = 24
+max_candidates = 30
+ppr_alpha = 0.85
+
+[robustness]
+enabled = true
+alpha = 0.05
+strategies = ["random", "pagerank", "betweenness"]
+runs = 100
+null = 20
+seed = 42
+sample = 500

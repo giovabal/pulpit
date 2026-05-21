@@ -14,8 +14,8 @@ channels/*
 static/*
 exports/*
 configuration/.env
-configuration/.operations-crawl
-configuration/.operations-structural
+configuration/.operations-crawl-*
+configuration/.operations-structural-*
 *.sqlite3*
 *.session
 *.session-journal

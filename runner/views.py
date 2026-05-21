@@ -20,13 +20,10 @@ from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
-    CRAWL_PATH,
     STRUCTURAL_DEFAULTS,
-    STRUCTURAL_PATH,
-    load_crawl_payload,
-    load_structural_payload,
-    save_crawl_settings,
-    save_structural_settings,
+    list_defaults,
+    load_payload_by_id,
+    save_named,
 )
 
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
@@ -170,8 +167,6 @@ class OperationsView(View):
                 ),
                 "palette_names": palette_utils.list_palette_names(),
                 "ad": ad,
-                "crawl_defaults_present": CRAWL_PATH.exists(),
-                "structural_defaults_present": STRUCTURAL_PATH.exists(),
             },
         )
 
@@ -823,46 +818,51 @@ class PaletteColorsView(View):
         return JsonResponse({"name": name, "reverse": reverse, "colors": hex_list})
 
 
-class SaveDefaultsView(View):
-    """Persist the current Operations-panel form state as the new default.
+class DefaultsListView(View):
+    """List defaults snapshots for a task (GET) or create a new one (POST).
 
-    The save-defaults endpoint mirrors the Run endpoint: same form, same CSRF,
-    same gating from WebAccessMiddleware. The translation table is
-    ``TASK_DEFAULT_SPECS``; the file format is TOML and the writer preserves
-    user-added comments across saves.
-    """
+    GET response shape: ``{"items": [{id, title, pulpit_version,
+    generated_at_iso, generated_at_human, is_base}, ...]}``. The bare baseline
+    file appears first (id=``"base"``) followed by user snapshots, newest-first.
 
-    def post(self, request: HttpRequest, task: str) -> JsonResponse:
-        if task not in TASK_DEFAULT_SPECS:
-            return JsonResponse({"error": "Unknown task"}, status=404)
-        try:
-            payload = _form_to_toml_payload(task, request.POST)
-        except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-        try:
-            if task == "crawl_channels":
-                save_crawl_settings(payload)
-            else:
-                save_structural_settings(payload)
-        except OSError as exc:
-            return JsonResponse({"error": f"write failed: {exc}"}, status=500)
-        return JsonResponse({"saved": True})
-
-
-class LoadDefaultsView(View):
-    """Return the saved-defaults file projected onto the form-field name space.
-
-    The response is a flat ``{form_field_name: value}`` JSON the client applies
-    directly to inputs. Returns 404 when the file is missing — used both for
-    the initial button-disabled gate and for the click-time race where the
-    file disappeared after page render.
+    POST: the request body is the same FormData the Run endpoint accepts, plus
+    a required ``title`` field. The server allocates a fresh timestamped
+    filename and returns the new item's metadata.
     """
 
     def get(self, request: HttpRequest, task: str) -> JsonResponse:
         if task not in TASK_DEFAULT_SPECS:
             return JsonResponse({"error": "Unknown task"}, status=404)
-        loader = load_crawl_payload if task == "crawl_channels" else load_structural_payload
-        merged = loader()
+        return JsonResponse({"items": list_defaults(task)})
+
+    def post(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFAULT_SPECS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        title = (request.POST.get("title") or "").strip()
+        if not title:
+            return JsonResponse({"error": "title is required"}, status=400)
+        try:
+            payload = _form_to_toml_payload(task, request.POST)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        try:
+            item = save_named(task, payload, title)
+        except OSError as exc:
+            return JsonResponse({"error": f"write failed: {exc}"}, status=500)
+        return JsonResponse({"saved": True, "item": item})
+
+
+class DefaultsItemView(View):
+    """Load one defaults snapshot, projecting it onto the form-field name space.
+
+    Response shape: ``{"values": {form_field_name: value, ...}}``. Returns 404
+    if the file is absent or the id is malformed.
+    """
+
+    def get(self, request: HttpRequest, task: str, snapshot_id: str) -> JsonResponse:
+        if task not in TASK_DEFAULT_SPECS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        merged = load_payload_by_id(task, snapshot_id)
         if merged is None:
             return JsonResponse({"file_present": False}, status=404)
         return JsonResponse({"values": _toml_to_form_payload(task, merged)})
