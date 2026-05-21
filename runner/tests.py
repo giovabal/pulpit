@@ -614,6 +614,8 @@ class BuildArgsExportNetworkTests(TestCase):
         # explicit "off" beats a saved-true default.
         args = _build_args("structural_analysis", FakePost({"export_name": "baseline", "include_mentions": "on"}))
         self.assertEqual(args[:2], ["--name", "baseline"])
+        # include_mentions checked ⇒ explicit --mentions, not a silent fallback.
+        self.assertIn("--mentions", args)
         for negation in (
             "--no-graph-2d",
             "--no-graph-3d",
@@ -634,6 +636,16 @@ class BuildArgsExportNetworkTests(TestCase):
             "--no-robustness",
         ):
             self.assertIn(negation, args)
+
+    def test_include_mentions_bool_explicit(self):
+        # include_mentions must always transmit its state explicitly so a loaded
+        # snapshot's value can't be silently overridden by settings.SA_INCLUDE_MENTIONS.
+        args_on = _build_args("structural_analysis", FakePost({"include_mentions": "on"}))
+        self.assertIn("--mentions", args_on)
+        self.assertNotIn("--no-mentions", args_on)
+        args_off = _build_args("structural_analysis", FakePost())
+        self.assertIn("--no-mentions", args_off)
+        self.assertNotIn("--mentions", args_off)
 
     def test_boolean_output_flags(self):
         for field, flag in [
@@ -717,7 +729,9 @@ class BuildArgsCompareAnalysisTests(TestCase):
         self.assertIn("--seo", args)
 
     def test_empty_project_dir_not_added(self):
-        self.assertEqual(_build_args("compare_analysis", FakePost({"project_dir": ""})), [])
+        # `seo` is bool_explicit so an empty post emits --no-seo. Project dir stays out.
+        args = _build_args("compare_analysis", FakePost({"project_dir": ""}))
+        self.assertEqual(args, ["--no-seo"])
 
 
 # ---------------------------------------------------------------------------
