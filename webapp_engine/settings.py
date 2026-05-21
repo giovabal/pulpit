@@ -332,7 +332,11 @@ TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, c
 # ── Project identity (.env) ───────────────────────────────────────────────────
 
 PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
-WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).upper()
+# `python-decouple` does not strip inline `#` comments from env-var values,
+# so defensively drop them: a user `.env` that copies env.example's format
+# `WEB_ACCESS=ALL  # …` would otherwise produce a value like "ALL  # …" that
+# matches none of the modes and silently flips the middleware into PROTECTED.
+WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).split("#", 1)[0].strip().upper()
 
 # ── Network and analysis options (configuration/.operations-structural) ──────
 

@@ -1,6 +1,6 @@
 """Pulpit configuration loaders/writers for `.operations-crawl` / `.operations-structural`.
 
-The committed bare files under `configuration/` carry the "Pulpit default"
+The committed bare files under `configuration/` carry the "Pulpit defaults"
 baseline used at startup and by the management commands. Built-in defaults in
 `defaults.py` apply whenever a file is missing or omits a key. The Operations
 panel can additionally save timestamped sidecars (`.operations-{stem}-{ts}`)

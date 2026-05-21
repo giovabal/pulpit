@@ -518,14 +518,14 @@
 .ops-cli-preview {
   margin: .75rem 1.25rem 1rem;
   padding: .75rem 1rem;
-  border: 1px solid #fecaca;
-  background: #fef2f2;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
   border-radius: .375rem;
 }
 .ops-cli-preview-title {
   font-size: .72rem;
   font-weight: 600;
-  color: #991b1b;
+  color: var(--danger-hover);
   text-transform: uppercase;
   letter-spacing: .04em;
   margin-bottom: .35rem;
@@ -533,7 +533,7 @@
 .ops-cli-command {
   margin: 0;
   font-size: .8rem;
-  color: #991b1b;
+  color: var(--danger-hover);
   white-space: pre-wrap;
   word-break: break-word;
   background: transparent;

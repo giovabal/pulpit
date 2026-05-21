@@ -1,5 +1,6 @@
 import json
 import re
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -211,9 +212,10 @@ class WriteCliCommandView(View):
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
         args = _build_args(task, request.POST)
-        command = "python manage.py " + task
-        if args:
-            command += " " + " ".join(args)
+        # shlex.quote each arg so multi-word values (e.g. search_channels
+        # --extra-term "hello world") remain executable when copy-pasted.
+        command_parts = ["python", "manage.py", task] + [shlex.quote(a) for a in args]
+        command = " ".join(command_parts)
         return JsonResponse({"command": command, "args": args})
 
 
