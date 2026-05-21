@@ -3,7 +3,7 @@
 `tomlkit` is used (rather than the stdlib `tomllib` plus a hand-rolled writer)
 because it preserves user comments and section ordering when an analyst
 hand-edits a snapshot. Each save always creates a NEW file — the bare
-`.operations-{stem}` baseline ("Pulpit default") is read-only via this API.
+`.operations-{stem}` baseline ("Pulpit defaults") is read-only via this API.
 
 Public API:
     save_named(task, payload, title) -> dict   # metadata for the new file
@@ -89,7 +89,7 @@ def save_named(task: str, payload: dict, title: str) -> dict:
 # Sentinel used by tests/migrations that need to (re)write the bare baseline
 # file. Not exposed through the Operations panel — the panel can only create
 # timestamped sidecars.
-def write_baseline(task: str, payload: dict, title: str = "Pulpit default") -> None:
+def write_baseline(task: str, payload: dict, title: str = "Pulpit defaults") -> None:
     """Overwrite the bare `.operations-{stem}` baseline. Not used by the panel."""
     if task not in _TASK_CONFIG:
         raise ValueError(f"Unknown task: {task!r}")

@@ -413,6 +413,18 @@ class WriteCliCommandViewTests(TestCase):
         self.assertIn("--mentions", cmd)
         self.assertIn("--community-strategies LEIDEN", cmd)
 
+    def test_command_quotes_args_with_spaces(self):
+        # search_channels --extra-term may carry multi-word phrases.  The
+        # preview must remain executable when pasted into a shell.
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["search_channels"]),
+            data={"extra_terms": "hello world\nbearbeit"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        cmd = resp.json()["command"]
+        self.assertIn("--extra-term 'hello world'", cmd)
+        self.assertIn("--extra-term bearbeit", cmd)
+
     def test_structural_validation_rejects_bad_bridging(self):
         resp = self.client.post(
             reverse("operations-write-cli-command", args=["structural_analysis"]),
@@ -1274,7 +1286,7 @@ class DefaultsViewTests(TestCase):
             items = resp.json()["items"]
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0]["id"], "base")
-            self.assertEqual(items[0]["title"], "Pulpit default")
+            self.assertEqual(items[0]["title"], "Pulpit defaults")
 
     def test_list_then_load_round_trip(self) -> None:
         with _RedirectConfigPathsForRunner():

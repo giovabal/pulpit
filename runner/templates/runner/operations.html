@@ -2118,6 +2118,7 @@ function showToast(msg, type) {
             preview.querySelector('code').textContent = data.command || '';
             preview.hidden = false;
           }
+          showToast('Wrote CLI command for ' + task + '.');
         })
         .catch(function (err) {
           showToast('Failed to write CLI command: ' + err.message, 'error');

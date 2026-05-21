@@ -241,7 +241,7 @@ def list_defaults(task: str) -> list[dict]:
         out.append(
             {
                 "id": BASE_ID,
-                "title": meta.get(META_TITLE_KEY) or "Pulpit default",
+                "title": meta.get(META_TITLE_KEY) or "Pulpit defaults",
                 "pulpit_version": meta.get(META_VERSION_KEY) or "",
                 "generated_at_iso": meta.get(META_GENERATED_AT_KEY) or "",
                 "generated_at_human": _format_human(meta.get(META_GENERATED_AT_KEY)),
