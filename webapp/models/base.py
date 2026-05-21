@@ -2,11 +2,29 @@ import os
 from typing import Any, ClassVar, Self
 
 from django.core.files import File
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 
 from webapp.utils import is_color_dark
 
 from colorfield.fields import ColorField
+
+
+class OverwriteStorage(FileSystemStorage):
+    """Save to the requested name, overwriting any existing file.
+
+    Default FileSystemStorage adds a random 7-char suffix when the target file
+    exists. Media here is keyed deterministically on (channel, message.telegram_id)
+    via ``get_media_path``, so a "conflict" always means we're re-downloading the
+    same logical media — the suffix would orphan the previous payload and the DB
+    would silently drift to point at the suffixed name. Overwrite instead so the
+    DB and disk stay in sync.
+    """
+
+    def get_available_name(self, name: str, max_length: int | None = None) -> str:
+        if self.exists(name):
+            self.delete(name)
+        return name
 
 
 class BaseModel(models.Model):
@@ -64,7 +82,9 @@ def _telegram_picture_upload_to_function(instance: Any, filename: str) -> str:
 
 class TelegramBasePictureModel(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
-    picture = models.ImageField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    picture = models.ImageField(
+        upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255
+    )
     date = models.DateTimeField(null=True)
 
     class Meta:

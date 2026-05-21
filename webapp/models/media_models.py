@@ -4,7 +4,12 @@ from typing import Any, ClassVar, Self
 from django.core.files import File
 from django.db import models
 
-from webapp.models.base import TelegramBaseModel, TelegramBasePictureModel, _telegram_picture_upload_to_function
+from webapp.models.base import (
+    OverwriteStorage,
+    TelegramBaseModel,
+    TelegramBasePictureModel,
+    _telegram_picture_upload_to_function,
+)
 from webapp.models.telegram_models import Channel, Message
 
 
@@ -15,7 +20,9 @@ class ProfilePicture(TelegramBasePictureModel):
     # ``thumbnail`` holds the largest static frame so templates can use it as
     # ``<video poster=…>`` or fall back to ``<img>`` when video playback isn't
     # appropriate (e.g. compact channel-list rows).
-    thumbnail = models.ImageField(upload_to=_telegram_picture_upload_to_function, max_length=255, blank=True)
+    thumbnail = models.ImageField(
+        upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255, blank=True
+    )
 
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
@@ -80,7 +87,7 @@ class MessagePicture(TelegramBasePictureModel):
 class MessageVideo(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
-    video = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    video = models.FileField(upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255)
     date = models.DateTimeField(null=True)
     is_animated = models.BooleanField(default=False)
     is_round = models.BooleanField(default=False)
@@ -112,7 +119,7 @@ class MessageVideo(TelegramBaseModel):
 class MessageAudio(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
-    audio = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    audio = models.FileField(upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255)
     mime_type = models.CharField(max_length=100, blank=True)
     is_voice = models.BooleanField(default=False)
     date = models.DateTimeField(null=True)
@@ -144,7 +151,9 @@ class MessageAudio(TelegramBaseModel):
 class MessageSticker(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
-    sticker = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    sticker = models.FileField(
+        upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255
+    )
     mime_type = models.CharField(max_length=100, blank=True)
     is_animated = models.BooleanField(default=False)
     date = models.DateTimeField(null=True)
@@ -176,7 +185,9 @@ class MessageSticker(TelegramBaseModel):
 class MessageOtherMedia(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = ("date",)
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
-    media_file = models.FileField(upload_to=_telegram_picture_upload_to_function, max_length=255)
+    media_file = models.FileField(
+        upload_to=_telegram_picture_upload_to_function, storage=OverwriteStorage(), max_length=255
+    )
     mime_type = models.CharField(max_length=100, blank=True)
     date = models.DateTimeField(null=True)
 
