@@ -328,6 +328,54 @@ class RunTaskViewTests(TestCase):
             )
         self.assertEqual(SearchTerm.objects.filter(word="term one").count(), 1)
 
+    def test_run_rejects_search_channels_zero_amount(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["search_channels"]),
+                {"amount": "0"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("positive", resp.json()["error"])
+
+    def test_run_rejects_search_channels_negative_amount(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["search_channels"]),
+                {"amount": "-3"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("positive", resp.json()["error"])
+
+    def test_run_accepts_search_channels_blank_amount(self):
+        # Blank means "process all queued terms" — still legal.
+        with (
+            patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
+            patch("runner.views.tasks.launch"),
+        ):
+            resp = self.client.post(
+                reverse("operations-run", args=["search_channels"]),
+                {"amount": ""},
+            )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_run_rejects_compare_analysis_empty_project_dir(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["compare_analysis"]),
+                {"project_dir": "", "compare_target": "foo"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("project_dir", resp.json()["error"])
+
+    def test_run_rejects_compare_analysis_empty_target(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["compare_analysis"]),
+                {"project_dir": "/tmp/foo", "compare_target": ""},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Target export name", resp.json()["error"])
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — AbortTaskView
@@ -1140,6 +1188,29 @@ class DefaultsViewTests(TestCase):
                 },
             )
             self.assertEqual(resp.status_code, 200)
+
+    def test_save_rejects_overlong_title(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["crawl_channels"]),
+                data={"title": "x" * 121, "get_channels_info": "on"},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("at most", resp.json()["error"])
+
+    def test_save_named_advances_timestamp_on_collision(self) -> None:
+        # Two saves within the same UTC second must not silently overwrite —
+        # the second one's filename should advance by 1 second.
+        from webapp_engine.config import save_named
+
+        with _RedirectConfigPathsForRunner() as tmp:
+            first = save_named("crawl_channels", {}, title="first")
+            second = save_named("crawl_channels", {}, title="second")
+            self.assertNotEqual(first["id"], second["id"])
+            self.assertTrue((tmp / first["filename"]).exists())
+            self.assertTrue((tmp / second["filename"]).exists())
+            self.assertIn('title = "first"', (tmp / first["filename"]).read_text())
+            self.assertIn('title = "second"', (tmp / second["filename"]).read_text())
 
     def test_list_returns_base_when_only_baseline_present(self) -> None:
         from webapp_engine.config import write_baseline
