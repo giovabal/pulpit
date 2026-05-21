@@ -1,25 +1,39 @@
 # Configuration
 
-Pulpit's configuration is split across four files:
+Pulpit's configuration lives in four files, each with a single responsibility:
 
 | File | Content | Format | Bootstrapped from |
 | :--- | :------ | :----- | :---------------- |
-| `configuration/.env` | Credentials and deployment — Telegram API keys, database, secret key, web access, locale. | KEY=value | `configuration/env.example` |
-| `configuration/.operations-crawl` | Crawler behaviour and per-channel defaults for `crawl_channels`. | TOML | — (built-in defaults) |
-| `configuration/.operations-structural` | Outputs, layouts, measures, communities, vacancy, and robustness defaults for `structural_analysis`. | TOML | — (built-in defaults) |
-| `.system` (repo root) | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. | KEY=value | — |
+| `configuration/.env` | Credentials and deployment — Telegram API keys, Telegram-client tuning, database, secret key, web-access policy, locale, project identity. | `KEY=value` (dotenv) | `configuration/env.example` |
+| `configuration/.operations-crawl` | Bundled baseline that pre-populates the **Crawl Channels** form. Committed in git as the "Pulpit defaults". | TOML | — (built-in defaults) |
+| `configuration/.operations-structural` | Bundled baseline that pre-populates the **Structural Analysis** form. Committed in git as the "Pulpit defaults". | TOML | — (built-in defaults) |
+| `configuration/.operations-{crawl,structural}-{timestamp}` | Optional named snapshots written by **Save as defaults**. Gitignored. | TOML | — |
+| `.system` (repo root) | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. | `KEY=value` | — |
 
-`setup.sh` and `setup.bat` copy `configuration/env.example` into `configuration/.env` on first install. Both `.operations-*` files are optional: built-in defaults live in `webapp_engine/config/defaults.py` and apply when the file is missing or omits a key. Click **Save as defaults** in the Operations panel under either form to write your current selections to the corresponding file (`tomlkit` preserves any comments you added by hand).
+`setup.sh` and `setup.bat` copy `configuration/env.example` into `configuration/.env` on first install. Both `.operations-*` baselines are committed in the repository, so a fresh checkout already has working form defaults; built-in factory-empty defaults from `webapp_engine/config/defaults.py` apply when the file is missing or omits a key.
 
-Each `.operations-*` file starts with a `pulpit_version = "X.Y"` field and a timestamp; future Django data migrations can read these and rewrite the file in place when section/key names change.
+**The `.operations-*` files only pre-populate the Operations-panel form.** They are no longer consulted by the CLI. A bare `python manage.py crawl_channels` / `structural_analysis` invocation does nothing — every option you want set must be passed as an explicit flag. Panel-driven runs are unaffected because the panel emits explicit `--flag` / `--no-flag` pairs for every toggle. The easiest way to discover the right flag combination is the **Write CLI command** button in the Operations panel.
+
+Each TOML file starts with a `[meta]` block:
+
+```toml
+[meta]
+title = "Pulpit defaults"
+pulpit_version = "0.21"
+generated_at = "2026-05-21T00:00:00Z"
+```
+
+The title identifies the snapshot in the **Load defaults** picker; `pulpit_version` lets future Django data migrations recognise the writing release and rewrite the file in place when section/key names change.
 
 Fill in at least the three Telegram credentials in `configuration/.env` before running any management command. All other settings have working defaults.
+
+See [docs/operations-defaults.md](docs/operations-defaults.md) for the end-to-end walk-through of how the form, the CLI, and the snapshot files relate.
 
 ---
 
 # `configuration/.env` — credentials and deployment
 
-## Telegram
+## Telegram credentials
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
@@ -28,6 +42,20 @@ Fill in at least the three Telegram credentials in `configuration/.env` before r
 | `TELEGRAM_PHONE_NUMBER` | Phone number linked to your Telegram account | **required** |
 
 See [Getting started § Telegram API credentials](docs/getting-started.md#telegram-api-credentials) for the registration walk-through.
+
+## Telegram client tuning
+
+Optional knobs for the Telethon client. Defaults match the previous `[telegram]` section of `.operations-crawl` (now removed).
+
+| Option | Description | Default |
+| :----- | :---------- | ------: |
+| `TELEGRAM_SESSION_NAME` | Telethon session file name (no `.session` extension) | `anon` |
+| `TELEGRAM_CONNECTION_RETRIES` | How many times Telethon retries a failed connection before giving up | `10` |
+| `TELEGRAM_RETRY_DELAY` | Seconds to wait between connection retry attempts | `5` |
+| `TELEGRAM_FLOOD_SLEEP_THRESHOLD` | Telethon auto-sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions | `60` |
+| `TELEGRAM_IGNORE_FLOODWAIT` | `False` = sleep `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` on FloodWait; `True` = skip the operation silently and continue | `True` |
+| `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` | Seconds to sleep when `TELEGRAM_IGNORE_FLOODWAIT=False` and a long flood-wait fires | `900` |
+| `TELEGRAM_CRAWLER_GRACE_TIME` | Seconds to wait between API requests | `1` |
 
 ---
 
@@ -59,7 +87,7 @@ pip install oracledb           # Oracle
 | Option | Description | Default |
 | :----- | :---------- | ------: |
 | `PROJECT_TITLE` | Project name used in the `<title>` tag of all HTML files produced by `structural_analysis` | `Pulpit project` |
-| `WEB_ACCESS` | Access control for the web interface: `ALL` (no login required, default), `OPEN` (public pages open; `/operations/` and `/manage/` require staff), `PROTECTED` (all pages require login; `/operations/` and `/manage/` additionally require staff) | `ALL` |
+| `WEB_ACCESS` | Access control for the web interface: `ALL` (no login required, default), `OPEN` (public pages open; `/operations/` and `/manage/` require staff), `PROTECTED` (all pages require login; `/operations/` and `/manage/` additionally require staff). **Comments must live on their own line**, not inline after the value — `python-decouple` does not strip inline `#` comments. | `ALL` |
 | `SECRET_KEY` | Django secret key. Generated by `setup.sh` / `setup.bat` on first install. Rotate before any non-local deployment. | _(generated)_ |
 | `DEBUG` | Django debug mode. Leave `True` for local use; set `False` for any deployment. | `True` |
 | `ALLOWED_HOSTS` | Comma-separated list of hostnames Django will serve. Required when `DEBUG=False`. | _(empty)_ |
@@ -70,22 +98,9 @@ pip install oracledb           # Oracle
 
 ---
 
-# `configuration/.operations-crawl` — crawler defaults
+# `configuration/.operations-crawl` — crawler form defaults
 
-TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:CRAWL_DEFAULTS`. Each value is also overridable at run time — from the **Crawl Channels** form on the Operations panel, or from the matching command-line flag on `crawl_channels` (e.g. `--get-channels-info`, `--download-images`). Click **Save as defaults** below the form to persist the current form state to this file.
-
-## `[telegram]` — connection and rate-limit behaviour
-
-| Path | Description | Built-in default |
-| :--- | :---------- | ---------------: |
-| `telegram.grace_time` | Seconds to wait between API requests | `1` |
-| `telegram.connection_retries` | How many times Telethon retries a failed connection before giving up | `10` |
-| `telegram.retry_delay` | Seconds to wait between connection retry attempts | `5` |
-| `telegram.flood_sleep_threshold` | Telethon auto-sleeps through flood-wait errors shorter than this value (seconds); errors longer than this are raised as exceptions | `60` |
-| `telegram.ignore_floodwait` | `false` = sleep `floodwait_sleep_seconds` on FloodWait; `true` = skip the operation silently and continue | `true` |
-| `telegram.floodwait_sleep_seconds` | Seconds to sleep when `ignore_floodwait=false` and a long flood-wait fires | `900` |
-| `telegram.session_name` | Telethon session file name (no `.session` extension) | `anon` |
-| `telegram.messages_limit_per_channel` | Max messages to fetch per channel per run; `0` = no limit | `100` |
+TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:CRAWL_DEFAULTS`; the committed baseline at `configuration/.operations-crawl` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Crawl Channels** form only — the CLI does not consult it. Click **Save as defaults** below the form (with a title) to write a new timestamped snapshot alongside this baseline; **Load defaults** lets you pick any saved snapshot back.
 
 ## `[downloads]` — media type toggles
 
@@ -103,11 +118,11 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:CRAWL_DEF
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `scope.channel_types` | Telegram entity types considered monitored: any of `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Default for `crawl_channels` and `structural_analysis`. | `["CHANNEL"]` |
+| `scope.channel_types` | Telegram entity types considered monitored: any of `CHANNEL` (broadcast), `GROUP` (supergroups/gigagroups), `USER`. Pre-populates the **Channel types** fieldset of the Crawl Channels form. | `["CHANNEL"]` |
 
 ## `[channels]` — channel-pass step toggles
 
-Toggle each channel-side step on or off by default in the Operations panel and CLI. Override per run with the corresponding flag (e.g. `--get-channels-info`).
+Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI flag for each (`--get-channels-info`, `--update-type-excluded-info`, `--mine-about-texts`, `--fetch-recommended`, `--retry-lost-and-private`) and its `--no-X` counterpart are emitted by the panel on Run.
 
 | Path | Step | Built-in default |
 | :--- | :--- | ---------------: |
@@ -124,11 +139,13 @@ Toggle each channel-side step on or off by default in the Operations panel and C
 | `messages.get_new_messages` | Download messages published since the last crawl | `false` |
 | `messages.fetch_replies` | Fetch reply threads from linked discussion groups | `false` |
 | `messages.refresh_messages_stats` | Re-fetch view counts, forward counts, edited text, reactions, fact-check labels | `false` |
-| `messages.fixholes` | Scan per-channel message ID sequences for gaps and refetch missing messages | `false` |
+| `messages.fix_holes` | Scan per-channel message ID sequences for gaps and refetch missing messages | `false` |
 | `messages.fix_missing_media` | Re-download photos and videos that were never saved or are missing from disk | `false` |
 | `messages.retry_lost_messages` | Bulk-refetch every message currently marked `is_lost=True`; rows Telegram returns are unmarked | `false` |
 | `messages.retry_references` | Re-attempt `t.me/` references that could not be resolved in a previous run | `false` |
-| `messages.force_retry_unresolved` | Together with `messages.retry_references`, also retries references previously marked permanently unresolvable | `false` |
+| `messages.force_retry_unresolved_references` | Together with `messages.retry_references`, also retries references previously marked permanently unresolvable | `false` |
+
+> The loader silently translates the pre-0.21 spellings `messages.fixholes` → `messages.fix_holes` and `messages.force_retry_unresolved` → `messages.force_retry_unresolved_references` at parse time, so older snapshots load unchanged; re-saving them through the panel rewrites the file with the canonical keys.
 
 ## `[degrees]` — bulk degree-recompute toggles
 
@@ -139,16 +156,17 @@ Toggle each channel-side step on or off by default in the Operations panel and C
 
 ---
 
-# `configuration/.operations-structural` — structural-analysis defaults
+# `configuration/.operations-structural` — structural-analysis form defaults
 
-TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURAL_DEFAULTS`. Each value is also overridable at run time — from the **Structural Analysis** form on the Operations panel, or from the matching command-line flag on `structural_analysis`. Click **Save as defaults** below the form to persist the current form state to this file.
+TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:STRUCTURAL_DEFAULTS`; the committed baseline at `configuration/.operations-structural` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Structural Analysis** form only — the CLI does not consult it.
 
-## `[graph]` — palette, base options
+## `[graph]` — palette and base options
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `graph.reversed_edges` | When `true`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `true` |
-| `graph.community_palette` | Colour palette for communities. Use `ORGANIZATION` to take colours from the admin (non-organisation strategies fall back to `vaporwave` *reversed*, so the most-vivid colours land on the largest communities), or any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order) | `ORGANIZATION` |
+| `graph.community_palette` | Colour palette for communities. Any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order). The legacy value `"ORGANIZATION"` is silently translated to `"vaporwave"` *reversed* at load time. Empty `""` disables palette rendering. | `""` |
+| `graph.community_palette_reversed` | Reverse the palette so the most-vivid colours land on the largest communities | `false` |
 | `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link) | `#596a64` |
 | `graph.output_dir` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
 
@@ -166,7 +184,7 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 | `outputs.seo` | Set indexable robots meta tags on the export HTML | `false` |
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
 | `outputs.structural_similarity` | Generate the pairwise structural similarity matrix | `false` |
-| `outputs.consensus_matrix` | Generate the community-detection consensus matrix | `false` |
+| `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-ORGANIZATION strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
 
@@ -174,15 +192,17 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `layouts.two_d` | 2D layouts to pre-compute. Available: `FA2`, `CIRCULAR`, `KAMADA_KAWAI`, `COMMUNITY_SHELL`, `TSNE`, `UMAP`, `HYPERBOLIC` | `["FA2"]` |
-| `layouts.three_d` | 3D layouts to pre-compute. Available: `FA2`, `SPECTRAL`, `SPRING`, `KAMADA_KAWAI`, `TSNE`, `UMAP` | `["FA2"]` |
+| `layouts.layouts_2d` | 2D layouts to pre-compute. Available: `FA2`, `CIRCULAR`, `KAMADA_KAWAI`, `COMMUNITY_SHELL`, `TSNE`, `UMAP`, `HYPERBOLIC`. Use `["ALL"]` for every layout. | `[]` |
+| `layouts.layouts_3d` | 3D layouts to pre-compute. Available: `FA2`, `SPECTRAL`, `SPRING`, `KAMADA_KAWAI`, `TSNE`, `UMAP`. Use `["ALL"]` for every layout. | `[]` |
+
+> Pre-0.21 spellings `layouts.two_d` and `layouts.three_d` are silently translated to the canonical names on load.
 
 ## `[computation]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. | `"7x"` |
-| `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables | `10` |
+| `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. Empty `""` disables FA2. | `""` |
+| `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables. `0` keeps every community. | `0` |
 | `computation.leiden_coarse_resolution` | CPM resolution γ for `LEIDEN_CPM_COARSE` (few large communities) | `0.01` |
 | `computation.leiden_fine_resolution` | CPM resolution γ for `LEIDEN_CPM_FINE` (many small communities) | `0.05` |
 | `computation.mcl_inflation` | Inflation parameter r for `MCL` (typical range 1.5–4.0) | `2.0` |
@@ -193,27 +213,27 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `measures.selected` | Measures to compute. See [Network measures](docs/network-measures.md) for the catalogue. Use the literal value `["ALL"]` to enable every measure. | `["PAGERANK"]` |
-| `measures.bridging_basis` | Community partition driving the BRIDGING measure (entropy across neighbour communities) and the `bridging` robustness strategy. Empty → uses `LEIDEN_DIRECTED`. | `""` |
+| `measures.selected` | Measures to compute. See [Network measures](docs/network-measures.md) for the catalogue. Use `["ALL"]` to enable every measure. | `[]` |
+| `measures.bridging_basis` | Community partition driving the BRIDGING measure (entropy across neighbour communities) and the `bridging` robustness strategy. Empty → uses `LEIDEN_DIRECTED`. Must be in `communities.strategies` and cannot be `ORGANIZATION`; otherwise Save/Run is rejected with HTTP 400. | `""` |
 
 ## `[communities]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `communities.strategies` | Community detection strategies. See [Community detection](docs/community-detection.md). Use `["ALL"]` for every strategy. | `["ORGANIZATION"]` |
+| `communities.strategies` | Community detection strategies. See [Community detection](docs/community-detection.md). Use `["ALL"]` for every strategy. | `[]` |
 
 ## `[network_stats]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](docs/whole-network-statistics.md). | `["ALL"]` |
+| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](docs/whole-network-statistics.md). | `[]` |
 
 ## `[edges]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `edges.weight_strategy` | Edge-weighting method: `PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`, `TOTAL`, `NONE` | `PARTIAL_REFERENCES` |
-| `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `true` |
+| `edges.weight_strategy` | Edge-weighting method: `PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`, `TOTAL`, `NONE`. Empty `""` disables edge weighting. | `""` |
+| `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `false` |
 | `edges.include_self_references` | Include self-loop edges where a channel forwards or mentions itself | `false` |
 | `edges.recency_weights` | Recency decay half-life in days as an integer string. Empty string `""` = weight all messages equally. | `""` |
 
@@ -236,17 +256,40 @@ TOML file. Built-in defaults live in `webapp_engine/config/defaults.py:STRUCTURA
 
 ## `[robustness]`
 
-Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. Off by default — set `robustness.enabled = true` (or click "Save as defaults" after checking a strategy in the panel; the writer also sets `enabled = bool(strategies)`). See [Robustness analysis](docs/robustness-analysis.md).
+Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. See [Robustness analysis](docs/robustness-analysis.md).
+
+There is no `robustness.enabled` knob — robustness analysis runs iff `robustness.strategies` is non-empty (`SA_ROBUSTNESS = bool(strategies)` in `settings.py`). The Operations panel's strategy checkboxes drive both the strategy list and the master switch.
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `robustness.enabled` | Master switch — enable the robustness analysis | `false` |
 | `robustness.alpha` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
 | `robustness.runs` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
 | `robustness.null` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores) | `20` |
-| `robustness.strategies` | Attack strategies. Static: `RANDOM`, `IN_STRENGTH`, `OUT_STRENGTH`, `PAGERANK`, `KATZ`, `HITS_HUB`, `HITS_AUTHORITY`, `HARMONIC`, `CLOSENESS`, `BETWEENNESS`, `FLOW_BETWEENNESS`, `BURT_CONSTRAINT`, `BRIDGING[(<community-strategy>)]`, `SPREADING`. Dynamic (re-rank per removal): `IN_STRENGTH_DYN`, `OUT_STRENGTH_DYN`, `PAGERANK_DYN`, `KATZ_DYN`, `HITS_HUB_DYN`, `HITS_AUTHORITY_DYN`, `BETWEENNESS_DYN`. Use `["ALL"]` for every strategy. At least one strategy must be selected. Bridging defaults to `LEIDEN_DIRECTED` as the community basis (directional brokerage); override via `measures.bridging_basis` | `["RANDOM", "IN_STRENGTH", "OUT_STRENGTH", "PAGERANK", "BETWEENNESS"]` |
+| `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`, `katz`, `hits_hub`, `hits_authority`, `harmonic`, `closeness`, `betweenness`, `flow_betweenness`, `burt_constraint`, `bridging[(<community-strategy>)]`, `spreading`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `katz_dyn`, `hits_hub_dyn`, `hits_authority_dyn`, `betweenness_dyn`. Use `["ALL"]` for every strategy. Bridging defaults to `LEIDEN_DIRECTED` as the community basis (directional brokerage); override via `measures.bridging_basis`. | `[]` |
 | `robustness.seed` | Single seed driving every stochastic component of the robustness analysis | `42` |
 | `robustness.sample` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+
+---
+
+# Snapshots — `configuration/.operations-{stem}-{timestamp}`
+
+Every click of **Save as defaults** writes a new TOML file alongside the committed baseline:
+
+```
+configuration/.operations-crawl-2026-05-21T14-32-00Z
+configuration/.operations-structural-2026-05-21T14-35-12Z
+```
+
+The filename's timestamp is UTC, second-precision. Same-second collisions advance by 1 s so concurrent saves never silently overwrite. These files are gitignored and never modify the committed baseline. They never affect form pre-population at startup — they're only loaded on demand when you pick one from the **Load defaults** picker.
+
+Each snapshot's `[meta]` block records the title you typed in the Save modal (max 120 characters; required), the Pulpit version that produced it, and the UTC timestamp the writer stamped at write time. The `Load defaults` picker reads these to label each row.
+
+Cross-field constraints are enforced server-side before a snapshot is written and again before any panel-driven Run, returning HTTP 400 + a clear error message on rejection. Currently enforced for `structural_analysis`:
+
+- BRIDGING basis (explicit `measures.bridging_basis` or the implicit `LEIDEN_DIRECTED` default) must be a known community-detection strategy other than `ORGANIZATION`, and must appear in `communities.strategies`.
+- `consensus_matrix` requires at least two non-`ORGANIZATION` strategies in `communities.strategies`.
+
+For `compare_analysis` and `search_channels` the Run path additionally validates: `project_dir` / `compare_target` non-empty; `--amount` positive.
 
 ---
 
@@ -256,6 +299,16 @@ A small, committed file containing `APP_VERSION` and `REPOSITORY_URL`. These val
 
 ---
 
-← [README](README.md) · [Getting started](docs/getting-started.md) · [Workflow](docs/workflow.md) · [Changelog](CHANGELOG.md)
+# Why two formats?
+
+`.env` uses dotenv (`KEY=value`) because that's the universal convention for environment variables — Docker Compose's `env_file`, CI/CD secret injectors, IDE runtime configs, and `direnv` all read it natively. Pulpit's `.env` carries exactly what the convention serves: credentials and per-deployment switches.
+
+The `.operations-*` files use TOML because their schema is hierarchical (per-section), typed (booleans, integers, floats, strings, lists), and benefits from comment preservation across rewrites (`tomlkit`). TOML is the modern Python project-config standard (`pyproject.toml`). YAML's indentation-sensitive type inference would be a hand-edit hazard; JSON disallows comments; INI loses both types and comments on rewrite; Python config files are an execution-time security hole.
+
+The split mirrors the audience: `.env` is sysadmin / deployment territory; `.operations-*` is analyst territory. They have different update cadences and different sets of consumers, and keeping them in their respective natural formats avoids forcing one user group to learn the other's idiom.
+
+---
+
+← [README](README.md) · [Getting started](docs/getting-started.md) · [Workflow](docs/workflow.md) · [Operations defaults](docs/operations-defaults.md) · [Changelog](CHANGELOG.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">
