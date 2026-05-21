@@ -300,7 +300,9 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--fetch-recommended-channels",
+            "--fetch-recommended",
+            "--fetch-recommended-channels",  # backward-compat alias for the longer form
+            dest="fetch_recommended",
             action=BooleanOptionalAction,
             default=None,
             help=(
@@ -364,7 +366,9 @@ class Command(BaseCommand):
             help="Only refresh messages on or before this date.",
         )
         parser.add_argument(
-            "--fixholes",
+            "--fix-holes",
+            "--fixholes",  # backward-compat alias (kebab-snake mismatch in older docs)
+            dest="fix_holes",
             action=BooleanOptionalAction,
             default=None,
             help="Scan each channel's message ID sequence for gaps and fetch any missing messages.",
@@ -386,7 +390,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download photo files attached to messages. Applies to --get-new-messages, "
-                "--fixholes, and --fix-missing-media. Defaults to "
+                "--fix-holes, and --fix-missing-media. Defaults to "
                 "TELEGRAM_CRAWLER_DOWNLOAD_IMAGES; pass --no-download-images to disable for "
                 "this run."
             ),
@@ -397,7 +401,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download video files attached to messages. Applies to --get-new-messages, "
-                "--fixholes, and --fix-missing-media. Defaults to "
+                "--fix-holes, and --fix-missing-media. Defaults to "
                 "TELEGRAM_CRAWLER_DOWNLOAD_VIDEO; pass --no-download-video to disable for "
                 "this run."
             ),
@@ -408,7 +412,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download audio files attached to messages — both voice notes and uploaded "
-                "audio documents. Applies to --get-new-messages, --fixholes, and "
+                "audio documents. Applies to --get-new-messages, --fix-holes, and "
                 "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_AUDIO; pass "
                 "--no-download-audio to disable for this run."
             ),
@@ -419,7 +423,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download stickers attached to messages — static webp, animated TGS, and "
-                "video webm stickers. Applies to --get-new-messages, --fixholes, and "
+                "video webm stickers. Applies to --get-new-messages, --fix-holes, and "
                 "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_STICKERS; pass "
                 "--no-download-stickers to disable for this run."
             ),
@@ -430,7 +434,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download non-photo, non-video, non-audio, non-sticker documents (PDFs, "
-                "archives, etc.). Applies to --get-new-messages, --fixholes, and "
+                "archives, etc.). Applies to --get-new-messages, --fix-holes, and "
                 "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA; "
                 "pass --no-download-other-media to disable for this run."
             ),
@@ -920,9 +924,7 @@ class Command(BaseCommand):
                 options["update_type_excluded_info"], settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO
             ),
             mine_about_texts=_resolve_optional_bool(options["mine_about_texts"], settings.CRAWL_MINE_ABOUT_TEXTS),
-            fetch_recommended=_resolve_optional_bool(
-                options["fetch_recommended_channels"], settings.CRAWL_FETCH_RECOMMENDED
-            ),
+            fetch_recommended=_resolve_optional_bool(options["fetch_recommended"], settings.CRAWL_FETCH_RECOMMENDED),
             retry_lost_and_private=_resolve_optional_bool(
                 options["retry_lost_and_private"], settings.CRAWL_RETRY_LOST_AND_PRIVATE
             ),
@@ -932,14 +934,14 @@ class Command(BaseCommand):
             refresh_limit=options["refresh_limit"],
             refresh_from=_parse_date(options.get("refresh_from"), "--refresh-from"),
             refresh_to=_parse_date(options.get("refresh_to"), "--refresh-to"),
-            fix_holes=_resolve_optional_bool(options["fixholes"], settings.CRAWL_FIXHOLES),
+            fix_holes=_resolve_optional_bool(options["fix_holes"], settings.CRAWL_FIX_HOLES),
             fix_missing_media=_resolve_optional_bool(options["fix_missing_media"], settings.CRAWL_FIX_MISSING_MEDIA),
             retry_lost_messages=_resolve_optional_bool(
                 options["retry_lost_messages"], settings.CRAWL_RETRY_LOST_MESSAGES
             ),
             retry_references=_resolve_optional_bool(options["retry_references"], settings.CRAWL_RETRY_REFERENCES),
             force_retry=_resolve_optional_bool(
-                options["force_retry_unresolved_references"], settings.CRAWL_FORCE_RETRY_UNRESOLVED
+                options["force_retry_unresolved_references"], settings.CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES
             ),
             download_images=_resolve_optional_bool(
                 options["download_images"], settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES

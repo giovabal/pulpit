@@ -83,6 +83,32 @@ def _strip_header(parsed: dict) -> dict:
     return parsed
 
 
+# Section.key → modern Section.key. Files written by older Pulpit releases (or
+# hand-edited from old docs) carry the legacy spellings; we translate them
+# silently on read so analysts don't have to migrate by hand. The writer always
+# emits the modern names, so re-saving an old file upgrades it in place.
+_LEGACY_TOML_KEY_RENAMES: dict[str, str] = {
+    "messages.fixholes": "messages.fix_holes",
+    "messages.force_retry_unresolved": "messages.force_retry_unresolved_references",
+    "layouts.two_d": "layouts.layouts_2d",
+    "layouts.three_d": "layouts.layouts_3d",
+}
+
+
+def _migrate_legacy_keys(parsed: dict) -> dict:
+    for legacy, modern in _LEGACY_TOML_KEY_RENAMES.items():
+        l_section, l_key = legacy.split(".", 1)
+        m_section, m_key = modern.split(".", 1)
+        legacy_table = parsed.get(l_section)
+        if not isinstance(legacy_table, dict) or l_key not in legacy_table:
+            continue
+        modern_table = parsed.setdefault(m_section, {})
+        # Modern key wins if both are present (e.g. partial mid-migration files).
+        modern_table.setdefault(m_key, legacy_table[l_key])
+        del legacy_table[l_key]
+    return parsed
+
+
 def _parse_toml(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -101,6 +127,7 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
     if parsed is None:
         return _to_namespace(defaults)
     _strip_header(parsed)
+    _migrate_legacy_keys(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
@@ -114,6 +141,7 @@ def _load_payload(path: Path, defaults: dict) -> dict | None:
     if parsed is None:
         return None
     _strip_header(parsed)
+    _migrate_legacy_keys(parsed)
     return _deep_merge(defaults, parsed)
 
 

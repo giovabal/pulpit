@@ -6,7 +6,7 @@
 [meta]
 title = "Pulpit default"
 pulpit_version = "0.21dev"
-generated_at = "2026-05-21T05:21:28Z"
+generated_at = "2026-05-21T07:29:21Z"
 
 [telegram]
 session_name = "anon"
@@ -38,11 +38,11 @@ retry_lost_and_private = false
 get_new_messages = true
 fetch_replies = true
 refresh_messages_stats = false
-fixholes = true
+fix_holes = true
 fix_missing_media = false
 retry_lost_messages = false
 retry_references = false
-force_retry_unresolved = false
+force_retry_unresolved_references = false
 
 [degrees]
 in_degrees = true

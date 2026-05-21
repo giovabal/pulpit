@@ -258,9 +258,9 @@ python manage.py crawl_channels --get-new-messages --download-audio --download-s
 python manage.py crawl_channels --fix-missing-media --download-images --no-download-video         # repair photos only
 
 # Generate the map
-python manage.py structural_analysis --2dgraph --html
-python manage.py structural_analysis --2dgraph --html --xlsx
-python manage.py structural_analysis --2dgraph --3dgraph --html --xlsx
+python manage.py structural_analysis --graph-2d --html
+python manage.py structural_analysis --graph-2d --html --xlsx
+python manage.py structural_analysis --graph-2d --graph-3d --html --xlsx
 python manage.py structural_analysis --gexf --graphml
 python manage.py structural_analysis --csv
 python manage.py structural_analysis --measures PAGERANK,BETWEENNESS
@@ -270,8 +270,8 @@ python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
-python manage.py structural_analysis --2dgraph --timeline-step year
-python manage.py structural_analysis --2dgraph --html --channel-groups media,activists
+python manage.py structural_analysis --graph-2d --timeline-step year
+python manage.py structural_analysis --graph-2d --html --channel-groups media,activists
 
 # Robustness analysis (resistance to node removal)
 python manage.py structural_analysis --robustness --html --xlsx               # default: α=0.05, N_runs=100, K_null=20, static strategies only

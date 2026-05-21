@@ -97,7 +97,7 @@ The entry point for sharing or publishing results. Lists every generated file wi
 </figure>
 <br>
 
-Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`. **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
+Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
 **Controls:**
 
@@ -119,7 +119,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--2dgraph`. **Requir
 
 ## graph3d.html — 3D interactive graph
 
-Powered by [Three.js](https://threejs.org/). Generated with `--3dgraph` (requires `--2dgraph`). **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
+Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requires `--graph-2d`). **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
 - Rotate, zoom, and pan the graph in three dimensions
 - Click a node to open the same detail panel as in the 2D view
