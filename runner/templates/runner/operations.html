@@ -976,11 +976,23 @@
                     data-task="{{ task.name }}">
               <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Load defaults
             </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-info write-cli-btn"
+                    data-task="{{ task.name }}">
+              <i class="bi bi-terminal me-1" aria-hidden="true"></i>Write CLI command
+            </button>
             <span class="save-defaults-status" id="save-defaults-status-{{ task.name }}" aria-live="polite"></span>
           </div>
           {% endif %}
 
         </form>
+
+        {% if task.name == "crawl_channels" or task.name == "structural_analysis" %}
+        <div class="ops-cli-preview" id="cli-preview-{{ task.name }}" hidden>
+          <div class="ops-cli-preview-title">Generated CLI command:</div>
+          <pre class="ops-cli-command"><code></code></pre>
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -2073,6 +2085,46 @@ function showToast(msg, type) {
       });
     });
   }
+
+  // ── Write CLI command ────────────────────────────────────────────────────
+  // Sends the current form to /operations/write-cli-command/<task>/ and renders
+  // the returned `python manage.py <task> ...` invocation in the preview div
+  // below the form. Same cross-field validation as Save/Run, so e.g. a bad
+  // BRIDGING basis surfaces in a toast before the preview is shown.
+  document.querySelectorAll('.write-cli-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var task = btn.dataset.task;
+      var form = document.getElementById('form-' + task);
+      // Re-enable disabled inputs during serialization so unchecked toggles
+      // (which the panel uses to emit --no-X) still ride along.
+      var reenabled = form.querySelectorAll('[disabled]');
+      reenabled.forEach(function (el) { el.removeAttribute('disabled'); });
+      var fd = new FormData(form);
+      reenabled.forEach(function (el) { el.setAttribute('disabled', ''); });
+
+      btn.disabled = true;
+      fetch('/operations/write-cli-command/' + task + '/', {
+        method: 'POST',
+        body: fd,
+        headers: { 'X-CSRFToken': getCsrfToken() },
+      })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || ('HTTP ' + r.status)); });
+          return r.json();
+        })
+        .then(function (data) {
+          var preview = document.getElementById('cli-preview-' + task);
+          if (preview) {
+            preview.querySelector('code').textContent = data.command || '';
+            preview.hidden = false;
+          }
+        })
+        .catch(function (err) {
+          showToast('Failed to write CLI command: ' + err.message, 'error');
+        })
+        .finally(function () { btn.disabled = false; });
+    });
+  });
 
 })();
 

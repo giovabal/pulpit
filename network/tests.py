@@ -1357,7 +1357,8 @@ class ExportNetworkCommandTests(TestCase):
 
         mock_build.side_effect = ValueError("There are no relationships between channels.")
         with self.assertRaises(CommandError):
-            call_command("structural_analysis")
+            # graph=True bypasses the bare-CLI early-exit so build_graph is reached.
+            call_command("structural_analysis", graph=True)
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1406,7 +1407,16 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("structural_analysis", graph=True, html=True)
+        # The defaults are factory-empty; pass community_strategies + measures
+        # explicitly so the community-detection and measures pipelines run.
+        call_command(
+            "structural_analysis",
+            graph=True,
+            html=True,
+            community_strategies="ORGANIZATION",
+            measures="PAGERANK",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+        )
 
         mock_build.assert_called_once()
         mock_detect.assert_called()
@@ -1471,7 +1481,14 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("structural_analysis", html=False)
+        # graph=True bypasses the bare-CLI early-exit; html=False suppresses tables.
+        call_command(
+            "structural_analysis",
+            graph=True,
+            html=False,
+            community_strategies="ORGANIZATION",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+        )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_not_called()
 
@@ -1522,7 +1539,13 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("structural_analysis", html=False, xlsx=True)
+        call_command(
+            "structural_analysis",
+            html=False,
+            xlsx=True,
+            community_strategies="ORGANIZATION",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+        )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
 
@@ -1573,7 +1596,13 @@ class ExportNetworkCommandTests(TestCase):
             mock_pagerank,
             mock_communities_payload,
         )
-        call_command("structural_analysis", html=True, xlsx=True)
+        call_command(
+            "structural_analysis",
+            html=True,
+            xlsx=True,
+            community_strategies="ORGANIZATION",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+        )
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
 

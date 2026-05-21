@@ -58,7 +58,9 @@ class HermeticLoadTests(TestCase):
 
     def test_crawl_hermetic_returns_defaults(self) -> None:
         ns = load_crawl_settings(hermetic=True)
-        self.assertEqual(ns.telegram.connection_retries, CRAWL_DEFAULTS["telegram"]["connection_retries"])
+        # `telegram.*` is intentionally absent — Telegram client tuning is now
+        # owned by `.env`, not by `.operations-crawl`.
+        self.assertNotIn("telegram", CRAWL_DEFAULTS)
         self.assertEqual(ns.downloads.images, CRAWL_DEFAULTS["downloads"]["images"])
         self.assertEqual(ns.scope.channel_types, CRAWL_DEFAULTS["scope"]["channel_types"])
 
@@ -75,8 +77,8 @@ class MissingFileFallbackTests(TestCase):
     def test_load_returns_defaults_when_file_absent(self) -> None:
         with _RedirectConfigPaths():
             ns = load_crawl_settings(hermetic=False)
-            self.assertEqual(ns.telegram.session_name, "anon")
             self.assertEqual(ns.downloads.images, False)
+            self.assertEqual(ns.scope.channel_types, ["CHANNEL"])
 
 
 class BaselineRoundTripTests(TestCase):
@@ -88,20 +90,17 @@ class BaselineRoundTripTests(TestCase):
             write_baseline(
                 "crawl_channels",
                 {
-                    "telegram": {"connection_retries": 99, "session_name": "alt"},
                     "downloads": {"video": True},
                     "scope": {"channel_types": ["CHANNEL", "GROUP"]},
+                    "channels": {"get_channels_info": True},
                 },
             )
             self.assertTrue((tmp / ".operations-crawl").exists())
             ns = load_crawl_settings(hermetic=False)
-            self.assertEqual(ns.telegram.connection_retries, 99)
-            self.assertEqual(ns.telegram.session_name, "alt")
             self.assertEqual(ns.downloads.video, True)
             self.assertEqual(ns.downloads.images, False)
             self.assertEqual(ns.scope.channel_types, ["CHANNEL", "GROUP"])
-            # Untouched defaults come through.
-            self.assertEqual(ns.telegram.grace_time, 1)
+            self.assertEqual(ns.channels.get_channels_info, True)
 
     def test_baseline_structural_round_trip(self) -> None:
         with _RedirectConfigPaths() as tmp:
@@ -120,7 +119,9 @@ class BaselineRoundTripTests(TestCase):
             self.assertEqual(ns.outputs.xlsx, False)
             self.assertEqual(ns.measures.selected, ["PAGERANK", "BETWEENNESS"])
             self.assertEqual(ns.robustness.strategies, ["pagerank"])
-            self.assertEqual(ns.communities.strategies, ["ORGANIZATION"])
+            # `communities.strategies` defaults to [] (factory-empty no-op);
+            # not provided in the write_baseline payload above, so still [].
+            self.assertEqual(ns.communities.strategies, [])
 
 
 class NamedSnapshotTests(TestCase):
@@ -161,8 +162,8 @@ class NamedSnapshotTests(TestCase):
             merged = load_payload_by_id("crawl_channels", item["id"])
             self.assertIsNotNone(merged)
             self.assertEqual(merged["downloads"]["audio"], True)
-            # Defaults still merged in.
-            self.assertEqual(merged["telegram"]["session_name"], "anon")
+            # Untouched defaults from defaults.py still merged in.
+            self.assertEqual(merged["scope"]["channel_types"], ["CHANNEL"])
 
     def test_load_payload_by_id_returns_none_for_unknown_id(self) -> None:
         with _RedirectConfigPaths():
@@ -223,8 +224,23 @@ class MalformedTOMLFallbackTests(TestCase):
         with _RedirectConfigPaths() as tmp:
             (tmp / ".operations-crawl").write_text("this is = not valid toml [[[")
             ns = load_crawl_settings(hermetic=False)
-            self.assertEqual(ns.telegram.session_name, "anon")
-            self.assertEqual(ns.telegram.connection_retries, 10)
+            # Falls back to built-in defaults — no telegram block expected anymore.
+            self.assertEqual(ns.downloads.images, False)
+            self.assertEqual(ns.channels.get_channels_info, False)
+
+
+class LegacyTelegramSectionTests(TestCase):
+    """Pre-.env-migration snapshots carry a [telegram] block that must be
+    silently stripped on load (the values now live in `.env`)."""
+
+    def test_legacy_telegram_block_is_dropped(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-crawl").write_text(
+                '[telegram]\nsession_name = "old"\nconnection_retries = 42\n\n[downloads]\nimages = true\n'
+            )
+            ns = load_crawl_settings(hermetic=False)
+            self.assertFalse(hasattr(ns, "telegram"))
+            self.assertEqual(ns.downloads.images, True)
 
 
 class LegacyTopLevelHeaderTests(TestCase):

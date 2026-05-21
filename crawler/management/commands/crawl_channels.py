@@ -899,7 +899,7 @@ class Command(BaseCommand):
         channel_types = (
             [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
             if channel_types_raw is not None
-            else list(settings.DEFAULT_CHANNEL_TYPES)
+            else []
         )
         invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
@@ -909,53 +909,39 @@ class Command(BaseCommand):
         channel_groups_raw = options.get("channel_groups")
         channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
 
-        # Every toggle uses BooleanOptionalAction (default=None): an explicit
-        # --<flag> / --no-<flag> wins over the configuration/.operations-crawl
-        # default. The Operations panel emits both forms (checked → --<flag>,
-        # unchecked → --no-<flag>), so an unchecked checkbox always disables
-        # the operation even when the saved default is True. When neither form
-        # is passed (bare CLI invocation), the settings default takes over.
-        def _resolve_optional_bool(option_value: bool | None, settings_value: bool) -> bool:
-            return option_value if option_value is not None else settings_value
+        # Every toggle uses BooleanOptionalAction (default=None). A bare
+        # `python manage.py crawl_channels` (no flags) must do nothing —
+        # the panel-driven Operations runs are unaffected because the panel
+        # emits explicit --<flag> / --no-<flag> for every checkbox. The CLI
+        # therefore no longer consults settings.* for fallbacks: missing
+        # flags resolve to False.
+        def _resolve_optional_bool(option_value: bool | None, default: bool = False) -> bool:
+            return option_value if option_value is not None else default
 
         return CrawlOptions(
-            get_channels_info=_resolve_optional_bool(options["get_channels_info"], settings.CRAWL_GET_CHANNELS_INFO),
-            update_type_excluded_info=_resolve_optional_bool(
-                options["update_type_excluded_info"], settings.CRAWL_UPDATE_TYPE_EXCLUDED_INFO
-            ),
-            mine_about_texts=_resolve_optional_bool(options["mine_about_texts"], settings.CRAWL_MINE_ABOUT_TEXTS),
-            fetch_recommended=_resolve_optional_bool(options["fetch_recommended"], settings.CRAWL_FETCH_RECOMMENDED),
-            retry_lost_and_private=_resolve_optional_bool(
-                options["retry_lost_and_private"], settings.CRAWL_RETRY_LOST_AND_PRIVATE
-            ),
-            get_new_messages=_resolve_optional_bool(options["get_new_messages"], settings.CRAWL_GET_NEW_MESSAGES),
-            fetch_replies=_resolve_optional_bool(options["fetch_replies"], settings.CRAWL_FETCH_REPLIES),
-            do_refresh=_resolve_optional_bool(options["refresh_messages_stats"], settings.CRAWL_REFRESH_MESSAGES_STATS),
+            get_channels_info=_resolve_optional_bool(options["get_channels_info"]),
+            update_type_excluded_info=_resolve_optional_bool(options["update_type_excluded_info"]),
+            mine_about_texts=_resolve_optional_bool(options["mine_about_texts"]),
+            fetch_recommended=_resolve_optional_bool(options["fetch_recommended"]),
+            retry_lost_and_private=_resolve_optional_bool(options["retry_lost_and_private"]),
+            get_new_messages=_resolve_optional_bool(options["get_new_messages"]),
+            fetch_replies=_resolve_optional_bool(options["fetch_replies"]),
+            do_refresh=_resolve_optional_bool(options["refresh_messages_stats"]),
             refresh_limit=options["refresh_limit"],
             refresh_from=_parse_date(options.get("refresh_from"), "--refresh-from"),
             refresh_to=_parse_date(options.get("refresh_to"), "--refresh-to"),
-            fix_holes=_resolve_optional_bool(options["fix_holes"], settings.CRAWL_FIX_HOLES),
-            fix_missing_media=_resolve_optional_bool(options["fix_missing_media"], settings.CRAWL_FIX_MISSING_MEDIA),
-            retry_lost_messages=_resolve_optional_bool(
-                options["retry_lost_messages"], settings.CRAWL_RETRY_LOST_MESSAGES
-            ),
-            retry_references=_resolve_optional_bool(options["retry_references"], settings.CRAWL_RETRY_REFERENCES),
-            force_retry=_resolve_optional_bool(
-                options["force_retry_unresolved_references"], settings.CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES
-            ),
-            download_images=_resolve_optional_bool(
-                options["download_images"], settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES
-            ),
-            download_video=_resolve_optional_bool(options["download_video"], settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO),
-            download_audio=_resolve_optional_bool(options["download_audio"], settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO),
-            download_stickers=_resolve_optional_bool(
-                options["download_stickers"], settings.TELEGRAM_CRAWLER_DOWNLOAD_STICKERS
-            ),
-            download_other_media=_resolve_optional_bool(
-                options["download_other_media"], settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA
-            ),
-            in_degrees=_resolve_optional_bool(options["in_degrees"], settings.CRAWL_IN_DEGREES),
-            out_degrees=_resolve_optional_bool(options["out_degrees"], settings.CRAWL_OUT_DEGREES),
+            fix_holes=_resolve_optional_bool(options["fix_holes"]),
+            fix_missing_media=_resolve_optional_bool(options["fix_missing_media"]),
+            retry_lost_messages=_resolve_optional_bool(options["retry_lost_messages"]),
+            retry_references=_resolve_optional_bool(options["retry_references"]),
+            force_retry=_resolve_optional_bool(options["force_retry_unresolved_references"]),
+            download_images=_resolve_optional_bool(options["download_images"]),
+            download_video=_resolve_optional_bool(options["download_video"]),
+            download_audio=_resolve_optional_bool(options["download_audio"]),
+            download_stickers=_resolve_optional_bool(options["download_stickers"]),
+            download_other_media=_resolve_optional_bool(options["download_other_media"]),
+            in_degrees=_resolve_optional_bool(options["in_degrees"]),
+            out_degrees=_resolve_optional_bool(options["out_degrees"]),
             ids_str=options["ids"],
             channel_types=channel_types,
             channel_groups=channel_groups,

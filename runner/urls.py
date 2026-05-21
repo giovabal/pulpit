@@ -6,6 +6,11 @@ urlpatterns = [
     path("", views.OperationsView.as_view(), name="operations"),
     path("analysis/", views.AnalysisPageView.as_view(), name="analysis"),
     path("run/<str:task>/", views.RunTaskView.as_view(), name="operations-run"),
+    path(
+        "write-cli-command/<str:task>/",
+        views.WriteCliCommandView.as_view(),
+        name="operations-write-cli-command",
+    ),
     path("abort/<str:task>/", views.AbortTaskView.as_view(), name="operations-abort"),
     path("reset/<str:task>/", views.ResetTaskView.as_view(), name="operations-reset"),
     path("status/<str:task>/", views.TaskStatusView.as_view(), name="operations-status"),
