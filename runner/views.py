@@ -703,17 +703,33 @@ def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
 _FORM_PAYLOAD_MISSING = object()
 
 
+_BRIDGING_VALID_BASES: frozenset[str] = frozenset(s for s in net_community.VALID_STRATEGIES if s != "ORGANIZATION")
+
+
 def _validate_post_constraints(task: str, post: Any) -> None:
     """Cross-field validation shared by Save and Run.
 
-    Raises ValueError on inconsistent input. Currently enforced:
+    Raises ValueError on inconsistent input.
 
-    * structural_analysis: when BRIDGING is among ``measures`` (or "bridging"
-      is among ``robustness_strategies``), the effective bridging basis —
-      either the explicit ``bridging_basis`` field or the default
-      ``LEIDEN_DIRECTED`` — must be one of the selected ``community_strategies``.
-      Otherwise the BRIDGING measure points at a community partition that
-      wasn't computed and the result is silently meaningless.
+    Currently enforced for structural_analysis:
+
+    * **BRIDGING basis must be a real community-detection strategy.** When
+      BRIDGING is among ``measures`` (or "bridging" is among
+      ``robustness_strategies``), the effective basis — either the explicit
+      ``bridging_basis`` or the default ``LEIDEN_DIRECTED`` — must be one of
+      ``_BRIDGING_VALID_BASES`` (i.e. a known strategy other than ORGANIZATION,
+      which is excluded because organisation membership isn't a community-
+      detection result and entropy across pre-declared categories doesn't
+      carry the same meaning).
+
+    * **BRIDGING basis must be among the selected strategies.** Otherwise the
+      BRIDGING measure points at a partition that was never computed and the
+      result is silently meaningless.
+
+    * **consensus_matrix requires ≥2 non-ORGANIZATION community strategies.**
+      The page is a pairwise NMI heatmap across strategies; with fewer than
+      two strategies (ORGANIZATION excluded since it's not a detection
+      result), the output table is empty and silently useless.
     """
     if task != "structural_analysis":
         return
@@ -722,15 +738,28 @@ def _validate_post_constraints(task: str, post: Any) -> None:
     measures = post.getlist("measures") or []
     robust = post.getlist("robustness_strategies") or []
     strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
+
     needs_bridging = "BRIDGING" in measures or "bridging" in {r.lower() for r in robust}
-    if not needs_bridging:
-        return
-    basis = (post.get("bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
-    if basis not in strategies:
-        present = ", ".join(sorted(strategies)) or "none selected"
-        raise ValueError(
-            f"BRIDGING basis '{basis}' must be one of the selected community strategies (currently: {present})"
-        )
+    if needs_bridging:
+        basis = (post.get("bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
+        if basis not in _BRIDGING_VALID_BASES:
+            raise ValueError(
+                f"BRIDGING basis '{basis}' is not a valid community-detection strategy"
+                " (ORGANIZATION is excluded because organisation membership is not a detection result)"
+            )
+        if basis not in strategies:
+            present = ", ".join(sorted(strategies)) or "none selected"
+            raise ValueError(
+                f"BRIDGING basis '{basis}' must be one of the selected community strategies (currently: {present})"
+            )
+
+    if post.get("consensus_matrix"):
+        non_org = strategies - {"ORGANIZATION"}
+        if len(non_org) < 2:
+            raise ValueError(
+                "Consensus matrix requires at least two non-ORGANIZATION community strategies"
+                f" (currently: {', '.join(sorted(non_org)) or 'none'})"
+            )
 
 
 def _read_nested(d: Any, dotted_path: str) -> Any:
