@@ -504,7 +504,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: .75rem;
+  gap: .5rem;
   padding: .5rem 0 0;
   margin-top: .75rem;
   border-top: 1px solid var(--border);
@@ -512,6 +512,45 @@
 .save-defaults-status {
   font-size: .75rem;
   color: var(--muted);
+}
+
+/* ---- Form-footer buttons (Save / Load / Write CLI) ---- */
+/* Outline-indigo style aligned with Pulpit's accent palette. The three
+   buttons share the same look so the footer reads as a coherent action row;
+   the icon + label combination distinguishes them. */
+.ops-footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .85rem;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: .8rem;
+  font-weight: 500;
+  line-height: 1.3;
+  border-radius: .375rem;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+}
+.ops-footer-btn .bi { font-size: .9em; }
+.ops-footer-btn:hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+.ops-footer-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-bg), 0 0 0 3px var(--accent);
+}
+.ops-footer-btn:active:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ops-footer-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
 /* ---- "Write CLI command" preview ---- */
