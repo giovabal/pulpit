@@ -833,10 +833,9 @@ class _RedirectConfigPathsForRunner:
         paths.CONFIG_DIR = self.tmp
         paths.CRAWL_PATH = self.tmp / ".operations-crawl"
         paths.STRUCTURAL_PATH = self.tmp / ".operations-structural"
+        loader.CONFIG_DIR = paths.CONFIG_DIR
         loader.CRAWL_PATH = paths.CRAWL_PATH
         loader.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
-        writer.CRAWL_PATH = paths.CRAWL_PATH
-        writer.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
         writer.CONFIG_DIR = paths.CONFIG_DIR
         return self.tmp
 
@@ -845,23 +844,39 @@ class _RedirectConfigPathsForRunner:
 
         for attr, value in self._orig.items():
             setattr(paths, attr, value)
+        loader.CONFIG_DIR = paths.CONFIG_DIR
         loader.CRAWL_PATH = paths.CRAWL_PATH
         loader.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
-        writer.CRAWL_PATH = paths.CRAWL_PATH
-        writer.STRUCTURAL_PATH = paths.STRUCTURAL_PATH
         writer.CONFIG_DIR = paths.CONFIG_DIR
 
 
-class SaveDefaultsViewTests(TestCase):
+def _saved_file_content(tmp: Path, stem: str) -> str:
+    """Read the single timestamped sidecar that a `Save` request just created."""
+    candidates = sorted(p for p in tmp.iterdir() if p.name.startswith(f"{stem}-"))
+    assert candidates, f"no {stem}-* sidecar produced"
+    return candidates[-1].read_text()
+
+
+class DefaultsViewTests(TestCase):
     def test_unknown_task_returns_404(self) -> None:
-        resp = self.client.post(reverse("operations-save-defaults", args=["nope"]))
+        resp = self.client.post(reverse("operations-defaults", args=["nope"]), data={"title": "x"})
         self.assertEqual(resp.status_code, 404)
 
-    def test_crawl_save_writes_file(self) -> None:
+    def test_save_requires_title(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["crawl_channels"]),
+                data={"get_channels_info": "on"},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("title", resp.json()["error"])
+
+    def test_crawl_save_writes_timestamped_file(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["crawl_channels"]),
+                reverse("operations-defaults", args=["crawl_channels"]),
                 data={
+                    "title": "My crawl",
                     "get_channels_info": "on",
                     "download_video": "on",
                     "channel_type_channel": "on",
@@ -869,9 +884,12 @@ class SaveDefaultsViewTests(TestCase):
                 },
             )
             self.assertEqual(resp.status_code, 200)
-            self.assertTrue(resp.json()["saved"])
-
-            content = (tmp / ".operations-crawl").read_text()
+            data = resp.json()
+            self.assertTrue(data["saved"])
+            self.assertEqual(data["item"]["title"], "My crawl")
+            self.assertFalse(data["item"]["is_base"])
+            content = _saved_file_content(tmp, ".operations-crawl")
+            self.assertIn('title = "My crawl"', content)
             self.assertIn("video = true", content)
             self.assertIn("get_channels_info = true", content)
             self.assertIn('channel_types = ["CHANNEL", "GROUP"]', content)
@@ -879,8 +897,9 @@ class SaveDefaultsViewTests(TestCase):
     def test_structural_save_round_trip(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
+                reverse("operations-defaults", args=["structural_analysis"]),
                 data={
+                    "title": "Big run",
                     "graph": "on",
                     "html": "on",
                     "fa2_iterations": "3000",
@@ -891,7 +910,7 @@ class SaveDefaultsViewTests(TestCase):
                 },
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
+            content = _saved_file_content(tmp, ".operations-structural")
             self.assertIn("graph = true", content)
             self.assertIn("fa2_iterations = 3000", content)
             self.assertIn('selected = ["PAGERANK", "BETWEENNESS"]', content)
@@ -903,87 +922,112 @@ class SaveDefaultsViewTests(TestCase):
     def test_robustness_enabled_false_when_no_strategies(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"html": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "no-strats", "html": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
+            content = _saved_file_content(tmp, ".operations-structural")
             self.assertIn("enabled = false", content)
             self.assertIn("strategies = []", content)
 
     def test_blank_int_falls_back_to_default(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"community_distribution_threshold": "", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "community_distribution_threshold": "", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn("community_distribution_threshold = 10", content)
+            self.assertIn("community_distribution_threshold = 10", _saved_file_content(tmp, ".operations-structural"))
 
     def test_fa2_iterations_multiplier_form_saved_as_string(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"fa2_iterations": "10x", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "fa2_iterations": "10x", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn('fa2_iterations = "10x"', content)
+            self.assertIn('fa2_iterations = "10x"', _saved_file_content(tmp, ".operations-structural"))
 
     def test_fa2_iterations_integer_form_saved_as_int(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"fa2_iterations": "3000", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "fa2_iterations": "3000", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn("fa2_iterations = 3000", content)
+            self.assertIn("fa2_iterations = 3000", _saved_file_content(tmp, ".operations-structural"))
 
     def test_fa2_iterations_blank_falls_back_to_default(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"fa2_iterations": "", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "fa2_iterations": "", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn('fa2_iterations = "7x"', content)
+            self.assertIn('fa2_iterations = "7x"', _saved_file_content(tmp, ".operations-structural"))
 
     def test_community_palette_round_trip(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
+                reverse("operations-defaults", args=["structural_analysis"]),
                 data={
+                    "title": "t",
                     "community_palette": "vaporwave",
                     "community_palette_reversed": "on",
                     "graph": "on",
                 },
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
+            content = _saved_file_content(tmp, ".operations-structural")
             self.assertIn('community_palette = "vaporwave"', content)
             self.assertIn("community_palette_reversed = true", content)
 
     def test_community_palette_reversed_unchecked_persists_false(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"community_palette": "vaporwave", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "community_palette": "vaporwave", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            content = (tmp / ".operations-structural").read_text()
-            self.assertIn("community_palette_reversed = false", content)
+            self.assertIn("community_palette_reversed = false", _saved_file_content(tmp, ".operations-structural"))
 
     def test_save_rejects_unknown_palette(self) -> None:
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
-                reverse("operations-save-defaults", args=["structural_analysis"]),
-                data={"community_palette": "NOT_A_REAL_PALETTE", "graph": "on"},
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "community_palette": "NOT_A_REAL_PALETTE", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 400)
             self.assertIn("Unknown palette", resp.json()["error"])
+
+    def test_list_returns_base_when_only_baseline_present(self) -> None:
+        from webapp_engine.config import write_baseline
+
+        with _RedirectConfigPathsForRunner():
+            write_baseline("crawl_channels", {"downloads": {"images": True}})
+            resp = self.client.get(reverse("operations-defaults", args=["crawl_channels"]))
+            self.assertEqual(resp.status_code, 200)
+            items = resp.json()["items"]
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["id"], "base")
+            self.assertEqual(items[0]["title"], "Pulpit default")
+
+    def test_list_then_load_round_trip(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            self.client.post(
+                reverse("operations-defaults", args=["crawl_channels"]),
+                data={"title": "Snap1", "download_audio": "on"},
+            )
+            items = self.client.get(reverse("operations-defaults", args=["crawl_channels"])).json()["items"]
+            snap = next(it for it in items if it["title"] == "Snap1")
+            resp = self.client.get(reverse("operations-defaults-item", args=["crawl_channels", snap["id"]]))
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(resp.json()["values"]["download_audio"])
+
+    def test_load_unknown_id_returns_404(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.get(reverse("operations-defaults-item", args=["crawl_channels", "2099-01-01T00-00-00Z"]))
+            self.assertEqual(resp.status_code, 404)
 
 
 class PaletteColorsViewTests(TestCase):

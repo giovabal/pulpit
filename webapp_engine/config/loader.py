@@ -1,22 +1,43 @@
-"""Read `.operations-crawl` and `.operations-structural` and merge with defaults.
+"""Read `.operations-crawl` / `.operations-structural` (plus user-saved snapshots) and merge with defaults.
 
-The loader is intentionally tiny: it parses the TOML, deep-merges over the
-hard-coded `CRAWL_DEFAULTS` / `STRUCTURAL_DEFAULTS`, and returns a nested
-`SimpleNamespace` for attribute access (`_crawl.telegram.connection_retries`).
+The loader is intentionally tiny: it parses the TOML, strips the `[meta]`
+header section, deep-merges the rest over the hard-coded `CRAWL_DEFAULTS` /
+`STRUCTURAL_DEFAULTS`, and returns a nested `SimpleNamespace` for attribute
+access (`_crawl.telegram.connection_retries`).
 
-When a file is missing or malformed, the defaults are returned unchanged — the
-crawler and structural-analysis commands stay runnable without either file
-existing on disk.
+The bare files (`.operations-{crawl,structural}`) are the committed "Pulpit
+default" baselines used at startup and by the management commands. The
+Operations panel can additionally save timestamped sidecars
+(`.operations-{stem}-{timestamp}`) that users name through a modal — the
+listing and load helpers here power the picker in that modal.
+
+When a file is missing or malformed, the defaults are returned unchanged —
+the crawler and structural-analysis commands stay runnable without either
+file existing on disk.
 """
 
+import datetime as _dt
+import re
 import sys
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
 from .defaults import CRAWL_DEFAULTS, STRUCTURAL_DEFAULTS
-from .paths import CRAWL_PATH, STRUCTURAL_PATH, SYSTEM_PATH
-from .schema import GENERATED_AT_KEY, PULPIT_VERSION_KEY
+from .paths import CONFIG_DIR, CRAWL_PATH, STRUCTURAL_PATH, SYSTEM_PATH, TASK_STEMS
+from .schema import (
+    GENERATED_AT_KEY,
+    META_GENERATED_AT_KEY,
+    META_SECTION,
+    META_TITLE_KEY,
+    META_VERSION_KEY,
+    PULPIT_VERSION_KEY,
+)
+
+BASE_ID = "base"
+# UTC ISO-style timestamp with `:` replaced by `-` so the filename is safe on
+# every filesystem and routable in a Django `<str:id>` URL path.
+_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
 
 def optional_int(value):
@@ -49,37 +70,50 @@ def _to_namespace(value):
     return value
 
 
-def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
-    if hermetic or not path.exists():
-        return _to_namespace(defaults)
-    try:
-        with path.open("rb") as fh:
-            parsed = tomllib.load(fh)
-    except (tomllib.TOMLDecodeError, OSError) as exc:
-        sys.stderr.write(f"[config] failed to parse {path}: {exc}; using built-in defaults\n")
-        return _to_namespace(defaults)
+def _strip_header(parsed: dict) -> dict:
+    """Remove the `[meta]` section plus legacy top-level header keys.
+
+    The user-facing payload is just the data sections; the meta is informational
+    and never deep-merged into the live settings.
+    """
+    parsed.pop(META_SECTION, None)
+    # Legacy: pre-[meta] files stored these at the top level.
     parsed.pop(PULPIT_VERSION_KEY, None)
     parsed.pop(GENERATED_AT_KEY, None)
+    return parsed
+
+
+def _parse_toml(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        sys.stderr.write(f"[config] failed to parse {path}: {exc}\n")
+        return None
+
+
+def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
+    if hermetic:
+        return _to_namespace(defaults)
+    parsed = _parse_toml(path)
+    if parsed is None:
+        return _to_namespace(defaults)
+    _strip_header(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
 def _load_payload(path: Path, defaults: dict) -> dict | None:
     """Return the on-disk TOML deep-merged over defaults, or None if absent/malformed.
 
-    Distinct from `_load` because the Operations panel's "Load defaults" path needs
-    to surface "file not present" to the client, rather than silently substituting
-    built-in defaults.
+    Used by the Operations panel's "Load defaults" path, which needs to surface
+    "file not present" to the client rather than silently substituting defaults.
     """
-    if not path.exists():
+    parsed = _parse_toml(path)
+    if parsed is None:
         return None
-    try:
-        with path.open("rb") as fh:
-            parsed = tomllib.load(fh)
-    except (tomllib.TOMLDecodeError, OSError) as exc:
-        sys.stderr.write(f"[config] failed to parse {path}: {exc}\n")
-        return None
-    parsed.pop(PULPIT_VERSION_KEY, None)
-    parsed.pop(GENERATED_AT_KEY, None)
+    _strip_header(parsed)
     return _deep_merge(defaults, parsed)
 
 
@@ -89,6 +123,124 @@ def load_crawl_settings(*, hermetic: bool = False) -> SimpleNamespace:
 
 def load_structural_settings(*, hermetic: bool = False) -> SimpleNamespace:
     return _load(STRUCTURAL_PATH, STRUCTURAL_DEFAULTS, hermetic=hermetic)
+
+
+def _task_defaults(task: str) -> dict:
+    return CRAWL_DEFAULTS if task == "crawl_channels" else STRUCTURAL_DEFAULTS
+
+
+def _path_for_id(task: str, snapshot_id: str) -> Path:
+    """Resolve `(task, id)` to an absolute path under CONFIG_DIR.
+
+    `id` is either the literal "base" (→ bare `.operations-{stem}` file) or a
+    timestamp matching `_TIMESTAMP_RE` (→ `.operations-{stem}-{id}` sidecar).
+    Anything else returns a non-existing path so the caller's `.exists()`
+    check produces the expected 404.
+    """
+    stem = TASK_STEMS[task]
+    if snapshot_id == BASE_ID:
+        return CONFIG_DIR / stem
+    if _TIMESTAMP_RE.match(snapshot_id):
+        return CONFIG_DIR / f"{stem}-{snapshot_id}"
+    return CONFIG_DIR / f"__invalid__{snapshot_id}"
+
+
+def _format_human(iso_str: str | None) -> str | None:
+    """Render an ISO 8601 UTC timestamp (with or without separators) as
+    `YYYY-MM-DD HH:MM UTC`. Returns None if the input is missing or unparseable —
+    callers degrade to displaying just the title."""
+    if not iso_str:
+        return None
+    try:
+        dt = _dt.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _id_to_iso(snapshot_id: str) -> str | None:
+    """Convert a filename-id (`YYYY-MM-DDTHH-MM-SSZ`) back to ISO 8601."""
+    if not _TIMESTAMP_RE.match(snapshot_id):
+        return None
+    # Replace the dashes that stand in for time-component colons.
+    date, _, time = snapshot_id.partition("T")
+    h, m, s = time[:-1].split("-")  # drop the trailing 'Z'
+    return f"{date}T{h}:{m}:{s}Z"
+
+
+def load_payload_by_id(task: str, snapshot_id: str) -> dict | None:
+    """Return the form-shaped merged dict for a single snapshot, or None if absent."""
+    if task not in TASK_STEMS:
+        return None
+    return _load_payload(_path_for_id(task, snapshot_id), _task_defaults(task))
+
+
+def _read_meta(parsed: dict | None) -> dict:
+    """Extract the `[meta]` block (or its legacy top-level equivalents)."""
+    if not parsed:
+        return {}
+    meta = parsed.get(META_SECTION) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+    # Backfill from legacy top-level keys when the file predates `[meta]`.
+    if META_VERSION_KEY not in meta and PULPIT_VERSION_KEY in parsed:
+        meta[META_VERSION_KEY] = parsed[PULPIT_VERSION_KEY]
+    if META_GENERATED_AT_KEY not in meta and GENERATED_AT_KEY in parsed:
+        meta[META_GENERATED_AT_KEY] = parsed[GENERATED_AT_KEY]
+    return meta
+
+
+def list_defaults(task: str) -> list[dict]:
+    """List the bare-baseline + every saved snapshot for `task`.
+
+    Returns dicts shaped for the load-modal picker: ``id``, ``title``,
+    ``pulpit_version``, ``generated_at_iso``, ``generated_at_human``, ``is_base``.
+    Ordered: base first, then user snapshots by id descending (newest first —
+    the id is a UTC timestamp, so lexicographic = chronological).
+    """
+    if task not in TASK_STEMS:
+        return []
+    stem = TASK_STEMS[task]
+    out: list[dict] = []
+
+    base_path = CONFIG_DIR / stem
+    if base_path.exists():
+        meta = _read_meta(_parse_toml(base_path))
+        out.append(
+            {
+                "id": BASE_ID,
+                "title": meta.get(META_TITLE_KEY) or "Pulpit default",
+                "pulpit_version": meta.get(META_VERSION_KEY) or "",
+                "generated_at_iso": meta.get(META_GENERATED_AT_KEY) or "",
+                "generated_at_human": _format_human(meta.get(META_GENERATED_AT_KEY)),
+                "is_base": True,
+            }
+        )
+
+    saved: list[dict] = []
+    if CONFIG_DIR.exists():
+        prefix = f"{stem}-"
+        for path in CONFIG_DIR.iterdir():
+            if not path.is_file() or not path.name.startswith(prefix):
+                continue
+            snapshot_id = path.name[len(prefix) :]
+            if not _TIMESTAMP_RE.match(snapshot_id):
+                continue
+            meta = _read_meta(_parse_toml(path))
+            iso = meta.get(META_GENERATED_AT_KEY) or _id_to_iso(snapshot_id)
+            saved.append(
+                {
+                    "id": snapshot_id,
+                    "title": meta.get(META_TITLE_KEY) or "(untitled)",
+                    "pulpit_version": meta.get(META_VERSION_KEY) or "",
+                    "generated_at_iso": iso or "",
+                    "generated_at_human": _format_human(iso),
+                    "is_base": False,
+                }
+            )
+    saved.sort(key=lambda d: d["id"], reverse=True)
+    out.extend(saved)
+    return out
 
 
 def load_crawl_payload() -> dict | None:
@@ -102,22 +254,19 @@ def load_structural_payload() -> dict | None:
 def read_pulpit_version(path: Path) -> str | None:
     """Return the `pulpit_version` field from a TOML file, or None if absent.
 
-    Used by future Django data migrations that need to know which Pulpit
-    release wrote the file and rewrite it in place when keys are renamed.
+    Accepts both the new `[meta].pulpit_version` and the legacy top-level form
+    so files written by older Pulpit releases still report a version.
     """
-    if not path.exists():
+    parsed = _parse_toml(path)
+    if parsed is None:
         return None
-    try:
-        with path.open("rb") as fh:
-            return tomllib.load(fh).get(PULPIT_VERSION_KEY)
-    except (tomllib.TOMLDecodeError, OSError):
-        return None
+    return _read_meta(parsed).get(META_VERSION_KEY)
 
 
 def get_app_version() -> str:
     """Read APP_VERSION from `.system` without dragging Django settings in.
 
-    The writer stamps the result into each TOML file's header so future
+    The writer stamps the result into each TOML file's [meta] block so future
     migrations can compare against the running version.
     """
     if not SYSTEM_PATH.exists():

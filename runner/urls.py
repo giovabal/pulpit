@@ -13,14 +13,14 @@ urlpatterns = [
     path("exports/", views.ExportsListView.as_view(), name="operations-exports"),
     path("exports/<str:name>/", views.ExportDetailView.as_view(), name="operations-export-detail"),
     path(
-        "save-defaults/<str:task>/",
-        views.SaveDefaultsView.as_view(),
-        name="operations-save-defaults",
+        "defaults/<str:task>/",
+        views.DefaultsListView.as_view(),
+        name="operations-defaults",
     ),
     path(
-        "load-defaults/<str:task>/",
-        views.LoadDefaultsView.as_view(),
-        name="operations-load-defaults",
+        "defaults/<str:task>/<str:snapshot_id>/",
+        views.DefaultsItemView.as_view(),
+        name="operations-defaults-item",
     ),
     path("palette/<str:name>/", views.PaletteColorsView.as_view(), name="operations-palette"),
 ]

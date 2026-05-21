@@ -1,105 +1,132 @@
-"""Write `.operations-crawl` and `.operations-structural` from a nested payload.
+"""Write user-saved `.operations-{stem}-{timestamp}` snapshots.
 
 `tomlkit` is used (rather than the stdlib `tomllib` plus a hand-rolled writer)
-because it preserves user comments and section ordering across round-trips.
-When the user manually edits a file to add a note to a field, clicking "Save
-as defaults" later should not blow that note away.
+because it preserves user comments and section ordering when an analyst
+hand-edits a snapshot. Each save always creates a NEW file — the bare
+`.operations-{stem}` baseline ("Pulpit default") is read-only via this API.
 
 Public API:
-    save_crawl_settings(payload)
-    save_structural_settings(payload)
+    save_named(task, payload, title) -> dict   # metadata for the new file
 
-`payload` is a nested dict matching the schema (e.g. `{"telegram": {"connection_retries": 20}}`).
-Unspecified keys retain their existing on-disk values; the file is created
-with full defaults from `defaults.py` on first write.
+`payload` is a nested dict matching the schema (e.g. ``{"telegram": {"connection_retries": 20}}``).
+The function fills in any schema-defined defaults the payload omits, wraps a
+`[meta]` block with `title`, `pulpit_version`, and `generated_at`, and writes
+atomically.
 """
 
 import datetime as _dt
 import os
-from pathlib import Path
 
 from .defaults import CRAWL_DEFAULTS, STRUCTURAL_DEFAULTS
-from .loader import get_app_version
-from .paths import CONFIG_DIR, CRAWL_PATH, STRUCTURAL_PATH
+from .loader import BASE_ID, get_app_version
+from .paths import CONFIG_DIR, TASK_STEMS
 from .schema import (
     CRAWL_HEADER_COMMENT,
     CRAWL_SECTIONS,
-    GENERATED_AT_KEY,
-    PULPIT_VERSION_KEY,
+    META_GENERATED_AT_KEY,
+    META_SECTION,
+    META_TITLE_KEY,
+    META_VERSION_KEY,
     STRUCTURAL_HEADER_COMMENT,
     STRUCTURAL_SECTIONS,
 )
 
 import tomlkit
-from tomlkit import TOMLDocument, comment, document, nl
+from tomlkit import TOMLDocument, comment, document, nl, table
+
+_TASK_CONFIG = {
+    "crawl_channels": (CRAWL_DEFAULTS, CRAWL_SECTIONS, CRAWL_HEADER_COMMENT),
+    "structural_analysis": (STRUCTURAL_DEFAULTS, STRUCTURAL_SECTIONS, STRUCTURAL_HEADER_COMMENT),
+}
 
 
-def save_crawl_settings(payload: dict) -> None:
-    _write(CRAWL_PATH, payload, CRAWL_DEFAULTS, CRAWL_SECTIONS, CRAWL_HEADER_COMMENT)
+def save_named(task: str, payload: dict, title: str) -> dict:
+    """Write a new timestamped snapshot for `task` and return metadata.
 
+    Raises ValueError on unknown task or empty title.
+    """
+    if task not in _TASK_CONFIG:
+        raise ValueError(f"Unknown task: {task!r}")
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("title is required")
 
-def save_structural_settings(payload: dict) -> None:
-    _write(STRUCTURAL_PATH, payload, STRUCTURAL_DEFAULTS, STRUCTURAL_SECTIONS, STRUCTURAL_HEADER_COMMENT)
+    defaults, sections, header = _TASK_CONFIG[task]
+    stem = TASK_STEMS[task]
+    now = _dt.datetime.now(_dt.UTC).replace(microsecond=0)
+    snapshot_id = now.strftime("%Y-%m-%dT%H-%M-%SZ")
+    iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    filename = f"{stem}-{snapshot_id}"
+    path = CONFIG_DIR / filename
 
-
-def _build_fresh_document(defaults: dict, sections: tuple[str, ...], header: str) -> TOMLDocument:
-    doc = document()
-    for line in header.splitlines():
-        doc.add(comment(line))
-    doc.add(nl())
-    doc[PULPIT_VERSION_KEY] = get_app_version()
-    doc[GENERATED_AT_KEY] = _now_iso()
-    doc.add(nl())
-    for section in sections:
-        if section not in defaults:
-            continue
-        table = tomlkit.table()
-        for key, value in defaults[section].items():
-            table[key] = _to_toml_value(value)
-        doc[section] = table
-    return doc
-
-
-def _write(
-    path: Path,
-    payload: dict,
-    defaults: dict,
-    sections: tuple[str, ...],
-    header: str,
-) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        try:
-            doc = tomlkit.parse(path.read_text(encoding="utf-8"))
-        except tomlkit.exceptions.TOMLKitError:
-            doc = _build_fresh_document(defaults, sections, header)
-    else:
-        doc = _build_fresh_document(defaults, sections, header)
-
-    # Refresh version + timestamp on every save so future migrations can
-    # see when the file was last touched.
-    doc[PULPIT_VERSION_KEY] = get_app_version()
-    doc[GENERATED_AT_KEY] = _now_iso()
-
-    for section, fields in payload.items():
-        if not isinstance(fields, dict):
-            continue
-        if section not in doc:
-            doc[section] = tomlkit.table()
-        for key, value in fields.items():
-            doc[section][key] = _to_toml_value(value)
+    doc = _build_document(defaults, sections, header, title=title, version=get_app_version(), iso=iso)
+    _overlay_payload(doc, payload)
 
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
     os.replace(tmp_path, path)
 
+    return {
+        "id": snapshot_id,
+        "filename": filename,
+        "title": title,
+        "pulpit_version": get_app_version(),
+        "generated_at_iso": iso,
+        "generated_at_human": now.strftime("%Y-%m-%d %H:%M UTC"),
+        "is_base": False,
+    }
 
-def _to_toml_value(value):
-    # tomlkit accepts native Python booleans, ints, floats, strings, and lists
-    # of those — but only via its own typed constructors when the surrounding
-    # document was built fresh. For the dict-literal path we let tomlkit infer.
-    return value
+
+# Sentinel used by tests/migrations that need to (re)write the bare baseline
+# file. Not exposed through the Operations panel — the panel can only create
+# timestamped sidecars.
+def write_baseline(task: str, payload: dict, title: str = "Pulpit default") -> None:
+    """Overwrite the bare `.operations-{stem}` baseline. Not used by the panel."""
+    if task not in _TASK_CONFIG:
+        raise ValueError(f"Unknown task: {task!r}")
+    defaults, sections, header = _TASK_CONFIG[task]
+    path = CONFIG_DIR / TASK_STEMS[task]
+    iso = _dt.datetime.now(_dt.UTC).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    doc = _build_document(defaults, sections, header, title=title, version=get_app_version(), iso=iso)
+    _overlay_payload(doc, payload)
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    os.replace(tmp_path, path)
 
 
-def _now_iso() -> str:
-    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _build_document(
+    defaults: dict, sections: tuple[str, ...], header: str, *, title: str, version: str, iso: str
+) -> TOMLDocument:
+    doc = document()
+    for line in header.splitlines():
+        doc.add(comment(line))
+    doc.add(nl())
+    meta = table()
+    meta[META_TITLE_KEY] = title
+    meta[META_VERSION_KEY] = version
+    meta[META_GENERATED_AT_KEY] = iso
+    doc[META_SECTION] = meta
+    for section in sections:
+        if section not in defaults:
+            continue
+        t = table()
+        for key, value in defaults[section].items():
+            t[key] = value
+        doc[section] = t
+    return doc
+
+
+def _overlay_payload(doc: TOMLDocument, payload: dict) -> None:
+    for section, fields in (payload or {}).items():
+        if not isinstance(fields, dict):
+            continue
+        if section not in doc:
+            doc[section] = table()
+        for key, value in fields.items():
+            doc[section][key] = value
+
+
+# Reserved id constants kept here so views can avoid magic strings.
+__all__ = ["save_named", "write_baseline", "BASE_ID"]
