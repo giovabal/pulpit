@@ -363,7 +363,6 @@ class ExportDetailView(View):
 # from POST data to a CLI argument. Adding a flag is a one-line table edit.
 #
 #   ("flag",          post_key, cli_flag)              "if post.get(key): args += [cli_flag]"
-#   ("inverted_flag", post_key, cli_flag)              "if not post.get(key): args += [cli_flag]"
 #   ("value",         post_key, cli_flag)              ".strip()-d value; skipped when empty"
 #   ("csv",           post_key, cli_flag)              "post.getlist(key) joined by ','"
 #   ("csv_unique",    post_key, cli_flag)              "csv with order-preserving dedupe"
@@ -381,10 +380,6 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
     if kind == "flag":
         _, key, flag = spec
         if post.get(key):
-            args.append(flag)
-    elif kind == "inverted_flag":
-        _, key, flag = spec
-        if not post.get(key):
             args.append(flag)
     elif kind == "value":
         _, key, flag = spec
@@ -554,7 +549,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("measures_with_bridging", "--measures"),
         ("csv", "community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
-        ("inverted_flag", "include_mentions", "--no-mentions"),
+        ("bool_explicit", "include_mentions", "--mentions", "--no-mentions"),
         ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
         ("value", "edge_weight_strategy", "--edge-weight-strategy"),
         ("value", "recency_weights", "--recency-weights"),
@@ -586,7 +581,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
     "compare_analysis": [
         ("positional", "project_dir"),
         ("value", "compare_target", "--target"),
-        ("flag", "seo", "--seo"),
+        ("bool_explicit", "seo", "--seo", "--no-seo"),
     ],
 }
 

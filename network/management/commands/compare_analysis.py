@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 from pathlib import Path
@@ -25,7 +26,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--seo",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=False,
             help=(
                 "Optimise the output mini-site for search engine discovery: sets indexable robots tags. "
