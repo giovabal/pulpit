@@ -182,21 +182,21 @@
                       <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                          title="Refresh at most N messages per channel within the date window. Leave blank to refresh all messages in the window."></i>
                     </label>
-                    <input type="number" name="refresh_limit" id="refresh_limit" placeholder="–" min="1" data-width="sm" data-requires-flag="do_refresh">
+                    <input type="number" name="refresh_limit" id="refresh_limit" placeholder="–" min="1" data-width="sm" data-requires-flag="refresh_messages_stats">
                   </div>
                   <div class="ops-param">
                     <label for="refresh_from">From date
                       <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                          title="Only refresh messages on or after this date (YYYY-MM-DD)."></i>
                     </label>
-                    <input type="text" name="refresh_from" id="refresh_from" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="do_refresh">
+                    <input type="text" name="refresh_from" id="refresh_from" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="refresh_messages_stats">
                   </div>
                   <div class="ops-param">
                     <label for="refresh_to">To date
                       <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                          title="Only refresh messages on or before this date (YYYY-MM-DD)."></i>
                     </label>
-                    <input type="text" name="refresh_to" id="refresh_to" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="do_refresh">
+                    <input type="text" name="refresh_to" id="refresh_to" placeholder="YYYY-MM-DD" data-width="sm" data-requires-flag="refresh_messages_stats">
                   </div>
                 </div>
               </fieldset>
@@ -767,36 +767,36 @@
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if has_vacancies %}checked{% endif %}>Amplifier Jaccard
+                <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if "AMPLIFIER_JACCARD" in ad.sa_vacancy_measures %}checked{% endif %}>Amplifier Jaccard
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Fraction of orphaned amplifiers that forwarded from this candidate after the vacancy closed (Jaccard coverage, Small 1973)."></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if has_vacancies %}checked{% endif %}>Structural Equivalence
+                <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Structural Equivalence
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Cosine similarity of shared in-neighbours (amplifiers) and out-neighbours (sources) — does the candidate occupy the same structural position as the vacancy? (Lorrain &amp; White 1971)"></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if has_vacancies %}checked{% endif %}>Brokerage
+                <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if "BROKERAGE" in ad.sa_vacancy_measures %}checked{% endif %}>Brokerage
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Jaccard of organization-pair sets (source-org × amplifier-org) — does the candidate replicate the same inter-organizational brokerage role? (Gould &amp; Fernandez 1989)"></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if has_vacancies %}checked{% endif %}>Cascade Overlap
+                <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if "CASCADE_OVERLAP" in ad.sa_vacancy_measures %}checked{% endif %}>Cascade Overlap
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Jaccard of SIR diffusion reach sets: vacancy content reach before closure vs candidate reach after. Reuses Spreading runs from Linked parameters. Computationally intensive."></i>
                 <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Tunable: Spreading runs (Linked parameters)"></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="PPR" {% if has_vacancies %}checked{% endif %}>Pers. PageRank
+                <input type="checkbox" name="vacancy_measures" value="PPR" {% if "PPR" in ad.sa_vacancy_measures %}checked{% endif %}>Pers. PageRank
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Personalized PageRank on the reversed graph starting from orphaned amplifiers — scores how deeply each candidate is embedded in their upstream content supply chain. (Haveliwala 2002)"></i>
                 <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Tunable: PPR α (see below)"></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if has_vacancies %}checked{% endif %}>Temporal Adoption
+                <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Coverage-weighted inverse mean days-to-first-adoption — rewards candidates adopted quickly by many orphaned channels (30-day half-life)."></i>
               </label>

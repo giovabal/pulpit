@@ -1086,6 +1086,61 @@ class DefaultsViewTests(TestCase):
             )
             self.assertEqual(resp.status_code, 200)
 
+    def test_save_rejects_bridging_basis_organization(self) -> None:
+        # ORGANIZATION is excluded from the dropdown — direct POST shouldn't smuggle it in.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "org-basis",
+                    "measures": ["BRIDGING"],
+                    "bridging_basis": "ORGANIZATION",
+                    "community_strategies": ["ORGANIZATION", "LEIDEN"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("not a valid community-detection strategy", resp.json()["error"])
+
+    def test_save_rejects_bridging_basis_unknown_strategy(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "bogus-basis",
+                    "measures": ["BRIDGING"],
+                    "bridging_basis": "NOT_A_REAL_STRATEGY",
+                    "community_strategies": ["LEIDEN"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("not a valid community-detection strategy", resp.json()["error"])
+
+    def test_save_rejects_consensus_matrix_with_few_strategies(self) -> None:
+        # Consensus matrix needs ≥2 non-ORGANIZATION strategies; ORGANIZATION-only is empty output.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "thin-consensus",
+                    "consensus_matrix": "on",
+                    "community_strategies": ["ORGANIZATION", "LEIDEN"],  # only 1 non-org
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("Consensus matrix requires", resp.json()["error"])
+
+    def test_save_accepts_consensus_matrix_with_two_strategies(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "ok-consensus",
+                    "consensus_matrix": "on",
+                    "community_strategies": ["LEIDEN", "INFOMAP"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+
     def test_list_returns_base_when_only_baseline_present(self) -> None:
         from webapp_engine.config import write_baseline
 
