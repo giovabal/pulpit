@@ -498,12 +498,12 @@ class BuildArgsGetChannelsTests(TestCase):
                 "--no-get-channels-info",
                 "--no-update-type-excluded-info",
                 "--no-mine-about-texts",
-                "--no-fetch-recommended-channels",
+                "--no-fetch-recommended",
                 "--no-retry-lost-and-private",
                 "--no-get-new-messages",
                 "--no-fetch-replies",
                 "--no-refresh-messages-stats",
-                "--no-fixholes",
+                "--no-fix-holes",
                 "--no-fix-missing-media",
                 "--no-retry-lost-messages",
                 "--no-retry-references",
@@ -521,8 +521,8 @@ class BuildArgsGetChannelsTests(TestCase):
     def test_each_boolean_flag_mapped(self):
         flags = {
             "get_new_messages": "--get-new-messages",
-            "fix_holes": "--fixholes",
-            "fetch_recommended_channels": "--fetch-recommended-channels",
+            "fix_holes": "--fix-holes",
+            "fetch_recommended": "--fetch-recommended",
             "retry_references": "--retry-references",
             "force_retry_unresolved_references": "--force-retry-unresolved-references",
             "mine_about_texts": "--mine-about-texts",
@@ -536,21 +536,21 @@ class BuildArgsGetChannelsTests(TestCase):
                 args = _build_args("crawl_channels", FakePost({field: "1"}))
                 self.assertIn(expected_flag, args)
 
-    def test_do_refresh_without_value(self):
-        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_value": ""}))
+    def test_refresh_messages_stats_without_value(self):
+        args = _build_args("crawl_channels", FakePost({"refresh_messages_stats": "1", "refresh_value": ""}))
         self.assertIn("--refresh-messages-stats", args)
         self.assertNotIn("200", args)
 
-    def test_do_refresh_with_limit_value(self):
-        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_limit": "200"}))
+    def test_refresh_messages_stats_with_limit_value(self):
+        args = _build_args("crawl_channels", FakePost({"refresh_messages_stats": "1", "refresh_limit": "200"}))
         # Every crawl_channels toggle is a bool_explicit spec, so the empty
         # checkboxes emit a constellation of --no-<flag> entries. Filter them
         # out to assert on just the refresh-related portion.
         non_no = [a for a in args if not a.startswith("--no-")]
         self.assertEqual(non_no, ["--refresh-messages-stats", "--refresh-limit", "200"])
 
-    def test_do_refresh_with_date_value(self):
-        args = _build_args("crawl_channels", FakePost({"do_refresh": "1", "refresh_from": "2024-01-01"}))
+    def test_refresh_messages_stats_with_date_value(self):
+        args = _build_args("crawl_channels", FakePost({"refresh_messages_stats": "1", "refresh_from": "2024-01-01"}))
         self.assertIn("2024-01-01", args)
 
     def test_ids_appended(self):
@@ -606,17 +606,40 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 class BuildArgsExportNetworkTests(TestCase):
     def test_export_name_appended(self):
-        # No robustness strategy ticked ⇒ --no-robustness trails; ``community_palette_reversed``
-        # is a ``bool_explicit`` spec so an explicit --no-community-palette-reversed slips in
-        # whenever the form omits the checkbox.
+        # Every output toggle is bool_explicit, so an empty form emits the matching
+        # --no-X for each one (graph-2d, graph-3d, html, xlsx, gexf, graphml, csv,
+        # seo, vertical-layout, draw-dead-leaves, community-palette-reversed,
+        # self-references, consensus-matrix, structural-similarity, include-lost,
+        # include-private) plus --no-robustness.  This is the desired behaviour —
+        # explicit "off" beats a saved-true default.
         args = _build_args("structural_analysis", FakePost({"export_name": "baseline", "include_mentions": "on"}))
-        self.assertEqual(args, ["--name", "baseline", "--no-community-palette-reversed", "--no-robustness"])
+        self.assertEqual(args[:2], ["--name", "baseline"])
+        for negation in (
+            "--no-graph-2d",
+            "--no-graph-3d",
+            "--no-html",
+            "--no-xlsx",
+            "--no-gexf",
+            "--no-graphml",
+            "--no-csv",
+            "--no-seo",
+            "--no-vertical-layout",
+            "--no-draw-dead-leaves",
+            "--no-community-palette-reversed",
+            "--no-self-references",
+            "--no-consensus-matrix",
+            "--no-structural-similarity",
+            "--no-include-lost",
+            "--no-include-private",
+            "--no-robustness",
+        ):
+            self.assertIn(negation, args)
 
     def test_boolean_output_flags(self):
         for field, flag in [
-            ("graph", "--2dgraph"),
+            ("graph", "--graph-2d"),
             ("html", "--html"),
-            ("graph_3d", "--3dgraph"),
+            ("graph_3d", "--graph-3d"),
             ("xlsx", "--xlsx"),
             ("gexf", "--gexf"),
             ("graphml", "--graphml"),
@@ -662,13 +685,16 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertEqual(args[idx + 1], "year")
 
     def test_empty_strings_not_added(self):
-        # All value-kind fields blank ⇒ only the implicit --no-community-palette-reversed
-        # (from the bool_explicit spec) and --no-robustness survive.
+        # Value-kind blanks (export_name, fa2_iterations, startdate) are dropped;
+        # bool_explicit specs still emit --no-X for every unchecked toggle.
         post = FakePost({"export_name": "", "fa2_iterations": "", "startdate": "", "include_mentions": "on"})
-        self.assertEqual(
-            _build_args("structural_analysis", post),
-            ["--no-community-palette-reversed", "--no-robustness"],
-        )
+        args = _build_args("structural_analysis", post)
+        self.assertNotIn("--name", args)
+        self.assertNotIn("--fa2-iterations", args)
+        self.assertNotIn("--startdate", args)
+        # All bool_explicit defaults emit --no-X when the box is unchecked.
+        for negation in ("--no-graph-2d", "--no-html", "--no-community-palette-reversed", "--no-robustness"):
+            self.assertIn(negation, args)
 
 
 # ---------------------------------------------------------------------------
@@ -703,7 +729,7 @@ class BuildArgsStructuralRobustnessTests(TestCase):
     # In the Operations panel, the robustness master switch is implicit: at least
     # one strategy ticked ⇒ --robustness, none ticked ⇒ --no-robustness. The CLI
     # --robustness/--no-robustness pair (BooleanOptionalAction) lets the UI fully
-    # override the robustness.enabled default in configuration/.operations-structural.
+    # override the SA_ROBUSTNESS setting (derived from bool(strategies)).
 
     def test_empty_post_emits_no_robustness(self) -> None:
         args = _build_args("structural_analysis", FakePost())
@@ -917,9 +943,11 @@ class DefaultsViewTests(TestCase):
             self.assertIn('bridging_basis = "LEIDEN"', content)
             self.assertIn('timeline_step = "year"', content)
             self.assertIn('strategies = ["pagerank", "random"]', content)
-            self.assertIn("enabled = true", content)
+            self.assertNotIn("enabled", content.split("[robustness]", 1)[-1].split("[", 1)[0])
 
-    def test_robustness_enabled_false_when_no_strategies(self) -> None:
+    def test_robustness_strategies_empty_when_none_ticked(self) -> None:
+        # `robustness.enabled` is no longer written — SA_ROBUSTNESS is derived
+        # from bool(strategies) in settings.py.
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
@@ -927,7 +955,7 @@ class DefaultsViewTests(TestCase):
             )
             self.assertEqual(resp.status_code, 200)
             content = _saved_file_content(tmp, ".operations-structural")
-            self.assertIn("enabled = false", content)
+            self.assertNotIn("enabled =", content.split("[robustness]", 1)[-1].split("[", 1)[0])
             self.assertIn("strategies = []", content)
 
     def test_blank_int_falls_back_to_default(self) -> None:
@@ -999,6 +1027,50 @@ class DefaultsViewTests(TestCase):
             )
             self.assertEqual(resp.status_code, 400)
             self.assertIn("Unknown palette", resp.json()["error"])
+
+    def test_save_rejects_bridging_basis_not_in_strategies(self) -> None:
+        # BRIDGING(LEIDEN) is configured but community_strategies doesn't include LEIDEN —
+        # the BRIDGING measure would point at a partition that's never computed.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "bad-bridging",
+                    "measures": ["BRIDGING"],
+                    "bridging_basis": "LEIDEN",
+                    "community_strategies": ["INFOMAP"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("BRIDGING basis", resp.json()["error"])
+
+    def test_save_rejects_default_bridging_basis_without_leiden_directed(self) -> None:
+        # BRIDGING in measures with no explicit basis defaults to LEIDEN_DIRECTED —
+        # that strategy must still be in community_strategies.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "implicit-bridging",
+                    "measures": ["BRIDGING"],
+                    "community_strategies": ["INFOMAP"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("LEIDEN_DIRECTED", resp.json()["error"])
+
+    def test_save_accepts_bridging_when_basis_in_strategies(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "good-bridging",
+                    "measures": ["BRIDGING"],
+                    "bridging_basis": "LEIDEN",
+                    "community_strategies": ["LEIDEN", "INFOMAP"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
 
     def test_list_returns_base_when_only_baseline_present(self) -> None:
         from webapp_engine.config import write_baseline

@@ -6,7 +6,7 @@
 [meta]
 title = "Pulpit default"
 pulpit_version = "0.21dev"
-generated_at = "2026-05-21T05:21:28Z"
+generated_at = "2026-05-21T07:29:21Z"
 
 [graph]
 reversed_edges = true
@@ -17,18 +17,18 @@ output_dir = "graph"
 
 [outputs]
 graph = true
-graph_3d = true
+graph_3d = false
 html = true
-xlsx = true
-gexf = true
-graphml = true
-csv = true
+xlsx = false
+gexf = false
+graphml = false
+csv = false
 seo = false
 vertical_layout = false
 structural_similarity = false
 consensus_matrix = false
 draw_dead_leaves = false
-timeline_step = "year"
+timeline_step = "none"
 
 [edges]
 weight_strategy = "PARTIAL_REFERENCES"
@@ -50,8 +50,8 @@ spreading_runs = 200
 diffusion_window = 30
 
 [layouts]
-two_d = ["FA2", "CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMAP", "HYPERBOLIC"]
-three_d = ["FA2", "SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"]
+layouts_2d = ["FA2", "CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMAP", "HYPERBOLIC"]
+layouts_3d = ["FA2", "SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"]
 
 [measures]
 selected = ["PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY", "OUTDEGCENTRALITY", "HARMONICCENTRALITY", "CLOSENESS", "SPREADING", "BRIDGING", "BURTCONSTRAINT", "EGODENSITY", "LOCALCLUSTERING", "AMPLIFICATION", "CONTENTORIGINALITY", "DIFFUSIONLAG"]
@@ -64,14 +64,13 @@ strategies = ["ORGANIZATION", "LEIDEN_DIRECTED", "INFOMAP", "INFOMAP_MEMORY", "M
 groups = ["SIZE", "PATHS", "COHESION", "COMPONENTS", "DEGCORRELATION", "CENTRALIZATION", "CONTENT"]
 
 [vacancy]
-measures = ["AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "CASCADE_OVERLAP", "PPR", "TEMPORAL"]
+measures = ["STRUCTURAL_EQUIV", "BROKERAGE"]
 months_before = 12
 months_after = 24
 max_candidates = 30
 ppr_alpha = 0.85
 
 [robustness]
-enabled = true
 alpha = 0.05
 strategies = ["random", "pagerank", "betweenness"]
 runs = 100

@@ -235,58 +235,63 @@ class Command(BaseCommand):
     help = "Build the network graph, compute measures, detect communities, and export output files."
 
     def add_arguments(self, parser: Any) -> None:
+        # Every output toggle uses BooleanOptionalAction (default=None) so the
+        # Operations panel's unchecked boxes can emit --no-X and beat a saved-true
+        # default. Same shape as the crawl_channels toggles (commit 5737cac).
         parser.add_argument(
-            "--2dgraph",
+            "--graph-2d",
+            "--2dgraph",  # backward-compat alias for the original cryptic name
             dest="graph",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Generate the 2D interactive graph (graph.html and layout computation).",
         )
         parser.add_argument(
-            "--3dgraph",
+            "--graph-3d",
+            "--3dgraph",  # backward-compat alias
             dest="graph_3d",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Also produce a 3D graph (graph3d.html). Slower on large graphs.",
         )
         parser.add_argument(
             "--html",
             dest="html",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Generate HTML table output (channel_table.html, network_table.html, community_table.html).",
         )
         parser.add_argument(
             "--xlsx",
             dest="xlsx",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Also produce Excel spreadsheet output (channel_table.xlsx, network_table.xlsx, community_table.xlsx).",
         )
         parser.add_argument(
             "--gexf",
             dest="gexf",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Also write network.gexf with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
             "--graphml",
             dest="graphml",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Also write network.graphml with all computed measures embedded as node attributes.",
         )
         parser.add_argument(
             "--csv",
             dest="csv",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Also write nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions).",
         )
         parser.add_argument(
             "--seo",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Optimise the output mini-site for search engine discovery: sets indexable robots tags "
@@ -321,7 +326,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--vertical-layout",
             dest="vertical_layout",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Orient the graph vertically. By default the layout is horizontal. "
@@ -329,7 +334,8 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--2dlayouts",
+            "--layouts-2d",
+            "--2dlayouts",  # backward-compat alias
             dest="layouts_2d",
             default=None,
             metavar="LAYOUTS",
@@ -337,11 +343,12 @@ class Command(BaseCommand):
                 "Comma-separated list of 2D layout algorithms to compute. "
                 "When omitted, ForceAtlas2 (FA2) is computed as the only layout. "
                 "The browser graph viewer offers a dropdown to switch between them at viewing time. "
-                "Available: FA2, CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL. Requires --2dgraph."
+                "Available: FA2, CIRCULAR, KAMADA_KAWAI, COMMUNITY_SHELL, TSNE, UMAP, HYPERBOLIC, ALL. Requires --graph-2d."
             ),
         )
         parser.add_argument(
-            "--3dlayouts",
+            "--layouts-3d",
+            "--3dlayouts",  # backward-compat alias
             dest="layouts_3d",
             default=None,
             metavar="LAYOUTS",
@@ -349,7 +356,7 @@ class Command(BaseCommand):
                 "Comma-separated list of 3D layout algorithms to compute. "
                 "When omitted, ForceAtlas2 (FA2) is computed as the only layout. "
                 "The 3D graph viewer offers a dropdown to switch between them at viewing time. "
-                "Available: FA2, SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --3dgraph."
+                "Available: FA2, SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --graph-3d."
             ),
         )
         parser.add_argument(
@@ -454,7 +461,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--draw-dead-leaves",
             dest="draw_dead_leaves",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Include dead leaves in the graph: out-of-target channels that an in-target channel has "
@@ -534,7 +541,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--consensus-matrix",
             dest="consensus_matrix",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Generate a consensus matrix page (consensus_matrix.html) showing how consistently "
@@ -545,7 +552,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--structural-similarity",
             dest="structural_similarity",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help=(
                 "Generate a structural similarity matrix page (structural_similarity.html) showing "
@@ -590,14 +597,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--include-lost",
             dest="include_lost",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Include channels marked as lost in the graph (excluded by default).",
         )
         parser.add_argument(
             "--include-private",
             dest="include_private",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
             default=None,
             help="Include channels marked as private in the graph (excluded by default).",
         )

@@ -44,11 +44,11 @@ CRAWL_DEFAULTS: dict = {
         "get_new_messages": False,
         "fetch_replies": False,
         "refresh_messages_stats": False,
-        "fixholes": False,
+        "fix_holes": False,
         "fix_missing_media": False,
         "retry_lost_messages": False,
         "retry_references": False,
-        "force_retry_unresolved": False,
+        "force_retry_unresolved_references": False,
     },
     "degrees": {
         "in_degrees": False,
@@ -100,8 +100,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "diffusion_window": 30,
     },
     "layouts": {
-        "two_d": ["FA2"],
-        "three_d": ["FA2"],
+        "layouts_2d": ["FA2"],
+        "layouts_3d": ["FA2"],
     },
     "measures": {
         "selected": ["PAGERANK"],
@@ -121,9 +121,14 @@ STRUCTURAL_DEFAULTS: dict = {
         "ppr_alpha": 0.85,
     },
     "robustness": {
-        "enabled": False,
+        # `enabled` is intentionally absent — it is derived from `bool(strategies)`
+        # in settings.py. A separate file-level switch would drift from the
+        # strategy list, since the Operations panel has no separate enable knob.
+        # `strategies` defaults to [] so the built-in defaults represent a clean
+        # "nothing configured" baseline (consistent with outputs.* / scope.* defaults).
+        # The bundled .operations-structural baseline supplies an opinionated list.
         "alpha": 0.05,
-        "strategies": ["RANDOM", "IN_STRENGTH", "OUT_STRENGTH", "PAGERANK", "BETWEENNESS"],
+        "strategies": [],
         "runs": 100,
         "null": 20,
         "seed": 42,

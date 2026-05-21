@@ -2,7 +2,7 @@
 
 A graph layout is an algorithm that assigns a spatial position to every channel node so that the resulting picture carries analytical meaning. Two channels placed close together in the layout are structurally similar; two channels placed far apart are structurally distant — according to whatever definition of distance the algorithm uses.
 
-Layouts to compute are selected with `--2dlayouts` (2D) and `--3dlayouts` (3D). When neither flag is passed, only **ForceAtlas2** (FA2) is computed. Pass a comma-separated list to compute multiple layouts; they become selectable from a dropdown in the graph viewer with smooth animated transitions — no re-export required.
+Layouts to compute are selected with `--layouts-2d` (2D) and `--layouts-3d` (3D). When neither flag is passed, only **ForceAtlas2** (FA2) is computed. Pass a comma-separated list to compute multiple layouts; they become selectable from a dropdown in the graph viewer with smooth animated transitions — no re-export required.
 
 Every layout answers a different question about the same network. Switching between them on the same graph is a rapid way to triangulate structure: patterns that survive across multiple layouts are more likely to be genuine, while patterns that appear only in one layout may be artefacts of that layout's assumptions.
 
@@ -34,7 +34,7 @@ Pulpit uses **log-linear mode** (`linLogMode`), which replaces the usual linear 
 
 **Reference:** Jacomy, M., Venturini, T., Heymann, S. & Bastian, M. (2014) "ForceAtlas2, a Continuous Graph Layout Algorithm for Handy Network Visualization Designed for the Gephi Software." *PLOS ONE* 9(6). [doi:10.1371/journal.pone.0098679](https://doi.org/10.1371/journal.pone.0098679)
 
-**In practice:** FA2 is the most interpretable general-purpose layout for political Telegram networks. Communities tend to appear as convex spatial blobs, hub channels sit near the dense centres of their clusters, and channels that bridge communities appear between those blobs. The layout is not the same across re-exports — it converges to a similar structure but can rotate or mirror between runs. Use `--3dlayouts FA2` to include it in the 3D viewer's dropdown.
+**In practice:** FA2 is the most interpretable general-purpose layout for political Telegram networks. Communities tend to appear as convex spatial blobs, hub channels sit near the dense centres of their clusters, and channels that bridge communities appear between those blobs. The layout is not the same across re-exports — it converges to a similar structure but can rotate or mirror between runs. Use `--layouts-3d FA2` to include it in the 3D viewer's dropdown.
 
 **Example.** A network of ~600 channels produces five FA2 clusters that closely match the five organizations assigned in the admin interface, with two small "bridge" channels sitting in the white space between the far-right and mainstream-right blobs — channels that the algorithm, without any organizational information, identifies as inter-community connectors.
 

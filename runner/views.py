@@ -78,11 +78,11 @@ class OperationsView(View):
             "CRAWL_GET_NEW_MESSAGES": settings.CRAWL_GET_NEW_MESSAGES,
             "CRAWL_FETCH_REPLIES": settings.CRAWL_FETCH_REPLIES,
             "CRAWL_REFRESH_MESSAGES_STATS": settings.CRAWL_REFRESH_MESSAGES_STATS,
-            "CRAWL_FIXHOLES": settings.CRAWL_FIXHOLES,
+            "CRAWL_FIX_HOLES": settings.CRAWL_FIX_HOLES,
             "CRAWL_FIX_MISSING_MEDIA": settings.CRAWL_FIX_MISSING_MEDIA,
             "CRAWL_RETRY_LOST_MESSAGES": settings.CRAWL_RETRY_LOST_MESSAGES,
             "CRAWL_RETRY_REFERENCES": settings.CRAWL_RETRY_REFERENCES,
-            "CRAWL_FORCE_RETRY_UNRESOLVED": settings.CRAWL_FORCE_RETRY_UNRESOLVED,
+            "CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES": settings.CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES,
             "CRAWL_DOWNLOAD_IMAGES": settings.TELEGRAM_CRAWLER_DOWNLOAD_IMAGES,
             "CRAWL_DOWNLOAD_VIDEO": settings.TELEGRAM_CRAWLER_DOWNLOAD_VIDEO,
             "CRAWL_DOWNLOAD_AUDIO": settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO,
@@ -183,6 +183,10 @@ class RunTaskView(View):
                 word = " ".join(line.split()).lower()
                 if word:
                     SearchTerm.objects.get_or_create(word=word)
+        try:
+            _validate_post_constraints(task, request.POST)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
         args = _build_args(task, request.POST)
         try:
             tasks.launch(task, args)
@@ -432,10 +436,10 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         # — see measures_with_bridging above).  Bare bridging falls through to the
         # backend default (leiden_directed).
         #
-        # The strategy list also doubles as the master switch: at least one strategy
+        # The strategy list doubles as the master switch: at least one strategy
         # checked ⇒ pass --robustness, none checked ⇒ pass --no-robustness
-        # (BooleanOptionalAction) so the UI's "off" intent overrides any
-        # robustness.enabled=true default in configuration/.operations-structural.
+        # (BooleanOptionalAction). The .operations-structural file has no separate
+        # `enabled` key — SA_ROBUSTNESS is derived from bool(strategies) in settings.
         _, flag = spec
         chosen = post.getlist("robustness_strategies")
         bridging_basis = (post.get("bridging_basis") or "").strip().lower()
@@ -477,21 +481,21 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
             "--no-update-type-excluded-info",
         ),
         ("bool_explicit", "mine_about_texts", "--mine-about-texts", "--no-mine-about-texts"),
-        (
-            "bool_explicit",
-            "fetch_recommended_channels",
-            "--fetch-recommended-channels",
-            "--no-fetch-recommended-channels",
-        ),
+        ("bool_explicit", "fetch_recommended", "--fetch-recommended", "--no-fetch-recommended"),
         ("bool_explicit", "retry_lost_and_private", "--retry-lost-and-private", "--no-retry-lost-and-private"),
         # Messages
         ("bool_explicit", "get_new_messages", "--get-new-messages", "--no-get-new-messages"),
         ("bool_explicit", "fetch_replies", "--fetch-replies", "--no-fetch-replies"),
-        ("bool_explicit", "do_refresh", "--refresh-messages-stats", "--no-refresh-messages-stats"),
+        (
+            "bool_explicit",
+            "refresh_messages_stats",
+            "--refresh-messages-stats",
+            "--no-refresh-messages-stats",
+        ),
         ("value", "refresh_limit", "--refresh-limit"),
         ("value", "refresh_from", "--refresh-from"),
         ("value", "refresh_to", "--refresh-to"),
-        ("bool_explicit", "fix_holes", "--fixholes", "--no-fixholes"),
+        ("bool_explicit", "fix_holes", "--fix-holes", "--no-fix-holes"),
         ("bool_explicit", "fix_missing_media", "--fix-missing-media", "--no-fix-missing-media"),
         ("bool_explicit", "retry_lost_messages", "--retry-lost-messages", "--no-retry-lost-messages"),
         ("bool_explicit", "retry_references", "--retry-references", "--no-retry-references"),
@@ -521,21 +525,24 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
     ],
     "structural_analysis": [
         ("value", "export_name", "--name"),
-        ("flag", "graph_3d", "--3dgraph"),
-        ("flag", "xlsx", "--xlsx"),
-        ("flag", "gexf", "--gexf"),
-        ("flag", "graphml", "--graphml"),
-        ("flag", "csv", "--csv"),
-        ("flag", "seo", "--seo"),
-        ("flag", "graph", "--2dgraph"),
-        ("flag", "html", "--html"),
-        ("flag", "vertical_layout", "--vertical-layout"),
-        ("csv_unique", "layouts_2d", "--2dlayouts"),
-        ("csv_unique", "layouts_3d", "--3dlayouts"),
+        # Output toggles: bool_explicit (paired with BooleanOptionalAction in argparse)
+        # so unchecking the box in the panel emits --no-X and beats the saved-true
+        # default. Same fix as commit 5737cac applied to the crawl side.
+        ("bool_explicit", "graph", "--graph-2d", "--no-graph-2d"),
+        ("bool_explicit", "graph_3d", "--graph-3d", "--no-graph-3d"),
+        ("bool_explicit", "html", "--html", "--no-html"),
+        ("bool_explicit", "xlsx", "--xlsx", "--no-xlsx"),
+        ("bool_explicit", "gexf", "--gexf", "--no-gexf"),
+        ("bool_explicit", "graphml", "--graphml", "--no-graphml"),
+        ("bool_explicit", "csv", "--csv", "--no-csv"),
+        ("bool_explicit", "seo", "--seo", "--no-seo"),
+        ("bool_explicit", "vertical_layout", "--vertical-layout", "--no-vertical-layout"),
+        ("csv_unique", "layouts_2d", "--layouts-2d"),
+        ("csv_unique", "layouts_3d", "--layouts-3d"),
         ("value", "fa2_iterations", "--fa2-iterations"),
         ("value", "startdate", "--startdate"),
         ("value", "enddate", "--enddate"),
-        ("flag", "draw_dead_leaves", "--draw-dead-leaves"),
+        ("bool_explicit", "draw_dead_leaves", "--draw-dead-leaves", "--no-draw-dead-leaves"),
         ("value", "dead_leaves_color", "--dead-leaves-color"),
         ("value", "community_palette", "--community-palette"),
         (
@@ -548,21 +555,21 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("csv", "community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
         ("inverted_flag", "include_mentions", "--no-mentions"),
-        ("flag", "include_self_references", "--self-references"),
+        ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
         ("value", "edge_weight_strategy", "--edge-weight-strategy"),
         ("value", "recency_weights", "--recency-weights"),
         ("value", "spreading_runs", "--spreading-runs"),
         ("value", "diffusion_window", "--diffusion-window"),
-        ("flag", "consensus_matrix", "--consensus-matrix"),
-        ("flag", "structural_similarity", "--structural-similarity"),
+        ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
+        ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
         ("value", "community_distribution_threshold", "--community-distribution-threshold"),
         ("value", "leiden_coarse_resolution", "--leiden-coarse-resolution"),
         ("value", "leiden_fine_resolution", "--leiden-fine-resolution"),
         ("value", "mcl_inflation", "--mcl-inflation"),
         ("channel_types", "--channel-types"),
         ("csv", "channel_groups", "--channel-groups"),
-        ("flag", "include_lost", "--include-lost"),
-        ("flag", "include_private", "--include-private"),
+        ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
+        ("bool_explicit", "include_private", "--include-private", "--no-include-private"),
         ("const", "timeline_step", "--timeline-step", "year"),
         ("csv", "vacancy_measures", "--vacancy-measures"),
         ("value", "vacancy_months_before", "--vacancy-months-before"),
@@ -604,24 +611,22 @@ def _build_args(task: str, post: Any) -> list[str]:
 #   "int" / "float"            cast; empty → fall back to defaults.py value
 #   "bool_to_enum:<off>,<on>"  checkbox → on-string or off-string
 #   "channel_types_triplet"    three checkboxes (CHANNEL/GROUP/USER) → list
-#   "list_with_enabled"        list goes to robustness.strategies AND sets
-#                              robustness.enabled = bool(list)
 
 TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
     "crawl_channels": [
         ("get_channels_info", "channels.get_channels_info", "bool"),
         ("update_type_excluded_info", "channels.update_type_excluded_info", "bool"),
         ("mine_about_texts", "channels.mine_about_texts", "bool"),
-        ("fetch_recommended_channels", "channels.fetch_recommended", "bool"),
+        ("fetch_recommended", "channels.fetch_recommended", "bool"),
         ("retry_lost_and_private", "channels.retry_lost_and_private", "bool"),
         ("get_new_messages", "messages.get_new_messages", "bool"),
         ("fetch_replies", "messages.fetch_replies", "bool"),
-        ("do_refresh", "messages.refresh_messages_stats", "bool"),
-        ("fix_holes", "messages.fixholes", "bool"),
+        ("refresh_messages_stats", "messages.refresh_messages_stats", "bool"),
+        ("fix_holes", "messages.fix_holes", "bool"),
         ("fix_missing_media", "messages.fix_missing_media", "bool"),
         ("retry_lost_messages", "messages.retry_lost_messages", "bool"),
         ("retry_references", "messages.retry_references", "bool"),
-        ("force_retry_unresolved_references", "messages.force_retry_unresolved", "bool"),
+        ("force_retry_unresolved_references", "messages.force_retry_unresolved_references", "bool"),
         ("in_degrees", "degrees.in_degrees", "bool"),
         ("out_degrees", "degrees.out_degrees", "bool"),
         ("download_images", "downloads.images", "bool"),
@@ -665,8 +670,8 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("mcl_inflation", "computation.mcl_inflation", "float"),
         ("spreading_runs", "computation.spreading_runs", "int"),
         ("diffusion_window", "computation.diffusion_window", "int"),
-        ("layouts_2d", "layouts.two_d", "list"),
-        ("layouts_3d", "layouts.three_d", "list"),
+        ("layouts_2d", "layouts.layouts_2d", "list"),
+        ("layouts_3d", "layouts.layouts_3d", "list"),
         ("measures", "measures.selected", "list"),
         ("bridging_basis", "measures.bridging_basis", "value_optional"),
         ("community_strategies", "communities.strategies", "list"),
@@ -677,7 +682,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("vacancy_max_candidates", "vacancy.max_candidates", "int"),
         ("vacancy_ppr_alpha", "vacancy.ppr_alpha", "float"),
         ("robustness_alpha", "robustness.alpha", "float"),
-        ("robustness_strategies", "robustness.strategies", "list_with_enabled"),
+        ("robustness_strategies", "robustness.strategies", "list"),
         ("robustness_runs", "robustness.runs", "int"),
         ("robustness_null", "robustness.null", "int"),
         ("robustness_seed", "robustness.seed", "int"),
@@ -701,6 +706,36 @@ def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
 
 
 _FORM_PAYLOAD_MISSING = object()
+
+
+def _validate_post_constraints(task: str, post: Any) -> None:
+    """Cross-field validation shared by Save and Run.
+
+    Raises ValueError on inconsistent input. Currently enforced:
+
+    * structural_analysis: when BRIDGING is among ``measures`` (or "bridging"
+      is among ``robustness_strategies``), the effective bridging basis —
+      either the explicit ``bridging_basis`` field or the default
+      ``LEIDEN_DIRECTED`` — must be one of the selected ``community_strategies``.
+      Otherwise the BRIDGING measure points at a community partition that
+      wasn't computed and the result is silently meaningless.
+    """
+    if task != "structural_analysis":
+        return
+    if not hasattr(post, "getlist"):
+        return
+    measures = post.getlist("measures") or []
+    robust = post.getlist("robustness_strategies") or []
+    strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
+    needs_bridging = "BRIDGING" in measures or "bridging" in {r.lower() for r in robust}
+    if not needs_bridging:
+        return
+    basis = (post.get("bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
+    if basis not in strategies:
+        present = ", ".join(sorted(strategies)) or "none selected"
+        raise ValueError(
+            f"BRIDGING basis '{basis}' must be one of the selected community strategies (currently: {present})"
+        )
 
 
 def _read_nested(d: Any, dotted_path: str) -> Any:
@@ -739,6 +774,7 @@ def _toml_to_form_payload(task: str, merged: dict) -> dict:
 
 
 def _form_to_toml_payload(task: str, post: Any) -> dict:
+    _validate_post_constraints(task, post)
     defaults = CRAWL_DEFAULTS if task == "crawl_channels" else STRUCTURAL_DEFAULTS
     payload: dict = {}
     for post_key, toml_path, kind in TASK_DEFAULT_SPECS[task]:
@@ -791,11 +827,6 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
         elif kind.startswith("bool_to_enum:"):
             off, on = kind.split(":", 1)[1].split(",", 1)
             value = on if post.get(post_key) else off
-        elif kind == "list_with_enabled":
-            chosen = list(post.getlist(post_key))
-            _set_nested(payload, toml_path, chosen)
-            _set_nested(payload, "robustness.enabled", bool(chosen))
-            continue
         else:
             raise ValueError(f"Unknown default-spec kind: {kind!r}")
         _set_nested(payload, toml_path, value)

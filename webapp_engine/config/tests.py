@@ -65,7 +65,10 @@ class HermeticLoadTests(TestCase):
     def test_structural_hermetic_returns_defaults(self) -> None:
         ns = load_structural_settings(hermetic=True)
         self.assertEqual(ns.measures.selected, STRUCTURAL_DEFAULTS["measures"]["selected"])
-        self.assertEqual(ns.robustness.enabled, STRUCTURAL_DEFAULTS["robustness"]["enabled"])
+        # `robustness.enabled` is intentionally absent from STRUCTURAL_DEFAULTS;
+        # SA_ROBUSTNESS is derived from bool(strategies) in settings.py.
+        self.assertNotIn("enabled", STRUCTURAL_DEFAULTS["robustness"])
+        self.assertEqual(ns.robustness.strategies, STRUCTURAL_DEFAULTS["robustness"]["strategies"])
 
 
 class MissingFileFallbackTests(TestCase):
@@ -107,7 +110,7 @@ class BaselineRoundTripTests(TestCase):
                 {
                     "outputs": {"graph": True, "html": True},
                     "measures": {"selected": ["PAGERANK", "BETWEENNESS"]},
-                    "robustness": {"enabled": True, "strategies": ["pagerank"]},
+                    "robustness": {"strategies": ["pagerank"]},
                 },
             )
             self.assertTrue((tmp / ".operations-structural").exists())
@@ -116,7 +119,6 @@ class BaselineRoundTripTests(TestCase):
             self.assertEqual(ns.outputs.html, True)
             self.assertEqual(ns.outputs.xlsx, False)
             self.assertEqual(ns.measures.selected, ["PAGERANK", "BETWEENNESS"])
-            self.assertEqual(ns.robustness.enabled, True)
             self.assertEqual(ns.robustness.strategies, ["pagerank"])
             self.assertEqual(ns.communities.strategies, ["ORGANIZATION"])
 

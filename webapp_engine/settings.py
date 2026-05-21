@@ -359,11 +359,11 @@ CRAWL_RETRY_LOST_AND_PRIVATE = _crawl.channels.retry_lost_and_private
 CRAWL_GET_NEW_MESSAGES = _crawl.messages.get_new_messages
 CRAWL_FETCH_REPLIES = _crawl.messages.fetch_replies
 CRAWL_REFRESH_MESSAGES_STATS = _crawl.messages.refresh_messages_stats
-CRAWL_FIXHOLES = _crawl.messages.fixholes
+CRAWL_FIX_HOLES = _crawl.messages.fix_holes
 CRAWL_FIX_MISSING_MEDIA = _crawl.messages.fix_missing_media
 CRAWL_RETRY_LOST_MESSAGES = _crawl.messages.retry_lost_messages
 CRAWL_RETRY_REFERENCES = _crawl.messages.retry_references
-CRAWL_FORCE_RETRY_UNRESOLVED = _crawl.messages.force_retry_unresolved
+CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES = _crawl.messages.force_retry_unresolved_references
 CRAWL_IN_DEGREES = _crawl.degrees.in_degrees
 CRAWL_OUT_DEGREES = _crawl.degrees.out_degrees
 
@@ -379,8 +379,8 @@ SA_OUTPUT_CSV = _structural.outputs.csv
 SA_SEO = _structural.outputs.seo
 SA_VERTICAL_LAYOUT = _structural.outputs.vertical_layout
 SA_FA2_ITERATIONS = _structural.computation.fa2_iterations
-SA_LAYOUTS_2D = ",".join(_structural.layouts.two_d)
-SA_LAYOUTS_3D = ",".join(_structural.layouts.three_d)
+SA_LAYOUTS_2D = ",".join(_structural.layouts.layouts_2d)
+SA_LAYOUTS_3D = ",".join(_structural.layouts.layouts_3d)
 SA_MEASURES = ",".join(_structural.measures.selected)
 SA_BRIDGING_BASIS = _structural.measures.bridging_basis
 SA_COMMUNITY_STRATEGIES = ",".join(_structural.communities.strategies)
@@ -406,7 +406,10 @@ SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before
 SA_VACANCY_MONTHS_AFTER = _structural.vacancy.months_after
 SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
 SA_VACANCY_PPR_ALPHA = _structural.vacancy.ppr_alpha
-SA_ROBUSTNESS = _structural.robustness.enabled
+# Derived: robustness runs iff at least one strategy is configured. A separate
+# file-level "enabled" key would drift from the strategy list (no separate
+# enable knob in the Operations panel).
+SA_ROBUSTNESS = bool(_structural.robustness.strategies)
 SA_ROBUSTNESS_ALPHA = _structural.robustness.alpha
 SA_ROBUSTNESS_STRATEGIES = ",".join(_structural.robustness.strategies)
 SA_ROBUSTNESS_RUNS = _structural.robustness.runs
