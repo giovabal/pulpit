@@ -17,5 +17,10 @@ urlpatterns = [
         views.SaveDefaultsView.as_view(),
         name="operations-save-defaults",
     ),
+    path(
+        "load-defaults/<str:task>/",
+        views.LoadDefaultsView.as_view(),
+        name="operations-load-defaults",
+    ),
     path("palette/<str:name>/", views.PaletteColorsView.as_view(), name="operations-palette"),
 ]

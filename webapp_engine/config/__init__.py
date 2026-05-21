@@ -10,7 +10,9 @@ needing to exist.
 from .defaults import CRAWL_DEFAULTS, STRUCTURAL_DEFAULTS
 from .loader import (
     get_app_version,
+    load_crawl_payload,
     load_crawl_settings,
+    load_structural_payload,
     load_structural_settings,
     optional_int,
     read_pulpit_version,
@@ -45,7 +47,9 @@ __all__ = [
     "STRUCTURAL_SECTIONS",
     "SYSTEM_PATH",
     "get_app_version",
+    "load_crawl_payload",
     "load_crawl_settings",
+    "load_structural_payload",
     "load_structural_settings",
     "optional_int",
     "read_pulpit_version",
