@@ -972,6 +972,14 @@
                     data-target-file="configuration/.operations-{% if task.name == 'crawl_channels' %}crawl{% else %}structural{% endif %}">
               <i class="bi bi-bookmark-fill me-1" aria-hidden="true"></i>Save as defaults
             </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary load-defaults-btn"
+                    data-task="{{ task.name }}"
+                    data-target-file="configuration/.operations-{% if task.name == 'crawl_channels' %}crawl{% else %}structural{% endif %}"
+                    {% if task.name == "crawl_channels" and not crawl_defaults_present %}disabled title="No saved defaults file"{% endif %}
+                    {% if task.name == "structural_analysis" and not structural_defaults_present %}disabled title="No saved defaults file"{% endif %}>
+              <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Load defaults
+            </button>
             <span class="save-defaults-status" id="save-defaults-status-{{ task.name }}" aria-live="polite"></span>
           </div>
           {% endif %}
@@ -1043,6 +1051,28 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary btn-sm" id="save-defaults-confirm">Save defaults</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="load-defaults-modal" tabindex="-1"
+     aria-labelledby="load-defaults-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="load-defaults-modal-label">Load saved defaults</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">The current form values will be replaced with the saved defaults from
+          <code id="load-defaults-target"></code>.</p>
+        <p class="mb-0 small text-muted">Fields not covered by the saved-defaults file (e.g. export name,
+          date filters, extra search terms) are left unchanged.</p>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="load-defaults-confirm">Load defaults</button>
       </div>
     </div>
   </div>
@@ -1886,6 +1916,12 @@ function showToast(msg, type) {
         .then(function () {
           saveDefaultsModal.hide();
           showToast('Saved defaults for ' + task + '.');
+          // After a successful save, the "Load defaults" button can be enabled
+          // even if the file was missing when the page rendered.
+          document.querySelectorAll('.load-defaults-btn[data-task="' + task + '"]').forEach(function (btn) {
+            btn.removeAttribute('disabled');
+            btn.removeAttribute('title');
+          });
         })
         .catch(function (err) {
           saveDefaultsModal.hide();
@@ -1893,6 +1929,83 @@ function showToast(msg, type) {
         })
         .finally(function () {
           saveDefaultsConfirmBtn.disabled = false;
+        });
+    });
+  }
+
+  // ── Load-defaults ────────────────────────────────────────────────────────
+  // Mirrors save-defaults: a shared confirmation modal, one click handler per
+  // ".load-defaults-btn", and a fetch to the load endpoint. The response is a
+  // flat {form_field_name: value} dict (see `_toml_to_form_payload` in
+  // runner/views.py); we apply each entry to the matching input(s) and
+  // dispatch a `change` event so dependent fieldsets re-evaluate their
+  // enabled/disabled state (e.g. graph_3d-gated 3D layouts).
+  var loadDefaultsModalEl = document.getElementById('load-defaults-modal');
+  if (loadDefaultsModalEl) {
+    var loadDefaultsModal = bootstrap.Modal.getOrCreateInstance(loadDefaultsModalEl);
+    var loadDefaultsConfirmBtn = document.getElementById('load-defaults-confirm');
+    var loadDefaultsPendingTask = null;
+
+    document.querySelectorAll('.load-defaults-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.hasAttribute('disabled')) return;
+        loadDefaultsPendingTask = btn.dataset.task;
+        document.getElementById('load-defaults-target').textContent = btn.dataset.targetFile;
+        loadDefaultsModal.show();
+      });
+    });
+
+    function applyLoadedDefaults(form, values) {
+      Object.keys(values).forEach(function (name) {
+        var value = values[name];
+        var els = form.querySelectorAll('[name="' + name + '"]');
+        if (!els.length) return;
+        if (Array.isArray(value)) {
+          var set = {};
+          value.forEach(function (v) { set[String(v).toUpperCase()] = true; });
+          els.forEach(function (el) {
+            el.checked = !!set[String(el.value).toUpperCase()];
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+        } else if (els.length === 1 && els[0].type === 'checkbox') {
+          els[0].checked = !!value;
+          els[0].dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (els[0].type === 'radio') {
+          els.forEach(function (el) {
+            if (String(el.value) === String(value)) {
+              el.checked = true;
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          });
+        } else {
+          els[0].value = value == null ? '' : value;
+          els[0].dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    }
+
+    loadDefaultsConfirmBtn.addEventListener('click', function () {
+      if (!loadDefaultsPendingTask) return;
+      var task = loadDefaultsPendingTask;
+      var form = document.getElementById('form-' + task);
+      loadDefaultsConfirmBtn.disabled = true;
+      fetch('/operations/load-defaults/' + task + '/')
+        .then(function (r) {
+          if (r.status === 404) throw new Error('No saved defaults file');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          applyLoadedDefaults(form, data.values || {});
+          loadDefaultsModal.hide();
+          showToast('Loaded defaults for ' + task + '.');
+        })
+        .catch(function (err) {
+          loadDefaultsModal.hide();
+          showToast('Failed to load defaults: ' + err.message, 'error');
+        })
+        .finally(function () {
+          loadDefaultsConfirmBtn.disabled = false;
         });
     });
   }

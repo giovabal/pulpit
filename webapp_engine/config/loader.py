@@ -63,12 +63,40 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
+def _load_payload(path: Path, defaults: dict) -> dict | None:
+    """Return the on-disk TOML deep-merged over defaults, or None if absent/malformed.
+
+    Distinct from `_load` because the Operations panel's "Load defaults" path needs
+    to surface "file not present" to the client, rather than silently substituting
+    built-in defaults.
+    """
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as fh:
+            parsed = tomllib.load(fh)
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        sys.stderr.write(f"[config] failed to parse {path}: {exc}\n")
+        return None
+    parsed.pop(PULPIT_VERSION_KEY, None)
+    parsed.pop(GENERATED_AT_KEY, None)
+    return _deep_merge(defaults, parsed)
+
+
 def load_crawl_settings(*, hermetic: bool = False) -> SimpleNamespace:
     return _load(CRAWL_PATH, CRAWL_DEFAULTS, hermetic=hermetic)
 
 
 def load_structural_settings(*, hermetic: bool = False) -> SimpleNamespace:
     return _load(STRUCTURAL_PATH, STRUCTURAL_DEFAULTS, hermetic=hermetic)
+
+
+def load_crawl_payload() -> dict | None:
+    return _load_payload(CRAWL_PATH, CRAWL_DEFAULTS)
+
+
+def load_structural_payload() -> dict | None:
+    return _load_payload(STRUCTURAL_PATH, STRUCTURAL_DEFAULTS)
 
 
 def read_pulpit_version(path: Path) -> str | None:

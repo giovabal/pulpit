@@ -20,7 +20,11 @@ from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
+    CRAWL_PATH,
     STRUCTURAL_DEFAULTS,
+    STRUCTURAL_PATH,
+    load_crawl_payload,
+    load_structural_payload,
     save_crawl_settings,
     save_structural_settings,
 )
@@ -166,6 +170,8 @@ class OperationsView(View):
                 ),
                 "palette_names": palette_utils.list_palette_names(),
                 "ad": ad,
+                "crawl_defaults_present": CRAWL_PATH.exists(),
+                "structural_defaults_present": STRUCTURAL_PATH.exists(),
             },
         )
 
@@ -699,6 +705,44 @@ def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
     d[parts[-1]] = value
 
 
+_FORM_PAYLOAD_MISSING = object()
+
+
+def _read_nested(d: Any, dotted_path: str) -> Any:
+    cur: Any = d
+    for part in dotted_path.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return _FORM_PAYLOAD_MISSING
+        cur = cur[part]
+    return cur
+
+
+def _toml_to_form_payload(task: str, merged: dict) -> dict:
+    """Reverse of `_form_to_toml_payload`: project a merged TOML dict onto the
+    flat ``{form_field_name: value}`` shape the client can apply uniformly.
+
+    Walks the same `TASK_DEFAULT_SPECS` entries used by saving so the field
+    mapping stays single-sourced. Fields missing from the merged dict are
+    omitted (the client leaves those inputs untouched).
+    """
+    out: dict = {}
+    for post_key, toml_path, kind in TASK_DEFAULT_SPECS[task]:
+        value = _read_nested(merged, toml_path)
+        if value is _FORM_PAYLOAD_MISSING:
+            continue
+        if kind == "channel_types_triplet":
+            labels = ("CHANNEL", "GROUP", "USER")
+            selected = set(value or [])
+            for i, name in enumerate(post_key):
+                out[name] = labels[i] in selected
+        elif kind.startswith("bool_to_enum:"):
+            _off, on = kind.split(":", 1)[1].split(",", 1)
+            out[post_key] = value == on
+        else:
+            out[post_key] = value
+    return out
+
+
 def _form_to_toml_payload(task: str, post: Any) -> dict:
     defaults = CRAWL_DEFAULTS if task == "crawl_channels" else STRUCTURAL_DEFAULTS
     payload: dict = {}
@@ -803,3 +847,22 @@ class SaveDefaultsView(View):
         except OSError as exc:
             return JsonResponse({"error": f"write failed: {exc}"}, status=500)
         return JsonResponse({"saved": True})
+
+
+class LoadDefaultsView(View):
+    """Return the saved-defaults file projected onto the form-field name space.
+
+    The response is a flat ``{form_field_name: value}`` JSON the client applies
+    directly to inputs. Returns 404 when the file is missing — used both for
+    the initial button-disabled gate and for the click-time race where the
+    file disappeared after page render.
+    """
+
+    def get(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFAULT_SPECS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        loader = load_crawl_payload if task == "crawl_channels" else load_structural_payload
+        merged = loader()
+        if merged is None:
+            return JsonResponse({"file_present": False}, status=404)
+        return JsonResponse({"values": _toml_to_form_payload(task, merged)})
