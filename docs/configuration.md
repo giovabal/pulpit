@@ -1,33 +1,18 @@
-# Configuration
+# Configuration reference
 
-Pulpit's configuration lives in four files, each with a single responsibility:
+This page lists every individual setting in every Pulpit configuration file. For the conceptual walk-through (how the form, the CLI, and the snapshot files relate, what the **Save / Load / Write CLI** buttons do, what the `[meta]` block carries, why `.env` and `.operations-*` use different formats), see [Operations defaults](operations-defaults.md).
 
-| File | Content | Format | Bootstrapped from |
-| :--- | :------ | :----- | :---------------- |
-| `configuration/.env` | Credentials and deployment — Telegram API keys, Telegram-client tuning, database, secret key, web-access policy, locale, project identity. | `KEY=value` (dotenv) | `configuration/env.example` |
-| `configuration/.operations-crawl` | Bundled baseline that pre-populates the **Crawl Channels** form. Committed in git as the "Pulpit defaults". | TOML | — (built-in defaults) |
-| `configuration/.operations-structural` | Bundled baseline that pre-populates the **Structural Analysis** form. Committed in git as the "Pulpit defaults". | TOML | — (built-in defaults) |
-| `configuration/.operations-{crawl,structural}-{timestamp}` | Optional named snapshots written by **Save as defaults**. Gitignored. | TOML | — |
-| `.system` (repo root) | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. | `KEY=value` | — |
+| File | Format | Role |
+| :--- | :----- | :--- |
+| `configuration/.env` | `KEY=value` (dotenv) | Credentials and deployment — Telegram keys + client tuning, database, secret key, web-access policy, locale, project identity. Bootstrapped from `configuration/env.example` by `setup.sh` / `setup.bat`. |
+| `configuration/.operations-crawl` | TOML | Bundled "Pulpit defaults" baseline that pre-populates the **Crawl Channels** form. Committed in git. |
+| `configuration/.operations-structural` | TOML | Bundled "Pulpit defaults" baseline that pre-populates the **Structural Analysis** form. Committed in git. |
+| `configuration/.operations-{crawl,structural}-{timestamp}` | TOML | Optional named snapshots written by **Save as defaults**. Gitignored. |
+| `.system` (repo root) | `KEY=value` | `APP_VERSION` and `REPOSITORY_URL`. Managed by the project — do not edit. |
 
-`setup.sh` and `setup.bat` copy `configuration/env.example` into `configuration/.env` on first install. Both `.operations-*` baselines are committed in the repository, so a fresh checkout already has working form defaults; built-in factory-empty defaults from `webapp_engine/config/defaults.py` apply when the file is missing or omits a key.
-
-**The `.operations-*` files only pre-populate the Operations-panel form.** They are no longer consulted by the CLI. A bare `python manage.py crawl_channels` / `structural_analysis` invocation does nothing — every option you want set must be passed as an explicit flag. Panel-driven runs are unaffected because the panel emits explicit `--flag` / `--no-flag` pairs for every toggle. The easiest way to discover the right flag combination is the **Write CLI command** button in the Operations panel.
-
-Each TOML file starts with a `[meta]` block:
-
-```toml
-[meta]
-title = "Pulpit defaults"
-pulpit_version = "0.21"
-generated_at = "2026-05-21T00:00:00Z"
-```
-
-The title identifies the snapshot in the **Load defaults** picker; `pulpit_version` lets future Django data migrations recognise the writing release and rewrite the file in place when section/key names change.
+Built-in factory-empty defaults from `webapp_engine/config/defaults.py` apply when an `.operations-*` file is missing or omits a key. The "Built-in default" columns below reflect those factory values; the committed baselines override most of them with curated values.
 
 Fill in at least the three Telegram credentials in `configuration/.env` before running any management command. All other settings have working defaults.
-
-See [docs/operations-defaults.md](docs/operations-defaults.md) for the end-to-end walk-through of how the form, the CLI, and the snapshot files relate.
 
 ---
 
@@ -41,7 +26,7 @@ See [docs/operations-defaults.md](docs/operations-defaults.md) for the end-to-en
 | `TELEGRAM_API_HASH` | API hash from Telegram | **required** |
 | `TELEGRAM_PHONE_NUMBER` | Phone number linked to your Telegram account | **required** |
 
-See [Getting started § Telegram API credentials](docs/getting-started.md#telegram-api-credentials) for the registration walk-through.
+See [Getting started § Telegram API credentials](getting-started.md#telegram-api-credentials) for the registration walk-through.
 
 ## Telegram client tuning
 
@@ -94,7 +79,7 @@ pip install oracledb           # Oracle
 | `LANGUAGE_CODE` | Django language code. | `en-us` |
 | `TIME_ZONE` | Django time zone. | `UTC` |
 
-> **User accounts:** `WEB_ACCESS=ALL` requires no accounts. For `OPEN` or `PROTECTED`, create a staff account first with `python manage.py createsuperuser`. Staff accounts (`is_staff=True`) can reach `/admin/`, `/operations/`, and `/manage/`; regular accounts can reach everything else in `PROTECTED` mode but are blocked from those paths. The login form is always at `/login/`. See [Getting started § Access control](docs/getting-started.md#access-control) for the full guide.
+> **User accounts:** `WEB_ACCESS=ALL` requires no accounts. For `OPEN` or `PROTECTED`, create a staff account first with `python manage.py createsuperuser`. Staff accounts (`is_staff=True`) can reach `/admin/`, `/operations/`, and `/manage/`; regular accounts can reach everything else in `PROTECTED` mode but are blocked from those paths. The login form is always at `/login/`. See [Getting started § Access control](getting-started.md#access-control) for the full guide.
 
 ---
 
@@ -213,20 +198,20 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `measures.selected` | Measures to compute. See [Network measures](docs/network-measures.md) for the catalogue. Use `["ALL"]` to enable every measure. | `[]` |
+| `measures.selected` | Measures to compute. See [Network measures](network-measures.md) for the catalogue. Use `["ALL"]` to enable every measure. | `[]` |
 | `measures.bridging_basis` | Community partition driving the BRIDGING measure (entropy across neighbour communities) and the `bridging` robustness strategy. Empty → uses `LEIDEN_DIRECTED`. Must be in `communities.strategies` and cannot be `ORGANIZATION`; otherwise Save/Run is rejected with HTTP 400. | `""` |
 
 ## `[communities]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `communities.strategies` | Community detection strategies. See [Community detection](docs/community-detection.md). Use `["ALL"]` for every strategy. | `[]` |
+| `communities.strategies` | Community detection strategies. See [Community detection](community-detection.md). Use `["ALL"]` for every strategy. | `[]` |
 
 ## `[network_stats]`
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](docs/whole-network-statistics.md). | `[]` |
+| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](whole-network-statistics.md). | `[]` |
 
 ## `[edges]`
 
@@ -248,7 +233,7 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `vacancy.measures` | Vacancy-succession algorithms. Available: `AMPLIFIER_JACCARD`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `CASCADE_OVERLAP`, `PPR`, `TEMPORAL`. Empty list disables vacancy analysis. See [Vacancy analysis](docs/vacancy-analysis.md). | `[]` |
+| `vacancy.measures` | Vacancy-succession algorithms. Available: `AMPLIFIER_JACCARD`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `CASCADE_OVERLAP`, `PPR`, `TEMPORAL`. Empty list disables vacancy analysis. See [Vacancy analysis](vacancy-analysis.md). | `[]` |
 | `vacancy.months_before` | Look-back window (months) for orphaned-amplifier detection | `12` |
 | `vacancy.months_after` | Forward window (months) for candidate adoption | `24` |
 | `vacancy.max_candidates` | Maximum candidates ranked per vacancy | `30` |
@@ -256,7 +241,7 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 ## `[robustness]`
 
-Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. See [Robustness analysis](docs/robustness-analysis.md).
+Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, and intra/inter community edge survival. See [Robustness analysis](robustness-analysis.md).
 
 There is no `robustness.enabled` knob — robustness analysis runs iff `robustness.strategies` is non-empty (`SA_ROBUSTNESS = bool(strategies)` in `settings.py`). The Operations panel's strategy checkboxes drive both the strategy list and the master switch.
 
@@ -271,44 +256,12 @@ There is no `robustness.enabled` knob — robustness analysis runs iff `robustne
 
 ---
 
-# Snapshots — `configuration/.operations-{stem}-{timestamp}`
-
-Every click of **Save as defaults** writes a new TOML file alongside the committed baseline:
-
-```
-configuration/.operations-crawl-2026-05-21T14-32-00Z
-configuration/.operations-structural-2026-05-21T14-35-12Z
-```
-
-The filename's timestamp is UTC, second-precision. Same-second collisions advance by 1 s so concurrent saves never silently overwrite. These files are gitignored and never modify the committed baseline. They never affect form pre-population at startup — they're only loaded on demand when you pick one from the **Load defaults** picker.
-
-Each snapshot's `[meta]` block records the title you typed in the Save modal (max 120 characters; required), the Pulpit version that produced it, and the UTC timestamp the writer stamped at write time. The `Load defaults` picker reads these to label each row.
-
-Cross-field constraints are enforced server-side before a snapshot is written and again before any panel-driven Run, returning HTTP 400 + a clear error message on rejection. Currently enforced for `structural_analysis`:
-
-- BRIDGING basis (explicit `measures.bridging_basis` or the implicit `LEIDEN_DIRECTED` default) must be a known community-detection strategy other than `ORGANIZATION`, and must appear in `communities.strategies`.
-- `consensus_matrix` requires at least two non-`ORGANIZATION` strategies in `communities.strategies`.
-
-For `compare_analysis` and `search_channels` the Run path additionally validates: `project_dir` / `compare_target` non-empty; `--amount` positive.
-
----
-
 # `.system` — project-managed metadata
 
 A small, committed file containing `APP_VERSION` and `REPOSITORY_URL`. These values are surfaced in the About modal and the export footer, and the writer stamps `APP_VERSION` into every `.operations-*` file it writes. The project maintains them — do not edit.
 
 ---
 
-# Why two formats?
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Operations defaults](operations-defaults.md) · [Changelog](../CHANGELOG.md)
 
-`.env` uses dotenv (`KEY=value`) because that's the universal convention for environment variables — Docker Compose's `env_file`, CI/CD secret injectors, IDE runtime configs, and `direnv` all read it natively. Pulpit's `.env` carries exactly what the convention serves: credentials and per-deployment switches.
-
-The `.operations-*` files use TOML because their schema is hierarchical (per-section), typed (booleans, integers, floats, strings, lists), and benefits from comment preservation across rewrites (`tomlkit`). TOML is the modern Python project-config standard (`pyproject.toml`). YAML's indentation-sensitive type inference would be a hand-edit hazard; JSON disallows comments; INI loses both types and comments on rewrite; Python config files are an execution-time security hole.
-
-The split mirrors the audience: `.env` is sysadmin / deployment territory; `.operations-*` is analyst territory. They have different update cadences and different sets of consumers, and keeping them in their respective natural formats avoids forcing one user group to learn the other's idiom.
-
----
-
-← [README](README.md) · [Getting started](docs/getting-started.md) · [Workflow](docs/workflow.md) · [Operations defaults](docs/operations-defaults.md) · [Changelog](CHANGELOG.md)
-
-<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">
+<img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">

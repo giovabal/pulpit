@@ -269,7 +269,8 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
-| [Configuration](CONFIGURATION.md) | All `.env` settings |
+| [Operations defaults & configuration](docs/operations-defaults.md) | How the form, the CLI, and the snapshot files relate; the three buttons (Save / Load / Write CLI); the every-flag-must-be-explicit CLI rule |
+| [Configuration reference](docs/configuration.md) | Every setting in `configuration/.env` and the two `.operations-*` TOML files, with built-in defaults |
 | [Changelog](CHANGELOG.md) | Version history |
 
 ---

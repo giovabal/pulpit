@@ -4,7 +4,7 @@ A *robustness analysis* asks: **how well does this network hold up when channels
 
 Pulpit's robustness analysis turns this intuition into measurable curves and a single score per attack strategy, with a statistical sanity check against a randomised version of the same network. The whole battery runs on the directed citation graph that the rest of `structural_analysis` already builds, so no extra crawl is needed.
 
-Enable with `--robustness` on `structural_analysis` (off by default; see [Workflow § Robustness](workflow.md#robustness-resistance-to-node-removal) for the CLI block and [Configuration § Robustness](../CONFIGURATION.md#robustness) for the `[robustness]` section in `.operations-structural`).
+Enable with `--robustness` on `structural_analysis` (off by default; see [Workflow § Robustness](workflow.md#robustness-resistance-to-node-removal) for the CLI block and [Configuration § Robustness](configuration.md#robustness) for the `[robustness]` section in `.operations-structural`).
 
 ---
 
