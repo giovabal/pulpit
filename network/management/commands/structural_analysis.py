@@ -804,7 +804,8 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        if edge_weight_strategy not in VALID_EDGE_WEIGHT_STRATEGIES:
+        # Empty string is the no-op default — only validate non-empty values.
+        if edge_weight_strategy and edge_weight_strategy not in VALID_EDGE_WEIGHT_STRATEGIES:
             raise CommandError(
                 f"Invalid --edge-weight-strategy value: {edge_weight_strategy!r}. "
                 f"Choose from {sorted(VALID_EDGE_WEIGHT_STRATEGIES)}."
@@ -1276,30 +1277,43 @@ class Command(BaseCommand):
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
-        """Apply configuration/.operations-structural fallbacks and parse CSV/date options into a typed bundle."""
+        """Parse CSV/date options into a typed bundle.
 
-        def _o(key: str, setting_val: Any) -> Any:
+        A bare `python manage.py structural_analysis` (no flags) must do
+        nothing. The CLI therefore no longer consults `settings.SA_*` for
+        fallbacks — missing flags resolve to typed no-op literals (False
+        for toggles, `[]` for lists, `""` for strings, `0` / `0.0` for
+        numerics). Tuning constants whose feature is opted into elsewhere
+        (Leiden resolutions, MCL inflation, vacancy / robustness numerics,
+        spreading runs, diffusion window) keep their hardcoded sensible
+        defaults — they're parameters of features the user enables, not
+        feature toggles themselves.
+
+        Panel-driven runs are unaffected: the Operations panel emits
+        explicit `--<flag>` / `--no-<flag>` for every checkbox (bool_explicit),
+        so the form's state always rides through the args dict.
+        """
+
+        def _o(key: str, default: Any) -> Any:
             v = options[key]
-            return v if v is not None else setting_val
+            return v if v is not None else default
 
-        raw_community_strategies = _parse_csv(_o("community_strategies", settings.SA_COMMUNITY_STRATEGIES))
+        raw_community_strategies = _parse_csv(_o("community_strategies", ""))
         communities_strategy = (
             measures.ALL_STRATEGIES if "ALL" in raw_community_strategies else raw_community_strategies
         )
-        raw_network_measures = _parse_csv(_o("measures", settings.SA_MEASURES))
+        raw_network_measures = _parse_csv(_o("measures", ""))
         network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
-        raw_network_stat_groups = _parse_csv(_o("network_stat_groups", settings.SA_NETWORK_STAT_GROUPS))
+        raw_network_stat_groups = _parse_csv(_o("network_stat_groups", ""))
         network_stat_groups = (
             measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
         )
         channel_types_raw = options["channel_types"]
-        channel_types = (
-            _parse_csv(channel_types_raw) if channel_types_raw is not None else settings.DEFAULT_CHANNEL_TYPES
-        )
+        channel_types = _parse_csv(channel_types_raw) if channel_types_raw is not None else []
         channel_groups_raw = options["channel_groups"]
         channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
-        edge_weight_strategy: str = _o("edge_weight_strategy", settings.SA_EDGE_WEIGHT_STRATEGY)
-        _raw_vacancy = _o("vacancy_measures", settings.SA_VACANCY_MEASURES) or ""
+        edge_weight_strategy: str = _o("edge_weight_strategy", "")
+        _raw_vacancy = _o("vacancy_measures", "")
         raw_vacancy_measures = _parse_csv(_raw_vacancy) if _raw_vacancy else []
         selected_vacancy_measures = (
             set(vacancy_analysis.ALL_VACANCY_MEASURES) if "ALL" in raw_vacancy_measures else set(raw_vacancy_measures)
@@ -1316,7 +1330,7 @@ class Command(BaseCommand):
         # Robustness strategies — parse, validate, expand ALL.  Bridging tokens
         # of the form ``bridging(LEIDEN)`` keep their parenthesised form so
         # the runner can route them to the right community partition.
-        _raw_rob = _o("robustness_strategies", settings.SA_ROBUSTNESS_STRATEGIES) or ""
+        _raw_rob = _o("robustness_strategies", "")
         _raw_rob_tokens = _parse_csv(_raw_rob) if _raw_rob else []
         if "ALL" in _raw_rob_tokens:
             robustness_strategies = list(robustness.ALL_STRATEGIES)
@@ -1336,36 +1350,37 @@ class Command(BaseCommand):
                     f"{bridging_key.upper()!r} is not in --community-strategies. "
                     f"Add it or change the bridging basis."
                 )
-        # Empty strategies list is only fatal when robustness is actually enabled —
-        # caught at runtime so a typo in the defaults doesn't break unrelated runs.
-        if not robustness_strategies:
+        # Robustness defaults are filled in only when the user actually opts in
+        # via --robustness; empty strategies are tolerated otherwise.
+        do_robustness = _o("robustness", False)
+        if do_robustness and not robustness_strategies:
             robustness_strategies = list(robustness.DEFAULT_STRATEGIES)
 
-        extra_layout_names = _parse_csv(_o("layouts_2d", settings.SA_LAYOUTS_2D) or "")
+        extra_layout_names = _parse_csv(_o("layouts_2d", ""))
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
         extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES_2D]
 
-        extra_layout_names_3d = _parse_csv(_o("layouts_3d", settings.SA_LAYOUTS_3D) or "")
+        extra_layout_names_3d = _parse_csv(_o("layouts_3d", ""))
         if "ALL" in extra_layout_names_3d:
             extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
         extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]
 
-        vertical = _o("vertical_layout", settings.SA_VERTICAL_LAYOUT)
+        vertical = _o("vertical_layout", False)
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
         if not export_name:
             export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        raw_palette = _o("community_palette", settings.COMMUNITY_PALETTE)
+        raw_palette = _o("community_palette", "")
         if raw_palette == "ORGANIZATION":
-            # Same legacy alias as in settings.py: the old default doubled as a
-            # "use organisation colours for ORG, vaporwave-reversed for everything else"
-            # marker. Map it explicitly here so a CLI override of "ORGANIZATION" still works.
+            # Legacy alias: the old default doubled as a "use organisation
+            # colours for ORG, vaporwave-reversed for everything else" marker.
+            # Map it explicitly here so a CLI override of "ORGANIZATION" works.
             raw_palette = "vaporwave"
             reversed_default = True
         else:
-            reversed_default = settings.COMMUNITY_PALETTE_REVERSED
-        if not is_known_palette(raw_palette):
+            reversed_default = False
+        if raw_palette and not is_known_palette(raw_palette):
             raise CommandError(
                 f"Unknown --community-palette: {raw_palette!r}. Pick a name from the pypalettes catalogue."
             )
@@ -1373,31 +1388,31 @@ class Command(BaseCommand):
         community_palette_reversed = _o("community_palette_reversed", reversed_default)
 
         return ResolvedOptions(
-            do_graph=_o("graph", settings.SA_OUTPUT_GRAPH),
-            do_3dgraph=_o("graph_3d", settings.SA_OUTPUT_3DGRAPH),
-            do_html=_o("html", settings.SA_OUTPUT_HTML),
-            do_xlsx=_o("xlsx", settings.SA_OUTPUT_XLSX),
-            do_gexf=_o("gexf", settings.SA_OUTPUT_GEXF),
-            do_graphml=_o("graphml", settings.SA_OUTPUT_GRAPHML),
-            do_csv=_o("csv", settings.SA_OUTPUT_CSV),
-            do_consensus_matrix=_o("consensus_matrix", settings.SA_CONSENSUS_MATRIX),
-            do_structural_similarity=_o("structural_similarity", settings.SA_STRUCTURAL_SIMILARITY),
-            seo=_o("seo", settings.SA_SEO),
+            do_graph=_o("graph", False),
+            do_3dgraph=_o("graph_3d", False),
+            do_html=_o("html", False),
+            do_xlsx=_o("xlsx", False),
+            do_gexf=_o("gexf", False),
+            do_graphml=_o("graphml", False),
+            do_csv=_o("csv", False),
+            do_consensus_matrix=_o("consensus_matrix", False),
+            do_structural_similarity=_o("structural_similarity", False),
+            seo=_o("seo", False),
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
-            fa2_iterations=_o("fa2_iterations", settings.SA_FA2_ITERATIONS),
+            fa2_iterations=_o("fa2_iterations", ""),
             extra_layout_names=extra_layout_names,
             extra_layout_names_3d=extra_layout_names_3d,
             start_date=self._parse_date(options["startdate"], "--startdate"),
             end_date=self._parse_date(options["enddate"], "--enddate"),
-            draw_dead_leaves=_o("draw_dead_leaves", settings.SA_DRAW_DEAD_LEAVES),
-            dead_leaves_color=options.get("dead_leaves_color") or settings.DEAD_LEAVES_COLOR,
+            draw_dead_leaves=_o("draw_dead_leaves", False),
+            dead_leaves_color=options.get("dead_leaves_color") or "",
             community_palette=community_palette,
             community_palette_reversed=community_palette_reversed,
-            include_mentions=_o("include_mentions", settings.SA_INCLUDE_MENTIONS),
-            include_self_references=_o("include_self_references", settings.SA_INCLUDE_SELF_REFERENCES),
-            include_lost=_o("include_lost", settings.SA_INCLUDE_LOST),
-            include_private=_o("include_private", settings.SA_INCLUDE_PRIVATE),
+            include_mentions=_o("include_mentions", False),
+            include_self_references=_o("include_self_references", False),
+            include_lost=_o("include_lost", False),
+            include_private=_o("include_private", False),
             channel_types=channel_types,
             channel_groups=channel_groups,
             edge_weight_strategy=edge_weight_strategy,
@@ -1407,27 +1422,25 @@ class Command(BaseCommand):
             selected_measures=set(network_measures),
             selected_network_groups=frozenset(network_stat_groups),
             bridging_token=bridging_token,
-            spreading_runs=_o("spreading_runs", settings.SA_SPREADING_RUNS),
-            diffusion_window=_o("diffusion_window", settings.SA_DIFFUSION_WINDOW),
-            leiden_coarse_resolution=_o("leiden_coarse_resolution", settings.SA_LEIDEN_COARSE_RESOLUTION),
-            leiden_fine_resolution=_o("leiden_fine_resolution", settings.SA_LEIDEN_FINE_RESOLUTION),
-            mcl_inflation=_o("mcl_inflation", settings.SA_MCL_INFLATION),
-            community_distribution_threshold=_o(
-                "community_distribution_threshold", settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD
-            ),
-            timeline_step=_o("timeline_step", settings.SA_TIMELINE_STEP),
+            spreading_runs=_o("spreading_runs", 200),
+            diffusion_window=_o("diffusion_window", 30),
+            leiden_coarse_resolution=_o("leiden_coarse_resolution", 0.01),
+            leiden_fine_resolution=_o("leiden_fine_resolution", 0.05),
+            mcl_inflation=_o("mcl_inflation", 2.0),
+            community_distribution_threshold=_o("community_distribution_threshold", 0),
+            timeline_step=_o("timeline_step", "none"),
             selected_vacancy_measures=selected_vacancy_measures,
-            vacancy_months_before=_o("vacancy_months_before", settings.SA_VACANCY_MONTHS_BEFORE),
-            vacancy_months_after=_o("vacancy_months_after", settings.SA_VACANCY_MONTHS_AFTER),
-            vacancy_max_candidates=_o("vacancy_max_candidates", settings.SA_VACANCY_MAX_CANDIDATES),
-            vacancy_ppr_alpha=_o("vacancy_ppr_alpha", settings.SA_VACANCY_PPR_ALPHA),
-            do_robustness=_o("robustness", settings.SA_ROBUSTNESS),
-            robustness_alpha=_o("robustness_alpha", settings.SA_ROBUSTNESS_ALPHA),
+            vacancy_months_before=_o("vacancy_months_before", 12),
+            vacancy_months_after=_o("vacancy_months_after", 24),
+            vacancy_max_candidates=_o("vacancy_max_candidates", 30),
+            vacancy_ppr_alpha=_o("vacancy_ppr_alpha", 0.85),
+            do_robustness=do_robustness,
+            robustness_alpha=_o("robustness_alpha", 0.05),
             robustness_strategies=robustness_strategies,
-            robustness_runs=_o("robustness_runs", settings.SA_ROBUSTNESS_RUNS),
-            robustness_null=_o("robustness_null", settings.SA_ROBUSTNESS_NULL),
-            robustness_seed=_o("robustness_seed", settings.SA_ROBUSTNESS_SEED),
-            robustness_sample=_o("robustness_sample", settings.SA_ROBUSTNESS_SAMPLE),
+            robustness_runs=_o("robustness_runs", 100),
+            robustness_null=_o("robustness_null", 20),
+            robustness_seed=_o("robustness_seed", 42),
+            robustness_sample=_o("robustness_sample", 500),
             export_name=export_name,
         )
 
@@ -1436,6 +1449,33 @@ class Command(BaseCommand):
         # Patch options dict so _run_year_export and _compute_communities (which still
         # take a plain dict) see the resolved values.
         options.update(opts.to_options_dict())
+
+        # Bare-CLI no-op: every output / measure / strategy / network stat /
+        # vacancy / robustness toggle is off. Bail out before building the
+        # graph so a flag-less invocation does literally nothing.
+        if not any(
+            (
+                opts.do_graph,
+                opts.do_3dgraph,
+                opts.do_html,
+                opts.do_xlsx,
+                opts.do_gexf,
+                opts.do_graphml,
+                opts.do_csv,
+                opts.do_consensus_matrix,
+                opts.do_structural_similarity,
+                opts.selected_measures,
+                opts.communities_strategy,
+                opts.selected_network_groups,
+                opts.selected_vacancy_measures,
+                opts.do_robustness,
+            )
+        ):
+            self.stdout.write(
+                "Nothing to do — no outputs, measures, communities, network stats, "
+                "vacancy measures, or robustness were requested. Pass at least one flag."
+            )
+            return
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()

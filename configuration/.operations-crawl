@@ -4,18 +4,9 @@
 # future Pulpit releases use `pulpit_version` to migrate the file in place.
 
 [meta]
-title = "Pulpit default"
-pulpit_version = "0.21dev"
-generated_at = "2026-05-21T07:29:21Z"
-
-[telegram]
-session_name = "anon"
-connection_retries = 10
-retry_delay = 5
-flood_sleep_threshold = 60
-ignore_floodwait = true
-floodwait_sleep_seconds = 900
-grace_time = 1
+title = "Pulpit defaults"
+pulpit_version = "0.21"
+generated_at = "2026-05-21T00:00:00Z"
 
 [downloads]
 images = true

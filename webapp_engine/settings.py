@@ -316,13 +316,18 @@ TELEGRAM_CRAWLER_DOWNLOAD_VIDEO = _crawl.downloads.video
 TELEGRAM_CRAWLER_DOWNLOAD_AUDIO = _crawl.downloads.audio
 TELEGRAM_CRAWLER_DOWNLOAD_STICKERS = _crawl.downloads.stickers
 TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA = _crawl.downloads.other_media
-TELEGRAM_CRAWLER_GRACE_TIME = _crawl.telegram.grace_time
-TELEGRAM_CONNECTION_RETRIES = _crawl.telegram.connection_retries
-TELEGRAM_RETRY_DELAY = _crawl.telegram.retry_delay
-TELEGRAM_FLOOD_SLEEP_THRESHOLD = _crawl.telegram.flood_sleep_threshold
-IGNORE_FLOODWAIT = _crawl.telegram.ignore_floodwait
-TELEGRAM_FLOODWAIT_SLEEP_SECONDS = _crawl.telegram.floodwait_sleep_seconds
-TELEGRAM_SESSION_NAME = _crawl.telegram.session_name
+
+# ── Telegram client tuning (.env) ─────────────────────────────────────────────
+# Connection / floodwait knobs for the Telethon client. These are deployment
+# infrastructure, not per-run analysis options, and live alongside the API
+# credentials above.
+TELEGRAM_SESSION_NAME = config("TELEGRAM_SESSION_NAME", default="anon", cast=str)
+TELEGRAM_CONNECTION_RETRIES = config("TELEGRAM_CONNECTION_RETRIES", default=10, cast=int)
+TELEGRAM_RETRY_DELAY = config("TELEGRAM_RETRY_DELAY", default=5, cast=int)
+TELEGRAM_FLOOD_SLEEP_THRESHOLD = config("TELEGRAM_FLOOD_SLEEP_THRESHOLD", default=60, cast=int)
+IGNORE_FLOODWAIT = config("TELEGRAM_IGNORE_FLOODWAIT", default=True, cast=bool)
+TELEGRAM_FLOODWAIT_SLEEP_SECONDS = config("TELEGRAM_FLOODWAIT_SLEEP_SECONDS", default=900, cast=int)
+TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, cast=int)
 
 # ── Project identity (.env) ───────────────────────────────────────────────────
 

@@ -195,6 +195,28 @@ class RunTaskView(View):
         return JsonResponse({"status": "started", "args": args})
 
 
+class WriteCliCommandView(View):
+    """Produce the `python manage.py <task> --flag ...` line for the current form.
+
+    Reuses `_validate_post_constraints` + `_build_args` so the displayed
+    command is exactly what the Run endpoint would launch. Validation
+    errors return 400 with the same message as Save/Run.
+    """
+
+    def post(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFINITIONS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        try:
+            _validate_post_constraints(task, request.POST)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        args = _build_args(task, request.POST)
+        command = "python manage.py " + task
+        if args:
+            command += " " + " ".join(args)
+        return JsonResponse({"command": command, "args": args})
+
+
 class AbortTaskView(View):
     def post(self, request: HttpRequest, task: str) -> JsonResponse:
         if task not in TASK_DEFINITIONS:

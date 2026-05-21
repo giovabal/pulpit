@@ -3,7 +3,7 @@
 The loader is intentionally tiny: it parses the TOML, strips the `[meta]`
 header section, deep-merges the rest over the hard-coded `CRAWL_DEFAULTS` /
 `STRUCTURAL_DEFAULTS`, and returns a nested `SimpleNamespace` for attribute
-access (`_crawl.telegram.connection_retries`).
+access (`_crawl.channels.get_channels_info`).
 
 The bare files (`.operations-{crawl,structural}`) are the committed "Pulpit
 default" baselines used at startup and by the management commands. The
@@ -80,6 +80,10 @@ def _strip_header(parsed: dict) -> dict:
     # Legacy: pre-[meta] files stored these at the top level.
     parsed.pop(PULPIT_VERSION_KEY, None)
     parsed.pop(GENERATED_AT_KEY, None)
+    # Legacy: pre-`.env`-migration files carried a [telegram] block that's now
+    # owned by `.env`. Drop it silently so old snapshots still load — the values
+    # are obsolete here and would otherwise warn on each parse.
+    parsed.pop("telegram", None)
     return parsed
 
 

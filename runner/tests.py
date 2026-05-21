@@ -378,6 +378,55 @@ class RunTaskViewTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# runner/views.py — WriteCliCommandView
+# ---------------------------------------------------------------------------
+
+
+class WriteCliCommandViewTests(TestCase):
+    def test_unknown_task_returns_404(self):
+        resp = self.client.post(reverse("operations-write-cli-command", args=["nope"]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_crawl_empty_form_emits_full_no_constellation(self):
+        resp = self.client.post(reverse("operations-write-cli-command", args=["crawl_channels"]))
+        self.assertEqual(resp.status_code, 200)
+        cmd = resp.json()["command"]
+        self.assertTrue(cmd.startswith("python manage.py crawl_channels"))
+        self.assertIn("--no-get-channels-info", cmd)
+        self.assertIn("--no-fix-holes", cmd)
+
+    def test_structural_with_flags(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={
+                "graph": "on",
+                "html": "on",
+                "include_mentions": "on",
+                "community_strategies": ["LEIDEN"],
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        cmd = resp.json()["command"]
+        self.assertTrue(cmd.startswith("python manage.py structural_analysis"))
+        self.assertIn("--graph-2d", cmd)
+        self.assertIn("--html", cmd)
+        self.assertIn("--mentions", cmd)
+        self.assertIn("--community-strategies LEIDEN", cmd)
+
+    def test_structural_validation_rejects_bad_bridging(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={
+                "measures": ["BRIDGING"],
+                "bridging_basis": "ORGANIZATION",
+                "community_strategies": ["LEIDEN"],
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("BRIDGING basis", resp.json()["error"])
+
+
+# ---------------------------------------------------------------------------
 # runner/views.py — AbortTaskView
 # ---------------------------------------------------------------------------
 
@@ -1021,13 +1070,15 @@ class DefaultsViewTests(TestCase):
             self.assertIn("strategies = []", content)
 
     def test_blank_int_falls_back_to_default(self) -> None:
+        # The defaults are now factory-empty no-ops (community_distribution_threshold = 0).
+        # A blank form value falls back to the no-op default, not to a curated value.
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={"title": "t", "community_distribution_threshold": "", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            self.assertIn("community_distribution_threshold = 10", _saved_file_content(tmp, ".operations-structural"))
+            self.assertIn("community_distribution_threshold = 0", _saved_file_content(tmp, ".operations-structural"))
 
     def test_fa2_iterations_multiplier_form_saved_as_string(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:
@@ -1048,13 +1099,14 @@ class DefaultsViewTests(TestCase):
             self.assertIn("fa2_iterations = 3000", _saved_file_content(tmp, ".operations-structural"))
 
     def test_fa2_iterations_blank_falls_back_to_default(self) -> None:
+        # No-op factory default is "" (empty string) — the saved file mirrors it.
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={"title": "t", "fa2_iterations": "", "graph": "on"},
             )
             self.assertEqual(resp.status_code, 200)
-            self.assertIn('fa2_iterations = "7x"', _saved_file_content(tmp, ".operations-structural"))
+            self.assertIn('fa2_iterations = ""', _saved_file_content(tmp, ".operations-structural"))
 
     def test_community_palette_round_trip(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:

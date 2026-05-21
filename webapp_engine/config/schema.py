@@ -8,7 +8,6 @@ PULPIT_VERSION_KEY = "pulpit_version"
 GENERATED_AT_KEY = "generated_at"
 
 CRAWL_SECTIONS: tuple[str, ...] = (
-    "telegram",
     "downloads",
     "scope",
     "channels",

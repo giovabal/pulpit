@@ -14,15 +14,9 @@ When adding a new option:
 """
 
 CRAWL_DEFAULTS: dict = {
-    "telegram": {
-        "session_name": "anon",
-        "connection_retries": 10,
-        "retry_delay": 5,
-        "flood_sleep_threshold": 60,
-        "ignore_floodwait": True,
-        "floodwait_sleep_seconds": 900,
-        "grace_time": 1,
-    },
+    # Note: Telegram client tuning (session_name, connection_retries, etc.) used
+    # to live in a [telegram] block here. It now lives in `.env` — these are
+    # deployment infrastructure knobs, not per-run analysis options.
     "downloads": {
         "images": False,
         "video": False,
@@ -58,11 +52,18 @@ CRAWL_DEFAULTS: dict = {
 
 
 STRUCTURAL_DEFAULTS: dict = {
+    # All entries here represent a "factory empty" baseline: a bare
+    # `python manage.py structural_analysis` with no flags must do nothing.
+    # Tuning constants that only matter when an opt-in feature is enabled
+    # (leiden resolutions, mcl inflation, spreading runs, vacancy windows,
+    # robustness numerics, reversed_edges, dead_leaves_color, output_dir)
+    # keep sensible values — they're never consulted when no flag selects
+    # the feature that needs them.
     "graph": {
         "reversed_edges": True,
         "dead_leaves_color": "#596a64",
-        "community_palette": "vaporwave",
-        "community_palette_reversed": True,
+        "community_palette": "",
+        "community_palette_reversed": False,
         "output_dir": "graph",
     },
     "outputs": {
@@ -81,8 +82,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "timeline_step": "none",
     },
     "edges": {
-        "weight_strategy": "PARTIAL_REFERENCES",
-        "include_mentions": True,
+        "weight_strategy": "",
+        "include_mentions": False,
         "include_self_references": False,
         "recency_weights": "",
     },
@@ -91,8 +92,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "include_private": False,
     },
     "computation": {
-        "fa2_iterations": "7x",
-        "community_distribution_threshold": 10,
+        "fa2_iterations": "",
+        "community_distribution_threshold": 0,
         "leiden_coarse_resolution": 0.01,
         "leiden_fine_resolution": 0.05,
         "mcl_inflation": 2.0,
@@ -100,18 +101,18 @@ STRUCTURAL_DEFAULTS: dict = {
         "diffusion_window": 30,
     },
     "layouts": {
-        "layouts_2d": ["FA2"],
-        "layouts_3d": ["FA2"],
+        "layouts_2d": [],
+        "layouts_3d": [],
     },
     "measures": {
-        "selected": ["PAGERANK"],
+        "selected": [],
         "bridging_basis": "",
     },
     "communities": {
-        "strategies": ["ORGANIZATION"],
+        "strategies": [],
     },
     "network_stats": {
-        "groups": ["ALL"],
+        "groups": [],
     },
     "vacancy": {
         "measures": [],

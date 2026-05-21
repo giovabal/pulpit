@@ -1874,7 +1874,9 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("crawl_channels", get_new_messages=True)
+            # `--channel-types` defaults to [] (factory empty) — pass an
+            # explicit value so the in-target CHANNEL records survive the filter.
+            call_command("crawl_channels", get_new_messages=True, channel_types="CHANNEL")
 
             telegram_ids_crawled = {c.args[0] for c in mock_crawler.get_channel.call_args_list}
             self.assertIn(self.ch1.telegram_id, telegram_ids_crawled)
