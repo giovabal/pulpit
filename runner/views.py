@@ -709,57 +709,77 @@ _BRIDGING_VALID_BASES: frozenset[str] = frozenset(s for s in net_community.VALID
 def _validate_post_constraints(task: str, post: Any) -> None:
     """Cross-field validation shared by Save and Run.
 
-    Raises ValueError on inconsistent input.
+    Raises ValueError on inconsistent input. Both DefaultsListView.post
+    (save) and RunTaskView.post (run) call this before doing any work, so
+    a bad POST is rejected with HTTP 400 + a human-readable message rather
+    than reaching the management command and surfacing as a cryptic
+    subprocess error.
 
-    Currently enforced for structural_analysis:
+    Per-task rules:
 
-    * **BRIDGING basis must be a real community-detection strategy.** When
-      BRIDGING is among ``measures`` (or "bridging" is among
-      ``robustness_strategies``), the effective basis — either the explicit
-      ``bridging_basis`` or the default ``LEIDEN_DIRECTED`` — must be one of
-      ``_BRIDGING_VALID_BASES`` (i.e. a known strategy other than ORGANIZATION,
-      which is excluded because organisation membership isn't a community-
-      detection result and entropy across pre-declared categories doesn't
-      carry the same meaning).
+    * ``structural_analysis``:
+        - BRIDGING basis (explicit or default LEIDEN_DIRECTED) must be a
+          real strategy (ORGANIZATION excluded because organisation
+          membership isn't a community-detection result).
+        - BRIDGING basis must be among the selected community_strategies.
+        - consensus_matrix requires ≥2 non-ORGANIZATION strategies.
 
-    * **BRIDGING basis must be among the selected strategies.** Otherwise the
-      BRIDGING measure points at a partition that was never computed and the
-      result is silently meaningless.
+    * ``compare_analysis``: ``project_dir`` and ``compare_target`` are both
+      required (the management command would otherwise reject them with a
+      CommandError surfaced as a 500 from the runner).
 
-    * **consensus_matrix requires ≥2 non-ORGANIZATION community strategies.**
-      The page is a pairwise NMI heatmap across strategies; with fewer than
-      two strategies (ORGANIZATION excluded since it's not a detection
-      result), the output table is empty and silently useless.
+    * ``search_channels``: ``amount``, when set, must be a positive integer.
+      QuerySet slicing with non-positive values silently returns an empty
+      or counterintuitive (negative-index) slice.
     """
-    if task != "structural_analysis":
-        return
     if not hasattr(post, "getlist"):
         return
-    measures = post.getlist("measures") or []
-    robust = post.getlist("robustness_strategies") or []
-    strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
 
-    needs_bridging = "BRIDGING" in measures or "bridging" in {r.lower() for r in robust}
-    if needs_bridging:
-        basis = (post.get("bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
-        if basis not in _BRIDGING_VALID_BASES:
-            raise ValueError(
-                f"BRIDGING basis '{basis}' is not a valid community-detection strategy"
-                " (ORGANIZATION is excluded because organisation membership is not a detection result)"
-            )
-        if basis not in strategies:
-            present = ", ".join(sorted(strategies)) or "none selected"
-            raise ValueError(
-                f"BRIDGING basis '{basis}' must be one of the selected community strategies (currently: {present})"
-            )
+    if task == "structural_analysis":
+        measures = post.getlist("measures") or []
+        robust = post.getlist("robustness_strategies") or []
+        strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
 
-    if post.get("consensus_matrix"):
-        non_org = strategies - {"ORGANIZATION"}
-        if len(non_org) < 2:
-            raise ValueError(
-                "Consensus matrix requires at least two non-ORGANIZATION community strategies"
-                f" (currently: {', '.join(sorted(non_org)) or 'none'})"
-            )
+        needs_bridging = "BRIDGING" in measures or "bridging" in {r.lower() for r in robust}
+        if needs_bridging:
+            basis = (post.get("bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
+            if basis not in _BRIDGING_VALID_BASES:
+                raise ValueError(
+                    f"BRIDGING basis '{basis}' is not a valid community-detection strategy"
+                    " (ORGANIZATION is excluded because organisation membership is not a detection result)"
+                )
+            if basis not in strategies:
+                present = ", ".join(sorted(strategies)) or "none selected"
+                raise ValueError(
+                    f"BRIDGING basis '{basis}' must be one of the selected community strategies (currently: {present})"
+                )
+
+        if post.get("consensus_matrix"):
+            non_org = strategies - {"ORGANIZATION"}
+            if len(non_org) < 2:
+                raise ValueError(
+                    "Consensus matrix requires at least two non-ORGANIZATION community strategies"
+                    f" (currently: {', '.join(sorted(non_org)) or 'none'})"
+                )
+        return
+
+    if task == "compare_analysis":
+        if not (post.get("project_dir") or "").strip():
+            raise ValueError("Source export (project_dir) is required")
+        if not (post.get("compare_target") or "").strip():
+            raise ValueError("Target export name is required")
+        return
+
+    if task == "search_channels":
+        raw_amount = (post.get("amount") or "").strip()
+        if raw_amount:
+            try:
+                amount = int(raw_amount)
+            except ValueError as exc:
+                raise ValueError(f"Amount must be an integer, got {raw_amount!r}") from exc
+            if amount <= 0:
+                raise ValueError(f"Amount must be a positive integer, got {amount}")
+        return
 
 
 def _read_nested(d: Any, dotted_path: str) -> Any:
@@ -890,12 +910,21 @@ class DefaultsListView(View):
             return JsonResponse({"error": "Unknown task"}, status=404)
         return JsonResponse({"items": list_defaults(task)})
 
+    # Match the HTML form's `<input maxlength="120">` so a script that bypasses
+    # the browser can't seed huge titles that would bloat the on-disk TOML.
+    MAX_TITLE_LENGTH = 120
+
     def post(self, request: HttpRequest, task: str) -> JsonResponse:
         if task not in TASK_DEFAULT_SPECS:
             return JsonResponse({"error": "Unknown task"}, status=404)
         title = (request.POST.get("title") or "").strip()
         if not title:
             return JsonResponse({"error": "title is required"}, status=400)
+        if len(title) > self.MAX_TITLE_LENGTH:
+            return JsonResponse(
+                {"error": f"title must be at most {self.MAX_TITLE_LENGTH} characters"},
+                status=400,
+            )
         try:
             payload = _form_to_toml_payload(task, request.POST)
         except ValueError as exc:

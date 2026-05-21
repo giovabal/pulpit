@@ -53,13 +53,21 @@ def save_named(task: str, payload: dict, title: str) -> dict:
 
     defaults, sections, header = _TASK_CONFIG[task]
     stem = TASK_STEMS[task]
-    now = _dt.datetime.now(_dt.UTC).replace(microsecond=0)
-    snapshot_id = now.strftime("%Y-%m-%dT%H-%M-%SZ")
-    iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    filename = f"{stem}-{snapshot_id}"
-    path = CONFIG_DIR / filename
-
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Snapshot IDs are second-precision UTC. If two saves arrive in the same
+    # second (rapid double-click) the second would silently overwrite the
+    # first; advance the timestamp until we find a free filename.
+    now = _dt.datetime.now(_dt.UTC).replace(microsecond=0)
+    while True:
+        snapshot_id = now.strftime("%Y-%m-%dT%H-%M-%SZ")
+        iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        filename = f"{stem}-{snapshot_id}"
+        path = CONFIG_DIR / filename
+        if not path.exists():
+            break
+        now += _dt.timedelta(seconds=1)
+
     doc = _build_document(defaults, sections, header, title=title, version=get_app_version(), iso=iso)
     _overlay_payload(doc, payload)
 
