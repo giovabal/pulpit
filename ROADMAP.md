@@ -19,7 +19,7 @@ They are loaded and saved as it is now.
 [telegram] options should be in .env, not in .operations* files
 Their values are used as a way to pre-populate forms, and in no other way. In particular they are not used by CLI operations.
 Next to load and save options buttons there must be a "write CLI command", it will send actual form to the API and the API will answers with a command line that will be shown as it is shown now, in red, bottom part of the form.
-Moreover default settings in settings.py should be set in a way that they basicly do nothing if invoked like that.
+Moreover default settings in settings.py should be set in a way that they basicly do nothing if CLI commands are invoked bare.
 ---
 
 - Community evolution visualization: when `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.

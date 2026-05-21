@@ -4,9 +4,9 @@
 # future Pulpit releases use `pulpit_version` to migrate the file in place.
 
 [meta]
-title = "Pulpit default"
-pulpit_version = "0.21dev"
-generated_at = "2026-05-21T07:29:21Z"
+title = "Pulpit defaults"
+pulpit_version = "0.21"
+generated_at = "2026-05-21T00:00:00Z"
 
 [graph]
 reversed_edges = true
