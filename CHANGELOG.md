@@ -547,6 +547,6 @@
 
 ---
 
-← [README](README.md) · [Getting started](docs/getting-started.md) · [Workflow](docs/workflow.md) · [Configuration](CONFIGURATION.md) · [Network measures](docs/network-measures.md) · [Community detection](docs/community-detection.md) · [Vacancy analysis](docs/vacancy-analysis.md) · [Web interface](docs/web-interface.md) · [Exports](docs/export-formats.md)
+← [README](README.md) · [Getting started](docs/getting-started.md) · [Workflow](docs/workflow.md) · [Configuration](docs/configuration.md) · [Network measures](docs/network-measures.md) · [Community detection](docs/community-detection.md) · [Vacancy analysis](docs/vacancy-analysis.md) · [Web interface](docs/web-interface.md) · [Exports](docs/export-formats.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

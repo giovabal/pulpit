@@ -1,58 +1,20 @@
 # Operations defaults & configuration
 
-This page describes where each kind of setting lives, how the Operations panel pre-populates its forms, and what the **Save as defaults**, **Load defaults**, and **Write CLI command** buttons actually do.
+This page describes how the Operations panel, the CLI, and the saved snapshot files relate, and what the **Save as defaults**, **Load defaults**, and **Write CLI command** buttons actually do.
 
 The short version: every analyst-tunable option flows through one of three layers — `.env`, the `.operations-*` snapshot files, or the live form — and each layer has a single responsibility. The Operations panel reads the snapshot files to pre-populate the form; the CLI reads only the explicit flags you pass. There is no longer a silent settings-fallback chain.
+
+For the exhaustive per-setting tables (every key, type, and built-in default) see the [Configuration reference](configuration.md).
 
 ---
 
 ## The three layers
 
-### 1. `configuration/.env` — credentials and deployment
+1. **`configuration/.env`** — credentials and deployment infrastructure: Telegram API keys + client tuning, database, secret key, `WEB_ACCESS`, locale, project identity. Read once at startup by `python-decouple`; restart the server after editing. Comments must live on their own line — `python-decouple` does not strip inline `#` comments.
+2. **`configuration/.operations-{crawl,structural}`** — bundled "Pulpit defaults" TOML baselines that pre-populate the Operations-panel forms. Each opens with a `[meta]` block (`title`, `pulpit_version`, `generated_at`) and is committed in git so a fresh checkout already has working form defaults. Only the Operations panel reads these — the CLI does not consult them. When a file is missing or omits a key, the loader fills in from the factory-empty defaults in `webapp_engine/config/defaults.py` (everything off, every list empty).
+3. **`configuration/.operations-{stem}-{timestamp}`** — gitignored timestamped snapshots written by **Save as defaults**. They never overwrite the baseline and never affect startup pre-population; they're loaded on demand when the user picks one from the **Load defaults** picker. Each snapshot's `[meta]` block records the title (max 120 chars; required), the Pulpit version, and the UTC timestamp.
 
-Everything that's *about the machine Pulpit is running on*:
-
-- Telegram API credentials (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`).
-- Telegram client tuning (`TELEGRAM_SESSION_NAME`, `TELEGRAM_CONNECTION_RETRIES`, `TELEGRAM_RETRY_DELAY`, `TELEGRAM_FLOOD_SLEEP_THRESHOLD`, `TELEGRAM_IGNORE_FLOODWAIT`, `TELEGRAM_FLOODWAIT_SLEEP_SECONDS`, `TELEGRAM_CRAWLER_GRACE_TIME`). All optional with sensible defaults — see `configuration/env.example`.
-- Django basics (`SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, database, language/timezone).
-- Web access policy (`WEB_ACCESS`).
-- Project identity (`PROJECT_TITLE`).
-
-The `.env` file is read once at startup by `python-decouple`. Restart the server after editing it.
-
-Comments must live on their own line. `python-decouple` does not strip inline `#` comments, so writing `WEB_ACCESS=ALL  # explanation` leaves the explanation in the value. (Pulpit defensively strips inline comments from `WEB_ACCESS` to absorb that footgun, but it's a footgun nonetheless — see `env.example` for the correct pattern.)
-
-### 2. `configuration/.operations-{crawl,structural}` — bundled "Pulpit defaults" baseline
-
-These two committed TOML files carry the **baseline pre-population values for the Operations-panel forms**. They are tracked in git so a fresh checkout already has reasonable form defaults; whoever curates a Pulpit fork bumps these files to taste.
-
-Each file starts with a `[meta]` block:
-```toml
-[meta]
-title = "Pulpit defaults"
-pulpit_version = "0.21"
-generated_at = "2026-05-21T00:00:00Z"
-```
-
-Followed by typed sections that mirror `webapp_engine/config/defaults.py`:
-- `.operations-crawl` has `[downloads]`, `[scope]`, `[channels]`, `[messages]`, `[degrees]`.
-- `.operations-structural` has `[graph]`, `[outputs]`, `[edges]`, `[scope]`, `[computation]`, `[layouts]`, `[measures]`, `[communities]`, `[network_stats]`, `[vacancy]`, `[robustness]`.
-
-These files are loaded once at startup and exposed under `settings.CRAWL_*` / `settings.SA_*` / `settings.COMMUNITY_PALETTE` etc. **Only the Operations panel reads those settings** — the CLI commands no longer consult them.
-
-If a file is missing or omits a section, the loader fills in from the hardcoded factory-empty defaults in `webapp_engine/config/defaults.py` (everything off, every list empty). That's the "do nothing if invoked like that" semantics the CLI also enforces.
-
-### 3. Saved snapshots — `configuration/.operations-{stem}-{timestamp}`
-
-Every click of **Save as defaults** writes a new file alongside the baseline:
-```
-configuration/.operations-crawl-2026-05-21T14-32-00Z
-configuration/.operations-structural-2026-05-21T14-35-12Z
-```
-
-These are gitignored. They never overwrite the baseline. They never affect the form's startup pre-population — they're only loaded on demand when you click **Load defaults** and pick one from the picker.
-
-The `[meta]` block at the top of each snapshot records the title you typed, the Pulpit version that produced it, and the UTC timestamp.
+For the per-key reference of each TOML section, see [Configuration reference](configuration.md).
 
 ---
 
@@ -134,3 +96,13 @@ When you add an option that the analyst should be able to tweak:
 8. **Bundled baseline** — if you want the option non-empty by default, add it under the matching section in the committed `.operations-{crawl,structural}` file.
 
 The `TASK_DEFAULT_SPECS` walker (`_form_to_toml_payload` and `_toml_to_form_payload` in `runner/views.py`) drives both Save and Load. Anything in the spec round-trips automatically; anything outside the spec (export name, start/end dates, channel groups, etc.) is per-run only.
+
+---
+
+## Why two formats?
+
+`.env` uses dotenv (`KEY=value`) because that's the universal convention for environment variables — Docker Compose's `env_file`, CI/CD secret injectors, IDE runtime configs, and `direnv` all read it natively. Pulpit's `.env` carries exactly what the convention serves: credentials and per-deployment switches.
+
+The `.operations-*` files use TOML because their schema is hierarchical (per-section), typed (booleans, integers, floats, strings, lists), and benefits from comment preservation across rewrites (`tomlkit`). TOML is the modern Python project-config standard (`pyproject.toml`). YAML's indentation-sensitive type inference would be a hand-edit hazard; JSON disallows comments; INI loses both types and comments on rewrite; Python config files are an execution-time security hole.
+
+The split mirrors the audience: `.env` is sysadmin / deployment territory; `.operations-*` is analyst territory. They have different update cadences and different sets of consumers, and keeping them in their respective natural formats avoids forcing one user group to learn the other's idiom.
