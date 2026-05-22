@@ -159,16 +159,17 @@ def purge_preview(request: Any) -> Response:
 
 @api_view(["GET"])
 def orphan_media_preview(request: Any) -> Response:
-    """Count files under MEDIA_ROOT/channels with no row reference, and their total size."""
-    from webapp.management.commands.purge_orphan_media import channels_root, purge_orphans
+    """Count files under media scan roots with no row reference, and their total size."""
+    from webapp.management.commands.purge_orphan_media import purge_orphans, scan_roots
 
-    if not channels_root().is_dir():
+    existing = [r for r in scan_roots() if r.is_dir()]
+    if not existing:
         return Response(
             {
                 "files": 0,
                 "bytes": 0,
                 "supported": False,
-                "detail": f"{channels_root()} does not exist — nothing to scan.",
+                "detail": "No media scan roots exist on disk — nothing to scan.",
             }
         )
     report = purge_orphans(dry_run=True)
@@ -184,11 +185,12 @@ def orphan_media_preview(request: Any) -> Response:
 @api_view(["POST"])
 def orphan_media_run(request: Any) -> Response:
     """Delete orphan media files from disk; tidy up the empty directories left behind."""
-    from webapp.management.commands.purge_orphan_media import channels_root, purge_orphans
+    from webapp.management.commands.purge_orphan_media import purge_orphans, scan_roots
 
-    if not channels_root().is_dir():
+    existing = [r for r in scan_roots() if r.is_dir()]
+    if not existing:
         return Response(
-            {"detail": f"{channels_root()} does not exist — nothing to scan."},
+            {"detail": "No media scan roots exist on disk — nothing to scan."},
             status=status.HTTP_400_BAD_REQUEST,
         )
     overall_t = time.perf_counter()

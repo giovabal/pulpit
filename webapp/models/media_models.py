@@ -73,15 +73,33 @@ class ProfilePicture(TelegramBasePictureModel):
 class MessagePicture(TelegramBasePictureModel):
     message = models.ForeignKey(Message, on_delete=models.CASCADE)
 
+    class Meta:
+        # The same Telegram photo legitimately appears under many Message rows
+        # (forwarded posts share photo.id), so identity is (telegram_id,
+        # message) — not telegram_id alone. The constraint also pairs with the
+        # composite get_or_create lookup in ``_args_for_from_telegram_object``;
+        # without it, a race between two concurrent --fix-missing-media calls
+        # could create two rows for the same pair.
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "message"], name="messagepicture_tid_msg_uniq"),
+        ]
+
+    @classmethod
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = super()._args_for_from_telegram_object(telegram_object, defaults=defaults)
+        if defaults and "message" in defaults:
+            args["message"] = defaults["message"]
+        return args
+
     def get_media_path(self, filename: str) -> str:
+        # Path is keyed on the Telegram photo id, NOT on the recipient
+        # Message: a single file is shared by every MessagePicture row that
+        # references the same photo (originals + forwards), so disk usage
+        # doesn't multiply with each forwarded recovery.
         extension = filename.split(".")[-1]
-        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
-        return os.path.join(
-            "channels",
-            channel_dir,
-            "message",
-            f"{self.message.telegram_id}.{extension}",
-        )
+        return os.path.join("photos", f"{self.telegram_id}.{extension}")
 
 
 class MessageVideo(TelegramBaseModel):
@@ -92,16 +110,23 @@ class MessageVideo(TelegramBaseModel):
     is_animated = models.BooleanField(default=False)
     is_round = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "message"], name="messagevideo_tid_msg_uniq"),
+        ]
+
+    @classmethod
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = super()._args_for_from_telegram_object(telegram_object, defaults=defaults)
+        if defaults and "message" in defaults:
+            args["message"] = defaults["message"]
+        return args
+
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
-        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
-        return os.path.join(
-            "channels",
-            channel_dir,
-            "message",
-            "video",
-            f"{self.message.telegram_id}.{extension}",
-        )
+        return os.path.join("videos", f"{self.telegram_id}.{extension}")
 
     @classmethod
     def from_telegram_object(
@@ -124,16 +149,23 @@ class MessageAudio(TelegramBaseModel):
     is_voice = models.BooleanField(default=False)
     date = models.DateTimeField(null=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "message"], name="messageaudio_tid_msg_uniq"),
+        ]
+
+    @classmethod
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = super()._args_for_from_telegram_object(telegram_object, defaults=defaults)
+        if defaults and "message" in defaults:
+            args["message"] = defaults["message"]
+        return args
+
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
-        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
-        return os.path.join(
-            "channels",
-            channel_dir,
-            "message",
-            "audio",
-            f"{self.message.telegram_id}.{extension}",
-        )
+        return os.path.join("audios", f"{self.telegram_id}.{extension}")
 
     @classmethod
     def from_telegram_object(
@@ -158,16 +190,23 @@ class MessageSticker(TelegramBaseModel):
     is_animated = models.BooleanField(default=False)
     date = models.DateTimeField(null=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "message"], name="messagesticker_tid_msg_uniq"),
+        ]
+
+    @classmethod
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = super()._args_for_from_telegram_object(telegram_object, defaults=defaults)
+        if defaults and "message" in defaults:
+            args["message"] = defaults["message"]
+        return args
+
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
-        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
-        return os.path.join(
-            "channels",
-            channel_dir,
-            "message",
-            "sticker",
-            f"{self.message.telegram_id}.{extension}",
-        )
+        return os.path.join("stickers", f"{self.telegram_id}.{extension}")
 
     @classmethod
     def from_telegram_object(
@@ -191,16 +230,23 @@ class MessageOtherMedia(TelegramBaseModel):
     mime_type = models.CharField(max_length=100, blank=True)
     date = models.DateTimeField(null=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "message"], name="messageothermedia_tid_msg_uniq"),
+        ]
+
+    @classmethod
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = super()._args_for_from_telegram_object(telegram_object, defaults=defaults)
+        if defaults and "message" in defaults:
+            args["message"] = defaults["message"]
+        return args
+
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
-        channel_dir = self.message.channel.username or str(self.message.channel.telegram_id)
-        return os.path.join(
-            "channels",
-            channel_dir,
-            "message",
-            "other",
-            f"{self.message.telegram_id}.{extension}",
-        )
+        return os.path.join("others", f"{self.telegram_id}.{extension}")
 
     @classmethod
     def from_telegram_object(

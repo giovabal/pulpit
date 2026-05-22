@@ -4,19 +4,19 @@ Companion to ``purge_out_of_target_messages``: that command deletes messages
 and their related media files in step, but every previous deletion path
 (crashed crawler runs, interrupted imports, the buggy ``delete_unused_messages``
 script that left payloads behind) can have produced orphan files. This command
-walks ``MEDIA_ROOT/channels`` and removes anything that isn't pointed to by one
-of the seven file-bearing model fields:
+walks the on-disk directories that hold media payloads and removes anything
+that isn't pointed to by one of the seven file-bearing model fields:
 
-* ``MessagePicture.picture``
-* ``MessageVideo.video``
-* ``MessageAudio.audio``
-* ``MessageSticker.sticker``
-* ``MessageOtherMedia.media_file``
-* ``ProfilePicture.picture``
-* ``ProfilePicture.thumbnail``
+* ``MessagePicture.picture`` (under ``photos/``)
+* ``MessageVideo.video`` (under ``videos/``)
+* ``MessageAudio.audio`` (under ``audios/``)
+* ``MessageSticker.sticker`` (under ``stickers/``)
+* ``MessageOtherMedia.media_file`` (under ``others/``)
+* ``ProfilePicture.picture`` (under ``channels/<X>/profile/``)
+* ``ProfilePicture.thumbnail`` (under ``channels/<X>/profile/``)
 
-Everything outside ``MEDIA_ROOT/channels`` is untouched. Symlinks are skipped.
-Empty directories left behind by the cleanup are removed at the end.
+Anything outside these six roots is untouched. Symlinks are skipped. Empty
+directories left behind by the cleanup are removed at the end.
 
 Usage:
     python manage.py purge_orphan_media --dry-run   # preview
@@ -68,9 +68,16 @@ class OrphanReport:
     dry_run: bool = False
 
 
-def channels_root() -> Path:
-    """Absolute path to the directory the cleanup is scoped to."""
-    return Path(settings.MEDIA_ROOT) / "channels"
+# Directories the cleanup is scoped to. Profile pictures still live under
+# ``channels/<X>/profile/``; message media (shared per Telegram object id) moved
+# out of ``channels/`` and into top-level type-keyed dirs in migration 0045.
+_SCAN_ROOTS: tuple[str, ...] = ("channels", "photos", "videos", "audios", "stickers", "others")
+
+
+def scan_roots() -> list[Path]:
+    """Absolute paths of the directories the cleanup is scoped to."""
+    media_root = Path(settings.MEDIA_ROOT)
+    return [media_root / name for name in _SCAN_ROOTS]
 
 
 def collect_referenced_paths() -> set[str]:
@@ -84,21 +91,22 @@ def collect_referenced_paths() -> set[str]:
 
 
 def iter_orphan_files() -> Iterator[Path]:
-    """Yield absolute paths of files under ``MEDIA_ROOT/channels`` with no DB reference."""
-    root = channels_root()
-    if not root.is_dir():
+    """Yield absolute paths of files under any scan root with no DB reference."""
+    roots = [r for r in scan_roots() if r.is_dir()]
+    if not roots:
         return
     referenced = collect_referenced_paths()
     media_root = Path(settings.MEDIA_ROOT)
-    for path in root.rglob("*"):
-        # ``is_file()`` follows symlinks; check ``is_symlink()`` first so we
-        # never delete a link's target (only the link itself, and even that we
-        # skip to stay conservative).
-        if path.is_symlink() or not path.is_file():
-            continue
-        rel = path.relative_to(media_root).as_posix()
-        if rel not in referenced:
-            yield path
+    for root in roots:
+        for path in root.rglob("*"):
+            # ``is_file()`` follows symlinks; check ``is_symlink()`` first so we
+            # never delete a link's target (only the link itself, and even that
+            # we skip to stay conservative).
+            if path.is_symlink() or not path.is_file():
+                continue
+            rel = path.relative_to(media_root).as_posix()
+            if rel not in referenced:
+                yield path
 
 
 def _remove_empty_dirs(root: Path) -> int:
@@ -119,8 +127,8 @@ def _remove_empty_dirs(root: Path) -> int:
 
 def purge_orphans(*, dry_run: bool = False) -> OrphanReport:
     """Find — and, unless ``dry_run`` is set, delete — every orphan file."""
-    root = channels_root()
-    if not root.is_dir():
+    roots = [r for r in scan_roots() if r.is_dir()]
+    if not roots:
         return OrphanReport(candidate_files=0, candidate_bytes=0, dry_run=dry_run)
 
     candidates: list[tuple[Path, int]] = []
@@ -149,7 +157,9 @@ def purge_orphans(*, dry_run: bool = False) -> OrphanReport:
         removed_files += 1
         removed_bytes += size
 
-    empty_dirs = _remove_empty_dirs(root)
+    empty_dirs = 0
+    for root in roots:
+        empty_dirs += _remove_empty_dirs(root)
 
     return OrphanReport(
         candidate_files=total_files,
@@ -174,8 +184,9 @@ def fmt_bytes(n: int) -> str:
 
 class Command(BaseCommand):
     help = (
-        "Delete media files under MEDIA_ROOT/channels that have no corresponding row "
-        "in the database. Run --dry-run first to preview."
+        "Delete media files under MEDIA_ROOT's media subdirectories (channels, photos, "
+        "videos, audios, stickers, others) that have no corresponding row in the database. "
+        "Run --dry-run first to preview."
     )
 
     def add_arguments(self, parser) -> None:

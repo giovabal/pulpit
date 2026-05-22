@@ -312,7 +312,9 @@ class Message(TelegramBaseModel):
         super().save(*args, **kwargs)
 
     @classmethod
-    def _args_for_from_telegram_object(cls, telegram_object: Any) -> dict[str, Any]:
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
 
     def get_telegram_references(self) -> list[str]:
