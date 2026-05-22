@@ -11,6 +11,7 @@ from django.views import View
 
 from stats.queries import channel_month_spine, global_month_spine, reindex_to_spine
 from webapp.models import Channel, Message, MessageReaction
+from webapp.utils.emoji import emoji_present
 
 import pandas as pd
 
@@ -320,7 +321,9 @@ class ReactionsHistoryDataView(View):
             pivot = pd.DataFrame(0, index=spine, columns=top_emojis)
             pivot.index.name = "month"
 
-        series = [{"emoji": emoji, "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis]
+        series = [
+            {"emoji": emoji_present(emoji), "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis
+        ]
         return JsonResponse({"labels": spine, "series": series, "y_label": "reactions"})
 
 
@@ -368,7 +371,9 @@ class ChannelReactionsHistoryView(View):
             pivot = pd.DataFrame(0, index=spine, columns=top_emojis)
             pivot.index.name = "month"
 
-        series = [{"emoji": emoji, "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis]
+        series = [
+            {"emoji": emoji_present(emoji), "values": [int(v) for v in pivot[emoji].tolist()]} for emoji in top_emojis
+        ]
         return JsonResponse({"labels": spine, "series": series, "y_label": "reactions"})
 
 

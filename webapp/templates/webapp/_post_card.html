@@ -150,7 +150,7 @@ sharing the same (channel_id, grouped_id).
       {% if post.edit_date %}<span class="post-meta-item" data-bs-toggle="tooltip" title="Last edited"><i class="bi bi-pencil" aria-hidden="true"></i> {{ post.edit_date }}</span>{% endif %}
       {% if post.is_lost %}<span class="post-lost-badge" data-bs-toggle="tooltip" title="No longer exists on Telegram">lost</span>{% endif %}
       {% for reaction in post.reactions.all %}
-      <span class="post-meta-item post-reaction">{{ reaction.emoji }} {{ reaction.count }}</span>
+      <span class="post-meta-item post-reaction">{{ reaction.display_emoji }} {{ reaction.count }}</span>
       {% endfor %}
     </div>
     <div class="post-footer-actions">
