@@ -1022,10 +1022,22 @@ class MediaHandlerMessagePictureTests(TestCase):
     @patch("crawler.media_handler.MessagePicture.from_telegram_object")
     def test_returns_1_on_success(self, mock_from_tg: MagicMock) -> None:
         tm = self._make_tg_message()
-        self.handler_dl._download_media = MagicMock(return_value=None)
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/test.jpg")
         result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 1)
         mock_from_tg.assert_called_once()
+
+    def test_returns_zero_when_download_returns_empty(self) -> None:
+        # _download_media returning None (timeout, error) must short-circuit
+        # before from_telegram_object — otherwise a zombie MessagePicture row
+        # with picture=NULL is created and the message becomes unrecoverable
+        # by --fix-missing-media (messagepicture__isnull=True excludes it).
+        tm = self._make_tg_message()
+        self.handler_dl._download_media = MagicMock(return_value=None)
+        with patch("crawler.media_handler.MessagePicture.from_telegram_object") as mock_from_tg:
+            result = self.handler_dl.download_message_picture(tm)
+        self.assertEqual(result, 0)
+        mock_from_tg.assert_not_called()
 
     def test_returns_zero_on_file_migrate_error(self) -> None:
         from telethon.errors.rpcerrorlist import FileMigrateError
@@ -1039,7 +1051,7 @@ class MediaHandlerMessagePictureTests(TestCase):
     def test_returns_zero_on_message_does_not_exist(self) -> None:
         tm = self._make_tg_message()
         tm.id = 9999  # No message with this telegram_id in DB
-        self.handler_dl._download_media = MagicMock(return_value=None)
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/test.jpg")
         result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 0)
 
@@ -1072,30 +1084,42 @@ class MediaHandlerMessageVideoTests(TestCase):
             tm.media.document = None
         return tm
 
-    def test_returns_when_download_disabled(self) -> None:
+    def test_returns_zero_when_download_disabled(self) -> None:
         tm = self._make_tg_message()
-        # Should return None without doing anything
         result = self.handler.download_message_video(tm)
-        self.assertIsNone(result)
+        self.assertEqual(result, 0)
         self.api_client.client.download_media.assert_not_called()
 
-    def test_returns_when_no_document(self) -> None:
+    def test_returns_zero_when_no_document(self) -> None:
         tm = self._make_tg_message(has_document=False)
         tm.media = None
-        self.handler_dl.download_message_video(tm)
+        result = self.handler_dl.download_message_video(tm)
+        self.assertEqual(result, 0)
         self.api_client.client.download_media.assert_not_called()
 
-    def test_returns_when_not_video_mime_type(self) -> None:
+    def test_returns_zero_when_not_video_mime_type(self) -> None:
         tm = self._make_tg_message(mime_type="image/jpeg")
-        self.handler_dl.download_message_video(tm)
+        result = self.handler_dl.download_message_video(tm)
+        self.assertEqual(result, 0)
         self.api_client.client.download_media.assert_not_called()
 
     @patch("crawler.media_handler.MessageVideo.from_telegram_object")
     def test_downloads_video_with_correct_mime_type(self, mock_from_tg: MagicMock) -> None:
         tm = self._make_tg_message(mime_type="video/mp4")
-        self.handler_dl._download_media = MagicMock(return_value=None)
-        self.handler_dl.download_message_video(tm)
+        self.handler_dl._download_media = MagicMock(return_value="/tmp/test.mp4")
+        result = self.handler_dl.download_message_video(tm)
+        self.assertEqual(result, 1)
         mock_from_tg.assert_called_once()
+
+    def test_returns_zero_when_download_returns_empty(self) -> None:
+        # Same zombie-row protection as for pictures: an empty _download_media
+        # result must not propagate into a MessageVideo row with video=NULL.
+        tm = self._make_tg_message(mime_type="video/mp4")
+        self.handler_dl._download_media = MagicMock(return_value=None)
+        with patch("crawler.media_handler.MessageVideo.from_telegram_object") as mock_from_tg:
+            result = self.handler_dl.download_message_video(tm)
+        self.assertEqual(result, 0)
+        mock_from_tg.assert_not_called()
 
     def test_handles_file_migrate_error_gracefully(self) -> None:
         from telethon.errors.rpcerrorlist import FileMigrateError
@@ -1103,10 +1127,8 @@ class MediaHandlerMessageVideoTests(TestCase):
         tm = self._make_tg_message()
         err = FileMigrateError.__new__(FileMigrateError)
         self.handler_dl._download_media = MagicMock(side_effect=err)
-        try:
-            self.handler_dl.download_message_video(tm)
-        except Exception:
-            self.fail("download_message_video raised an unexpected exception")
+        result = self.handler_dl.download_message_video(tm)
+        self.assertEqual(result, 0)
 
 
 # ---------------------------------------------------------------------------

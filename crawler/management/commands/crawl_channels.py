@@ -739,38 +739,50 @@ class Command(BaseCommand):
 
         # Messages with each media_type but no corresponding record.
         # Each media-type bucket is only scanned when its toggle is on.
+        # Album siblings with empty media_type are also enrolled: older crawls
+        # only set media_type on the first sibling of a grouped post, so a
+        # narrow ``media_type=X`` filter misses every other sibling that
+        # actually carries media on Telegram. The per-type download_message_*
+        # functions early-return for non-matching media, so over-broad candidate
+        # sets are safe — they just cost one extra get_messages batch fetch.
+        album_sibling = Q(grouped_id__isnull=False, media_type="")
         needs_pic: set[int] = set()
         if opts.download_images:
             needs_pic = set(
-                Message.objects.filter(channel__in=crawl_qs, media_type="photo")
+                Message.objects.filter(channel__in=crawl_qs)
+                .filter(Q(media_type="photo") | album_sibling)
                 .filter(messagepicture__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_vid: set[int] = set()
         if opts.download_video:
             needs_vid = set(
-                Message.objects.filter(channel__in=crawl_qs, media_type="video")
+                Message.objects.filter(channel__in=crawl_qs)
+                .filter(Q(media_type="video") | album_sibling)
                 .filter(messagevideo__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_aud: set[int] = set()
         if opts.download_audio:
             needs_aud = set(
-                Message.objects.filter(channel__in=crawl_qs, media_type="audio")
+                Message.objects.filter(channel__in=crawl_qs)
+                .filter(Q(media_type="audio") | album_sibling)
                 .filter(messageaudio__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_sticker: set[int] = set()
         if opts.download_stickers:
             needs_sticker = set(
-                Message.objects.filter(channel__in=crawl_qs, media_type="sticker")
+                Message.objects.filter(channel__in=crawl_qs)
+                .filter(Q(media_type="sticker") | album_sibling)
                 .filter(messagesticker__isnull=True)
                 .values_list("id", flat=True)
             )
         needs_other: set[int] = set()
         if opts.download_other_media:
             needs_other = set(
-                Message.objects.filter(channel__in=crawl_qs, media_type="document")
+                Message.objects.filter(channel__in=crawl_qs)
+                .filter(Q(media_type="document") | album_sibling)
                 .filter(messageothermedia__isnull=True)
                 .values_list("id", flat=True)
             )
@@ -813,8 +825,19 @@ class Command(BaseCommand):
         n_messages = len(all_msg_pks)
         self.stdout.write(f"\nFixing missing media: {n_messages} message(s) across {n_channels} channel(s)")
 
-        downloaded = 0
+        # ``saved_*`` count actual file writes (return value 1 from each
+        # download_message_*); ``processed`` counts Telegram messages iterated.
+        # Surfacing both makes silent-download failures visible — the old
+        # single "downloaded" counter incremented per iteration even when
+        # every download returned 0, which made the run *look* successful
+        # while writing nothing.
+        processed = 0
         skipped = 0
+        saved_pic = 0
+        saved_vid = 0
+        saved_aud = 0
+        saved_sticker = 0
+        saved_other = 0
         _BATCH = 100
         for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
             channel = Channel.objects.get(pk=channel_pk)
@@ -822,6 +845,11 @@ class Command(BaseCommand):
             telegram_ids = [tid for _, tid in msg_list]
             pk_by_tid: dict[int, int] = {tid: pk for pk, tid in msg_list}
             n = len(telegram_ids)
+            ch_saved_pic = 0
+            ch_saved_vid = 0
+            ch_saved_aud = 0
+            ch_saved_sticker = 0
+            ch_saved_other = 0
             printer.status(f"{channel_label} | {n} message(s) with missing media", ch_idx)
             try:
                 api_client.wait()
@@ -866,24 +894,43 @@ class Command(BaseCommand):
                         continue
                     msg_pk = pk_by_tid.get(tg_msg.id)
                     if msg_pk in needs_pic:
-                        fix_handler.download_message_picture(tg_msg)
+                        ch_saved_pic += fix_handler.download_message_picture(tg_msg)
                     if msg_pk in needs_vid:
-                        fix_handler.download_message_video(tg_msg)
+                        ch_saved_vid += fix_handler.download_message_video(tg_msg)
                     if msg_pk in needs_aud:
-                        fix_handler.download_message_audio(tg_msg)
+                        ch_saved_aud += fix_handler.download_message_audio(tg_msg)
                     if msg_pk in needs_sticker:
-                        fix_handler.download_message_sticker(tg_msg)
+                        ch_saved_sticker += fix_handler.download_message_sticker(tg_msg)
                     if msg_pk in needs_other:
-                        fix_handler.download_message_other_media(tg_msg)
-                    downloaded += 1
+                        ch_saved_other += fix_handler.download_message_other_media(tg_msg)
+                    processed += 1
+                    ch_saved = ch_saved_pic + ch_saved_vid + ch_saved_aud + ch_saved_sticker + ch_saved_other
                     printer.status(
-                        f"{channel_label} | downloaded {downloaded}/{n_messages}",
+                        f"{channel_label} | processed {processed}/{n_messages}, saved {ch_saved} so far",
                         ch_idx,
                     )
 
+            saved_pic += ch_saved_pic
+            saved_vid += ch_saved_vid
+            saved_aud += ch_saved_aud
+            saved_sticker += ch_saved_sticker
+            saved_other += ch_saved_other
+            ch_saved_total = ch_saved_pic + ch_saved_vid + ch_saved_aud + ch_saved_sticker + ch_saved_other
+            if ch_saved_total < n:
+                printer.newline()
+                self.stdout.write(
+                    f"  {channel_label}: saved {ch_saved_total}/{n} "
+                    f"(pic={ch_saved_pic} vid={ch_saved_vid} aud={ch_saved_aud} "
+                    f"sticker={ch_saved_sticker} other={ch_saved_other})"
+                )
             printer.ensure_newline()
 
-        self.stdout.write(f"Missing media: {downloaded} downloaded, {skipped} skipped.")
+        total_saved = saved_pic + saved_vid + saved_aud + saved_sticker + saved_other
+        self.stdout.write(
+            f"Missing media: {processed} message(s) processed, {total_saved} file(s) saved "
+            f"(pic={saved_pic} vid={saved_vid} aud={saved_aud} sticker={saved_sticker} "
+            f"other={saved_other}), {skipped} skipped."
+        )
 
     def _resolve_options(self, options: dict[str, Any]) -> CrawlOptions:
         from django.core.management.base import CommandError

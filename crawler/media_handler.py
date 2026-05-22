@@ -212,6 +212,16 @@ class MediaHandler:
             return 0
         try:
             picture_filename = self._download_media(telegram_message)
+            if not picture_filename:
+                # _download_media returned None (timeout) or an empty path. Without this
+                # guard, MessagePicture.from_telegram_object would still create a row
+                # with picture=NULL — a "zombie" that messagepicture__isnull=True can no
+                # longer recover via --fix-missing-media.
+                logger.warning(
+                    "Empty download for message picture (msg_id=%s) — likely timeout or stripped media; skipping save",
+                    telegram_message.id,
+                )
+                return 0
             MessagePicture.from_telegram_object(
                 telegram_message.media.photo,
                 force_update=True,
@@ -235,26 +245,32 @@ class MediaHandler:
             logger.warning("Error downloading message picture (msg_id=%s): %s", telegram_message.id, e)
         return 0
 
-    def download_message_video(self, telegram_message: Any) -> None:
+    def download_message_video(self, telegram_message: Any) -> int:
         """Download video documents — including GIFs/animations and round videos.
 
         Webm video stickers (mime ``video/*`` + sticker attribute) are deferred to
         download_message_sticker so the two categories stay disjoint.
         """
         if not self.download_video:
-            return
+            return 0
         document = getattr(telegram_message, "document", None)
         if not document and telegram_message.media:
             document = getattr(telegram_message.media, "document", None)
         if not document:
-            return
+            return 0
         mime_type = getattr(document, "mime_type", "") or ""
         if not mime_type.startswith("video/"):
-            return
+            return 0
         if _is_sticker(document):
-            return
+            return 0
         try:
             video_filename = self._download_media(telegram_message)
+            if not video_filename:
+                logger.warning(
+                    "Empty download for message video (msg_id=%s) — likely timeout or stripped media; skipping save",
+                    telegram_message.id,
+                )
+                return 0
             MessageVideo.from_telegram_object(
                 document,
                 force_update=True,
@@ -269,6 +285,7 @@ class MediaHandler:
                 },
             )
             self._cleanup_downloaded_file(video_filename)
+            return 1
         except (
             errors.rpcerrorlist.FileMigrateError,
             errors.rpcerrorlist.FileReferenceExpiredError,
@@ -277,6 +294,7 @@ class MediaHandler:
             Message.DoesNotExist,
         ) as e:
             logger.warning("Error downloading message video (msg_id=%s): %s", telegram_message.id, e)
+        return 0
 
     def download_message_audio(self, telegram_message: Any) -> int:
         """Download audio documents — both voice notes and uploaded audio files.
