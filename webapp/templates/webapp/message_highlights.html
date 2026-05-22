@@ -1,0 +1,58 @@
+{% extends "webapp/index.html" %}
+{% load static %}
+
+{% block content %}
+<div class="search-header">
+  <h1 class="search-page-title">Top messages</h1>
+  <p class="search-page-subtitle">
+    Ranked by per-channel z-scores of reactions, forwards, and views
+    (Suh et&nbsp;al. 2010; Cha et&nbsp;al. 2010).
+    Cold-start channels are excluded.
+  </p>
+  <form method="get" action="" class="search-form" role="search">
+    <div class="search-input-wrap">
+      <i class="bi bi-search search-icon" aria-hidden="true"></i>
+      <input
+        type="search"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search inside top messages…"
+        class="search-input"
+        aria-label="Search messages"
+      >
+      <button type="submit" class="search-btn">Search</button>
+    </div>
+    {% include "webapp/message_options.html" %}
+  </form>
+  {% if query %}
+  <p class="search-summary">
+    {% if page_obj.paginator.count %}
+      {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for <strong>{{ query }}</strong>
+    {% else %}
+      No results for <strong>{{ query }}</strong>
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+{% include "webapp/pagination.html" %}
+
+<ol class="post-list list-unstyled mt-2">
+  {% for post in page_obj %}
+  <li>
+    {% include "webapp/_post_card.html" with post=post show_channel_chip=True %}
+  </li>
+  {% endfor %}
+</ol>
+
+{% include "webapp/pagination.html" %}
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
+</script>
+<script src="{% static 'webapp/js/post_replies.js' %}"></script>
+{% endblock extra_scripts %}

@@ -17,6 +17,7 @@ from network import (
     community_stats,
     exporter,
     graph_builder,
+    interest_structural,
     layout,
     measures,
     robustness,
@@ -81,6 +82,39 @@ def _compute_extra_layouts(
         else:
             out[name.lower()] = funcs[name](graph)
     return out
+
+
+def _pick_interest_community_strategy(strategies: list[str]) -> str:
+    """Pick the community strategy used by interest-structural's C metric.
+
+    Prefer LEIDEN_DIRECTED (matches ``_BRIDGING_DEFAULT_STRATEGY``: directional
+    brokerage makes more sense for forwarding cascades than undirected modularity),
+    then LEIDEN, then any non-ORGANIZATION strategy, then ORGANIZATION as a last
+    resort. The chosen strategy must be one of those already requested via
+    ``--community-strategies`` so its labels are present on the graph.
+    """
+    preference = ["LEIDEN_DIRECTED", "LEIDEN", "LOUVAIN", "INFOMAP", "LEIDEN_CPM_FINE", "LEIDEN_CPM_COARSE"]
+    for candidate in preference:
+        if candidate in strategies:
+            return candidate
+    for candidate in strategies:
+        if candidate != "ORGANIZATION":
+            return candidate
+    if "ORGANIZATION" in strategies:
+        return "ORGANIZATION"
+    raise CommandError("--interest-structural requires at least one community strategy in --community-strategies.")
+
+
+def _pick_interest_authority_key(selected_measures: set[str]) -> str:
+    """Choose the node attribute used as D's authority weight.
+
+    Falls through PAGERANK → HITSAUTH → in_deg (always populated by
+    ``apply_base_node_measures``)."""
+    if "PAGERANK" in selected_measures:
+        return "pagerank"
+    if "HITSAUTH" in selected_measures:
+        return "hits_authority"
+    return "in_deg"
 
 
 def _atomic_publish(staging: str, final_target: str) -> None:
@@ -178,6 +212,11 @@ class ResolvedOptions:
     robustness_seed: int = 42
     robustness_sample: int = 500
 
+    # Interest structural analysis (per-message C + D)
+    do_interest_structural: bool = False
+    interest_window_days: int = 30
+    interest_include_mentions: bool = False
+
     # Export naming
     export_name: str = ""
 
@@ -226,6 +265,9 @@ class ResolvedOptions:
             "robustness_null": self.robustness_null,
             "robustness_seed": self.robustness_seed,
             "robustness_sample": self.robustness_sample,
+            "interest_structural": self.do_interest_structural,
+            "interest_window_days": self.interest_window_days,
+            "interest_include_mentions": self.interest_include_mentions,
             "recency_weights": self.recency_weights,
         }
 
@@ -749,6 +791,43 @@ class Command(BaseCommand):
             metavar="N",
             help=("Source-sample size for the R_reach metric on graphs larger than this many nodes. Default: 500."),
         )
+        # ── Interest structural analysis (per-message C + D) ─────────────────
+        parser.add_argument(
+            "--interest-structural",
+            dest="interest_structural",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Compute per-message cross-community reach (Goel et al. 2016 adapted to "
+                "Telegram's depth-1 forwarding) and authority-weighted reach (Cha et al. 2010). "
+                "Writes data/interest_structural.json. Requires at least one community "
+                "strategy and ideally PAGERANK in --measures (falls back to HITSAUTH then "
+                "in-degree)."
+            ),
+        )
+        parser.add_argument(
+            "--interest-window-days",
+            dest="interest_window_days",
+            type=int,
+            default=None,
+            metavar="DAYS",
+            help=(
+                "Reaction window in days for the structural interest scoring: only forwards "
+                "within this many days of the origin post count toward C and D. Use 0 to "
+                "disable the window. Default: 30 (matches --diffusion-window)."
+            ),
+        )
+        parser.add_argument(
+            "--interest-include-mentions",
+            dest="interest_include_mentions",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Accept the flag for forward compatibility. Currently a no-op: Telegram's "
+                "Message.references are message→channel, not message→message, so a faithful "
+                "implementation needs separate design. A warning is logged when set."
+            ),
+        )
         parser.add_argument(
             "--name",
             dest="name",
@@ -1090,6 +1169,9 @@ class Command(BaseCommand):
         robustness_null: int = 20,
         robustness_seed: int = 42,
         robustness_sample: int = 500,
+        do_interest_structural: bool = False,
+        interest_window_days: int = 30,
+        interest_include_mentions: bool = False,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
@@ -1245,6 +1327,17 @@ class Command(BaseCommand):
                     ),
                 )
                 exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
+
+            if do_interest_structural:
+                year_int_payload = interest_structural.compute_interest_structural(
+                    graph_data,
+                    channel_dict,
+                    community_strategy=_pick_interest_community_strategy(communities_strategy),
+                    authority_key=_pick_interest_authority_key(selected_measures),
+                    window_days=interest_window_days,
+                    include_mentions=interest_include_mentions,
+                )
+                exporter.write_interest_structural_json(year_int_payload, graph_dir=tmp_dir)
 
             year_data_dst = os.path.join(root_target, f"data_{year}")
             if os.path.exists(year_data_dst):
@@ -1441,6 +1534,9 @@ class Command(BaseCommand):
             robustness_null=_o("robustness_null", 20),
             robustness_seed=_o("robustness_seed", 42),
             robustness_sample=_o("robustness_sample", 500),
+            do_interest_structural=_o("interest_structural", False),
+            interest_window_days=_o("interest_window_days", 30),
+            interest_include_mentions=_o("interest_include_mentions", False),
             export_name=export_name,
         )
 
@@ -1469,6 +1565,7 @@ class Command(BaseCommand):
                 opts.selected_network_groups,
                 opts.selected_vacancy_measures,
                 opts.do_robustness,
+                opts.do_interest_structural,
             )
         ):
             self.stdout.write(
@@ -1745,6 +1842,29 @@ class Command(BaseCommand):
             )
             self.stdout.write("- vacancy_analysis.html")
 
+        if opts.do_interest_structural:
+            self.stdout.write("\nInterest structural")
+            int_community = _pick_interest_community_strategy(opts.communities_strategy)
+            int_authority = _pick_interest_authority_key(opts.selected_measures)
+            self.stdout.write(f"- basis: {int_community.lower()} communities, {int_authority} authority")
+
+            def _int_progress(label: str) -> None:
+                self.stdout.write(f"  - {label}", ending="\n")
+                self.stdout.flush()
+
+            int_payload = interest_structural.compute_interest_structural(
+                graph_data,
+                channel_dict,
+                community_strategy=int_community,
+                authority_key=int_authority,
+                window_days=opts.interest_window_days,
+                include_mentions=opts.interest_include_mentions,
+                progress=_int_progress,
+            )
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_interest_structural_json(int_payload, root_target)
+            self.stdout.write("- interest_structural.json")
+
         global_rob_payload: dict | None = None
         if opts.do_robustness:
             self.stdout.write("\nRobustness analysis")
@@ -1831,6 +1951,9 @@ class Command(BaseCommand):
                         robustness_null=opts.robustness_null,
                         robustness_seed=opts.robustness_seed,
                         robustness_sample=opts.robustness_sample,
+                        do_interest_structural=opts.do_interest_structural,
+                        interest_window_days=opts.interest_window_days,
+                        interest_include_mentions=opts.interest_include_mentions,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
