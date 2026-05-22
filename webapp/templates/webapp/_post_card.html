@@ -62,82 +62,79 @@ sharing the same (channel_id, grouped_id).
   </div>
   {% endif %}
   {% with pictures=post.album_pictures videos=post.album_videos audios=post.album_audios stickers=post.album_stickers other_media=post.album_other_media %}
-  {% if pictures %}
-    {% for picture in pictures %}
-    {% if picture.picture %}
-    <figure class="mb-0">
-      <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ post.channel.title }}">
-    </figure>
-    {% endif %}
-    {% endfor %}
-  {% elif post.media_type == "photo" %}
+  {% for picture in pictures %}
+  {% if picture.picture %}
+  <figure class="mb-0">
+    <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ post.channel.title }}">
+  </figure>
+  {% endif %}
+  {% endfor %}
+  {% for _ in post.album_missing_pictures %}
   <div class="media-placeholder">
     <i class="bi bi-image" aria-hidden="true"></i>
     <span>Image not downloaded</span>
   </div>
+  {% endfor %}
+  {% for video in videos %}
+  {% if video.video %}
+  <figure class="mb-0">
+    <video src="{{ video.video.url }}" class="post-image" controls aria-label="Message video from {{ post.channel.title }}"></video>
+  </figure>
   {% endif %}
-  {% if videos %}
-    {% for video in videos %}
-    <figure class="mb-0">
-      <video src="{{ video.video.url }}" class="post-image" controls aria-label="Message video from {{ post.channel.title }}"></video>
-    </figure>
-    {% endfor %}
-  {% elif post.media_type == "video" %}
+  {% endfor %}
+  {% for _ in post.album_missing_videos %}
   <div class="media-placeholder">
     <i class="bi bi-film" aria-hidden="true"></i>
     <span>Video not downloaded</span>
   </div>
+  {% endfor %}
+  {% for audio in audios %}
+  {% if audio.audio %}
+  <figure class="mb-0">
+    <audio src="{{ audio.audio.url }}" controls aria-label="{% if audio.is_voice %}Voice note{% else %}Audio{% endif %} from {{ post.channel.title }}"></audio>
+  </figure>
   {% endif %}
-  {% if audios %}
-    {% for audio in audios %}
-    {% if audio.audio %}
-    <figure class="mb-0">
-      <audio src="{{ audio.audio.url }}" controls aria-label="{% if audio.is_voice %}Voice note{% else %}Audio{% endif %} from {{ post.channel.title }}"></audio>
-    </figure>
-    {% endif %}
-    {% endfor %}
-  {% elif post.media_type == "audio" %}
+  {% endfor %}
+  {% for _ in post.album_missing_audios %}
   <div class="media-placeholder">
     <i class="bi bi-music-note-beamed" aria-hidden="true"></i>
     <span>Audio not downloaded</span>
   </div>
+  {% endfor %}
+  {% for sticker in stickers %}
+  {% if sticker.sticker %}
+  {% if sticker.mime_type == "image/webp" %}
+  <figure class="mb-0">
+    <img src="{{ sticker.sticker.url }}" class="post-sticker" alt="Sticker from {{ post.channel.title }}">
+  </figure>
+  {% else %}
+  <div class="media-placeholder">
+    <i class="bi bi-emoji-smile" aria-hidden="true"></i>
+    <a href="{{ sticker.sticker.url }}" download>{% if sticker.is_animated %}Animated{% else %}Video{% endif %} sticker</a>
+  </div>
   {% endif %}
-  {% if stickers %}
-    {% for sticker in stickers %}
-    {% if sticker.sticker %}
-    {% if sticker.mime_type == "image/webp" %}
-    <figure class="mb-0">
-      <img src="{{ sticker.sticker.url }}" class="post-sticker" alt="Sticker from {{ post.channel.title }}">
-    </figure>
-    {% else %}
-    <div class="media-placeholder">
-      <i class="bi bi-emoji-smile" aria-hidden="true"></i>
-      <a href="{{ sticker.sticker.url }}" download>{% if sticker.is_animated %}Animated{% else %}Video{% endif %} sticker</a>
-    </div>
-    {% endif %}
-    {% endif %}
-    {% endfor %}
-  {% elif post.media_type == "sticker" %}
+  {% endif %}
+  {% endfor %}
+  {% for _ in post.album_missing_stickers %}
   <div class="media-placeholder">
     <i class="bi bi-emoji-smile" aria-hidden="true"></i>
     <span>Sticker not downloaded</span>
   </div>
+  {% endfor %}
+  {% for other in other_media %}
+  {% if other.media_file %}
+  <div class="media-placeholder">
+    <i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i>
+    <a href="{{ other.media_file.url }}" download>Download attachment</a>
+  </div>
   {% endif %}
-  {% if other_media %}
-    {% for other in other_media %}
-    {% if other.media_file %}
-    <div class="media-placeholder">
-      <i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i>
-      <a href="{{ other.media_file.url }}" download>Download attachment</a>
-    </div>
-    {% endif %}
-    {% endfor %}
-  {% elif post.media_type == "document" %}
+  {% endfor %}
+  {% for _ in post.album_missing_other_media %}
   <div class="media-placeholder">
     <i class="bi bi-file-earmark" aria-hidden="true"></i>
     <span>File not downloaded</span>
   </div>
-  {% endif %}
+  {% endfor %}
   {% endwith %}
   <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
   {% if post.post_author %}

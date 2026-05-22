@@ -955,6 +955,73 @@ class MessageAlbumTests(TestCase):
         self.assertFalse(hasattr(self.standalone, "_album_cache"))
 
 
+class AlbumMissingMediaTests(TestCase):
+    """The gallery must show a placeholder per sibling whose media never
+    downloaded — otherwise an album of 1 photo + 2 undownloaded videos
+    visually renders as just the photo, dropping two items silently."""
+
+    def setUp(self) -> None:
+        from webapp.models import MessagePicture, MessageVideo
+
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=20, organization=self.org)
+        # Album of 3 siblings: 1 photo (downloaded) + 2 videos (NOT downloaded).
+        self.head = Message.objects.create(
+            telegram_id=300, channel=self.channel, grouped_id=777, media_type="photo"
+        )
+        self.video1 = Message.objects.create(
+            telegram_id=301, channel=self.channel, grouped_id=777, media_type="video"
+        )
+        self.video2 = Message.objects.create(
+            telegram_id=302, channel=self.channel, grouped_id=777, media_type="video"
+        )
+        MessagePicture.objects.create(message=self.head, telegram_id=300, picture="head.jpg")
+        # Empty-file video row (e.g. crawled but file went missing) counts as missing too.
+        MessageVideo.objects.create(message=self.video1, telegram_id=301, video="")
+
+    def test_missing_videos_for_undownloaded_siblings(self) -> None:
+        # Head sees its 1 picture (present) and 0 video files (both siblings missing).
+        self.assertEqual(len(self.head.album_pictures), 1)
+        self.assertEqual(len(self.head.album_videos), 1)  # video1 row exists with empty file
+        self.assertEqual(self.head.album_missing_pictures, [])
+        self.assertEqual(len(self.head.album_missing_videos), 2)  # video1 (empty file) + video2 (no row)
+
+    def test_no_placeholders_when_everything_downloaded(self) -> None:
+        from webapp.models import MessageVideo
+
+        # Fill the empty file on video1 and add the missing row for video2.
+        v1 = MessageVideo.objects.get(message=self.video1)
+        v1.video = "v1.mp4"
+        v1.save()
+        MessageVideo.objects.create(message=self.video2, telegram_id=302, video="v2.mp4")
+        self.assertEqual(self.head.album_missing_pictures, [])
+        self.assertEqual(self.head.album_missing_videos, [])
+
+    def test_missing_picture_on_standalone_post(self) -> None:
+        """The placeholder logic also covers non-album messages."""
+        lone = Message.objects.create(
+            telegram_id=400, channel=self.channel, grouped_id=None, media_type="photo"
+        )
+        # No MessagePicture row at all ⇒ one placeholder expected.
+        self.assertEqual(len(lone.album_missing_pictures), 1)
+        self.assertEqual(lone.album_missing_videos, [])
+
+    def test_attach_album_data_caches_sibling_type_counts(self) -> None:
+        """The bulk loader must populate `_album_sibling_type_counts` so the
+        per-type placeholder properties don't re-query the database."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        Message.attach_album_data([self.head])
+        with CaptureQueriesContext(connection) as ctx:
+            _ = self.head.album_missing_pictures
+            _ = self.head.album_missing_videos
+            _ = self.head.album_missing_audios
+            _ = self.head.album_missing_stickers
+            _ = self.head.album_missing_other_media
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+
 # ─── purge_out_of_target_messages ──────────────────────────────────────────────
 
 

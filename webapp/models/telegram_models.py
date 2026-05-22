@@ -401,6 +401,74 @@ class Message(TelegramBaseModel):
 
     _ALBUM_CACHE_KEYS: ClassVar[tuple[str, ...]] = ("pictures", "videos", "audios", "stickers", "other_media")
 
+    # Map each `Message.media_type` string a sibling carries to (a) the album-
+    # cache key used by `_album_media` / `album_pictures` / `album_videos` /
+    # …, and (b) the name of the file field on the corresponding media model
+    # whose truthiness tells us the file actually downloaded.
+    _MEDIA_TYPE_INFO: ClassVar[dict[str, tuple[str, str]]] = {
+        "photo": ("pictures", "picture"),
+        "video": ("videos", "video"),
+        "audio": ("audios", "audio"),
+        "sticker": ("stickers", "sticker"),
+        "document": ("other_media", "media_file"),
+    }
+
+    def _expected_media_count(self, media_type: str) -> int:
+        """How many sibling messages in this album carry `media_type` on their Message row.
+
+        For a non-album message, this is `1` when the message itself is of that
+        type and `0` otherwise. For an album head, it reflects the union over
+        every sibling sharing `(channel_id, grouped_id)` — cached by
+        `attach_album_data` when present, otherwise a single COUNT() per call.
+        """
+        if not self.is_album:
+            return 1 if self.media_type == media_type else 0
+        cache = getattr(self, "_album_sibling_type_counts", None)
+        if cache is not None:
+            return cache.get(media_type, 0)
+        return Message.objects.filter(
+            channel_id=self.channel_id, grouped_id=self.grouped_id, media_type=media_type
+        ).count()
+
+    def _missing_media_placeholders(self, media_type: str) -> list:
+        """Return a list of length N (= sibling-count − downloaded-row-count) for templates.
+
+        The template loops it to render N placeholder cards. Only sibling rows
+        whose underlying file field is truthy count as "downloaded" — a media
+        row whose file went missing from disk is still treated as a missing
+        placeholder, not as a silent blank.
+        """
+        info = self._MEDIA_TYPE_INFO.get(media_type)
+        if not info:
+            return []
+        cache_key, file_attr = info
+        # Use the existing album_* properties so we benefit from the
+        # attach_album_data cache when the view called it.
+        media_rows = getattr(self, f"album_{cache_key}")
+        actual = sum(1 for row in media_rows if getattr(row, file_attr, None))
+        expected = self._expected_media_count(media_type)
+        return [None] * max(0, expected - actual)
+
+    @property
+    def album_missing_pictures(self) -> list:
+        return self._missing_media_placeholders("photo")
+
+    @property
+    def album_missing_videos(self) -> list:
+        return self._missing_media_placeholders("video")
+
+    @property
+    def album_missing_audios(self) -> list:
+        return self._missing_media_placeholders("audio")
+
+    @property
+    def album_missing_stickers(self) -> list:
+        return self._missing_media_placeholders("sticker")
+
+    @property
+    def album_missing_other_media(self) -> list:
+        return self._missing_media_placeholders("document")
+
     @classmethod
     def attach_album_data(cls, messages: "Iterable[Message]") -> None:
         """Bulk-load album sibling media and sizes for a page of messages.
@@ -439,13 +507,21 @@ class Message(TelegramBaseModel):
             return
 
         q = reduce(or_, (Q(channel_id=c, grouped_id=g) for c, g in album_keys))
-        sibling_rows = list(cls.objects.filter(q).values("id", "channel_id", "grouped_id"))
+        sibling_rows = list(cls.objects.filter(q).values("id", "channel_id", "grouped_id", "media_type"))
 
         sibling_ids: list[int] = []
         sizes: dict[tuple[int, int], int] = defaultdict(int)
+        # Per-album-key counts of sibling messages whose `media_type` is the
+        # given value. Powers the `album_missing_*` placeholder properties so
+        # a video sibling whose file wasn't downloaded still shows up as a
+        # placeholder in the gallery.
+        sibling_type_counts: dict[tuple[int, int], dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for row in sibling_rows:
             sibling_ids.append(row["id"])
-            sizes[(row["channel_id"], row["grouped_id"])] += 1
+            key = (row["channel_id"], row["grouped_id"])
+            sizes[key] += 1
+            if row["media_type"]:
+                sibling_type_counts[key][row["media_type"]] += 1
 
         media_lookups: dict[tuple[int, int], dict[str, list]] = {}
         media_configs = (
@@ -471,6 +547,7 @@ class Message(TelegramBaseModel):
             key = (msg.channel_id, msg.grouped_id)
             msg._album_cache = media_lookups.get(key, {k: [] for k in cls._ALBUM_CACHE_KEYS})
             msg._album_size_cache = sizes.get(key, 1)
+            msg._album_sibling_type_counts = dict(sibling_type_counts.get(key, {}))
 
     @property
     def telegram_url(self) -> str:
