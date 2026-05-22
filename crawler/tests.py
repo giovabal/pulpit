@@ -1799,6 +1799,22 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.assertIsNone(self.msg.forwarded_from)
         self.assertIsNone(self.msg.pending_forward_telegram_id)
 
+    def test_resolve_pending_marks_unresolvable_as_private(self) -> None:
+        """Telethon raises ValueError when it can't find the input entity (e.g. unknown
+        access_hash). Treat that the same as ChannelPrivateError: preserve the channel_id
+        in forwarded_from_private rather than dropping it."""
+        self._set_pending(1608875596)
+        self.api_client.client.get_entity.side_effect = ValueError(
+            "Could not find the input entity for PeerUser(user_id=1608875596)"
+        )
+
+        self.crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        self.assertEqual(self.msg.forwarded_from_private, 1608875596)
+        self.assertIsNone(self.msg.forwarded_from)
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+
     def test_resolve_pending_on_flood_wait_keeps_field_for_retry(self) -> None:
         self._set_pending(2222)
         self.api_client.client.get_entity.side_effect = _flood_error(seconds=30)
