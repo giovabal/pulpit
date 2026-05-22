@@ -21,6 +21,7 @@ from django.urls import reverse
 from webapp.managers import ChannelManager, MessageManager
 from webapp.models import Organization
 from webapp.models.base import TelegramBaseModel
+from webapp.utils.emoji import emoji_present
 
 
 class Channel(TelegramBaseModel):
@@ -567,6 +568,10 @@ class MessageReaction(models.Model):
 
     def __str__(self) -> str:
         return f"{self.emoji} ×{self.count} on message {self.message_id}"
+
+    @property
+    def display_emoji(self) -> str:
+        return emoji_present(self.emoji)
 
 
 class MessageReply(models.Model):

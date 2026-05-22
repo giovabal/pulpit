@@ -966,15 +966,9 @@ class AlbumMissingMediaTests(TestCase):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
         self.channel = Channel.objects.create(telegram_id=20, organization=self.org)
         # Album of 3 siblings: 1 photo (downloaded) + 2 videos (NOT downloaded).
-        self.head = Message.objects.create(
-            telegram_id=300, channel=self.channel, grouped_id=777, media_type="photo"
-        )
-        self.video1 = Message.objects.create(
-            telegram_id=301, channel=self.channel, grouped_id=777, media_type="video"
-        )
-        self.video2 = Message.objects.create(
-            telegram_id=302, channel=self.channel, grouped_id=777, media_type="video"
-        )
+        self.head = Message.objects.create(telegram_id=300, channel=self.channel, grouped_id=777, media_type="photo")
+        self.video1 = Message.objects.create(telegram_id=301, channel=self.channel, grouped_id=777, media_type="video")
+        self.video2 = Message.objects.create(telegram_id=302, channel=self.channel, grouped_id=777, media_type="video")
         MessagePicture.objects.create(message=self.head, telegram_id=300, picture="head.jpg")
         # Empty-file video row (e.g. crawled but file went missing) counts as missing too.
         MessageVideo.objects.create(message=self.video1, telegram_id=301, video="")
@@ -999,9 +993,7 @@ class AlbumMissingMediaTests(TestCase):
 
     def test_missing_picture_on_standalone_post(self) -> None:
         """The placeholder logic also covers non-album messages."""
-        lone = Message.objects.create(
-            telegram_id=400, channel=self.channel, grouped_id=None, media_type="photo"
-        )
+        lone = Message.objects.create(telegram_id=400, channel=self.channel, grouped_id=None, media_type="photo")
         # No MessagePicture row at all ⇒ one placeholder expected.
         self.assertEqual(len(lone.album_missing_pictures), 1)
         self.assertEqual(lone.album_missing_videos, [])
