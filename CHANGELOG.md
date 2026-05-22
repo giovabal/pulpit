@@ -1,5 +1,5 @@
 # Changelog
-## [0.21] - To be announced
+## [0.21] - 2026-05-22
 *New configuration system. Fixed and improved maintenance functionalities.*
 
 ### New features
