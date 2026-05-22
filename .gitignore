@@ -21,3 +21,4 @@ configuration/.operations-structural-*
 *.session-journal
 node_modules/
 package-lock.json
+.claude/

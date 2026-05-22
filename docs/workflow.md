@@ -209,6 +209,10 @@ Enable in the Structural Analysis options (or with `--robustness` on the CLI). T
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
 
+### Interesting messages
+
+Per-channel z-scored engagement is always on once the relevant migration has been applied — Pulpit refreshes the scores automatically at the end of each crawl, and you can recompute on demand with `python manage.py compute_message_scores` (accepts `--channel-id`, `--min-sample`, `--recency-days`, `--weights`). The structural reach metrics (cross-community reach + authority-weighted reach) are opt-in via `--interest-structural` on `structural_analysis`, with companion flags `--interest-window-days N` (default 30, matches `--diffusion-window`; 0 disables) and `--interest-include-mentions` (accepted for forward compatibility, currently a no-op). The structural layer writes `data/interest_structural.json` and is consumed on demand by the per-channel **Top messages** panel. See [Interesting messages](interesting-messages.md) for the scoring formula, the academic references, and when the metrics are interpretable.
+
 ---
 
 ## Viewing your results
@@ -285,6 +289,12 @@ python manage.py structural_analysis --robustness --robustness-strategies pagera
 python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging\(louvain\)  # explicit bridging basis (escape parens in bash)
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 
+# Interesting messages — structural reach layer (hot per-channel z-scores are always on)
+python manage.py compute_message_scores                                                 # recompute hot scores for every channel
+python manage.py compute_message_scores --channel-id 42 --recency-days 90               # one channel, rolling baseline
+python manage.py structural_analysis --interest-structural --measures PAGERANK --community-strategies LEIDEN_DIRECTED
+python manage.py structural_analysis --interest-structural --interest-window-days 0     # disable the 30-day forwarder window
+
 # Compare two exports
 python manage.py compare_analysis /path/to/exports/<other-name>
 # Windows: use backslashes or quote the path
@@ -295,6 +305,6 @@ See `python manage.py <command> --help` for the full list of flags for any comma
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">
