@@ -19,4 +19,5 @@ urlpatterns = [
         name="message-jump",
     ),
     path("search/", views.MessageSearchView.as_view(), name="message-search"),
+    path("messages/highlights/", views.MessageHighlightsView.as_view(), name="message-highlights"),
 ]

@@ -59,6 +59,10 @@ _SORT_ORDER_BY: dict[str, tuple] = {
     "views_asc": (F("views").asc(nulls_last=True), "-date", "-pk"),
     "reactions_desc": ("-total_reactions", "-date", "-pk"),
     "reactions_asc": ("total_reactions", "-date", "-pk"),
+    # Per-channel z-scored composite (webapp.scoring). NULL when the channel
+    # has too little history to baseline; pushed to the bottom by nulls_last.
+    "interest_desc": (F("interest_score").desc(nulls_last=True), "-date", "-pk"),
+    "interest_asc": (F("interest_score").asc(nulls_last=True), "-date", "-pk"),
 }
 
 
@@ -383,6 +387,60 @@ class MessageSearchView(ListView):
         return ctx
 
 
+class MessageHighlightsView(ListView):
+    """Global feed of messages ranked by ``interest_score`` (the hot-layer
+    composite of per-channel z-scored views, forwards, reactions).
+
+    Cold-start channels — those below ``webapp.scoring.MIN_SAMPLE`` alive
+    messages — emit ``NULL`` interest scores and are filtered out: the page
+    is a ranking, not a catch-all browser.
+    """
+
+    template_name = "webapp/message_highlights.html"
+    model = Message
+    paginator_class = DiggPaginator
+    paginate_by = 50
+    paginate_orphans = 15
+    page_kwarg = "page"
+
+    def _params(self) -> Any:
+        # Default the sort to interest_desc on first visit, but keep any
+        # explicit ?sort= from the dropdown.
+        params = self.request.GET.copy()
+        if "sort" not in self.request.GET:
+            params["sort"] = "interest_desc"
+        return params
+
+    def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
+        qs = (
+            Message.objects.filter(
+                channel__in=Channel.objects.in_target(),
+                interest_score__isnull=False,
+            )
+            .select_related("channel", "channel__organization", "forwarded_from")
+            .prefetch_related(
+                "messagepicture_set",
+                "messagevideo_set",
+                "messageaudio_set",
+                "messagesticker_set",
+                "messageothermedia_set",
+                "reactions",
+            )
+        )
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(message__icontains=q)
+        return _apply_message_options(qs, self._params())
+
+    def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(*args, **kwargs)
+        Message.attach_album_data(ctx["object_list"])
+        q = self.request.GET.get("q", "").strip()
+        ctx["query"] = q
+        ctx.update(_message_options_context(self._params()))
+        return ctx
+
+
 class ChannelDetailView(ListView):
     template_name = "webapp/channel_detail.html"
     model = Message
@@ -680,6 +738,20 @@ class ChannelDetailView(ListView):
                 "url": reverse("channel-contact-info", kwargs={"pk": ch.pk}),
                 "type": "table",
                 "description": "External domains and email addresses found in this channel's messages.",
+            },
+            {
+                "id": "ch-top-messages",
+                "title": "Top messages",
+                "icon": "bi-stars",
+                "url": reverse("channel-top-messages", kwargs={"pk": ch.pk}),
+                "type": "top-messages",
+                "description": (
+                    "This channel's most engaging posts, ranked by a weighted composite of "
+                    "per-channel z-scored reactions, forwards, and views (Suh et al. 2010; "
+                    "Cha et al. 2010). When a structural-analysis export is available, "
+                    "cross-community reach (Goel et al. 2016) and authority-weighted reach "
+                    "(Cha et al. 2010) are shown alongside."
+                ),
             },
         ]
 

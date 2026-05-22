@@ -523,6 +523,9 @@ def write_summary_json(
         "robustness_null",
         "robustness_seed",
         "robustness_sample",
+        "interest_structural",
+        "interest_window_days",
+        "interest_include_mentions",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -574,6 +577,14 @@ def _sanitize_nan_inf(obj):
     if isinstance(obj, tuple):
         return tuple(_sanitize_nan_inf(v) for v in obj)
     return obj
+
+
+def write_interest_structural_json(payload: dict, graph_dir: str) -> None:
+    """Write data/interest_structural.json from compute_interest_structural."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "interest_structural.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
 
 
 def write_robustness_json(payload: dict, graph_dir: str) -> None:

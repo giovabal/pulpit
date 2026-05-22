@@ -35,6 +35,14 @@
           <input type="radio" name="sort" value="reactions_asc" class="msg-opt-input"
                  {% if sort == "reactions_asc" %}checked{% endif %}> Fewest reactions
         </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="interest_desc" class="msg-opt-input"
+                 {% if sort == "interest_desc" %}checked{% endif %}> Most interesting
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="interest_asc" class="msg-opt-input"
+                 {% if sort == "interest_asc" %}checked{% endif %}> Least interesting
+        </label>
       </div>
 
       <div class="msg-options-divider"></div>

@@ -1,0 +1,237 @@
+"""Structural interest scoring for messages.
+
+Computes per-message **cross-community reach** *C* (Goel, Anderson, Hofman &
+Watts, *The structural virality of online diffusion*, Management Science 2016,
+adapted to Telegram's depth-1 forwarding topology) and **authority-weighted
+reach** *D* (Cha, Haddadi, Benevenuto & Gummadi, *Measuring user influence in
+Twitter*, ICWSM 2010, "weighted indegree" analogue) by walking the
+``(forwarded_from, fwd_from_channel_post)`` join.
+
+Output is a JSON-serialisable dict written to
+``exports/<name>/data/interest_structural.json`` by
+``network.exporter.write_interest_structural_json``. See the plan at
+``/home/jo/.claude/plans/i-want-to-implement-radiant-lovelace.md`` §4 for the
+edge cases (out-of-target forwarders, self-forwards, album heads, window).
+"""
+
+from __future__ import annotations
+
+import datetime
+import logging
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
+
+from django.db.models import F
+from django.utils import timezone
+
+from network.utils import GraphData
+from webapp.models import Channel, Message
+
+import networkx as nx  # noqa: F401  (kept for type-symmetry with sister modules)
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_TOP_PER_CHANNEL: int = 50
+_FORWARDER_CHUNK: int = 5000
+
+
+def compute_interest_structural(
+    graph_data: GraphData,
+    channel_dict: dict[str, Any],
+    *,
+    community_strategy: str,
+    authority_key: str = "pagerank",
+    window_days: int = 30,
+    include_mentions: bool = False,
+    top_n_per_channel: int = DEFAULT_TOP_PER_CHANNEL,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Compute per-message C and D and emit a JSON-serialisable payload.
+
+    Parameters
+    ----------
+    graph_data
+        ``GraphData`` dict returned by ``exporter.build_graph_data`` *after*
+        ``_compute_measures`` has populated the authority key.
+    channel_dict
+        The ``{str(pk): {channel, data}}`` dict from ``graph_builder.build_graph``;
+        ``data["communities"][strategy_key]`` holds the community label.
+    community_strategy
+        Strategy name (e.g. ``"LEIDEN_DIRECTED"``); lowercased internally to
+        match the storage key used by ``community.apply_to_graph``.
+    authority_key
+        Node-attribute key holding the authority score (``"pagerank"`` by
+        default; fallback chain handled by the caller).
+    window_days
+        Forwards beyond this many days from the origin's posting date are
+        dropped. ``0`` disables the window.
+    include_mentions
+        Accepted for forward compatibility; not yet implemented. Mentions in
+        ``Message.references`` are message→channel rather than
+        message→message and need separate design work.
+    top_n_per_channel
+        Size of each per-channel top list.
+    progress
+        Optional callback for stage labels.
+    """
+    if include_mentions:
+        logger.warning(
+            "interest_structural: include_mentions=True is accepted but not yet "
+            "implemented. Telegram's references are message→channel, not "
+            "message→message, and a faithful translation needs separate design."
+        )
+
+    if progress:
+        progress("preparing channel maps")
+    strategy_key = community_strategy.lower()
+    comm_by_pk: dict[int, Any] = {}
+    auth_by_pk: dict[int, float] = {}
+    for node_id, entry in channel_dict.items():
+        comm_label = (entry["data"].get("communities") or {}).get(strategy_key)
+        if comm_label is not None:
+            comm_by_pk[int(node_id)] = comm_label
+    for node in graph_data.get("nodes") or ():
+        val = node.get(authority_key)
+        if val is None:
+            continue
+        try:
+            auth_by_pk[int(node["id"])] = float(val)
+        except (TypeError, ValueError):
+            continue
+
+    in_target_pks: set[int] = set(Channel.objects.in_target().values_list("pk", flat=True))
+
+    if progress:
+        progress("collecting in-target forwarder rows")
+    forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
+    out_of_target_count: dict[tuple[int, int], int] = defaultdict(int)
+
+    in_target_q = (
+        Message.objects.alive()
+        .filter(
+            channel_id__in=in_target_pks,
+            forwarded_from_id__in=in_target_pks,
+            fwd_from_channel_post__isnull=False,
+        )
+        .exclude(channel_id=F("forwarded_from_id"))
+        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post", "date")
+    )
+    for fwd_ch, origin_ch, origin_tg_id, fwd_date in in_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
+        forwarders_by_origin[(origin_ch, origin_tg_id)].append((fwd_ch, fwd_date))
+
+    if progress:
+        progress("counting out-of-target forwarders")
+    out_target_q = (
+        Message.objects.alive()
+        .filter(
+            forwarded_from_id__in=in_target_pks,
+            fwd_from_channel_post__isnull=False,
+        )
+        .exclude(channel_id__in=in_target_pks)
+        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post")
+    )
+    for _fwd_ch, origin_ch, origin_tg_id in out_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
+        out_of_target_count[(origin_ch, origin_tg_id)] += 1
+
+    if not forwarders_by_origin:
+        return _empty_payload(
+            community_strategy=strategy_key,
+            authority_key=authority_key,
+            window_days=window_days,
+            include_mentions=include_mentions,
+        )
+
+    if progress:
+        progress("fetching origin metadata")
+    origins_by_channel: dict[int, list[int]] = defaultdict(list)
+    for ch_pk, tg_id in forwarders_by_origin:
+        origins_by_channel[ch_pk].append(tg_id)
+    origin_meta: dict[tuple[int, int], dict[str, Any]] = {}
+    for ch_pk, tg_ids in origins_by_channel.items():
+        rows = Message.objects.filter(channel_id=ch_pk, telegram_id__in=tg_ids).values_list(
+            "telegram_id", "date", "grouped_id", "interest_score"
+        )
+        for tg_id, date, grouped_id, interest_score in rows:
+            origin_meta[(ch_pk, tg_id)] = {
+                "date": date,
+                "grouped_id": grouped_id,
+                "interest_score": interest_score,
+            }
+
+    if progress:
+        progress("scoring origins")
+    by_message: list[dict[str, Any]] = []
+    for key, forwarders in forwarders_by_origin.items():
+        origin_ch, origin_tg_id = key
+        meta = origin_meta.get(key) or {}
+        origin_date: datetime.datetime | None = meta.get("date")
+        grouped_id = meta.get("grouped_id")
+        interest_score = meta.get("interest_score")
+        if window_days > 0 and origin_date is not None:
+            cutoff = origin_date + datetime.timedelta(days=window_days)
+            filtered = [(fid, fd) for fid, fd in forwarders if fd is not None and fd <= cutoff]
+        else:
+            filtered = list(forwarders)
+        if not filtered:
+            continue
+        forwarder_pks = {pk for pk, _ in filtered}
+        c_value = len({comm_by_pk[pk] for pk in forwarder_pks if pk in comm_by_pk})
+        d_value = sum(auth_by_pk.get(pk, 0.0) for pk in forwarder_pks)
+        by_message.append(
+            {
+                "channel_pk": origin_ch,
+                "telegram_id": origin_tg_id,
+                "date": origin_date.isoformat() if origin_date else None,
+                "grouped_id": grouped_id,
+                "c_cross_community": c_value,
+                "d_authority_reach": d_value,
+                "interest_score": interest_score,
+                "forwarder_count_in_target": len(forwarder_pks),
+                "forwarder_count_out_of_target": out_of_target_count.get(key, 0),
+            }
+        )
+
+    if progress:
+        progress("ranking per channel")
+    by_channel_top: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for rec in by_message:
+        grouped[rec["channel_pk"]].append(rec)
+
+    def _interest_key(rec: dict[str, Any]) -> float:
+        v = rec["interest_score"]
+        return v if v is not None else float("-inf")
+
+    for ch_pk, recs in grouped.items():
+        by_interest = sorted(recs, key=_interest_key, reverse=True)[:top_n_per_channel]
+        by_c = sorted(recs, key=lambda r: r["c_cross_community"], reverse=True)[:top_n_per_channel]
+        by_channel_top[str(ch_pk)] = {"by_interest": by_interest, "by_cross_community": by_c}
+
+    return {
+        "computed_at": timezone.now().isoformat(timespec="seconds"),
+        "community_strategy": strategy_key,
+        "authority_key": authority_key,
+        "window_days": window_days,
+        "include_mentions": include_mentions,
+        "by_message": by_message,
+        "by_channel_top": by_channel_top,
+    }
+
+
+def _empty_payload(
+    *,
+    community_strategy: str,
+    authority_key: str,
+    window_days: int,
+    include_mentions: bool,
+) -> dict[str, Any]:
+    return {
+        "computed_at": timezone.now().isoformat(timespec="seconds"),
+        "community_strategy": community_strategy,
+        "authority_key": authority_key,
+        "window_days": window_days,
+        "include_mentions": include_mentions,
+        "by_message": [],
+        "by_channel_top": {},
+    }

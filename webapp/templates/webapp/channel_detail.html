@@ -290,7 +290,7 @@
   <div class="collapse" id="{{ panel.id }}" data-panel-url="{{ panel.url }}" data-panel-type="{{ panel.type|default:'chart' }}">
     <div class="stats-panel-body">
       <div class="stats-spinner"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
-      {% if panel.type == "table" or panel.type == "cross-refs" %}
+      {% if panel.type == "table" or panel.type == "cross-refs" or panel.type == "top-messages" %}
       <div class="panel-tables-wrap"></div>
       {% else %}
       <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas></canvas></div>
@@ -322,16 +322,19 @@
     collapse.addEventListener('show.bs.collapse', function () {
       if (!loaded) {
         loaded = true;
-        var isChart = collapse.dataset.panelType !== 'table' && collapse.dataset.panelType !== 'cross-refs';
+        var ptype = collapse.dataset.panelType;
+        var isChart = ptype !== 'table' && ptype !== 'cross-refs' && ptype !== 'top-messages';
         var fetches = [fetchJson(collapse.dataset.panelUrl)];
         if (isChart) fetches.push(getEventsPromise());
         Promise.all(fetches).then(function (results) {
           spinner.classList.add('hidden');
-          if (collapse.dataset.panelType === 'table') {
+          if (ptype === 'table') {
             renderContactTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
-          } else if (collapse.dataset.panelType === 'cross-refs') {
+          } else if (ptype === 'cross-refs') {
             renderCrossRefsTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
-          } else if (collapse.dataset.panelType === 'reactions-chart') {
+          } else if (ptype === 'top-messages') {
+            renderTopMessagesTable(collapse.querySelector('.panel-tables-wrap'), results[0]);
+          } else if (ptype === 'reactions-chart') {
             renderReactionsChart(collapse.querySelector('canvas'), results[0], results[1]);
           } else {
             renderChart(collapse.querySelector('canvas'), results[0], results[1]);
@@ -402,6 +405,108 @@
       }
       wrap.appendChild(section);
     });
+  }
+
+  function renderTopMessagesTable(wrap, data) {
+    var rows = data.messages || [];
+    if (rows.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'panel-table-empty';
+      empty.textContent = 'No scored messages yet for this channel (cold-start or zero variance).';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    var showStructural = !!data.structural_loaded;
+    function fmtScore(v) { return v == null ? '—' : (Math.round(v * 100) / 100).toFixed(2); }
+    function fmtInt(v) { return v == null ? '—' : Number(v).toLocaleString(); }
+    function fmtDate(v) {
+      if (!v) return '—';
+      var d = new Date(v);
+      return isNaN(d.getTime()) ? v.slice(0, 10) : d.toISOString().slice(0, 10);
+    }
+
+    var cols = [
+      { key: 'date',           label: 'Date',         cls: '',         numeric: false, dir: -1 },
+      { key: 'preview',        label: 'Message',      cls: '',         numeric: false, dir: 1  },
+      { key: 'interest_score', label: 'Interest',     cls: 'text-end', numeric: true,  dir: -1 },
+      { key: 'z_reactions',    label: 'z(react)',     cls: 'text-end', numeric: true,  dir: -1 },
+      { key: 'z_forwards',     label: 'z(fwd)',       cls: 'text-end', numeric: true,  dir: -1 },
+      { key: 'z_views',        label: 'z(views)',     cls: 'text-end', numeric: true,  dir: -1 },
+    ];
+    if (showStructural) {
+      cols.push({ key: 'c_cross_community', label: 'Cross-comm.', cls: 'text-end', numeric: true, dir: -1 });
+      cols.push({ key: 'd_authority_reach', label: 'Auth. reach', cls: 'text-end', numeric: true, dir: -1 });
+    }
+
+    var sortCol = 'interest_score';
+    var sortDir = -1;
+
+    function render() {
+      var sorted = rows.slice().sort(function (a, b) {
+        var va = a[sortCol], vb = b[sortCol];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return sortDir * (va < vb ? -1 : va > vb ? 1 : 0);
+      });
+
+      var thead = '<tr>' + cols.map(function (col) {
+        var arrow = col.key === sortCol ? (sortDir === 1 ? ' ↑' : ' ↓') : ' <span class="vac-sort-idle" aria-hidden="true">↕</span>';
+        var sortState = col.key === sortCol ? (sortDir === 1 ? 'ascending' : 'descending') : 'none';
+        return '<th scope="col" aria-sort="' + sortState + '" class="vac-sort-th ' + col.cls + '" data-col="' + col.key + '"><button type="button" class="vac-sort-btn">' + col.label + arrow + '</button></th>';
+      }).join('') + '</tr>';
+
+      var tbody = sorted.map(function (m) {
+        var preview = document.createElement('a');
+        preview.href = m.url || '#';
+        preview.textContent = m.preview || '(no text)';
+        preview.className = 'top-msg-preview-link';
+        var html = '<tr>' +
+          '<td>' + fmtDate(m.date) + '</td>' +
+          '<td>' + preview.outerHTML + '</td>' +
+          '<td class="text-end">' + fmtScore(m.interest_score) + '</td>' +
+          '<td class="text-end">' + fmtScore(m.z_reactions) + '</td>' +
+          '<td class="text-end">' + fmtScore(m.z_forwards) + '</td>' +
+          '<td class="text-end">' + fmtScore(m.z_views) + '</td>';
+        if (showStructural) {
+          html += '<td class="text-end">' + fmtInt(m.c_cross_community) + '</td>';
+          html += '<td class="text-end">' + fmtScore(m.d_authority_reach) + '</td>';
+        }
+        return html + '</tr>';
+      }).join('');
+
+      var tableEl = document.createElement('table');
+      tableEl.className = 'stats-table top-messages-table';
+      tableEl.innerHTML = '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody>';
+      tableEl.querySelectorAll('th[data-col]').forEach(function (th) {
+        var btn = th.querySelector('.vac-sort-btn') || th;
+        btn.addEventListener('click', function () {
+          var col = th.dataset.col;
+          if (sortCol === col) { sortDir = -sortDir; }
+          else { sortCol = col; sortDir = cols.find(function (c) { return c.key === col; }).dir; }
+          render();
+          if (window.PulpitA11y) {
+            var meta = cols.find(function (c) { return c.key === sortCol; });
+            PulpitA11y.announce('Sorted by ' + (meta ? meta.label : sortCol) + ', ' + (sortDir === 1 ? 'ascending' : 'descending'));
+          }
+        });
+      });
+
+      wrap.innerHTML = '';
+      if (showStructural && data.structural_meta) {
+        var meta = document.createElement('p');
+        meta.className = 'top-messages-meta';
+        meta.textContent = 'Structural columns from export: ' +
+          data.structural_meta.community_strategy + ' communities, ' +
+          data.structural_meta.authority_key + ' authority, ' +
+          data.structural_meta.window_days + '-day window.';
+        wrap.appendChild(meta);
+      }
+      wrap.appendChild(tableEl);
+    }
+
+    render();
   }
 
   function renderContactTables(wrap, data) {

@@ -377,6 +377,116 @@ class ChannelReactionsHistoryView(View):
         return JsonResponse({"labels": spine, "series": series, "y_label": "reactions"})
 
 
+class ChannelTopMessagesView(View):
+    """Top messages of a channel ranked by ``interest_score`` (Suh et al. 2010
+    / Cha et al. 2010 weighted composite of per-channel z-scored views,
+    forwards, reactions).
+
+    Optionally merges in cross-community reach (C) and authority-weighted
+    reach (D) from ``exports/<latest>/data/interest_structural.json`` when an
+    export with that file is available.
+    """
+
+    _DEFAULT_LIMIT = 30
+    _MAX_LIMIT = 100
+    _PREVIEW_CHARS = 220
+
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        from django.db.models import F
+        from django.urls import reverse
+
+        # Local import to avoid the webapp ↔ stats import dance at module load.
+        from webapp.views import _exclude_album_tails
+
+        channel = get_object_or_404(Channel, pk=pk)
+        try:
+            limit = min(self._MAX_LIMIT, max(1, int(request.GET.get("limit", self._DEFAULT_LIMIT))))
+        except (TypeError, ValueError):
+            limit = self._DEFAULT_LIMIT
+
+        qs = (
+            Message.objects.alive()
+            .filter(channel=channel, interest_score__isnull=False)
+            .only(
+                "pk",
+                "telegram_id",
+                "channel_id",
+                "date",
+                "message",
+                "media_type",
+                "grouped_id",
+                "views",
+                "forwards",
+                "total_reactions",
+                "interest_score",
+                "z_views",
+                "z_forwards",
+                "z_reactions",
+            )
+        )
+        if channel.out_of_target_after:
+            qs = qs.filter(date__date__lte=channel.out_of_target_after)
+        qs = _exclude_album_tails(qs).order_by(F("interest_score").desc(nulls_last=True), "-date", "-pk")[:limit]
+
+        # Try to enrich with structural C/D from the latest published export.
+        from webapp.utils.exports import latest_export_payload
+
+        structural = latest_export_payload("interest_structural.json")
+        by_message: dict[tuple[int, int], dict] = {}
+        if structural is not None:
+            for entry in structural.get("by_message") or ():
+                key = (entry.get("channel_pk"), entry.get("telegram_id"))
+                by_message[key] = entry
+
+        messages = []
+        for msg in qs:
+            extra = by_message.get((msg.channel_id, msg.telegram_id), {})
+            preview = (msg.message or "").strip().replace("\n", " ")
+            if len(preview) > self._PREVIEW_CHARS:
+                preview = preview[: self._PREVIEW_CHARS - 1].rstrip() + "…"
+            messages.append(
+                {
+                    "telegram_id": msg.telegram_id,
+                    "date": msg.date.isoformat() if msg.date else None,
+                    "url": reverse(
+                        "message-jump",
+                        kwargs={"channel_pk": channel.pk, "telegram_id": msg.telegram_id},
+                    ),
+                    "preview": preview,
+                    "media_type": msg.media_type or "",
+                    "interest_score": msg.interest_score,
+                    "z_views": msg.z_views,
+                    "z_forwards": msg.z_forwards,
+                    "z_reactions": msg.z_reactions,
+                    "views": msg.views,
+                    "forwards": msg.forwards,
+                    "reactions": msg.total_reactions,
+                    "c_cross_community": extra.get("c_cross_community"),
+                    "d_authority_reach": extra.get("d_authority_reach"),
+                }
+            )
+
+        from webapp.scoring import DEFAULT_WEIGHTS
+
+        return JsonResponse(
+            {
+                "messages": messages,
+                "structural_loaded": structural is not None,
+                "structural_meta": (
+                    {
+                        "community_strategy": structural.get("community_strategy"),
+                        "authority_key": structural.get("authority_key"),
+                        "window_days": structural.get("window_days"),
+                        "include_mentions": structural.get("include_mentions"),
+                    }
+                    if structural is not None
+                    else None
+                ),
+                "weights": DEFAULT_WEIGHTS,
+            }
+        )
+
+
 class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)

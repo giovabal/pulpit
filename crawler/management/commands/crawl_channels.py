@@ -1309,6 +1309,19 @@ class Command(BaseCommand):
                             if retry_lost_messages:
                                 self._retry_lost_for_channel(channel, crawler, index, total_channels, printer)
 
+                            # Refresh per-channel interest scores once the
+                            # channel's messages have been updated (Suh 2010 /
+                            # Cha 2010 weighted z-scores).  Channel-level
+                            # recompute is O(N_messages) and trivially cheap
+                            # compared to a network round-trip.
+                            if get_new_messages or do_refresh or fix_holes:
+                                try:
+                                    from webapp.scoring import recompute_channel
+
+                                    recompute_channel(channel.pk)
+                                except Exception as exc:  # noqa: BLE001
+                                    logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
+
                         printer.newline()
 
                         if retry_references:

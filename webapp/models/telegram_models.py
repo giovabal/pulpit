@@ -288,6 +288,18 @@ class Message(TelegramBaseModel):
     factcheck = models.JSONField(null=True, blank=True)
     stats_refreshed_at = models.DateTimeField(null=True)
 
+    # Per-channel z-scores of the three engagement facets. NULL when the
+    # facet is itself NULL on the message, or when the channel has fewer than
+    # webapp.scoring.MIN_SAMPLE rated messages (cold-start). Salganik–Dodds–Watts
+    # 2006 normalisation against rich-get-richer bias.
+    z_views = models.FloatField(null=True)
+    z_forwards = models.FloatField(null=True)
+    z_reactions = models.FloatField(null=True)
+    # Weighted composite of the available z-scores (Suh et al. 2010 / Cha et al.
+    # 2010 weights). NULL when all three facet z-scores are NULL.
+    interest_score = models.FloatField(null=True, db_index=True)
+    interest_scored_at = models.DateTimeField(null=True)
+
     class Meta:
         indexes = [
             # Speeds up the in_target() + Message.alive() pattern used by every
@@ -299,6 +311,8 @@ class Message(TelegramBaseModel):
             # Per-channel sort by views / reactions on the messages browser.
             models.Index(fields=["channel", "views"], name="webapp_msg_chan_views_idx"),
             models.Index(fields=["channel", "total_reactions"], name="webapp_msg_chan_react_idx"),
+            # Per-channel sort by interest_score for the "Top messages" panel.
+            models.Index(fields=["channel", "interest_score"], name="webapp_msg_chan_interest_idx"),
         ]
 
     def __str__(self) -> str:
