@@ -24,7 +24,7 @@ from webapp.models import (
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
-from telethon.tl.types import InputChannel, MessageService, User
+from telethon.tl.types import InputChannel, MessageService, PeerChannel, User
 
 logger = logging.getLogger(__name__)
 
@@ -579,7 +579,9 @@ class ChannelCrawler:
                 status_callback(f"resolving forwarded channels … {index}/{total}")
             self.api_client.wait()
             try:
-                telegram_channel = self.api_client.client.get_entity(channel_id)
+                # PeerChannel hints the entity type so Telethon's session cache does not
+                # mis-resolve the raw int as a PeerUser when the channel is unknown to us.
+                telegram_channel = self.api_client.client.get_entity(PeerChannel(channel_id))
                 resolved = Channel.from_telegram_object(telegram_channel, force_update=True)
                 Message.objects.filter(pending_forward_telegram_id=channel_id).update(
                     forwarded_from=resolved,
@@ -596,9 +598,9 @@ class ChannelCrawler:
                     pending_forward_telegram_id=None,
                 )
             except (AttributeError, ValueError) as e:
-                logger.warning("Unexpected error resolving pending forward for channel_id=%s: %s", channel_id, e)
+                logger.warning("Could not resolve forwarded channel %s (%s); treating as private", channel_id, e)
                 Message.objects.filter(pending_forward_telegram_id=channel_id).update(
-                    forwarded_from_private=0,
+                    forwarded_from_private=channel_id,
                     pending_forward_telegram_id=None,
                 )
 
