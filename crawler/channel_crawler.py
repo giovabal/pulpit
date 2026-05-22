@@ -41,20 +41,22 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
     so that total reaction counts are not understated on channels that use custom emoji packs.
     """
     MessageReaction.objects.filter(message_id=message_pk).delete()
+    to_create: list[MessageReaction] = []
     reactions_obj = getattr(telegram_message, "reactions", None)
-    if not reactions_obj:
-        return
-    to_create = []
-    custom_total = 0
-    for rc in getattr(reactions_obj, "results", None) or []:
-        if hasattr(rc.reaction, "emoticon"):
-            to_create.append(MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count))
-        else:
-            custom_total += rc.count
-    if custom_total:
-        to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
+    if reactions_obj:
+        custom_total = 0
+        for rc in getattr(reactions_obj, "results", None) or []:
+            if hasattr(rc.reaction, "emoticon"):
+                to_create.append(MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count))
+            else:
+                custom_total += rc.count
+        if custom_total:
+            to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
     if to_create:
         MessageReaction.objects.bulk_create(to_create)
+    # Keep Message.total_reactions in sync — including the N → 0 case, so the
+    # denormalised sort key never goes stale.
+    Message.objects.filter(pk=message_pk).update(total_reactions=sum(r.count for r in to_create))
 
 
 def _save_poll(message_pk: int, telegram_message: Any) -> None:
