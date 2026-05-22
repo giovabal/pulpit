@@ -55,6 +55,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 - How does the network today compare to a snapshot from six months ago? *([Network comparison](docs/workflow.md#compare-two-networks))*
 - After a key channel went silent — removed, banned, or simply abandoned — who filled its structural role? *([Vacancy Analysis](docs/vacancy-analysis.md))*
 - How resilient is this ecosystem if a moderation wave starts pulling channels offline — and which kinds of removals would damage it most? *([Robustness Analysis](docs/robustness-analysis.md))*
+- Which messages punched above their channel's own baseline, and which ones escaped their origin community to spread across the network? *([Interesting messages](docs/interesting-messages.md))*
 
 ---
 
@@ -267,6 +268,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 6 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
+| [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
 | [Operations defaults & configuration](docs/operations-defaults.md) | How the form, the CLI, and the snapshot files relate; the three buttons (Save / Load / Write CLI); the every-flag-must-be-explicit CLI rule |
