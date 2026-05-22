@@ -591,7 +591,7 @@ class MaintenanceOrphanMediaApiTests(_ApiTestCase):
     """Endpoints powering the "Purge orphan media files" panel."""
 
     @override_settings(WEB_ACCESS="ALL")
-    def test_preview_reports_unsupported_when_channels_root_missing(self):
+    def test_preview_reports_unsupported_when_scan_roots_missing(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as media_root:
@@ -601,7 +601,7 @@ class MaintenanceOrphanMediaApiTests(_ApiTestCase):
                 body = resp.json()
                 self.assertFalse(body["supported"])
                 self.assertEqual(body["files"], 0)
-                self.assertIn("does not exist", body["detail"])
+                self.assertIn("nothing to scan", body["detail"])
 
     @override_settings(WEB_ACCESS="ALL")
     def test_preview_reports_orphan_counts(self):

@@ -1055,6 +1055,45 @@ class MediaHandlerMessagePictureTests(TestCase):
         result = self.handler_dl.download_message_picture(tm)
         self.assertEqual(result, 0)
 
+    def test_forwarded_photo_creates_separate_messagepicture_row(self) -> None:
+        # A forwarded photo carries the same Telegram photo.id under a
+        # different Message. Before the composite-key fix, get_or_create
+        # matched on telegram_id alone, returned the original row, wrote the
+        # file to the original Message's path, and left the forwarded Message
+        # uncovered — the symptom that made --fix-missing-media's "saved N"
+        # counter climb while files never appeared on disk.
+        import tempfile
+
+        from django.core.files.base import ContentFile
+        from django.test import override_settings
+
+        from webapp.models import MessagePicture
+
+        forwarded = Message.objects.create(telegram_id=2, channel=self.channel)
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                # Seed the original — same telegram_id (=42, the photo id) the
+                # mock _make_tg_message will use, attached to a different
+                # Message.
+                original_row = MessagePicture.objects.create(message=self.message, telegram_id=42)
+                original_row.picture.save("seed.jpg", ContentFile(b"seed-bytes"), save=True)
+
+                tm = self._make_tg_message()
+                tm.id = forwarded.telegram_id  # 2 — the forwarded Message
+                src_file = os.path.join(media_root, "src.jpg")
+                with open(src_file, "wb") as fh:
+                    fh.write(b"new-bytes")
+                self.handler_dl._download_media = MagicMock(return_value=src_file)
+                result = self.handler_dl.download_message_picture(tm)
+
+                self.assertEqual(result, 1)
+                rows = MessagePicture.objects.filter(telegram_id=42).order_by("id")
+                # One row per Message that references the photo.
+                self.assertEqual(rows.count(), 2)
+                self.assertEqual({row.message_id for row in rows}, {self.message.id, forwarded.id})
+                # Both rows point at the same shared file under photos/<id>.<ext>.
+                self.assertTrue(all(r.picture.name == "photos/42.jpg" for r in rows))
+
 
 # ---------------------------------------------------------------------------
 # MediaHandler — download_message_video

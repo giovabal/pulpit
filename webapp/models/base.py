@@ -58,7 +58,14 @@ class TelegramBaseModel(BaseModel):
         abstract = True
 
     @classmethod
-    def _args_for_from_telegram_object(cls, telegram_object: Any) -> dict[str, Any]:
+    def _args_for_from_telegram_object(
+        cls, telegram_object: Any, defaults: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        # ``defaults`` is forwarded so subclasses that need a composite
+        # identity (e.g. message-bound media where the same Telegram photo can
+        # legitimately appear under multiple Message rows after a forward) can
+        # mix the FK into the lookup. The base identity is the Telegram object
+        # id alone.
         return {"telegram_id": telegram_object.id if telegram_object else None}
 
     @classmethod
@@ -66,7 +73,7 @@ class TelegramBaseModel(BaseModel):
         cls, telegram_object: Any, force_update: bool = True, defaults: dict[str, Any] | None = None
     ) -> Self:
         obj, created = cls.objects.get_or_create(
-            **cls._args_for_from_telegram_object(telegram_object), defaults=defaults or {}
+            **cls._args_for_from_telegram_object(telegram_object, defaults=defaults), defaults=defaults or {}
         )
         if (created or force_update) and cls.TELEGRAM_OBJECT_PROPERTIES:
             for field in cls.TELEGRAM_OBJECT_PROPERTIES:
