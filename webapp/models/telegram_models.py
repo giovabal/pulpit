@@ -266,6 +266,7 @@ class Message(TelegramBaseModel):
     missing_references = models.TextField(blank=True)
     grouped_id = models.BigIntegerField(null=True, db_index=True)
     views = models.PositiveBigIntegerField(null=True)
+    total_reactions = models.PositiveBigIntegerField(default=0)
     forwards = models.PositiveBigIntegerField(null=True)
     edit_date = models.DateTimeField(null=True)
     post_author = models.CharField(max_length=255, blank=True)
@@ -295,6 +296,9 @@ class Message(TelegramBaseModel):
             # Speeds up Min/Max(date) aggregates and per-channel date-range
             # filters (channel-detail timeline, structural_analysis).
             models.Index(fields=["channel", "date"], name="webapp_msg_chan_date_idx"),
+            # Per-channel sort by views / reactions on the messages browser.
+            models.Index(fields=["channel", "views"], name="webapp_msg_chan_views_idx"),
+            models.Index(fields=["channel", "total_reactions"], name="webapp_msg_chan_react_idx"),
         ]
 
     def __str__(self) -> str:

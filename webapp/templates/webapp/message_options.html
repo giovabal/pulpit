@@ -10,14 +10,44 @@
     <div class="dropdown-menu msg-options-menu">
 
       <div class="msg-options-section">
-        <div class="msg-options-label">Sort by date</div>
+        <div class="msg-options-label">Sort</div>
         <label class="msg-options-item">
-          <input type="radio" name="sort" value="asc" class="msg-opt-input"
-                 {% if sort == "asc" %}checked{% endif %}> Oldest first
+          <input type="radio" name="sort" value="date_desc" class="msg-opt-input"
+                 {% if sort == "date_desc" %}checked{% endif %}> Newest first
         </label>
         <label class="msg-options-item">
-          <input type="radio" name="sort" value="desc" class="msg-opt-input"
-                 {% if sort == "desc" %}checked{% endif %}> Newest first
+          <input type="radio" name="sort" value="date_asc" class="msg-opt-input"
+                 {% if sort == "date_asc" %}checked{% endif %}> Oldest first
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="views_desc" class="msg-opt-input"
+                 {% if sort == "views_desc" %}checked{% endif %}> Most viewed
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="views_asc" class="msg-opt-input"
+                 {% if sort == "views_asc" %}checked{% endif %}> Least viewed
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="reactions_desc" class="msg-opt-input"
+                 {% if sort == "reactions_desc" %}checked{% endif %}> Most reactions
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="sort" value="reactions_asc" class="msg-opt-input"
+                 {% if sort == "reactions_asc" %}checked{% endif %}> Fewest reactions
+        </label>
+      </div>
+
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
+        <div class="msg-options-label">Date range</div>
+        <label class="msg-options-item">
+          <span class="msg-options-date-label">From</span>
+          <input type="date" name="date_from" value="{{ date_from }}" class="msg-opt-input form-control form-control-sm">
+        </label>
+        <label class="msg-options-item">
+          <span class="msg-options-date-label">To</span>
+          <input type="date" name="date_to" value="{{ date_to }}" class="msg-opt-input form-control form-control-sm">
         </label>
       </div>
 
