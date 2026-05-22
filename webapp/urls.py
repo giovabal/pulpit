@@ -13,5 +13,10 @@ urlpatterns = [
         views.MessageRepliesView.as_view(),
         name="message-replies",
     ),
+    path(
+        "channel/<int:channel_pk>/message/<int:telegram_id>/",
+        views.MessageJumpView.as_view(),
+        name="message-jump",
+    ),
     path("search/", views.MessageSearchView.as_view(), name="message-search"),
 ]
