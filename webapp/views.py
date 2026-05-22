@@ -8,8 +8,8 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Count, Exists, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 from django.views.generic import ListView, TemplateView
@@ -47,6 +47,34 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 
 _LOST_MODES = ("exclude", "include", "only")
 
+_DEFAULT_SORT = "date_desc"
+# Backward-compat for pre-2026 URLs that used the bare asc/desc vocabulary.
+_LEGACY_SORTS = {"asc": "date_asc", "desc": "date_desc"}
+# Every order_by tuple terminates with -pk / pk so pagination is stable across
+# ties — MessageJumpView relies on (-date, -pk) for the default sort.
+_SORT_ORDER_BY: dict[str, tuple] = {
+    "date_desc": ("-date", "-pk"),
+    "date_asc": ("date", "pk"),
+    "views_desc": (F("views").desc(nulls_last=True), "-date", "-pk"),
+    "views_asc": (F("views").asc(nulls_last=True), "-date", "-pk"),
+    "reactions_desc": ("-total_reactions", "-date", "-pk"),
+    "reactions_asc": ("total_reactions", "-date", "-pk"),
+}
+
+
+def _parse_iso_date(s: str | None) -> datetime.date | None:
+    if not s:
+        return None
+    try:
+        return datetime.date.fromisoformat(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_sort(raw: str | None) -> str:
+    sort = _LEGACY_SORTS.get(raw or "", raw or "")
+    return sort if sort in _SORT_ORDER_BY else _DEFAULT_SORT
+
 
 def _exclude_album_tails(qs: QuerySet) -> QuerySet:
     """Hide messages that are part of a Telegram media-group album but not its head.
@@ -68,9 +96,15 @@ def _exclude_album_tails(qs: QuerySet) -> QuerySet:
     )
 
 
-def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc") -> QuerySet:
-    sort = params.get("sort", default_sort)
-    qs = qs.order_by("date" if sort == "asc" else "-date")
+def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
+    sort = _resolve_sort(params.get("sort"))
+    qs = qs.order_by(*_SORT_ORDER_BY[sort])
+    date_from = _parse_iso_date(params.get("date_from"))
+    if date_from:
+        qs = qs.filter(date__date__gte=date_from)
+    date_to = _parse_iso_date(params.get("date_to"))
+    if date_to:
+        qs = qs.filter(date__date__lte=date_to)
     selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
     if selected and set(selected) != set(_CONTENT_TYPES):
         type_q: Q = Q(pk__in=[])
@@ -87,21 +121,33 @@ def _apply_message_options(qs: QuerySet, params: Any, default_sort: str = "desc"
     return _exclude_album_tails(qs)
 
 
-def _message_options_context(params: Any, default_sort: str = "desc") -> dict[str, Any]:
-    sort = params.get("sort", default_sort)
+def _message_options_context(params: Any) -> dict[str, Any]:
+    sort = _resolve_sort(params.get("sort"))
+    date_from = _parse_iso_date(params.get("date_from"))
+    date_to = _parse_iso_date(params.get("date_to"))
     selected = [t for t in params.getlist("type") if t in _CONTENT_TYPE_Q]
     if not selected:
         selected = list(_CONTENT_TYPES)
     lost = params.get("lost", "exclude")
     if lost not in _LOST_MODES:
         lost = "exclude"
-    options_active = sort != default_sort or set(selected) != set(_CONTENT_TYPES) or lost != "exclude"
+    options_active = (
+        sort != _DEFAULT_SORT
+        or date_from is not None
+        or date_to is not None
+        or set(selected) != set(_CONTENT_TYPES)
+        or lost != "exclude"
+    )
 
     extra: dict[str, Any] = {}
     if params.get("q"):
         extra["q"] = params["q"]
-    if sort != default_sort:
+    if sort != _DEFAULT_SORT:
         extra["sort"] = sort
+    if date_from:
+        extra["date_from"] = date_from.isoformat()
+    if date_to:
+        extra["date_to"] = date_to.isoformat()
     if set(selected) != set(_CONTENT_TYPES):
         extra["type"] = selected
     if lost != "exclude":
@@ -110,6 +156,8 @@ def _message_options_context(params: Any, default_sort: str = "desc") -> dict[st
 
     return {
         "sort": sort,
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
         "selected_types": selected,
         "all_types": _CONTENT_TYPES,
         "lost": lost,
@@ -895,3 +943,58 @@ class MessageRepliesView(View):
                 "replies": [{**r, "date": r["date"].isoformat() if r["date"] else None} for r in stored],
             }
         )
+
+
+class MessageJumpView(View):
+    """Redirect to the channel-detail page that displays a specific message.
+
+    GET /channel/<channel_pk>/message/<telegram_id>/
+
+    Album tails resolve to their head (the only sibling listed). The page
+    number is derived from the channel-detail default queryset; ``lost=include``
+    is added when the target is a lost message so the row is visible. Falls
+    back to the bare channel URL when the message is not in the database or
+    sits past the channel's ``out_of_target_after`` cutoff.
+    """
+
+    PAGE_SIZE = ChannelDetailView.paginate_by
+    ORPHANS = ChannelDetailView.paginate_orphans
+
+    def get(self, request: HttpRequest, channel_pk: int, telegram_id: int) -> HttpResponse:
+        from django.urls import reverse
+
+        channel = get_object_or_404(Channel, pk=channel_pk)
+        channel_url = reverse("channel-detail", kwargs={"pk": channel.pk})
+
+        target = Message.objects.filter(channel=channel, telegram_id=telegram_id).first()
+        if target is None:
+            return HttpResponseRedirect(channel_url)
+
+        if target.grouped_id is not None:
+            head = Message.objects.filter(channel=channel, grouped_id=target.grouped_id).order_by("telegram_id").first()
+            if head is not None:
+                target = head
+
+        if target.date is None:
+            return HttpResponseRedirect(channel_url)
+        if channel.out_of_target_after and target.date.date() > channel.out_of_target_after:
+            return HttpResponseRedirect(channel_url)
+
+        qs = Message.objects.filter(channel=channel)
+        if channel.out_of_target_after:
+            qs = qs.filter(date__date__lte=channel.out_of_target_after)
+        extra_params: dict[str, str] = {}
+        if target.is_lost:
+            extra_params["lost"] = "include"
+        else:
+            qs = qs.filter(is_lost=False)
+        qs = _exclude_album_tails(qs)
+
+        preceding = qs.filter(Q(date__gt=target.date) | Q(date=target.date, pk__gt=target.pk)).count()
+        count = qs.count()
+        hits = max(1, count - self.ORPHANS)
+        num_pages = max(1, math.ceil(hits / self.PAGE_SIZE))
+        page = min(preceding // self.PAGE_SIZE + 1, num_pages)
+
+        query = urlencode({"page": page, **extra_params})
+        return HttpResponseRedirect(f"{channel_url}?{query}#post-{target.pk}")

@@ -455,6 +455,7 @@ body {
   margin-bottom: .5rem;
   overflow: hidden;
   transition: border-color .15s;
+  scroll-margin-top: 70px;
 }
 
 .post-card:hover { border-color: var(--muted); }
@@ -462,6 +463,14 @@ body {
 .post-card.was-pinned { border-left-color: var(--muted); }
 .post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #0369a1; }
 [data-theme="dark"] .post-card.is-forwarded:not(.is-pinned):not(.was-pinned) { border-left-color: #38bdf8; }
+
+.post-card:target {
+  animation: post-card-target-flash 2.6s ease-out;
+}
+@keyframes post-card-target-flash {
+  0%   { box-shadow: 0 0 0 3px var(--warning-border); border-color: var(--warning-accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
 
 .post-card.is-lost { opacity: .55; }
 .post-lost-badge {
@@ -1200,6 +1209,21 @@ body {
 }
 
 .msg-options-item input { cursor: pointer; }
+
+.msg-options-item input[type="date"] {
+  flex: 1;
+  min-width: 0;
+  font-size: .8rem;
+  padding: .15rem .3rem;
+  height: auto;
+}
+
+.msg-options-date-label {
+  font-size: .8rem;
+  color: var(--muted);
+  width: 2.25rem;
+  flex-shrink: 0;
+}
 
 .msg-options-divider {
   height: 1px;
