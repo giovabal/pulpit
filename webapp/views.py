@@ -206,12 +206,12 @@ class HomeView(ListView):
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET))
 
-        # Five sequential aggregates over the Message + Channel tables. Cached
-        # for an hour and invalidated at the start of every crawl_channels run
-        # — see webapp/cache.py.
+        # Two rows of ecosystem-stat cards aggregated over the Message + Channel
+        # tables. Cached for an hour and invalidated at the start of every
+        # crawl_channels run — see webapp/cache.py.
         from webapp.cache import get_home_summary
 
-        ctx["summary"] = get_home_summary()
+        ctx["summary_rows"] = get_home_summary()
         ctx["panels"] = [
             {
                 "id": "messages-history",
