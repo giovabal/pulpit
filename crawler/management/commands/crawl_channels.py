@@ -1262,74 +1262,82 @@ class Command(BaseCommand):
                         or retry_references
                         or fetch_replies
                     ):
-                        for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
-                            pre_crawl_max_id = 0
+                        # The per-channel loop only fires for operations that
+                        # touch each channel directly. retry_references and
+                        # fix_missing_media handle channel iteration themselves;
+                        # without this guard, running either of them alone would
+                        # silently fetch every channel before the real work
+                        # started, looking like the program had hung.
+                        per_channel_ops = get_new_messages or do_refresh or fix_holes or retry_lost_messages
+                        if per_channel_ops:
+                            for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                                pre_crawl_max_id = 0
 
-                            if get_new_messages:
-                                try:
-                                    pre_crawl_max_id = crawler.get_channel(
-                                        channel.telegram_id,
-                                        fix_holes=fix_holes,
-                                        update_info=False,
-                                        status_callback=lambda message, idx=index: printer.status(message, idx),
-                                    )
-                                except errors.FloodWaitError as error:
-                                    printer.newline()
-                                    self.stdout.write(
-                                        self.style.WARNING(
-                                            f"Skipping channel {channel.telegram_id} due to flood wait: {error}"
+                                if get_new_messages:
+                                    try:
+                                        pre_crawl_max_id = crawler.get_channel(
+                                            channel.telegram_id,
+                                            fix_holes=fix_holes,
+                                            update_info=False,
+                                            status_callback=lambda message, idx=index: printer.status(message, idx),
                                         )
+                                    except errors.FloodWaitError as error:
+                                        printer.newline()
+                                        self.stdout.write(
+                                            self.style.WARNING(
+                                                f"Skipping channel {channel.telegram_id} due to flood wait: {error}"
+                                            )
+                                        )
+                                        if not settings.IGNORE_FLOODWAIT:
+                                            sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                                        continue
+                                    finally:
+                                        crawler._resolve_pending_forwards(
+                                            lambda message, idx=index: printer.status(message, idx)
+                                        )
+                                    printer.ensure_newline()
+                                    if fetch_replies:
+                                        new_min = pre_crawl_max_id + 1 if pre_crawl_max_id > 0 else None
+                                        self._fetch_replies_for_channel(
+                                            channel, crawler, index, printer, min_telegram_id=new_min
+                                        )
+                                elif fix_holes:
+                                    self._fix_holes_for_channel(channel, crawler, index, printer)
+
+                                if do_refresh:
+                                    self._refresh_channel(
+                                        channel,
+                                        crawler,
+                                        index,
+                                        total_channels,
+                                        refresh_limit,
+                                        refresh_from,
+                                        refresh_to,
+                                        pre_crawl_max_id,
+                                        printer,
                                     )
-                                    if not settings.IGNORE_FLOODWAIT:
-                                        sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
-                                    continue
-                                finally:
-                                    crawler._resolve_pending_forwards(
-                                        lambda message, idx=index: printer.status(message, idx)
-                                    )
-                                printer.ensure_newline()
-                                if fetch_replies:
-                                    new_min = pre_crawl_max_id + 1 if pre_crawl_max_id > 0 else None
-                                    self._fetch_replies_for_channel(
-                                        channel, crawler, index, printer, min_telegram_id=new_min
-                                    )
-                            elif fix_holes:
-                                self._fix_holes_for_channel(channel, crawler, index, printer)
+                                    if fetch_replies:
+                                        self._fetch_replies_for_channel(
+                                            channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
+                                        )
 
-                            if do_refresh:
-                                self._refresh_channel(
-                                    channel,
-                                    crawler,
-                                    index,
-                                    total_channels,
-                                    refresh_limit,
-                                    refresh_from,
-                                    refresh_to,
-                                    pre_crawl_max_id,
-                                    printer,
-                                )
-                                if fetch_replies:
-                                    self._fetch_replies_for_channel(
-                                        channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
-                                    )
+                                if retry_lost_messages:
+                                    self._retry_lost_for_channel(channel, crawler, index, total_channels, printer)
 
-                            if retry_lost_messages:
-                                self._retry_lost_for_channel(channel, crawler, index, total_channels, printer)
+                                # Refresh per-channel interest scores once the
+                                # channel's messages have been updated (Suh 2010 /
+                                # Cha 2010 weighted z-scores).  Channel-level
+                                # recompute is O(N_messages) and trivially cheap
+                                # compared to a network round-trip.
+                                if get_new_messages or do_refresh or fix_holes:
+                                    try:
+                                        from webapp.scoring import recompute_channel
 
-                            # Refresh per-channel interest scores once the
-                            # channel's messages have been updated (Suh 2010 /
-                            # Cha 2010 weighted z-scores).  Channel-level
-                            # recompute is O(N_messages) and trivially cheap
-                            # compared to a network round-trip.
-                            if get_new_messages or do_refresh or fix_holes:
-                                try:
-                                    from webapp.scoring import recompute_channel
+                                        recompute_channel(channel.pk)
+                                    except Exception as exc:  # noqa: BLE001
+                                        logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
 
-                                    recompute_channel(channel.pk)
-                                except Exception as exc:  # noqa: BLE001
-                                    logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
-
-                        printer.newline()
+                            printer.newline()
 
                         if retry_references:
                             if force_retry:
