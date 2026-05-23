@@ -183,6 +183,24 @@
 </div>
 {% endif %}
 
+{% if include_interest_structural %}
+<div class="export-section-sep"><span><i class="bi bi-stars me-1" aria-hidden="true"></i>Interesting Messages</span></div>
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-stars text-secondary me-2" aria-hidden="true"></i>Interesting messages</h5>
+        <p class="card-text text-muted small">Per-message structural reach: cross-community reach C (Goel et al. 2016) and authority-weighted reach D (Cha et al. 2010), alongside the per-channel z-scored engagement composite (Suh 2010 / Salganik 2006).</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="interest_structural.html" class="btn btn-outline-primary btn-sm">Open table</a>
+          <a href="{{ repository_url }}/blob/main/docs/interesting-messages.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if include_compare_html or compare_files %}
 <div class="export-section-sep"><span>Compare network</span></div>
 

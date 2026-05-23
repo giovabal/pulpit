@@ -1864,6 +1864,12 @@ class Command(BaseCommand):
             os.makedirs(root_target, exist_ok=True)
             exporter.write_interest_structural_json(int_payload, root_target)
             self.stdout.write("- interest_structural.json")
+            tables.write_interest_structural_html(
+                output_filename=os.path.join(root_target, "interest_structural.html"),
+                seo=opts.seo,
+                project_title=project_title,
+            )
+            self.stdout.write("- interest_structural.html")
 
         global_rob_payload: dict | None = None
         if opts.do_robustness:
@@ -2030,6 +2036,7 @@ class Command(BaseCommand):
             include_vacancy_analysis=opts.do_vacancy,
             include_robustness_html=opts.do_robustness and opts.do_html,
             include_robustness_xlsx=opts.do_robustness and opts.do_xlsx,
+            include_interest_structural=opts.do_interest_structural,
         )
 
         exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))

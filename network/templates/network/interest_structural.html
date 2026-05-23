@@ -1,0 +1,163 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <h2 class="mb-0">Interesting Messages</h2>
+  <div class="d-flex gap-2">
+    <a href="index.html" class="btn btn-outline-secondary btn-sm">← Back to index</a>
+    <a href="{{ repository_url }}/blob/main/docs/interesting-messages.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+  </div>
+</div>
+<p class="text-muted small mb-2">
+  Per-message structural reach: <strong>C</strong> (Goel et&nbsp;al. 2016) counts distinct neighbour communities that re-forwarded the post; <strong>D</strong> (Cha et&nbsp;al. 2010) sums the authority of the in-target forwarders.
+  <strong>Interest score</strong> is the per-channel z-scored engagement composite (Salganik 2006 / Suh 2010) refreshed at crawl time.
+</p>
+<p class="text-muted small mb-3" id="is-summary">Loading…</p>
+
+<div class="table-responsive export-wide" id="is-root"></div>
+
+<style>
+  .is-num { font-variant-numeric: tabular-nums; text-align: right; }
+  .is-null { color: var(--bs-secondary-color, #6c757d); }
+  .is-org-dot {
+    display: inline-block;
+    width: .65em; height: .65em;
+    border-radius: 50%;
+    margin-right: .3em;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  th[data-sort-direction="asc"] a::after { content: " ↑"; font-size: .75em; opacity: .6; }
+  th[data-sort-direction="desc"] a::after { content: " ↓"; font-size: .75em; opacity: .6; }
+  .is-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
+  .is-cap-note { color: var(--bs-secondary-color, #6c757d); font-size: .85em; margin-top: .5rem; }
+</style>
+
+<script>
+(function () {
+  var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
+  var ROW_CAP = 1000;
+
+  Promise.all([
+    fetch(dataDir + "interest_structural.json").then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetch(dataDir + "channels.json").then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+  ])
+    .then(function (results) { render(results[0], results[1]); })
+    .catch(function () {
+      document.getElementById("is-summary").textContent = "Failed to load interest_structural.json.";
+    });
+
+  function render(data, channelsData) {
+    var msgs = data.by_message || [];
+    var nodes = (channelsData && channelsData.nodes) || [];
+    var byPk = {};
+    nodes.forEach(function (n) { byPk[String(n.id)] = n; });
+
+    var total = msgs.length;
+    var sorted = msgs.slice().sort(function (a, b) {
+      return (b.c_cross_community || 0) - (a.c_cross_community || 0);
+    });
+    var capped = sorted.slice(0, ROW_CAP);
+
+    var parts = [
+      total.toLocaleString() + " message" + (total === 1 ? "" : "s") + " scored",
+      "community basis: " + (data.community_strategy || "—"),
+      "authority: " + (data.authority_key || "—"),
+      "window: " + (data.window_days > 0 ? data.window_days + " day" + (data.window_days === 1 ? "" : "s") : "disabled"),
+    ];
+    if (data.computed_at) parts.push("computed " + data.computed_at);
+    document.getElementById("is-summary").textContent = parts.join(" · ");
+
+    var root = document.getElementById("is-root");
+    if (!total) {
+      root.innerHTML = '<p class="is-empty">No structurally re-forwarded messages found. Either no in-target forwarders exist, or no posts fall inside the reaction window.</p>';
+      return;
+    }
+
+    var cMin = Infinity, cMax = -Infinity;
+    var dMin = Infinity, dMax = -Infinity;
+    var iMin = Infinity, iMax = -Infinity;
+    capped.forEach(function (m) {
+      var c = m.c_cross_community, d = m.d_authority_reach, iv = m.interest_score;
+      if (c != null) { if (c < cMin) cMin = c; if (c > cMax) cMax = c; }
+      if (d != null) { if (d < dMin) dMin = d; if (d > dMax) dMax = d; }
+      if (iv != null) { if (iv < iMin) iMin = iv; if (iv > iMax) iMax = iv; }
+    });
+
+    var head = "<thead><tr>" +
+      '<th scope="col">Channel</th>' +
+      '<th class="date" scope="col">Date</th>' +
+      '<th class="number" scope="col" title="Cross-community reach (Goel et al. 2016): distinct neighbour communities that re-forwarded the post.">C</th>' +
+      '<th class="number" scope="col" title="Authority-weighted reach (Cha et al. 2010): sum of forwarder authority scores.">D</th>' +
+      '<th class="number" scope="col">In-target fwd</th>' +
+      '<th class="number" scope="col">Out-target fwd</th>' +
+      '<th class="number" scope="col" title="Per-channel z-scored engagement composite (Suh 2010 / Salganik 2006).">Interest</th>' +
+      '<th scope="col">Open</th>' +
+      "</tr></thead>";
+
+    var body = "<tbody>" + capped.map(function (m) {
+      var node = byPk[String(m.channel_pk)] || {};
+      var chTitle = node.label || ("channel " + m.channel_pk);
+      var chUrl = node.url || "";
+      var dot = node.color ? '<span class="is-org-dot" style="background:' + esc(node.color) + '"></span>' : "";
+      var chCell = dot + (chUrl
+        ? '<a href="' + esc(chUrl) + '" target="_blank" rel="noopener">' + esc(chTitle) + "</a>"
+        : esc(chTitle));
+
+      var dateIso = m.date || "";
+      var dateShown = dateIso ? dateIso.substring(0, 10) : "—";
+
+      var msgUrl = chUrl && m.telegram_id ? chUrl + "/" + m.telegram_id : "";
+      var openCell = msgUrl
+        ? '<a href="' + esc(msgUrl) + '" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" aria-label="Open message on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>'
+        : '<span class="is-null">—</span>';
+
+      var cVal = m.c_cross_community, dVal = m.d_authority_reach, iVal = m.interest_score;
+
+      function numCell(val, displayFn, bg) {
+        var display = val != null ? displayFn(val) : '<span class="is-null">—</span>';
+        var sortVal = val != null ? String(val) : "";
+        return '<td class="is-num"' +
+          (bg ? ' style="' + esc(bg) + '"' : "") +
+          (sortVal ? ' data-sort-value="' + esc(sortVal) + '"' : "") +
+          ">" + display + "</td>";
+      }
+
+      return "<tr>" +
+        "<td>" + chCell + "</td>" +
+        '<td data-sort-value="' + esc(dateIso) + '">' + esc(dateShown) + "</td>" +
+        numCell(cVal, function (v) { return v.toLocaleString(); }, typeof heatmapBg === "function" ? heatmapBg(cVal, cMin, cMax) : "") +
+        numCell(dVal, function (v) { return typeof sigFig === "function" ? sigFig(v, 3) : v.toPrecision(3); }, typeof heatmapBg === "function" ? heatmapBg(dVal, dMin, dMax) : "") +
+        numCell(m.forwarder_count_in_target, function (v) { return v.toLocaleString(); }, "") +
+        numCell(m.forwarder_count_out_of_target, function (v) { return v.toLocaleString(); }, "") +
+        numCell(iVal, function (v) { return v.toFixed(3); }, typeof heatmapBg === "function" ? heatmapBg(iVal, iMin, iMax) : "") +
+        "<td>" + openCell + "</td>" +
+        "</tr>";
+    }).join("") + "</tbody>";
+
+    var note = total > ROW_CAP
+      ? '<p class="is-cap-note">Showing the top ' + ROW_CAP.toLocaleString() + ' messages by C. Full data: <code>data/interest_structural.json</code>.</p>'
+      : "";
+
+    root.innerHTML =
+      '<table class="table table-hover table-sm sortable">' +
+        '<caption class="sr-only">Top messages by structural reach.</caption>' +
+        head + body +
+      "</table>" + note;
+
+    if (typeof initSortableTables === "function") {
+      initSortableTables();
+    }
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+})();
+</script>
+{% endblock %}
