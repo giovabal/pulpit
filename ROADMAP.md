@@ -1,6 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
-## [0.21]
-- Unexpected error resolving pending forward for channel_id=1608875596: Could not find the input entity for PeerUser(user_id=1608875596) (PeerUser). Please read https://docs.telethon.dev/en/stable/concepts/entities.html to find out more details.
+## [0.22]
 - Community evolution visualization: when `--compare` is used, enhance `network_compare_table.html` with a Sankey diagram showing how channels moved between communities across the two exports. Which channels left community A and joined community B? Implemented in JS using the D3.js Sankey module.
 - regency weights should be centered on a period of time, and there must regency weights even for the future
 
