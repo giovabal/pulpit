@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import datetime
 import math
-from collections.abc import Callable
+from collections import defaultdict
+from collections.abc import Callable, Iterable
 
 from django.utils import timezone
 
@@ -63,15 +64,17 @@ def _facet_stats(values: list[int], min_sample: int) -> tuple[float, float] | No
     return mean, std
 
 
-def recompute_channel(
-    channel_id: int,
+def score_messages(
+    rows: Iterable[tuple[int, int | None, int | None, int | None]],
     *,
     weights: dict[str, float] = DEFAULT_WEIGHTS,
     min_sample: int = MIN_SAMPLE,
-    recency_days: int | None = RECENCY_DAYS,
-) -> int:
-    """Recompute z-scores and ``interest_score`` for every alive ``Message``
-    in *channel_id*. Returns the number of messages written.
+) -> dict[int, tuple[float | None, float | None, float | None, float | None]]:
+    """Pure scoring core: ``(pk, views, forwards, total_reactions)`` rows in,
+    ``{pk: (z_views, z_forwards, z_reactions, interest_score)}`` out.
+
+    Does not touch the database. Callers decide whether to persist the result
+    (``recompute_channel`` does; the export path keeps it in memory).
 
     The composite uses *partial renormalisation*: a message missing one facet
     (e.g. a sticker post Telegram never reports views for) is scored on the
@@ -80,21 +83,16 @@ def recompute_channel(
     facet z-score is NULL.
     """
     normalised = _normalised_weights(weights)
-    qs = Message.objects.alive().filter(channel_id=channel_id)
-    if recency_days is not None and recency_days > 0:
-        cutoff = timezone.now() - datetime.timedelta(days=recency_days)
-        qs = qs.filter(date__gte=cutoff)
-    rows = list(qs.values_list("pk", "views", "forwards", "total_reactions"))
+    rows = list(rows)
     if not rows:
-        return 0
+        return {}
 
     stats: dict[str, tuple[float, float] | None] = {}
     for facet in _FACET_FIELDS:
         values = [r[_FACET_IDX[facet]] for r in rows if r[_FACET_IDX[facet]] is not None]
         stats[facet] = _facet_stats(values, min_sample)
 
-    now = timezone.now()
-    updates: list[Message] = []
+    scored: dict[int, tuple[float | None, float | None, float | None, float | None]] = {}
     for row in rows:
         pk = row[0]
         z_per_facet: dict[str, float | None] = {"views": None, "forwards": None, "reactions": None}
@@ -113,23 +111,85 @@ def recompute_channel(
             score_sum += normalised[facet] * z
             weight_sum += normalised[facet]
         interest_score = score_sum / weight_sum if weight_sum > 0 else None
-        updates.append(
-            Message(
-                pk=pk,
-                z_views=z_per_facet["views"],
-                z_forwards=z_per_facet["forwards"],
-                z_reactions=z_per_facet["reactions"],
-                interest_score=interest_score,
-                interest_scored_at=now,
-            )
+        scored[pk] = (
+            z_per_facet["views"],
+            z_per_facet["forwards"],
+            z_per_facet["reactions"],
+            interest_score,
         )
+    return scored
 
+
+def recompute_channel(
+    channel_id: int,
+    *,
+    weights: dict[str, float] = DEFAULT_WEIGHTS,
+    min_sample: int = MIN_SAMPLE,
+    recency_days: int | None = RECENCY_DAYS,
+) -> int:
+    """Recompute z-scores and ``interest_score`` for every alive ``Message``
+    in *channel_id* and persist them. Returns the number of messages written.
+    """
+    qs = Message.objects.alive().filter(channel_id=channel_id)
+    if recency_days is not None and recency_days > 0:
+        cutoff = timezone.now() - datetime.timedelta(days=recency_days)
+        qs = qs.filter(date__gte=cutoff)
+    rows = list(qs.values_list("pk", "views", "forwards", "total_reactions"))
+    scored = score_messages(rows, weights=weights, min_sample=min_sample)
+    if not scored:
+        return 0
+
+    now = timezone.now()
+    updates = [
+        Message(
+            pk=pk,
+            z_views=zv,
+            z_forwards=zf,
+            z_reactions=zr,
+            interest_score=score,
+            interest_scored_at=now,
+        )
+        for pk, (zv, zf, zr, score) in scored.items()
+    ]
     Message.objects.bulk_update(
         updates,
         ["z_views", "z_forwards", "z_reactions", "interest_score", "interest_scored_at"],
         batch_size=1000,
     )
     return len(updates)
+
+
+def score_messages_for_window(
+    message_qs,
+    *,
+    weights: dict[str, float] = DEFAULT_WEIGHTS,
+    min_sample: int = MIN_SAMPLE,
+) -> dict[tuple[int, int], float | None]:
+    """In-memory windowed scoring for export sites.
+
+    Groups *message_qs* by channel, scores each channel independently with
+    :func:`score_messages`, and returns ``{(channel_id, telegram_id):
+    interest_score}`` so callers can join against per-message keys
+    (``compute_interest_structural`` uses exactly that shape).
+
+    The returned mapping is empty for channels that fail the ``min_sample``
+    cold-start floor — narrow windows hit this often and the consumer is
+    expected to render those as a missing-Interest column.
+    """
+    grouped: dict[int, list[tuple[int, int | None, int | None, int | None]]] = defaultdict(list)
+    tg_by_pk: dict[int, tuple[int, int]] = {}
+    for pk, channel_id, telegram_id, views, forwards, total_reactions in message_qs.values_list(
+        "pk", "channel_id", "telegram_id", "views", "forwards", "total_reactions"
+    ):
+        grouped[channel_id].append((pk, views, forwards, total_reactions))
+        tg_by_pk[pk] = (channel_id, telegram_id)
+
+    out: dict[tuple[int, int], float | None] = {}
+    for rows in grouped.values():
+        scored = score_messages(rows, weights=weights, min_sample=min_sample)
+        for pk, (_zv, _zf, _zr, score) in scored.items():
+            out[tg_by_pk[pk]] = score
+    return out
 
 
 def recompute_all_channels(

@@ -46,6 +46,8 @@ def compute_interest_structural(
     include_mentions: bool = False,
     top_n_per_channel: int = DEFAULT_TOP_PER_CHANNEL,
     progress: Callable[[str], None] | None = None,
+    window_filter: dict[str, Any] | None = None,
+    interest_score_override: dict[tuple[int, int], float | None] | None = None,
 ) -> dict[str, Any]:
     """Compute per-message C and D and emit a JSON-serialisable payload.
 
@@ -74,6 +76,18 @@ def compute_interest_structural(
         Size of each per-channel top list.
     progress
         Optional callback for stage labels.
+    window_filter
+        Optional Django ORM filter kwargs (e.g. ``{"date__gte": ..., "date__lte":
+        ...}``) applied to both forwarder queries. Targets the forwarder row's
+        ``date``, not the origin's — so an older origin counts if it was
+        forwarded inside the window. Without this, C, D and the forwarder
+        counts are computed over all-time forwards regardless of the export's
+        date scope.
+    interest_score_override
+        Optional ``{(channel_id, telegram_id): interest_score}`` map that
+        takes precedence over ``Message.interest_score`` when emitting the
+        per-message ``interest_score`` field. Lets the caller substitute a
+        windowed hot-layer recompute without persisting it.
     """
     if include_mentions:
         logger.warning(
@@ -107,32 +121,40 @@ def compute_interest_structural(
     forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
     out_of_target_count: dict[tuple[int, int], int] = defaultdict(int)
 
-    in_target_q = (
-        Message.objects.alive()
-        .filter(
-            channel_id__in=in_target_pks,
-            forwarded_from_id__in=in_target_pks,
-            fwd_from_channel_post__isnull=False,
-        )
-        .exclude(channel_id=F("forwarded_from_id"))
-        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post", "date")
+    in_target_qs = Message.objects.alive().filter(
+        channel_id__in=in_target_pks,
+        forwarded_from_id__in=in_target_pks,
+        fwd_from_channel_post__isnull=False,
+    )
+    if window_filter:
+        in_target_qs = in_target_qs.filter(**window_filter)
+    in_target_q = in_target_qs.exclude(channel_id=F("forwarded_from_id")).values_list(
+        "channel_id", "forwarded_from_id", "fwd_from_channel_post", "date"
     )
     for fwd_ch, origin_ch, origin_tg_id, fwd_date in in_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
         forwarders_by_origin[(origin_ch, origin_tg_id)].append((fwd_ch, fwd_date))
 
     if progress:
         progress("counting out-of-target forwarders")
-    out_target_q = (
-        Message.objects.alive()
-        .filter(
-            forwarded_from_id__in=in_target_pks,
-            fwd_from_channel_post__isnull=False,
-        )
-        .exclude(channel_id__in=in_target_pks)
-        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post")
+    out_target_qs = Message.objects.alive().filter(
+        forwarded_from_id__in=in_target_pks,
+        fwd_from_channel_post__isnull=False,
+    )
+    if window_filter:
+        out_target_qs = out_target_qs.filter(**window_filter)
+    out_target_q = out_target_qs.exclude(channel_id__in=in_target_pks).values_list(
+        "channel_id", "forwarded_from_id", "fwd_from_channel_post"
     )
     for _fwd_ch, origin_ch, origin_tg_id in out_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
         out_of_target_count[(origin_ch, origin_tg_id)] += 1
+
+    if interest_score_override is None:
+        hot_layer_scope = "all-time"
+    elif window_filter:
+        hot_layer_scope = _scope_label(window_filter)
+    else:
+        hot_layer_scope = "overridden"
+    structural_scope = _scope_label(window_filter)
 
     if not forwarders_by_origin:
         return _empty_payload(
@@ -140,6 +162,8 @@ def compute_interest_structural(
             authority_key=authority_key,
             window_days=window_days,
             include_mentions=include_mentions,
+            hot_layer_scope=hot_layer_scope,
+            structural_scope=structural_scope,
         )
 
     if progress:
@@ -153,6 +177,8 @@ def compute_interest_structural(
             "telegram_id", "date", "grouped_id", "interest_score"
         )
         for tg_id, date, grouped_id, interest_score in rows:
+            if interest_score_override is not None:
+                interest_score = interest_score_override.get((ch_pk, tg_id))
             origin_meta[(ch_pk, tg_id)] = {
                 "date": date,
                 "grouped_id": grouped_id,
@@ -214,9 +240,33 @@ def compute_interest_structural(
         "authority_key": authority_key,
         "window_days": window_days,
         "include_mentions": include_mentions,
+        "hot_layer_scope": hot_layer_scope,
+        "structural_scope": structural_scope,
+        "forwarder_window_policy": "forwarder-date",
         "by_message": by_message,
         "by_channel_top": by_channel_top,
     }
+
+
+def _scope_label(window_filter: dict[str, Any] | None) -> str:
+    """Render a window filter as a human-readable scope string for the payload."""
+    if not window_filter:
+        return "all-time"
+    start = window_filter.get("date__gte")
+    end = window_filter.get("date__lte") or window_filter.get("date__lt")
+    if start is None and end is None:
+        return "windowed"
+    return f"window {_iso(start)}..{_iso(end)}"
+
+
+def _iso(value: Any) -> str:
+    if value is None:
+        return "…"
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return str(value)
 
 
 def _empty_payload(
@@ -225,6 +275,8 @@ def _empty_payload(
     authority_key: str,
     window_days: int,
     include_mentions: bool,
+    hot_layer_scope: str = "all-time",
+    structural_scope: str = "all-time",
 ) -> dict[str, Any]:
     return {
         "computed_at": timezone.now().isoformat(timespec="seconds"),
@@ -232,6 +284,9 @@ def _empty_payload(
         "authority_key": authority_key,
         "window_days": window_days,
         "include_mentions": include_mentions,
+        "hot_layer_scope": hot_layer_scope,
+        "structural_scope": structural_scope,
+        "forwarder_window_policy": "forwarder-date",
         "by_message": [],
         "by_channel_top": {},
     }

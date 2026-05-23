@@ -26,6 +26,7 @@ from network import (
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
+from webapp import scoring
 from webapp.models import Message
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 from webapp.utils.colors import is_known_palette
@@ -115,6 +116,20 @@ def _pick_interest_authority_key(selected_measures: set[str]) -> str:
     if "HITSAUTH" in selected_measures:
         return "hits_authority"
     return "in_deg"
+
+
+def _date_window_filter(start_date: datetime.date | None, end_date: datetime.date | None) -> dict[str, Any]:
+    """Build ORM filter kwargs for ``Message.date`` from the export window.
+
+    Returns ``{}`` when both bounds are absent — callers treat that as the
+    "use Message.interest_score field, span all-time forwards" sentinel.
+    """
+    out: dict[str, Any] = {}
+    if start_date is not None:
+        out["date__gte"] = start_date
+    if end_date is not None:
+        out["date__lte"] = end_date
+    return out
 
 
 def _atomic_publish(staging: str, final_target: str) -> None:
@@ -1329,6 +1344,9 @@ class Command(BaseCommand):
                 exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
 
             if do_interest_structural:
+                year_window_filter = _date_window_filter(start_date, end_date)
+                year_qs = Message.objects.alive().filter(**year_window_filter)
+                year_score_map = scoring.score_messages_for_window(year_qs)
                 year_int_payload = interest_structural.compute_interest_structural(
                     graph_data,
                     channel_dict,
@@ -1336,6 +1354,8 @@ class Command(BaseCommand):
                     authority_key=_pick_interest_authority_key(selected_measures),
                     window_days=interest_window_days,
                     include_mentions=interest_include_mentions,
+                    window_filter=year_window_filter,
+                    interest_score_override=year_score_map,
                 )
                 exporter.write_interest_structural_json(year_int_payload, graph_dir=tmp_dir)
 
@@ -1852,6 +1872,12 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - {label}", ending="\n")
                 self.stdout.flush()
 
+            global_window_filter = _date_window_filter(opts.start_date, opts.end_date)
+            if global_window_filter:
+                global_qs = Message.objects.alive().filter(**global_window_filter)
+                global_score_map = scoring.score_messages_for_window(global_qs)
+            else:
+                global_score_map = None
             int_payload = interest_structural.compute_interest_structural(
                 graph_data,
                 channel_dict,
@@ -1860,6 +1886,8 @@ class Command(BaseCommand):
                 window_days=opts.interest_window_days,
                 include_mentions=opts.interest_include_mentions,
                 progress=_int_progress,
+                window_filter=global_window_filter or None,
+                interest_score_override=global_score_map,
             )
             os.makedirs(root_target, exist_ok=True)
             exporter.write_interest_structural_json(int_payload, root_target)
