@@ -550,7 +550,7 @@
 
 </script>
 
-{% if is_in_target or selected_channel.is_lost %}
+{% if is_in_target or selected_channel.is_lost or selected_channel.to_inspect %}
 <div class="ch-msg-tabs">
   <a href="?{% if query %}q={{ query }}&{% endif %}tab=messages"
      class="ch-msg-tab{% if active_tab != 'received' %} active{% endif %}">
