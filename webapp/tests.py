@@ -1283,3 +1283,138 @@ class PurgeOrphanMediaTests(TestCase):
             report = purge_orphans(dry_run=True)
             self.assertEqual(report.candidate_files, 0)
             self.assertEqual(report.candidate_bytes, 0)
+
+
+class ScoreMessagesTests(TestCase):
+    """Pure scoring core: deterministic, no DB writes, partial renormalisation."""
+
+    def test_empty_input_returns_empty_dict(self) -> None:
+        from webapp.scoring import score_messages
+
+        self.assertEqual(score_messages([]), {})
+
+    def test_below_min_sample_yields_null_scores(self) -> None:
+        from webapp.scoring import score_messages
+
+        rows = [(i, 100 + i, 5, 2) for i in range(5)]
+        scored = score_messages(rows, min_sample=10)
+        self.assertEqual(len(scored), 5)
+        for pk, (zv, zf, zr, interest) in scored.items():
+            self.assertIsNone(zv, msg=f"pk={pk}")
+            self.assertIsNone(zf)
+            self.assertIsNone(zr)
+            self.assertIsNone(interest)
+
+    def test_z_scores_have_zero_mean_unit_std(self) -> None:
+        from webapp.scoring import score_messages
+
+        rows = [(i, 10 * i + 50, 5, 3) for i in range(50)]
+        scored = score_messages(rows, min_sample=10)
+        zv_values = [t[0] for t in scored.values() if t[0] is not None]
+        self.assertEqual(len(zv_values), 50)
+        self.assertAlmostEqual(sum(zv_values) / len(zv_values), 0.0, places=6)
+        variance = sum(z * z for z in zv_values) / len(zv_values)
+        self.assertAlmostEqual(variance, 1.0, places=6)
+
+    def test_partial_renormalisation_when_one_facet_is_constant(self) -> None:
+        from webapp.scoring import score_messages
+
+        # forwards is constant => stddev=0 => that facet is skipped; interest
+        # composite still produced from views + reactions on rescaled weights.
+        rows = [(i, 100 + i, 5, 10 + i) for i in range(40)]
+        scored = score_messages(rows, min_sample=10)
+        for _pk, (zv, zf, zr, interest) in scored.items():
+            self.assertIsNotNone(zv)
+            self.assertIsNone(zf, msg="constant facet should be dropped")
+            self.assertIsNotNone(zr)
+            self.assertIsNotNone(interest)
+
+    def test_recompute_channel_matches_pure_score(self) -> None:
+        """recompute_channel must produce the same interest_score as the pure
+        score_messages call it now delegates to — guards the refactor."""
+        from webapp.scoring import recompute_channel, score_messages
+
+        org = Organization.objects.create(name="In target", is_in_target=True)
+        ch = Channel.objects.create(telegram_id=2001, title="ScoringCh", organization=org)
+        base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=10_000 + i,
+                channel=ch,
+                date=base + datetime.timedelta(days=i),
+                views=100 + i,
+                forwards=5 + (i % 4),
+                total_reactions=2 + (i % 3),
+            )
+        rows = list(
+            Message.objects.alive().filter(channel_id=ch.pk).values_list("pk", "views", "forwards", "total_reactions")
+        )
+        expected = score_messages(rows)
+        n = recompute_channel(ch.pk)
+        self.assertEqual(n, 40)
+        for msg in Message.objects.filter(channel_id=ch.pk):
+            _zv, _zf, _zr, expected_score = expected[msg.pk]
+            if expected_score is None:
+                self.assertIsNone(msg.interest_score)
+            else:
+                self.assertAlmostEqual(msg.interest_score, expected_score, places=6)
+
+
+class ScoreMessagesForWindowTests(TestCase):
+    """The export-facing wrapper groups by channel and keys by (channel, telegram_id)."""
+
+    def test_keys_are_channel_telegram_pairs(self) -> None:
+        from webapp.scoring import score_messages_for_window
+
+        org = Organization.objects.create(name="In target", is_in_target=True)
+        ch1 = Channel.objects.create(telegram_id=3001, title="A", organization=org)
+        ch2 = Channel.objects.create(telegram_id=3002, title="B", organization=org)
+        base = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=20_000 + i,
+                channel=ch1,
+                date=base + datetime.timedelta(days=i),
+                views=50 + i,
+                forwards=2,
+                total_reactions=1,
+            )
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=30_000 + i,
+                channel=ch2,
+                date=base + datetime.timedelta(days=i),
+                views=200 + 2 * i,
+                forwards=10,
+                total_reactions=5,
+            )
+
+        score_map = score_messages_for_window(Message.objects.alive())
+        keys = list(score_map.keys())
+        # Every key is a (channel_pk, telegram_id) pair; both channels represented.
+        self.assertTrue(all(isinstance(k, tuple) and len(k) == 2 for k in keys))
+        self.assertTrue(any(k[0] == ch1.pk for k in keys))
+        self.assertTrue(any(k[0] == ch2.pk for k in keys))
+
+    def test_window_filter_restricts_to_subset(self) -> None:
+        """Filtering the queryset before calling restricts both the baseline AND
+        which messages get scored — narrow windows produce smaller maps."""
+        from webapp.scoring import score_messages_for_window
+
+        org = Organization.objects.create(name="In target", is_in_target=True)
+        ch = Channel.objects.create(telegram_id=3003, title="C", organization=org)
+        base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=40_000 + i,
+                channel=ch,
+                date=base + datetime.timedelta(days=i),
+                views=50 + i,
+                forwards=2,
+                total_reactions=1,
+            )
+
+        cutoff = base + datetime.timedelta(days=20)
+        narrow = score_messages_for_window(Message.objects.alive().filter(date__lt=cutoff), min_sample=10)
+        full = score_messages_for_window(Message.objects.alive(), min_sample=10)
+        self.assertLess(len(narrow), len(full))

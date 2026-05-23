@@ -10,8 +10,9 @@
 </div>
 <p class="text-muted small mb-2">
   Per-message structural reach: <strong>C</strong> (Goel et&nbsp;al. 2016) counts distinct neighbour communities that re-forwarded the post; <strong>D</strong> (Cha et&nbsp;al. 2010) sums the authority of the in-target forwarders.
-  <strong>Interest score</strong> is the per-channel z-scored engagement composite (Salganik 2006 / Suh 2010) refreshed at crawl time.
+  <strong>Interest score</strong> is the per-channel z-scored engagement composite (Salganik 2006 / Suh 2010).
 </p>
+<div id="is-scope-callout"></div>
 <p class="text-muted small mb-3" id="is-summary">Loading…</p>
 
 <div class="table-responsive export-wide" id="is-root"></div>
@@ -59,14 +60,29 @@
     });
     var capped = sorted.slice(0, ROW_CAP);
 
+    var hotScope = data.hot_layer_scope || "all-time";
+    var structScope = data.structural_scope || "all-time";
     var parts = [
       total.toLocaleString() + " message" + (total === 1 ? "" : "s") + " scored",
+      "scope: " + structScope,
       "community basis: " + (data.community_strategy || "—"),
       "authority: " + (data.authority_key || "—"),
-      "window: " + (data.window_days > 0 ? data.window_days + " day" + (data.window_days === 1 ? "" : "s") : "disabled"),
+      "reaction window: " + (data.window_days > 0 ? data.window_days + " day" + (data.window_days === 1 ? "" : "s") : "disabled"),
     ];
     if (data.computed_at) parts.push("computed " + data.computed_at);
     document.getElementById("is-summary").textContent = parts.join(" · ");
+
+    var callout = document.getElementById("is-scope-callout");
+    callout.innerHTML = "";
+    if (hotScope !== "all-time" || structScope !== "all-time") {
+      var alert = document.createElement("div");
+      alert.className = "alert alert-info py-2 small mb-3";
+      alert.innerHTML =
+        "Interest, C and D in this export are recomputed against <strong>" + esc(structScope) + "</strong>. " +
+        "The Interest column may differ from the same message's score in the global export and in the webapp's " +
+        "Top messages panel, which use the channel's all-time baseline.";
+      callout.appendChild(alert);
+    }
 
     var root = document.getElementById("is-root");
     if (!total) {

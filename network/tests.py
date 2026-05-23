@@ -3620,3 +3620,133 @@ class ResolveIterationsTests(TestCase):
         from network.layout import resolve_iterations
 
         self.assertEqual(resolve_iterations("3X", num_nodes=200), 600)
+
+
+class ComputeInterestStructuralWindowTests(TestCase):
+    """Window-scoping the structural layer.
+
+    Builds a tiny network of three in-target channels (A→B and a recent fwd
+    from C→B), then asserts that:
+      * a window_filter on the forwarder date restricts which forwards are
+        counted in C and D;
+      * an interest_score_override map replaces the persisted
+        Message.interest_score in the payload;
+      * the payload emits hot_layer_scope / structural_scope / policy.
+    """
+
+    def _build(self) -> tuple[Any, Any, Any, Any]:
+        org = Organization.objects.create(name="In target", is_in_target=True)
+        a = Channel.objects.create(telegram_id=9001, title="A", organization=org)
+        b = Channel.objects.create(telegram_id=9002, title="B", organization=org)
+        c = Channel.objects.create(telegram_id=9003, title="C", organization=org)
+        return org, a, b, c
+
+    def _origin_and_forwards(self, a: Any, b: Any, c: Any) -> Any:
+        # Origin post on A.
+        origin = Message.objects.create(
+            telegram_id=500_000,
+            channel=a,
+            date=datetime.datetime(2024, 1, 15, tzinfo=datetime.UTC),
+            views=100,
+            forwards=10,
+            total_reactions=5,
+        )
+        # Old in-window forward by B (Jan 2024).
+        Message.objects.create(
+            telegram_id=600_001,
+            channel=b,
+            date=datetime.datetime(2024, 1, 16, tzinfo=datetime.UTC),
+            forwarded_from=a,
+            fwd_from_channel_post=origin.telegram_id,
+        )
+        # Out-of-window forward by C (Jan 2025).
+        Message.objects.create(
+            telegram_id=700_001,
+            channel=c,
+            date=datetime.datetime(2025, 1, 16, tzinfo=datetime.UTC),
+            forwarded_from=a,
+            fwd_from_channel_post=origin.telegram_id,
+        )
+        return origin
+
+    def _graph_data(self, a: Any, b: Any, c: Any) -> tuple[dict, dict]:
+        # Minimal GraphData + channel_dict shape used by compute_interest_structural.
+        graph_data = {
+            "nodes": [
+                {"id": str(a.pk), "pagerank": 0.3},
+                {"id": str(b.pk), "pagerank": 0.5},
+                {"id": str(c.pk), "pagerank": 0.2},
+            ],
+            "edges": [],
+        }
+        channel_dict = {
+            str(a.pk): {"channel": a, "data": {"communities": {"leiden_directed": "alpha"}}},
+            str(b.pk): {"channel": b, "data": {"communities": {"leiden_directed": "beta"}}},
+            str(c.pk): {"channel": c, "data": {"communities": {"leiden_directed": "gamma"}}},
+        }
+        return graph_data, channel_dict
+
+    def test_window_filter_excludes_out_of_window_forwarders(self) -> None:
+        from network.interest_structural import compute_interest_structural
+
+        _org, a, b, c = self._build()
+        origin = self._origin_and_forwards(a, b, c)
+        graph_data, channel_dict = self._graph_data(a, b, c)
+
+        # No window → both forwards counted (C reach = 2 communities).
+        all_time = compute_interest_structural(
+            graph_data,
+            channel_dict,
+            community_strategy="LEIDEN_DIRECTED",
+            window_days=0,
+        )
+        self.assertEqual(all_time["structural_scope"], "all-time")
+        self.assertEqual(all_time["hot_layer_scope"], "all-time")
+        all_time_rec = next(
+            r for r in all_time["by_message"] if r["telegram_id"] == origin.telegram_id and r["channel_pk"] == a.pk
+        )
+        self.assertEqual(all_time_rec["forwarder_count_in_target"], 2)
+        self.assertEqual(all_time_rec["c_cross_community"], 2)
+
+        # 2024-only window → only B's forward counts (C reach = 1).
+        windowed = compute_interest_structural(
+            graph_data,
+            channel_dict,
+            community_strategy="LEIDEN_DIRECTED",
+            window_days=0,
+            window_filter={
+                "date__gte": datetime.date(2024, 1, 1),
+                "date__lte": datetime.date(2024, 12, 31),
+            },
+        )
+        self.assertIn("window 2024-01-01..2024-12-31", windowed["structural_scope"])
+        windowed_rec = next(
+            r for r in windowed["by_message"] if r["telegram_id"] == origin.telegram_id and r["channel_pk"] == a.pk
+        )
+        self.assertEqual(windowed_rec["forwarder_count_in_target"], 1)
+        self.assertEqual(windowed_rec["c_cross_community"], 1)
+
+    def test_override_replaces_persisted_interest_score(self) -> None:
+        from network.interest_structural import compute_interest_structural
+
+        _org, a, b, c = self._build()
+        origin = self._origin_and_forwards(a, b, c)
+        # Persist a global score on the origin.
+        Message.objects.filter(pk=origin.pk).update(interest_score=0.99)
+
+        graph_data, channel_dict = self._graph_data(a, b, c)
+        payload = compute_interest_structural(
+            graph_data,
+            channel_dict,
+            community_strategy="LEIDEN_DIRECTED",
+            window_days=0,
+            interest_score_override={(a.pk, origin.telegram_id): -0.42},
+        )
+        rec = next(
+            r for r in payload["by_message"] if r["telegram_id"] == origin.telegram_id and r["channel_pk"] == a.pk
+        )
+        # Override beat the persisted 0.99.
+        self.assertAlmostEqual(rec["interest_score"], -0.42, places=6)
+        # Override without window labels the hot layer as a custom override.
+        self.assertEqual(payload["hot_layer_scope"], "overridden")
+        self.assertEqual(payload["forwarder_window_policy"], "forwarder-date")
