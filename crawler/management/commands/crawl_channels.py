@@ -832,6 +832,12 @@ class Command(BaseCommand):
         n_messages = len(all_msg_pks)
         self.stdout.write(f"\nFixing missing media: {n_messages} message(s) across {n_channels} channel(s)")
 
+        # Retarget the shared printer at the channels-with-missing-media subset
+        # so the ``[ch_idx/total]`` prefix lines up with what's actually being
+        # processed here. ``_fix_missing_media`` is the last phase that uses
+        # the printer in this run, so we don't need to restore the original.
+        printer._total = n_channels
+
         # ``saved_*`` count actual file writes (return value 1 from each
         # download_message_*); ``processed`` counts Telegram messages iterated.
         # Surfacing both makes silent-download failures visible — the old
@@ -852,6 +858,7 @@ class Command(BaseCommand):
             telegram_ids = [tid for _, tid in msg_list]
             pk_by_tid: dict[int, int] = {tid: pk for pk, tid in msg_list}
             n = len(telegram_ids)
+            ch_processed = 0
             ch_saved_pic = 0
             ch_saved_vid = 0
             ch_saved_aud = 0
@@ -911,11 +918,17 @@ class Command(BaseCommand):
                     if msg_pk in needs_other:
                         ch_saved_other += fix_handler.download_message_other_media(tg_msg)
                     processed += 1
-                    ch_saved = ch_saved_pic + ch_saved_vid + ch_saved_aud + ch_saved_sticker + ch_saved_other
-                    printer.status(
-                        f"{channel_label} | processed {processed}/{n_messages}, saved {ch_saved} so far",
-                        ch_idx,
-                    )
+                    ch_processed += 1
+
+                # One status line per ``_BATCH``-message batch keeps the log
+                # readable: in the web UI's non-TTY mode ``printer.status`` emits
+                # a fresh line every call, so updating per message would flood
+                # the log with hundreds of thousands of near-identical rows.
+                ch_saved = ch_saved_pic + ch_saved_vid + ch_saved_aud + ch_saved_sticker + ch_saved_other
+                printer.status(
+                    f"{channel_label} | processed {ch_processed}/{n}, saved {ch_saved} so far",
+                    ch_idx,
+                )
 
             saved_pic += ch_saved_pic
             saved_vid += ch_saved_vid
