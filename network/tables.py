@@ -574,6 +574,21 @@ def write_robustness_table_html(
     )
 
 
+def write_interest_structural_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    _write_page(
+        "network/interest_structural.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Interesting messages",
+        seo_title_part="Structurally interesting messages",
+    )
+
+
 _ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach")
 
 
@@ -719,6 +734,7 @@ def write_index_html(
     include_vacancy_analysis: bool = False,
     include_robustness_html: bool = False,
     include_robustness_xlsx: bool = False,
+    include_interest_structural: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -748,6 +764,7 @@ def write_index_html(
         "include_vacancy_analysis": include_vacancy_analysis,
         "include_robustness_html": include_robustness_html,
         "include_robustness_xlsx": include_robustness_xlsx,
+        "include_interest_structural": include_interest_structural,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)
