@@ -425,6 +425,9 @@ SA_ROBUSTNESS_RUNS = _structural.robustness.runs
 SA_ROBUSTNESS_NULL = _structural.robustness.null
 SA_ROBUSTNESS_SEED = _structural.robustness.seed
 SA_ROBUSTNESS_SAMPLE = _structural.robustness.sample
+SA_INTEREST_STRUCTURAL = _structural.interest.structural
+SA_INTEREST_WINDOW_DAYS = _structural.interest.window_days
+SA_INTEREST_INCLUDE_MENTIONS = _structural.interest.include_mentions
 
 # ── System constants (.system — managed by project, do not edit) ─────────────
 

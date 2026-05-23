@@ -135,4 +135,11 @@ STRUCTURAL_DEFAULTS: dict = {
         "seed": 42,
         "sample": 500,
     },
+    "interest": {
+        # Per-message structural reach (C + D). The hot layer (z-scored
+        # engagement) is computed at crawl time and is not configurable here.
+        "structural": False,
+        "window_days": 30,
+        "include_mentions": False,
+    },
 }

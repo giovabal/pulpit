@@ -27,6 +27,7 @@ STRUCTURAL_SECTIONS: tuple[str, ...] = (
     "network_stats",
     "vacancy",
     "robustness",
+    "interest",
 )
 
 CRAWL_HEADER_COMMENT = (

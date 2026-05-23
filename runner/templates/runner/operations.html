@@ -366,6 +366,12 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all non-ORGANIZATION community strategies."></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="interest_structural" {% if ad.SA_INTEREST_STRUCTURAL %}checked{% endif %}>Interesting messages
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Compute per-message cross-community reach (Goel et al. 2016 adapted to Telegram's depth-1 forwarding) and authority-weighted reach (Cha et al. 2010 weighted indegree). Writes data/interest_structural.json. Per-channel z-scored engagement scores (Salganik 2006 / Suh 2010) are always on and computed at crawl time."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: Interest window, Include mentions in reach (Linked parameters)"></i>
+                </label>
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
@@ -670,6 +676,25 @@
                     <option value="" {% if not ad.SA_BRIDGING_BASIS %}selected{% endif %}>(Leiden directed — default)</option>
                     {% for key, label in bridging_basis_choices %}<option value="{{ key }}" {% if key == ad.SA_BRIDGING_BASIS %}selected{% endif %}>{{ label }}</option>{% endfor %}
                   </select>
+                </div>
+                {# data-requires-flag on the wrapper (not the <input>) so the input stays #}
+                {# DOM-enabled when Interesting messages is off — the visual disable is    #}
+                {# styling only, and we still want the value to ride along in FormData so  #}
+                {# save-defaults preserves the user's choice across toggles. The CLI driver #}
+                {# only applies these flags when --interest-structural is on.              #}
+                <div class="ops-param" data-requires-flag="interest_structural">
+                  <label for="interest_window_days">Interest window
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Reaction window in days for Interesting messages: only forwards within this many days of the origin post count toward cross-community reach and authority-weighted reach. Use 0 to disable the window. Default: 30 (matches the Diffusion window default)."></i>
+                  </label>
+                  <input type="number" name="interest_window_days" id="interest_window_days" placeholder="{{ ad.SA_INTEREST_WINDOW_DAYS }}" value="{{ ad.SA_INTEREST_WINDOW_DAYS }}" min="0">
+                </div>
+                <div class="ops-param" data-requires-flag="interest_structural">
+                  <label class="ops-flag" for="interest_include_mentions" style="margin-top:1.5rem">
+                    <input type="checkbox" name="interest_include_mentions" id="interest_include_mentions" {% if ad.SA_INTEREST_INCLUDE_MENTIONS %}checked{% endif %}>Include mentions in reach
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Forward-compatibility flag for Interesting messages. Telegram's Message.references is message→channel (not message→message), so a faithful message-level translation needs separate design — the flag is currently a no-op and logs a warning when set."></i>
+                  </label>
                 </div>
               </div>
             </fieldset>

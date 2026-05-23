@@ -108,6 +108,7 @@ class OperationsView(View):
             "SA_BRIDGING_BASIS": settings.SA_BRIDGING_BASIS,
             "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
+            "SA_INTEREST_STRUCTURAL": settings.SA_INTEREST_STRUCTURAL,
             "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,
             "SA_INCLUDE_MENTIONS": settings.SA_INCLUDE_MENTIONS,
             "SA_INCLUDE_SELF_REFERENCES": settings.SA_INCLUDE_SELF_REFERENCES,
@@ -133,6 +134,9 @@ class OperationsView(View):
             "SA_ROBUSTNESS_NULL": settings.SA_ROBUSTNESS_NULL,
             "SA_ROBUSTNESS_SEED": settings.SA_ROBUSTNESS_SEED,
             "SA_ROBUSTNESS_SAMPLE": settings.SA_ROBUSTNESS_SAMPLE,
+            # SA interest (per-message structural reach)
+            "SA_INTEREST_WINDOW_DAYS": settings.SA_INTEREST_WINDOW_DAYS,
+            "SA_INTEREST_INCLUDE_MENTIONS": settings.SA_INTEREST_INCLUDE_MENTIONS,
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
             # SA expanded sets for checkbox groups
@@ -581,6 +585,14 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "diffusion_window", "--diffusion-window"),
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
+        ("bool_explicit", "interest_structural", "--interest-structural", "--no-interest-structural"),
+        ("value", "interest_window_days", "--interest-window-days"),
+        (
+            "bool_explicit",
+            "interest_include_mentions",
+            "--interest-include-mentions",
+            "--no-interest-include-mentions",
+        ),
         ("value", "community_distribution_threshold", "--community-distribution-threshold"),
         ("value", "leiden_coarse_resolution", "--leiden-coarse-resolution"),
         ("value", "leiden_fine_resolution", "--leiden-fine-resolution"),
@@ -706,6 +718,9 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("robustness_null", "robustness.null", "int"),
         ("robustness_seed", "robustness.seed", "int"),
         ("robustness_sample", "robustness.sample", "int"),
+        ("interest_structural", "interest.structural", "bool"),
+        ("interest_window_days", "interest.window_days", "int"),
+        ("interest_include_mentions", "interest.include_mentions", "bool"),
     ],
 }
 
