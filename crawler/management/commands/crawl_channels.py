@@ -814,12 +814,19 @@ class Command(BaseCommand):
             self.stdout.write("\nNo missing media found.")
             return
 
-        # Group by channel: channel_pk → [(message_pk, telegram_id)]
+        # Group by channel: channel_pk → [(message_pk, telegram_id)].
+        # Chunk the IN clause to stay under SQLite's SQLITE_MAX_VARIABLE_NUMBER
+        # (defaults to 999 on older builds), which a single ``pk__in`` over the
+        # full set would otherwise blow past.
         channel_to_msgs: dict[int, list[tuple[int, int]]] = {}
-        for msg_pk, channel_pk, telegram_id in Message.objects.filter(pk__in=all_msg_pks).values_list(
-            "id", "channel_id", "telegram_id"
-        ):
-            channel_to_msgs.setdefault(channel_pk, []).append((msg_pk, telegram_id))
+        all_msg_pks_list = list(all_msg_pks)
+        _PK_BATCH = 900
+        for start in range(0, len(all_msg_pks_list), _PK_BATCH):
+            chunk = all_msg_pks_list[start : start + _PK_BATCH]
+            for msg_pk, channel_pk, telegram_id in Message.objects.filter(pk__in=chunk).values_list(
+                "id", "channel_id", "telegram_id"
+            ):
+                channel_to_msgs.setdefault(channel_pk, []).append((msg_pk, telegram_id))
 
         n_channels = len(channel_to_msgs)
         n_messages = len(all_msg_pks)
