@@ -1,5 +1,6 @@
 import datetime
 import logging
+from math import log
 from typing import Any
 
 from django.db.models import Count, Max, Min, Q
@@ -15,6 +16,66 @@ logger = logging.getLogger(__name__)
 def channel_pks_from_graph_data(graph_data: GraphData, channel_dict: dict[str, Any]) -> list[int]:
     """PKs of the Channels represented as nodes in ``graph_data`` (in graph order)."""
     return [channel_dict[node["id"]]["channel"].pk for node in graph_data["nodes"] if channel_dict.get(node["id"])]
+
+
+def apply_measure(
+    graph_data: GraphData,
+    values: dict[str, float],
+    key: str,
+    label: str,
+    *,
+    default: Any = 0.0,
+) -> list[tuple[str, str]]:
+    """Write a per-node scalar onto every node in ``graph_data``.
+
+    Used by the simple measure-application functions in ``_centrality`` and
+    ``_spreading`` whose only varying bit was the values dict, the key name,
+    and the label — the surrounding ``for node in graph_data["nodes"]: ...``
+    loop was repeated identically a dozen times. Nodes absent from
+    ``values`` receive ``default``.
+    """
+    for node in graph_data["nodes"]:
+        node[key] = values.get(node["id"], default)
+    return [(key, label)]
+
+
+def compute_neighbour_community_entropy(
+    graph: nx.DiGraph,
+    partition: dict[Any, Any],
+) -> dict[Any, float]:
+    """Shannon entropy of the community distribution among each node's
+    weighted neighbours (predecessors ∪ successors). The bridging-
+    centrality recipe multiplies this by betweenness to surface broker
+    nodes — high entropy = node bridges many distinct communities.
+
+    Shared by :func:`network.measures._centrality.apply_bridging_centrality`
+    and :func:`network.robustness.attacks._bridging_with_partition`, which
+    used to carry independent copies of the same formula.
+
+    Nodes absent from ``partition``: their edges are skipped (treated as
+    "unknown community", contributing nothing to the entropy). Nodes with
+    no community-tagged neighbours, or all neighbours in one community,
+    receive 0.0.
+    """
+    entropies: dict[Any, float] = {}
+    for node in graph.nodes():
+        weights: dict[Any, float] = {}
+        for pred in graph.predecessors(node):
+            w = graph.edges[pred, node].get("weight", 1.0)
+            c = partition.get(pred)
+            if c is not None:
+                weights[c] = weights.get(c, 0.0) + w
+        for succ in graph.successors(node):
+            w = graph.edges[node, succ].get("weight", 1.0)
+            c = partition.get(succ)
+            if c is not None:
+                weights[c] = weights.get(c, 0.0) + w
+        total = sum(weights.values())
+        if total == 0.0 or len(weights) <= 1:
+            entropies[node] = 0.0
+        else:
+            entropies[node] = -sum((w / total) * log(w / total) for w in weights.values())
+    return entropies
 
 
 def per_channel_message_counts(

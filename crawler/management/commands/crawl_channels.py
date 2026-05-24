@@ -169,6 +169,16 @@ class ProgressPrinter:
         cols = shutil.get_terminal_size().columns
         return line if len(line) <= cols else line[: cols - 1]
 
+    def _write_overwrite(self, line: str) -> None:
+        """TTY-only: fit the line to the terminal, pad it to the previous
+        line's width with spaces (so a shorter line erases the tail of the
+        longer one), then ``\\r``-overwrite without a trailing newline."""
+        line = self._fit(line)
+        padding = " " * max(0, self._line_length - len(line))
+        self._stdout.write(f"\r{line}{padding}", ending="")
+        self._stdout.flush()
+        self._line_length = len(line)
+
     def status(self, message: str, channel_index: int) -> None:
         if self._is_tty:
             if self._current_channel != channel_index:
@@ -176,11 +186,7 @@ class ProgressPrinter:
                     self._stdout.write("", ending="\n")
                 self._current_channel = channel_index
                 self._line_length = 0
-            line = self._fit(f"[{channel_index}/{self._total}] {message}")
-            padding = " " * max(0, self._line_length - len(line))
-            self._stdout.write(f"\r{line}{padding}", ending="")
-            self._stdout.flush()
-            self._line_length = len(line)
+            self._write_overwrite(f"[{channel_index}/{self._total}] {message}")
         else:
             self._current_channel = channel_index
             line = f"[{channel_index}/{self._total}] {message}"
@@ -190,11 +196,7 @@ class ProgressPrinter:
 
     def indented(self, message: str, indent: str) -> None:
         if self._is_tty:
-            line = self._fit(f"{indent}{message}")
-            padding = " " * max(0, self._line_length - len(line))
-            self._stdout.write(f"\r{line}{padding}", ending="")
-            self._stdout.flush()
-            self._line_length = len(line)
+            self._write_overwrite(f"{indent}{message}")
         else:
             self._indented_calls += 1
             self._last_indented = (message, indent)
@@ -232,11 +234,7 @@ class ProgressPrinter:
         bookkeeping in callers — it keeps every progress loop consistent.
         """
         if self._is_tty:
-            line = self._fit(line)
-            padding = " " * max(0, self._line_length - len(line))
-            self._stdout.write(f"\r{line}{padding}", ending="")
-            self._stdout.flush()
-            self._line_length = len(line)
+            self._write_overwrite(line)
         else:
             self._stdout.write(line, ending="\n")
             self._stdout.flush()
@@ -520,6 +518,69 @@ class Command(BaseCommand):
                 status_callback=lambda message, idx=index: printer.status(message, idx),
             )
 
+    def _resolve_telegram_entity(
+        self,
+        channel: Channel,
+        crawler: ChannelCrawler,
+        action: str,
+        printer: ProgressPrinter,
+    ) -> Any:
+        """Resolve a channel's Telegram entity, falling back to the cached
+        username when the numeric-id lookup misses (typical for channels
+        that aren't in the Telethon session entity cache).
+
+        Returns the resolved entity, or ``None`` after logging a WARNING
+        line — callers should bail out on ``None``. ``action`` is the
+        human-readable label that appears in the warning ("refresh",
+        "retry-lost", …).
+        """
+        try:
+            return crawler.api_client.client.get_entity(channel.telegram_id)
+        except ValueError:
+            if not channel.username:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {action} for channel {channel.telegram_id}: "
+                        "entity not in cache and no username stored"
+                    )
+                )
+                return None
+            try:
+                return crawler.api_client.client.get_entity(channel.username)
+            except Exception as error:  # noqa: BLE001 - logged for the operator
+                printer.newline()
+                self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
+                return None
+
+    def _bulk_update_degrees(
+        self,
+        channels: list[Channel],
+        label_fmt: str,
+        *,
+        announce: bool = False,
+    ) -> None:
+        """Batched bulk_update of ``(in_degree, out_degree)`` with a progress line.
+
+        ``label_fmt`` accepts a single ``{total}`` placeholder so the caller
+        doesn't have to interpolate twice (once for the announce banner and
+        once for the per-batch progress tick). Set ``announce=True`` to emit
+        the leading banner line — used by the first pass; the second pass
+        piggy-backs on the same stream and omits it.
+        """
+        total = len(channels)
+        if not total:
+            return
+        label = label_fmt.format(total=total)
+        printer = ProgressPrinter(self.stdout, total)
+        if announce:
+            printer.announce(f"\n{label}")
+        for i in range(0, total, 100):
+            Channel.objects.bulk_update(channels[i : i + 100], ["in_degree", "out_degree"])
+            done = min(i + 100, total)
+            printer.progress(f"{label} [{done}/{total}]")
+        printer.ensure_newline()
+
     def _fix_holes_for_channel(
         self,
         channel: Channel,
@@ -581,24 +642,9 @@ class Command(BaseCommand):
     ) -> None:
         if not Message.objects.filter(channel=channel, is_lost=True).exists():
             return
-        try:
-            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
-        except ValueError:
-            if not channel.username:
-                printer.newline()
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Skipping retry-lost for channel {channel.telegram_id}: "
-                        "entity not in cache and no username stored"
-                    )
-                )
-                return
-            try:
-                telegram_channel = crawler.api_client.client.get_entity(channel.username)
-            except Exception as error:
-                printer.newline()
-                self.stdout.write(self.style.WARNING(f"Skipping retry-lost for channel {channel.telegram_id}: {error}"))
-                return
+        telegram_channel = self._resolve_telegram_entity(channel, crawler, "retry-lost", printer)
+        if telegram_channel is None:
+            return
 
         prefix = f"[{index}/{total_channels}] [id={channel.id}] {channel} | "
         try:
@@ -642,24 +688,9 @@ class Command(BaseCommand):
         pre_crawl_max_id: int,
         printer: ProgressPrinter,
     ) -> None:
-        # Resolve entity: try numeric ID first (cached), fall back to username only on failure.
-        try:
-            telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
-        except ValueError:
-            if not channel.username:
-                printer.newline()
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Skipping refresh for channel {channel.telegram_id}: entity not in cache and no username stored"
-                    )
-                )
-                return
-            try:
-                telegram_channel = crawler.api_client.client.get_entity(channel.username)
-            except Exception as error:
-                printer.newline()
-                self.stdout.write(self.style.WARNING(f"Skipping refresh for channel {channel.telegram_id}: {error}"))
-                return
+        telegram_channel = self._resolve_telegram_entity(channel, crawler, "refresh", printer)
+        if telegram_channel is None:
+            return
 
         refresh_prefix = f"[{index}/{total_channels}] [id={channel.id}] {channel} | "
         try:
@@ -1503,14 +1534,11 @@ class Command(BaseCommand):
                     else:
                         ch.in_degree, ch.out_degree = cites, cited_by
 
-                total = len(channels_to_update)
-                _deg_printer = ProgressPrinter(self.stdout, total)
-                _deg_printer.announce(f"\nRefreshing degrees for {total} in-target channels")
-                for i in range(0, total, 100):
-                    Channel.objects.bulk_update(channels_to_update[i : i + 100], ["in_degree", "out_degree"])
-                    done = min(i + 100, total)
-                    _deg_printer.progress(f"Refreshing degrees for {total} in-target channels [{done}/{total}]")
-                _deg_printer.ensure_newline()
+                self._bulk_update_degrees(
+                    channels_to_update,
+                    "Refreshing degrees for {total} in-target channels",
+                    announce=True,
+                )
 
             if out_degrees and cited_pks:
                 fwd_cited = set(
@@ -1539,14 +1567,9 @@ class Command(BaseCommand):
                     else:
                         ch.in_degree, ch.out_degree = 0, citations
 
-                total = len(cited_channels)
-                _deg_printer2 = ProgressPrinter(self.stdout, total)
-                for i in range(0, total, 100):
-                    Channel.objects.bulk_update(cited_channels[i : i + 100], ["in_degree", "out_degree"])
-                    done = min(i + 100, total)
-                    _deg_printer2.progress(
-                        f"Refreshing citation degree for {total} referenced channels [{done}/{total}]"
-                    )
-                _deg_printer2.ensure_newline()
+                self._bulk_update_degrees(
+                    cited_channels,
+                    "Refreshing citation degree for {total} referenced channels",
+                )
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
