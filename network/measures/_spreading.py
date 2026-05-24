@@ -1,5 +1,6 @@
 import logging
 
+from network.measures._base import apply_measure
 from network.utils import GraphData
 
 import networkx as nx
@@ -83,7 +84,4 @@ def apply_spreading_efficiency(
         # Subtract 1 per run to exclude the seed itself from the spreading count
         results[node_id] = round((total_infected / runs - 1) / norm, 6)
 
-    for node in graph_data["nodes"]:
-        node[key] = results.get(node["id"], 0.0)
-
-    return [(key, "Spreading Efficiency")]
+    return apply_measure(graph_data, results, key, "Spreading Efficiency")

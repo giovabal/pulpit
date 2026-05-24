@@ -33,6 +33,19 @@ from .utils.emoji import emoji_present
 
 # ---- message list options ------------------------------------------------
 
+# Standard prefetch set for every Message-list view: each card needs all five
+# media types plus reactions, and rendering them per-row without prefetching
+# fires a query storm. ChannelDetailView additionally prefetches
+# ``references`` because its template shows the t.me link column.
+_MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
+    "messagepicture_set",
+    "messagevideo_set",
+    "messageaudio_set",
+    "messagesticker_set",
+    "messageothermedia_set",
+    "reactions",
+)
+
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
 
 _CONTENT_TYPE_Q: dict[str, Q] = {
@@ -187,14 +200,7 @@ class HomeView(ListView):
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
             .select_related("channel", "channel__organization", "forwarded_from")
-            .prefetch_related(
-                "messagepicture_set",
-                "messagevideo_set",
-                "messageaudio_set",
-                "messagesticker_set",
-                "messageothermedia_set",
-                "reactions",
-            )
+            .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         if q:
             qs = qs.filter(message__icontains=q)
@@ -368,14 +374,7 @@ class MessageSearchView(ListView):
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
             .select_related("channel", "channel__organization", "forwarded_from")
-            .prefetch_related(
-                "messagepicture_set",
-                "messagevideo_set",
-                "messageaudio_set",
-                "messagesticker_set",
-                "messageothermedia_set",
-                "reactions",
-            )
+            .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -422,14 +421,7 @@ class MessageHighlightsView(ListView):
                 interest_score__isnull=False,
             )
             .select_related("channel", "channel__organization", "forwarded_from")
-            .prefetch_related(
-                "messagepicture_set",
-                "messagevideo_set",
-                "messageaudio_set",
-                "messagesticker_set",
-                "messageothermedia_set",
-                "reactions",
-            )
+            .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -467,15 +459,7 @@ class ChannelDetailView(ListView):
                     channel__in=Channel.objects.in_target().values("pk"),
                 )
                 .select_related("channel", "channel__organization", "forwarded_from")
-                .prefetch_related(
-                    "references",
-                    "reactions",
-                    "messagepicture_set",
-                    "messagevideo_set",
-                    "messageaudio_set",
-                    "messagesticker_set",
-                    "messageothermedia_set",
-                )
+                .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
             )
             if q:
                 qs = qs.filter(message__icontains=q)
@@ -488,15 +472,7 @@ class ChannelDetailView(ListView):
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
-            .prefetch_related(
-                "references",
-                "reactions",
-                "messagepicture_set",
-                "messagevideo_set",
-                "messageaudio_set",
-                "messagesticker_set",
-                "messageothermedia_set",
-            )
+            .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
         )
         if self.selected_channel.out_of_target_after:
             qs = qs.filter(date__date__lte=self.selected_channel.out_of_target_after)

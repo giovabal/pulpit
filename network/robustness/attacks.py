@@ -33,10 +33,11 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from math import isnan, log
+from math import isnan
 from typing import Any, Literal
 
 from network.measures import compute_betweenness
+from network.measures._base import compute_neighbour_community_entropy
 from network.measures._spreading import _run_sir
 
 import networkx as nx
@@ -166,31 +167,13 @@ def _bridging_with_partition(g: nx.DiGraph, partition: dict[Any, Any]) -> dict[A
     """Bridging centrality = betweenness × Shannon entropy of the community
     distribution among the node's weighted neighbours.
 
-    Mirrors the formula in :func:`network.measures._centrality.apply_bridging_centrality`
-    but returns the raw {node: score} dict rather than mutating graph_data.
+    Both pieces come from shared helpers — ``compute_betweenness`` and
+    ``compute_neighbour_community_entropy`` — so the formula stays in
+    lock-step with :func:`network.measures._centrality.apply_bridging_centrality`.
     """
     betweenness = compute_betweenness(g)
-    scores: dict[Any, float] = {}
-    for node in g.nodes():
-        bt = betweenness.get(node, 0.0)
-        weights: dict[Any, float] = {}
-        for pred in g.predecessors(node):
-            w = g.edges[pred, node].get("weight", 1.0)
-            c = partition.get(pred)
-            if c is not None:
-                weights[c] = weights.get(c, 0.0) + w
-        for succ in g.successors(node):
-            w = g.edges[node, succ].get("weight", 1.0)
-            c = partition.get(succ)
-            if c is not None:
-                weights[c] = weights.get(c, 0.0) + w
-        total = sum(weights.values())
-        if total == 0.0 or len(weights) <= 1:
-            entropy = 0.0
-        else:
-            entropy = -sum((w / total) * log(w / total) for w in weights.values())
-        scores[node] = bt * entropy
-    return scores
+    entropies = compute_neighbour_community_entropy(g, partition)
+    return {node: betweenness.get(node, 0.0) * entropies.get(node, 0.0) for node in g.nodes()}
 
 
 def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generator | None = None) -> dict[Any, float]:

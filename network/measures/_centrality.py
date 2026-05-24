@@ -1,6 +1,7 @@
 import logging
-from math import isnan, log
+from math import isnan
 
+from network.measures._base import apply_measure, compute_neighbour_community_entropy
 from network.utils import GraphData
 
 import networkx as nx
@@ -47,45 +48,30 @@ def apply_betweenness_centrality(
     the nx call is skipped, allowing the caller to share one computation with
     ``apply_bridging_centrality``.
     """
-    key = "betweenness"
     values = betweenness if betweenness is not None else compute_betweenness(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Betweenness Centrality")]
+    return apply_measure(graph_data, values, "betweenness", "Betweenness Centrality")
 
 
 def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add normalized in-degree centrality to each node."""
-    key = "in_degree_centrality"
-    values: dict[str, float] = nx.in_degree_centrality(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "In-degree Centrality")]
+    return apply_measure(graph_data, nx.in_degree_centrality(graph), "in_degree_centrality", "In-degree Centrality")
 
 
 def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add normalized out-degree centrality to each node."""
-    key = "out_degree_centrality"
-    values: dict[str, float] = nx.out_degree_centrality(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Out-degree Centrality")]
+    return apply_measure(graph_data, nx.out_degree_centrality(graph), "out_degree_centrality", "Out-degree Centrality")
 
 
 def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add normalized harmonic centrality to each node."""
-    key = "harmonic_centrality"
     n = graph.number_of_nodes()
     norm = (n - 1) if n > 1 else 1
-    values: dict[str, float] = nx.harmonic_centrality(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0) / norm
-    return [(key, "Harmonic Centrality")]
+    values = {nid: v / norm for nid, v in nx.harmonic_centrality(graph).items()}
+    return apply_measure(graph_data, values, "harmonic_centrality", "Harmonic Centrality")
 
 
 def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Katz centrality to each node."""
-    key = "katz_centrality"
     try:
         values: dict[str, float] = nx.katz_centrality(graph, weight="weight")
     except nx.PowerIterationFailedConvergence:
@@ -95,9 +81,7 @@ def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
         except Exception as exc:
             logger.warning("Katz centrality numpy fallback also failed: %s", exc)
             return []
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Katz Centrality")]
+    return apply_measure(graph_data, values, "katz_centrality", "Katz Centrality")
 
 
 def apply_bridging_centrality(
@@ -116,41 +100,15 @@ def apply_bridging_centrality(
     If ``betweenness`` is provided (pre-computed via ``compute_betweenness``), the nx call
     is skipped, allowing the caller to share one computation with ``apply_betweenness_centrality``.
     """
-    key = "bridging_centrality"
-
     betweenness = betweenness if betweenness is not None else compute_betweenness(graph)
-
     community_map: dict[str, str] = {
         node_id: node_data["communities"][strategy_key]
         for node_id, node_data in graph.nodes(data="data")
         if node_data and strategy_key in (node_data.get("communities") or {})
     }
-
-    for node in graph_data["nodes"]:
-        node_id = node["id"]
-        bt = betweenness.get(node_id, 0.0)
-
-        community_weights: dict[str, float] = {}
-        for pred in graph.predecessors(node_id):
-            w = graph.edges[pred, node_id].get("weight", 1.0)
-            c = community_map.get(pred)
-            if c is not None:
-                community_weights[c] = community_weights.get(c, 0.0) + w
-        for succ in graph.successors(node_id):
-            w = graph.edges[node_id, succ].get("weight", 1.0)
-            c = community_map.get(succ)
-            if c is not None:
-                community_weights[c] = community_weights.get(c, 0.0) + w
-
-        total = sum(community_weights.values())
-        if total == 0.0 or len(community_weights) <= 1:
-            entropy = 0.0
-        else:
-            entropy = -sum((w / total) * log(w / total) for w in community_weights.values())
-
-        node[key] = bt * entropy
-
-    return [(key, "Bridging Centrality")]
+    entropies = compute_neighbour_community_entropy(graph, community_map)
+    values = {nid: betweenness.get(nid, 0.0) * entropies.get(nid, 0.0) for nid in graph.nodes()}
+    return apply_measure(graph_data, values, "bridging_centrality", "Bridging Centrality")
 
 
 def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -184,9 +142,7 @@ def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) 
         logger.warning("flow_betweenness: computation failed (%s)", exc)
         return []
 
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Flow Betweenness")]
+    return apply_measure(graph_data, values, key, "Flow Betweenness")
 
 
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -205,11 +161,7 @@ def apply_closeness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
     Uses the Wasserman-Faust improved formula (NetworkX default), which handles partially
     disconnected graphs correctly: nodes that cannot reach any other node receive 0.0.
     """
-    key = "closeness_centrality"
-    values: dict[str, float] = nx.closeness_centrality(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Closeness Centrality")]
+    return apply_measure(graph_data, nx.closeness_centrality(graph), "closeness_centrality", "Closeness Centrality")
 
 
 def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -218,11 +170,7 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     Counts the fraction of directed triangles through the node relative to all possible
     directed triads.  Nodes with total degree < 2 receive 0.0.
     """
-    key = "local_clustering"
-    values: dict[str, float] = nx.clustering(graph)
-    for node in graph_data["nodes"]:
-        node[key] = values.get(node["id"], 0.0)
-    return [(key, "Local Clustering")]
+    return apply_measure(graph_data, nx.clustering(graph), "local_clustering", "Local Clustering")
 
 
 def apply_ego_network_density(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
