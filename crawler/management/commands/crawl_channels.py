@@ -787,27 +787,28 @@ class Command(BaseCommand):
                 .values_list("id", flat=True)
             )
 
-        # Records that exist but whose file is missing on disk
-        if opts.download_images:
-            for mp in MessagePicture.objects.filter(message__channel__in=crawl_qs).select_related("message"):
-                if mp.picture and not os.path.exists(mp.picture.path):
-                    needs_pic.add(mp.message_id)
-        if opts.download_video:
-            for mv in MessageVideo.objects.filter(message__channel__in=crawl_qs).select_related("message"):
-                if mv.video and not os.path.exists(mv.video.path):
-                    needs_vid.add(mv.message_id)
-        if opts.download_audio:
-            for ma in MessageAudio.objects.filter(message__channel__in=crawl_qs).select_related("message"):
-                if ma.audio and not os.path.exists(ma.audio.path):
-                    needs_aud.add(ma.message_id)
-        if opts.download_stickers:
-            for ms in MessageSticker.objects.filter(message__channel__in=crawl_qs).select_related("message"):
-                if ms.sticker and not os.path.exists(ms.sticker.path):
-                    needs_sticker.add(ms.message_id)
-        if opts.download_other_media:
-            for mo in MessageOtherMedia.objects.filter(message__channel__in=crawl_qs).select_related("message"):
-                if mo.media_file and not os.path.exists(mo.media_file.path):
-                    needs_other.add(mo.message_id)
+        # Records that exist but whose file is missing on disk. Use
+        # ``values_list`` instead of iterating full ORM instances with
+        # ``select_related("message")``: the join wasn't needed (only
+        # ``message_id`` was read), the wrapping model + FieldFile objects
+        # were allocated per row, and the loop fires a syscall per record
+        # — keep the syscall, drop the rest.
+        _media_checks = (
+            (opts.download_images, MessagePicture, "picture", needs_pic),
+            (opts.download_video, MessageVideo, "video", needs_vid),
+            (opts.download_audio, MessageAudio, "audio", needs_aud),
+            (opts.download_stickers, MessageSticker, "sticker", needs_sticker),
+            (opts.download_other_media, MessageOtherMedia, "media_file", needs_other),
+        )
+        media_root = settings.MEDIA_ROOT
+        for enabled, model, file_field, target in _media_checks:
+            if not enabled:
+                continue
+            for msg_id, file_name in model.objects.filter(message__channel__in=crawl_qs).values_list(
+                "message_id", file_field
+            ):
+                if file_name and not os.path.exists(os.path.join(media_root, file_name)):
+                    target.add(msg_id)
 
         all_msg_pks = needs_pic | needs_vid | needs_aud | needs_sticker | needs_other
         if not all_msg_pks:
@@ -855,8 +856,11 @@ class Command(BaseCommand):
         saved_sticker = 0
         saved_other = 0
         _BATCH = 100
+        # Pre-fetch every channel we'll iterate so the per-channel loop body
+        # doesn't fire one ``Channel.objects.get(pk=…)`` query each turn.
+        channels_by_pk: dict[int, Channel] = {c.pk: c for c in Channel.objects.filter(pk__in=channel_to_msgs.keys())}
         for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
-            channel = Channel.objects.get(pk=channel_pk)
+            channel = channels_by_pk[channel_pk]
             channel_label = f"[id={channel.id}] {channel}"
             telegram_ids = [tid for _, tid, _ in msg_list]
             pk_by_tid: dict[int, int] = {tid: pk for pk, tid, _ in msg_list}
