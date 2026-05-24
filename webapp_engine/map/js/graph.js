@@ -185,9 +185,10 @@ sigma_instance.on('beforeRender', function() {
 // Theme application
 // =============================================================================
 
-function apply_theme(themeKey) {
+function apply_theme(themeKey, opts) {
     var theme = THEMES[themeKey];
     if (!theme) return;
+    var persist = !opts || opts.persist !== false;
     active_theme = themeKey;
 
     // CSS custom properties (nav bar, infobar, year switcher)
@@ -226,7 +227,14 @@ function apply_theme(themeKey) {
     var sel = el('theme-select');
     if (sel && sel.value !== themeKey) sel.value = themeKey;
 
-    try { localStorage.setItem('pulpit_theme', themeKey); } catch(e) {}
+    // Persist user-chosen themes only. The boot-time default ("dark" for the
+    // graph viewer when nothing is saved yet) passes persist:false so the
+    // shared ``pulpit_theme`` key stays empty — that lets the live webapp
+    // and table exports keep their own light default until the user makes a
+    // deliberate choice in either context.
+    if (persist) {
+        try { localStorage.setItem('pulpit_theme', themeKey); } catch(e) {}
+    }
 }
 
 // =============================================================================
@@ -1093,10 +1101,15 @@ function reload_graph(data_dir) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Restore saved theme before the graph renders so data loading uses correct settings
+    // Restore saved theme before the graph renders so data loading uses correct settings.
+    // When no theme is saved, fall back to "dark" without persisting it, so
+    // opening the graph for the first time doesn't write to the shared
+    // pulpit_theme key (which would override the light default the live UI
+    // and table exports use).
     var _saved_theme = null;
     try { _saved_theme = localStorage.getItem('pulpit_theme'); } catch(e) {}
-    apply_theme((_saved_theme && THEMES[_saved_theme]) ? _saved_theme : 'dark');
+    var _has_saved = !!(_saved_theme && THEMES[_saved_theme]);
+    apply_theme(_has_saved ? _saved_theme : 'dark', { persist: _has_saved });
 
     if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
 
