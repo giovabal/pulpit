@@ -309,7 +309,7 @@
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                   <input type="text" name="export_name" id="export_name" placeholder="e.g. baseline, filtered-2023" data-width="lg" style="flex:1;min-width:14rem;">
                   <button type="button" class="btn btn-outline-secondary btn-sm" id="export-load-btn"
-                          onclick="opsExportsList(this)">
+                          data-ops-action="exports-list">
                     <i class="bi bi-clock-history"></i> Previous exports
                   </button>
                 </div>
@@ -950,7 +950,7 @@
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                   <input type="text" name="compare_target" id="compare_target" placeholder="export name (e.g. baseline)" data-width="lg" style="flex:1;min-width:14rem;">
                   <button type="button" class="btn btn-outline-secondary btn-sm"
-                          onclick="opsExportsList(this, 'compare_target')">
+                          data-ops-action="exports-list" data-target-input="compare_target">
                     <i class="bi bi-clock-history"></i> Pick export
                   </button>
                 </div>
@@ -969,7 +969,7 @@
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                   <input type="text" name="project_dir" id="project_dir" placeholder="path/to/exports/name/" data-width="lg" style="flex:1;min-width:14rem;">
                   <button type="button" class="btn btn-outline-secondary btn-sm" id="graph-dir-scan-btn"
-                          onclick="opsGraphDirScan(this)">
+                          data-ops-action="graph-dir-scan">
                     <i class="bi bi-folder-symlink"></i> Find exports
                   </button>
                 </div>
@@ -1116,10 +1116,7 @@
 // Shared helpers used by multiple IIFEs in this file. They live at script-top-level
 // (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
 // community-palette preview — can call them without crossing closure boundaries.
-function getCsrfToken() {
-  const m = document.cookie.match(/csrftoken=([^;]+)/);
-  return m ? m[1] : '';
-}
+// getCsrfToken() is a global provided by webapp/js/http.js.
 
 function showToast(msg, type) {
   type = type || 'success';
@@ -1664,15 +1661,14 @@ function showToast(msg, type) {
   })();
 
   var _graphDirScanning = false;
-  window.opsGraphDirScan = function (btn) {
+  var opsGraphDirScan = function (btn) {
     if (_graphDirScanning) return;
     _graphDirScanning = true;
     var resultsEl = document.getElementById('graph-dir-results');
     var input = document.getElementById('project_dir');
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning…';
-    fetch('{% url "operations-graph-dirs" %}')
-      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    fetchJson('{% url "operations-graph-dirs" %}')
       .then(function(data) {
         resultsEl.innerHTML = '';
         var dirs = data.dirs || [];
@@ -1720,15 +1716,14 @@ function showToast(msg, type) {
 
   /* ── Previous exports picker ──────────────────────────────────────── */
   var _exportsLoading = false;
-  window.opsExportsList = function (btn, targetInputId) {
+  var opsExportsList = function (btn, targetInputId) {
     if (_exportsLoading) return;
     _exportsLoading = true;
     var resultsId = targetInputId ? 'export-load-results-' + targetInputId : 'export-load-results';
     var resultsEl = document.getElementById(resultsId);
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading…';
-    fetch('{% url "operations-exports" %}')
-      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    fetchJson('{% url "operations-exports" %}')
       .then(function(data) {
         resultsEl.innerHTML = '';
         var exports = data.exports || [];
@@ -1781,9 +1776,16 @@ function showToast(msg, type) {
       });
   };
 
+  // Wire the export pickers and graph-dir scan (replaces former inline onclick=).
+  document.querySelectorAll('[data-ops-action]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.opsAction === 'graph-dir-scan') opsGraphDirScan(b);
+      else if (b.dataset.opsAction === 'exports-list') opsExportsList(b, b.dataset.targetInput);
+    });
+  });
+
   window.opsLoadExportOptions = function (name) {
-    fetch('{% url "operations-exports" %}' + encodeURIComponent(name) + '/')
-      .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    fetchJson('{% url "operations-exports" %}' + encodeURIComponent(name) + '/')
       .then(function(data) {
         var opts = data.options || {};
         var form = document.getElementById('form-structural_analysis');
@@ -2185,8 +2187,7 @@ function showToast(msg, type) {
       return;
     }
     var url = urlTpl.replace('PLACEHOLDER', encodeURIComponent(name));
-    fetch(url, { headers: { 'Accept': 'application/json' } })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('unknown')); })
+    fetchJson(url, { headers: { 'Accept': 'application/json' } })
       .then(function (data) {
         cache[name] = data.colors || [];
         render(rev.checked ? cache[name].slice().reverse() : cache[name]);

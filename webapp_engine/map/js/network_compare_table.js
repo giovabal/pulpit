@@ -1,10 +1,11 @@
 import { strategy_label } from './labels.js';
+import { fetchJson } from './utils.js';
 
 Promise.all([
-    fetch("data/network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch("data_2/network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch("data/channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch("data_2/channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+    fetchJson("data/network_metrics.json"),
+    fetchJson("data_2/network_metrics.json"),
+    fetchJson("data/channels.json"),
+    fetchJson("data_2/channels.json"),
 ]).then(function(results) {
     var dataA = results[0], dataB = results[1], channelsA = results[2], channelsB = results[3];
     var nodesA = channelsA.nodes;

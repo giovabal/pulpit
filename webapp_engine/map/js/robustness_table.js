@@ -12,6 +12,7 @@
 
 import { build_year_nav } from './year_nav.js';
 import { strategy_label } from './labels.js';
+import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 
@@ -426,8 +427,7 @@ function _render(payload) {
 function _load(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
-    return fetch(dd + "robustness.json")
-        .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    return fetchJson(dd + "robustness.json")
         .then(function (payload) { _cache[year] = payload; return payload; });
 }
 
@@ -451,7 +451,7 @@ function _switch_year(year) {
 
 Promise.all([
     _load(_current_year),
-    fetch(_base_dd + "timeline.json").then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+    fetchJsonOrNull(_base_dd + "timeline.json"),
 ]).then(function (results) {
     var payload = results[0];
     var timeline = results[1];

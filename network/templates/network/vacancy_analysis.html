@@ -32,13 +32,14 @@
   .va-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
 </style>
 
-<script>
+<script type="module">
+import { fetchJson } from "./js/utils.js";
+
 (function () {
   var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
   var _data = null;
 
-  fetch(dataDir + "vacancy_analysis.json")
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+  fetchJson(dataDir + "vacancy_analysis.json")
     .then(function (data) { _data = data; render(data); })
     .catch(function () {
       document.getElementById("va-summary").textContent = "Failed to load vacancy_analysis.json.";

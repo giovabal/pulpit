@@ -36,8 +36,6 @@
 <script>
 (function () {
   var tbody   = document.getElementById('analysis-tbody');
-  var CSRF    = document.cookie.match(/csrftoken=([^;]+)/);
-  var csrfTok = CSRF ? CSRF[1] : '';
 
   function fmtDate(iso) {
     if (!iso) return '—';
@@ -80,11 +78,7 @@
   }
 
   function load() {
-    fetch('/operations/exports/')
-      .then(function(r) {
-        if (!r.ok) return Promise.reject(new Error(r.status));
-        return r.json();
-      })
+    fetchJson('/operations/exports/')
       .then(function(data) {
         var exports = data.exports || [];
         tbody.innerHTML = '';
@@ -139,7 +133,7 @@
             if (!confirm('Delete export “' + exp.name + '”?\nThis will permanently remove all files.')) return;
             fetch('/operations/exports/' + encodeURIComponent(exp.name) + '/', {
               method: 'DELETE',
-              headers: { 'X-CSRFToken': csrfTok },
+              headers: { 'X-CSRFToken': getCsrfToken() },
             }).then(function(r) {
               if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || r.status); });
               tr.remove();

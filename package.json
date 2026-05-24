@@ -4,9 +4,14 @@
   "private": true,
   "description": "Dev tooling for Pulpit. Currently: html-validate for the static export bundle and any rendered exports/.",
   "scripts": {
-    "lint:html": "html-validate --config .htmlvalidate.json 'webapp_engine/map/*.html'"
+    "lint:js": "eslint .",
+    "lint:html": "html-validate --config .htmlvalidate.json 'webapp_engine/map/*.html'",
+    "lint": "npm run lint:js && npm run lint:html"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
     "html-validate": "^9.0.0"
   }
 }

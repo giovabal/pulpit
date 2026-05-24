@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NEVER run `git add`, `git commit`, or `git push` unless the user explicitly requests that exact operation in their message.** Each operation requires its own explicit instruction: "commit" authorises a commit only; "push" authorises a push only; "commit and push" authorises both. After finishing any code change — however large or small — stop completely. Do not commit. Do not push. Do not revert and push. Wait for the user to send a separate message.
 - Run `ruff check . --fix && ruff format .` before declaring any code change done.
 - Smoke-test changes with a quick `python -c "..."` call where practical before finishing.
+- When you touch any first-party JavaScript (`webapp_engine/map/js/`, `backoffice/static/`, `webapp/static/`), run `npm run lint:js` (ESLint flat config in `eslint.config.mjs`; requires `npm install` once). Inline `<script>` JS in Django templates is not in scope of this linter.
 - When you touch the static-export HTML files (`webapp_engine/map/*.html`), run `npm run lint:html` to catch accessibility regressions (requires `npm install` once). Django templates are not in scope of this linter.
+- `npm run lint` runs both JS and HTML linters.
 
 ## Commands
 

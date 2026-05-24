@@ -1,5 +1,6 @@
 import { build_year_nav } from './year_nav.js';
 import { addSvgZoomPan as _addSvgZoomPan, showTip as _showTip, moveTip as _moveTip, hideTip as _hideTip } from './_zoom_pan.js';
+import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 function _pluralityComm(label, stratMaps, stratKeys) {
@@ -30,8 +31,8 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetchJson(dd + "communities.json"),
+        fetchJsonOrNull(dd + "meta.json"),
     ]).then(function(res) {
         var d = { data: res[0], meta: res[1] };
         _cache[year] = d;
@@ -223,9 +224,9 @@ function _switch_year(year) {
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetchJson(_dd + "communities.json"),
+    fetchJsonOrNull(_dd + "meta.json"),
+    fetchJsonOrNull(_base_dd + "timeline.json"),
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };
     var timeline = results[2];

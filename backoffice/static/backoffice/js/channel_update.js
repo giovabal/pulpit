@@ -251,7 +251,7 @@
         return fg;
     }
 
-    function saveChannel(ch, form, orgs, groups) {
+    function saveChannel(ch, form, _orgs, _groups) {
         var fd = new FormData(form);
         var orgVal = fd.get("organization_id");
         var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });

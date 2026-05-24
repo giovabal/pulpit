@@ -71,8 +71,7 @@
         loaded = true;
         var inner = panel.querySelector('.post-replies-inner');
         inner.innerHTML = '<div class="post-replies-spinner"><div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">Loading…</span></div></div>';
-        fetch(btn.dataset.repliesUrl)
-          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        fetchJson(btn.dataset.repliesUrl)
           .then(function (data) {
             renderReplies(panel, data);
             if (data.fetched && data.count != null) {
