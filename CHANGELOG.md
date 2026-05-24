@@ -1,6 +1,6 @@
 # Changelog
 ## [0.22] - To be announced
-*Interesting messages. Pulpit version check.*
+*Interesting messages. Pulpit version check. Fixes.*
 
 ### New features
 - **Interesting messages** — Pulpit now scores every alive message for *interestingness* and surfaces the result on a new `/messages/highlights/` global feed and a per-channel **Top messages** panel on the channel detail page. The scoring runs in two layers: a hot per-channel z-scored engagement composite (refreshed automatically at crawl time and via the new `python manage.py compute_message_scores` command) and an opt-in structural layer produced by `structural_analysis --interest-structural` that adds cross-community reach and authority-weighted reach as a sidecar JSON. See [Interesting messages](docs/interesting-messages.md) for the four academic references (Salganik–Dodds–Watts 2006, Suh et al. 2010, Cha et al. 2010, Goel et al. 2016), the partial-renormalisation rule for posts missing a facet, the cold-start floor, the recency-window option, and the structural-layer edge cases.
