@@ -8,11 +8,14 @@ Have a review of all measurements available in Pulpit. Read documentation for ha
 1. find measures that Pulpit offers and that aren't useful in this specific case;
 1. find measures that Pulpit doesn't offers yet and that can be useful in this specific case.
 Let me choose which to remove and which to accept, if any.
-
 ---
-Organization attribution of a channel can change overtime, so it can happens that a channel is in-target only for a period of time.
+Organization attribution of a channel can change overtime, so it can happens that a channel is in-target only for a period of time, or that is in-target over a long time but under two alternating organizations.
 Basically any organization attribution pass through a model that defines a start and an end, both optional.
-Only in that period of time messages are crawled, relationships are measured and so on.
+Only for period of time where a channel belongs to in-target organizations messages are crawled, relationships are measured and so on.
+If `to_inspect` it's always crawled, as it is now.
+If starting time is None it means that organization attribution goes back to channel creation time, if ending time is None it means that organization attribution goes up to present time. Starting and ending times are None by default.
+
+This is a deep refactorization. I need you to write a clear plan for python code, for analysis, for UI and everything that's needed. In a few spots there are decision to take, so ask me throughly and do not make your own decision.
 ---
 - Zenodo registration
 - Have a deep inspection of Python code, search for bugs, bad practices and dead code
