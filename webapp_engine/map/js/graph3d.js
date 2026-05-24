@@ -371,8 +371,9 @@ function _rebuild_edge_positions() {
 // Themes, layout switching
 // =============================================================================
 
-function apply_theme_3d(theme) {
+function apply_theme_3d(theme, opts) {
     var t = THEMES_3D[theme] || THEMES_3D.dark;
+    var persist = !opts || opts.persist !== false;
     active_theme_3d = theme;
     if (scene) scene.background.setHex(t.bg);
     fade_color.setHex(t.fade);
@@ -380,8 +381,15 @@ function apply_theme_3d(theme) {
     document.body.setAttribute('data-theme3d', theme);
     var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
     document.documentElement.style.backgroundColor = bgHex;
+    // Persist user-chosen themes only. The boot-time default ("dark" for the
+    // graph viewer when nothing is saved yet) passes persist:false so the
+    // shared ``pulpit_theme`` key stays empty — that lets the live webapp
+    // and table exports keep their own light default until the user makes a
+    // deliberate choice in either context.
     // Safari private browsing and locked-down profiles can throw on setItem.
-    try { localStorage.setItem('pulpit_theme', theme); } catch (e) { /* persistence is best-effort */ }
+    if (persist) {
+        try { localStorage.setItem('pulpit_theme', theme); } catch (e) { /* persistence is best-effort */ }
+    }
 }
 
 // =============================================================================
@@ -1312,11 +1320,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     init_three();
 
-    var saved_theme = null;
-    try { saved_theme = localStorage.getItem('pulpit_theme'); } catch (e) { /* localStorage may be disabled */ }
-    saved_theme = (saved_theme && THEMES_3D[saved_theme]) ? saved_theme : 'dark';
+    // Fall back to "dark" when nothing is saved, but don't persist that
+    // default — the live UI and table exports default to light and share the
+    // same pulpit_theme key, so writing here would override their default
+    // for any future visit.
+    var saved_theme_raw = null;
+    try { saved_theme_raw = localStorage.getItem('pulpit_theme'); } catch (e) { /* localStorage may be disabled */ }
+    var has_saved_3d = !!(saved_theme_raw && THEMES_3D[saved_theme_raw]);
+    var saved_theme = has_saved_3d ? saved_theme_raw : 'dark';
     el('theme-select').value = saved_theme;
-    apply_theme_3d(saved_theme);
+    apply_theme_3d(saved_theme, { persist: has_saved_3d });
 
     build_layout_selector();
 
