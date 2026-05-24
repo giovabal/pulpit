@@ -1400,8 +1400,17 @@ class Command(BaseCommand):
                                         self.stdout.flush()
                                         _ref_len[0] = len(line)
                                     else:
+                                        # In non-TTY mode (web log), throttle to every 100th
+                                        # message + the final tick. The format is "N/M" but
+                                        # an unexpected progress string shouldn't crash the
+                                        # whole retry pass — fall back to emitting the line
+                                        # unthrottled if either side fails to parse.
                                         done_str, _, total_str = progress.partition("/")
-                                        if done_str == total_str or int(done_str) % 100 == 0:
+                                        try:
+                                            should_emit = done_str == total_str or int(done_str) % 100 == 0
+                                        except ValueError:
+                                            should_emit = True
+                                        if should_emit:
                                             self.stdout.write(line, ending="\n")
                                             self.stdout.flush()
 

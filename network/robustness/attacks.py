@@ -29,6 +29,7 @@ References:
         https://doi.org/10.1103/PhysRevE.65.056109
 """
 
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -40,6 +41,8 @@ from network.measures._spreading import _run_sir
 
 import networkx as nx
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # ── Spec registry ────────────────────────────────────────────────────────────
 
@@ -87,10 +90,12 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
 def _safe_katz(g: nx.DiGraph) -> dict[Any, float]:
     try:
         return nx.katz_centrality(g, weight="weight")
-    except (nx.PowerIterationFailedConvergence, Exception):
+    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
+        logger.warning("Katz power-iteration failed; trying numpy backend", exc_info=True)
         try:
             return nx.katz_centrality_numpy(g, weight="weight")
-        except Exception:
+        except Exception:  # noqa: BLE001
+            logger.warning("Katz numpy backend also failed; using in-strength proxy", exc_info=True)
             return _in_strength(g)
 
 
@@ -101,7 +106,8 @@ def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
     try:
         hubs, _ = nx.hits(g)
         return hubs
-    except Exception:
+    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
+        logger.warning("HITS hub failed; using out-strength proxy", exc_info=True)
         return _out_strength(g)
 
 
@@ -109,7 +115,8 @@ def _hits_authority(g: nx.DiGraph) -> dict[Any, float]:
     try:
         _, auth = nx.hits(g)
         return auth
-    except Exception:
+    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
+        logger.warning("HITS authority failed; using in-strength proxy", exc_info=True)
         return _in_strength(g)
 
 
