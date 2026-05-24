@@ -259,7 +259,15 @@ class Message(TelegramBaseModel):
     forwarded_from = models.ForeignKey(
         Channel, on_delete=models.SET_NULL, null=True, related_name="forwarded_message_set"
     )
+    # Crawler-internal: written by ``ChannelCrawler._resolve_pending_forwards`` when a
+    # forwarded post originated from a private channel we couldn't resolve. Preserved
+    # so the originator's telegram_id isn't lost; not yet rendered anywhere on the
+    # public site, but the data sticks around for a future "forwarded from private"
+    # affordance.
     forwarded_from_private = models.PositiveBigIntegerField(null=True)
+    # Crawler-internal: the telegram_id of a forwarded channel we couldn't resolve
+    # in-line during get_message. Cleared once the deferred lookup succeeds (in
+    # ``_resolve_pending_forwards``); never read by the public-facing views.
     pending_forward_telegram_id = models.PositiveBigIntegerField(null=True)
 
     references = models.ManyToManyField(Channel, related_name="reference_message_set")

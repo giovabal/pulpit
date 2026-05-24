@@ -1,6 +1,6 @@
 import datetime
 import math
-import re as _re
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -354,7 +354,7 @@ class VacanciesView(TemplateView):
 
 def serve_export(request: HttpRequest, name: str, path: str = "") -> HttpResponse:
     """Serve static files from BASE_DIR/exports/{name}/ (development only)."""
-    if not _re.match(r"^[\w\-]+$", name):
+    if not re.match(r"^[\w\-]+$", name):
         raise Http404
     doc_root = Path(settings.BASE_DIR) / "exports" / name
     if not doc_root.is_dir():
