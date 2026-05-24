@@ -556,40 +556,59 @@ class ChannelDetailView(ListView):
             (media_agg["other"], "other", "other"),
         ]
         in_target_pks = Channel.objects.in_target().values("pk")
-        fwd_sent_in_target_qs = msg_qs.filter(forwarded_from__in=in_target_pks).exclude(forwarded_from=ch)
-        fwd_sent_out_of_target_qs = msg_qs.filter(forwarded_from__isnull=False).exclude(
-            forwarded_from__in=in_target_pks
+
+        # Collapse the engagement counts into four aggregate queries (down
+        # from fourteen separate .count() / .distinct().count() calls). Each
+        # aggregate fans out into conditional ``Count(..., filter=Q(...))``
+        # expressions over a single base scan — the same shape as the 0.19
+        # home-page summary fix.
+        fwd_in_target_q = Q(forwarded_from__in=in_target_pks) & ~Q(forwarded_from=ch)
+        fwd_out_of_target_q = Q(forwarded_from__isnull=False) & ~Q(forwarded_from__in=in_target_pks)
+        fwd_sent_agg = msg_qs.aggregate(
+            in_target=Count("id", filter=fwd_in_target_q),
+            in_target_channels=Count("forwarded_from", filter=fwd_in_target_q, distinct=True),
+            out_of_target=Count("id", filter=fwd_out_of_target_q),
+            out_of_target_channels=Count("forwarded_from", filter=fwd_out_of_target_q, distinct=True),
+            self_=Count("id", filter=Q(forwarded_from=ch)),
         )
-        fwd_received_qs = (
-            Message.objects.alive().filter(channel__in=in_target_pks, forwarded_from=ch).exclude(channel=ch)
+        total_forwards_sent_in_target = fwd_sent_agg["in_target"]
+        fwd_sent_in_target_channels = fwd_sent_agg["in_target_channels"]
+        total_forwards_sent_out_of_target = fwd_sent_agg["out_of_target"]
+        fwd_sent_out_of_target_channels = fwd_sent_agg["out_of_target_channels"]
+        total_forwards_sent_self = fwd_sent_agg["self_"]
+
+        fwd_received_agg = (
+            Message.objects.alive()
+            .filter(channel__in=in_target_pks, forwarded_from=ch)
+            .exclude(channel=ch)
+            .aggregate(total=Count("id"), channels=Count("channel", distinct=True))
         )
-        total_forwards_sent_in_target = fwd_sent_in_target_qs.count()
-        total_forwards_sent_self = msg_qs.filter(forwarded_from=ch).count()
-        total_forwards_sent_out_of_target = fwd_sent_out_of_target_qs.count()
-        total_forwards_received = fwd_received_qs.count()
-        fwd_sent_in_target_channels = fwd_sent_in_target_qs.values("forwarded_from").distinct().count()
-        fwd_sent_out_of_target_channels = fwd_sent_out_of_target_qs.values("forwarded_from").distinct().count()
-        fwd_received_channels = fwd_received_qs.values("channel").distinct().count()
+        total_forwards_received = fwd_received_agg["total"]
+        fwd_received_channels = fwd_received_agg["channels"]
 
         refs_through = Message.references.through.objects
-        mentions_sent_in_target_qs = refs_through.filter(
-            message__channel=ch, message__is_lost=False, channel__in=in_target_pks
-        ).exclude(channel=ch)
-        mentions_sent_out_of_target_qs = (
-            refs_through.filter(message__channel=ch, message__is_lost=False)
-            .exclude(channel__in=in_target_pks)
-            .exclude(channel=ch)
+        mentions_in_target_q = Q(channel__in=in_target_pks) & ~Q(channel=ch)
+        mentions_out_of_target_q = ~Q(channel__in=in_target_pks) & ~Q(channel=ch)
+        mentions_sent_agg = refs_through.filter(message__channel=ch, message__is_lost=False).aggregate(
+            in_target=Count("id", filter=mentions_in_target_q),
+            in_target_channels=Count("channel", filter=mentions_in_target_q, distinct=True),
+            out_of_target=Count("id", filter=mentions_out_of_target_q),
+            out_of_target_channels=Count("channel", filter=mentions_out_of_target_q, distinct=True),
+            self_=Count("id", filter=Q(channel=ch)),
         )
-        mentions_received_qs = refs_through.filter(
-            message__channel__in=in_target_pks, message__is_lost=False, channel=ch
-        ).exclude(message__channel=ch)
-        total_mentions_sent_in_target = mentions_sent_in_target_qs.count()
-        total_mentions_sent_self = refs_through.filter(message__channel=ch, message__is_lost=False, channel=ch).count()
-        total_mentions_sent_out_of_target = mentions_sent_out_of_target_qs.count()
-        total_mentions_received = mentions_received_qs.count()
-        mentions_sent_in_target_channels = mentions_sent_in_target_qs.values("channel").distinct().count()
-        mentions_sent_out_of_target_channels = mentions_sent_out_of_target_qs.values("channel").distinct().count()
-        mentions_received_channels = mentions_received_qs.values("message__channel").distinct().count()
+        total_mentions_sent_in_target = mentions_sent_agg["in_target"]
+        mentions_sent_in_target_channels = mentions_sent_agg["in_target_channels"]
+        total_mentions_sent_out_of_target = mentions_sent_agg["out_of_target"]
+        mentions_sent_out_of_target_channels = mentions_sent_agg["out_of_target_channels"]
+        total_mentions_sent_self = mentions_sent_agg["self_"]
+
+        mentions_received_agg = (
+            refs_through.filter(message__channel__in=in_target_pks, message__is_lost=False, channel=ch)
+            .exclude(message__channel=ch)
+            .aggregate(total=Count("id"), channels=Count("message__channel", distinct=True))
+        )
+        total_mentions_received = mentions_received_agg["total"]
+        mentions_received_channels = mentions_received_agg["channels"]
 
         def channels_phrase(prefix: str, count: int, kind: str) -> str:
             word = "channel" if count == 1 else "channels"
