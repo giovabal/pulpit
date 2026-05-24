@@ -284,7 +284,7 @@ class Message(TelegramBaseModel):
     webpage_type = models.CharField(max_length=255, default="", blank=True)
     media_type = models.CharField(
         max_length=32, default="", blank=True
-    )  # "photo", "video", "audio", "document", "poll", or ""
+    )  # "photo", "video", "audio", "sticker", "document", "poll", "none", "gone" (no longer on Telegram), or ""
     replies = models.PositiveBigIntegerField(null=True)
     replies_fetched = models.BooleanField(default=False)
     replies_unavailable = models.BooleanField(default=False)

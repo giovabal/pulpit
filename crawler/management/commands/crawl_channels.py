@@ -890,6 +890,18 @@ class Command(BaseCommand):
         # Pre-fetch every channel we'll iterate so the per-channel loop body
         # doesn't fire one ``Channel.objects.get(pk=…)`` query each turn.
         channels_by_pk: dict[int, Channel] = {c.pk: c for c in Channel.objects.filter(pk__in=channel_to_msgs.keys())}
+
+        def _flush_types(updates: dict[str, list[int]]) -> None:
+            """Persist queued ``media_type`` rewrites — one UPDATE per distinct
+            type, chunked under SQLite's variable limit — then clear the queue.
+            Covers both types discovered on fetched messages and the ``"gone"``
+            tag for ids Telegram no longer has, so the album-sibling candidate
+            query stops re-flagging them on the next run."""
+            for type_str, pks in updates.items():
+                for j in range(0, len(pks), _PK_BATCH):
+                    Message.objects.filter(pk__in=pks[j : j + _PK_BATCH]).update(media_type=type_str)
+            updates.clear()
+
         for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
             channel = channels_by_pk[channel_pk]
             channel_label = f"[id={channel.id}] {channel}"
@@ -911,6 +923,40 @@ class Command(BaseCommand):
             ch_saved_sticker = 0
             ch_saved_other = 0
             printer.status(f"{channel_label} | {n} message(s) with missing media", ch_idx)
+
+            # This channel auto-deletes old messages (TTL) and/or hides pre-join
+            # history, so every id at or below ``available_min_id`` is gone from
+            # Telegram for good: ``get_messages`` returns ``None`` for each,
+            # which the inner loop can only skip — one rate-limited round-trip
+            # per 100-id batch that never saves a file (the "processed 0/N,
+            # saved 0 so far" churn). Tag the album-sibling ones (media_type="")
+            # "gone" so the candidate query drops them next run instead of
+            # re-fetching forever, and persist that now (before the possible
+            # ``continue``). Already-typed messages are left as-is — the same
+            # conservatism as the fetched-message write-back below. If nothing
+            # fetchable remains, skip the channel without resolving its entity.
+            if channel.available_min_id:
+                watermark = channel.available_min_id
+                fetchable = [tid for tid in telegram_ids if tid > watermark]
+                gone_count = n - len(fetchable)
+                if gone_count:
+                    gone_pks = [
+                        pk_by_tid[t] for t in telegram_ids if t <= watermark and pk_by_tid[t] in unknown_type_pks
+                    ]
+                    _flush_types({"gone": gone_pks})
+                    skipped += gone_count
+                    printer.newline()
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  {channel_label}: {gone_count} of {n} message(s) at or below "
+                            f"available_min_id={watermark} are gone from Telegram — "
+                            f"{len(gone_pks)} marked, not retried."
+                        )
+                    )
+                    telegram_ids = fetchable
+                    n = len(telegram_ids)
+                    if not telegram_ids:
+                        continue
             try:
                 api_client.wait()
                 telegram_entity = api_client.client.get_entity(channel.telegram_id)
@@ -948,9 +994,17 @@ class Command(BaseCommand):
                 if not isinstance(tg_messages, list):
                     tg_messages = [tg_messages]
 
-                for tg_msg in tg_messages:
+                for tid, tg_msg in zip(batch_tids, tg_messages, strict=False):
                     if tg_msg is None or not hasattr(tg_msg, "peer_id"):
+                        # No usable message at this id any more — auto-deleted by
+                        # the channel's TTL, or a MessageEmpty stub. Tag album-
+                        # siblings "gone" so they drop out of next run's candidate
+                        # query instead of re-churning forever; this is the
+                        # deleted case the old code skipped without recording.
                         skipped += 1
+                        gone_pk = pk_by_tid.get(tid)
+                        if gone_pk in unknown_type_pks:
+                            type_updates.setdefault("gone", []).append(gone_pk)
                         continue
                     msg_pk = pk_by_tid.get(tg_msg.id)
                     if msg_pk in needs_pic:
@@ -983,15 +1037,10 @@ class Command(BaseCommand):
                     ch_idx,
                 )
 
-            # Persist the discovered media_type for messages whose tag was
-            # unknown — one UPDATE per distinct type per channel, chunked to
-            # stay under SQLite's variable limit. Without this, text-only
-            # album siblings would be re-flagged on every run because the
-            # album-sibling Q only narrows by ``media_type=""``.
-            for type_str, pks in type_updates.items():
-                for j in range(0, len(pks), _PK_BATCH):
-                    chunk = pks[j : j + _PK_BATCH]
-                    Message.objects.filter(pk__in=chunk).update(media_type=type_str)
+            # Persist queued media_type rewrites — types discovered on fetched
+            # messages, plus the "gone" tag for ids Telegram returned as None —
+            # so the album-sibling Q stops re-flagging them next run.
+            _flush_types(type_updates)
 
             saved_pic += ch_saved_pic
             saved_vid += ch_saved_vid
