@@ -2,6 +2,21 @@
 {% load static %}
 
 {% block bo_content %}
+<div id="bo-version-banner" class="update-banner d-none" role="status">
+  <i class="bi bi-arrow-up-circle-fill update-banner-icon" aria-hidden="true"></i>
+  <div class="update-banner-body">
+    <span id="bo-version-banner-text">A new version of Pulpit is available.</span>
+    {% if REPOSITORY_URL %}
+    <a href="{{ REPOSITORY_URL }}" target="_blank" rel="noopener" class="update-banner-link">
+      <i class="bi bi-github me-1" aria-hidden="true"></i>View on GitHub
+    </a>
+    {% endif %}
+  </div>
+  <button type="button" id="bo-version-banner-dismiss" class="update-banner-close" aria-label="Dismiss new-version notice">
+    <i class="bi bi-x" aria-hidden="true"></i>
+  </button>
+</div>
+
 <div class="bo-maint">
   <div class="bo-panel">
     <div class="bo-section-header">

@@ -1802,3 +1802,56 @@ body {
   transition: opacity .15s;
 }
 .about-modal-close:hover { opacity: .9; }
+
+/* ── New-version indicator ──────────────────────────────────────────────────
+   Red attention dot on the Manage button (every page) and the Maintenance menu
+   voice, plus the red banner on the Maintenance page. Hosts carry .position-
+   relative; both surfaces are toggled by version_check.js / maintenance.js. */
+.update-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  transform: translate(35%, -35%);
+  pointer-events: none;
+}
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1.25rem;
+  padding: .7rem 1rem;
+  border: 1px solid var(--danger-border);
+  border-radius: .5rem;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: .85rem;
+}
+.update-banner-icon { flex-shrink: 0; font-size: 1.1rem; }
+.update-banner-body {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .75rem;
+}
+.update-banner-link { color: var(--danger); font-weight: 600; text-decoration: none; }
+.update-banner-link:hover { text-decoration: underline; }
+.update-banner-close {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: .1rem .25rem;
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 1.2rem;
+  line-height: 1;
+  opacity: .6;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.update-banner-close:hover { opacity: 1; }

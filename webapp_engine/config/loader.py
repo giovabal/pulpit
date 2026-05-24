@@ -295,6 +295,25 @@ def read_pulpit_version(path: Path) -> str | None:
     return _read_meta(parsed).get(META_VERSION_KEY)
 
 
+def parse_app_version(text: str) -> str | None:
+    """Return the APP_VERSION value from `.system`-format text, or None if absent.
+
+    Shared by :func:`get_app_version` (local file) and the upstream update check
+    in :mod:`webapp.version_check` (remote `.system`), so the running version and
+    the latest-available version can never be parsed differently.
+    """
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() == "APP_VERSION":
+            return value.strip().strip('"').strip("'")
+    return None
+
+
 def get_app_version() -> str:
     """Read APP_VERSION from `.system` without dragging Django settings in.
 
@@ -304,15 +323,7 @@ def get_app_version() -> str:
     if not SYSTEM_PATH.exists():
         return "unknown"
     try:
-        for line in SYSTEM_PATH.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            if key.strip() == "APP_VERSION":
-                return value.strip().strip('"').strip("'")
+        version = parse_app_version(SYSTEM_PATH.read_text())
     except OSError:
-        pass
-    return "unknown"
+        return "unknown"
+    return version if version is not None else "unknown"

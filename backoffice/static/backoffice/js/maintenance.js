@@ -272,4 +272,29 @@
     $orphanRunBtn.addEventListener("click", runOrphanCleanup);
     // Preview is opt-in (the scan walks the whole media tree and can take many
     // seconds on a large install); user clicks "Preview" to start it.
+
+    // ── New-version banner ───────────────────────────────────────────────────
+    // window.pulpitVersion is published by webapp/static/webapp/js/version_check.js
+    // (loaded in the page shell before this script). Reuse its single cached
+    // lookup: reveal the banner when an update exists, and wire its dismiss button
+    // to clear the attention dots. The banner itself stays in place — only the
+    // dots are dismissed, until a newer release supersedes the stored version.
+    var $verBanner = document.getElementById("bo-version-banner");
+    if ($verBanner && window.pulpitVersion) {
+        var $verText = document.getElementById("bo-version-banner-text");
+        var $verDismiss = document.getElementById("bo-version-banner-dismiss");
+        window.pulpitVersion.ready.then(function (status) {
+            if (!status || !status.update_available) return;
+            if ($verText) {
+                $verText.textContent =
+                    "Pulpit " + status.latest + " is available — you are running " + status.current + ".";
+            }
+            $verBanner.classList.remove("d-none");
+        });
+        if ($verDismiss) {
+            $verDismiss.addEventListener("click", function () {
+                window.pulpitVersion.dismiss();
+            });
+        }
+    }
 })();
