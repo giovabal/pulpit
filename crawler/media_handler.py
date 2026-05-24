@@ -67,6 +67,38 @@ def _is_round_video(document: Any) -> bool:
     return False
 
 
+def detect_media_type(telegram_message: Any) -> str:
+    """Classify a Telegram message's media into the ``Message.media_type`` vocabulary.
+
+    Returns one of ``"photo"``, ``"video"``, ``"audio"``, ``"sticker"``,
+    ``"document"``, ``"poll"``, or ``"none"`` when the message carries no
+    downloadable media (text-only, webpage-only, geo, venue, etc.).
+
+    The ``"none"`` sentinel is what lets ``--fix-missing-media`` record that
+    it actually checked an album sibling whose ``media_type`` was empty —
+    without it, the album-sibling Q would re-flag the same captions on
+    every run.
+    """
+    media = getattr(telegram_message, "media", None)
+    if not media:
+        return "none"
+    if hasattr(media, "photo"):
+        return "photo"
+    if hasattr(media, "document"):
+        doc = media.document
+        if _is_sticker(doc):
+            return "sticker"
+        mime_type = getattr(doc, "mime_type", "") or ""
+        if mime_type.startswith("video/"):
+            return "video"
+        if _is_audio(doc):
+            return "audio"
+        return "document"
+    if hasattr(media, "poll"):
+        return "poll"
+    return "none"
+
+
 class MediaHandler:
     def __init__(
         self,
