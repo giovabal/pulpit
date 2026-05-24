@@ -1136,6 +1136,15 @@ function showToast(msg, type) {
   'use strict';
   document.querySelectorAll('.ops-tip').forEach(function (el) {
     new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+    // The info / tunable-param icons sit *inside* the <label> wrapping each
+    // checkbox. Clicking a non-control descendant of a <label> runs the
+    // label's activation behaviour, i.e. it toggles the associated checkbox.
+    // So clicking an icon to read its tooltip would silently flip the box —
+    // e.g. inadvertently enabling "Fetch recommended channels" and fetching
+    // them on the next run. Tooltips fire on hover/focus, so the icon has no
+    // legitimate click action; suppressing the click's default action stops
+    // the stray toggle without affecting the tooltip.
+    el.addEventListener('click', function (e) { e.preventDefault(); });
   });
 
   function formatTimestamp(iso) {
