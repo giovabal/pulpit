@@ -816,8 +816,8 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                 amount = int(raw_amount)
             except ValueError as exc:
                 raise ValueError(f"Amount must be an integer, got {raw_amount!r}") from exc
-            if amount <= 0:
-                raise ValueError(f"Amount must be a positive integer, got {amount}")
+            if amount < 0:
+                raise ValueError(f"Amount must be zero or a positive integer, got {amount}")
         return
 
 
