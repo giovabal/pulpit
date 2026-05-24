@@ -23,7 +23,7 @@ class Command(BaseCommand):
             "--amount",
             type=int,
             default=None,
-            help="Number of database search terms to process (default: all).",
+            help="Number of database search terms to process (default: all; 0 = none, only --extra-term).",
         )
         parser.add_argument(
             "--extra-term",
