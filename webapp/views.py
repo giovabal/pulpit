@@ -30,6 +30,7 @@ from .models import (
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_ttl
 from .utils.emoji import emoji_present
+from .version_check import version_status
 
 # ---- message list options ------------------------------------------------
 
@@ -1072,3 +1073,18 @@ class MessageJumpView(View):
 
         query = urlencode({"page": page, **extra_params})
         return HttpResponseRedirect(f"{channel_url}?{query}#post-{target.pk}")
+
+
+class VersionCheckView(View):
+    """Report whether a newer Pulpit release is available upstream.
+
+    Reads the day-cached upstream version (see :mod:`webapp.version_check`); the
+    web UI polls this to toggle the "update available" dots and the Maintenance
+    banner. A short ``Cache-Control`` keeps the browser from re-hitting it on
+    every navigation.
+    """
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        response = JsonResponse(version_status())
+        response["Cache-Control"] = "max-age=3600"
+        return response

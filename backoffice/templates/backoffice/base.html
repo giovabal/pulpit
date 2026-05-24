@@ -37,8 +37,9 @@
       <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Vacancies
     </a>
     <a href="{% url 'backoffice:maintenance' %}"
-       class="bo-subnav-link{% if request.resolver_match.url_name == 'maintenance' %} active{% endif %}">
+       class="bo-subnav-link position-relative{% if request.resolver_match.url_name == 'maintenance' %} active{% endif %}">
       <i class="bi bi-tools me-1" aria-hidden="true"></i>Maintenance
+      <span class="update-dot" data-update-dot aria-hidden="true" hidden></span>
     </a>
   </nav>
 
