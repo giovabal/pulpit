@@ -4,7 +4,7 @@ import EdgeCurveProgram from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel } from 'sigma/rendering';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { escHtml } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor } from './utils.js';
 
 // =============================================================================
 // Measure and strategy tooltips
@@ -247,11 +247,7 @@ function rgb_str_to_parts(s) {
 }
 
 function avg_and_darken(c1, c2, factor) {
-    return [
-        Math.round((c1[0]+c2[0])/2 * factor),
-        Math.round((c1[1]+c2[1])/2 * factor),
-        Math.round((c1[2]+c2[2])/2 * factor)
-    ];
+    return avgColor(c1, c2, factor).map(Math.round);
 }
 
 
@@ -349,19 +345,6 @@ function show_node_info(nodeId) {
 // =============================================================================
 // Community coloring
 // =============================================================================
-
-function build_community_color_maps(communities) {
-    var maps = {};
-    for (var strategy in communities) {
-        maps[strategy] = {};
-        var groups = communities[strategy].groups;
-        for (var i = 0; i < groups.length; i++) {
-            // groups[i] = [id, count, label, hexColor]
-            maps[strategy][groups[i][2]] = groups[i][3];
-        }
-    }
-    return maps;
-}
 
 function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
@@ -589,8 +572,8 @@ function click_node(nodeId) {
 
 function get_data(data_dir) {
     return Promise.all([
-        fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetchJson(data_dir + 'channel_position.json'),
+        fetchJson(data_dir + 'channels.json'),
     ]).then(function(results) {
         var pos_data = results[0];
         var ch_data  = results[1];
@@ -648,7 +631,7 @@ function get_data(data_dir) {
 function _apply_accessory(ch_data, comm_data, prev_strategy, prev_size) {
     accessory_data          = ch_data;
     community_strategy_data = comm_data.strategies;
-    community_color_maps    = build_community_color_maps(comm_data.strategies);
+    community_color_maps    = buildCommunityColorMaps(comm_data.strategies);
 
     var strategies  = Object.keys(comm_data.strategies);
     active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1)
@@ -690,8 +673,8 @@ function load_accessory(data_dir) {
     }
 
     Promise.all([
-        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetchJson(data_dir + 'channels.json'),
+        fetchJson(data_dir + 'communities.json'),
     ]).then(function(results) {
         _apply_accessory(results[0], results[1], prev_strategy, prev_size);
     }).catch(function(err) { console.error('load_accessory failed:', err); });
@@ -705,9 +688,9 @@ function preload_year(data_dir) {
     if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
     year_cache_pend[data_dir] = true;
     return Promise.all([
-        fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetchJson(data_dir + 'channel_position.json'),
+        fetchJson(data_dir + 'channels.json'),
+        fetchJson(data_dir + 'communities.json'),
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
@@ -858,15 +841,6 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
     if (old_ids.length) {
         old_ids.forEach(function(id) { cx += graph.getNodeAttribute(id, 'x'); cy += graph.getNodeAttribute(id, 'y'); });
         cx /= old_ids.length; cy /= old_ids.length;
-    }
-
-    // Centre of new year's graph — departing nodes drift here as they shrink,
-    // keeping them inside the new bounding box so dropping them causes no normalization jump.
-    var new_cx = 0, new_cy = 0;
-    if (new_pos_data.nodes.length) {
-        new_pos_data.nodes.forEach(function(n) { new_cx += n.x; new_cy += n.y; });
-        new_cx /= new_pos_data.nodes.length;
-        new_cy /= new_pos_data.nodes.length;
     }
 
     // Snapshot current positions and sizes
@@ -1026,8 +1000,7 @@ function switch_layout(algo) {
     if (layout_cache[cache_key]) {
         animate_layout_transition(layout_cache[cache_key], 600);
     } else {
-        fetch(current_data_dir + filename)
-            .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        fetchJson(current_data_dir + filename)
             .then(function(data) {
                 layout_cache[cache_key] = data;
                 animate_layout_transition(data, 600);
@@ -1058,8 +1031,8 @@ function reload_graph(data_dir) {
             animate_year_transition(yc.pos, yc.ch, 700);
         } else {
             Promise.all([
-                fetch(data_dir + 'channel_position.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-                fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+                fetchJson(data_dir + 'channel_position.json'),
+                fetchJson(data_dir + 'channels.json'),
             ]).then(function(results) {
                 animate_year_transition(results[0], results[1], 700);
             }).catch(function(err) {
@@ -1070,15 +1043,14 @@ function reload_graph(data_dir) {
         var lc_key = active_layout + ':' + data_dir;
         var pos_p = layout_cache[lc_key]
             ? Promise.resolve(layout_cache[lc_key])
-            : fetch(data_dir + 'channel_position_' + active_layout + '.json')
-                .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+            : fetchJson(data_dir + 'channel_position_' + active_layout + '.json')
                 .then(function(d) { layout_cache[lc_key] = d; return d; });
         var ch_p = yc
             ? Promise.resolve(yc.ch)
-            : fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
+            : fetchJson(data_dir + 'channels.json');
         Promise.all([pos_p, ch_p]).then(function(results) {
             animate_year_transition(results[0], results[1], 700);
-        }).catch(function(err) {
+        }).catch(function() {
             console.error('reload_graph: layout', active_layout, 'not available for', data_dir, '— falling back to FA2');
             active_layout = 'fa2';
             var layoutSel = el('layout-select');
@@ -1120,9 +1092,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Fetch timeline and preload ALL year data in parallel with the graph build,
     // so everything is cached by the time the spinner closes.
-    var years_promise = fetch('data/timeline.json')
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .catch(function() { return null; })
+    var years_promise = fetchJsonOrNull('data/timeline.json')
         .then(function(timeline) {
             if (!timeline) return;
             init_year_switcher(timeline);

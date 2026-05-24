@@ -114,10 +114,7 @@
       if (loaded) return;
       loaded = true;
       Promise.all([
-        fetch(collapse.dataset.chartUrl).then(function (r) {
-          if (!r.ok) return Promise.reject(new Error(r.status));
-          return r.json();
-        }),
+        fetchJson(collapse.dataset.chartUrl),
         eventsPromise,
       ]).then(function (results) {
         spinner.classList.add('hidden');

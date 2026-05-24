@@ -1,5 +1,6 @@
 import { strategy_label as _strat_label } from './labels.js';
 import { addSvgZoomPan as _addSvgZoomPan, showTip as _showTip, moveTip as _moveTip, hideTip as _hideTip } from './_zoom_pan.js';
+import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 
@@ -258,10 +259,10 @@ function _render(simData, channelData, communities, meta, sortMode, sortMeasureK
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "structural_similarity.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "channels.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetchJson(_dd + "structural_similarity.json"),
+    fetchJsonOrNull(_dd + "channels.json"),
+    fetchJsonOrNull(_dd + "communities.json"),
+    fetchJsonOrNull(_dd + "meta.json"),
 ]).then(function(results) {
     _render(results[0], results[1], results[2], results[3], "community", null, null);
 }).catch(function(err) {

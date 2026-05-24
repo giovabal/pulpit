@@ -1,4 +1,5 @@
 /* Shared backoffice utilities */
+/* exported BACKOFFICE_PAGE_SIZE, renderPagination, getCsrfToken, apiFetch, showToast, confirmDelete, fmtInt, fmtDate, makeDeleteBtn, makeEditBtn, makeProfilePicEl */
 
 const BACKOFFICE_PAGE_SIZE = 100;
 

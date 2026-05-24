@@ -8,11 +8,7 @@
 // Read Django's CSRF cookie for unsafe (POST/PUT/DELETE) requests.
 function getCsrfToken() {
     var m = document.cookie.match(/csrftoken=([^;]+)/);
-    if (m) return m[1];
-    if (typeof console !== "undefined" && console.warn) {
-        console.warn("Pulpit: csrftoken cookie not found; unsafe requests may be rejected.");
-    }
-    return "";
+    return m ? m[1] : "";
 }
 
 // Fetch JSON, rejecting on any non-2xx response. Use for required resources.

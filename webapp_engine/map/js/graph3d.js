@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { escHtml } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor } from './utils.js';
 
 // =============================================================================
 // Constants
@@ -96,11 +96,8 @@ function parse_color(css_rgb) {
 }
 
 function avg_darken(c1, c2) {
-    return new THREE.Color(
-        (c1.r + c2.r) / 2 * EDGE_DARKEN,
-        (c1.g + c2.g) / 2 * EDGE_DARKEN,
-        (c1.b + c2.b) / 2 * EDGE_DARKEN
-    );
+    var a = avgColor([c1.r, c1.g, c1.b], [c2.r, c2.g, c2.b], EDGE_DARKEN);
+    return new THREE.Color(a[0], a[1], a[2]);
 }
 
 // Quadratic Bézier control point: mid offset perpendicular to edge direction
@@ -461,8 +458,7 @@ function switch_layout_3d(algo) {
     var filename = algo === 'fa2' ? 'channel_position_3d.json' : 'channel_position_3d_' + algo + '.json';
     var key = current_data_dir + filename;
     if (layout_cache_3d[key]) { _animate_layout_3d(layout_cache_3d[key]); return; }
-    fetch(current_data_dir + filename)
-        .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    fetchJson(current_data_dir + filename)
         .then(function(data) {
             var display = algo === 'fa2' ? data : _rescale_to_fa2(data);
             layout_cache_3d[key] = display;
@@ -506,17 +502,6 @@ function _animate_layout_3d(pos_data) {
 // =============================================================================
 // Community coloring
 // =============================================================================
-
-function build_community_color_maps(communities) {
-    var maps = {};
-    for (var strategy in communities) {
-        maps[strategy] = {};
-        communities[strategy].groups.forEach(function(g) {
-            maps[strategy][g[2]] = g[3];  // label → hexColor
-        });
-    }
-    return maps;
-}
 
 function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
@@ -835,9 +820,9 @@ function apply_group_filter(group) {
 
 function get_data() {
     return Promise.all([
-        fetch(current_data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(current_data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(current_data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetchJson(current_data_dir + 'channel_position_3d.json'),
+        fetchJson(current_data_dir + 'channels.json'),
+        fetchJson(current_data_dir + 'communities.json'),
     ]).then(function(results) {
         var pos_data  = results[0];
         var ch_data   = results[1];
@@ -845,7 +830,7 @@ function get_data() {
 
         accessory_data          = ch_data;
         community_strategy_data = comm_data.strategies;
-        community_color_maps    = build_community_color_maps(comm_data.strategies);
+        community_color_maps    = buildCommunityColorMaps(comm_data.strategies);
 
         var strategies  = Object.keys(comm_data.strategies);
         active_strategy = strategies[0] || null;
@@ -879,9 +864,9 @@ function preload_year_3d(data_dir) {
     if (year_cache[data_dir] || year_cache_pend[data_dir]) return Promise.resolve();
     year_cache_pend[data_dir] = true;
     return Promise.all([
-        fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+        fetchJson(data_dir + 'channel_position_3d.json'),
+        fetchJson(data_dir + 'channels.json'),
+        fetchJson(data_dir + 'communities.json'),
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
@@ -894,7 +879,7 @@ function _apply_accessory_3d(ch_data, comm_data) {
 
     accessory_data          = ch_data;
     community_strategy_data = comm_data.strategies;
-    community_color_maps    = build_community_color_maps(comm_data.strategies);
+    community_color_maps    = buildCommunityColorMaps(comm_data.strategies);
 
     var strategies  = Object.keys(comm_data.strategies);
     active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1)
@@ -1194,9 +1179,9 @@ function reload_graph_3d(data_dir) {
         animate_year_transition_3d(c.pos, c.ch, 700);
     } else {
         Promise.all([
-            fetch(data_dir + 'channel_position_3d.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-            fetch(data_dir + 'channels.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-            fetch(data_dir + 'communities.json').then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
+            fetchJson(data_dir + 'channel_position_3d.json'),
+            fetchJson(data_dir + 'channels.json'),
+            fetchJson(data_dir + 'communities.json'),
         ]).then(function(results) {
             _apply_accessory_3d(results[1], results[2]);
             animate_year_transition_3d(results[0], results[1], 700);
@@ -1334,9 +1319,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loading_modal_bs.show();
     el('loading_message').innerHTML = 'Loading…<br>Please wait.';
 
-    var years_promise = fetch('data/timeline.json')
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .catch(function() { return null; })
+    var years_promise = fetchJsonOrNull('data/timeline.json')
         .then(function(timeline) {
             if (!timeline) return;
             init_year_switcher(timeline);

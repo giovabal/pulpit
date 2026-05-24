@@ -1,6 +1,7 @@
 import { strategy_label as _strat_label } from './labels.js';
 import { build_year_nav } from './year_nav.js';
 import { mini_hist as _mini_hist } from './charts.js';
+import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 var _ym = _dd.match(/data_(\d{4,})\//);
@@ -25,9 +26,9 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetchJson(dd + "network_metrics.json"),
+        fetchJson(dd + "channels.json"),
+        fetchJsonOrNull(dd + "meta.json"),
     ]).then(function(res) {
         var d = { data: res[0], channels: res[1], meta: res[2] };
         _cache[year] = d;
@@ -455,11 +456,11 @@ function _switch_year(year) {
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_base_dd + "network_metrics.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }).catch(function() { return null; }),
+    fetchJson(_dd + "network_metrics.json"),
+    fetchJson(_dd + "channels.json"),
+    fetchJsonOrNull(_dd + "meta.json"),
+    fetchJsonOrNull(_base_dd + "timeline.json"),
+    fetchJsonOrNull(_base_dd + "network_metrics.json"),
 ]).then(function(results) {
     var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
 
@@ -479,8 +480,7 @@ Promise.all([
 
     return (_has_tl
         ? Promise.all(_ty.map(function(y) {
-            return fetch("data_" + y.year + "/network_metrics.json")
-                .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+            return fetchJson("data_" + y.year + "/network_metrics.json")
                 .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
                 .catch(function() { return null; });
           })).then(function(list) { return list.filter(Boolean); })

@@ -1,5 +1,6 @@
 import { build_year_nav } from './year_nav.js';
 import { mini_hist } from './charts.js';
+import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
@@ -55,8 +56,7 @@ function _load_year_channels() {
     if (!_all_years.length) { _yr_channels_promise = Promise.resolve(); return _yr_channels_promise; }
     _yr_channels_promise = Promise.all(_all_years.map(function(yr) {
         if (_yr_channels[yr]) return Promise.resolve();
-        return fetch("data_" + yr + "/channels.json")
-            .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+        return fetchJson("data_" + yr + "/channels.json")
             .then(function(d) {
                 var m = {};
                 (d.nodes || []).forEach(function(n) { m[n.id] = n; });
@@ -117,9 +117,9 @@ function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return Promise.all([
-        fetch(dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-        fetch(dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetchJson(dd + "channels.json"),
+        fetchJson(dd + "communities.json"),
+        fetchJsonOrNull(dd + "meta.json"),
     ]).then(function(res) {
         var d = { channels: res[0], communities: res[1], meta: res[2] };
         _cache[year] = d;
@@ -310,7 +310,7 @@ function _render(d) {
     addFtd("Mean ± SD", "", false);
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
     var firstStratFoot = true;
-    strategies.forEach(function(s) { addFtd("", "", firstStratFoot); firstStratFoot = false; });
+    strategies.forEach(function() { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
@@ -345,10 +345,10 @@ function _switch_year(year) {
 
 // ── Initial load ───────────────────────────────────────────────────────────────
 Promise.all([
-    fetch(_dd + "channels.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "communities.json").then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(_dd + "meta.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-    fetch(_base_dd + "timeline.json").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetchJson(_dd + "channels.json"),
+    fetchJson(_dd + "communities.json"),
+    fetchJsonOrNull(_dd + "meta.json"),
+    fetchJsonOrNull(_base_dd + "timeline.json"),
 ]).then(function(results) {
     _cache[_current_year] = { channels: results[0], communities: results[1], meta: results[2] };
     var timeline = results[3];

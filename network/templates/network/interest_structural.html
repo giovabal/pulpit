@@ -34,14 +34,16 @@
   .is-cap-note { color: var(--bs-secondary-color, #6c757d); font-size: .85em; margin-top: .5rem; }
 </style>
 
-<script>
+<script type="module">
+import { fetchJson } from "./js/utils.js";
+
 (function () {
   var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
   var ROW_CAP = 1000;
 
   Promise.all([
-    fetch(dataDir + "interest_structural.json").then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); }),
-    fetch(dataDir + "channels.json").then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+    fetchJson(dataDir + "interest_structural.json"),
+    fetchJson(dataDir + "channels.json")
   ])
     .then(function (results) { render(results[0], results[1]); })
     .catch(function () {

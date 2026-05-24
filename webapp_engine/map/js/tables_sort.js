@@ -1,3 +1,4 @@
+/* exported heatmapBg, sigFig, fmtInt, divergingHeatmapBg, numSortVal, initSortableTables */
 function heatmapBg(val, min, max) {
     if (val === null || val === undefined || min >= max) return "";
     var ratio = (val - min) / (max - min);
@@ -31,7 +32,7 @@ function initSortableTables() {
     var tables = document.querySelectorAll("table.sortable:not([data-sort-initialized])"), table, thead, headers, i, j;
     for (i = 0; i < tables.length; i++) {
         table = tables[i];
-        if (thead = table.querySelector("thead")) {
+        if ((thead = table.querySelector("thead"))) {
             headers = thead.querySelectorAll("th");
             if (headers.length === 0) continue;
             table.setAttribute('data-sort-initialized', 'true');
@@ -84,7 +85,7 @@ function sortTableFunction(table) {
 }
 function siblingIndex(node) {
     var count = 0;
-    while (node = node.previousElementSibling) count++;
+    while ((node = node.previousElementSibling)) count++;
     return count;
 }
 function sortRows(table, columnIndex, direction) {

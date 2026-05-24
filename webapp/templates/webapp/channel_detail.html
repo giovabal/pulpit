@@ -301,10 +301,6 @@
 {% endfor %}
 
 <script>
-  function fetchJson(url) {
-    return fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); });
-  }
-
   var eventsPromise = null;
   function getEventsPromise() {
     if (!eventsPromise) {
@@ -733,11 +729,7 @@
     _picModal.show();
 
     if (_loaded) { _showPic(0); return; }
-    fetch("/manage/api/channels/{{ selected_channel.pk }}/pictures/")
-      .then(function (r) {
-        if (!r.ok) throw new Error(r.status);
-        return r.json();
-      })
+    fetchJson("/manage/api/channels/{{ selected_channel.pk }}/pictures/")
       .then(function (data) {
         _loaded = true;
         var pics = data.pictures && data.pictures.length ? data.pictures : [_fallbackFromAvatar()];
