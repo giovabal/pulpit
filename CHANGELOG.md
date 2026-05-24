@@ -1,4 +1,7 @@
 # Changelog
+## [0.23] - To be announced
+
+
 ## [0.22] - 2026-05-24
 *Interesting messages. Pulpit version check. Fixes.*
 
