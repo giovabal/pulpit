@@ -1,5 +1,8 @@
+import io
 import os
+import shutil
 import tempfile
+from dataclasses import fields
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +11,7 @@ from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.hole_fixer import find_missing_message_ids, fix_message_holes, iter_hole_ranges
+from crawler.management.commands.crawl_channels import Command, CrawlOptions, ProgressPrinter
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 
@@ -23,6 +27,21 @@ def _make_api_client() -> MagicMock:
     api_client = MagicMock()
     api_client.wait.return_value = None
     return api_client
+
+
+def _crawl_opts(**overrides) -> CrawlOptions:
+    """Build a CrawlOptions with every flag off, overriding only what a test needs.
+
+    Every bool field defaults False; the non-bool fields take their natural
+    empty default. New fields are picked up automatically (defaulted False),
+    so the helper does not need touching when an option is added.
+    """
+    base = {f.name: False for f in fields(CrawlOptions)}
+    base.update(
+        refresh_limit=None, refresh_from=None, refresh_to=None, ids_str=None, channel_types=[], channel_groups=[]
+    )
+    base.update(overrides)
+    return CrawlOptions(**base)
 
 
 def _make_telegram_channel(telegram_id: int = 999, username: str = "testchan") -> MagicMock:
@@ -335,6 +354,121 @@ class FixMessageHolesTests(TestCase):
         self._create_messages([1, 3])  # hole at 2
         self._run()
         self.assertIn("CHAN | messages processed: 1", self.status_messages)
+
+
+# ---------------------------------------------------------------------------
+# _fix_missing_media — retiring messages Telegram no longer has
+# ---------------------------------------------------------------------------
+
+
+class FixMissingMediaGoneTests(TestCase):
+    """``_fix_missing_media`` must retire messages Telegram no longer has
+    (e.g. auto-deleted by a channel TTL) instead of re-fetching them forever.
+
+    A flagged album sibling (``grouped_id`` set, ``media_type=""``) is tagged
+    ``"gone"`` from either signal: its id is at or below the channel's
+    ``available_min_id`` watermark (tagged with no round-trip), or
+    ``get_messages`` returns ``None`` for it (tagged after the fetch).
+    Already-typed messages are left untouched.
+    """
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.api_client = _make_api_client()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.cmd = Command(stdout=io.StringIO())
+
+    def _channel(self, telegram_id: int, available_min_id: int | None = None) -> Channel:
+        return Channel.objects.create(telegram_id=telegram_id, organization=self.org, available_min_id=available_min_id)
+
+    def _album_sibling(self, channel: Channel, telegram_id: int) -> Message:
+        # grouped_id set + empty media_type → enrolled via the album-sibling Q.
+        return Message.objects.create(channel=channel, telegram_id=telegram_id, grouped_id=777)
+
+    def _run(self, channel: Channel) -> None:
+        printer = ProgressPrinter(self.cmd.stdout, total=1)
+        self.cmd._fix_missing_media(
+            Channel.objects.filter(pk=channel.pk),
+            self.api_client,
+            self.tmp,
+            printer,
+            _crawl_opts(fix_missing_media=True, download_images=True),
+        )
+
+    def test_below_watermark_marked_gone_without_any_fetch(self) -> None:
+        ch = self._channel(telegram_id=501, available_min_id=100)
+        below = self._album_sibling(ch, telegram_id=10)
+        at_watermark = self._album_sibling(ch, telegram_id=100)  # boundary: <= watermark is gone too
+        self._run(ch)
+        below.refresh_from_db()
+        at_watermark.refresh_from_db()
+        self.assertEqual(below.media_type, "gone")
+        self.assertEqual(at_watermark.media_type, "gone")
+        # A fully-gone channel is skipped without resolving its entity or fetching.
+        self.api_client.client.get_entity.assert_not_called()
+        self.api_client.client.get_messages.assert_not_called()
+
+    def test_none_result_marked_gone_after_fetch(self) -> None:
+        ch = self._channel(telegram_id=502)  # no watermark reported
+        m1 = self._album_sibling(ch, telegram_id=10)
+        m2 = self._album_sibling(ch, telegram_id=20)
+        self.api_client.client.get_messages.side_effect = lambda entity, ids: [None for _ in ids]
+        self._run(ch)
+        m1.refresh_from_db()
+        m2.refresh_from_db()
+        self.assertEqual(m1.media_type, "gone")
+        self.assertEqual(m2.media_type, "gone")
+        self.api_client.client.get_messages.assert_called_once()
+
+    def test_partial_watermark_fetches_only_above_then_marks_all_gone(self) -> None:
+        ch = self._channel(telegram_id=503, available_min_id=15)
+        below = self._album_sibling(ch, telegram_id=10)  # tagged without a fetch
+        above = self._album_sibling(ch, telegram_id=20)  # fetched, comes back None
+        self.api_client.client.get_messages.side_effect = lambda entity, ids: [None for _ in ids]
+        self._run(ch)
+        below.refresh_from_db()
+        above.refresh_from_db()
+        self.assertEqual(below.media_type, "gone")
+        self.assertEqual(above.media_type, "gone")
+        # Only the above-watermark id is ever sent to Telegram.
+        self.api_client.client.get_messages.assert_called_once()
+        _, kwargs = self.api_client.client.get_messages.call_args
+        self.assertEqual(list(kwargs["ids"]), [20])
+
+    def test_known_type_below_watermark_is_left_intact(self) -> None:
+        ch = self._channel(telegram_id=504, available_min_id=100)
+        # media_type="photo" with no MessagePicture → flagged via the photo
+        # bucket, but it is not an album sibling, so the guard must not touch it.
+        m = Message.objects.create(channel=ch, telegram_id=10, media_type="photo")
+        self._run(ch)
+        m.refresh_from_db()
+        self.assertEqual(m.media_type, "photo")
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_existing_message_is_reclassified_not_marked_gone(self) -> None:
+        ch = self._channel(telegram_id=505)
+        m = self._album_sibling(ch, telegram_id=30)
+        tg = MagicMock()
+        tg.id = 30
+        tg.peer_id = MagicMock()
+        self.api_client.client.get_messages.side_effect = lambda entity, ids: [tg]
+        with patch("crawler.management.commands.crawl_channels.MediaHandler") as mock_mh:
+            handler = mock_mh.return_value
+            for meth in (
+                "download_message_picture",
+                "download_message_video",
+                "download_message_audio",
+                "download_message_sticker",
+                "download_message_other_media",
+            ):
+                getattr(handler, meth).return_value = 0
+            self._run(ch)
+        m.refresh_from_db()
+        # A live message that still exists is reclassified by detect_media_type,
+        # never retired — the "gone" tag is only for ids Telegram no longer has.
+        self.assertNotEqual(m.media_type, "gone")
+        self.api_client.client.get_messages.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
