@@ -36,12 +36,16 @@ from .utils.emoji import emoji_present
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
 
 _CONTENT_TYPE_Q: dict[str, Q] = {
-    "text": Q(media_type=""),
+    # "none" is the sentinel ``--fix-missing-media`` writes after confirming a
+    # message has no downloadable media on Telegram, so it must be treated as
+    # text here (and excluded from "other") to keep the message-list filter
+    # consistent with the legacy empty-string value.
+    "text": Q(media_type__in=["", "none"]),
     "image": Q(media_type="photo"),
     "video": Q(media_type="video"),
     "sound": Q(media_type="audio"),
     "sticker": Q(media_type="sticker"),
-    "other": ~Q(media_type__in=["", "photo", "video", "audio", "sticker"]),
+    "other": ~Q(media_type__in=["", "none", "photo", "video", "audio", "sticker"]),
 }
 
 

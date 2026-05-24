@@ -19,7 +19,7 @@ from django.db.models import F, Q
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
-from crawler.media_handler import MediaHandler
+from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
 from webapp.models import (
     Channel,
@@ -814,19 +814,22 @@ class Command(BaseCommand):
             self.stdout.write("\nNo missing media found.")
             return
 
-        # Group by channel: channel_pk → [(message_pk, telegram_id)].
-        # Chunk the IN clause to stay under SQLite's SQLITE_MAX_VARIABLE_NUMBER
-        # (defaults to 999 on older builds), which a single ``pk__in`` over the
-        # full set would otherwise blow past.
-        channel_to_msgs: dict[int, list[tuple[int, int]]] = {}
+        # Group by channel: channel_pk → [(message_pk, telegram_id, media_type)].
+        # ``media_type`` is captured so the inner loop can tell which messages
+        # were enrolled via the album-sibling Q (media_type="") and need their
+        # discovered type written back; messages with an already-known type
+        # are left alone. Chunk the IN clause to stay under SQLite's
+        # SQLITE_MAX_VARIABLE_NUMBER (defaults to 999 on older builds), which
+        # a single ``pk__in`` over the full set would otherwise blow past.
+        channel_to_msgs: dict[int, list[tuple[int, int, str]]] = {}
         all_msg_pks_list = list(all_msg_pks)
         _PK_BATCH = 900
         for start in range(0, len(all_msg_pks_list), _PK_BATCH):
             chunk = all_msg_pks_list[start : start + _PK_BATCH]
-            for msg_pk, channel_pk, telegram_id in Message.objects.filter(pk__in=chunk).values_list(
-                "id", "channel_id", "telegram_id"
+            for msg_pk, channel_pk, telegram_id, current_media_type in Message.objects.filter(pk__in=chunk).values_list(
+                "id", "channel_id", "telegram_id", "media_type"
             ):
-                channel_to_msgs.setdefault(channel_pk, []).append((msg_pk, telegram_id))
+                channel_to_msgs.setdefault(channel_pk, []).append((msg_pk, telegram_id, current_media_type))
 
         n_channels = len(channel_to_msgs)
         n_messages = len(all_msg_pks)
@@ -855,8 +858,16 @@ class Command(BaseCommand):
         for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
             channel = Channel.objects.get(pk=channel_pk)
             channel_label = f"[id={channel.id}] {channel}"
-            telegram_ids = [tid for _, tid in msg_list]
-            pk_by_tid: dict[int, int] = {tid: pk for pk, tid in msg_list}
+            telegram_ids = [tid for _, tid, _ in msg_list]
+            pk_by_tid: dict[int, int] = {tid: pk for pk, tid, _ in msg_list}
+            # Pre-update set of message pks whose media_type was unknown (""):
+            # those are the ones enrolled via the album-sibling Q, and the
+            # only ones whose stored type we should rewrite. Messages with an
+            # already-known type (e.g. "photo" missing only its file) are
+            # left intact so a transient download failure doesn't flip the
+            # tag to "none".
+            unknown_type_pks: set[int] = {pk for pk, _, mt in msg_list if mt == ""}
+            type_updates: dict[str, list[int]] = {}
             n = len(telegram_ids)
             ch_processed = 0
             ch_saved_pic = 0
@@ -919,6 +930,13 @@ class Command(BaseCommand):
                         ch_saved_other += fix_handler.download_message_other_media(tg_msg)
                     processed += 1
                     ch_processed += 1
+                    # Record the discovered media type so the album-sibling Q
+                    # stops re-flagging this message on the next run. "none"
+                    # marks captions/webpage-only/etc. that Telegram confirms
+                    # carry no downloadable media.
+                    if msg_pk in unknown_type_pks:
+                        discovered = detect_media_type(tg_msg)
+                        type_updates.setdefault(discovered, []).append(msg_pk)
 
                 # One status line per ``_BATCH``-message batch keeps the log
                 # readable: in the web UI's non-TTY mode ``printer.status`` emits
@@ -929,6 +947,16 @@ class Command(BaseCommand):
                     f"{channel_label} | processed {ch_processed}/{n}, saved {ch_saved} so far",
                     ch_idx,
                 )
+
+            # Persist the discovered media_type for messages whose tag was
+            # unknown — one UPDATE per distinct type per channel, chunked to
+            # stay under SQLite's variable limit. Without this, text-only
+            # album siblings would be re-flagged on every run because the
+            # album-sibling Q only narrows by ``media_type=""``.
+            for type_str, pks in type_updates.items():
+                for j in range(0, len(pks), _PK_BATCH):
+                    chunk = pks[j : j + _PK_BATCH]
+                    Message.objects.filter(pk__in=chunk).update(media_type=type_str)
 
             saved_pic += ch_saved_pic
             saved_vid += ch_saved_vid
