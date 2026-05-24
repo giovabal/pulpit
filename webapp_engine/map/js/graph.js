@@ -185,10 +185,9 @@ sigma_instance.on('beforeRender', function() {
 // Theme application
 // =============================================================================
 
-function apply_theme(themeKey, opts) {
+function apply_theme(themeKey) {
     var theme = THEMES[themeKey];
     if (!theme) return;
-    var persist = !opts || opts.persist !== false;
     active_theme = themeKey;
 
     // CSS custom properties (nav bar, infobar, year switcher)
@@ -227,14 +226,9 @@ function apply_theme(themeKey, opts) {
     var sel = el('theme-select');
     if (sel && sel.value !== themeKey) sel.value = themeKey;
 
-    // Persist user-chosen themes only. The boot-time default ("dark" for the
-    // graph viewer when nothing is saved yet) passes persist:false so the
-    // shared ``pulpit_theme`` key stays empty — that lets the live webapp
-    // and table exports keep their own light default until the user makes a
-    // deliberate choice in either context.
-    if (persist) {
-        try { localStorage.setItem('pulpit_theme', themeKey); } catch(e) {}
-    }
+    // The graph viewer's theme is a per-session display choice, deliberately
+    // not persisted: it always boots dark and never reads or writes the shared
+    // ``pulpit_theme`` key that the live webapp and table exports use.
 }
 
 // =============================================================================
@@ -1101,15 +1095,11 @@ function reload_graph(data_dir) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Restore saved theme before the graph renders so data loading uses correct settings.
-    // When no theme is saved, fall back to "dark" without persisting it, so
-    // opening the graph for the first time doesn't write to the shared
-    // pulpit_theme key (which would override the light default the live UI
-    // and table exports use).
-    var _saved_theme = null;
-    try { _saved_theme = localStorage.getItem('pulpit_theme'); } catch(e) {}
-    var _has_saved = !!(_saved_theme && THEMES[_saved_theme]);
-    apply_theme(_has_saved ? _saved_theme : 'dark', { persist: _has_saved });
+    // The graph always boots dark, independent of the shared pulpit_theme key:
+    // theme here is a display layout the user flips at will, not a remembered
+    // preference. The live webapp and table exports keep their own
+    // pulpit_theme-backed light/dark setting.
+    apply_theme('dark');
 
     if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
 
