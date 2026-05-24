@@ -158,6 +158,18 @@ def _patch_html_file(
         if idx != -1:
             content = content[:idx] + injection + content[idx:]
             break
+    else:
+        # Neither marker found — the template's script-include format
+        # diverged from what _patch_html_file knows about. The export will
+        # be written without the window.* shims and the viewer JS will
+        # behave as if every flag were unset (no vertical layout, no extra
+        # layouts, blank version chip). Log loud so the regression is
+        # caught instead of silently shipping a broken export.
+        logger.error(
+            'Could not find a <script src="js/…"> marker in %s; '
+            "window.VERTICAL_LAYOUT / EXTRA_LAYOUTS / APP_VERSION not injected.",
+            path,
+        )
     with open(path, "w") as f:
         f.write(content)
 

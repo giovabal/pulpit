@@ -19,6 +19,7 @@ from .utils import UnaccentLower, _normalize
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
@@ -211,10 +212,17 @@ class EventViewSet(viewsets.ModelViewSet):
         qs = Event.objects.select_related("action").order_by("-date")
         type_id = self.request.query_params.get("type", "").strip()
         if type_id:
-            qs = qs.filter(action_id=type_id)
+            # Postgres raises InvalidTextRepresentation on a non-integer FK
+            # value (500); SQLite silently returns nothing. Reject explicitly
+            # so the contract is the same across backends.
+            if not type_id.isdigit():
+                raise ValidationError({"type": "must be an integer"})
+            qs = qs.filter(action_id=int(type_id))
         year = self.request.query_params.get("year", "").strip()
         if year:
-            qs = qs.filter(date__year=year)
+            if not year.isdigit():
+                raise ValidationError({"year": "must be a 4-digit year"})
+            qs = qs.filter(date__year=int(year))
         return qs
 
 
