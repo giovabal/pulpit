@@ -1,3 +1,4 @@
+import datetime
 import io
 import os
 import shutil
@@ -14,6 +15,7 @@ from crawler.hole_fixer import find_missing_message_ids, fix_message_holes, iter
 from crawler.management.commands.crawl_channels import Command, CrawlOptions, ProgressPrinter
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
+from webapp.test_helpers import make_channel
 
 from telethon import errors
 
@@ -99,7 +101,7 @@ def _username_invalid_error() -> errors.rpcerrorlist.UsernameInvalidError:
 class FindMissingMessageIdsTests(TestCase):
     def setUp(self) -> None:
         org = Organization.objects.create(name="Org1", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=org)
+        self.channel = make_channel(telegram_id=1, organization=org)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
         for tid in telegram_ids:
@@ -161,43 +163,47 @@ class FindMissingMessageIdsTests(TestCase):
 class IterHoleRangesTests(TestCase):
     def setUp(self) -> None:
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=50, organization=org)
+        self.channel = make_channel(telegram_id=50, organization=org)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
         for tid in telegram_ids:
             Message.objects.create(telegram_id=tid, channel=self.channel)
 
+    def _ranges(self, **kwargs) -> list[tuple[int, int]]:
+        # iter_hole_ranges yields (start, end, prev_date, current_date); these tests assert ID ranges.
+        return [(start, end) for start, end, _prev, _cur in iter_hole_ranges(self.channel, **kwargs)]
+
     def test_empty_channel_yields_nothing(self) -> None:
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+        self.assertEqual(self._ranges(), [])
 
     def test_single_message_yields_nothing(self) -> None:
         self._create_messages([5])
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+        self.assertEqual(self._ranges(), [])
 
     def test_consecutive_messages_yield_nothing(self) -> None:
         self._create_messages([1, 2, 3, 4, 5])
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [])
+        self.assertEqual(self._ranges(), [])
 
     def test_single_gap_of_one_yields_correct_range(self) -> None:
         self._create_messages([1, 3])
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 2)])
+        self.assertEqual(self._ranges(), [(2, 2)])
 
     def test_large_gap_yields_inclusive_range(self) -> None:
         self._create_messages([1, 10])
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 9)])
+        self.assertEqual(self._ranges(), [(2, 9)])
 
     def test_multiple_gaps_yield_multiple_ranges(self) -> None:
         self._create_messages([1, 3, 6])
-        self.assertEqual(list(iter_hole_ranges(self.channel)), [(2, 2), (4, 5)])
+        self.assertEqual(self._ranges(), [(2, 2), (4, 5)])
 
     def test_min_telegram_id_excludes_earlier_ranges(self) -> None:
         self._create_messages([1, 3, 5, 7])  # gaps at 2, 4, 6
-        result = list(iter_hole_ranges(self.channel, min_telegram_id=5))
+        result = self._ranges(min_telegram_id=5)
         self.assertEqual(result, [(6, 6)])
 
     def test_min_telegram_id_below_all_messages_includes_all(self) -> None:
         self._create_messages([2, 5])
-        result = list(iter_hole_ranges(self.channel, min_telegram_id=1))
+        result = self._ranges(min_telegram_id=1)
         self.assertEqual(result, [(3, 4)])
 
     def test_returns_generator(self) -> None:
@@ -208,7 +214,7 @@ class IterHoleRangesTests(TestCase):
 
     def test_orm_sorts_ascending_regardless_of_insertion_order(self) -> None:
         self._create_messages([10, 5, 1])  # created in reverse order
-        result = list(iter_hole_ranges(self.channel))
+        result = self._ranges()
         # gaps: 1→5 → (2,4), 5→10 → (6,9)
         self.assertEqual(result, [(2, 4), (6, 9)])
 
@@ -221,7 +227,7 @@ class IterHoleRangesTests(TestCase):
 class FixMessageHolesTests(TestCase):
     def setUp(self) -> None:
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=60, organization=org)
+        self.channel = make_channel(telegram_id=60, organization=org)
         self.api_client = _make_api_client()
         self.telegram_channel = MagicMock()
         self.status_messages: list[str] = []
@@ -380,7 +386,7 @@ class FixMissingMediaGoneTests(TestCase):
         self.cmd = Command(stdout=io.StringIO())
 
     def _channel(self, telegram_id: int, available_min_id: int | None = None) -> Channel:
-        return Channel.objects.create(telegram_id=telegram_id, organization=self.org, available_min_id=available_min_id)
+        return make_channel(telegram_id=telegram_id, organization=self.org, available_min_id=available_min_id)
 
     def _album_sibling(self, channel: Channel, telegram_id: int) -> Message:
         # grouped_id set + empty media_type → enrolled via the album-sibling Q.
@@ -536,7 +542,7 @@ class ResolveOneTests(TestCase):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
 
     def test_returns_existing_db_channel_without_api_call(self) -> None:
-        channel = Channel.objects.create(telegram_id=1, username="existingchan", organization=self.org)
+        channel = make_channel(telegram_id=1, username="existingchan", organization=self.org)
         result, failed = self.resolver._resolve_one("existingchan")
         self.assertEqual(result, channel)
         self.assertFalse(failed)
@@ -598,7 +604,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.channel = make_channel(telegram_id=1, organization=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_telegram_message(self, entities: list | None = None) -> MagicMock:
@@ -613,7 +619,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertEqual(missing, [])
 
     def test_resolvable_reference_added_to_message_references(self) -> None:
-        target_channel = Channel.objects.create(telegram_id=2, username="targetchan", organization=self.org)
+        target_channel = make_channel(telegram_id=2, username="targetchan", organization=self.org)
         self.message.message = "Check out t.me/targetchan for more info."
         tm = self._make_telegram_message()
         self.resolver.resolve_message_references(self.message, tm)
@@ -635,7 +641,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertIn("unknownchan", missing)
 
     def test_entity_url_reference_processed(self) -> None:
-        target_channel = Channel.objects.create(telegram_id=3, username="urlchan", organization=self.org)
+        target_channel = make_channel(telegram_id=3, username="urlchan", organization=self.org)
         entity = MagicMock()
         entity.url = "https://t.me/urlchan"
         tm = self._make_telegram_message(entities=[entity])
@@ -643,7 +649,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertIn(target_channel, self.message.references.all())
 
     def test_entity_url_subpath_is_stripped(self) -> None:
-        target_channel = Channel.objects.create(telegram_id=4, username="pathchan", organization=self.org)
+        target_channel = make_channel(telegram_id=4, username="pathchan", organization=self.org)
         entity = MagicMock()
         entity.url = "https://t.me/pathchan/12345"
         tm = self._make_telegram_message(entities=[entity])
@@ -676,7 +682,7 @@ class GetMissingReferencesTests(TestCase):
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.channel = make_channel(telegram_id=1, organization=self.org)
 
     def test_message_with_empty_missing_references_is_skipped(self) -> None:
         Message.objects.create(telegram_id=1, channel=self.channel, missing_references="")
@@ -684,7 +690,7 @@ class GetMissingReferencesTests(TestCase):
         self.api_client.client.get_entity.assert_not_called()
 
     def test_missing_reference_found_in_db_added_without_api_call(self) -> None:
-        target = Channel.objects.create(telegram_id=2, username="dbchan", organization=self.org)
+        target = make_channel(telegram_id=2, username="dbchan", organization=self.org)
         msg = Message.objects.create(telegram_id=2, channel=self.channel, missing_references="|dbchan")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
@@ -692,7 +698,7 @@ class GetMissingReferencesTests(TestCase):
         self.api_client.client.get_entity.assert_not_called()
 
     def test_missing_reference_cleared_after_successful_resolution(self) -> None:
-        Channel.objects.create(telegram_id=3, username="resolvable", organization=self.org)
+        make_channel(telegram_id=3, username="resolvable", organization=self.org)
         msg = Message.objects.create(telegram_id=3, channel=self.channel, missing_references="|resolvable")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
@@ -730,7 +736,7 @@ class GetMissingReferencesTests(TestCase):
         self.assertEqual(msg.missing_references, "")
 
     def test_multiple_references_processed_in_one_message(self) -> None:
-        ch_a = Channel.objects.create(telegram_id=10, username="chana", organization=self.org)
+        ch_a = make_channel(telegram_id=10, username="chana", organization=self.org)
         mock_tc = _make_telegram_channel(telegram_id=20, username="chanb")
         self.api_client.client.get_entity.return_value = mock_tc
         msg = Message.objects.create(telegram_id=7, channel=self.channel, missing_references="|chana|chanb")
@@ -896,7 +902,7 @@ class MediaHandlerProfilePictureTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.channel = make_channel(telegram_id=1, organization=self.org)
 
     def _make_tg_channel(self, telegram_id: int = 1) -> MagicMock:
         tc = MagicMock()
@@ -1128,7 +1134,7 @@ class MediaHandlerMessagePictureTests(TestCase):
         self.handler = MediaHandler(self.api_client)  # download_images=False by default
         self.handler_dl = MediaHandler(self.api_client, download_images=True)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, has_photo: bool = True) -> MagicMock:
@@ -1242,7 +1248,7 @@ class MediaHandlerMessageVideoTests(TestCase):
         self.handler = MediaHandler(self.api_client)  # download_video=False by default
         self.handler_dl = MediaHandler(self.api_client, download_video=True)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, mime_type: str = "video/mp4", has_document: bool = True) -> MagicMock:
@@ -1317,7 +1323,7 @@ class MediaHandlerMessageAudioTests(TestCase):
         self.handler = MediaHandler(self.api_client)  # download_audio=False by default
         self.handler_dl = MediaHandler(self.api_client, download_audio=True)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(
@@ -1401,7 +1407,7 @@ class MediaHandlerMessageStickerTests(TestCase):
         self.handler = MediaHandler(self.api_client)  # download_stickers=False by default
         self.handler_dl = MediaHandler(self.api_client, download_stickers=True)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(
@@ -1476,7 +1482,7 @@ class MediaHandlerMessageOtherMediaTests(TestCase):
         self.handler = MediaHandler(self.api_client)  # download_other_media=False by default
         self.handler_dl = MediaHandler(self.api_client, download_other_media=True)
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, mime_type: str = "application/pdf", has_document: bool = True) -> MagicMock:
@@ -1663,7 +1669,7 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.channel = make_channel(telegram_id=1, organization=self.org)
 
     def _make_tc(self) -> MagicMock:
         """Minimal telegram channel mock safe for set_more_channel_details."""
@@ -1761,7 +1767,7 @@ class ChannelCrawlerSearchChannelTests(TestCase):
         self.assertTrue(Channel.objects.filter(telegram_id=100).exists())
 
     def test_skips_channel_already_in_db(self) -> None:
-        Channel.objects.create(telegram_id=200, organization=self.org)
+        make_channel(telegram_id=200, organization=self.org)
         mock_tc = _make_telegram_channel(telegram_id=200, username="existing")
         self.api_client.client.return_value = self._make_search_result([mock_tc])
         initial_count = Channel.objects.count()
@@ -1794,7 +1800,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.source_channel = Channel.objects.create(telegram_id=1, organization=self.org)
+        self.source_channel = make_channel(telegram_id=1, organization=self.org)
         self.msg = Message.objects.create(telegram_id=1, channel=self.source_channel)
 
     def _set_pending(self, channel_id: int) -> None:
@@ -1848,7 +1854,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
 
     def test_get_message_does_not_set_pending_when_channel_already_in_db(self) -> None:
         """Known forwarded-from channel sets forwarded_from directly, no pending field."""
-        fwd_channel = Channel.objects.create(telegram_id=7777, organization=self.org)
+        fwd_channel = make_channel(telegram_id=7777, organization=self.org)
         tm = self._make_tg_message(msg_id=100, fwd_channel_id=fwd_channel.telegram_id)
 
         self.crawler.get_message(self.source_channel, tm)
@@ -1860,7 +1866,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
     def test_get_message_clears_stale_pending_when_channel_now_in_db(self) -> None:
         """If a previous run left pending_forward_telegram_id set and the channel is
         now in the DB, a fresh get_message() call clears the stale flag."""
-        fwd_channel = Channel.objects.create(telegram_id=8888, organization=self.org)
+        fwd_channel = make_channel(telegram_id=8888, organization=self.org)
         self._set_pending(8888)  # stale flag from a previous crashed run
 
         tm = self._make_tg_message(msg_id=self.msg.telegram_id, fwd_channel_id=fwd_channel.telegram_id)
@@ -2062,8 +2068,8 @@ _GET_CMD = "crawler.management.commands.crawl_channels"
 class GetChannelsCommandTests(TestCase):
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.ch1 = Channel.objects.create(telegram_id=1, organization=self.org, title="Ch1")
-        self.ch2 = Channel.objects.create(telegram_id=2, organization=self.org, title="Ch2")
+        self.ch1 = make_channel(telegram_id=1, organization=self.org, title="Ch1")
+        self.ch2 = make_channel(telegram_id=2, organization=self.org, title="Ch2")
 
     def _patch_command(self) -> tuple:
         tc_patch = patch(f"{_GET_CMD}.TelegramClient")
@@ -2144,3 +2150,74 @@ class GetChannelsCommandTests(TestCase):
             call_command("crawl_channels", get_new_messages=True)
 
             mock_media.clean_leftovers.assert_called_once()
+
+
+class GapCouldBeInTargetTests(TestCase):
+    """hole_fixer._gap_could_be_in_target classifies gaps by their bounding stored-message dates."""
+
+    def _dt(self, year, month, day):
+        return timezone.make_aware(datetime.datetime(year, month, day), datetime.timezone.utc)
+
+    def test_gap_outside_period_skipped(self) -> None:
+        from crawler.hole_fixer import _gap_could_be_in_target
+
+        intervals = [(datetime.date(2024, 1, 1), datetime.date(2024, 3, 31))]
+        self.assertFalse(_gap_could_be_in_target(self._dt(2024, 6, 1), self._dt(2024, 6, 2), intervals))
+
+    def test_gap_overlapping_period_kept(self) -> None:
+        from crawler.hole_fixer import _gap_could_be_in_target
+
+        intervals = [(datetime.date(2024, 1, 1), datetime.date(2024, 3, 31))]
+        self.assertTrue(_gap_could_be_in_target(self._dt(2024, 2, 1), self._dt(2024, 2, 5), intervals))
+
+    def test_gap_with_missing_bounding_date_kept(self) -> None:
+        from crawler.hole_fixer import _gap_could_be_in_target
+
+        intervals = [(datetime.date(2024, 1, 1), datetime.date(2024, 3, 31))]
+        self.assertTrue(_gap_could_be_in_target(None, self._dt(2024, 6, 1), intervals))
+
+
+class SkipOutOfTargetStorageTests(TestCase):
+    """ChannelCrawler._skip_out_of_target gates message storage by in-target period (to_inspect = store all)."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="O", is_in_target=True)
+        self.crawler = ChannelCrawler.__new__(ChannelCrawler)  # methods only; no client needed
+
+    def _msg(self, year, month):
+        import types
+
+        return types.SimpleNamespace(date=datetime.datetime(year, month, 1, tzinfo=datetime.timezone.utc))
+
+    def test_in_period_stored(self) -> None:
+        ch = make_channel(
+            telegram_id=1,
+            organization=self.org,
+            attribution_start=datetime.date(2024, 1, 1),
+            attribution_end=datetime.date(2024, 3, 31),
+        )
+        self.assertFalse(self.crawler._skip_out_of_target(ch, self._msg(2024, 2)))
+
+    def test_out_of_period_skipped(self) -> None:
+        ch = make_channel(
+            telegram_id=2,
+            organization=self.org,
+            attribution_start=datetime.date(2024, 1, 1),
+            attribution_end=datetime.date(2024, 3, 31),
+        )
+        self.assertTrue(self.crawler._skip_out_of_target(ch, self._msg(2024, 6)))
+
+    def test_to_inspect_stores_all(self) -> None:
+        ch = make_channel(telegram_id=3, to_inspect=True)
+        self.assertFalse(self.crawler._skip_out_of_target(ch, self._msg(2024, 6)))
+
+    def test_none_date_stored(self) -> None:
+        import types
+
+        ch = make_channel(
+            telegram_id=4,
+            organization=self.org,
+            attribution_start=datetime.date(2024, 1, 1),
+            attribution_end=datetime.date(2024, 3, 31),
+        )
+        self.assertFalse(self.crawler._skip_out_of_target(ch, types.SimpleNamespace(date=None)))

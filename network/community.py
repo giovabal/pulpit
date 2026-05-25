@@ -1,11 +1,9 @@
 import io
-import logging
 import sys
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
-from django.db.models import Count
 from django.utils.text import slugify
 
 from webapp.models import Organization
@@ -31,8 +29,6 @@ import markov_clustering as mc  # noqa: E402
 
 sys.stderr = _stderr
 del _stderr
-
-logger = logging.getLogger(__name__)
 
 COMMUNITY_ALGORITHMS = {
     "LOUVAIN",
@@ -203,14 +199,14 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
     community_map: CommunityMap = {}
     community_palette: CommunityPalette = {}
     for channel_id, item in channel_dict.items():
-        channel = item["channel"]
-        organization_id = channel.organization_id
+        data = item["data"]
+        organization_id = data.get("resolved_org_id")
         if organization_id is None:
-            logger.warning("Channel %s has no organization; skipping community assignment", channel_id)
+            # Dead-leaf, or no in-target organisation in the analysis window — not grouped by organisation.
             continue
         community_map[channel_id] = organization_id
         if organization_id not in community_palette:
-            community_palette[organization_id] = parse_color(channel.organization.color)
+            community_palette[organization_id] = parse_color(data["resolved_org_color"])
     return community_map, community_palette
 
 
@@ -580,9 +576,18 @@ def build_communities_payload(
                 str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
             }
         else:
-            orgs = list(Organization.objects.filter(is_in_target=True).annotate(channel_count=Count("channel")))
-            groups = [(org.id, org.channel_count, org.name, org.color) for org in orgs]
-            main_groups = {org.key: org.name for org in orgs}
+            # ORGANIZATION: counts come from the resolved per-window community map (consistent with
+            # node colouring), not a raw FK channel count — only orgs that actually own a node appear.
+            community_counts = Counter(community_map.values())
+            org_objs = {o.pk: o for o in Organization.objects.filter(pk__in=list(community_counts))}
+            groups = [
+                (org_id, count, org_objs[org_id].name, org_objs[org_id].color)
+                for org_id, count in community_counts.items()
+                if org_id in org_objs
+            ]
+            main_groups = {
+                org_objs[org_id].key: org_objs[org_id].name for org_id in community_counts if org_id in org_objs
+            }
         if strategy == "KCORE":
             groups = sorted(groups, key=lambda x: int(x[0]))
         else:

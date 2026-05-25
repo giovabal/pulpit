@@ -207,14 +207,10 @@
             badge.textContent = ch.channel_type || "—";
             tdType.appendChild(badge); tr.appendChild(tdType);
 
-            /* org */
+            /* org (read-only current organization; edit time-bounded periods on the channel page) */
             var tdOrg = document.createElement("td");
             tdOrg.className = "bo-org-cell";
             renderOrgCell(tdOrg, ch);
-            tdOrg.addEventListener("click", function (e) {
-                if (e.target.classList.contains("bo-org-select")) return;
-                openOrgSelect(tdOrg, ch);
-            });
             tr.appendChild(tdOrg);
 
             /* to-inspect */
@@ -242,11 +238,11 @@
 
     function renderOrgCell(td, ch) {
         td.innerHTML = "";
-        if (ch.organization_id) {
+        if (ch.current_organization_id) {
             var dot = document.createElement("span"); dot.className = "bo-org-dot";
-            dot.style.background = ch.organization_color || "#ccc";
+            dot.style.background = ch.current_organization_color || "#ccc";
             var name = document.createElement("span"); name.className = "bo-org-name";
-            name.textContent = ch.organization_name;
+            name.textContent = ch.current_organization_name;
             td.appendChild(dot); td.appendChild(name);
         } else {
             var un = document.createElement("span"); un.className = "bo-org-unassigned";
@@ -278,56 +274,6 @@
             });
         });
         td.appendChild(chk);
-    }
-
-    function openOrgSelect(td, ch) {
-        var sel = document.createElement("select"); sel.className = "bo-org-select";
-        sel.appendChild(new Option("— unassign —", ""));
-        _orgs.forEach(function (o) {
-            var opt = new Option(o.name, o.id);
-            if (o.id === ch.organization_id) opt.selected = true;
-            sel.appendChild(opt);
-        });
-        td.innerHTML = "";
-        td.appendChild(sel);
-        sel.focus();
-
-        sel.addEventListener("change", function () {
-            var newOrgId = sel.value ? parseInt(sel.value, 10) : null;
-            assignOrg(ch, newOrgId, td);
-        });
-        sel.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") renderOrgCell(td, ch);
-        });
-        sel.addEventListener("blur", function () {
-            setTimeout(function () { renderOrgCell(td, ch); }, 150);
-        });
-    }
-
-    function assignOrg(ch, newOrgId, td) {
-        var prevOrgId = ch.organization_id;
-        var prevOrgName = ch.organization_name;
-        var prevOrgColor = ch.organization_color;
-
-        /* optimistic update */
-        var org = _orgs.find(function (o) { return o.id === newOrgId; });
-        ch.organization_id = newOrgId;
-        ch.organization_name = org ? org.name : null;
-        ch.organization_color = org ? org.color : null;
-        renderOrgCell(td, ch);
-
-        apiFetch(API_BASE + "channels/" + ch.id + "/", {
-            method: "PATCH",
-            body: { organization_id: newOrgId },
-        }).then(function () {
-            showToast("Organization updated.");
-        }).catch(function (err) {
-            ch.organization_id = prevOrgId;
-            ch.organization_name = prevOrgName;
-            ch.organization_color = prevOrgColor;
-            renderOrgCell(td, ch);
-            showToast("Error: " + err.message, "error");
-        });
     }
 
     function renderGroupChips(td, ch) {

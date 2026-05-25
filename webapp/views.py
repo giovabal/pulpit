@@ -15,10 +15,12 @@ from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
+from network.utils import channel_period_date_q
 from webapp.paginator import DiggPaginator
 
 from .models import (
     Channel,
+    ChannelAttribution,
     ChannelGroup,
     ChannelVacancy,
     Message,
@@ -31,6 +33,12 @@ from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_ttl
 from .utils.emoji import emoji_present
 from .version_check import version_status
+
+
+def _in_target_attr_exists() -> Exists:
+    """Exists(): the channel has at least one in-target attribution period (any time)."""
+    return Exists(ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True))
+
 
 # ---- message list options ------------------------------------------------
 
@@ -45,6 +53,7 @@ _MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
     "messagesticker_set",
     "messageothermedia_set",
     "reactions",
+    "channel__attributions__organization",
 )
 
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
@@ -200,7 +209,7 @@ class HomeView(ListView):
         q = self.request.GET.get("q", "").strip()
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
-            .select_related("channel", "channel__organization", "forwarded_from")
+            .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         if q:
@@ -284,8 +293,7 @@ class ChannelListView(ListView):
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.in_target()
-            .select_related("organization")
-            .prefetch_related(self._pic_prefetch, "groups")
+            .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -297,9 +305,8 @@ class ChannelListView(ListView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
-            Channel.objects.filter(organization__is_in_target=True)
-            .select_related("organization")
-            .prefetch_related(self._pic_prefetch)
+            Channel.objects.filter(_in_target_attr_exists())
+            .prefetch_related(self._pic_prefetch, "attributions__organization")
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -308,12 +315,11 @@ class ChannelListView(ListView):
             .order_by("title")
         )
         ctx["excluded_list"] = (
-            Channel.objects.filter(organization__is_in_target=True)
+            Channel.objects.filter(_in_target_attr_exists())
             .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_lost=True)
             .exclude(is_private=True)
-            .select_related("organization")
-            .prefetch_related(self._pic_prefetch)
+            .prefetch_related(self._pic_prefetch, "attributions__organization")
             .annotate(
                 messages_count=Count("message_set"),
                 first_message_date=Min("message_set__date"),
@@ -345,7 +351,8 @@ class VacanciesView(TemplateView):
         )
         rows = [
             {"vacancy": vac, "channel": vac.channel, "orphaned_amplifier_count": vac.orphaned_amplifier_count or 0}
-            for vac in ChannelVacancy.objects.select_related("channel__organization")
+            for vac in ChannelVacancy.objects.select_related("channel")
+            .prefetch_related("channel__attributions__organization")
             .annotate(orphaned_amplifier_count=orphaned_sub)
             .order_by("-closure_date")
         ]
@@ -374,7 +381,7 @@ class MessageSearchView(ListView):
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         qs = (
             Message.objects.filter(channel__in=Channel.objects.in_target())
-            .select_related("channel", "channel__organization", "forwarded_from")
+            .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         q = self.request.GET.get("q", "").strip()
@@ -421,7 +428,7 @@ class MessageHighlightsView(ListView):
                 channel__in=Channel.objects.in_target(),
                 interest_score__isnull=False,
             )
-            .select_related("channel", "channel__organization", "forwarded_from")
+            .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
         q = self.request.GET.get("q", "").strip()
@@ -459,7 +466,7 @@ class ChannelDetailView(ListView):
                     forwarded_from=self.selected_channel,
                     channel__in=Channel.objects.in_target().values("pk"),
                 )
-                .select_related("channel", "channel__organization", "forwarded_from")
+                .select_related("channel", "forwarded_from")
                 .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
             )
             if q:
@@ -475,8 +482,8 @@ class ChannelDetailView(ListView):
             .select_related("forwarded_from")
             .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
         )
-        if self.selected_channel.out_of_target_after:
-            qs = qs.filter(date__date__lte=self.selected_channel.out_of_target_after)
+        if self.selected_channel.in_target_periods.exists():
+            qs = qs.filter(channel_period_date_q(self.selected_channel))
         if q:
             qs = qs.filter(message__icontains=q)
         if self.request.GET.get("forwards_only"):
@@ -510,8 +517,8 @@ class ChannelDetailView(ListView):
         is_in_target = Channel.objects.in_target().filter(pk=ch.pk).exists()
 
         msg_qs = Message.objects.alive().filter(channel=ch)
-        if ch.out_of_target_after:
-            msg_qs = msg_qs.filter(date__date__lte=ch.out_of_target_after)
+        if ch.in_target_periods.exists():
+            msg_qs = msg_qs.filter(channel_period_date_q(ch))
         total_messages = msg_qs.count()
         total_views = msg_qs.aggregate(total=Sum("views"))["total"] or 0
         replies_allowed = ch.has_link or not ch.broadcast
@@ -860,7 +867,7 @@ class VacancyAnalysisView(View):
         cand_map = {r["forwarded_from"]: r for r in raw}
         cand_qs = (
             Channel.objects.filter(pk__in=cand_ids)
-            .select_related("organization")
+            .prefetch_related("attributions__organization")
             .annotate(first_msg=Min("message_set__date"))
         )
         if only_after_vacancy:
@@ -868,50 +875,53 @@ class VacancyAnalysisView(View):
         cand_channels = {c.pk: c for c in cand_qs}
 
         # ── Extra queries for strategies A / B / C ────────────────────────
+        # Attribution is time-bounded: each forwarded-from channel's organisation is resolved as of
+        # the forwarding message's date, and the orphaned amplifiers' orgs as of the closure date.
         # Strategy B: vacancy's out-neighbors (sources it forwarded from) before death
-        vac_out_rows = (
-            Message.objects.filter(
-                channel=ch,
-                forwarded_from__isnull=False,
-                date__gte=before_start,
-                date__lt=closure_dt,
-            )
-            .values("forwarded_from_id", "forwarded_from__organization_id")
-            .distinct()
-        )
         vacancy_out_pks: set[int] = set()
-        vacancy_src_org_pks: set[int] = set()
-        for r in vac_out_rows:
-            vacancy_out_pks.add(r["forwarded_from_id"])
-            if r["forwarded_from__organization_id"]:
-                vacancy_src_org_pks.add(r["forwarded_from__organization_id"])
+        vacancy_out_dated: list[tuple[int, datetime.date]] = []
+        for fwd_id, fwd_date in Message.objects.filter(
+            channel=ch,
+            forwarded_from__isnull=False,
+            date__gte=before_start,
+            date__lt=closure_dt,
+        ).values_list("forwarded_from_id", "date"):
+            vacancy_out_pks.add(fwd_id)
+            if fwd_date is not None:
+                vacancy_out_dated.append((fwd_id, fwd_date.date()))
 
-        # Strategy C: vacancy's amplifier orgs (orgs of orphaned channels)
-        orphaned_org_map: dict[int, int] = dict(
-            orphaned.filter(organization__isnull=False).values_list("pk", "organization_id")
+        # Strategy B+C: each candidate's out-neighbors (batched)
+        cand_out_pks: dict[int, set[int]] = defaultdict(set)
+        cand_out_dated: list[tuple[int, int, datetime.date]] = []
+        for ch_id, fwd_id, fwd_date in Message.objects.filter(
+            channel__in=list(cand_channels),
+            forwarded_from__isnull=False,
+            date__gte=closure_dt,
+            date__lte=after_end,
+        ).values_list("channel_id", "forwarded_from_id", "date"):
+            cand_out_pks[ch_id].add(fwd_id)
+            if fwd_date is not None:
+                cand_out_dated.append((ch_id, fwd_id, fwd_date.date()))
+
+        # Resolve organisations at the relevant dates from the attribution timeline.
+        attr_cache = ChannelAttribution.build_cache(
+            vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_dated} | orphaned_pks
         )
+        vacancy_src_org_pks: set[int] = {
+            org for fwd_id, when in vacancy_out_dated if (org := ChannelAttribution.org_at(attr_cache, fwd_id, when))
+        }
+        orphaned_org_map: dict[int, int] = {
+            pk: org for pk in orphaned_pks if (org := ChannelAttribution.org_at(attr_cache, pk, closure_date))
+        }
         vacancy_amp_org_pks: set[int] = set(orphaned_org_map.values())
         vacancy_org_pairs: frozenset[tuple[int, int]] = frozenset(
             (s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks
         )
-
-        # Strategy B+C: each candidate's out-neighbors with orgs (batched)
-        cand_out_rows = (
-            Message.objects.filter(
-                channel__in=list(cand_channels),
-                forwarded_from__isnull=False,
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .values("channel_id", "forwarded_from_id", "forwarded_from__organization_id")
-            .distinct()
-        )
-        cand_out_pks: dict[int, set[int]] = defaultdict(set)
         cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
-        for r in cand_out_rows:
-            cand_out_pks[r["channel_id"]].add(r["forwarded_from_id"])
-            if r["forwarded_from__organization_id"]:
-                cand_src_org_pks[r["channel_id"]].add(r["forwarded_from__organization_id"])
+        for ch_id, fwd_id, when in cand_out_dated:
+            org = ChannelAttribution.org_at(attr_cache, fwd_id, when)
+            if org is not None:
+                cand_src_org_pks[ch_id].add(org)
 
         # Strategy C: which orphaned channels forward each candidate (for amp orgs)
         cand_amp_rows = (
@@ -968,7 +978,7 @@ class VacancyAnalysisView(View):
                     "pk": c.pk,
                     "title": c.title,
                     "url": c.get_absolute_url(),
-                    "org_color": c.organization.color if c.organization else None,
+                    "org_color": c.current_organization.color if c.current_organization else None,
                     "amplifier_count": amp_count,
                     "score_a": score_a,
                     "score_b": score_b,
@@ -1029,7 +1039,7 @@ class MessageJumpView(View):
     number is derived from the channel-detail default queryset; ``lost=include``
     is added when the target is a lost message so the row is visible. Falls
     back to the bare channel URL when the message is not in the database or
-    sits past the channel's ``out_of_target_after`` cutoff.
+    falls outside the channel's in-target attribution periods.
     """
 
     PAGE_SIZE = ChannelDetailView.paginate_by
@@ -1052,12 +1062,16 @@ class MessageJumpView(View):
 
         if target.date is None:
             return HttpResponseRedirect(channel_url)
-        if channel.out_of_target_after and target.date.date() > channel.out_of_target_after:
+        in_target_periods = list(channel.in_target_periods.values_list("start", "end"))
+        target_date = target.date.date()
+        if in_target_periods and not any(
+            (s is None or s <= target_date) and (e is None or e >= target_date) for s, e in in_target_periods
+        ):
             return HttpResponseRedirect(channel_url)
 
         qs = Message.objects.filter(channel=channel)
-        if channel.out_of_target_after:
-            qs = qs.filter(date__date__lte=channel.out_of_target_after)
+        if in_target_periods:
+            qs = qs.filter(channel_period_date_q(channel))
         extra_params: dict[str, str] = {}
         if target.is_lost:
             extra_params["lost"] = "include"

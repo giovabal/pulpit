@@ -87,7 +87,7 @@ def per_channel_message_counts(
     extra_q: Q | None = None,
 ) -> dict[int, int]:
     """Return ``{channel_id: count}`` of messages in ``channel_pks`` honouring the
-    date window and each channel's ``out_of_target_after`` cutoff.
+    date window and each channel's in-target attribution periods.
 
     ``alive``: when True (default), excludes messages marked as lost. Base node
     measures pass ``alive=False`` to keep parity with historical totals.

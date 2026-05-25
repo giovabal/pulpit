@@ -9,6 +9,7 @@ from .maintenance import (
     purge_run,
 )
 from .views import (
+    ChannelAttributionViewSet,
     ChannelGroupViewSet,
     ChannelVacancyViewSet,
     ChannelViewSet,
@@ -23,6 +24,7 @@ from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter(trailing_slash=True)
 router.register("channels", ChannelViewSet, basename="api-channels")
+router.register("channel-attributions", ChannelAttributionViewSet, basename="api-channel-attributions")
 router.register("organizations", OrganizationViewSet, basename="api-organizations")
 router.register("groups", ChannelGroupViewSet, basename="api-groups")
 router.register("search-terms", SearchTermViewSet, basename="api-search-terms")

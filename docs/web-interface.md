@@ -36,9 +36,9 @@ A paginated list of all channels in the database. Filters and controls:
 - **Organization filter** — show only channels assigned to a specific organization
 - **Group filter** — show channels belonging to a specific ChannelGroup
 - **Sort** — by name, subscriber count, message count, in-degree, or out-degree
-- **Channel chips** — each card shows the channel's organization colour, subscriber count, message count, and group chips
+- **Channel chips** — each card shows the channel's current organization colour, subscriber count, message count, and group chips
 
-Channels marked `is_in_target = True` via their organization show their network position data once crawled.
+A channel shows its network position data once crawled while it has an in-target **attribution period** — a time-bounded link to an organization whose `is_in_target` flag is set (see the channel editor below).
 
 ---
 
@@ -140,10 +140,10 @@ Staff-only management interface for corpus administration. Accessible only to us
 
 Bulk management of the channel database:
 
-- **Assign organization** — select multiple channels and assign them to an organization in one action
+- **Assign organization** — select multiple channels and replace their attribution timeline with a single period under one organization in one action
 - **Group chips** — add or remove ChannelGroup memberships inline
-- **Edit individual** — click through to edit a channel's details, is_in_target status, and vacancy record
-- **Filter** — by organization, group, is_in_target status, entity type
+- **Edit individual** — click through to edit a channel's details, its **attribution periods** (organization + optional start/end, non-overlapping), `to_inspect` flag, and vacancy record
+- **Filter** — by organization, group, in-target status, entity type
 
 ### Organizations — `/manage/organizations/`
 

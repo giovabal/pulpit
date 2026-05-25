@@ -110,10 +110,12 @@ class _ChannelTimeSeriesBase(View):
     extra_filters: ClassVar[dict[str, Any]] = {}
 
     def _msg_qs(self, channel: Channel, **filters):
-        """Base Message queryset for a channel, respecting out_of_target_after and excluding lost."""
+        """Base Message queryset for a channel, restricted to its in-target periods and excluding lost."""
+        from network.utils import channel_period_date_q
+
         qs = Message.objects.alive().filter(channel=channel, **filters)
-        if channel.out_of_target_after:
-            qs = qs.filter(date__date__lte=channel.out_of_target_after)
+        if channel.in_target_periods.exists():
+            qs = qs.filter(channel_period_date_q(channel))
         return qs
 
     def get_annotation(self) -> Count | Sum | Avg:
@@ -334,29 +336,27 @@ class ChannelReactionsHistoryView(View):
         if not spine:
             return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})
 
-        top_emojis_filter = {"message__channel": channel, "message__is_lost": False}
-        if channel.out_of_target_after:
-            top_emojis_filter["message__date__date__lte"] = channel.out_of_target_after
-        top_emojis_qs = (
-            MessageReaction.objects.filter(**top_emojis_filter)
-            .values("emoji")
-            .annotate(total=Sum("count"))
-            .order_by("-total")[:8]
-        )
+        from network.utils import channel_period_date_q
+
+        period_q = channel_period_date_q(channel, "message__date") if channel.in_target_periods.exists() else None
+        top_emojis_qs = MessageReaction.objects.filter(message__channel=channel, message__is_lost=False)
+        if period_q is not None:
+            top_emojis_qs = top_emojis_qs.filter(period_q)
+        top_emojis_qs = top_emojis_qs.values("emoji").annotate(total=Sum("count")).order_by("-total")[:8]
         top_emojis = [r["emoji"] for r in top_emojis_qs]
         if not top_emojis:
             return JsonResponse({"labels": spine, "series": [], "y_label": "reactions"})
 
-        cutoff_kwargs = {"message__date__date__lte": channel.out_of_target_after} if channel.out_of_target_after else {}
+        monthly_qs = MessageReaction.objects.filter(
+            message__channel=channel,
+            message__date__isnull=False,
+            message__is_lost=False,
+            emoji__in=top_emojis,
+        )
+        if period_q is not None:
+            monthly_qs = monthly_qs.filter(period_q)
         monthly = (
-            MessageReaction.objects.filter(
-                message__channel=channel,
-                message__date__isnull=False,
-                message__is_lost=False,
-                emoji__in=top_emojis,
-                **cutoff_kwargs,
-            )
-            .annotate(month=TruncMonth("message__date"))
+            monthly_qs.annotate(month=TruncMonth("message__date"))
             .values("month", "emoji")
             .annotate(total=Sum("count"))
             .order_by("month", "emoji")
@@ -424,8 +424,10 @@ class ChannelTopMessagesView(View):
                 "z_reactions",
             )
         )
-        if channel.out_of_target_after:
-            qs = qs.filter(date__date__lte=channel.out_of_target_after)
+        if channel.in_target_periods.exists():
+            from network.utils import channel_period_date_q
+
+            qs = qs.filter(channel_period_date_q(channel))
         qs = _exclude_album_tails(qs).order_by(F("interest_score").desc(nulls_last=True), "-date", "-pk")[:limit]
 
         # Try to enrich with structural C/D from the latest published export.
@@ -491,8 +493,10 @@ class ChannelContactInfoView(View):
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
         msg_qs = Message.objects.alive().filter(channel=channel)
-        if channel.out_of_target_after:
-            msg_qs = msg_qs.filter(date__date__lte=channel.out_of_target_after)
+        if channel.in_target_periods.exists():
+            from network.utils import channel_period_date_q
+
+            msg_qs = msg_qs.filter(channel_period_date_q(channel))
         texts = msg_qs.exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
         domain_counter: Counter = Counter()
         email_counter: Counter = Counter()

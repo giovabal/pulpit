@@ -1,11 +1,22 @@
+import datetime
+
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, ChannelVacancy, Organization, ProfilePicture, SearchTerm
+from webapp.models import (
+    Channel,
+    ChannelAttribution,
+    ChannelGroup,
+    ChannelVacancy,
+    Organization,
+    ProfilePicture,
+    SearchTerm,
+)
 
 from .serializers import (
+    ChannelAttributionSerializer,
     ChannelGroupSerializer,
     ChannelSerializer,
     ChannelVacancySerializer,
@@ -56,7 +67,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
 
     def get_queryset(self):
-        return Organization.objects.annotate(channel_count=Count("channel")).order_by("name")
+        return Organization.objects.annotate(channel_count=Count("attributions__channel", distinct=True)).order_by(
+            "name"
+        )
 
 
 class ChannelGroupViewSet(viewsets.ModelViewSet):
@@ -99,7 +112,8 @@ class ChannelViewSet(
     ordering = ["-id"]
 
     def get_queryset(self):
-        qs = Channel.objects.select_related("organization").prefetch_related(
+        qs = Channel.objects.prefetch_related(
+            "attributions__organization",
             "groups",
             Prefetch(
                 "profilepicture_set",
@@ -118,7 +132,7 @@ class ChannelViewSet(
 
         org_id = self.request.query_params.get("organization", "").strip()
         if org_id:
-            qs = qs.filter(organization_id=org_id)
+            qs = qs.filter(attributions__organization_id=org_id).distinct()
 
         group_id = self.request.query_params.get("group", "").strip()
         if group_id:
@@ -126,9 +140,10 @@ class ChannelViewSet(
 
         status_filter = self.request.query_params.get("status", "").strip()
         if status_filter == "unassigned":
-            qs = qs.filter(organization__isnull=True)
+            qs = qs.filter(attributions__isnull=True)
         elif status_filter == "in_target":
-            qs = qs.filter(organization__is_in_target=True).exclude(is_lost=True).exclude(is_private=True)
+            in_target_attr = ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
+            qs = qs.filter(Exists(in_target_attr)).exclude(is_lost=True).exclude(is_private=True)
         elif status_filter == "lost":
             qs = qs.filter(is_lost=True)
         elif status_filter == "private":
@@ -169,13 +184,33 @@ class ChannelViewSet(
                 {"error": "'add_group_ids' and 'remove_group_ids' must be lists of integers."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        start_raw = request.data.get("start") or None
+        end_raw = request.data.get("end") or None
+        try:
+            start_date = datetime.date.fromisoformat(start_raw) if start_raw else None
+            end_date = datetime.date.fromisoformat(end_raw) if end_raw else None
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "'start'/'end' must be ISO dates (YYYY-MM-DD)."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if start_date and end_date and start_date > end_date:
+            return Response({"error": "'end' must not be before 'start'."}, status=status.HTTP_400_BAD_REQUEST)
 
         channels = Channel.objects.filter(pk__in=ids)
 
         with transaction.atomic():
             if "organization_id" in request.data:
+                # Replace each selected channel's attribution timeline with one period (whole lifetime
+                # when start/end are omitted). org=null leaves the channel unassigned. Never overlaps.
                 org = Organization.objects.filter(pk=organization_id).first() if organization_id else None
-                channels.update(organization=org)
+                ChannelAttribution.objects.filter(channel__in=channels).delete()
+                if org is not None:
+                    ChannelAttribution.objects.bulk_create(
+                        [
+                            ChannelAttribution(channel=ch, organization=org, start=start_date, end=end_date)
+                            for ch in channels
+                        ]
+                    )
             if add_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
                     grp.channels.add(*channels)
@@ -184,6 +219,17 @@ class ChannelViewSet(
                     grp.channels.remove(*channels)
 
         return Response({"updated": channels.count()})
+
+
+class ChannelAttributionViewSet(viewsets.ModelViewSet):
+    serializer_class = ChannelAttributionSerializer
+
+    def get_queryset(self):
+        qs = ChannelAttribution.objects.select_related("organization", "channel").order_by("channel_id", "start")
+        channel_id = self.request.query_params.get("channel", "").strip()
+        if channel_id:
+            qs = qs.filter(channel_id=channel_id)
+        return qs
 
 
 class SearchTermViewSet(
