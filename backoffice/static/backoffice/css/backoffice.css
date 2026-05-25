@@ -31,6 +31,16 @@
 .bo-subnav-link:hover { color: var(--text); }
 .bo-subnav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* New-version dot: inline right after the label instead of the absolute corner
+   badge used on the Manage button. The corner badge pokes above the tab's top
+   edge, which .bo-subnav (overflow-x: auto → overflow-y: auto) clips. Inline +
+   the link's flex align-items:center keeps it fully visible and tight to text. */
+.bo-subnav-link .update-dot {
+  position: static;
+  transform: none;
+  margin-left: .3rem;
+}
+
 .bo-content {
   flex: 1;
   padding: var(--space-5);
