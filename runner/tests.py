@@ -328,14 +328,17 @@ class RunTaskViewTests(TestCase):
             )
         self.assertEqual(SearchTerm.objects.filter(word="term one").count(), 1)
 
-    def test_run_rejects_search_channels_zero_amount(self):
-        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+    def test_run_accepts_search_channels_zero_amount(self):
+        # amount=0 is legal — it searches only the extra/form terms (no queued SearchTerms).
+        with (
+            patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
+            patch("runner.views.tasks.launch"),
+        ):
             resp = self.client.post(
                 reverse("operations-run", args=["search_channels"]),
                 {"amount": "0"},
             )
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("positive", resp.json()["error"])
+        self.assertEqual(resp.status_code, 200)
 
     def test_run_rejects_search_channels_negative_amount(self):
         with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
