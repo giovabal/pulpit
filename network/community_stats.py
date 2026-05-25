@@ -594,9 +594,7 @@ def compute_community_metrics(
         types_present = {k: v for k, v in type_counts.items() if v > 0}
         if len(types_present) > 1:
             network_summary["channel_type_counts"] = types_present
-        pk_to_org = {
-            str(pk): name for pk, name in channel_qs.values_list("pk", "organization__name") if name is not None
-        }
+        pk_to_org = {node["id"]: node["organization"] for node in graph_data["nodes"] if node.get("organization")}
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     if status_callback:

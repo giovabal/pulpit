@@ -1,10 +1,13 @@
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch, QuerySet
 from django.http import HttpRequest
 from django.utils.html import format_html
 
 from .models import (
     Channel,
+    ChannelAttribution,
     ChannelGroup,
     Message,
     MessagePicture,
@@ -16,9 +19,35 @@ from .models import (
 )
 
 
+class ChannelAttributionInlineFormSet(forms.BaseInlineFormSet):
+    def clean(self) -> None:
+        super().clean()
+        periods: list[tuple] = []
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
+                continue
+            cd = form.cleaned_data
+            if not cd.get("organization"):
+                continue
+            start, end = cd.get("start"), cd.get("end")
+            if start and end and start > end:
+                raise ValidationError("A period's end date must not be before its start date.")
+            for prev_start, prev_end in periods:
+                if ChannelAttribution._overlaps(start, end, prev_start, prev_end):
+                    raise ValidationError("Attribution periods for a channel must not overlap.")
+            periods.append((start, end))
+
+
+class ChannelAttributionInline(admin.TabularInline):
+    model = ChannelAttribution
+    formset = ChannelAttributionInlineFormSet
+    extra = 0
+
+
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
+    inlines = [ChannelAttributionInline]
     list_display = (
         "__str__",
         "thumb",
@@ -28,20 +57,26 @@ class ChannelAdmin(admin.ModelAdmin):
         "messages_count",
         "date",
         "telegram_url",
-        "organization",
+        "current_org",
     )
-    list_editable = ("organization",)
-    list_filter = ("organization__is_in_target", "broadcast", "organization", "groups")
+    list_filter = ("attributions__organization__is_in_target", "broadcast", "attributions__organization", "groups")
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
         return (
             super()
             .get_queryset(request)
-            .select_related("organization")
             .annotate(_messages_count=Count("message_set", distinct=True))
-            .prefetch_related(Prefetch("profilepicture_set", queryset=ProfilePicture.objects.order_by("-date")))
+            .prefetch_related(
+                "attributions__organization",
+                Prefetch("profilepicture_set", queryset=ProfilePicture.objects.order_by("-date")),
+            )
         )
+
+    @admin.display(description="Org (now)")
+    def current_org(self, obj: Channel) -> str:
+        org = obj.current_organization
+        return org.name if org else "—"
 
     @admin.display(description="Msg")
     def messages_count(self, obj: Channel) -> int:

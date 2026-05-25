@@ -40,6 +40,7 @@ def build_graph_data(
         }
         for key in (
             "label",
+            "organization",
             "communities",
             "color",
             "pic",
@@ -278,7 +279,7 @@ def write_csv(
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
 
-    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
@@ -293,6 +294,7 @@ def write_csv(
             row: list = [
                 node.get("label") or node["id"],
                 node.get("url") or "",
+                node.get("organization") or "",
                 node.get("fans"),
                 node.get("messages_count"),
                 node.get("in_deg"),
@@ -410,6 +412,7 @@ def write_graph_files(
     node_keys: set[str] = {
         "id",
         "label",
+        "organization",
         "color",
         "pic",
         "url",
