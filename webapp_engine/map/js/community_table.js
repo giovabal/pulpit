@@ -1,5 +1,6 @@
 import { build_year_nav } from './year_nav.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { strategy_label as _strat_label } from './labels.js';
 
 // ── Hungarian matching (column ordering for cross-tabs) ─────────────────────────
 function _hungarianMaxAssign(mat) {
@@ -147,7 +148,7 @@ function _render(d) {
         var h3 = document.createElement("h3");
         h3.id = "strategy-" + strategyKey;
         h3.className = "mt-4 mb-1";
-        h3.textContent = strategyKey.charAt(0).toUpperCase() + strategyKey.slice(1);
+        h3.textContent = _strat_label(strategyKey);
         container.appendChild(h3);
 
         var stratNote = document.createElement("p");
