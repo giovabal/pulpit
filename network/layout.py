@@ -235,7 +235,7 @@ def tsne_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
     n = len(nodes)
     if n < 4:
         return kamada_kawai_positions(graph)
-    perplexity = min(30, max(5, n // 4))
+    perplexity = min(30, max(5, n // 4), n - 1)
     embedding = TSNE(n_components=2, random_state=42, perplexity=perplexity).fit_transform(features)
     embedding = _scale_embedding(embedding)
     return {node: (float(embedding[i, 0]), float(embedding[i, 1])) for i, node in enumerate(nodes)}
@@ -254,7 +254,8 @@ def umap_positions_2d(graph: nx.DiGraph) -> dict[str, tuple[float, float]]:
         return tsne_positions_2d(graph)
     nodes, dist = _shortest_path_matrix(graph)
     n = len(nodes)
-    if n < 4:
+    # Need n >= 5: UMAP's spectral init fails with "k >= N" on smaller graphs.
+    if n < 5:
         return kamada_kawai_positions(graph)
     n_neighbors = min(15, n - 1)
     with warnings.catch_warnings():
@@ -325,9 +326,11 @@ def tsne_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]
 
     nodes, features = _laplacian_features(graph)
     n = len(nodes)
-    if n < 4:
+    # Need n >= 5: _laplacian_features yields only n-2 columns for small graphs,
+    # and sklearn's PCA-init t-SNE requires n_components (3) <= n_features.
+    if n < 5:
         return kamada_kawai_positions_3d(graph)
-    perplexity = min(30, max(5, n // 4))
+    perplexity = min(30, max(5, n // 4), n - 1)
     embedding = TSNE(n_components=3, random_state=42, perplexity=perplexity).fit_transform(features)
     embedding = _scale_embedding(embedding)
     return {
@@ -344,7 +347,8 @@ def umap_positions_3d(graph: nx.DiGraph) -> dict[str, tuple[float, float, float]
         return tsne_positions_3d(graph)
     nodes, dist = _shortest_path_matrix(graph)
     n = len(nodes)
-    if n < 4:
+    # Need n >= 5: UMAP's spectral init fails with "k >= N" on smaller graphs.
+    if n < 5:
         return kamada_kawai_positions_3d(graph)
     n_neighbors = min(15, n - 1)
     with warnings.catch_warnings():
