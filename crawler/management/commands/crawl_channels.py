@@ -14,15 +14,17 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import F, Q
+from django.db.models import Exists, F, OuterRef, Q
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
+from network.utils import channel_cutoff_q
 from webapp.models import (
     Channel,
+    ChannelAttribution,
     Message,
     MessageAudio,
     MessageOtherMedia,
@@ -37,6 +39,11 @@ from telethon import errors
 from telethon.sync import TelegramClient
 
 logger = logging.getLogger(__name__)
+
+
+def _ever_in_target() -> Q:
+    """Q matching channels with at least one in-target attribution period (any time)."""
+    return Q(Exists(ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)))
 
 
 from dataclasses import dataclass  # noqa: E402
@@ -1127,8 +1134,8 @@ class Command(BaseCommand):
         )
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
-        """Channels included in this crawl: in-target channels and to_inspect candidates."""
-        qs = Channel.objects.filter(Q(organization__is_in_target=True) | Q(to_inspect=True)).filter(
+        """Channels included in this crawl: channels ever in-target, plus to_inspect candidates."""
+        qs = Channel.objects.filter(_ever_in_target() | Q(to_inspect=True)).filter(
             channel_type_filter(opts.channel_types)
         )
         if not opts.retry_lost_and_private:
@@ -1264,9 +1271,7 @@ class Command(BaseCommand):
 
                         if get_channels_info and opts.update_type_excluded_info:
                             all_in_target_base = (
-                                Channel.objects.filter(organization__is_in_target=True)
-                                .exclude(is_lost=True)
-                                .exclude(is_private=True)
+                                Channel.objects.filter(_ever_in_target()).exclude(is_lost=True).exclude(is_private=True)
                             )
                             excluded_by_type = all_in_target_base.exclude(channel_type_filter(channel_types)).order_by(
                                 "-id"
@@ -1519,18 +1524,18 @@ class Command(BaseCommand):
         if in_degrees or out_degrees:
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
-            in_target_pks = set(crawl_qs.filter(organization__is_in_target=True).values_list("pk", flat=True))
+            in_target_pks = set(crawl_qs.filter(_ever_in_target()).values_list("pk", flat=True))
 
             cited_pks = (
                 set(
                     Message.objects.filter(
-                        channel__organization__is_in_target=True,
+                        channel_cutoff_q(),
                         forwarded_from__isnull=False,
                     ).values_list("forwarded_from_id", flat=True)
                 )
                 | set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_in_target=True,
+                        channel_cutoff_q("message__channel", "message__date"),
                     ).values_list("channel_id", flat=True)
                 )
             ) - in_target_pks
@@ -1540,7 +1545,7 @@ class Command(BaseCommand):
                 self.stdout.flush()
                 fwd_cited_by = set(
                     Message.objects.filter(
-                        channel__organization__is_in_target=True,
+                        channel_cutoff_q(),
                         forwarded_from_id__in=in_target_pks,
                     )
                     .exclude(channel_id=F("forwarded_from_id"))
@@ -1548,7 +1553,7 @@ class Command(BaseCommand):
                 )
                 ref_cited_by = set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_in_target=True,
+                        channel_cutoff_q("message__channel", "message__date"),
                         channel_id__in=in_target_pks,
                     )
                     .exclude(message__channel_id=F("channel_id"))
@@ -1558,6 +1563,7 @@ class Command(BaseCommand):
 
                 fwd_cites = set(
                     Message.objects.filter(
+                        channel_cutoff_q(),
                         channel_id__in=in_target_pks,
                         forwarded_from_id__in=in_target_pks,
                     )
@@ -1566,6 +1572,7 @@ class Command(BaseCommand):
                 )
                 ref_cites = set(
                     Message.references.through.objects.filter(
+                        channel_cutoff_q("message__channel", "message__date"),
                         message__channel_id__in=in_target_pks,
                         channel_id__in=in_target_pks,
                     )
@@ -1592,7 +1599,7 @@ class Command(BaseCommand):
             if out_degrees and cited_pks:
                 fwd_cited = set(
                     Message.objects.filter(
-                        channel__organization__is_in_target=True,
+                        channel_cutoff_q(),
                         forwarded_from_id__in=cited_pks,
                     )
                     .exclude(channel_id=F("forwarded_from_id"))
@@ -1600,7 +1607,7 @@ class Command(BaseCommand):
                 )
                 ref_cited = set(
                     Message.references.through.objects.filter(
-                        message__channel__organization__is_in_target=True,
+                        channel_cutoff_q("message__channel", "message__date"),
                         channel_id__in=cited_pks,
                     )
                     .exclude(message__channel_id=F("channel_id"))

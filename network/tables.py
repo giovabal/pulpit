@@ -100,7 +100,7 @@ def write_table_xlsx(
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
 
-    headers = ["Channel", "URL", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
@@ -116,6 +116,7 @@ def write_table_xlsx(
             row: list[Any] = [
                 node.get("label") or node["id"],
                 node.get("url") or "",
+                node.get("organization") or "",
                 node.get("fans"),
                 node.get("messages_count"),
                 node.get("in_deg"),

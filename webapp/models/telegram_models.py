@@ -12,14 +12,14 @@ if TYPE_CHECKING:
         MessageVideo,
         ProfilePicture,
     )
+    from webapp.models.organization_models import ChannelAttribution, Organization
 
 from django.conf import settings
 from django.db import models
-from django.db.models import F, Max, Min, Q
+from django.db.models import Max, Min, Q
 from django.urls import reverse
 
 from webapp.managers import ChannelManager, MessageManager
-from webapp.models import Organization
 from webapp.models.base import TelegramBaseModel
 from webapp.utils.emoji import emoji_present
 
@@ -64,7 +64,6 @@ class Channel(TelegramBaseModel):
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)
-    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, blank=True, null=True)
     broadcast = models.BooleanField(default=True)
     verified = models.BooleanField(default=False)
     megagroup = models.BooleanField(default=False)
@@ -80,7 +79,6 @@ class Channel(TelegramBaseModel):
     access_hash = models.BigIntegerField(null=True)
     in_degree = models.PositiveIntegerField(null=True)
     out_degree = models.PositiveIntegerField(null=True)
-    out_of_target_after = models.DateField(null=True, blank=True)
     restriction_reason = models.JSONField(null=True, blank=True)
     message_ttl = models.PositiveIntegerField(null=True, blank=True)
     noforwards = models.BooleanField(default=False)
@@ -134,12 +132,54 @@ class Channel(TelegramBaseModel):
             return pics[0] if pics else None
         return self.profilepicture_set.order_by("-date").first()
 
+    @property
+    def in_target_periods(self) -> "models.QuerySet[ChannelAttribution]":
+        """Attribution periods whose organization is currently in target."""
+        return self.attributions.filter(organization__is_in_target=True)
+
+    @property
+    def current_attribution(self) -> "ChannelAttribution | None":
+        """The attribution that best represents the channel *now*.
+
+        The period active today wins (null bounds count as open); otherwise the
+        most recent past period (largest ``end``, tie → latest ``start``);
+        otherwise the earliest known period. ``None`` when the channel has no
+        attribution at all.
+        """
+        today = datetime.date.today()
+        attrs = list(self.attributions.all())  # prefetch-friendly; callers iterating many channels prefetch
+        if not attrs:
+            return None
+        active = [a for a in attrs if (a.start is None or a.start <= today) and (a.end is None or a.end >= today)]
+        if active:
+            return max(active, key=lambda a: (a.start or datetime.date.min))
+        past = [a for a in attrs if a.end is not None and a.end < today]
+        if past:
+            return max(past, key=lambda a: (a.end, a.start or datetime.date.min))
+        return min(attrs, key=lambda a: (a.start or datetime.date.min))
+
+    @property
+    def current_organization(self) -> "Organization | None":
+        attribution = self.current_attribution
+        return attribution.organization if attribution else None
+
     def _get_activity_bounds(
         self,
     ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:
         qs = self.message_set.exclude(date__isnull=True)
-        if self.out_of_target_after:
-            qs = qs.filter(date__date__lte=self.out_of_target_after)
+        # Restrict to in-target periods when the channel has any; an unattributed channel
+        # (or to_inspect-only) shows its full message span. One periods query + one aggregate.
+        intervals = list(self.in_target_periods.values_list("start", "end"))
+        if intervals:
+            period_q = Q()
+            for start, end in intervals:
+                sub = Q()
+                if start is not None:
+                    sub &= Q(date__date__gte=start)
+                if end is not None:
+                    sub &= Q(date__date__lte=end)
+                period_q |= sub
+            qs = qs.filter(period_q)
         agg = qs.aggregate(min_date=Min("date"), max_date=Max("date"))
         first_date = agg["min_date"]
         last_date = agg["max_date"]
@@ -181,25 +221,26 @@ class Channel(TelegramBaseModel):
         citations are outgoing edges (stored in out_degree), consistent with
         refresh_cited_degree() for out-of-target channels.
         """
+        from network.utils import channel_cutoff_q
+
         cited_by = (
             Message.objects.alive()
             .filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
+            .filter(channel_cutoff_q())
             .exclude(channel=self)
             .distinct()
             .count()
         )
-        cites_qs = (
+        cites = (
             Message.objects.alive()
             .filter(channel=self)
             .filter(Q(forwarded_from__in=Channel.objects.in_target()) | Q(references__in=Channel.objects.in_target()))
+            .filter(channel_cutoff_q())
             .exclude(forwarded_from=self)
             .distinct()
+            .count()
         )
-        if self.out_of_target_after:
-            cites_qs = cites_qs.filter(date__date__lte=self.out_of_target_after)
-        cites = cites_qs.count()
         if settings.REVERSED_EDGES:
             self._set_degrees(cited_by, cites)
         else:
@@ -215,11 +256,13 @@ class Channel(TelegramBaseModel):
           - out_degree when REVERSED_EDGES=False (citations leave as outgoing edges)
         The other field is set to 0.
         """
+        from network.utils import channel_cutoff_q
+
         citations = (
             Message.objects.alive()
             .filter(channel__in=Channel.objects.in_target())
             .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(Q(channel__out_of_target_after__isnull=True) | Q(date__date__lte=F("channel__out_of_target_after")))
+            .filter(channel_cutoff_q())
             .exclude(channel=self)
             .distinct()
             .count()

@@ -1,4 +1,4 @@
-from .organization_models import Organization  # NOQA
+from .organization_models import ChannelAttribution, Organization  # NOQA
 from .search_models import SearchTerm  # NOQA
 from .telegram_models import Channel, Message, MessageReaction, MessageReply, Poll, PollAnswer  # NOQA
 from .media_models import (  # NOQA

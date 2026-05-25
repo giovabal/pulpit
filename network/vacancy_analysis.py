@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from django.db.models import Count, Max, Min
 
-from webapp.models import Channel, ChannelVacancy, Message
+from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
 
 import networkx as nx
 import numpy as np
@@ -186,53 +186,55 @@ def _scores_abc(
         ):
             amp_counts[r["forwarded_from_id"]] = r["amp_count"]
 
+    # Forwarded-from edges out of the vacancy in the BEFORE window (org resolved at each forward's date).
     vacancy_out_pks: set[int] = set()
-    vacancy_src_org_pks: set[int] = set()
+    vacancy_out_rows: list[tuple[int, datetime.date]] = []
     if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"}:
-        for r in (
+        for fwd_id, fwd_date in (
             Message.objects.alive()
-            .filter(
-                channel=vacancy_pk,
-                forwarded_from__isnull=False,
-                date__gte=before_start,
-                date__lt=closure_dt,
-            )
-            .values("forwarded_from_id", "forwarded_from__organization_id")
-            .distinct()
+            .filter(channel=vacancy_pk, forwarded_from__isnull=False, date__gte=before_start, date__lt=closure_dt)
+            .values_list("forwarded_from_id", "date")
         ):
-            vacancy_out_pks.add(r["forwarded_from_id"])
-            if r["forwarded_from__organization_id"]:
-                vacancy_src_org_pks.add(r["forwarded_from__organization_id"])
+            vacancy_out_pks.add(fwd_id)
+            if fwd_date is not None:
+                vacancy_out_rows.append((fwd_id, fwd_date.date()))
+
+    # Forwarded-from edges out of each candidate in the AFTER window.
+    cand_out_pks: dict[int, set[int]] = defaultdict(set)
+    cand_out_rows: list[tuple[int, int, datetime.date]] = []
+    if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"}:
+        for ch_id, fwd_id, fwd_date in (
+            Message.objects.alive()
+            .filter(channel__in=candidate_pks, forwarded_from__isnull=False, date__gte=closure_dt, date__lte=after_end)
+            .values_list("channel_id", "forwarded_from_id", "date")
+        ):
+            cand_out_pks[ch_id].add(fwd_id)
+            if fwd_date is not None:
+                cand_out_rows.append((ch_id, fwd_id, fwd_date.date()))
 
     orphaned_org_map: dict[int, int] = {}
     vacancy_org_pairs: frozenset[tuple[int, int]] = frozenset()
-    if "BROKERAGE" in selected:
-        orphaned_org_map = dict(
-            Channel.objects.filter(pk__in=orphaned_pks, organization__isnull=False).values_list("pk", "organization_id")
-        )
-        vacancy_amp_org_pks = set(orphaned_org_map.values())
-        vacancy_org_pairs = frozenset((s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks)
-
-    cand_out_pks: dict[int, set[int]] = defaultdict(set)
     cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
-    if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"}:
-        for r in (
-            Message.objects.alive()
-            .filter(
-                channel__in=candidate_pks,
-                forwarded_from__isnull=False,
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .values("channel_id", "forwarded_from_id", "forwarded_from__organization_id")
-            .distinct()
-        ):
-            cand_out_pks[r["channel_id"]].add(r["forwarded_from_id"])
-            if r["forwarded_from__organization_id"]:
-                cand_src_org_pks[r["channel_id"]].add(r["forwarded_from__organization_id"])
-
     cand_amp_org_pks: dict[int, set[int]] = defaultdict(set)
     if "BROKERAGE" in selected:
+        # Attribution is time-bounded: resolve each channel's org as of the relevant date — the
+        # forward's date for source edges, the closure date for the orphaned amplifiers themselves.
+        closure_date = closure_dt.date()
+        attr_cache = ChannelAttribution.build_cache(
+            vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_rows} | set(orphaned_pks)
+        )
+        vacancy_src_org_pks = {
+            org for fwd_id, when in vacancy_out_rows if (org := ChannelAttribution.org_at(attr_cache, fwd_id, when))
+        }
+        orphaned_org_map = {
+            pk: org for pk in orphaned_pks if (org := ChannelAttribution.org_at(attr_cache, pk, closure_date))
+        }
+        vacancy_amp_org_pks = set(orphaned_org_map.values())
+        vacancy_org_pairs = frozenset((s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks)
+        for ch_id, fwd_id, when in cand_out_rows:
+            org = ChannelAttribution.org_at(attr_cache, fwd_id, when)
+            if org is not None:
+                cand_src_org_pks[ch_id].add(org)
         for r in (
             Message.objects.alive()
             .filter(
@@ -446,7 +448,7 @@ def _analyze_vacancy(
     cand_channels: dict[int, Channel] = {
         c.pk: c
         for c in Channel.objects.filter(pk__in=cand_pks)
-        .select_related("organization")
+        .prefetch_related("attributions__organization")
         .annotate(first_msg=Min("message_set__date"))
     }
 
@@ -482,7 +484,7 @@ def _analyze_vacancy(
             "pk": c.pk,
             "title": c.title,
             "url": c.get_absolute_url(),
-            "org_color": c.organization.color if c.organization else None,
+            "org_color": c.current_organization.color if c.current_organization else None,
             "amplifier_count": cand_meta[cid]["amplifier_count"],
             "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
             "last_forwarded_iso": lf.date().isoformat() if lf else None,
@@ -523,7 +525,7 @@ def compute_vacancy_analysis(
 
     Returns a payload dict suitable for serialisation to vacancy_analysis.json.
     """
-    vacancies = list(ChannelVacancy.objects.select_related("channel__organization").all())
+    vacancies = list(ChannelVacancy.objects.select_related("channel").all())
 
     pk_to_node: dict[int, str] = {data["channel"].pk: node_id for node_id, data in channel_dict.items()}
     all_channel_pks: list[int] = [data["channel"].pk for data in channel_dict.values()]

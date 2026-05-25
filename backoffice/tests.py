@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from events.models import Event, EventType
 from webapp.models import Channel, ChannelGroup, Message, Organization, SearchTerm
+from webapp.test_helpers import make_channel
 
 # ---------------------------------------------------------------------------
 # backoffice/api/utils.py — _normalize
@@ -129,7 +130,7 @@ class BackofficePageTests(TestCase):
 
     def test_channel_update_page(self):
         org = Organization.objects.create(name="Org", color="#ff0000")
-        ch = Channel.objects.create(telegram_id=1, title="T", organization=org)
+        ch = make_channel(telegram_id=1, title="T", organization=org)
         self._check("channel-update", kwargs={"pk": ch.pk})
 
     def test_organizations_page(self):
@@ -189,7 +190,7 @@ class OrganizationViewSetTests(_ApiTestCase):
         self.assertIn("Alpha", names)
 
     def test_list_includes_channel_count(self):
-        Channel.objects.create(telegram_id=1, title="T", organization=self.org)
+        make_channel(telegram_id=1, title="T", organization=self.org)
         resp = self.jget(_api("organizations/"))
         org = next(o for o in resp.json()["results"] if o["name"] == "Alpha")
         self.assertEqual(org["channel_count"], 1)
@@ -220,8 +221,8 @@ class ChannelGroupViewSetTests(_ApiTestCase):
     def setUp(self):
         self.group = ChannelGroup.objects.create(name="GroupA")
         self.org = Organization.objects.create(name="O", color="#000000")
-        self.ch1 = Channel.objects.create(telegram_id=10, title="C1", organization=self.org)
-        self.ch2 = Channel.objects.create(telegram_id=11, title="C2", organization=self.org)
+        self.ch1 = make_channel(telegram_id=10, title="C1", organization=self.org)
+        self.ch2 = make_channel(telegram_id=11, title="C2", organization=self.org)
 
     def test_list_returns_groups(self):
         resp = self.jget(_api("groups/"))
@@ -276,9 +277,9 @@ class ChannelViewSetTests(_ApiTestCase):
         self.org = Organization.objects.create(name="OrgA", color="#ff0000", is_in_target=True)
         self.org2 = Organization.objects.create(name="OrgB", color="#0000ff")
         self.group = ChannelGroup.objects.create(name="G1")
-        self.ch = Channel.objects.create(telegram_id=1, title="Alpha Channel", username="alpha", organization=self.org)
-        self.ch_lost = Channel.objects.create(telegram_id=2, title="Lost", is_lost=True)
-        self.ch_private = Channel.objects.create(telegram_id=3, title="Private", is_private=True)
+        self.ch = make_channel(telegram_id=1, title="Alpha Channel", username="alpha", organization=self.org)
+        self.ch_lost = make_channel(telegram_id=2, title="Lost", is_lost=True)
+        self.ch_private = make_channel(telegram_id=3, title="Private", is_private=True)
 
     def test_list_returns_channels(self):
         resp = self.jget(_api("channels/"))
@@ -290,17 +291,24 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["title"], "Alpha Channel")
 
-    def test_patch_assigns_organization(self):
-        resp = self.jpatch(_api(f"channels/{self.ch.pk}/"), {"organization_id": self.org2.pk})
-        self.assertEqual(resp.status_code, 200)
-        self.ch.refresh_from_db()
-        self.assertEqual(self.ch.organization, self.org2)
+    def test_create_attribution_assigns_organization(self):
+        ch = make_channel(telegram_id=50, title="Fresh")
+        resp = self.jpost(_api("channel-attributions/"), {"channel_id": ch.pk, "organization_id": self.org2.pk})
+        self.assertEqual(resp.status_code, 201)
+        ch.refresh_from_db()
+        self.assertEqual(ch.current_organization, self.org2)
 
-    def test_patch_clears_organization(self):
-        resp = self.jpatch(_api(f"channels/{self.ch.pk}/"), {"organization_id": None})
-        self.assertEqual(resp.status_code, 200)
+    def test_delete_attribution_clears_organization(self):
+        attr = self.ch.attributions.first()
+        resp = self.jdelete(_api(f"channel-attributions/{attr.pk}/"))
+        self.assertEqual(resp.status_code, 204)
         self.ch.refresh_from_db()
-        self.assertIsNone(self.ch.organization)
+        self.assertIsNone(self.ch.current_organization)
+
+    def test_create_overlapping_attribution_rejected(self):
+        # self.ch already has an open-ended period under self.org; a second open period overlaps.
+        resp = self.jpost(_api("channel-attributions/"), {"channel_id": self.ch.pk, "organization_id": self.org2.pk})
+        self.assertEqual(resp.status_code, 400)
 
     def test_patch_assigns_groups(self):
         resp = self.jpatch(_api(f"channels/{self.ch.pk}/"), {"group_ids": [self.group.pk]})
@@ -331,7 +339,7 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertIn(self.ch_private.pk, ids)
 
     def test_status_filter_unassigned(self):
-        unassigned = Channel.objects.create(telegram_id=99, title="Unassigned")
+        unassigned = make_channel(telegram_id=99, title="Unassigned")
         resp = self.jget(_api("channels/?status=unassigned"))
         ids = [c["id"] for c in resp.json()["results"]]
         self.assertIn(unassigned.pk, ids)
@@ -343,13 +351,13 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertIn(self.ch.pk, ids)
 
     def test_bulk_assign_organization(self):
-        ch2 = Channel.objects.create(telegram_id=20, title="C2")
+        ch2 = make_channel(telegram_id=20, title="C2")
         resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk, ch2.pk], "organization_id": self.org2.pk})
         self.assertEqual(resp.status_code, 200)
         self.ch.refresh_from_db()
         ch2.refresh_from_db()
-        self.assertEqual(self.ch.organization, self.org2)
-        self.assertEqual(ch2.organization, self.org2)
+        self.assertEqual(self.ch.current_organization, self.org2)
+        self.assertEqual(ch2.current_organization, self.org2)
 
     def test_bulk_assign_no_ids_returns_400(self):
         resp = self.jpost(_api("channels/bulk-assign/"), {"ids": []})
@@ -539,8 +547,8 @@ class MaintenancePurgeApiTests(_ApiTestCase):
     def setUp(self):
         in_target = Organization.objects.create(name="In", is_in_target=True)
         out = Organization.objects.create(name="Out", is_in_target=False)
-        self.kept = Channel.objects.create(telegram_id=1, title="kept", organization=in_target)
-        self.purgeable = Channel.objects.create(telegram_id=2, title="purge", organization=out)
+        self.kept = make_channel(telegram_id=1, title="kept", organization=in_target)
+        self.purgeable = make_channel(telegram_id=2, title="purge", organization=out)
         Message.objects.create(telegram_id=10, channel=self.kept)
         Message.objects.create(telegram_id=20, channel=self.purgeable)
         Message.objects.create(telegram_id=21, channel=self.purgeable)
@@ -559,7 +567,7 @@ class MaintenancePurgeApiTests(_ApiTestCase):
 
     @override_settings(WEB_ACCESS="ALL")
     def test_preview_reports_unsupported_when_no_in_target(self):
-        Channel.objects.update(organization=Organization.objects.create(name="Z", is_in_target=False))
+        # Flip every organization out of target → no channel has an in-target attribution period.
         Organization.objects.filter(is_in_target=True).update(is_in_target=False)
         resp = self.jget(_api("maintenance/purge-preview/"))
         self.assertEqual(resp.status_code, 200)

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import datetime
 
+from django.core.exceptions import ValidationError
 from django.core.paginator import InvalidPage
 from django.test import TestCase
 from django.urls import reverse
 
 from network.graph_builder import channel_network_data
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, Message, Organization
+from webapp.models import Channel, ChannelAttribution, Message, Organization
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
+from webapp.test_helpers import attribute, make_channel
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
     average_color,
@@ -321,9 +323,9 @@ class ChannelManagerTests(TestCase):
     def setUp(self) -> None:
         self.in_target_org = Organization.objects.create(name="In target", is_in_target=True)
         self.boring_org = Organization.objects.create(name="Boring", is_in_target=False)
-        self.ch_in_target = Channel.objects.create(telegram_id=1, title="Channel A", organization=self.in_target_org)
-        self.ch_boring = Channel.objects.create(telegram_id=2, title="Channel B", organization=self.boring_org)
-        self.ch_orphan = Channel.objects.create(telegram_id=3, title="Channel C")
+        self.ch_in_target = make_channel(telegram_id=1, title="Channel A", organization=self.in_target_org)
+        self.ch_boring = make_channel(telegram_id=2, title="Channel B", organization=self.boring_org)
+        self.ch_orphan = make_channel(telegram_id=3, title="Channel C")
 
     def test_in_target_includes_in_target_org_channel(self) -> None:
         self.assertIn(self.ch_in_target, Channel.objects.in_target())
@@ -354,7 +356,7 @@ class ChannelManagerTests(TestCase):
 class MessageManagerTests(TestCase):
     def setUp(self) -> None:
         org = Organization.objects.create(name="In target", is_in_target=True)
-        self.ch = Channel.objects.create(telegram_id=1, title="Ch", organization=org)
+        self.ch = make_channel(telegram_id=1, title="Ch", organization=org)
         self.alive_msg = Message.objects.create(telegram_id=10, channel=self.ch, is_lost=False)
         self.lost_msg = Message.objects.create(telegram_id=11, channel=self.ch, is_lost=True)
 
@@ -394,15 +396,15 @@ class ChannelTelegramUrlTests(TestCase):
 
 class ChannelGetAbsoluteUrlTests(TestCase):
     def test_returns_detail_url(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, title="Ch")
+        ch = make_channel(telegram_id=1, title="Ch")
         self.assertEqual(ch.get_absolute_url(), reverse("channel-detail", kwargs={"pk": ch.pk}))
 
 
 class ChannelSaveTests(TestCase):
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.ch1 = Channel.objects.create(telegram_id=1, title="Source", organization=self.org)
-        self.ch2 = Channel.objects.create(telegram_id=2, title="Target", organization=self.org)
+        self.ch1 = make_channel(telegram_id=1, title="Source", organization=self.org)
+        self.ch2 = make_channel(telegram_id=2, title="Target", organization=self.org)
 
     def test_none_username_converted_to_empty_string(self) -> None:
         ch = Channel(telegram_id=99, title="X", username=None)
@@ -410,7 +412,7 @@ class ChannelSaveTests(TestCase):
         self.assertEqual(ch.username, "")
 
     def test_existing_username_preserved(self) -> None:
-        ch = Channel.objects.create(telegram_id=100, username="handle")
+        ch = make_channel(telegram_id=100, username="handle")
         self.assertEqual(ch.username, "handle")
 
     def test_in_degree_counts_forwards_from_in_target_channels(self) -> None:
@@ -427,7 +429,7 @@ class ChannelSaveTests(TestCase):
 
     def test_in_degree_excludes_out_of_target_org(self) -> None:
         boring = Organization.objects.create(name="Boring", is_in_target=False)
-        boring_ch = Channel.objects.create(telegram_id=50, organization=boring)
+        boring_ch = make_channel(telegram_id=50, organization=boring)
         Message.objects.create(telegram_id=10, channel=boring_ch, forwarded_from=self.ch1)
         self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
@@ -465,7 +467,7 @@ class ChannelSaveTests(TestCase):
 
 class ChannelActivityPeriodTests(TestCase):
     def setUp(self) -> None:
-        self.ch = Channel.objects.create(telegram_id=1)
+        self.ch = make_channel(telegram_id=1)
 
     def test_no_date_no_messages_returns_unknown(self) -> None:
         self.assertEqual(self.ch.activity_period, "Unknown")
@@ -507,7 +509,7 @@ class ChannelActivityPeriodTests(TestCase):
         Message.objects.create(telegram_id=1, channel=self.ch, date=old)
         self.assertIn("Jan 2020 - Jan 2020", self.ch.activity_period)
 
-    def test_uses_single_db_query(self) -> None:
+    def test_uses_minimal_db_queries(self) -> None:
         Message.objects.create(
             telegram_id=1, channel=self.ch, date=datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
         )
@@ -516,34 +518,35 @@ class ChannelActivityPeriodTests(TestCase):
 
         with CaptureQueriesContext(connection) as ctx:
             _ = self.ch.activity_period
-        self.assertEqual(len(ctx.captured_queries), 1)
+        # One query to read in-target periods, one to aggregate the message-date bounds.
+        self.assertEqual(len(ctx.captured_queries), 2)
 
 
 class ChannelNetworkDataTests(TestCase):
     def test_with_organization_sets_label(self) -> None:
         org = Organization.objects.create(name="Test Org", color="#ff0000")
-        ch = Channel.objects.create(telegram_id=1, title="Chan", organization=org)
+        ch = make_channel(telegram_id=1, title="Chan", organization=org)
         data = channel_network_data(ch)
         self.assertEqual(data["label"], "Chan")
 
     def test_communities_is_empty_dict_initially(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, title="Chan")
+        ch = make_channel(telegram_id=1, title="Chan")
         data = channel_network_data(ch)
         self.assertEqual(data["communities"], {})
 
     def test_required_keys_present(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, title="Chan")
+        ch = make_channel(telegram_id=1, title="Chan")
         data = channel_network_data(ch)
         for key in ("pk", "id", "label", "communities", "color", "url", "activity_period", "fans"):
             self.assertIn(key, data, msg=f"Missing key: {key}")
 
     def test_defaults_dict_merged(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, title="Chan")
+        ch = make_channel(telegram_id=1, title="Chan")
         data = channel_network_data(ch, {"extra": "value"})
         self.assertEqual(data["extra"], "value")
 
     def test_defaults_override_computed_fields(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, title="Original")
+        ch = make_channel(telegram_id=1, title="Original")
         data = channel_network_data(ch, {"label": "Override"})
         self.assertEqual(data["label"], "Override")
 
@@ -553,7 +556,7 @@ class ChannelNetworkDataTests(TestCase):
 
 class MessageSaveTests(TestCase):
     def setUp(self) -> None:
-        self.ch = Channel.objects.create(telegram_id=1, title="Ch")
+        self.ch = make_channel(telegram_id=1, title="Ch")
 
     def test_none_message_converted_to_empty_string(self) -> None:
         msg = Message(telegram_id=1, channel=self.ch, message=None)
@@ -636,7 +639,7 @@ class MessageGetTelegramReferencesTests(TestCase):
 
 class MessageTelegramUrlTests(TestCase):
     def test_url_combines_channel_url_and_message_id(self) -> None:
-        ch = Channel.objects.create(telegram_id=1, username="mychan")
+        ch = make_channel(telegram_id=1, username="mychan")
         msg = Message.objects.create(telegram_id=42, channel=ch)
         self.assertEqual(msg.telegram_url, "https://t.me/mychan/42")
 
@@ -696,13 +699,11 @@ class FromTelegramObjectTests(TestCase):
         self.assertEqual(Channel.objects.get(telegram_id=999).title, "Fake Channel")
 
     def test_defaults_applied_on_creation(self) -> None:
-        org = Organization.objects.create(name="D Org")
-
         class OtherFake(self._Fake):
             id = 888
 
-        obj = Channel.from_telegram_object(OtherFake(), defaults={"organization": org})
-        self.assertEqual(obj.organization, org)
+        obj = Channel.from_telegram_object(OtherFake(), defaults={"to_inspect": True})
+        self.assertTrue(obj.to_inspect)
 
 
 # ─── Organization model ────────────────────────────────────────────────────────
@@ -738,7 +739,7 @@ class HomeViewTests(TestCase):
 
 class ChannelDetailViewTests(TestCase):
     def setUp(self) -> None:
-        self.ch = Channel.objects.create(telegram_id=1, title="Test Channel")
+        self.ch = make_channel(telegram_id=1, title="Test Channel")
         for i in range(3):
             Message.objects.create(
                 telegram_id=i,
@@ -762,7 +763,7 @@ class ChannelDetailViewTests(TestCase):
         self.assertEqual(dates, sorted(dates, reverse=True))
 
     def test_only_messages_for_selected_channel(self) -> None:
-        other = Channel.objects.create(telegram_id=2, title="Other")
+        other = make_channel(telegram_id=2, title="Other")
         Message.objects.create(telegram_id=99, channel=other)
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
         channel_ids = {m.channel_id for m in response.context["object_list"]}
@@ -863,7 +864,7 @@ class MessageAlbumTests(TestCase):
         from webapp.models import MessagePicture
 
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=10, organization=self.org)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
         # Album of three messages sharing grouped_id=999
         self.head = Message.objects.create(telegram_id=100, channel=self.channel, grouped_id=999, message="caption")
         self.tail1 = Message.objects.create(telegram_id=101, channel=self.channel, grouped_id=999)
@@ -964,7 +965,7 @@ class AlbumMissingMediaTests(TestCase):
         from webapp.models import MessagePicture, MessageVideo
 
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=20, organization=self.org)
+        self.channel = make_channel(telegram_id=20, organization=self.org)
         # Album of 3 siblings: 1 photo (downloaded) + 2 videos (NOT downloaded).
         self.head = Message.objects.create(telegram_id=300, channel=self.channel, grouped_id=777, media_type="photo")
         self.video1 = Message.objects.create(telegram_id=301, channel=self.channel, grouped_id=777, media_type="video")
@@ -1042,26 +1043,22 @@ class PurgeOutOfTargetTests(TestCase):
         # An in-target organisation; channels under it survive the purge.
         self.in_target_org = Organization.objects.create(name="Org-A", is_in_target=True)
         # Plain in-target channel — survives.
-        self.healthy = Channel.objects.create(telegram_id=1, title="healthy", organization=self.in_target_org)
+        self.healthy = make_channel(telegram_id=1, title="healthy", organization=self.in_target_org)
         # Marked in-target but currently lost — MUST survive (Bug 1).
-        self.lost = Channel.objects.create(
-            telegram_id=2, title="lost-chan", organization=self.in_target_org, is_lost=True
-        )
+        self.lost = make_channel(telegram_id=2, title="lost-chan", organization=self.in_target_org, is_lost=True)
         # Marked in-target but currently private — MUST survive (Bug 1).
-        self.private = Channel.objects.create(
+        self.private = make_channel(
             telegram_id=3, title="private-chan", organization=self.in_target_org, is_private=True
         )
         # Marked in-target but a gigagroup (excluded by DEFAULT_CHANNEL_TYPES=CHANNEL) — MUST survive (Bug 1).
-        self.giga = Channel.objects.create(
-            telegram_id=4, title="giga-chan", organization=self.in_target_org, gigagroup=True
-        )
+        self.giga = make_channel(telegram_id=4, title="giga-chan", organization=self.in_target_org, gigagroup=True)
         # Out-of-target organisation; channels under it get purged unless they're forward sources.
         self.out_org = Organization.objects.create(name="Org-B", is_in_target=False)
-        self.purgeable = Channel.objects.create(telegram_id=5, title="purge-me", organization=self.out_org)
+        self.purgeable = make_channel(telegram_id=5, title="purge-me", organization=self.out_org)
         # Forward source — out-of-target but referenced by an in-target message (Bug 2 fix).
-        self.fwd_source = Channel.objects.create(telegram_id=6, title="fwd-source", organization=self.out_org)
+        self.fwd_source = make_channel(telegram_id=6, title="fwd-source", organization=self.out_org)
         # Mention target — out-of-target, linked only via the references M2M.
-        self.mention_target = Channel.objects.create(telegram_id=7, title="mention-target", organization=self.out_org)
+        self.mention_target = make_channel(telegram_id=7, title="mention-target", organization=self.out_org)
 
         # Messages: each surviving channel gets one, plus the purgeable + fwd_source ones.
         Message.objects.create(telegram_id=100, channel=self.healthy)
@@ -1156,9 +1153,7 @@ class PurgeOutOfTargetTests(TestCase):
 
     def test_to_inspect_protects_channel(self) -> None:
         """A channel under a non-in-target org but with to_inspect=True keeps its crawled messages."""
-        ch = Channel.objects.create(
-            telegram_id=999, title="inspect-protected", organization=self.out_org, to_inspect=True
-        )
+        ch = make_channel(telegram_id=999, title="inspect-protected", organization=self.out_org, to_inspect=True)
         msg = Message.objects.create(telegram_id=900, channel=ch)
         self._run_purge()
         self.assertTrue(Message.objects.filter(pk=msg.pk).exists())
@@ -1180,7 +1175,7 @@ class PurgeOrphanMediaTests(TestCase):
         from webapp.models import MessagePicture
 
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, organization=self.org, username="ch")
+        self.channel = make_channel(telegram_id=1, organization=self.org, username="ch")
         msg = Message.objects.create(telegram_id=1, channel=self.channel)
         pic = MessagePicture.objects.create(message=msg, telegram_id=1)
         pic.picture.save("kept.jpg", ContentFile(b"referenced bytes"), save=True)
@@ -1335,7 +1330,7 @@ class ScoreMessagesTests(TestCase):
         from webapp.scoring import recompute_channel, score_messages
 
         org = Organization.objects.create(name="In target", is_in_target=True)
-        ch = Channel.objects.create(telegram_id=2001, title="ScoringCh", organization=org)
+        ch = make_channel(telegram_id=2001, title="ScoringCh", organization=org)
         base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1367,8 +1362,8 @@ class ScoreMessagesForWindowTests(TestCase):
         from webapp.scoring import score_messages_for_window
 
         org = Organization.objects.create(name="In target", is_in_target=True)
-        ch1 = Channel.objects.create(telegram_id=3001, title="A", organization=org)
-        ch2 = Channel.objects.create(telegram_id=3002, title="B", organization=org)
+        ch1 = make_channel(telegram_id=3001, title="A", organization=org)
+        ch2 = make_channel(telegram_id=3002, title="B", organization=org)
         base = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1402,7 +1397,7 @@ class ScoreMessagesForWindowTests(TestCase):
         from webapp.scoring import score_messages_for_window
 
         org = Organization.objects.create(name="In target", is_in_target=True)
-        ch = Channel.objects.create(telegram_id=3003, title="C", organization=org)
+        ch = make_channel(telegram_id=3003, title="C", organization=org)
         base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1418,3 +1413,108 @@ class ScoreMessagesForWindowTests(TestCase):
         narrow = score_messages_for_window(Message.objects.alive().filter(date__lt=cutoff), min_sample=10)
         full = score_messages_for_window(Message.objects.alive(), min_sample=10)
         self.assertLess(len(narrow), len(full))
+
+
+class ChannelAttributionModelTests(TestCase):
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="O", is_in_target=True)
+        self.ch = make_channel(telegram_id=1)
+
+    def test_overlap_rejected(self) -> None:
+        attribute(self.ch, self.org, datetime.date(2024, 1, 1), datetime.date(2024, 6, 30))
+        # end=X and a sibling start=X overlap (inclusive bounds).
+        dup = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2024, 6, 30), end=None)
+        with self.assertRaises(ValidationError):
+            dup.clean()
+
+    def test_open_periods_overlap_rejected(self) -> None:
+        attribute(self.ch, self.org, None, None)
+        dup = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2030, 1, 1), end=None)
+        with self.assertRaises(ValidationError):
+            dup.clean()
+
+    def test_adjacent_periods_allowed(self) -> None:
+        attribute(self.ch, self.org, datetime.date(2024, 1, 1), datetime.date(2024, 6, 30))
+        nxt = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2024, 7, 1), end=None)
+        nxt.clean()  # adjacent (start = end + 1 day) does not overlap
+
+    def test_end_before_start_rejected(self) -> None:
+        bad = ChannelAttribution(
+            channel=self.ch, organization=self.org, start=datetime.date(2024, 6, 1), end=datetime.date(2024, 1, 1)
+        )
+        with self.assertRaises(ValidationError):
+            bad.clean()
+
+
+class CurrentOrganizationTests(TestCase):
+    def setUp(self) -> None:
+        self.org_a = Organization.objects.create(name="A", is_in_target=True)
+        self.org_b = Organization.objects.create(name="B", is_in_target=True)
+
+    def test_active_today_wins_over_past(self) -> None:
+        ch = make_channel(telegram_id=1)
+        attribute(ch, self.org_a, datetime.date(2020, 1, 1), datetime.date(2021, 1, 1))
+        attribute(ch, self.org_b, datetime.date(2024, 1, 1), None)
+        self.assertEqual(ch.current_organization, self.org_b)
+
+    def test_most_recent_past_when_none_active(self) -> None:
+        ch = make_channel(telegram_id=2)
+        attribute(ch, self.org_a, datetime.date(2018, 1, 1), datetime.date(2019, 1, 1))
+        attribute(ch, self.org_b, datetime.date(2020, 1, 1), datetime.date(2021, 1, 1))
+        self.assertEqual(ch.current_organization, self.org_b)
+
+    def test_none_when_unattributed(self) -> None:
+        self.assertIsNone(make_channel(telegram_id=3).current_organization)
+
+
+class InTargetPeriodQuerysetTests(TestCase):
+    def test_past_in_target_period_qualifies(self) -> None:
+        org = Organization.objects.create(name="O", is_in_target=True)
+        ch = make_channel(
+            telegram_id=1,
+            organization=org,
+            attribution_start=datetime.date(2020, 1, 1),
+            attribution_end=datetime.date(2020, 6, 1),
+        )
+        self.assertIn(ch, Channel.objects.in_target())
+
+    def test_out_of_target_org_excluded(self) -> None:
+        org = Organization.objects.create(name="O", is_in_target=False)
+        ch = make_channel(telegram_id=2, organization=org)
+        self.assertNotIn(ch, Channel.objects.in_target())
+
+    def test_unattributed_excluded(self) -> None:
+        self.assertNotIn(make_channel(telegram_id=3), Channel.objects.in_target())
+
+
+class PurgeOutOfPeriodTests(TestCase):
+    def _purgeable_ids(self) -> set[int]:
+        from webapp.management.commands.purge_out_of_target_messages import find_purgeable_messages
+
+        return set(find_purgeable_messages().values_list("telegram_id", flat=True))
+
+    def _msg(self, channel, tid, year, month) -> None:
+        Message.objects.create(
+            telegram_id=tid,
+            channel=channel,
+            date=datetime.datetime(year, month, 1, tzinfo=datetime.timezone.utc),
+        )
+
+    def test_out_of_period_pruned_for_kept_channel(self) -> None:
+        org = Organization.objects.create(name="O", is_in_target=True)
+        ch = make_channel(
+            telegram_id=1,
+            organization=org,
+            attribution_start=datetime.date(2024, 1, 1),
+            attribution_end=datetime.date(2024, 3, 31),
+        )
+        self._msg(ch, 1, 2024, 2)  # in period
+        self._msg(ch, 2, 2024, 6)  # out of period
+        purgeable = self._purgeable_ids()
+        self.assertIn(2, purgeable)
+        self.assertNotIn(1, purgeable)
+
+    def test_to_inspect_keeps_all(self) -> None:
+        ch = make_channel(telegram_id=5, to_inspect=True)
+        self._msg(ch, 50, 2024, 6)
+        self.assertNotIn(50, self._purgeable_ids())
