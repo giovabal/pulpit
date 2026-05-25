@@ -1,7 +1,10 @@
 import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from django.db.models import F, Q
+from django.db.models import Exists, OuterRef, Q
+
+if TYPE_CHECKING:
+    from webapp.models import Channel
 
 type GraphData = dict[str, list[dict[str, Any]]]
 type CommunityTableData = dict[str, Any]
@@ -18,15 +21,48 @@ type CommunityTableData = dict[str, Any]
 
 
 def channel_cutoff_q(channel_field: str = "channel", date_field: str = "date") -> Q:
-    """Q that excludes messages past their channel's out_of_target_after date.
+    """Q matching messages whose date falls inside one of their channel's in-target periods.
 
-    Pass ``channel_field`` / ``date_field`` to adjust the ORM path when the
-    Message is accessed through a related model (e.g. ``message__channel`` /
-    ``message__date`` for the references through-table).
+    A message is in-target iff its channel has a ``ChannelAttribution`` to an
+    in-target organization whose inclusive ``[start, end]`` interval (null
+    bounds = open) contains the message date. Pass ``channel_field`` /
+    ``date_field`` to adjust the ORM path when the Message is reached through a
+    related model (e.g. ``message__channel`` / ``message__date`` for the
+    references through-table).
     """
-    return Q(**{f"{channel_field}__out_of_target_after__isnull": True}) | Q(
-        **{f"{date_field}__date__lte": F(f"{channel_field}__out_of_target_after")}
+    from webapp.models import ChannelAttribution
+
+    subquery = (
+        ChannelAttribution.objects.filter(
+            channel=OuterRef(channel_field),
+            organization__is_in_target=True,
+        )
+        .filter(Q(start__isnull=True) | Q(start__lte=OuterRef(f"{date_field}__date")))
+        .filter(Q(end__isnull=True) | Q(end__gte=OuterRef(f"{date_field}__date")))
     )
+    return Q(Exists(subquery))
+
+
+def channel_period_date_q(channel: "Channel", date_field: str = "date") -> Q:
+    """Q restricting messages to a single channel's in-target periods.
+
+    Builds an OR-chain of inclusive date ranges over ``channel``'s in-target
+    attribution periods — cheap (no correlated subquery), for single-channel
+    call sites. Returns a match-nothing Q when the channel has no in-target
+    period, so callers that want "show everything when unattributed" must guard
+    with ``channel.in_target_periods.exists()``.
+    """
+    query = Q()
+    has_period = False
+    for start, end in channel.in_target_periods.values_list("start", "end"):
+        has_period = True
+        interval = Q()
+        if start is not None:
+            interval &= Q(**{f"{date_field}__date__gte": start})
+        if end is not None:
+            interval &= Q(**{f"{date_field}__date__lte": end})
+        query |= interval
+    return query if has_period else Q(pk__in=[])
 
 
 def make_date_q(

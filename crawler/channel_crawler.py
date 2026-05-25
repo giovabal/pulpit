@@ -197,9 +197,9 @@ class ChannelCrawler:
             )
             if linked_tg is not None:
                 try:
-                    Channel.from_telegram_object(
-                        linked_tg, force_update=False, defaults={"organization": channel.organization}
-                    )
+                    # Attribution is analyst-managed (time-bounded periods); a discovered linked
+                    # chat starts unattributed.
+                    Channel.from_telegram_object(linked_tg, force_update=False)
                 except DatabaseError as exc:
                     logger.warning("Could not create linked channel %s: %s", linked_chat_id, exc)
         channel.available_min_id = getattr(full, "available_min_id", None) or None
@@ -464,15 +464,47 @@ class ChannelCrawler:
         update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
         return last_known_id
 
+    @staticmethod
+    def _in_target_intervals(channel: Channel) -> list[tuple[Any, Any]]:
+        """The channel's in-target (start, end) periods, cached on the instance for one crawl."""
+        intervals = getattr(channel, "_in_target_intervals_cache", None)
+        if intervals is None:
+            intervals = list(channel.in_target_periods.values_list("start", "end"))
+            channel._in_target_intervals_cache = intervals
+        return intervals
+
+    def _skip_out_of_target(self, channel: Channel, telegram_message: Any) -> bool:
+        """True if the message must NOT be stored: dated outside the channel's in-target periods.
+
+        ``to_inspect`` channels store everything; messages with no date are kept (can't classify).
+        """
+        if channel.to_inspect or not telegram_message.date:
+            return False
+        d = telegram_message.date.date()
+        return not any((s is None or s <= d) and (e is None or e >= d) for s, e in self._in_target_intervals(channel))
+
+    def _in_target_period_q(self, channel: Channel) -> Q | None:
+        """Q over Message restricting to the channel's in-target periods (None = no restriction)."""
+        if channel.to_inspect:
+            return None
+        intervals = self._in_target_intervals(channel)
+        if not intervals:
+            return None
+        q = Q()
+        for start, end in intervals:
+            sub = Q()
+            if start is not None:
+                sub &= Q(date__date__gte=start)
+            if end is not None:
+                sub &= Q(date__date__lte=end)
+            q |= sub
+        return q
+
     def get_message(self, channel: Channel, telegram_message: Any) -> tuple[bool, int]:
         """Store *telegram_message* and return ``(stored, downloaded_images)``."""
         if isinstance(telegram_message, MessageService):
             return False, 0
-        if (
-            channel.out_of_target_after
-            and telegram_message.date
-            and telegram_message.date.date() > channel.out_of_target_after
-        ):
+        if self._skip_out_of_target(channel, telegram_message):
             return False, 0
         downloaded_images = 0
         message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
@@ -661,8 +693,9 @@ class ChannelCrawler:
             _total_qs = _total_qs.filter(date__lt=to_cutoff)
         if iter_max_id > 0:
             _total_qs = _total_qs.filter(telegram_id__lt=iter_max_id)
-        if channel.out_of_target_after is not None:
-            _total_qs = _total_qs.filter(date__date__lte=channel.out_of_target_after)
+        period_q = self._in_target_period_q(channel)
+        if period_q is not None:
+            _total_qs = _total_qs.filter(period_q)
         db_ids_initial = set(_total_qs.values_list("telegram_id", flat=True))
         total_in_db = len(db_ids_initial)
         processed = 0
@@ -681,11 +714,7 @@ class ChannelCrawler:
                 break
             if to_cutoff is not None and telegram_message.date is not None and telegram_message.date >= to_cutoff:
                 continue
-            if (
-                channel.out_of_target_after
-                and telegram_message.date is not None
-                and telegram_message.date.date() > channel.out_of_target_after
-            ):
+            if self._skip_out_of_target(channel, telegram_message):
                 continue
             if isinstance(telegram_message, MessageService):
                 deleted, _ = Message.objects.filter(channel=channel, telegram_id=telegram_message.id).delete()

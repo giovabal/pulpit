@@ -14,10 +14,10 @@ Home page ecosystem summary (two rows of cards):
   * Invalidated at the start of every ``crawl_channels`` run via
     :func:`invalidate_home_summary_cache` so freshly fetched data shows up
     on the next home-page hit.
-  * Aggregates do not honour ``Channel.out_of_target_after``: per-channel
-    date caps would require joining Channel for every Message row, so home
-    totals may diverge from the sum of per-channel detail-page totals when
-    any in-target channel has ``out_of_target_after`` set.
+  * Aggregates do not honour per-channel in-target attribution periods: the
+    period check would need a correlated subquery for every Message row, so home
+    totals may diverge from the sum of per-channel detail-page totals when any
+    in-target channel has a bounded (non-open) attribution period.
 
 Cache backend: :file:`webapp_engine/settings.py` configures a
 ``FileBasedCache`` so the management-command process (which writes the

@@ -32,11 +32,13 @@ from dataclasses import dataclass
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.query import QuerySet
 
+from network.utils import channel_cutoff_q
 from webapp.models import (
     Channel,
+    ChannelAttribution,
     Message,
     MessageAudio,
     MessageOtherMedia,
@@ -77,11 +79,25 @@ def marked_in_target_channels() -> QuerySet[Channel]:
     that for keep-set computation silently nukes history of channels that
     just happen to be lost or of a type outside the current view.
     """
-    return Channel.objects.filter(Q(organization__is_in_target=True) | Q(to_inspect=True))
+    has_in_target_period = Exists(
+        ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
+    )
+    return Channel.objects.filter(Q(has_in_target_period) | Q(to_inspect=True))
 
 
 def find_purgeable_messages() -> QuerySet[Message]:
-    """Return the queryset of messages whose channel falls outside the keep-set."""
+    """Return the queryset of messages outside the keep-set.
+
+    Two kinds of messages are purgeable:
+
+    * every message of a channel that is not in the keep-set (no in-target
+      attribution period, not ``to_inspect``, and not a forward source);
+    * the *out-of-period* messages of a kept in-target channel that is not
+      ``to_inspect`` — messages dated outside all its in-target periods, e.g.
+      left behind after an analyst narrows a period. ``to_inspect`` channels
+      keep every message; pure forward-source (out-of-target) channels keep
+      every message too.
+    """
     marked = marked_in_target_channels()
     marked_ids = set(marked.values_list("id", flat=True))
 
@@ -92,8 +108,11 @@ def find_purgeable_messages() -> QuerySet[Message]:
         .distinct()
     )
 
-    keep_ids = marked_ids | forward_source_ids
-    return Message.objects.exclude(channel_id__in=keep_ids)
+    keep_channel_ids = marked_ids | forward_source_ids
+    to_inspect_ids = set(Channel.objects.filter(to_inspect=True).values_list("id", flat=True))
+    prune_channel_ids = marked_ids - to_inspect_ids
+    out_of_period = Q(channel_id__in=prune_channel_ids) & ~channel_cutoff_q()
+    return Message.objects.filter(~Q(channel_id__in=keep_channel_ids) | out_of_period)
 
 
 def collect_media_files(messages: QuerySet[Message]) -> list[tuple[object, str]]:

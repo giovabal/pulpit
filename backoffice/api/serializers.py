@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, ChannelVacancy, Organization, SearchTerm
+from webapp.models import Channel, ChannelAttribution, ChannelGroup, ChannelVacancy, Organization, SearchTerm
 
 from rest_framework import serializers
 
@@ -32,15 +32,40 @@ class ChannelGroupSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "key", "description", "note", "channel_count"]
 
 
-class ChannelSerializer(serializers.ModelSerializer):
-    organization_id = serializers.PrimaryKeyRelatedField(
-        source="organization",
-        queryset=Organization.objects.all(),
-        allow_null=True,
-        required=False,
-    )
+class ChannelAttributionSerializer(serializers.ModelSerializer):
+    channel_id = serializers.PrimaryKeyRelatedField(source="channel", queryset=Channel.objects.all())
+    organization_id = serializers.PrimaryKeyRelatedField(source="organization", queryset=Organization.objects.all())
     organization_name = serializers.CharField(source="organization.name", read_only=True)
     organization_color = serializers.CharField(source="organization.color", read_only=True)
+
+    class Meta:
+        model = ChannelAttribution
+        fields = ["id", "channel_id", "organization_id", "organization_name", "organization_color", "start", "end"]
+
+    def validate(self, attrs):
+        channel = attrs.get("channel") or getattr(self.instance, "channel", None)
+        start = attrs.get("start", getattr(self.instance, "start", None))
+        end = attrs.get("end", getattr(self.instance, "end", None))
+        if start and end and start > end:
+            raise serializers.ValidationError({"end": "End date must not be before start date."})
+        if channel is not None:
+            siblings = ChannelAttribution.objects.filter(channel=channel)
+            if self.instance is not None:
+                siblings = siblings.exclude(pk=self.instance.pk)
+            for other in siblings.select_related("organization"):
+                if ChannelAttribution._overlaps(start, end, other.start, other.end):
+                    raise serializers.ValidationError(
+                        "Attribution periods for a channel must not overlap "
+                        f"(conflicts with {other.organization} [{other.start or '…'}, {other.end or '…'}])."
+                    )
+        return attrs
+
+
+class ChannelSerializer(serializers.ModelSerializer):
+    current_organization_id = serializers.SerializerMethodField()
+    current_organization_name = serializers.SerializerMethodField()
+    current_organization_color = serializers.SerializerMethodField()
+    attributions = ChannelAttributionSerializer(many=True, read_only=True)
     group_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         source="groups",
@@ -72,6 +97,18 @@ class ChannelSerializer(serializers.ModelSerializer):
     def get_detail_url(self, obj):
         return obj.get_absolute_url()
 
+    def get_current_organization_id(self, obj):
+        org = obj.current_organization
+        return org.id if org else None
+
+    def get_current_organization_name(self, obj):
+        org = obj.current_organization
+        return org.name if org else None
+
+    def get_current_organization_color(self, obj):
+        org = obj.current_organization
+        return org.color if org else None
+
     class Meta:
         model = Channel
         fields = [
@@ -83,9 +120,10 @@ class ChannelSerializer(serializers.ModelSerializer):
             "profile_picture_mime_type",
             "profile_picture_thumbnail_url",
             "detail_url",
-            "organization_id",
-            "organization_name",
-            "organization_color",
+            "current_organization_id",
+            "current_organization_name",
+            "current_organization_color",
+            "attributions",
             "group_ids",
             "participants_count",
             "in_degree",
@@ -94,7 +132,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "is_private",
             "to_inspect",
             "date",
-            "out_of_target_after",
             "restriction_reason",
             "message_ttl",
             "noforwards",

@@ -8,7 +8,8 @@ from stats.queries import (
     global_month_spine as _global_month_spine,
     reindex_to_spine as _reindex_to_spine,
 )
-from webapp.models import Channel, Message, Organization
+from webapp.models import Message, Organization
+from webapp.test_helpers import make_channel
 
 import pandas as pd
 
@@ -16,7 +17,7 @@ import pandas as pd
 class StatsViewsTests(TestCase):
     def test_messages_history_data_returns_json(self):
         organization = Organization.objects.create(name="In-target Org", is_in_target=True)
-        channel = Channel.objects.create(telegram_id=1, title="C1", organization=organization)
+        channel = make_channel(telegram_id=1, title="C1", organization=organization)
         Message.objects.create(telegram_id=1, channel=channel, date="2024-01-20T00:00:00Z")
 
         response = self.client.get(reverse("messages-history-data"))
@@ -32,8 +33,8 @@ class StatsViewsTests(TestCase):
 
     def test_active_channels_history_data_returns_json(self):
         organization = Organization.objects.create(name="In-target Org", is_in_target=True)
-        channel1 = Channel.objects.create(telegram_id=1, title="C1", organization=organization)
-        channel2 = Channel.objects.create(telegram_id=2, title="C2", organization=organization)
+        channel1 = make_channel(telegram_id=1, title="C1", organization=organization)
+        channel2 = make_channel(telegram_id=2, title="C2", organization=organization)
         Message.objects.create(telegram_id=1, channel=channel1, date="2024-01-20T00:00:00Z")
         Message.objects.create(telegram_id=2, channel=channel2, date="2024-01-22T00:00:00Z")
 
@@ -60,26 +61,26 @@ class GlobalMonthSpineTests(TestCase):
 
     def test_single_message_returns_single_month(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        channel = make_channel(telegram_id=1, title="C1", organization=org)
         Message.objects.create(telegram_id=1, channel=channel, date="2024-03-15T00:00:00Z")
         self.assertEqual(_global_month_spine(), ["2024-03"])
 
     def test_multi_month_span_fills_intermediate_months(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        channel = make_channel(telegram_id=1, title="C1", organization=org)
         Message.objects.create(telegram_id=1, channel=channel, date="2024-01-01T00:00:00Z")
         Message.objects.create(telegram_id=2, channel=channel, date="2024-03-01T00:00:00Z")
         self.assertEqual(_global_month_spine(), ["2024-01", "2024-02", "2024-03"])
 
     def test_ignores_out_of_target_channels(self):
         org = Organization.objects.create(name="Org", is_in_target=False)
-        channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        channel = make_channel(telegram_id=1, title="C1", organization=org)
         Message.objects.create(telegram_id=1, channel=channel, date="2024-01-01T00:00:00Z")
         self.assertEqual(_global_month_spine(), [])
 
     def test_ignores_messages_without_date(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        channel = make_channel(telegram_id=1, title="C1", organization=org)
         Message.objects.create(telegram_id=1, channel=channel, date=None)
         self.assertEqual(_global_month_spine(), [])
 
@@ -87,7 +88,7 @@ class GlobalMonthSpineTests(TestCase):
 class ChannelMonthSpineTests(TestCase):
     def setUp(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=org)
 
     def test_no_messages_returns_empty_list(self):
         self.assertEqual(_channel_month_spine(self.channel), [])
@@ -132,8 +133,8 @@ class ReindexToSpineTests(TestCase):
 class ForwardsHistoryDataViewTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=self.org)
-        self.source = Channel.objects.create(telegram_id=2, title="C2", organization=self.org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=self.org)
+        self.source = make_channel(telegram_id=2, title="C2", organization=self.org)
 
     def test_empty_db_returns_empty_response(self):
         response = self.client.get(reverse("forwards-history-data"))
@@ -165,7 +166,7 @@ class ForwardsHistoryDataViewTests(TestCase):
 
     def test_excludes_out_of_target_channels(self):
         non_org = Organization.objects.create(name="Non", is_in_target=False)
-        non_channel = Channel.objects.create(telegram_id=3, title="C3", organization=non_org)
+        non_channel = make_channel(telegram_id=3, title="C3", organization=non_org)
         Message.objects.create(
             telegram_id=1, channel=non_channel, date="2024-01-15T00:00:00Z", forwarded_from=self.source
         )
@@ -178,7 +179,7 @@ class ForwardsHistoryDataViewTests(TestCase):
 class ViewsHistoryDataViewTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=self.org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=self.org)
 
     def test_empty_db_returns_empty_response(self):
         response = self.client.get(reverse("views-history-data"))
@@ -207,7 +208,7 @@ class ViewsHistoryDataViewTests(TestCase):
 class AvgInvolvementHistoryDataViewTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=self.org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=self.org)
 
     def test_empty_db_returns_empty_response(self):
         response = self.client.get(reverse("avg-involvement-history-data"))
@@ -241,7 +242,7 @@ class AvgInvolvementHistoryDataViewTests(TestCase):
 class ChannelMessagesHistoryViewTests(TestCase):
     def setUp(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=org)
 
     def test_unknown_channel_returns_404(self):
         response = self.client.get(reverse("channel-messages-history", kwargs={"pk": 999}))
@@ -275,7 +276,7 @@ class ChannelMessagesHistoryViewTests(TestCase):
 class ChannelViewsHistoryViewTests(TestCase):
     def setUp(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=org)
 
     def test_unknown_channel_returns_404(self):
         response = self.client.get(reverse("channel-views-history", kwargs={"pk": 999}))
@@ -309,8 +310,8 @@ class ChannelViewsHistoryViewTests(TestCase):
 class ChannelForwardsHistoryViewTests(TestCase):
     def setUp(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
-        self.source = Channel.objects.create(telegram_id=2, title="C2", organization=org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=org)
+        self.source = make_channel(telegram_id=2, title="C2", organization=org)
 
     def test_unknown_channel_returns_404(self):
         response = self.client.get(reverse("channel-forwards-history", kwargs={"pk": 999}))
@@ -347,8 +348,8 @@ class ChannelForwardsHistoryViewTests(TestCase):
 class ChannelForwardsReceivedHistoryViewTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=self.org)
-        self.forwarder = Channel.objects.create(telegram_id=2, title="C2", organization=self.org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=self.org)
+        self.forwarder = make_channel(telegram_id=2, title="C2", organization=self.org)
 
     def test_unknown_channel_returns_404(self):
         response = self.client.get(reverse("channel-forwards-received-history", kwargs={"pk": 999}))
@@ -374,7 +375,7 @@ class ChannelForwardsReceivedHistoryViewTests(TestCase):
 
     def test_excludes_forwards_from_out_of_target_channels(self):
         non_org = Organization.objects.create(name="Non", is_in_target=False)
-        non_forwarder = Channel.objects.create(telegram_id=3, title="C3", organization=non_org)
+        non_forwarder = make_channel(telegram_id=3, title="C3", organization=non_org)
         Message.objects.create(
             telegram_id=1, channel=non_forwarder, date="2024-08-01T00:00:00Z", forwarded_from=self.channel
         )
@@ -387,7 +388,7 @@ class ChannelForwardsReceivedHistoryViewTests(TestCase):
 class ChannelAvgInvolvementHistoryViewTests(TestCase):
     def setUp(self):
         org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = Channel.objects.create(telegram_id=1, title="C1", organization=org)
+        self.channel = make_channel(telegram_id=1, title="C1", organization=org)
 
     def test_unknown_channel_returns_404(self):
         response = self.client.get(reverse("channel-avg-involvement-history", kwargs={"pk": 999}))
