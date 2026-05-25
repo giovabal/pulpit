@@ -1,12 +1,14 @@
 """Cache helpers for slow webapp pages.
 
 Home page ecosystem summary (two rows of cards):
-  * Row 1 (5 cards): channels (with to_inspect count), messages (with replies),
-    media (with per-type breakdown), total views (with subscribers), date range.
-  * Row 2 (4 cards): forwards / mentions sent and received across the in-target
-    set, with self / in-target / out-of-target splits — mirrors the channel
-    detail engagement row.
-  * ~10 sequential aggregates that each scan most of the Message and
+  * Row 1 (4 cards): channels (with to_inspect count), messages (with replies),
+    media (with per-type breakdown), total views (with subscribers).
+  * Row 2 (3 cards): forwards sent and mentions sent across the in-target set,
+    with self / in-target / out-of-target splits, plus the date range. The
+    "received" counterparts are omitted: at the ecosystem level they are a
+    provable identity with the matching "sent" totals (see compute_home_summary),
+    so they carried no extra signal.
+  * Several sequential aggregates that each scan most of the Message and
     message_references tables. Cold-render cost is roughly 400-800 ms on a
     real corpus.
   * Cached under :data:`HOME_SUMMARY_CACHE_KEY` for
@@ -31,10 +33,11 @@ from django.db.models import Count, F, Max, Min, Q, Sum
 from webapp.models import Channel, Message, MessageReply
 from webapp.utils.dates import fmt_date
 
-# Suffix bumped to :v2 when the return shape changed from list[dict] to
-# list[list[dict]]; old entries become orphans and the FileBasedCache evicts
-# them on its own schedule.
-HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v2"
+# Suffix bumped to :v3 when the card layout changed (the two "received" cards
+# were dropped and the date range moved to row 2); :v2 had marked the
+# list[dict] -> list[list[dict]] shape change. Old entries become orphans and
+# the FileBasedCache evicts them on its own schedule.
+HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v3"
 HOME_SUMMARY_CACHE_TIMEOUT = 3600  # 1 hour
 
 
@@ -87,12 +90,13 @@ def compute_home_summary() -> list[list[dict]]:
         parent_message__channel__in=in_target_pks, parent_message__is_lost=False
     ).count()
 
-    # Row 2 — forwards. Across the in-target set, every in-target-to-in-target
-    # forward is one Message row counted both from the sender's perspective
-    # (Forwards sent, in-target) and the receiver's (Forwards received), so the
-    # two headline counts are numerically equal. The cards stay distinct because
-    # their secondaries differ ("from N senders" vs "by N receivers"). Reuse the
-    # row count rather than running a redundant query — same logic for mentions.
+    # Row 2 — forwards sent. Only the "sent" side is shown on the home page:
+    # across the whole in-target set, every in-target-to-in-target forward is a
+    # single Message row counted once from the sender's side and once from the
+    # source's side, so an ecosystem-wide "Forwards received" total is provably
+    # identical to "Forwards sent" — a conservation identity, not extra signal.
+    # The per-channel detail page still shows both because they diverge per node.
+    # Same reasoning for mentions.
     fwd_in_target_filter = Q(forwarded_from__in=in_target_pks) & ~Q(forwarded_from=F("channel"))
     fwd_agg = msgs.aggregate(
         sent_in_target=Count("id", filter=fwd_in_target_filter),
@@ -106,7 +110,6 @@ def compute_home_summary() -> list[list[dict]]:
     fwd_oot_msgs = msgs.filter(forwarded_from__isnull=False).exclude(forwarded_from__in=in_target_pks)
     fwd_sent_in_target_channels = fwd_in_target_msgs.values("forwarded_from").distinct().count()
     fwd_sent_oot_channels = fwd_oot_msgs.values("forwarded_from").distinct().count()
-    fwd_received_channels = fwd_in_target_msgs.values("channel").distinct().count()
 
     # Row 2 — mentions (Message.references M2M, walked through the join table).
     refs_through = Message.references.through.objects
@@ -121,7 +124,6 @@ def compute_home_summary() -> list[list[dict]]:
     ment_oot_refs = base_refs.exclude(channel__in=in_target_pks)
     mentions_sent_in_target_channels = ment_in_target_refs.values("channel").distinct().count()
     mentions_sent_oot_channels = ment_oot_refs.values("channel").distinct().count()
-    mentions_received_channels = ment_in_target_refs.values("message__channel").distinct().count()
 
     row1 = [
         {
@@ -155,12 +157,6 @@ def compute_home_summary() -> list[list[dict]]:
             "value": f"{total_views:,}",
             "secondary": [{"value": f"{total_subscribers:,}", "label": "subscribers"}],
         },
-        {
-            "icon": "bi-calendar-range",
-            "label": "Date range",
-            "value": f"{fmt_date(msg_agg['earliest'])} – {fmt_date(msg_agg['latest'])}",
-            "note": "first message - last message",
-        },
     ]
     row2 = [
         {
@@ -190,16 +186,10 @@ def compute_home_summary() -> list[list[dict]]:
             ],
         },
         {
-            "icon": "bi-arrow-return-right",
-            "label": "Forwards received",
-            "value": f"{fwd_agg['sent_in_target']:,}",
-            "note": _channels_phrase("by", fwd_received_channels, "other in-target"),
-        },
-        {
-            "icon": "bi-chat-quote",
-            "label": "Mentions received",
-            "value": f"{ment_agg['sent_in_target']:,}",
-            "note": _channels_phrase("by", mentions_received_channels, "other in-target"),
+            "icon": "bi-calendar-range",
+            "label": "Date range",
+            "value": f"{fmt_date(msg_agg['earliest'])} – {fmt_date(msg_agg['latest'])}",
+            "note": "first message - last message",
         },
     ]
     return [row1, row2]
