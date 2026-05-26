@@ -549,6 +549,58 @@ class BuildGraphTests(TestCase):
         _, channel_dict, _, _ = build_graph(draw_dead_leaves=False)
         self.assertNotIn(str(ch3.pk), channel_dict)
 
+    def test_draw_dead_leaves_survive_windowed_build(self) -> None:
+        """Regression: a dead leaf cited inside the window must survive a windowed
+        (e.g. per-year timeline) build, not be dropped by the inactive-channel filter
+        — which keys off own-message counts that out-of-target channels never have."""
+        leaf = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        # In-target ch2 forwards from the leaf within the 2023 window.
+        Message.objects.create(
+            telegram_id=10,
+            channel=self.ch2,
+            forwarded_from=leaf,
+            date=datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc),
+        )
+        leaf.refresh_degrees()
+        _, channel_dict, _, channel_qs = build_graph(
+            draw_dead_leaves=True,
+            start_date=datetime.date(2023, 1, 1),
+            end_date=datetime.date(2023, 12, 31),
+        )
+        self.assertIn(str(leaf.pk), channel_dict)
+        self.assertIn(leaf, channel_qs)
+
+    def test_dead_leaf_cited_only_outside_window_is_dropped(self) -> None:
+        """A dead leaf whose only citation falls outside the window must not appear:
+        the degree-0 orphan sweep still prunes it once windowed edges are known."""
+        leaf = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        # Sole citation of the leaf is in 2022, outside the 2023 window.
+        Message.objects.create(
+            telegram_id=10,
+            channel=self.ch2,
+            forwarded_from=leaf,
+            date=datetime.datetime(2022, 6, 15, tzinfo=datetime.timezone.utc),
+        )
+        # An in-window edge so the graph is valid and ch1/ch2 stay active.
+        Message.objects.create(
+            telegram_id=11,
+            channel=self.ch2,
+            forwarded_from=self.ch1,
+            date=datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc),
+        )
+        Message.objects.create(
+            telegram_id=12,
+            channel=self.ch1,
+            date=datetime.datetime(2023, 3, 1, tzinfo=datetime.timezone.utc),
+        )
+        leaf.refresh_degrees()
+        _, channel_dict, _, _ = build_graph(
+            draw_dead_leaves=True,
+            start_date=datetime.date(2023, 1, 1),
+            end_date=datetime.date(2023, 12, 31),
+        )
+        self.assertNotIn(str(leaf.pk), channel_dict)
+
     def test_returns_queryset_of_channels(self) -> None:
         self._create_forward()
         _, _, _, channel_qs = build_graph()

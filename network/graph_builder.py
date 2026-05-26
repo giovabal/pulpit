@@ -147,9 +147,21 @@ def _filter_inactive_channels(
     channel_qs: QuerySet[Channel],
     messages_per_channel: dict,
 ) -> tuple[list[int], QuerySet[Channel]]:
-    """Remove channels with no activity in the date range from channel_dict and graph in-place."""
+    """Remove in-target channels with no activity in the date range from channel_dict and graph in-place.
+
+    Dead-leaf nodes (out-of-target channels pulled in because an in-target channel
+    cited them — identified by ``resolved_org_id is None``) are exempt: they have no
+    in-target period, so the period-aware cutoff excludes all of their own messages
+    and they would *always* be dropped here, before their incoming citation edges are
+    even built. Their window relevance is whether they were cited *within* the window,
+    which the degree-0 orphan sweep in ``build_graph`` decides once edges exist.
+    """
     active_ids = set(messages_per_channel.keys())
-    inactive = [cid for cid, cdata in channel_dict.items() if cdata["channel"].pk not in active_ids]
+    inactive = [
+        cid
+        for cid, cdata in channel_dict.items()
+        if cdata["channel"].pk not in active_ids and cdata["data"].get("resolved_org_id") is not None
+    ]
     for cid in inactive:
         graph.remove_node(cid)
         del channel_dict[cid]
