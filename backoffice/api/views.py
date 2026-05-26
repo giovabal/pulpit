@@ -2,7 +2,7 @@ import datetime
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, ProtectedError, Q
 
 from events.models import Event, EventType
 from webapp.models import (
@@ -249,6 +249,18 @@ class EventTypeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return EventType.objects.annotate(event_count=Count("events")).order_by("name")
+
+    def destroy(self, request, *args, **kwargs):
+        # Event.action is on_delete=PROTECT, so deleting an in-use type raises
+        # ProtectedError. DRF doesn't translate it, surfacing as a 500; turn it
+        # into a clean 409 instead.
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This event type is still used by one or more events and cannot be deleted."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class EventViewSet(viewsets.ModelViewSet):

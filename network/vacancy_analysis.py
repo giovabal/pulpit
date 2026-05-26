@@ -172,7 +172,7 @@ def _scores_abc(
     total_orphaned = len(orphaned_pks)
 
     amp_counts: dict[int, int] = {}
-    if selected & {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV"}:
+    if "AMPLIFIER_JACCARD" in selected:
         for r in (
             Message.objects.alive()
             .filter(
@@ -185,6 +185,25 @@ def _scores_abc(
             .annotate(amp_count=Count("channel", distinct=True))
         ):
             amp_counts[r["forwarded_from_id"]] = r["amp_count"]
+
+    # Each candidate's in-amplifier set: in-target channels that forwarded from the
+    # candidate in the after-window. Restricted to in-target so it shares the universe
+    # of the vacancy's amplifier set (orphaned_pks ⊆ in-target), giving a well-defined
+    # cosine for STRUCTURAL_EQUIV. Note |orphaned_pks ∩ cand_in_pks[cid]| == amp_count.
+    cand_in_pks: dict[int, set[int]] = defaultdict(set)
+    if "STRUCTURAL_EQUIV" in selected:
+        for fwd_id, ch_id in (
+            Message.objects.alive()
+            .filter(
+                channel__in=Channel.objects.in_target(),
+                forwarded_from__in=candidate_pks,
+                date__gte=closure_dt,
+                date__lte=after_end,
+            )
+            .values_list("forwarded_from_id", "channel_id")
+            .distinct()
+        ):
+            cand_in_pks[fwd_id].add(ch_id)
 
     # Forwarded-from edges out of the vacancy in the BEFORE window (org resolved at each forward's date).
     vacancy_out_pks: set[int] = set()
@@ -259,7 +278,7 @@ def _scores_abc(
             scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, 3) if total_orphaned else 0.0
 
         if "STRUCTURAL_EQUIV" in selected:
-            cos_in = math.sqrt(a_count / total_orphaned) if total_orphaned else 0.0
+            cos_in = _cosine(orphaned_pks, cand_in_pks.get(cid, set()))
             cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
             scores["STRUCTURAL_EQUIV"] = round(0.5 * cos_in + 0.5 * cos_out, 3)
 

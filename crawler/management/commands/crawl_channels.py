@@ -1398,7 +1398,9 @@ class Command(BaseCommand):
                         # without this guard, running either of them alone would
                         # silently fetch every channel before the real work
                         # started, looking like the program had hung.
-                        per_channel_ops = get_new_messages or do_refresh or fix_holes or retry_lost_messages
+                        per_channel_ops = (
+                            get_new_messages or do_refresh or fix_holes or retry_lost_messages or fetch_replies
+                        )
                         if per_channel_ops:
                             for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
                                 pre_crawl_max_id = 0
@@ -1450,6 +1452,12 @@ class Command(BaseCommand):
                                         self._fetch_replies_for_channel(
                                             channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
                                         )
+
+                                # Standalone reply fetch: when --fetch-replies is requested on its
+                                # own (no get-new-messages/refresh pass to piggyback on), fetch
+                                # replies across all of the channel's existing parent messages.
+                                if fetch_replies and not (get_new_messages or do_refresh):
+                                    self._fetch_replies_for_channel(channel, crawler, index, printer)
 
                                 if retry_lost_messages:
                                     self._retry_lost_for_channel(channel, crawler, index, total_channels, printer)

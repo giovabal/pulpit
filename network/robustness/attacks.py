@@ -200,12 +200,6 @@ def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generato
     return scores
 
 
-# Wrapper so the spreading scorer matches the generic ``(g) -> dict`` shape
-# expected by the registry (rng/runs come from the runner via closure).
-def _spreading_default(g: nx.DiGraph) -> dict[Any, float]:
-    return _spreading_scores(g)
-
-
 # ── Registry ────────────────────────────────────────────────────────────────
 
 
@@ -231,8 +225,9 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     # the registry (label / kind) — the score function is invoked separately
     # via _bridging_with_partition because it needs the chosen partition.
     "bridging": StrategySpec("Bridging centrality", None),
-    # Dynamical
-    "spreading": StrategySpec("Spreading efficiency (SIR)", _spreading_default),
+    # Dynamical — score_fn is None: ``removal_order`` special-cases "spreading"
+    # so it can thread the shared rng into the (stochastic) SIR scorer.
+    "spreading": StrategySpec("Spreading efficiency (SIR)", None),
     # Dynamic variants
     "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
     "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
@@ -302,7 +297,8 @@ def removal_order(
     See :data:`STRATEGY_SPECS` for the available strategies.  Tie-breaking is
     deterministic (ascending by node ID).  Empty graph returns ``[]``.
 
-    ``rng`` is consulted only for ``"random"``.  ``partitions`` (a dict
+    ``rng`` is consulted for ``"random"`` and ``"spreading"`` (the stochastic
+    SIR scorer); all other strategies are deterministic.  ``partitions`` (a dict
     ``{strategy_name: {node: community_id}}``) is required only for
     ``"bridging"`` / ``"bridging(...)"``.
 
@@ -331,6 +327,13 @@ def removal_order(
     spec = STRATEGY_SPECS[canonical]
     if spec.kind == "dynamic":
         return _dynamic_order(G, spec)
+    if canonical == "spreading":
+        # The only static scorer that consumes randomness: thread the shared rng
+        # through so the ranking honours the run's seed. Every other static scorer
+        # is deterministic and ignores rng; without an rng the SIR scorer falls
+        # back to its own fixed seed.
+        scores = _spreading_scores(G, rng=rng)
+        return _sort_by_scores(G, scores, inverse=spec.inverse)
     if spec.score_fn is None:
         raise ValueError(f"strategy {canonical!r} has no score function and isn't a recognised special case")
     scores = spec.score_fn(G)
