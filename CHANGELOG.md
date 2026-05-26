@@ -32,6 +32,7 @@
 
 ### Backward incompatibility
 - **Recency-weighted edges** — the opt-in recency-decay weighting for graph edges has been removed.
+- **Per-channel Top messages panel removed** — the channel detail page's Top messages dropdown (added in [0.22]) and its backing view/route/export read-path are gone; the global `/messages/highlights/` feed and per-message interest scoring are unaffected.
 
 ## [0.22] - 2026-05-24
 *Interesting messages. Pulpit version check. Fixes.*

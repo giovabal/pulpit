@@ -57,9 +57,4 @@ urlpatterns = [
         views.ChannelReactionsHistoryView.as_view(),
         name="channel-reactions-history",
     ),
-    path(
-        "data/channel/<int:pk>/top_messages/",
-        views.ChannelTopMessagesView.as_view(),
-        name="channel-top-messages",
-    ),
 ]

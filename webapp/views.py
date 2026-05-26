@@ -758,20 +758,6 @@ class ChannelDetailView(ListView):
                 "type": "table",
                 "description": "External domains and email addresses found in this channel's messages.",
             },
-            {
-                "id": "ch-top-messages",
-                "title": "Top messages",
-                "icon": "bi-stars",
-                "url": reverse("channel-top-messages", kwargs={"pk": ch.pk}),
-                "type": "top-messages",
-                "description": (
-                    "This channel's most engaging posts, ranked by a weighted composite of "
-                    "per-channel z-scored reactions, forwards, and views (Suh et al. 2010; "
-                    "Cha et al. 2010). When a structural-analysis export is available, "
-                    "cross-community reach (Goel et al. 2016) and authority-weighted reach "
-                    "(Cha et al. 2010) are shown alongside."
-                ),
-            },
         ]
 
         if not is_in_target:
