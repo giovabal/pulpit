@@ -1,3 +1,5 @@
+from typing import Any
+
 from network.measures._base import apply_measure
 from network.utils import GraphData
 
@@ -7,15 +9,24 @@ import numpy as np
 _SIR_GAMMA = 0.3  # recovery probability per step; mean infectious period ≈ 3 steps
 
 
-def _run_sir(
-    adj: dict[str, list[tuple[str, float]]],
-    seed: str,
+def sir_ever_infected(
+    adj: dict[Any, list[tuple[Any, float]]],
+    seed: Any,
     rng: np.random.Generator,
-) -> int:
-    """Single SIR run seeded at *seed*. Returns the number of nodes ever infected, including the seed."""
-    susceptible = set(adj) - {seed}
+    *,
+    universe: "set | None" = None,
+) -> set:
+    """Single SIR run seeded at *seed*; return the set of nodes ever infected (incl. seed).
+
+    *adj* maps each node to ``[(successor, transmission_prob), …]``. *universe* is the
+    susceptible pool and defaults to the keys of *adj*. Recovery probability per step is
+    ``_SIR_GAMMA``. Generic over node type (str ids or int PKs) so the per-channel
+    spreading measure, the robustness spreading attack, and the vacancy cascade-overlap
+    score all share one transmission model.
+    """
+    susceptible = (set(adj) if universe is None else set(universe)) - {seed}
     infected = {seed}
-    ever_infected = 1
+    ever = {seed}
 
     while infected:
         infected_list = list(infected)
@@ -26,9 +37,9 @@ def _run_sir(
         }
 
         # Transmission: for each infected node, batch-draw against its out-edges
-        newly_infected: set[str] = set()
+        newly_infected: set = set()
         for node in infected_list:
-            neighbors = adj[node]
+            neighbors = adj.get(node, ())
             if not neighbors:
                 continue
             succs = [s for s, _ in neighbors]
@@ -40,9 +51,18 @@ def _run_sir(
 
         susceptible -= newly_infected
         infected = (infected | newly_infected) - newly_recovered
-        ever_infected += len(newly_infected)
+        ever |= newly_infected
 
-    return ever_infected
+    return ever
+
+
+def _run_sir(
+    adj: dict[str, list[tuple[str, float]]],
+    seed: str,
+    rng: np.random.Generator,
+) -> int:
+    """Single SIR run seeded at *seed*. Returns the number of nodes ever infected, including the seed."""
+    return len(sir_ever_infected(adj, seed, rng))
 
 
 def apply_spreading_efficiency(
