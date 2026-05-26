@@ -32,6 +32,31 @@ _BRIDGING_DEFAULT_STRATEGY = "LEIDEN_DIRECTED"
 
 ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
 
+# Node-attribute keys that are genuine centrality indices — the only measures for
+# which a Freeman-style centralization (score concentration around the max) is
+# meaningful. Excludes audience/activity attributes (fans, messages_count),
+# local coefficients (burt_constraint, ego_network_density, local_clustering),
+# and behavioural metrics (amplification_factor, content_originality,
+# diffusion_lag, spreading_efficiency).
+CENTRALITY_MEASURE_KEYS: frozenset[str] = frozenset(
+    {
+        "in_deg",
+        "out_deg",
+        "pagerank",
+        "hits_hub",
+        "hits_authority",
+        "betweenness",
+        "flow_betweenness",
+        "in_degree_centrality",
+        "out_degree_centrality",
+        "harmonic_centrality",
+        "closeness_centrality",
+        "katz_centrality",
+        "bridging_centrality",
+        "community_bridging",
+    }
+)
+
 VALID_NETWORK_STAT_GROUPS: frozenset[str] = frozenset(
     {
         "SIZE",
