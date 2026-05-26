@@ -327,6 +327,17 @@ class ChannelListView(ListView):
             )
             .order_by("title")
         )
+        ctx["to_inspect_list"] = (
+            Channel.objects.filter(to_inspect=True)
+            .exclude(_in_target_attr_exists())
+            .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
+            .annotate(
+                messages_count=Count("message_set"),
+                first_message_date=Min("message_set__date"),
+                last_message_date=Max("message_set__date"),
+            )
+            .order_by("title")
+        )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
         ctx["organizations"] = Organization.objects.filter(is_in_target=True).order_by("name")
