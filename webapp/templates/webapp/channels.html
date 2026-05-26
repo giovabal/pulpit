@@ -36,6 +36,7 @@
         <div class="channel-sort">
           <select id="sort-field" class="channel-org-select" aria-label="Sort channels by">
             <option value="name">Name</option>
+            <option value="tag">Tag name</option>
             <option value="first">First activity</option>
             <option value="last">Last activity</option>
             <option value="followers">Followers</option>
@@ -59,25 +60,29 @@
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
-          <span class="channel-row-title">{{ channel.title }}</span>
+          <span class="channel-row-title">{% if channel.title %}{{ channel.title }}{% else %}<span class="channel-row-noname"><i class="bi bi-dash-circle" aria-hidden="true"></i> No name</span>{% endif %}</span>
+          {% if channel.username or channel.current_organization %}
           <span class="channel-row-meta">
-            <span>{{ channel.current_organization }}</span>
-            <span class="channel-row-meta-sep">·</span>
+            {% if channel.username %}<span class="channel-row-tag">@{{ channel.username }}</span>{% endif %}
+            {% if channel.username and channel.current_organization %}<span class="channel-row-meta-sep">·</span>{% endif %}
+            {% if channel.current_organization %}<span>{{ channel.current_organization }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="channel-row-meta">
             <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
             {% if channel.participants_count %}
             <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
-          </span>
-          {% if channel.first_message_date %}
-          <span class="channel-row-meta">
+            {% if channel.first_message_date %}
+            <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+            {% endif %}
           </span>
-          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -93,25 +98,29 @@
   </div>
   <ul class="channels-list list-unstyled" id="lost-list">
     {% for channel in lost_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
-          <span class="channel-row-title">{{ channel.title }} <span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span></span>
+          <span class="channel-row-title">{% if channel.title %}{{ channel.title }}{% else %}<span class="channel-row-noname"><i class="bi bi-dash-circle" aria-hidden="true"></i> No name</span>{% endif %} <span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span></span>
+          {% if channel.username or channel.current_organization %}
           <span class="channel-row-meta">
-            <span>{{ channel.current_organization }}</span>
-            <span class="channel-row-meta-sep">·</span>
+            {% if channel.username %}<span class="channel-row-tag">@{{ channel.username }}</span>{% endif %}
+            {% if channel.username and channel.current_organization %}<span class="channel-row-meta-sep">·</span>{% endif %}
+            {% if channel.current_organization %}<span>{{ channel.current_organization }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="channel-row-meta">
             <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
             {% if channel.participants_count %}
             <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
-          </span>
-          {% if channel.first_message_date %}
-          <span class="channel-row-meta">
+            {% if channel.first_message_date %}
+            <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+            {% endif %}
           </span>
-          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -126,25 +135,29 @@
   </div>
   <ul class="channels-list list-unstyled" id="private-list">
     {% for channel in private_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
-          <span class="channel-row-title">{{ channel.title }} <span class="ch-badge ch-badge--warn ms-1"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span></span>
+          <span class="channel-row-title">{% if channel.title %}{{ channel.title }}{% else %}<span class="channel-row-noname"><i class="bi bi-dash-circle" aria-hidden="true"></i> No name</span>{% endif %} <span class="ch-badge ch-badge--warn ms-1"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span></span>
+          {% if channel.username or channel.current_organization %}
           <span class="channel-row-meta">
-            <span>{{ channel.current_organization }}</span>
-            <span class="channel-row-meta-sep">·</span>
+            {% if channel.username %}<span class="channel-row-tag">@{{ channel.username }}</span>{% endif %}
+            {% if channel.username and channel.current_organization %}<span class="channel-row-meta-sep">·</span>{% endif %}
+            {% if channel.current_organization %}<span>{{ channel.current_organization }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="channel-row-meta">
             <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
             {% if channel.participants_count %}
             <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
-          </span>
-          {% if channel.first_message_date %}
-          <span class="channel-row-meta">
+            {% if channel.first_message_date %}
+            <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+            {% endif %}
           </span>
-          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -159,25 +172,29 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
-          <span class="channel-row-title">{{ channel.title }}</span>
+          <span class="channel-row-title">{% if channel.title %}{{ channel.title }}{% else %}<span class="channel-row-noname"><i class="bi bi-dash-circle" aria-hidden="true"></i> No name</span>{% endif %}</span>
+          {% if channel.username or channel.current_organization %}
           <span class="channel-row-meta">
-            <span>{{ channel.current_organization }}</span>
-            <span class="channel-row-meta-sep">·</span>
+            {% if channel.username %}<span class="channel-row-tag">@{{ channel.username }}</span>{% endif %}
+            {% if channel.username and channel.current_organization %}<span class="channel-row-meta-sep">·</span>{% endif %}
+            {% if channel.current_organization %}<span>{{ channel.current_organization }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="channel-row-meta">
             <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
             {% if channel.participants_count %}
             <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
-          </span>
-          {% if channel.first_message_date %}
-          <span class="channel-row-meta">
+            {% if channel.first_message_date %}
+            <span class="channel-row-meta-sep">·</span>
             <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+            {% endif %}
           </span>
-          {% endif %}
         </span>
       </a>
     </li>
@@ -282,6 +299,7 @@
 
     function sortKey(row, field) {
       switch (field) {
+        case "tag": return row.dataset.tag || "";
         case "org": return row.dataset.orgName || "";
         case "first": return row.dataset.dateMin || "";
         case "last": return row.dataset.dateMax || "";
