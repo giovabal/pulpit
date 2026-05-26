@@ -328,7 +328,7 @@ function _build_dist_section() {
     var dirLbl = document.createElement("label");
     dirLbl.className = "form-label mb-1 d-block fw-semibold small"; dirLbl.htmlFor = "deg-dir-select"; dirLbl.textContent = "Direction";
     _distSel = document.createElement("select"); _distSel.className = "form-select form-select-sm"; _distSel.id = "deg-dir-select"; _distSel.style.width = "auto";
-    [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) { _distSel.appendChild(new Option(opt[1], opt[0])); });
+    [["in_deg", "In-strength"], ["out_deg", "Out-strength"]].forEach(function(opt) { _distSel.appendChild(new Option(opt[1], opt[0])); });
     dirWrap.appendChild(dirLbl); dirWrap.appendChild(_distSel); controls.appendChild(dirWrap);
     distSection.appendChild(controls);
 

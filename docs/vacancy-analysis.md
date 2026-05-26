@@ -106,6 +106,8 @@ The brokerage role score is a **Jaccard similarity** between the set of organiza
 
 A score of 1.0 means the candidate bridges exactly the same organizational pairs. The score is shown as `—` when the vacancy's neighbourhood contained no channels with organization assignments.
 
+> This operationalises the **concept** of brokerage roles (Gould & Fernandez 1989) as the positional overlap of bridged organization-pairs. It is **not** the Gould–Fernandez brokerage census itself, which classifies each mediating triad into coordinator / gatekeeper / representative / consultant / liaison roles. The UI label is therefore **Brokerage overlap**.
+
 ---
 
 ### Score D — Cascade overlap

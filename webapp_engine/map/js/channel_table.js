@@ -8,10 +8,10 @@ var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"katz_central
 var STRUCTURAL_KEYS = {"betweenness":1,"flow_betweenness":1,"bridging_centrality":1,"burt_constraint":1};
 var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
-var POSITION_LABELS = {"in_deg":"Inbound","out_deg":"Outbound","fans":"Users","messages_count":"Messages"};
+var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
 var COL_TOOLTIPS = {
-    "in_deg":             "Inbound connections (in-degree): number of channels that forward to or cite this channel",
-    "out_deg":            "Outbound connections (out-degree): number of channels this channel forwards or cites",
+    "in_deg":             "In-strength: summed raw weights of incoming ties (forwards + mentions received); higher → more heavily cited",
+    "out_deg":            "Out-strength: summed raw weights of outgoing ties (forwards + mentions made); higher → cites more heavily",
     "fans":               "Number of subscribers / followers at crawl time",
     "messages_count":     "Number of messages collected in the analysis period",
     "pagerank":           "PageRank: steady-state visit probability in a random walk; higher → more central",
@@ -24,7 +24,7 @@ var COL_TOOLTIPS = {
     "harmonic_centrality": "Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
     "closeness_centrality":"Closeness centrality (Wasserman-Faust): how easily the rest of the network can reach this channel along citation paths",
     "katz_centrality":     "Katz centrality: counts all directed paths with exponential penalization for length",
-    "bridging_centrality": "Bridging centrality: betweenness × cross-community Shannon entropy; high → information broker",
+    "bridging_centrality": "Bridging centrality: betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high → broker spanning distinct communities",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",

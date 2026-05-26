@@ -135,10 +135,17 @@ def apply_base_node_measures(
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
 ) -> list[tuple[str, str]]:
-    """Populate degree, fans, message count, and activity period on each node."""
+    """Populate in/out strength, fans, message count, and activity period on each node.
+
+    ``in_deg``/``out_deg`` hold the weighted in/out **strength** — the sum of raw
+    (un-rescaled) tie weights on a node's incoming/outgoing edges. They are summed
+    over ``weight_raw`` rather than the ×10/max-normalised ``weight`` so the figure
+    is portable across exports (the normalised ``weight`` depends on the single
+    largest edge in the graph and is not comparable between runs).
+    """
     measures_labels: list[tuple[str, str]] = [
-        ("in_deg", "Inbound connections"),
-        ("out_deg", "Outbound connections"),
+        ("in_deg", "In-strength"),
+        ("out_deg", "Out-strength"),
         ("fans", "Users"),
         ("messages_count", "Messages"),
     ]
@@ -162,8 +169,8 @@ def apply_base_node_measures(
         if channel_entry is None:
             continue
         channel = channel_entry["channel"]
-        node["in_deg"] = graph.in_degree(node["id"], weight="weight")
-        node["out_deg"] = graph.out_degree(node["id"], weight="weight")
+        node["in_deg"] = graph.in_degree(node["id"], weight="weight_raw")
+        node["out_deg"] = graph.out_degree(node["id"], weight="weight_raw")
         node["fans"] = channel.participants_count
         node["messages_count"] = message_counts.get(channel.pk, 0)
         node["label"] = channel.title

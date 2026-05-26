@@ -238,18 +238,22 @@ def _subgraph_metrics(
                 ug = subgraph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
+    # Weighted modularity contribution, replicating networkx's per-community
+    # ``community_contribution`` (weight="weight") so the values sum to the weighted
+    # headline modularity reported for the same strategy (which community detection
+    # itself optimises). ``m`` is the total edge weight; ``l_c`` the internal weight.
     mg = mod_graph if mod_graph is not None else graph
-    m = mg.number_of_edges()
+    m = mg.size(weight="weight")
     modularity_contribution = None
     if m > 0:
-        mod_internal = mg.subgraph(nodes_set).number_of_edges()
+        l_c = sum(w for _u, v, w in mg.edges(nodes_set, data="weight", default=1.0) if v in nodes_set)
         if mg.is_directed():
-            d_out = sum(mg.out_degree(nd) for nd in nodes_set)
-            d_in = sum(mg.in_degree(nd) for nd in nodes_set)
-            modularity_contribution = round(mod_internal / m - (d_out * d_in) / (m * m), 6)
+            s_out = sum(d for _, d in mg.out_degree(nodes_set, weight="weight"))
+            s_in = sum(d for _, d in mg.in_degree(nodes_set, weight="weight"))
+            modularity_contribution = round(l_c / m - (s_out * s_in) / (m * m), 6)
         else:
-            deg = sum(mg.degree(nd) for nd in nodes_set)
-            modularity_contribution = round(mod_internal / m - (deg / (2 * m)) ** 2, 6)
+            k_c = sum(d for _, d in mg.degree(nodes_set, weight="weight"))
+            modularity_contribution = round(l_c / m - (k_c / (2 * m)) ** 2, 6)
     # ── E-I Index — Krackhardt & Stern (1988) ────────────────────────────────
     # (external_ties − internal_ties) / (external_ties + internal_ties)
     # Range −1 (fully cohesive) to +1 (fully competitive/peripheral).
@@ -312,9 +316,16 @@ def _network_content_metrics(
     """Compute network-wide content originality and amplification ratio from the DB."""
     channel_pks = list(channel_qs.values_list("pk", flat=True))
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
-    agg = Message.objects.filter(msg_q).aggregate(
-        total=Count("id"),
-        forwarded_out=Count("id", filter=Q(forwarded_from__isnull=False)),
+    # ``.alive()`` (exclude lost messages) to match the per-channel CONTENTORIGINALITY /
+    # AMPLIFICATION measures, which run on ``Message.objects.alive()``; otherwise the
+    # whole-network aggregate would not reconcile with the per-channel column.
+    agg = (
+        Message.objects.alive()
+        .filter(msg_q)
+        .aggregate(
+            total=Count("id"),
+            forwarded_out=Count("id", filter=Q(forwarded_from__isnull=False)),
+        )
     )
     total = agg["total"]
     if total == 0:
@@ -325,7 +336,7 @@ def _network_content_metrics(
         & make_date_q(start_date, end_date)
         & channel_cutoff_q()
     )
-    forwards_received = Message.objects.filter(fwd_in_q).count()
+    forwards_received = Message.objects.alive().filter(fwd_in_q).count()
     return {
         "network_originality": round(1 - forwarded_out / total, 4),
         "network_amplification": round(forwards_received / total, 4),
@@ -754,7 +765,10 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
         if summary.get("mean_burt_constraint") is not None:
             rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
         for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
-            rows.append((f"{c_label} Centralization (0–1)", c_val, "Centralization"))
+            # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
+            # for measures with a zero periphery floor (e.g. degree on a star); for closeness /
+            # harmonic it is a conservative lower bound. See _freeman_centralization.
+            rows.append((f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization"))
     if _include("Content"):
         if summary.get("network_originality") is not None:
             rows.append(("Content Originality (0–1)", summary["network_originality"], "Content"))

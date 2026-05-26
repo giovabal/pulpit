@@ -72,7 +72,7 @@ def write_table_html(
         seo_title_part="Channel network data",
         description=(
             f"Network data for {n} Telegram channels, "
-            "including activity metrics, inbound and outbound connections, and community assignments."
+            "including activity metrics, inbound and outbound tie strength, and community assignments."
         ),
     )
 

@@ -31,7 +31,7 @@ ALL_VACANCY_MEASURES: list[str] = [
 MEASURE_LABELS: dict[str, str] = {
     "AMPLIFIER_JACCARD": "Amplifier Coverage",
     "STRUCTURAL_EQUIV": "Structural Equivalence",
-    "BROKERAGE": "Brokerage",
+    "BROKERAGE": "Brokerage overlap",
     "CASCADE_OVERLAP": "Cascade Overlap (SIR)",
     "PPR": "Pers. PageRank",
     "TEMPORAL": "Temporal Adoption",
@@ -287,6 +287,10 @@ def _scores_abc(
             scores["STRUCTURAL_EQUIV"] = round(0.5 * cos_in + 0.5 * cos_out, 3)
 
         if "BROKERAGE" in selected:
+            # Overlap (Jaccard) of the (source-org, amplifier-org) pairs the channel bridges:
+            # does the candidate mediate the same inter-organisation flows the vacancy did?
+            # Operationalises the *concept* of brokerage roles (Gould & Fernandez 1989), not
+            # their brokerage-census classifier — hence the label "Brokerage overlap".
             cand_org_pairs = frozenset(
                 (s, a) for s in cand_src_org_pks.get(cid, set()) for a in cand_amp_org_pks.get(cid, set())
             )
@@ -373,8 +377,9 @@ def _scores_temporal(
     Temporal adoption: recency-weighted coverage fraction.
 
     For each candidate C, score = (fraction of orphaned channels that adopted C)
-    divided by (1 + mean_days_to_first_adoption / 30).  A 30-day half-life rewards
-    candidates adopted quickly by the orphaned audience.
+    divided by (1 + mean_days_to_first_adoption / 30).  This is a hyperbolic recency
+    weight 1/(1 + days/30): it equals 0.5 at 30 days then decays gradually (not an
+    exponential half-life), rewarding candidates adopted quickly by the orphaned audience.
     """
     total_orphaned = len(orphaned_pks)
     if not total_orphaned or not candidate_pks:

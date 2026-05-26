@@ -117,7 +117,7 @@ Promise.all([
     dirSel.className = "form-select form-select-sm";
     dirSel.id = "deg-dir-select";
     dirSel.style.width = "auto";
-    [["in_deg", "Forwards received"], ["out_deg", "Forwards sent"]].forEach(function(opt) {
+    [["in_deg", "In-strength"], ["out_deg", "Out-strength"]].forEach(function(opt) {
         dirSel.appendChild(new Option(opt[1], opt[0]));
     });
     dirWrap.appendChild(dirLbl);

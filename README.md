@@ -205,7 +205,7 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 | :---- | :------- | :----- |
 | Amplifier Coverage | What fraction of orphaned amplifiers have started forwarding the candidate? | Coverage / recall (|A ∩ B| / |A|) |
 | Structural equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
-| Brokerage role | Does the candidate bridge the same organizational communities? | Jaccard (Gould & Fernandez 1989) |
+| Brokerage overlap | Does the candidate bridge the same organizational communities? | Jaccard of bridged org-pairs; brokerage *concept* per Gould & Fernandez 1989 (not their census) |
 | Cascade overlap | Does information seeded at the candidate reach the same downstream channels? | SIR simulation (Watts & Dodds 2007) |
 | Personalized PageRank | How deeply embedded is the candidate in the orphaned channels' content supply chain? | PPR on reversed graph (Haveliwala 2002) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage × recency decay |

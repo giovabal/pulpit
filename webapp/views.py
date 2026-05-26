@@ -1,7 +1,6 @@
 import datetime
 import math
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -16,6 +15,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.utils import channel_cutoff_q, channel_period_date_q
+from network.vacancy_analysis import _scores_abc, _shift_months
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -804,16 +804,6 @@ class ChannelDetailView(ListView):
         return context_data
 
 
-def _shift_months(d: datetime.date, n: int) -> datetime.date:
-    import calendar
-
-    month = d.month - 1 + n
-    year = d.year + month // 12
-    month = month % 12 + 1
-    day = min(d.day, calendar.monthrange(year, month)[1])
-    return d.replace(year=year, month=month, day=day)
-
-
 class VacancyAnalysisView(View):
     """JSON endpoint: replacement candidates for a vacancy channel."""
 
@@ -887,106 +877,19 @@ class VacancyAnalysisView(View):
             cand_qs = cand_qs.filter(first_msg__gte=closure_dt)
         cand_channels = {c.pk: c for c in cand_qs}
 
-        # ── Extra queries for strategies A / B / C ────────────────────────
-        # Attribution is time-bounded: each forwarded-from channel's organisation is resolved as of
-        # the forwarding message's date, and the orphaned amplifiers' orgs as of the closure date.
-        # Strategy B: vacancy's out-neighbors (sources it forwarded from) before death
-        vacancy_out_pks: set[int] = set()
-        vacancy_out_dated: list[tuple[int, datetime.date]] = []
-        for fwd_id, fwd_date in (
-            Message.objects.alive()
-            .filter(
-                channel=ch,
-                forwarded_from__isnull=False,
-                date__gte=before_start,
-                date__lt=closure_dt,
-            )
-            .values_list("forwarded_from_id", "date")
-        ):
-            vacancy_out_pks.add(fwd_id)
-            if fwd_date is not None:
-                vacancy_out_dated.append((fwd_id, fwd_date.date()))
-
-        # Strategy B+C: each candidate's out-neighbors (batched)
-        cand_out_pks: dict[int, set[int]] = defaultdict(set)
-        cand_out_dated: list[tuple[int, int, datetime.date]] = []
-        for ch_id, fwd_id, fwd_date in (
-            Message.objects.alive()
-            .filter(
-                channel__in=list(cand_channels),
-                forwarded_from__isnull=False,
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .values_list("channel_id", "forwarded_from_id", "date")
-        ):
-            cand_out_pks[ch_id].add(fwd_id)
-            if fwd_date is not None:
-                cand_out_dated.append((ch_id, fwd_id, fwd_date.date()))
-
-        # Strategy B: each candidate's in-amplifier set — in-target channels that forwarded from the
-        # candidate in the after-window. Restricted to in-target so it shares the universe of
-        # orphaned_pks (⊆ in-target), making cos_in a well-defined cosine.
-        cand_in_pks: dict[int, set[int]] = defaultdict(set)
-        for fwd_id, ch_id in (
-            Message.objects.alive()
-            .filter(
-                channel__in=Channel.objects.in_target(),
-                forwarded_from__in=list(cand_channels),
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .values_list("forwarded_from_id", "channel_id")
-            .distinct()
-        ):
-            cand_in_pks[fwd_id].add(ch_id)
-
-        # Resolve organisations at the relevant dates from the attribution timeline.
-        attr_cache = ChannelAttribution.build_cache(
-            vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_dated} | orphaned_pks
+        # ── Strategy scores A / B / C ─────────────────────────────────────
+        # Shared with the structural-analysis export (network.vacancy_analysis) so the card
+        # and the export agree by construction. Scoped to the (possibly only_after_vacancy-
+        # filtered) candidate set; candidates the loop below skips are simply not scored.
+        score_map = _scores_abc(
+            ch.pk,
+            orphaned_pks,
+            list(cand_channels),
+            before_start,
+            closure_dt,
+            after_end,
+            {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE"},
         )
-        vacancy_src_org_pks: set[int] = {
-            org for fwd_id, when in vacancy_out_dated if (org := ChannelAttribution.org_at(attr_cache, fwd_id, when))
-        }
-        orphaned_org_map: dict[int, int] = {
-            pk: org for pk in orphaned_pks if (org := ChannelAttribution.org_at(attr_cache, pk, closure_date))
-        }
-        vacancy_amp_org_pks: set[int] = set(orphaned_org_map.values())
-        vacancy_org_pairs: frozenset[tuple[int, int]] = frozenset(
-            (s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks
-        )
-        cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
-        for ch_id, fwd_id, when in cand_out_dated:
-            org = ChannelAttribution.org_at(attr_cache, fwd_id, when)
-            if org is not None:
-                cand_src_org_pks[ch_id].add(org)
-
-        # Strategy C: which orphaned channels forward each candidate (for amp orgs)
-        cand_amp_rows = (
-            Message.objects.alive()
-            .filter(
-                channel__in=orphaned_pks,
-                forwarded_from__in=list(cand_channels),
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .values("forwarded_from_id", "channel_id")
-            .distinct()
-        )
-        cand_amp_org_pks: dict[int, set[int]] = defaultdict(set)
-        for r in cand_amp_rows:
-            org = orphaned_org_map.get(r["channel_id"])
-            if org:
-                cand_amp_org_pks[r["forwarded_from_id"]].add(org)
-
-        def _cosine(a: set, b: set) -> float:
-            if not a or not b:
-                return 0.0
-            return len(a & b) / (math.sqrt(len(a)) * math.sqrt(len(b)))
-
-        def _jaccard(a: frozenset, b: frozenset) -> float:
-            union = a | b
-            return len(a & b) / len(union) if union else 0.0
 
         # ── Build candidate list ──────────────────────────────────────────
         candidates = []
@@ -998,21 +901,10 @@ class VacancyAnalysisView(View):
             lf = cand_map[cid]["last_forwarded"]
             fm = c.first_msg
 
-            # A — Amplifier coverage: fraction of the vacancy's orphaned amplifiers
-            # that also forward this candidate (|A ∩ B| / |A|). This is an asymmetric
-            # overlap / recall measure, NOT a Jaccard (which would divide by |A ∪ B|).
-            score_a = round(amp_count / total_orphaned, 3) if total_orphaned else 0.0
-
-            # B — Structural equivalence (cosine in + cosine out, equal weight)
-            cos_in = _cosine(orphaned_pks, cand_in_pks.get(cid, set()))
-            cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
-            score_b = round(0.5 * cos_in + 0.5 * cos_out, 3)
-
-            # C — Brokerage role (Jaccard of organisation-pair sets)
-            cand_org_pairs = frozenset(
-                (s, a) for s in cand_src_org_pks.get(cid, set()) for a in cand_amp_org_pks.get(cid, set())
-            )
-            score_c: float | None = round(_jaccard(vacancy_org_pairs, cand_org_pairs), 3) if vacancy_org_pairs else None
+            s = score_map.get(cid, {})
+            score_a = s.get("AMPLIFIER_JACCARD", 0.0)  # amplifier coverage (recall): |A ∩ B| / |A|
+            score_b = s.get("STRUCTURAL_EQUIV", 0.0)  # structural equivalence: 0.5·cos_in + 0.5·cos_out
+            score_c: float | None = s.get("BROKERAGE")  # brokerage overlap: Jaccard of bridged org-pairs
 
             candidates.append(
                 {
