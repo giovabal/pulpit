@@ -1,15 +1,12 @@
 # Roadmap for Pulpit: Activities for Next Versions
-## [0.22]
-- 2D and 3D graphs computed with timeline and dead leaves do not show dead leaves in yearly graphs
-
-
-
 ## [1.0]
 Have a review of all measurements available in Pulpit. Read documentation for having a good grasp of what is the Pulpit goal. Then:
 1. find measures that Pulpit offers and that aren't useful in this specific case;
 1. find measures that Pulpit doesn't offers yet and that can be useful in this specific case.
 Let me choose which to remove and which to accept, if any.
+
 - Zenodo registration
+- Have a deep inspection of Python code for calculating channels measures, network measures, community strategies, consensus matrix, structural similarity, robustness, and vacancies. Do search for bugs, implementations that doesn't have a strong academic validation, and incoherence
 - Have a deep inspection of Python code, search for bugs, bad practices and dead code
 - Have a deep inspection of JS code, search for bugs, bad practices and dead code
 - Have a deep inspection of HTML and CSS code, search for bugs, bad practices and dead code
