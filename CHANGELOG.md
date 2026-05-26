@@ -1,6 +1,6 @@
 # Changelog
 ## [0.23] - To be announced
-*Time-bounded organization attribution. Fixes.*
+*Time-bounded organization attribution. Fixes, lots and important.*
 
 ### New features
 - **Time-bounded organization attribution** — a channel's membership in an `Organization` is no longer a static `Channel.organization` FK plus the one-way `out_of_target_after` cutoff; it is now a timeline of non-overlapping **`ChannelAttribution`** periods (`channel` + `organization` + optional inclusive `start`/`end`, both `None` meaning "since creation" / "until now"). A channel can therefore be in-target only for a stretch of time, or in-target across a long span under *alternating* organizations, and a message or relationship counts as in-target only when its date falls inside one of its channel's in-target periods. Non-overlap is enforced in `ChannelAttribution.clean()`, the DRF serializer, and the admin inline formset (SQLite can't express a portable exclusion constraint). Migrations `0047`–`0049` create the model, backfill one period `(start=None, end=out_of_target_after)` per channel that had an organization, then drop the two legacy `Channel` fields.
