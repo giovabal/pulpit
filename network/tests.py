@@ -670,6 +670,61 @@ class BuildGraphTests(TestCase):
         self.assertIn(self.ch2, channel_qs)
 
 
+class BuildGraphReferenceCutoffTests(TestCase):
+    """t.me/ mention edges must honour a channel's in-target attribution period,
+    exactly like forwards — regression for the leak where references made in a
+    channel's out-of-period messages slipped into the graph (the reference_counts
+    query in graph_builder used to skip channel_cutoff_q)."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_in_target=True, color="#FF0000")
+        # ch1 is in-target only during 2023.
+        self.ch1 = make_channel(
+            telegram_id=1,
+            organization=self.org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+            title="Bounded",
+        )
+        # ch2 / ch3 are in-target for all time (open period).
+        self.ch2 = make_channel(telegram_id=2, organization=self.org, title="Cited A")
+        self.ch3 = make_channel(telegram_id=3, organization=self.org, title="Cited B")
+
+    @staticmethod
+    def _connected(graph: nx.DiGraph, a: object, b: object) -> bool:
+        edges = graph.edges()
+        return (str(a.pk), str(b.pk)) in edges or (str(b.pk), str(a.pk)) in edges
+
+    def test_in_period_mention_creates_edge(self) -> None:
+        msg = Message.objects.create(
+            telegram_id=10,
+            channel=self.ch1,
+            date=datetime.datetime(2023, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        msg.references.add(self.ch3)
+        graph, _, _, _ = build_graph()
+        self.assertTrue(self._connected(graph, self.ch1, self.ch3))
+
+    def test_out_of_period_mention_excluded(self) -> None:
+        # In-period mention of ch2 → a valid edge and a non-zero PARTIAL_REFERENCES denominator.
+        in_period = Message.objects.create(
+            telegram_id=11,
+            channel=self.ch1,
+            date=datetime.datetime(2023, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        in_period.references.add(self.ch2)
+        # Mention of ch3 dated AFTER ch1's in-target period ends → must not create an edge.
+        out_of_period = Message.objects.create(
+            telegram_id=12,
+            channel=self.ch1,
+            date=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        out_of_period.references.add(self.ch3)
+        graph, _, _, _ = build_graph()
+        self.assertTrue(self._connected(graph, self.ch1, self.ch2))  # in-period mention kept
+        self.assertFalse(self._connected(graph, self.ch1, self.ch3))  # out-of-period mention dropped
+
+
 # ---------------------------------------------------------------------------
 # exporter.py — build_graph_data
 # ---------------------------------------------------------------------------
