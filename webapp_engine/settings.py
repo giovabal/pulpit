@@ -7,7 +7,6 @@ from webapp_engine.config import (
     SYSTEM_PATH,
     load_crawl_settings,
     load_structural_settings,
-    optional_int,
 )
 
 from decouple import Config, Csv, RepositoryEnv, UndefinedValueError
@@ -397,7 +396,6 @@ SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
 SA_INCLUDE_SELF_REFERENCES = _structural.edges.include_self_references
 SA_EDGE_WEIGHT_STRATEGY = _structural.edges.weight_strategy
-SA_RECENCY_WEIGHTS = optional_int(_structural.edges.recency_weights)
 SA_SPREADING_RUNS = _structural.computation.spreading_runs
 SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves

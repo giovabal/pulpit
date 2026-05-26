@@ -611,13 +611,6 @@
                   <input type="text" name="fa2_iterations" id="fa2_iterations" placeholder="{{ ad.SA_FA2_ITERATIONS }}" value="{{ ad.SA_FA2_ITERATIONS }}" pattern="^\d+(\.\d+)?[xX]?$" title="An integer or a multiplier like 7x">
                 </div>
                 <div class="ops-param">
-                  <label for="recency_weights">Recency weights
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Apply recency decay: messages up to N days old carry full weight; older messages decay as exp(-(age-N)/N). Leave blank to weight all messages equally."></i>
-                  </label>
-                  <input type="number" name="recency_weights" id="recency_weights" placeholder="–" value="{{ ad.SA_RECENCY_WEIGHTS }}" min="1">
-                </div>
-                <div class="ops-param">
                   <label for="community_distribution_threshold">Distribution threshold %
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Minimum percentage a community must reach in at least one organization row to appear in the Organization × Community distribution tables. Columns below this threshold are hidden. Default: 10."></i>
@@ -1841,7 +1834,6 @@ function showToast(msg, type) {
         setVal('enddate',                        opts.enddate   || '');
         if (opts.dead_leaves_color) setVal('dead_leaves_color', opts.dead_leaves_color);
         setVal('fa2_iterations',                 opts.fa2_iterations);
-        setVal('recency_weights',                opts.recency_weights || '');
         setVal('spreading_runs',                 opts.spreading_runs);
         setVal('diffusion_window',               opts.diffusion_window != null ? opts.diffusion_window : '');
         setVal('community_distribution_threshold', opts.community_distribution_threshold);

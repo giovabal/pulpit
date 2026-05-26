@@ -220,7 +220,6 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 | `edges.weight_strategy` | Edge-weighting method: `PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`, `TOTAL`, `NONE`. Empty `""` disables edge weighting. | `""` |
 | `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `false` |
 | `edges.include_self_references` | Include self-loop edges where a channel forwards or mentions itself | `false` |
-| `edges.recency_weights` | Recency decay half-life in days as an integer string. Empty string `""` = weight all messages equally. | `""` |
 
 ## `[scope]`
 

@@ -791,11 +791,10 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertIn("--enddate", args)
 
     def test_numeric_params(self):
-        post = FakePost({"fa2_iterations": "1000", "spreading_runs": "50", "recency_weights": "90"})
+        post = FakePost({"fa2_iterations": "1000", "spreading_runs": "50"})
         args = _build_args("structural_analysis", post)
         self.assertIn("--fa2-iterations", args)
         self.assertIn("--spreading-runs", args)
-        self.assertIn("--recency-weights", args)
 
     def test_community_strategies_csv(self):
         post = FakePost({"community_strategies": ["LEIDEN", "LOUVAIN"]})

@@ -34,7 +34,6 @@ timeline_step = "none"
 weight_strategy = "PARTIAL_REFERENCES"
 include_mentions = true
 include_self_references = false
-recency_weights = ""
 
 [scope]
 include_lost = false

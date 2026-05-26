@@ -85,7 +85,6 @@ STRUCTURAL_DEFAULTS: dict = {
         "weight_strategy": "",
         "include_mentions": False,
         "include_self_references": False,
-        "recency_weights": "",
     },
     "scope": {
         "include_lost": False,
