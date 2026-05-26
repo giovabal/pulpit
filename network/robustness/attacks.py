@@ -38,6 +38,7 @@ from typing import Any, Literal
 
 from network.measures import compute_betweenness
 from network.measures._base import compute_neighbour_community_entropy
+from network.measures._centrality import katz_alpha
 from network.measures._spreading import _run_sir
 
 import networkx as nx
@@ -89,12 +90,13 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
 
 
 def _safe_katz(g: nx.DiGraph) -> dict[Any, float]:
+    alpha = katz_alpha(g)  # below 1/λ_max, so the result stays valid (non-negative)
     try:
-        return nx.katz_centrality(g, weight="weight")
+        return nx.katz_centrality(g, alpha=alpha, weight="weight")
     except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
         logger.warning("Katz power-iteration failed; trying numpy backend", exc_info=True)
         try:
-            return nx.katz_centrality_numpy(g, weight="weight")
+            return nx.katz_centrality_numpy(g, alpha=alpha, weight="weight")
         except Exception:  # noqa: BLE001
             logger.warning("Katz numpy backend also failed; using in-strength proxy", exc_info=True)
             return _in_strength(g)
@@ -155,7 +157,7 @@ def _burt_constraint(g: nx.DiGraph) -> dict[Any, float]:
     # NetworkX; we coerce to +infinity so they sort last under ascending order
     # (treated as "not a broker").
     out: dict[Any, float] = {}
-    for nid, val in nx.constraint(g).items():
+    for nid, val in nx.constraint(g, weight="weight").items():
         out[nid] = float("inf") if val is None or isnan(val) else val
     return out
 
@@ -189,8 +191,12 @@ def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generato
     n = g.number_of_nodes()
     if n <= 1:
         return dict.fromkeys(g.nodes(), 0.0)
+    # Transmission probability = weight / max_weight (scale-independent; the raw
+    # weight is rescaled to max 10 by build_graph, which would saturate min(w, 1)).
+    edge_weights = [d.get("weight", 1.0) for _, _, d in g.edges(data=True)]
+    max_weight = max(edge_weights) if edge_weights else 1.0
     adj: dict[Any, list[tuple[Any, float]]] = {
-        nid: [(s, min(d.get("weight", 1.0), 1.0)) for s, d in g[nid].items()] for nid in g.nodes()
+        nid: [(s, min(d.get("weight", 1.0) / max_weight, 1.0)) for s, d in g[nid].items()] for nid in g.nodes()
     }
     norm = n - 1
     scores: dict[Any, float] = {}

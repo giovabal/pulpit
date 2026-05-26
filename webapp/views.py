@@ -15,7 +15,7 @@ from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
-from network.utils import channel_period_date_q
+from network.utils import channel_cutoff_q, channel_period_date_q
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -570,7 +570,7 @@ class ChannelDetailView(ListView):
 
         fwd_received_agg = (
             Message.objects.alive()
-            .filter(channel__in=in_target_pks, forwarded_from=ch)
+            .filter(channel_cutoff_q(), channel__in=in_target_pks, forwarded_from=ch)
             .exclude(channel=ch)
             .aggregate(total=Count("id"), channels=Count("channel", distinct=True))
         )
@@ -594,7 +594,12 @@ class ChannelDetailView(ListView):
         total_mentions_sent_self = mentions_sent_agg["self_"]
 
         mentions_received_agg = (
-            refs_through.filter(message__channel__in=in_target_pks, message__is_lost=False, channel=ch)
+            refs_through.filter(
+                channel_cutoff_q("message__channel", "message__date"),
+                message__channel__in=in_target_pks,
+                message__is_lost=False,
+                channel=ch,
+            )
             .exclude(message__channel=ch)
             .aggregate(total=Count("id"), channels=Count("message__channel", distinct=True))
         )

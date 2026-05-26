@@ -26,7 +26,7 @@ from .serializers import (
     SearchTermSerializer,
     UserSerializer,
 )
-from .utils import UnaccentLower, _normalize
+from .utils import UnaccentLower, normalize_for_search
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -124,7 +124,7 @@ class ChannelViewSet(
 
         search = self.request.query_params.get("search", "").strip()
         if search:
-            norm = _normalize(search)
+            norm = normalize_for_search(search)
             qs = qs.annotate(
                 _title_norm=UnaccentLower("title"),
                 _username_norm=UnaccentLower("username"),

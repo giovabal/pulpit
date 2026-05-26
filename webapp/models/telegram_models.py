@@ -170,7 +170,10 @@ class Channel(TelegramBaseModel):
         # Restrict to in-target periods when the channel has any; an unattributed channel
         # (or to_inspect-only) shows its full message span. One periods query + one aggregate.
         intervals = list(self.in_target_periods.values_list("start", "end"))
-        if intervals:
+        # A fully-open (None, None) period covers every date, so apply no date filter;
+        # folding its empty Q() into the OR-chain would be absorbed and wrongly drop
+        # everything outside the other periods.
+        if intervals and not any(start is None and end is None for start, end in intervals):
             period_q = Q()
             for start, end in intervals:
                 sub = Q()

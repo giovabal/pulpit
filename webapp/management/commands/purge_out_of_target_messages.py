@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.query import QuerySet
 
 from network.utils import channel_cutoff_q
@@ -111,26 +111,49 @@ def find_purgeable_messages() -> QuerySet[Message]:
     keep_channel_ids = marked_ids | forward_source_ids
     to_inspect_ids = set(Channel.objects.filter(to_inspect=True).values_list("id", flat=True))
     prune_channel_ids = marked_ids - to_inspect_ids
-    out_of_period = Q(channel_id__in=prune_channel_ids) & ~channel_cutoff_q()
+    # A dateless message can't be placed inside or outside a period; ~channel_cutoff_q()
+    # is vacuously true for it, so guard with date__isnull=False to keep such messages
+    # of in-target channels (matching the per-channel detail view, which keeps them).
+    out_of_period = Q(channel_id__in=prune_channel_ids) & Q(date__isnull=False) & ~channel_cutoff_q()
     return Message.objects.filter(~Q(channel_id__in=keep_channel_ids) | out_of_period)
 
 
 def collect_media_files(messages: QuerySet[Message]) -> list[tuple[object, str]]:
-    """Capture ``(storage, name)`` for every on-disk file owned by ``messages``.
+    """Capture ``(storage, name)`` for on-disk files owned *only* by ``messages``.
 
-    Called *before* the bulk row delete so the cascade doesn't make the
-    FileField descriptors unreachable. Returns a flat list ready for
-    :func:`remove_files`.
+    Called *before* the bulk row delete so the cascade doesn't make the FileField
+    descriptors unreachable. Media paths are keyed by Telegram file id
+    (``photos/{telegram_id}.ext`` …, no per-message segment), so a forwarded copy
+    and a kept in-target message can point at the *same* file. A path is returned
+    for deletion only when no surviving (non-purged) row of the same model still
+    references it — otherwise purging an out-of-target forward would delete a kept
+    message's media.
     """
     msg_ids = list(messages.values_list("pk", flat=True))
     if not msg_ids:
         return []
     files: list[tuple[object, str]] = []
     for model, field_name in _MEDIA_FIELDS:
+        purged_counts: dict[str, int] = {}
+        storages: dict[str, object] = {}
         for media in model.objects.filter(message_id__in=msg_ids).iterator(chunk_size=500):
             descriptor = getattr(media, field_name)
             if descriptor and descriptor.name:
-                files.append((descriptor.storage, descriptor.name))
+                purged_counts[descriptor.name] = purged_counts.get(descriptor.name, 0) + 1
+                storages[descriptor.name] = descriptor.storage
+        if not purged_counts:
+            continue
+        # Total rows (across ALL messages, purged or kept) referencing each path.
+        total_counts = {
+            row[field_name]: row["total"]
+            for row in model.objects.filter(**{f"{field_name}__in": list(purged_counts)})
+            .values(field_name)
+            .annotate(total=Count("pk"))
+        }
+        for name, purged_n in purged_counts.items():
+            # Delete only when every row referencing this shared file is being purged.
+            if total_counts.get(name, purged_n) <= purged_n:
+                files.append((storages[name], name))
     return files
 
 

@@ -112,9 +112,24 @@ def align_to_reference(
     return dict(zip(positions.keys(), (tuple(row) for row in all_pts.tolist()), strict=True))
 
 
+def _kk_distance_graph(graph: nx.DiGraph) -> nx.DiGraph:
+    """Copy of *graph* whose edge ``weight`` is inverted (1/w).
+
+    ``nx.kamada_kawai_layout`` reads ``weight`` as a target *distance*, so passing
+    the raw weight would place strongly-tied nodes *farther* apart — the opposite
+    of the intent (more forwards/mentions ⇒ closer) and the opposite of what the
+    ForceAtlas2 pass this seeds expects. Inverting makes a strong tie a short edge.
+    """
+    inverted = graph.copy()
+    for _, _, data in inverted.edges(data=True):
+        weight = data.get("weight", 1.0)
+        data["weight"] = 1.0 / weight if weight else 1.0
+    return inverted
+
+
 def kamada_kawai_positions(graph: nx.DiGraph) -> dict:
     """Return initial node positions via Kamada-Kawai."""
-    return nx.kamada_kawai_layout(graph, weight="weight")
+    return nx.kamada_kawai_layout(_kk_distance_graph(graph), weight="weight")
 
 
 def forceatlas2_positions(graph: nx.DiGraph, initial_pos: dict, iterations: int = 10) -> dict[str, tuple[float, float]]:
@@ -373,7 +388,7 @@ def kamada_kawai_positions_3d(graph: nx.DiGraph) -> dict:
     """
     with np.errstate(divide="ignore", invalid="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        return nx.kamada_kawai_layout(graph, weight="weight", dim=3)
+        return nx.kamada_kawai_layout(_kk_distance_graph(graph), weight="weight", dim=3)
 
 
 def forceatlas2_positions_3d(

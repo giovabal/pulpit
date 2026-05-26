@@ -126,9 +126,9 @@ def _date_window_filter(start_date: datetime.date | None, end_date: datetime.dat
     """
     out: dict[str, Any] = {}
     if start_date is not None:
-        out["date__gte"] = start_date
+        out["date__date__gte"] = start_date
     if end_date is not None:
-        out["date__lte"] = end_date
+        out["date__date__lte"] = end_date
     return out
 
 

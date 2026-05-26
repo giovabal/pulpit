@@ -26,7 +26,28 @@ def register_normalize() -> None:
 
 
 class UnaccentLower(Func):
-    """SQL expression: UNACCENT_LOWER(col) — accent-stripped, lowercased text."""
+    """SQL expression: UNACCENT_LOWER(col) — accent-stripped, lowercased text.
+
+    Only SQLite has the registered ``UNACCENT_LOWER`` UDF. PostgreSQL has no portable
+    equivalent (it would need the ``unaccent`` extension), so there it falls back to
+    ``LOWER`` — channel search stays case-insensitive (accent-sensitive) instead of
+    raising ``function unaccent_lower(...) does not exist``. Pair with
+    :func:`normalize_for_search` so the query term matches the column transform.
+    """
 
     function = "UNACCENT_LOWER"
     output_field = TextField()
+
+    def as_postgresql(self, compiler, connection, **extra_context):
+        return super().as_sql(compiler, connection, function="LOWER", **extra_context)
+
+
+def normalize_for_search(text: str) -> str:
+    """Normalize a search term to match what :class:`UnaccentLower` renders on the
+    active backend: accent-stripped + lowercased on SQLite (the UNACCENT_LOWER UDF),
+    lowercased-only on PostgreSQL (which falls back to LOWER)."""
+    from django.db import connection
+
+    if connection.vendor == "sqlite":
+        return _normalize(text)
+    return (text or "").lower()

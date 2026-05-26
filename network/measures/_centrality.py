@@ -74,15 +74,35 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     return apply_measure(graph_data, values, "harmonic_centrality", "Harmonic Centrality")
 
 
+def katz_alpha(graph: nx.DiGraph, *, margin: float = 0.9, default: float = 0.1) -> float:
+    """Return a Katz ``alpha`` guaranteed to be below ``1 / spectral_radius``.
+
+    Katz centrality only converges — and only yields non-negative scores — for
+    ``alpha < 1/λ_max``. ``build_graph`` rescales edge weights (max → 10), which
+    inflates ``λ_max`` well past the NetworkX default ``alpha=0.1``, so power
+    iteration diverges and the numpy solver silently returns invalid (negative)
+    scores. We bound ``λ_max`` by ``min`` of the largest weighted out-/in-degree
+    (a Perron-Frobenius/Gershgorin upper bound — O(N), needs no eigensolver and
+    is independent of the weight scale) and back off by ``margin``.
+    """
+    if graph.number_of_edges() == 0:
+        return default
+    out_max = max((w for _, w in graph.out_degree(weight="weight")), default=0.0)
+    in_max = max((w for _, w in graph.in_degree(weight="weight")), default=0.0)
+    bound = min(out_max, in_max)
+    return margin / bound if bound > 0 else default
+
+
 def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Katz centrality to each node."""
+    alpha = katz_alpha(graph)
     try:
-        values: dict[str, float] = nx.katz_centrality(graph, weight="weight")
+        values: dict[str, float] = nx.katz_centrality(graph, alpha=alpha, weight="weight")
     except nx.PowerIterationFailedConvergence:
         logger.warning("Katz centrality failed to converge; retrying with numpy solver")
         try:
-            values = nx.katz_centrality_numpy(graph, weight="weight")
-        except Exception as exc:
+            values = nx.katz_centrality_numpy(graph, alpha=alpha, weight="weight")
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Katz centrality numpy fallback also failed: %s", exc)
             return []
     return apply_measure(graph_data, values, "katz_centrality", "Katz Centrality")
@@ -152,7 +172,9 @@ def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) 
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Burt's constraint to each node. Isolated nodes receive None (undefined)."""
     key = "burt_constraint"
-    values: dict[str, float] = nx.constraint(graph)
+    # Use edge weights so constraint reflects tie strength, consistent with the
+    # other structural measures (betweenness, Katz, …) which all pass weight.
+    values: dict[str, float] = nx.constraint(graph, weight="weight")
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
         node[key] = None if (val is None or isnan(val)) else round(val, 6)
