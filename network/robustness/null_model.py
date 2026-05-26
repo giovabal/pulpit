@@ -1,29 +1,30 @@
-"""Null model for the robustness battery — weight-rewiring on a fixed topology.
+"""Null model for the robustness battery — a directed weighted configuration model.
 
-The ideal null model would be a *directed weighted configuration model* that
-preserves each node's ``(s_in, s_out)`` strength sequence.  This module
-implements the cheaper and more commonly used *weight-shuffling* variant:
-the graph topology and the *multiset* of edge weights are preserved, but
-weights are randomly permuted among the existing edges via pairwise swaps.
+This implements the *strength-preserving* null: a randomised graph that keeps
+each node's in/out **degree** sequence exactly and its in/out **strength**
+sequence (approximately), while randomising the topology. It supersedes the
+earlier weight-shuffle null, which merely permuted the weight multiset over a
+*fixed* topology and so preserved no structural constraint beyond the wiring
+itself — leaving deviations attributable only to weight placement.
+
+It is built in two stages (see :func:`rewire_strength_preserving`):
+    1. **Maslov–Sneppen directed edge swaps** — randomise which pairs are
+       connected while preserving the exact in/out degree sequence.
+    2. **Iterative proportional fitting** (Sinkhorn) — rescale the rewired weights
+       back onto the observed in/out strength sequence.
 
 **What this null preserves**
-    - graph topology (the same pairs are connected),
-    - total number of edges and total sum of weights,
-    - the multiset of edge weights,
-    - per-node binary in- and out-degree.
+    - per-node in- and out-degree (exactly),
+    - per-node in- and out-strength (approximately, via IPF),
+    - total number of edges and total edge weight.
 
-**What this null does NOT preserve** (documented limitations)
-    - per-node in-strength / out-strength,
-    - reciprocity (the (u, v) and (v, u) weights are reshuffled independently),
-    - clustering coefficient,
-    - higher-order motifs and assortativity patterns.
+**What it randomises**
+    - the topology (which pairs are connected, beyond the degree sequence),
+    - clustering, reciprocity, motifs, and weight–topology coupling.
 
-In other words: any deviation between the observed R and the null R can be
-attributed only to the *distribution of weights across edges*, not to the
-underlying topology or to richer correlations.  When you need a stricter
-null, use a per-node strength-preserving sampler (e.g. Maslov-Sneppen style
-edge-swap with weight reassignment); this module is the minimum acceptable
-baseline as discussed in the project's robustness-analysis brief.
+So a deviation between the observed R and the null R reflects higher-order
+structure, not the degree/strength sequences the attack strategies already
+rank on.
 
 The companion :func:`z_score` helper turns ``(R_observed, [R_null_1, …,
 R_null_K])`` into a standard ``(z, μ_null, σ_null)`` triple, with
@@ -31,12 +32,12 @@ R_null_K])`` into a standard ``(z, μ_null, σ_null)`` triple, with
 of the null distribution.
 
 References:
-    Serrano, M. Á. & Boguñá, M. (2005). Weighted configuration model.
-        *AIP Conference Proceedings* 776, 101-107.
-        https://doi.org/10.1063/1.1985381
     Maslov, S. & Sneppen, K. (2002). Specificity and stability in topology
         of protein networks. *Science* 296(5569), 910-913.
         https://doi.org/10.1126/science.1065103
+    Serrano, M. Á. & Boguñá, M. (2005). Weighted configuration model.
+        *AIP Conference Proceedings* 776, 101-107.
+        https://doi.org/10.1063/1.1985381
 """
 
 from collections.abc import Iterator
@@ -45,24 +46,38 @@ import networkx as nx
 import numpy as np
 
 
-def rewire_weights(
+def rewire_strength_preserving(
     G: nx.DiGraph,
     *,
     weight: str = "weight",
     n_swaps: int | None = None,
+    ipf_iterations: int = 50,
     rng: np.random.Generator | None = None,
 ) -> nx.DiGraph:
-    """Return a copy of *G* whose edge weights have been pairwise-swapped.
+    """Return a randomised copy of *G* that preserves the in/out degree sequence
+    exactly and the in/out strength sequence approximately — a directed weighted
+    configuration-model null.
 
-    Topology is preserved (the same ``(u, v)`` pairs carry an edge); only
-    the weights are reshuffled.  ``n_swaps`` is the number of swap *attempts*
-    and defaults to ``10 * |E|``.  Each attempt draws two random edge
-    indices uniformly; identity swaps (the same index picked twice) are
-    silent no-ops, which happens at expected rate ``1/|E|`` so well above
-    99% of attempts move weights for any non-trivial graph.
+    Two stages:
 
-    Graphs with fewer than two edges are returned as a plain copy (nothing
-    to swap).  The input graph is never mutated.
+    1. **Maslov–Sneppen directed edge swaps** (2002): repeatedly pick two edges
+       ``(a→b)`` and ``(c→d)`` and rewire them to ``(a→d)`` and ``(c→b)`` whenever
+       that creates no self-loop or duplicate edge, carrying each edge's weight
+       with it. This preserves the exact in- and out-degree sequence while
+       randomising *which* pairs are connected. ``n_swaps`` is the number of swap
+       *attempts* and defaults to ``10 · |E|``.
+    2. **Iterative proportional fitting** (Sinkhorn): alternately rescale every
+       node's out-edges to its observed out-strength and in-edges to its observed
+       in-strength, for ``ipf_iterations`` rounds. Because the degree sequence is
+       preserved the system is feasible, so the rewired weights converge onto G's
+       strength sequence (and hence its total weight).
+
+    The result shares G's degree *and* strength sequences but not its wiring, so a
+    robustness deviation from this null reflects higher-order structure rather than
+    the strength sequence the attack strategies already rank on.
+
+    Graphs with fewer than two edges are returned as a plain copy. The input graph
+    is never mutated.
     """
     H = G.copy()
     m = H.number_of_edges()
@@ -74,17 +89,48 @@ def rewire_weights(
     if n_swaps is None:
         n_swaps = 10 * m
 
+    # ── Stage 1: degree-preserving edge swaps ─────────────────────────────────
     edges = list(H.edges())
-    weights = np.array([H.edges[u, v].get(weight, 0.0) for u, v in edges], dtype=float)
+    draws = rng.integers(0, m, size=2 * n_swaps)
+    for k in range(n_swaps):
+        i, j = int(draws[2 * k]), int(draws[2 * k + 1])
+        if i == j:
+            continue
+        a, b = edges[i]
+        c, d = edges[j]
+        # Skip swaps that share an endpoint (no-op) or would make a self-loop or
+        # a parallel edge.
+        if a == c or b == d or a == d or c == b:
+            continue
+        if H.has_edge(a, d) or H.has_edge(c, b):
+            continue
+        w_ab = H.edges[a, b][weight]
+        w_cd = H.edges[c, d][weight]
+        H.remove_edge(a, b)
+        H.remove_edge(c, d)
+        H.add_edge(a, d, **{weight: w_ab})
+        H.add_edge(c, b, **{weight: w_cd})
+        edges[i] = (a, d)
+        edges[j] = (c, b)
 
-    idx = rng.integers(0, m, size=2 * n_swaps)
-    for i in range(n_swaps):
-        a, b = int(idx[2 * i]), int(idx[2 * i + 1])
-        if a != b:
-            weights[a], weights[b] = weights[b], weights[a]
-
-    for k, (u, v) in enumerate(edges):
-        H.edges[u, v][weight] = float(weights[k])
+    # ── Stage 2: IPF rescaling onto the observed strength sequence ────────────
+    target_out = dict(G.out_degree(weight=weight))
+    target_in = dict(G.in_degree(weight=weight))
+    for _ in range(ipf_iterations):
+        cur_out = dict(H.out_degree(weight=weight))
+        for u in H.nodes():
+            cur, tgt = cur_out.get(u, 0.0), target_out.get(u, 0.0)
+            if cur > 0 and tgt > 0:
+                scale = tgt / cur
+                for _, v in H.out_edges(u):
+                    H.edges[u, v][weight] *= scale
+        cur_in = dict(H.in_degree(weight=weight))
+        for v in H.nodes():
+            cur, tgt = cur_in.get(v, 0.0), target_in.get(v, 0.0)
+            if cur > 0 and tgt > 0:
+                scale = tgt / cur
+                for u, _ in H.in_edges(v):
+                    H.edges[u, v][weight] *= scale
     return H
 
 
@@ -107,7 +153,7 @@ def null_distribution(
     if rng is None:
         rng = np.random.default_rng()
     for _ in range(n_simulations):
-        yield rewire_weights(G, weight="weight", n_swaps=n_swaps, rng=rng)
+        yield rewire_strength_preserving(G, weight="weight", n_swaps=n_swaps, rng=rng)
 
 
 def z_score(observed: float, null_samples: list[float]) -> tuple[float, float, float]:

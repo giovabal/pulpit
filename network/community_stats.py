@@ -7,6 +7,7 @@ from typing import Any
 
 from django.db.models import Count, Q, QuerySet
 
+from network.community import UNDIRECTED_BASIS_STRATEGIES
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
@@ -204,8 +205,17 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     }
 
 
-def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
-    """Compute structural metrics for a community defined by nodes_set."""
+def _subgraph_metrics(
+    nodes_set: set[str], graph: nx.DiGraph, mod_graph: "nx.DiGraph | nx.Graph | None" = None
+) -> dict[str, Any]:
+    """Compute structural metrics for a community defined by nodes_set.
+
+    ``mod_graph`` is the graph the modularity *contribution* is computed against:
+    the undirected ``W + Wᵀ`` projection for strategies optimised on it, else the
+    directed graph (the default when ``None``). All other metrics always describe
+    the directed community, so the contribution stays consistent with the overall
+    modularity reported for the same strategy.
+    """
     subgraph = graph.subgraph(nodes_set)
     n = subgraph.number_of_nodes()
     internal_edges = subgraph.number_of_edges()
@@ -228,12 +238,18 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
                 ug = subgraph.subgraph(largest_wcc).to_undirected()
                 avg_path_length = nx.average_shortest_path_length(ug)
                 diameter = nx.diameter(ug)
-    m = graph.number_of_edges()
+    mg = mod_graph if mod_graph is not None else graph
+    m = mg.number_of_edges()
     modularity_contribution = None
     if m > 0:
-        d_out = sum(graph.out_degree(nd) for nd in nodes_set)
-        d_in = sum(graph.in_degree(nd) for nd in nodes_set)
-        modularity_contribution = round(internal_edges / m - (d_out * d_in) / (m * m), 6)
+        mod_internal = mg.subgraph(nodes_set).number_of_edges()
+        if mg.is_directed():
+            d_out = sum(mg.out_degree(nd) for nd in nodes_set)
+            d_in = sum(mg.in_degree(nd) for nd in nodes_set)
+            modularity_contribution = round(mod_internal / m - (d_out * d_in) / (m * m), 6)
+        else:
+            deg = sum(mg.degree(nd) for nd in nodes_set)
+            modularity_contribution = round(mod_internal / m - (deg / (2 * m)) ** 2, 6)
     # ── E-I Index — Krackhardt & Stern (1988) ────────────────────────────────
     # (external_ties − internal_ties) / (external_ties + internal_ties)
     # Range −1 (fully cohesive) to +1 (fully competitive/peripheral).
@@ -479,12 +495,20 @@ def _compute_strategy_entry(
         if lbl is not None:
             label_to_nodes[lbl].add(node["id"])
 
+    # Report modularity against the projection the strategy was optimised on:
+    # the undirected W+Wᵀ graph for undirected-basis strategies, the directed
+    # graph otherwise. Computed once per strategy and reused for the per-community
+    # contributions so they stay consistent with the overall value.
+    mod_graph: "nx.DiGraph | nx.Graph" = (
+        to_undirected_sum(graph) if strategy_key in UNDIRECTED_BASIS_STRATEGIES else graph
+    )
+
     rows = []
     for group in strategy_data["groups"]:
         _community_id, _count, label, _hex_color = group
         nodes_set = label_to_nodes.get(str(label), set())
         metrics = (
-            _subgraph_metrics(nodes_set, graph)
+            _subgraph_metrics(nodes_set, graph, mod_graph)
             if nodes_set
             else {
                 "internal_edges": 0,
@@ -511,7 +535,7 @@ def _compute_strategy_entry(
     modularity = None
     if label_to_nodes:
         with _swallow_metric(f"modularity (strategy {strategy_key})", ValueError):
-            modularity = nx.community.modularity(graph, label_to_nodes.values())
+            modularity = nx.community.modularity(mod_graph, label_to_nodes.values())
 
     # ── Inter-community edge ratio ────────────────────────────────────────────
     # Fraction of all directed edges whose source and target belong to different

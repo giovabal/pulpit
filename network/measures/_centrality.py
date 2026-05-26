@@ -1,10 +1,11 @@
 import logging
 from math import isnan
 
-from network.measures._base import apply_measure, compute_neighbour_community_entropy
+from network.measures._base import apply_measure, compute_neighbour_community_participation
 from network.utils import GraphData, to_undirected_sum
 
 import networkx as nx
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +27,64 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     return [(key, "PageRank")]
 
 
+def compute_hits(
+    graph: nx.DiGraph, *, max_iter: int = 100, tol: float = 1.0e-8
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Weighted HITS hub & authority scores (Kleinberg 1999, weighted variant).
+
+    NetworkX's ``hits`` ignores edge weights — it treats the graph as binary — so
+    its scores disagree with every other prestige measure here (PageRank, Katz, …)
+    which all use tie strength. This computes HITS on the *weighted* adjacency by
+    power iteration:
+
+        ``a = Aᵀ h``   (authority of v = Σ_u w(u→v) · hub(u))
+        ``h = A a``    (hub of v       = Σ_u w(v→u) · authority(u))
+
+    iterated to convergence (each vector rescaled by its max per step, as NetworkX
+    does) and finally normalised so each vector sums to 1 (matching
+    ``nx.hits(normalized=True)``). Returns ``(hubs, authorities)`` keyed by node id;
+    ``({}, {})`` for an empty graph.
+    """
+    nodes = list(graph.nodes())
+    n = len(nodes)
+    if n == 0:
+        return {}, {}
+    a_mat = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight="weight", dtype=float, format="csr")
+    at_mat = a_mat.T.tocsr()
+    hub = np.full(n, 1.0 / n)
+    for _ in range(max_iter):
+        auth = at_mat @ hub
+        auth_max = auth.max() if auth.size else 0.0
+        if auth_max > 0:
+            auth = auth / auth_max
+        new_hub = a_mat @ auth
+        hub_max = new_hub.max() if new_hub.size else 0.0
+        if hub_max > 0:
+            new_hub = new_hub / hub_max
+        if float(np.abs(new_hub - hub).sum()) < tol:
+            hub = new_hub
+            break
+        hub = new_hub
+    auth = at_mat @ hub
+    hub_sum = float(hub.sum())
+    auth_sum = float(auth.sum())
+    if hub_sum > 0:
+        hub = hub / hub_sum
+    if auth_sum > 0:
+        auth = auth / auth_sum
+    return (
+        {nid: float(v) for nid, v in zip(nodes, hub, strict=True)},
+        {nid: float(v) for nid, v in zip(nodes, auth, strict=True)},
+    )
+
+
 def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add HITS hub and authority scores to each node."""
+    """Add weighted HITS hub and authority scores to each node."""
     try:
-        hubs, authorities = nx.hits(graph)
+        hubs, authorities = compute_hits(graph)
     except Exception as exc:  # noqa: BLE001
-        # nx.hits is backed by SciPy SVDS, which raises ValueError / ArpackError
-        # (not just PowerIterationFailedConvergence) on single-node or otherwise
-        # degenerate graphs — e.g. a lone self-referencing channel. Degrade
-        # gracefully instead of aborting the whole export.
+        # Degrade gracefully on degenerate graphs (e.g. a lone self-referencing
+        # channel) instead of aborting the whole export.
         logger.warning("HITS could not be computed (%s); skipping hub/authority scores", exc)
         return []
     for node in graph_data["nodes"]:
@@ -137,12 +187,14 @@ def apply_bridging_centrality(
     strategy_key: str,
     betweenness: "dict[str, float] | None" = None,
 ) -> list[tuple[str, str]]:
-    """Add bridging centrality (betweenness × neighbor-community Shannon entropy) to each node.
+    """Add bridging centrality (betweenness × neighbour-community participation coefficient) to each node.
 
-    For each node, the Shannon entropy is computed over the community distribution of its
-    neighbours weighted by edge strength. Nodes that connect many distinct communities score
-    high on entropy; multiplying by betweenness surfaces nodes that are both structurally
-    central and community-diverse.
+    For each node, the participation coefficient (Guimerà & Amaral 2005) of its neighbours'
+    community distribution — weighted by edge strength — measures how evenly the node's ties
+    spread across communities (0 = every neighbour in one community, →1 = evenly split across
+    many). Multiplying it by betweenness (Freeman 1977) surfaces nodes that are both
+    structurally central and span communities. The participation coefficient is bounded in
+    ``[0, 1]``, so the product stays on betweenness' scale.
 
     If ``betweenness`` is provided (pre-computed via ``compute_betweenness``), the nx call
     is skipped, allowing the caller to share one computation with ``apply_betweenness_centrality``.
@@ -153,8 +205,8 @@ def apply_bridging_centrality(
         for node_id, node_data in graph.nodes(data="data")
         if node_data and strategy_key in (node_data.get("communities") or {})
     }
-    entropies = compute_neighbour_community_entropy(graph, community_map)
-    values = {nid: betweenness.get(nid, 0.0) * entropies.get(nid, 0.0) for nid in graph.nodes()}
+    participation = compute_neighbour_community_participation(graph, community_map)
+    values = {nid: betweenness.get(nid, 0.0) * participation.get(nid, 0.0) for nid in graph.nodes()}
     return apply_measure(graph_data, values, "bridging_centrality", "Bridging Centrality")
 
 

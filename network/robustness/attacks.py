@@ -36,8 +36,8 @@ from dataclasses import dataclass
 from math import isnan
 from typing import Any, Literal
 
-from network.measures import compute_betweenness
-from network.measures._base import compute_neighbour_community_entropy
+from network.measures import compute_betweenness, compute_hits
+from network.measures._base import compute_neighbour_community_participation
 from network.measures._centrality import katz_alpha
 from network.measures._spreading import _run_sir
 from network.utils import to_undirected_sum
@@ -104,11 +104,11 @@ def _safe_katz(g: nx.DiGraph) -> dict[Any, float]:
 
 
 def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
-    # SciPy's SVDS backend behind nx.hits can raise ArpackError on tiny or
-    # degenerate residual graphs (typical during the dynamic re-ranking loop);
+    # Weighted HITS (shared with the HITS measure) so the attack ranks by the same
+    # tie-strength-aware scores. Degenerate residual graphs can still misbehave;
     # catch broadly and fall back to out-strength as a structural proxy.
     try:
-        hubs, _ = nx.hits(g)
+        hubs, _ = compute_hits(g)
         return hubs
     except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
         logger.warning("HITS hub failed; using out-strength proxy", exc_info=True)
@@ -117,7 +117,7 @@ def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
 
 def _hits_authority(g: nx.DiGraph) -> dict[Any, float]:
     try:
-        _, auth = nx.hits(g)
+        _, auth = compute_hits(g)
         return auth
     except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
         logger.warning("HITS authority failed; using in-strength proxy", exc_info=True)
@@ -168,16 +168,16 @@ _BRIDGING_RE = re.compile(r"^bridging(?:\((\w+)\))?$", re.IGNORECASE)
 
 
 def _bridging_with_partition(g: nx.DiGraph, partition: dict[Any, Any]) -> dict[Any, float]:
-    """Bridging centrality = betweenness × Shannon entropy of the community
-    distribution among the node's weighted neighbours.
+    """Bridging centrality = betweenness × participation coefficient of the
+    community distribution among the node's weighted neighbours.
 
     Both pieces come from shared helpers — ``compute_betweenness`` and
-    ``compute_neighbour_community_entropy`` — so the formula stays in
+    ``compute_neighbour_community_participation`` — so the formula stays in
     lock-step with :func:`network.measures._centrality.apply_bridging_centrality`.
     """
     betweenness = compute_betweenness(g)
-    entropies = compute_neighbour_community_entropy(g, partition)
-    return {node: betweenness.get(node, 0.0) * entropies.get(node, 0.0) for node in g.nodes()}
+    participation = compute_neighbour_community_participation(g, partition)
+    return {node: betweenness.get(node, 0.0) * participation.get(node, 0.0) for node in g.nodes()}
 
 
 def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generator | None = None) -> dict[Any, float]:

@@ -16,7 +16,7 @@ from network.robustness.metrics import (
     weighted_global_efficiency,
 )
 from network.robustness.modular import modular_robustness_curves
-from network.robustness.null_model import null_distribution, rewire_weights, z_score
+from network.robustness.null_model import null_distribution, rewire_strength_preserving, z_score
 from network.robustness.runner import RobustnessConfig, run_robustness
 
 __all__ = [
@@ -35,7 +35,7 @@ __all__ = [
     "parse_strategy",
     "r_index",
     "removal_order",
-    "rewire_weights",
+    "rewire_strength_preserving",
     "run_robustness",
     "strategy_label",
     "weighted_global_efficiency",
