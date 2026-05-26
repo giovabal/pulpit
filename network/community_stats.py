@@ -8,6 +8,7 @@ from typing import Any
 from django.db.models import Count, Q, QuerySet
 
 from network.community import UNDIRECTED_BASIS_STRATEGIES
+from network.measures._registry import CENTRALITY_MEASURE_KEYS
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
@@ -617,6 +618,11 @@ def compute_community_metrics(
     centralizations: dict[str, tuple[float | None, str]] = {}
     if _grp("CENTRALIZATION") and measures_labels:
         for key, label in measures_labels:
+            # Freeman centralization is only meaningful for genuine centrality
+            # indices; skip audience/activity attributes, local coefficients, and
+            # behavioural metrics (see CENTRALITY_MEASURE_KEYS).
+            if key not in CENTRALITY_MEASURE_KEYS:
+                continue
             values = [node[key] for node in graph_data["nodes"] if key in node]
             centralizations[key] = (_freeman_centralization(values), label)
     network_summary["centralizations"] = centralizations
