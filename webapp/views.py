@@ -903,6 +903,22 @@ class VacancyAnalysisView(View):
             if fwd_date is not None:
                 cand_out_dated.append((ch_id, fwd_id, fwd_date.date()))
 
+        # Strategy B: each candidate's in-amplifier set — in-target channels that forwarded from the
+        # candidate in the after-window. Restricted to in-target so it shares the universe of
+        # orphaned_pks (⊆ in-target), making cos_in a well-defined cosine.
+        cand_in_pks: dict[int, set[int]] = defaultdict(set)
+        for fwd_id, ch_id in (
+            Message.objects.filter(
+                channel__in=Channel.objects.in_target(),
+                forwarded_from__in=list(cand_channels),
+                date__gte=closure_dt,
+                date__lte=after_end,
+            )
+            .values_list("forwarded_from_id", "channel_id")
+            .distinct()
+        ):
+            cand_in_pks[fwd_id].add(ch_id)
+
         # Resolve organisations at the relevant dates from the attribution timeline.
         attr_cache = ChannelAttribution.build_cache(
             vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_dated} | orphaned_pks
@@ -963,7 +979,7 @@ class VacancyAnalysisView(View):
             score_a = round(amp_count / total_orphaned, 3) if total_orphaned else 0.0
 
             # B — Structural equivalence (cosine in + cosine out, equal weight)
-            cos_in = math.sqrt(score_a)  # sqrt(amp_count / total_orphaned)
+            cos_in = _cosine(orphaned_pks, cand_in_pks.get(cid, set()))
             cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
             score_b = round(0.5 * cos_in + 0.5 * cos_out, 3)
 

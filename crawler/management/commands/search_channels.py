@@ -1,3 +1,5 @@
+import logging
+from time import sleep
 from typing import Any
 
 from django.conf import settings
@@ -11,7 +13,10 @@ from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import SearchTerm
 
+from telethon import errors
 from telethon.sync import TelegramClient
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -58,19 +63,41 @@ class Command(BaseCommand):
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
             for term in qs:
-                self.stdout.write(f'Searching: "{term.word}" … ', ending="")
-                self.stdout.flush()
-                found, new = crawler.search_channel(term.word)
-                self.stdout.write(f"{found} found, {new} new")
+                result = self._run_search(crawler, term.word, "Searching: ")
+                if result is None:
+                    continue  # leave last_check untouched so a failed term is retried first next run
+                found, new = result
                 total_found += found
                 total_new += new
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])
             for word in extra_terms:
-                self.stdout.write(f'Searching (extra): "{word}" … ', ending="")
-                self.stdout.flush()
-                found, new = crawler.search_channel(word)
-                self.stdout.write(f"{found} found, {new} new")
+                result = self._run_search(crawler, word, "Searching (extra): ")
+                if result is None:
+                    continue
+                found, new = result
                 total_found += found
                 total_new += new
         self.stdout.write(self.style.SUCCESS(f"\nSearch complete. {total_found} channels found, {total_new} new."))
+
+    def _run_search(self, crawler: ChannelCrawler, word: str, label: str) -> tuple[int, int] | None:
+        """Run one search term; return (found, new), or None if it failed so the run can continue.
+
+        A single bad term (RPCError, above-threshold flood wait, network error) must not abort the
+        whole command — log it and move on, mirroring the per-channel resilience of crawl_channels.
+        """
+        self.stdout.write(f'{label}"{word}" … ', ending="")
+        self.stdout.flush()
+        try:
+            found, new = crawler.search_channel(word)
+        except errors.FloodWaitError as exc:
+            self.stdout.write(self.style.WARNING(f"flood wait, skipping: {exc}"))
+            if not settings.IGNORE_FLOODWAIT:
+                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return None
+        except Exception as exc:  # noqa: BLE001 - one bad term must not abort the whole run
+            logger.warning("Search failed for term %r: %s", word, exc)
+            self.stdout.write(self.style.WARNING(f"failed: {exc}"))
+            return None
+        self.stdout.write(f"{found} found, {new} new")
+        return found, new

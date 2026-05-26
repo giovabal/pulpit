@@ -301,9 +301,13 @@ class ChannelCrawler:
 
             if is_private:
                 return None, None, "private"
-            if initial_private:
-                return None, None, "lost"
-            return None, None, "user_account"
+            # Reached only when nothing confirmed the channel: an initial
+            # ChannelPrivateError that no fallback could re-confirm, or a
+            # ValueError (Telethon had no cached access_hash) with no usable
+            # access_hash/username fallback. Either way it is unresolvable →
+            # "lost", not a user account. Genuine user accounts are caught by
+            # the _UserAccountSeed handler below.
+            return None, None, "lost"
         except _UserAccountSeed:
             # get_basic_channel — initial call or any fallback — saw a User entity.
             return None, None, "user_account"
