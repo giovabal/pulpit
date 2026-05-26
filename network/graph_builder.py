@@ -1,6 +1,5 @@
 import datetime
 import logging
-import math
 from typing import Any
 
 from django.conf import settings
@@ -132,15 +131,6 @@ def resolve_window_organization(
 VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
 
 
-def _recency_decay(date: datetime.datetime | datetime.date | None, today: datetime.date, n: int) -> float:
-    """Return 1.0 for messages within the last N days, then exp(-(age-N)/N) beyond that."""
-    if date is None or n <= 0:
-        return 1.0
-    d = date.date() if isinstance(date, datetime.datetime) else date
-    excess = (today - d).days - n
-    return math.exp(-excess / n) if excess > 0 else 1.0
-
-
 def _filter_inactive_channels(
     channel_dict: dict[str, dict[str, Any]],
     graph: nx.DiGraph,
@@ -214,7 +204,6 @@ def build_graph(
     draw_dead_leaves: bool = False,
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
-    recency_weights: int | None = None,
     channel_types: list[str] | None = None,
     channel_groups: list[str] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
@@ -289,123 +278,60 @@ def build_graph(
     channel_ids = [int(channel_id) for channel_id in channel_dict]
     date_q = make_date_q(start_date, end_date)
     cutoff_q = channel_cutoff_q()
-    ref_cutoff_q = channel_cutoff_q("message__channel", "message__date")
     references_through = Message.references.through
 
-    if recency_weights is not None:
-        today = datetime.date.today()
+    messages_per_channel = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.alive()
+        .filter(date_q, cutoff_q, channel_id__in=channel_ids)
+        .values("channel_id")
+        .annotate(total=Count("id"))
+    }
 
-        messages_per_channel: dict[int, float] = {}
-        for ch_id, date in (
-            Message.objects.alive()
-            .filter(date_q, cutoff_q, channel_id__in=channel_ids)
-            .values_list("channel_id", "date")
-        ):
-            messages_per_channel[ch_id] = messages_per_channel.get(ch_id, 0.0) + _recency_decay(
-                date, today, recency_weights
+    if start_date or end_date:
+        channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
+
+    forwarded_counts = {
+        (item["channel_id"], item["forwarded_from_id"]): item["total"]
+        for item in Message.objects.alive()
+        .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+        .values("channel_id", "forwarded_from_id")
+        .annotate(total=Count("id"))
+    }
+
+    reference_counts = (
+        {
+            (item["message__channel_id"], item["channel_id"]): item["total"]
+            for item in references_through.objects.filter(
+                make_date_q(start_date, end_date, field="message__date"),
+                message__is_lost=False,
+                channel_id__in=channel_ids,
+                message__channel_id__in=channel_ids,
             )
+            .exclude(message__forwarded_from=F("channel"))
+            .values("message__channel_id", "channel_id")
+            .annotate(total=Count("id"))
+        }
+        if include_mentions
+        else {}
+    )
 
-        if start_date or end_date:
-            channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
-
-        forwarded_counts: dict[tuple[int, int], float] = {}
-        for ch_id, fwd_id, date in (
-            Message.objects.alive()
-            .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
-            .values_list("channel_id", "forwarded_from_id", "date")
-        ):
-            key = (ch_id, fwd_id)
-            forwarded_counts[key] = forwarded_counts.get(key, 0.0) + _recency_decay(date, today, recency_weights)
-
-        reference_counts: dict[tuple[int, int], float] = {}
-        if include_mentions:
-            for src_ch_id, ref_ch_id, msg_date in (
-                references_through.objects.filter(
-                    make_date_q(start_date, end_date, field="message__date"),
-                    ref_cutoff_q,
-                    message__is_lost=False,
-                    channel_id__in=channel_ids,
-                    message__channel_id__in=channel_ids,
-                )
-                .exclude(message__forwarded_from=F("channel"))
-                .values_list("message__channel_id", "channel_id", "message__date")
-            ):
-                key = (src_ch_id, ref_ch_id)
-                reference_counts[key] = reference_counts.get(key, 0.0) + _recency_decay(
-                    msg_date, today, recency_weights
-                )
-
-        referencing_counts: dict[int, float] = {}
-        if edge_weight_strategy == "PARTIAL_REFERENCES":
-            has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
-            ref_filter = (
-                Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
-                if include_mentions
-                else Q(forwarded_from_id__isnull=False)
-            )
-            for ch_id, date in (
-                Message.objects.alive()
-                .filter(date_q, cutoff_q, channel_id__in=channel_ids)
-                .filter(ref_filter)
-                .values_list("channel_id", "date")
-            ):
-                referencing_counts[ch_id] = referencing_counts.get(ch_id, 0.0) + _recency_decay(
-                    date, today, recency_weights
-                )
-
-    else:
-        messages_per_channel = {
+    referencing_counts = {}
+    if edge_weight_strategy == "PARTIAL_REFERENCES":
+        has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
+        ref_filter = (
+            Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
+            if include_mentions
+            else Q(forwarded_from_id__isnull=False)
+        )
+        referencing_counts = {
             item["channel_id"]: item["total"]
             for item in Message.objects.alive()
             .filter(date_q, cutoff_q, channel_id__in=channel_ids)
+            .filter(ref_filter)
             .values("channel_id")
             .annotate(total=Count("id"))
         }
-
-        if start_date or end_date:
-            channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
-
-        forwarded_counts = {
-            (item["channel_id"], item["forwarded_from_id"]): item["total"]
-            for item in Message.objects.alive()
-            .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
-            .values("channel_id", "forwarded_from_id")
-            .annotate(total=Count("id"))
-        }
-
-        reference_counts = (
-            {
-                (item["message__channel_id"], item["channel_id"]): item["total"]
-                for item in references_through.objects.filter(
-                    make_date_q(start_date, end_date, field="message__date"),
-                    message__is_lost=False,
-                    channel_id__in=channel_ids,
-                    message__channel_id__in=channel_ids,
-                )
-                .exclude(message__forwarded_from=F("channel"))
-                .values("message__channel_id", "channel_id")
-                .annotate(total=Count("id"))
-            }
-            if include_mentions
-            else {}
-        )
-
-        referencing_counts = {}
-        if edge_weight_strategy == "PARTIAL_REFERENCES":
-            has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
-            ref_filter = (
-                Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
-                if include_mentions
-                else Q(forwarded_from_id__isnull=False)
-            )
-            referencing_counts = {
-                item["channel_id"]: item["total"]
-                for item in Message.objects.alive()
-                .filter(date_q, cutoff_q, channel_id__in=channel_ids)
-                .filter(ref_filter)
-                .values("channel_id")
-                .annotate(total=Count("id"))
-            }
 
     pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
     edge_list = _build_edge_list(

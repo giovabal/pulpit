@@ -511,7 +511,6 @@ def write_summary_json(
         "fa2_iterations",
         "layouts_2d",
         "layouts_3d",
-        "recency_weights",
         "spreading_runs",
         "diffusion_window",
         "community_distribution_threshold",

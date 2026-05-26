@@ -191,7 +191,6 @@ class ResolvedOptions:
     channel_types: list[str]
     channel_groups: list[str]
     edge_weight_strategy: str
-    recency_weights: int | None
 
     # Communities and measures
     communities_strategy: list[str]
@@ -283,7 +282,6 @@ class ResolvedOptions:
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
-            "recency_weights": self.recency_weights,
         }
 
 
@@ -482,18 +480,6 @@ class Command(BaseCommand):
                 "NONE = all edges equal weight; TOTAL = raw count; "
                 "PARTIAL_MESSAGES = count / total messages; "
                 "PARTIAL_REFERENCES = count / forwarded-or-citing messages (default)."
-            ),
-        )
-        parser.add_argument(
-            "--recency-weights",
-            dest="recency_weights",
-            type=int,
-            default=None,
-            metavar="N",
-            help=(
-                "Apply recency decay: messages up to N days old carry full weight; "
-                "older messages decay as exp(-(age-N)/N). "
-                "Omit to weight all messages equally."
             ),
         )
         parser.add_argument(
@@ -1201,7 +1187,6 @@ class Command(BaseCommand):
                 dead_leaves_color=options.get("dead_leaves_color"),
                 start_date=start_date,
                 end_date=end_date,
-                recency_weights=options["recency_weights"],
                 channel_types=channel_types,
                 channel_groups=channel_groups or None,
                 edge_weight_strategy=edge_weight_strategy,
@@ -1529,7 +1514,6 @@ class Command(BaseCommand):
             channel_types=channel_types,
             channel_groups=channel_groups,
             edge_weight_strategy=edge_weight_strategy,
-            recency_weights=options["recency_weights"],
             communities_strategy=communities_strategy,
             strategies_lower=[s.lower() for s in communities_strategy],
             selected_measures=set(network_measures),
@@ -1602,7 +1586,6 @@ class Command(BaseCommand):
                 dead_leaves_color=opts.dead_leaves_color,
                 start_date=opts.start_date,
                 end_date=opts.end_date,
-                recency_weights=opts.recency_weights,
                 channel_types=opts.channel_types,
                 channel_groups=opts.channel_groups or None,
                 edge_weight_strategy=opts.edge_weight_strategy,
