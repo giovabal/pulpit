@@ -3509,7 +3509,15 @@ class RobustnessRunnerTests(TestCase):
     # -- reproducibility ------------------------------------------------------
 
     def test_same_seed_produces_identical_payloads(self) -> None:
+        import math
+
         from network.robustness import run_robustness
+
+        def _same(a: float, b: float) -> bool:
+            # z is legitimately NaN when the null R distribution has zero variance
+            # (z_score documents this); NaN != NaN, so equal-or-both-NaN is the
+            # reproducibility check we actually want.
+            return a == b or (math.isnan(a) and math.isnan(b))
 
         g = self._toy_graph()
         out1 = run_robustness(g, config=self._fast_cfg(n_null=2, seed=99))
@@ -3518,10 +3526,9 @@ class RobustnessRunnerTests(TestCase):
         for s in out1["strategies"]:
             for m in ("wcc", "scc", "reach"):
                 self.assertEqual(out1["strategies"][s][f"r_{m}"], out2["strategies"][s][f"r_{m}"])
-                self.assertEqual(
-                    out1["strategies"][s]["null"][f"r_{m}"]["z"],
-                    out2["strategies"][s]["null"][f"r_{m}"]["z"],
-                )
+                z1 = out1["strategies"][s]["null"][f"r_{m}"]["z"]
+                z2 = out2["strategies"][s]["null"][f"r_{m}"]["z"]
+                self.assertTrue(_same(z1, z2), f"z mismatch for {s}/{m}: {z1!r} vs {z2!r}")
 
     # -- progress callback ----------------------------------------------------
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from django.db.models import Count, Q, QuerySet
 
-from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q
+from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
 import networkx as nx
@@ -136,7 +136,9 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
                     total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
                 global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
             with _swallow_metric("algebraic_connectivity"):
-                ug_ac = graph.to_undirected()
+                # Sum reciprocal weights (W + Wᵀ) so the Fiedler value reflects full
+                # mutual-tie strength; plain to_undirected() would drop one direction.
+                ug_ac = to_undirected_sum(graph)
                 lcc_nodes = max(nx.connected_components(ug_ac), key=len)
                 lcc_ac = ug_ac.subgraph(lcc_nodes)
                 if len(lcc_ac) >= 2:

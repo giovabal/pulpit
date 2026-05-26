@@ -40,6 +40,7 @@ from network.measures import compute_betweenness
 from network.measures._base import compute_neighbour_community_entropy
 from network.measures._centrality import katz_alpha
 from network.measures._spreading import _run_sir
+from network.utils import to_undirected_sum
 
 import networkx as nx
 import numpy as np
@@ -136,7 +137,8 @@ def _closeness(g: nx.DiGraph) -> dict[Any, float]:
 def _flow_betweenness(g: nx.DiGraph) -> dict[Any, float]:
     # Random-walk (current-flow) betweenness needs a connected undirected
     # graph; we restrict to the largest WCC and assign 0 to every other node.
-    ug = g.to_undirected()
+    # Sum reciprocal weights (W + Wᵀ) so mutual ties keep their full conductance.
+    ug = to_undirected_sum(g)
     scores: dict[Any, float] = dict.fromkeys(g.nodes(), 0.0)
     if ug.number_of_nodes() < 2:
         return scores

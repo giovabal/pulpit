@@ -2,7 +2,7 @@ import logging
 from math import isnan
 
 from network.measures._base import apply_measure, compute_neighbour_community_entropy
-from network.utils import GraphData
+from network.utils import GraphData, to_undirected_sum
 
 import networkx as nx
 
@@ -12,7 +12,14 @@ logger = logging.getLogger(__name__)
 def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add PageRank score to each node."""
     key = "pagerank"
-    pagerank_values: dict[str, float] = nx.pagerank(graph)
+    try:
+        pagerank_values: dict[str, float] = nx.pagerank(graph)
+    except Exception as exc:  # noqa: BLE001
+        # PageRank rarely fails, but power iteration can diverge on adversarial /
+        # degenerate graphs; degrade gracefully rather than aborting the whole
+        # export (parity with the HITS and Katz handlers below).
+        logger.warning("PageRank could not be computed (%s); skipping score", exc)
+        return []
     for node in graph_data["nodes"]:
         if node["id"] in pagerank_values:
             node[key] = pagerank_values[node["id"]]
@@ -37,8 +44,24 @@ def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]
 
 
 def compute_betweenness(graph: nx.DiGraph) -> dict[str, float]:
-    """Compute betweenness centrality and return the raw values dict."""
-    return nx.betweenness_centrality(graph, weight="weight")
+    """Compute betweenness centrality with tie strength mapped to proximity.
+
+    NetworkX treats the ``weight`` argument as edge *distance* — shortest paths
+    *minimise* it — but our ``weight`` is tie *strength* (``build_graph`` sets it
+    to ``10 · total / normalizer / max``, so higher = stronger). Passing strength
+    straight through would make shortest paths route *around* the strongest ties,
+    inverting the measure (the lightly-trafficked node scores as the broker). We
+    therefore compute over a derived ``distance = 1 / weight`` (Brandes 2001;
+    Opsahl, Agneessens & Skvoretz 2010), so heavily-forwarded edges are *short*
+    and the nodes brokering real flow score highest. Done on a copy so the source
+    graph's ``weight`` attribute — which the null-model rewiring permutes — is
+    never touched.
+    """
+    g = graph.copy()
+    for _u, _v, data in g.edges(data=True):
+        w = data.get("weight", 1.0)
+        data["distance"] = (1.0 / w) if w > 0 else float("inf")
+    return nx.betweenness_centrality(g, weight="distance")
 
 
 def apply_betweenness_centrality(
@@ -149,7 +172,7 @@ def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) 
     the largest weakly-connected component receive 0.0; a warning is logged when this occurs.
     """
     key = "flow_betweenness"
-    ugraph = graph.to_undirected()
+    ugraph = to_undirected_sum(graph)
 
     if not nx.is_connected(ugraph):
         logger.warning(
