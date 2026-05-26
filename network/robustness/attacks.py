@@ -38,7 +38,7 @@ from typing import Any, Literal
 
 from network.measures import compute_betweenness, compute_hits
 from network.measures._base import compute_neighbour_community_participation
-from network.measures._centrality import katz_alpha
+from network.measures._centrality import katz_alpha, proximity_distances
 from network.measures._spreading import _run_sir
 from network.utils import to_undirected_sum
 
@@ -125,13 +125,16 @@ def _hits_authority(g: nx.DiGraph) -> dict[Any, float]:
 
 
 def _harmonic(g: nx.DiGraph) -> dict[Any, float]:
+    # Weighted over distance = 1/weight (Opsahl 2010), matching the harmonic measure.
     n = g.number_of_nodes()
     norm = (n - 1) if n > 1 else 1
-    return {nid: v / norm for nid, v in nx.harmonic_centrality(g).items()}
+    gd = proximity_distances(g)
+    return {nid: v / norm for nid, v in nx.harmonic_centrality(gd, distance="distance").items()}
 
 
 def _closeness(g: nx.DiGraph) -> dict[Any, float]:
-    return nx.closeness_centrality(g)
+    # Weighted over distance = 1/weight (Opsahl 2010), matching the closeness measure.
+    return nx.closeness_centrality(proximity_distances(g), distance="distance")
 
 
 def _flow_betweenness(g: nx.DiGraph) -> dict[Any, float]:

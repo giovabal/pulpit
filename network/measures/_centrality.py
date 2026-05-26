@@ -93,25 +93,34 @@ def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]
     return [("hits_hub", "HITS Hub"), ("hits_authority", "HITS Authority")]
 
 
-def compute_betweenness(graph: nx.DiGraph) -> dict[str, float]:
-    """Compute betweenness centrality with tie strength mapped to proximity.
+def proximity_distances(graph: nx.DiGraph) -> nx.DiGraph:
+    """Return a copy of *graph* with a ``distance`` edge attribute = ``1 / weight``.
 
-    NetworkX treats the ``weight`` argument as edge *distance* — shortest paths
-    *minimise* it — but our ``weight`` is tie *strength* (``build_graph`` sets it
-    to ``10 · total / normalizer / max``, so higher = stronger). Passing strength
-    straight through would make shortest paths route *around* the strongest ties,
-    inverting the measure (the lightly-trafficked node scores as the broker). We
-    therefore compute over a derived ``distance = 1 / weight`` (Brandes 2001;
-    Opsahl, Agneessens & Skvoretz 2010), so heavily-forwarded edges are *short*
-    and the nodes brokering real flow score highest. Done on a copy so the source
-    graph's ``weight`` attribute — which the null-model rewiring permutes — is
-    never touched.
+    Our ``weight`` is tie *strength* (``build_graph`` sets it to
+    ``10 · total / normalizer / max``, so higher = stronger), but every NetworkX
+    shortest-path routine *minimises* the distance attribute. Passing strength
+    straight through would route paths *around* the strongest ties, inverting any
+    distance-based measure (the lightly-trafficked node would score as the broker /
+    the closest). Inverting strength to a proximity distance ``1 / weight``
+    (Brandes 2001; Opsahl, Agneessens & Skvoretz 2010) makes heavily-forwarded
+    edges *short*, so betweenness, closeness and harmonic centrality all agree on
+    what "close" means. Done on a copy so the source graph's ``weight`` attribute —
+    which the null-model rewiring permutes — is never touched.
     """
     g = graph.copy()
     for _u, _v, data in g.edges(data=True):
         w = data.get("weight", 1.0)
         data["distance"] = (1.0 / w) if w > 0 else float("inf")
-    return nx.betweenness_centrality(g, weight="distance")
+    return g
+
+
+def compute_betweenness(graph: nx.DiGraph) -> dict[str, float]:
+    """Compute betweenness centrality with tie strength mapped to proximity.
+
+    Computed over the ``distance = 1 / weight`` projection (see
+    :func:`proximity_distances`) so the nodes brokering real flow score highest.
+    """
+    return nx.betweenness_centrality(proximity_distances(graph), weight="distance")
 
 
 def apply_betweenness_centrality(
@@ -140,10 +149,18 @@ def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> lis
 
 
 def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add normalized harmonic centrality to each node."""
+    """Add harmonic centrality to each node, weighted by tie strength.
+
+    Computed over the ``distance = 1 / weight`` projection (Opsahl, Agneessens &
+    Skvoretz 2010) for consistency with betweenness/closeness, then divided by
+    ``n − 1`` to report the mean reciprocal distance to the other nodes
+    (unreachable nodes contribute 0). Because the weighted distance can be below 1,
+    this no longer lies in ``[0, 1]`` — interpret it relatively, not as a fraction.
+    """
     n = graph.number_of_nodes()
     norm = (n - 1) if n > 1 else 1
-    values = {nid: v / norm for nid, v in nx.harmonic_centrality(graph).items()}
+    g = proximity_distances(graph)
+    values = {nid: v / norm for nid, v in nx.harmonic_centrality(g, distance="distance").items()}
     return apply_measure(graph_data, values, "harmonic_centrality", "Harmonic Centrality")
 
 
@@ -332,12 +349,18 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
 
 
 def apply_closeness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add closeness centrality to each node.
+    """Add closeness centrality to each node, weighted by tie strength.
 
     Uses the Wasserman-Faust improved formula (NetworkX default), which handles partially
     disconnected graphs correctly: nodes that cannot reach any other node receive 0.0.
+    Computed over the ``distance = 1 / weight`` projection (Opsahl, Agneessens & Skvoretz
+    2010) for consistency with betweenness/harmonic; because the weighted distance can be
+    below 1 the value may exceed 1, so interpret it relatively rather than as a fraction.
     """
-    return apply_measure(graph_data, nx.closeness_centrality(graph), "closeness_centrality", "Closeness Centrality")
+    g = proximity_distances(graph)
+    return apply_measure(
+        graph_data, nx.closeness_centrality(g, distance="distance"), "closeness_centrality", "Closeness Centrality"
+    )
 
 
 def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
