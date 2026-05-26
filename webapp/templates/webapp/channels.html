@@ -202,6 +202,43 @@
   </ul>
   {% endif %}
 
+  {% if to_inspect_list %}
+  <div class="channels-section-sep" id="to-inspect-sep">
+    <span>Excluded from analysis <span class="channels-section-sep-count" id="to-inspect-count"></span> · To inspect</span>
+  </div>
+  <ul class="channels-list list-unstyled" id="to-inspect-list">
+    {% for channel in to_inspect_list %}
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+      <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
+        <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
+        <span class="channel-row-body">
+          <span class="channel-row-title">{% if channel.title %}{{ channel.title }}{% else %}<span class="channel-row-noname"><i class="bi bi-dash-circle" aria-hidden="true"></i> No name</span>{% endif %} <span class="ch-badge ch-badge--muted ms-1"><i class="bi bi-search" aria-hidden="true"></i> To inspect</span></span>
+          {% if channel.username or channel.current_organization %}
+          <span class="channel-row-meta">
+            {% if channel.username %}<span class="channel-row-tag">@{{ channel.username }}</span>{% endif %}
+            {% if channel.username and channel.current_organization %}<span class="channel-row-meta-sep">·</span>{% endif %}
+            {% if channel.current_organization %}<span>{{ channel.current_organization }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="channel-row-meta">
+            <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ channel.messages_count }}</span>
+            {% if channel.participants_count %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
+            {% endif %}
+            {% if channel.first_message_date %}
+            <span class="channel-row-meta-sep">·</span>
+            <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+            {% endif %}
+          </span>
+        </span>
+        {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
 </div>
 
 <script>
@@ -221,6 +258,9 @@
     var privateSep = document.getElementById("private-sep");
     var privateList = document.getElementById("private-list");
     var privateRows = privateList ? Array.from(privateList.querySelectorAll(".channel-row")) : [];
+    var toInspectSep = document.getElementById("to-inspect-sep");
+    var toInspectList = document.getElementById("to-inspect-list");
+    var toInspectRows = toInspectList ? Array.from(toInspectList.querySelectorAll(".channel-row")) : [];
 
     var mainList = document.getElementById("channels-list");
     var sortField = document.getElementById("sort-field");
@@ -230,6 +270,7 @@
     var excludedCountEl = document.getElementById("excluded-count");
     var lostCountEl = document.getElementById("lost-count");
     var privateCountEl = document.getElementById("private-count");
+    var toInspectCountEl = document.getElementById("to-inspect-count");
 
     function norm(s) {
       // Strip the Combining Diacritical Marks block (U+0300..U+036F) after NFD
@@ -247,6 +288,7 @@
       if (excludedCountEl) excludedCountEl.textContent = visible(excludedRows).toLocaleString();
       if (lostCountEl) lostCountEl.textContent = visible(lostRows).toLocaleString();
       if (privateCountEl) privateCountEl.textContent = visible(privateRows).toLocaleString();
+      if (toInspectCountEl) toInspectCountEl.textContent = visible(toInspectRows).toLocaleString();
     }
 
     function matchesFilters(row) {
@@ -286,6 +328,11 @@
         row.style.display = matchesFilters(row) ? "" : "none";
       });
       if (privateSep) privateSep.style.display = visible(privateRows) ? "" : "none";
+
+      toInspectRows.forEach(function (row) {
+        row.style.display = matchesFilters(row) ? "" : "none";
+      });
+      if (toInspectSep) toInspectSep.style.display = visible(toInspectRows) ? "" : "none";
 
       updateCounts();
     }
@@ -337,6 +384,7 @@
       sortInto(excludedRows, excludedList);
       sortInto(lostRows, lostList);
       sortInto(privateRows, privateList);
+      sortInto(toInspectRows, toInspectList);
     }
 
     function toggleSortDir() {
