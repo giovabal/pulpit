@@ -134,9 +134,9 @@ A high out-degree score means a channel casts a wide net — pointing outward to
 
 ## Harmonic centrality
 
-*A high harmonic centrality score means this channel can reach the rest of the network quickly — in few hops.*
+*A high harmonic centrality score means this channel can reach the rest of the network quickly — along short, strongly-tied paths.*
 
-Harmonic centrality sums the reciprocals of shortest path lengths to every other reachable channel, then normalises by the number of other channels. Unreachable channels contribute zero, making it robust in the sparse, partially disconnected networks typical of political Telegram ecosystems. Unlike betweenness, it does not require a channel to sit on paths others use; it only asks how short those paths are from its own vantage point.
+Harmonic centrality sums the reciprocals of shortest path lengths to every other reachable channel, then normalises by the number of other channels. Path length is measured over weighted distance `1/weight` (a strong forwarding tie counts as *short*, following Opsahl, Agneessens & Skvoretz 2010), consistent with betweenness and closeness. Unreachable channels contribute zero, making it robust in the sparse, partially disconnected networks typical of political Telegram ecosystems. Unlike betweenness, it does not require a channel to sit on paths others use; it only asks how short those paths are from its own vantage point. Because a weighted distance can be below 1, the normalised score is not bounded to `[0, 1]` — read it relatively.
 
 **In practice:** harmonic centrality surfaces structurally well-positioned channels that are invisible to betweenness-based rankings — channels that are structurally close to everyone without being a bottleneck.
 
@@ -144,9 +144,9 @@ Harmonic centrality sums the reciprocals of shortest path lengths to every other
 
 ## Closeness centrality
 
-*A high closeness score means this channel is easily reached from the rest of the network — many channels can arrive at it in very few hops.*
+*A high closeness score means this channel is easily reached from the rest of the network — many channels can arrive at it along short, strongly-tied paths.*
 
-Closeness centrality (Wasserman-Faust normalised) measures how accessible a channel is as a destination. For each channel, the average incoming path length from all other reachable channels is computed, then normalised by the fraction of the network that can actually reach it. A channel with high closeness sits at the convergence of many short incoming paths: the rest of the network can find it efficiently, without traversing many intermediaries.
+Closeness centrality (Wasserman-Faust normalised) measures how accessible a channel is as a destination. For each channel, the average incoming path length from all other reachable channels is computed over weighted distance `1/weight` (strong forwarding ties count as *short*, following Opsahl, Agneessens & Skvoretz 2010), then normalised by the fraction of the network that can actually reach it. A channel with high closeness sits at the convergence of many short incoming paths: the rest of the network can find it efficiently, without traversing many intermediaries. Because a weighted distance can be below 1, the score may exceed 1 — read it relatively rather than as a fraction.
 
 The Wasserman-Faust correction handles the partial connectivity typical of Telegram networks — channels in isolated components or with no incoming paths receive 0.0 — without penalising every node for the size of unreachable components.
 

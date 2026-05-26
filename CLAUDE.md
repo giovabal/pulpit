@@ -81,8 +81,8 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `FLOWBETWEENNESS` | Random-walk (current-flow) betweenness — Newman 2005; graph symmetrised, computed on largest connected component |
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
-| `HARMONICCENTRALITY` | Harmonic centrality |
-| `CLOSENESS` | Closeness centrality (Wasserman-Faust); measures how easily the rest of the network can reach this channel |
+| `HARMONICCENTRALITY` | Harmonic centrality; weighted over `distance = 1/weight` (tie strength → proximity, Opsahl 2010); mean reciprocal distance ÷ (n−1), so not bounded to [0, 1] |
+| `CLOSENESS` | Closeness centrality (Wasserman-Faust); measures how easily the rest of the network can reach this channel; weighted over `distance = 1/weight` (Opsahl 2010), so the value can exceed 1 |
 | `KATZ` | Katz centrality |
 | `BRIDGINGCENTRALITY` | **Bridging Centrality** (Hwang et al. 2008): betweenness × bridging coefficient, where the bridging coefficient `(1/d(v)) / Σ_{i∈N(v)} (1/d(i))` uses undirected, unweighted degree; high = a low-degree node wedged between high-degree regions (a topological bridge). Purely degree-based — needs no community basis. Distinct from `BRIDGING` |
 | `BRIDGING` or `BRIDGING(STRATEGY)` | **Community Bridging** (key `community_bridging`): betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); defaults to `LEIDEN_DIRECTED` (directional brokerage); strategy must also be in `--community-strategies`. The bridging-basis dropdown in the Operations panel (Linked parameters fieldset) is shared with the community-bridging robustness attack — both use the same basis. *Not* the Bridging Centrality of Hwang et al. (2008) — see `BRIDGINGCENTRALITY` |
