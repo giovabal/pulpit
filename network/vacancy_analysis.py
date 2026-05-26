@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from django.db.models import Count, Max, Min
 
+from network.measures._spreading import sir_ever_infected
 from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
 
 import networkx as nx
@@ -37,7 +38,6 @@ MEASURE_LABELS: dict[str, str] = {
     "TEMPORAL": "Temporal Adoption",
 }
 
-_SIR_GAMMA = 0.3
 _SIR_REACH_THRESHOLD = 0.25  # fraction of runs a node must be infected to count as "reached"
 
 
@@ -64,40 +64,6 @@ def _cosine(a: set, b: set) -> float:
 
 
 # ── SIR for Cascade Overlap ───────────────────────────────────────────────────
-
-
-def _run_sir_pks(
-    adj: dict[int, list[tuple[int, float]]],
-    all_nodes: set[int],
-    seed: int,
-    rng: np.random.Generator,
-) -> set[int]:
-    """Single SIR run keyed by channel PKs. Returns the set of ever-infected nodes."""
-    susceptible = all_nodes - {seed}
-    infected = {seed}
-    ever: set[int] = {seed}
-
-    while infected:
-        infected_list = list(infected)
-        newly_recovered = {
-            n for n, r in zip(infected_list, rng.random(len(infected_list)) < _SIR_GAMMA, strict=True) if r
-        }
-        newly_infected: set[int] = set()
-        for node in infected_list:
-            neighbors = adj.get(node, [])
-            if not neighbors:
-                continue
-            succs = [s for s, _ in neighbors]
-            weights = np.array([w for _, w in neighbors])
-            hits = rng.random(len(succs)) < weights
-            for succ, hit in zip(succs, hits, strict=True):
-                if hit and succ in susceptible:
-                    newly_infected.add(succ)
-        susceptible -= newly_infected
-        infected = (infected | newly_infected) - newly_recovered
-        ever |= newly_infected
-
-    return ever
 
 
 def _build_spread_adj(
@@ -150,7 +116,7 @@ def _majority_reach(
         return frozenset()
     counts: dict[int, int] = defaultdict(int)
     for _ in range(runs):
-        for n in _run_sir_pks(adj, all_nodes, seed, rng):
+        for n in sir_ever_infected(adj, seed, rng, universe=all_nodes):
             counts[n] += 1
     min_count = max(1, int(runs * _SIR_REACH_THRESHOLD))
     return frozenset(n for n, c in counts.items() if c >= min_count and n != seed)
