@@ -1497,6 +1497,18 @@ body {
 
 .channel-row-meta-sep { opacity: .4; }
 
+.channel-row-noname {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--muted);
+}
+.channel-row-noname i { font-style: normal; opacity: .8; }
+
+.channel-row-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .channels-count {
   font-size: .8rem;
   font-weight: 400;
