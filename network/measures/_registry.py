@@ -6,6 +6,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "HITSHUB",
         "HITSAUTH",
         "BETWEENNESS",
+        "BRIDGINGCENTRALITY",
         "FLOWBETWEENNESS",
         "INDEGCENTRALITY",
         "OUTDEGCENTRALITY",
@@ -62,7 +63,8 @@ ALL_STRATEGIES: list[str] = [
 ]
 
 # Dispatch table: (settings key, progress label, apply function name)
-# HITS and BRIDGING are handled separately because they have non-standard signatures.
+# HITS, BRIDGINGCENTRALITY (Hwang, shares betweenness) and BRIDGING (community bridging,
+# needs a partition basis) are handled separately because they have non-standard signatures.
 MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("PAGERANK", "pagerank", "apply_pagerank"),
     ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),

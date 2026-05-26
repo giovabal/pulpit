@@ -199,7 +199,7 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `measures.selected` | Measures to compute. See [Network measures](network-measures.md) for the catalogue. Use `["ALL"]` to enable every measure. | `[]` |
-| `measures.bridging_basis` | Community partition driving the BRIDGING measure (entropy across neighbour communities) and the `bridging` robustness strategy. Empty → uses `LEIDEN_DIRECTED`. Must be in `communities.strategies` and cannot be `ORGANIZATION`; otherwise Save/Run is rejected with HTTP 400. | `""` |
+| `measures.bridging_basis` | Community partition driving the Community Bridging measure (`BRIDGING`; participation across neighbour communities) and the `bridging` robustness strategy. Does not affect Hwang's Bridging Centrality (`BRIDGINGCENTRALITY`), which is degree-based and partition-free. Empty → uses `LEIDEN_DIRECTED`. Must be in `communities.strategies` and cannot be `ORGANIZATION`; otherwise Save/Run is rejected with HTTP 400. | `""` |
 
 ## `[communities]`
 

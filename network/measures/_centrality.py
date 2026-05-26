@@ -181,13 +181,13 @@ def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     return apply_measure(graph_data, values, "katz_centrality", "Katz Centrality")
 
 
-def apply_bridging_centrality(
+def apply_community_bridging(
     graph_data: GraphData,
     graph: nx.DiGraph,
     strategy_key: str,
     betweenness: "dict[str, float] | None" = None,
 ) -> list[tuple[str, str]]:
-    """Add bridging centrality (betweenness × neighbour-community participation coefficient) to each node.
+    """Add community bridging (betweenness × neighbour-community participation coefficient) to each node.
 
     For each node, the participation coefficient (Guimerà & Amaral 2005) of its neighbours'
     community distribution — weighted by edge strength — measures how evenly the node's ties
@@ -195,6 +195,12 @@ def apply_bridging_centrality(
     many). Multiplying it by betweenness (Freeman 1977) surfaces nodes that are both
     structurally central and span communities. The participation coefficient is bounded in
     ``[0, 1]``, so the product stays on betweenness' scale.
+
+    This is *not* the Bridging Centrality of Hwang et al. (2008) — see
+    :func:`apply_bridging_centrality` for that. This measure asks "broker between *detected
+    communities*" (and so needs a community partition); the Hwang measure asks "bridge between
+    *high-degree regions*" (a purely degree-based, partition-free quantity). They are kept
+    separate on purpose.
 
     If ``betweenness`` is provided (pre-computed via ``compute_betweenness``), the nx call
     is skipped, allowing the caller to share one computation with ``apply_betweenness_centrality``.
@@ -207,6 +213,75 @@ def apply_bridging_centrality(
     }
     participation = compute_neighbour_community_participation(graph, community_map)
     values = {nid: betweenness.get(nid, 0.0) * participation.get(nid, 0.0) for nid in graph.nodes()}
+    return apply_measure(graph_data, values, "community_bridging", "Community Bridging")
+
+
+def compute_bridging_coefficient(graph: nx.DiGraph) -> dict[str, float]:
+    """Bridging coefficient of each node (Hwang et al. 2008).
+
+    The bridging coefficient measures how well a node sits *between* high-degree regions of
+    the graph — independent of how globally central it is:
+
+        ``Ψ(v) = (1 / d(v)) / Σ_{i ∈ N(v)} (1 / d(i))``
+
+    where ``d(v)`` is the **undirected** degree of ``v`` (the number of distinct neighbours,
+    counting a node reached by both an incoming and an outgoing edge once) and ``N(v)`` its
+    neighbour set. Direction is dropped on purpose: the coefficient is a topological-position
+    quantity, so a citation either way makes two channels neighbours, mirroring Hwang's
+    original undirected, unweighted definition. A node scores high when it has *few* links of
+    its own yet those links reach *high-degree* nodes — the small ``1/d(i)`` terms shrink the
+    denominator — i.e. it is the narrow waist between otherwise busy regions.
+
+    Isolated nodes (``d(v) = 0``) get ``0.0``: they bridge nothing. Every neighbour ``i`` of a
+    non-isolated node necessarily has ``d(i) ≥ 1``, so the denominator is always positive there.
+    """
+    neighbours: dict[str, set] = {
+        node: (set(graph.predecessors(node)) | set(graph.successors(node))) - {node} for node in graph.nodes()
+    }
+    degree: dict[str, int] = {node: len(nbrs) for node, nbrs in neighbours.items()}
+    coefficient: dict[str, float] = {}
+    for node, nbrs in neighbours.items():
+        d = degree[node]
+        if d == 0:
+            coefficient[node] = 0.0
+            continue
+        denom = sum(1.0 / degree[i] for i in nbrs if degree[i] > 0)
+        coefficient[node] = (1.0 / d) / denom if denom > 0 else 0.0
+    return coefficient
+
+
+def apply_bridging_centrality(
+    graph_data: GraphData,
+    graph: nx.DiGraph,
+    betweenness: "dict[str, float] | None" = None,
+) -> list[tuple[str, str]]:
+    """Add Bridging Centrality (Hwang et al. 2008) to each node.
+
+    Bridging centrality is the product of betweenness centrality and the *bridging coefficient*
+    (:func:`compute_bridging_coefficient`):
+
+        ``C_bridge(v) = betweenness(v) × Ψ(v)``
+
+    Betweenness alone surfaces nodes on many shortest paths; the bridging coefficient
+    up-weights those whose links sit *between* high-degree regions rather than inside one
+    dense cluster. Their product (Hwang, Kim, Ramanathan & Zhang, *Bridging Centrality: Graph
+    Mining from Element Level to Group Level*, KDD 2008) isolates the true topological
+    bridges — nodes whose removal most fragments global connectivity.
+
+    Unlike :func:`apply_community_bridging` (betweenness × neighbour-community participation),
+    this needs no community partition: the bridging coefficient is purely degree-based, so the
+    two measures answer different questions — "bridge between dense regions" (here) vs. "broker
+    between detected communities" (there).
+
+    Betweenness uses the project's weighted, directed convention (:func:`compute_betweenness`,
+    tie strength mapped to proximity) for parity with the standalone betweenness measure; the
+    bridging coefficient follows Hwang's original undirected, unweighted degree. If
+    ``betweenness`` is supplied, the nx computation is skipped so the caller can share one
+    betweenness across measures.
+    """
+    betweenness = betweenness if betweenness is not None else compute_betweenness(graph)
+    coefficient = compute_bridging_coefficient(graph)
+    values = {nid: betweenness.get(nid, 0.0) * coefficient.get(nid, 0.0) for nid in graph.nodes()}
     return apply_measure(graph_data, values, "bridging_centrality", "Bridging Centrality")
 
 

@@ -33,7 +33,8 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
 | Spreading efficiency | `SPREADING` | If this channel starts spreading a message, what fraction of the network eventually receives it? |
-| Bridging centrality | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
+| Bridging centrality | `BRIDGINGCENTRALITY` | Which channels are topological bridges wedged between high-degree regions (Hwang et al. 2008)? |
+| Community bridging | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
 
 <figure>
 <img src="../webapp_engine/static/screenshot_05.jpg" alt="Measure comparison scatter plot">
@@ -259,19 +260,33 @@ The SIR model is the standard epidemiological model for rumour propagation and m
 
 ---
 
-## Bridging centrality
+## Bridging centrality (Hwang et al. 2008)
 
-*A high bridging centrality score means this channel is both structurally central AND bridges genuinely distinct communities.*
+*A high bridging centrality score means this channel is a topological bridge — a low-degree node wedged between high-degree regions, whose removal would most fragment the network.*
 
-Bridging centrality is a composite measure combining betweenness centrality (how often a channel sits on the shortest paths between others) and the **participation coefficient** of its immediate neighbours' community memberships (Guimerà & Amaral, *Nature* 2005) — `P = 1 − Σ_c (w_c / W)²`, which is 0 when every neighbour belongs to one community and approaches 1 as the channel's ties spread evenly across many. The final score is the product of the two. A channel scores high only if it is simultaneously on important paths *and* those paths cross ideological or topical boundaries. (The participation coefficient replaced an earlier unbounded Shannon-entropy factor; being bounded in `[0, 1]` it keeps the product on betweenness' own scale.)
+This is the **Bridging Centrality** of Hwang, Kim, Ramanathan & Zhang (*Bridging Centrality: Graph Mining from Element Level to Group Level*, KDD 2008): the product of betweenness centrality and a **bridging coefficient** `Ψ(v) = (1 / d(v)) / Σ_{i ∈ N(v)} (1 / d(i))`, where `d(v)` is the (undirected, unweighted) degree of channel `v` and `N(v)` its neighbours. The bridging coefficient is large when a channel has *few* links of its own yet those links reach *high-degree* nodes — i.e. it is the narrow waist between otherwise busy regions. Multiplying by betweenness keeps only those waists that actually carry shortest-path traffic.
 
-> **Naming note.** This is a *community-bridging* composite (betweenness × community participation coefficient). It is **not** the "Bridging Centrality" of Hwang et al. (2008), which multiplies betweenness by a degree-based *bridging coefficient* and ignores community structure. We keep the familiar name but the construction — and the question it answers ("does this broker span *distinct communities*?") — is the Guimerà–Amaral one.
+Crucially this is **purely topological** — it uses no community partition, so it needs no `--community-strategies` basis. It answers a different question from [community bridging](#community-bridging): "is this a bridge between *dense regions of the graph*?" rather than "is this a broker between *detected communities*?".
 
-The community basis for the participation coefficient is set by the strategy name in parentheses — for example, `BRIDGING(LOUVAIN)` uses the Louvain partition. Without a strategy name, `LEIDEN_DIRECTED` is used (the directed null model respects citation direction, which matches the brokerage question). The chosen strategy must also appear in `--community-strategies`. In the Operations panel the basis is picked from the **Bridging basis** dropdown in the *Linked parameters* fieldset; the same dropdown also drives the bridging robustness attack strategy, so both pick up the same partition.
+**In practice:** bridging centrality separates true bottlenecks from mere hubs. A hub with many neighbours can have very high betweenness yet a low bridging coefficient (its neighbours are mostly low-degree leaves), so it scores *lower* than a modest channel that quietly connects two large clusters — the one whose disappearance fractures the network.
 
-**In practice:** bridging centrality fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a densely connected region of the network, even if all its neighbours belong to the same ideological cluster. Bridging centrality penalises that: the participation-coefficient factor discounts intra-community connectors and elevates genuine cross-community bridges.
+**Example.** A channel with only two ties — one into a 200-channel nationalist cluster, one into a 200-channel religious cluster — has low degree but an enormous bridging coefficient. A central aggregator *inside* the nationalist cluster has higher betweenness but a low bridging coefficient. Plain betweenness ranks the aggregator first; bridging centrality ranks the two-tie bridge first, correctly flagging it as the single point of failure between the two clusters.
 
-**Example.** Two channels have identical betweenness scores. The first connects channels that all belong to the same nationalist bloc; the second connects channels from four distinct communities — nationalist, religious conservative, mainstream right, and state media. Standard betweenness ranks them equal. Bridging centrality gives the second channel a substantially higher score, identifying it as the more strategically significant node for understanding how narratives migrate across the broader information ecosystem.
+---
+
+## Community bridging
+
+*A high community bridging score means this channel is both structurally central AND bridges genuinely distinct communities.*
+
+Community bridging is a composite measure combining betweenness centrality (how often a channel sits on the shortest paths between others) and the **participation coefficient** of its immediate neighbours' community memberships (Guimerà & Amaral, *Nature* 2005) — `P = 1 − Σ_c (w_c / W)²`, which is 0 when every neighbour belongs to one community and approaches 1 as the channel's ties spread evenly across many. The final score is the product of the two. A channel scores high only if it is simultaneously on important paths *and* those paths cross ideological or topical boundaries. (The participation coefficient replaced an earlier unbounded Shannon-entropy factor; being bounded in `[0, 1]` it keeps the product on betweenness' own scale.)
+
+> **Naming note.** This composite (betweenness × community participation coefficient) was previously labelled "Bridging centrality", but that name properly belongs to the degree-based measure of Hwang et al. (2008) described above — now exposed separately as `BRIDGINGCENTRALITY`. This measure was therefore renamed **Community bridging** (node key `community_bridging`); the question it answers ("does this broker span *distinct communities*?") is the Guimerà–Amaral one.
+
+The community basis for the participation coefficient is set by the strategy name in parentheses — for example, `BRIDGING(LOUVAIN)` uses the Louvain partition. Without a strategy name, `LEIDEN_DIRECTED` is used (the directed null model respects citation direction, which matches the brokerage question). The chosen strategy must also appear in `--community-strategies`. In the Operations panel the basis is picked from the **Bridging basis** dropdown in the *Linked parameters* fieldset; the same dropdown also drives the community-bridging robustness attack strategy, so both pick up the same partition.
+
+**In practice:** community bridging fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a densely connected region of the network, even if all its neighbours belong to the same ideological cluster. Community bridging penalises that: the participation-coefficient factor discounts intra-community connectors and elevates genuine cross-community bridges.
+
+**Example.** Two channels have identical betweenness scores. The first connects channels that all belong to the same nationalist bloc; the second connects channels from four distinct communities — nationalist, religious conservative, mainstream right, and state media. Standard betweenness ranks them equal. Community bridging gives the second channel a substantially higher score, identifying it as the more strategically significant node for understanding how narratives migrate across the broader information ecosystem.
 
 ---
 
