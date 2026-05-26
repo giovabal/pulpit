@@ -58,7 +58,14 @@ function _render(d) {
         container.appendChild(pEl);
     }
 
-    var nonOrgKeys = strategies.filter(function(s) { return s !== "ORGANIZATION"; });
+    // Exclude ORGANIZATION (manual labels) plus the structural decompositions
+    // WEAKCC / STRONGCC / KCORE — these are component/shell partitions, not
+    // community detection, and bias the co-association count (e.g. WEAKCC's
+    // giant component co-assigns almost every pair). Keys in communities.json are
+    // lowercase, so the previous `s !== "ORGANIZATION"` test never matched and
+    // silently kept ORGANIZATION in the consensus; compare case-insensitively.
+    var _CONSENSUS_EXCLUDE = { organization: 1, weakcc: 1, strongcc: 1, kcore: 1 };
+    var nonOrgKeys = strategies.filter(function(s) { return !_CONSENSUS_EXCLUDE[String(s).toLowerCase()]; });
     if (nonOrgKeys.length < 2) {
         var msg = document.createElement("p"); msg.className = "text-muted";
         msg.textContent = "At least two non-ORGANIZATION community detection strategies are required to build a consensus matrix.";
@@ -110,7 +117,7 @@ function _render(d) {
     var noteEl = document.createElement("p");
     noteEl.className = "text-muted small mb-2";
     noteEl.textContent = n + " × " + n + " channels — " + maxCount + " partition" + (maxCount !== 1 ? "s" : "") +
-        " compared (ORGANIZATION excluded). Balloon area ∝ agreement count; colour shifts blue→red with increasing agreement. Lower triangle; diagonal omitted.";
+        " compared (ORGANIZATION and component/shell partitions excluded). Balloon area ∝ agreement count; colour shifts blue→red with increasing agreement. Lower triangle; diagonal omitted.";
     container.appendChild(noteEl);
 
     var legendDiv = document.createElement("div");
