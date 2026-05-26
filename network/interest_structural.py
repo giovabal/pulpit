@@ -1,11 +1,13 @@
 """Structural interest scoring for messages.
 
-Computes per-message **cross-community reach** *C* (Goel, Anderson, Hofman &
-Watts, *The structural virality of online diffusion*, Management Science 2016,
-adapted to Telegram's depth-1 forwarding topology) and **authority-weighted
-reach** *D* (Cha, Haddadi, Benevenuto & Gummadi, *Measuring user influence in
-Twitter*, ICWSM 2010, "weighted indegree" analogue) by walking the
-``(forwarded_from, fwd_from_channel_post)`` join.
+Computes per-message **cross-community reach** *C* — the number of distinct
+communities among a post's forwarders. Telegram exposes only depth-1 forwarding,
+so the true structural-virality (Wiener-index) metric of Goel, Anderson, Hofman &
+Watts (*The structural virality of online diffusion*, Management Science 2016)
+cannot be reconstructed; *C* is a breadth-based proxy in that spirit, **not** that
+metric. Also computes **authority-weighted reach** *D* (Cha, Haddadi, Benevenuto &
+Gummadi, *Measuring user influence in Twitter*, ICWSM 2010, "weighted indegree"
+analogue) by walking the ``(forwarded_from, fwd_from_channel_post)`` join.
 
 Output is a JSON-serialisable dict written to
 ``exports/<name>/data/interest_structural.json`` by

@@ -354,6 +354,9 @@ def build_graph(
             edge[0],
             edge[1],
             weight=10 * edge[2] / max_weight if max_weight else 0.0,
+            # Un-rescaled tie weight (before the ×10/max normalisation): portable across
+            # exports and used for the displayed In-/Out-strength node measures.
+            weight_raw=float(edge[2]),
             weight_forwards=edge[3],
             weight_mentions=edge[4],
         )

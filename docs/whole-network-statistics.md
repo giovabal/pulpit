@@ -260,6 +260,8 @@ Generated with `--structural-similarity`. Available as a standalone page `struct
 
 Each cell (i, j) shows the cosine similarity between channel i's feature vector and channel j's feature vector, where the feature vector is built from all computed network measures (PageRank, betweenness, in-degree, out-degree, Burt's constraint, spreading efficiency, content originality, etc.).
 
+> **What this is (and isn't).** This compares channels by their **measure profile** — their *centrality fingerprint*. It is **not** structural equivalence in the Lorrain & White (1971) sense (equivalence of who-they-connect-to): two channels with no shared neighbours can still score 1.0 here if their centrality scores happen to match. Use it to find channels that play a *similar role* by the numbers, not channels embedded in the same local structure.
+
 **Preprocessing:**
 1. A raw n × m matrix is built (n channels, m measures). Missing values — `None` for measures such as `burt_constraint` on isolated nodes — are replaced with 0.
 2. Each column (measure) is min-max normalised to [0, 1] so that all measures contribute equally regardless of their natural scale.

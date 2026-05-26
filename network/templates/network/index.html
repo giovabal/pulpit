@@ -143,7 +143,7 @@
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural similarity</h5>
-        <p class="card-text text-muted small">Channel × channel cosine similarity matrix built from all computed network measures (min-max normalised). Channels with similar structural profiles appear darker.</p>
+        <p class="card-text text-muted small">Channel × channel cosine similarity matrix built from all computed network measures (min-max normalised). Channels with similar <em>measure profiles</em> appear darker — a similarity of centrality fingerprints, not structural equivalence (shared neighbours).</p>
         <a href="structural_similarity.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
       </div>
     </div>
@@ -175,7 +175,7 @@
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title"><i class="bi bi-arrow-repeat text-secondary me-2" aria-hidden="true"></i>Vacancy succession</h5>
-        <p class="card-text text-muted small">Replacement candidates scored per closed channel using structural, diffusion and temporal algorithms: Amplifier Coverage, Structural Equivalence, Brokerage, Cascade Overlap (SIR), Personalized PageRank, and Temporal Adoption.</p>
+        <p class="card-text text-muted small">Replacement candidates scored per closed channel using structural, diffusion and temporal algorithms: Amplifier Coverage, Structural Equivalence, Brokerage overlap, Cascade Overlap (SIR), Personalized PageRank, and Temporal Adoption.</p>
         <a href="vacancy_analysis.html" class="btn btn-outline-primary btn-sm">Open analysis</a>
       </div>
     </div>
@@ -190,7 +190,7 @@
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title"><i class="bi bi-stars text-secondary me-2" aria-hidden="true"></i>Interesting messages</h5>
-        <p class="card-text text-muted small">Per-message structural reach: cross-community reach C (Goel et al. 2016) and authority-weighted reach D (Cha et al. 2010), alongside the per-channel z-scored engagement composite (Suh 2010 / Salganik 2006).</p>
+        <p class="card-text text-muted small">Per-message structural reach: cross-community reach C (a depth-1 breadth proxy in the spirit of Goel et al. 2016, not their Wiener-index virality) and authority-weighted reach D (Cha et al. 2010), alongside the per-channel z-scored engagement composite (Suh 2010 / Salganik 2006).</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="interest_structural.html" class="btn btn-outline-primary btn-sm">Open table</a>
           <a href="{{ repository_url }}/blob/main/docs/interesting-messages.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>

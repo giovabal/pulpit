@@ -9,6 +9,12 @@
     <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
   </div>
 </div>
+<p class="text-muted small mb-3">
+  Similarity of channels' <strong>measure profiles</strong> — the cosine between their vectors of computed
+  network measures (min-max normalised per measure). This is a similarity of <em>centrality fingerprints</em>,
+  not structural equivalence in the Lorrain &amp; White sense: two channels can score 1.0 here while sharing
+  no neighbours, as long as their centrality profiles match.
+</p>
 <div id="structural-similarity-container" class="export-wide"></div>
 <script type="module" src="js/structural_similarity.js"></script>
 {% endblock %}
