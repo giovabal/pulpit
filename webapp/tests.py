@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from network.graph_builder import channel_network_data
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, ChannelAttribution, Message, Organization
+from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message, Organization
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.test_helpers import attribute, make_channel
 from webapp.utils.colors import (
@@ -790,6 +790,38 @@ class ChannelDetailViewTests(TestCase):
         response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}) + "?lost=include")
         tids = {m.telegram_id for m in response.context["object_list"]}
         self.assertEqual(tids, {0, 1, 2, 42})
+
+
+# ─── VacanciesView ─────────────────────────────────────────────────────────────
+
+
+class VacanciesViewTests(TestCase):
+    """The vacancies list reports the number of DISTINCT in-target channels that
+    forwarded from the vacancy channel — regression for the subquery that used to
+    return one arbitrary amplifier's message count (GROUP BY pk + LIMIT 1)."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.vacancy_ch = make_channel(telegram_id=1, organization=self.org, title="Vacancy")
+        self.amp1 = make_channel(telegram_id=2, organization=self.org, title="Amp1")
+        self.amp2 = make_channel(telegram_id=3, organization=self.org, title="Amp2")
+        self.outsider = make_channel(telegram_id=4, title="Outsider")  # not in-target
+        # amp1 forwards from the vacancy 3 times, amp2 once → 2 distinct amplifiers.
+        for tid in (1, 2, 3):
+            Message.objects.create(telegram_id=tid, channel=self.amp1, forwarded_from=self.vacancy_ch)
+        Message.objects.create(telegram_id=1, channel=self.amp2, forwarded_from=self.vacancy_ch)
+        # A non-in-target forwarder must not be counted.
+        Message.objects.create(telegram_id=1, channel=self.outsider, forwarded_from=self.vacancy_ch)
+        ChannelVacancy.objects.create(channel=self.vacancy_ch, closure_date=datetime.date(2024, 1, 1))
+
+    def test_orphaned_amplifier_count_is_distinct_in_target_channels(self) -> None:
+        response = self.client.get(reverse("channel-vacancies"))
+        self.assertEqual(response.status_code, 200)
+        rows = response.context["vacancies"]
+        self.assertEqual(len(rows), 1)
+        # 2 distinct amplifiers (amp1, amp2): not amp1's 3 messages, not amp2's 1,
+        # not the 4 total forwards, and the non-in-target outsider is excluded.
+        self.assertEqual(rows[0]["orphaned_amplifier_count"], 2)
 
 
 # ─── SoftPaginator ─────────────────────────────────────────────────────────────
