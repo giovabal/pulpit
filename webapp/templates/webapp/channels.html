@@ -33,6 +33,19 @@
           <i class="bi bi-search channel-filter-icon" aria-hidden="true"></i>
           <input type="search" id="channel-filter" placeholder="Filter channels…" class="channel-filter-input" aria-label="Filter channels">
         </div>
+        <div class="channel-sort">
+          <select id="sort-field" class="channel-org-select" aria-label="Sort channels by">
+            <option value="name">Name</option>
+            <option value="first">First activity</option>
+            <option value="last">Last activity</option>
+            <option value="followers">Followers</option>
+            <option value="messages">Messages</option>
+            <option value="org">Organization</option>
+          </select>
+          <button type="button" id="sort-dir" class="channel-sort-dir" data-dir="asc" aria-label="Sort ascending" title="Ascending">
+            <i class="bi bi-arrow-up" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <div class="channel-date-range">
         <label for="date-from" class="channel-date-label">From</label>
@@ -46,7 +59,7 @@
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -80,7 +93,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="lost-list">
     {% for channel in lost_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -113,7 +126,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="private-list">
     {% for channel in private_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -146,7 +159,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-org="{{ channel.current_organization.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_organization|default:''|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_organization.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -191,6 +204,10 @@
     var privateSep = document.getElementById("private-sep");
     var privateList = document.getElementById("private-list");
     var privateRows = privateList ? Array.from(privateList.querySelectorAll(".channel-row")) : [];
+
+    var mainList = document.getElementById("channels-list");
+    var sortField = document.getElementById("sort-field");
+    var sortDirBtn = document.getElementById("sort-dir");
 
     var countEl = document.getElementById("channels-count");
     var excludedCountEl = document.getElementById("excluded-count");
@@ -256,13 +273,74 @@
       updateCounts();
     }
 
+    // --- Sorting ---------------------------------------------------------
+    var NUMERIC = { followers: true, messages: true };
+
+    function tieBreak(a, b) {
+      return (a.dataset.title || "").localeCompare(b.dataset.title || "");
+    }
+
+    function sortKey(row, field) {
+      switch (field) {
+        case "org": return row.dataset.orgName || "";
+        case "first": return row.dataset.dateMin || "";
+        case "last": return row.dataset.dateMax || "";
+        case "followers": return row.dataset.followers === "" ? null : Number(row.dataset.followers);
+        case "messages": return Number(row.dataset.messages || 0);
+        default: return row.dataset.title || "";  // "name"
+      }
+    }
+
+    function compareRows(a, b, field, dir) {
+      var ka = sortKey(a, field), kb = sortKey(b, field);
+      var aMissing = ka === "" || ka === null;
+      var bMissing = kb === "" || kb === null;
+      if (aMissing || bMissing) {
+        // Channels with no value (no followers / no activity) always sort
+        // last, regardless of direction.
+        if (aMissing && bMissing) return tieBreak(a, b);
+        return aMissing ? 1 : -1;
+      }
+      var r = NUMERIC[field] ? (ka - kb) : String(ka).localeCompare(String(kb));
+      return (r * dir) || tieBreak(a, b);
+    }
+
+    function sortInto(rows, container) {
+      if (!container) return;
+      var field = sortField.value;
+      var dir = sortDirBtn.dataset.dir === "desc" ? -1 : 1;
+      rows.slice()
+        .sort(function (a, b) { return compareRows(a, b, field, dir); })
+        .forEach(function (r) { container.appendChild(r); });
+    }
+
+    function applySort() {
+      sortInto(mainRows, mainList);
+      sortInto(excludedRows, excludedList);
+      sortInto(lostRows, lostList);
+      sortInto(privateRows, privateList);
+    }
+
+    function toggleSortDir() {
+      var next = sortDirBtn.dataset.dir === "desc" ? "asc" : "desc";
+      sortDirBtn.dataset.dir = next;
+      var icon = sortDirBtn.querySelector("i");
+      if (icon) icon.className = next === "desc" ? "bi bi-arrow-down" : "bi bi-arrow-up";
+      sortDirBtn.setAttribute("aria-label", next === "desc" ? "Sort descending" : "Sort ascending");
+      sortDirBtn.title = next === "desc" ? "Descending" : "Ascending";
+      applySort();
+    }
+
     updateCounts();
+    applySort();
 
     input.addEventListener("input", applyFilters);
     if (orgSelect) orgSelect.addEventListener("change", applyFilters);
     if (groupSelect) groupSelect.addEventListener("change", applyFilters);
     dateFrom.addEventListener("change", applyFilters);
     dateTo.addEventListener("change", applyFilters);
+    if (sortField) sortField.addEventListener("change", applySort);
+    if (sortDirBtn) sortDirBtn.addEventListener("click", toggleSortDir);
     input.focus();
   })();
 </script>

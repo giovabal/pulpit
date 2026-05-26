@@ -1305,6 +1305,7 @@ body {
 .channel-filters-top {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: .5rem;
 }
 
@@ -1392,6 +1393,39 @@ body {
 }
 
 .channel-org-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+}
+
+.channel-sort {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.channel-sort-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .1s, border-color .1s, color .1s;
+}
+
+.channel-sort-dir:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.channel-sort-dir:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(67,56,202,.15);
