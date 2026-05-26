@@ -722,15 +722,15 @@ class BuildGraphDataTests(TestCase):
         self.graph, self.channel_dict, self.positions = _make_graph_with_positions()
 
     def test_nodes_list_length_matches_graph(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         self.assertEqual(len(graph_data["nodes"]), 2)
 
     def test_edges_list_length_matches_graph(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         self.assertEqual(len(graph_data["edges"]), 1)
 
     def test_node_has_all_required_keys(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         required = {
             "id",
             "x",
@@ -754,13 +754,13 @@ class BuildGraphDataTests(TestCase):
             self.assertFalse(missing, f"Node is missing keys: {missing}")
 
     def test_edge_has_all_required_keys(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         edge = graph_data["edges"][0]
         for key in ("source", "target", "weight", "color", "id"):
             self.assertIn(key, edge)
 
     def test_node_positions_are_applied(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         node_map = {n["id"]: n for n in graph_data["nodes"]}
         self.assertAlmostEqual(node_map["1"]["x"], 1.0)
         self.assertAlmostEqual(node_map["1"]["y"], 2.0)
@@ -768,7 +768,7 @@ class BuildGraphDataTests(TestCase):
         self.assertAlmostEqual(node_map["2"]["y"], 4.0)
 
     def test_edge_ids_are_sequential(self) -> None:
-        graph_data = build_graph_data(self.graph, self.channel_dict, self.positions)
+        graph_data = build_graph_data(self.graph, self.positions)
         edge_ids = [e["id"] for e in graph_data["edges"]]
         self.assertEqual(edge_ids, list(range(len(edge_ids))))
 

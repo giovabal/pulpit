@@ -1,5 +1,4 @@
 import datetime
-import logging
 import statistics
 from typing import Any
 
@@ -14,8 +13,6 @@ from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
 import networkx as nx
-
-logger = logging.getLogger(__name__)
 
 
 def apply_amplification_factor(

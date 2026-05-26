@@ -56,17 +56,6 @@ def _write_page(
 _BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
 
-def _heatmap_bg(val: float | int | None, col_min: float, col_max: float) -> str:
-    """Subtle blue heatmap cell background: white (min) → #dceaf9 (max)."""
-    if val is None or col_min >= col_max:
-        return ""
-    ratio = (val - col_min) / (col_max - col_min)
-    r = round(255 - ratio * 35)
-    g = round(255 - ratio * 21)
-    b = round(255 - ratio * 6)
-    return f"background-color:rgb({r},{g},{b})"
-
-
 def write_table_html(
     graph_data: GraphData,
     output_filename: str,

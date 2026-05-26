@@ -213,7 +213,11 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
 def detect_kcore(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    coreness = nx.core_number(graph.to_undirected())
+    # nx.core_number rejects graphs with self-loops, which are present whenever
+    # --self-references is enabled; strip them from the undirected view first.
+    undirected = graph.to_undirected()
+    undirected.remove_edges_from(nx.selfloop_edges(undirected))
+    coreness = nx.core_number(undirected)
     # Nodes with coreness 0 (isolated) are grouped together at shell 1
     raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
     # Assign community IDs ordered from most internal (highest k-shell) to outermost.

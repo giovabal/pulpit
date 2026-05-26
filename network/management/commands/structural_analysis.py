@@ -1173,10 +1173,18 @@ class Command(BaseCommand):
         do_interest_structural: bool = False,
         interest_window_days: int = 30,
         interest_include_mentions: bool = False,
+        window_start: datetime.date | None = None,
+        window_end: datetime.date | None = None,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         start_date = datetime.date(year, 1, 1)
         end_date = datetime.date(year, 12, 31)
+        # Clamp the calendar year to the user's --startdate/--enddate window so a
+        # windowed run does not emit graphs for the out-of-window part of a year.
+        if window_start and window_start > start_date:
+            start_date = window_start
+        if window_end and window_end < end_date:
+            end_date = window_end
 
         self.stdout.write(f"\n  {year} … ", ending="")
         self.stdout.flush()
@@ -1247,7 +1255,7 @@ class Command(BaseCommand):
 
         self.stdout.write("\nBuild graph data … ", ending="")
         self.stdout.flush()
-        graph_data = exporter.build_graph_data(graph, channel_dict, positions)
+        graph_data = exporter.build_graph_data(graph, positions)
         self.stdout.write("done")
         measures_labels = self._compute_measures(
             graph,
@@ -1264,7 +1272,6 @@ class Command(BaseCommand):
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
-        need_metrics = True
         community_table_data = None
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1291,21 +1298,20 @@ class Command(BaseCommand):
                 community_distribution_threshold=options["community_distribution_threshold"],
                 has_consensus_matrix=False,
             )
-            if need_metrics:
-                community_table_data = community_stats.compute_community_metrics(
-                    graph_data,
-                    communities_data,
-                    graph,
-                    strategies,
-                    measures_labels=measures_labels,
-                    status_callback=None,
-                    channel_qs=channel_qs,
-                    start_date=start_date,
-                    end_date=end_date,
-                    selected_network_groups=selected_network_groups,
-                )
-                tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
-                tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
+            community_table_data = community_stats.compute_community_metrics(
+                graph_data,
+                communities_data,
+                graph,
+                strategies,
+                measures_labels=measures_labels,
+                status_callback=None,
+                channel_qs=channel_qs,
+                start_date=start_date,
+                end_date=end_date,
+                selected_network_groups=selected_network_groups,
+            )
+            tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
+            tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
 
             rob_payload: dict | None = None
             if do_robustness:
@@ -1631,7 +1637,7 @@ class Command(BaseCommand):
 
         self.stdout.write("\nBuild graph data … ", ending="")
         self.stdout.flush()
-        graph_data = exporter.build_graph_data(graph, channel_dict, positions)
+        graph_data = exporter.build_graph_data(graph, positions)
         self.stdout.write("done")
         measures_labels = self._compute_measures(
             graph,
@@ -1936,8 +1942,10 @@ class Command(BaseCommand):
             if min_date is None:
                 self.stdout.write(self.style.WARNING("\nTimeline: no messages found, skipping."))
             else:
-                self.stdout.write(f"\nTimeline export ({min_date.year}–{max_date.year})")
-                for yr in range(min_date.year, max_date.year + 1):
+                first_year = max(min_date.year, opts.start_date.year) if opts.start_date else min_date.year
+                last_year = min(max_date.year, opts.end_date.year) if opts.end_date else max_date.year
+                self.stdout.write(f"\nTimeline export ({first_year}–{last_year})")
+                for yr in range(first_year, last_year + 1):
                     entry = self._run_year_export(
                         yr,
                         root_target,
@@ -1971,6 +1979,8 @@ class Command(BaseCommand):
                         do_interest_structural=opts.do_interest_structural,
                         interest_window_days=opts.interest_window_days,
                         interest_include_mentions=opts.interest_include_mentions,
+                        window_start=opts.start_date,
+                        window_end=opts.end_date,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)

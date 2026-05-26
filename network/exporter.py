@@ -25,7 +25,6 @@ _ISOLATED_GRID_DIVISIONS: int = 200
 
 def build_graph_data(
     graph: nx.DiGraph,
-    channel_dict: dict[str, Any],
     positions: dict[str, tuple[float, float]],
 ) -> GraphData:
     """Serialize graph nodes and edges into the output dict."""

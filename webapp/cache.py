@@ -71,7 +71,9 @@ def compute_home_summary() -> list[list[dict]]:
         videos=Count("id", filter=Q(media_type="video")),
         audio=Count("id", filter=Q(media_type="audio")),
         stickers=Count("id", filter=Q(media_type="sticker")),
-        other=Count("id", filter=~Q(media_type__in=["", *media_known_types])),
+        # "none"/"" are confirmed-no-media / text sentinels — exclude them so this
+        # matches the list view's _CONTENT_TYPE_Q["other"] (which classes them as text).
+        other=Count("id", filter=~Q(media_type__in=["", "none", *media_known_types])),
     )
     total_messages = msg_agg["total"] or 0
     total_views = msg_agg["views"] or 0
