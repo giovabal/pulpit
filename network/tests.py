@@ -3018,7 +3018,7 @@ class RemovalOrderTests(TestCase):
         self.assertEqual(removal_order(g, "BETWEENNESS"), removal_order(g, "betweenness"))
 
 
-class RewireWeightsTests(TestCase):
+class RewireStrengthPreservingTests(TestCase):
     def _gnp(self, n: int = 30, p: float = 0.15, seed: int = 42) -> nx.DiGraph:
         g = nx.gnp_random_graph(n, p, seed=seed, directed=True)
         rng = np.random.default_rng(seed)
@@ -3026,77 +3026,74 @@ class RewireWeightsTests(TestCase):
             g.edges[u, v]["weight"] = float(rng.uniform(0.5, 5.0))
         return g
 
-    def test_topology_preserved(self) -> None:
-        from network.robustness import rewire_weights
+    def test_degree_sequence_preserved_exactly(self) -> None:
+        from network.robustness import rewire_strength_preserving
 
         g = self._gnp()
-        h = rewire_weights(g, rng=np.random.default_rng(0))
+        h = rewire_strength_preserving(g, rng=np.random.default_rng(0))
         self.assertEqual(set(g.nodes()), set(h.nodes()))
-        self.assertEqual(set(g.edges()), set(h.edges()))
+        self.assertEqual(dict(g.in_degree()), dict(h.in_degree()))
+        self.assertEqual(dict(g.out_degree()), dict(h.out_degree()))
+
+    def test_strength_sequence_preserved(self) -> None:
+        # IPF restores each node's in/out strength onto the observed values.
+        from network.robustness import rewire_strength_preserving
+
+        g = self._gnp()
+        h = rewire_strength_preserving(g, rng=np.random.default_rng(0))
+        for n, s in dict(g.out_degree(weight="weight")).items():
+            self.assertAlmostEqual(s, h.out_degree(n, weight="weight"), places=4)
+        for n, s in dict(g.in_degree(weight="weight")).items():
+            self.assertAlmostEqual(s, h.in_degree(n, weight="weight"), places=4)
 
     def test_total_weight_preserved(self) -> None:
-        from network.robustness import rewire_weights
+        from network.robustness import rewire_strength_preserving
 
         g = self._gnp()
         before = sum(d["weight"] for _, _, d in g.edges(data=True))
-        h = rewire_weights(g, rng=np.random.default_rng(0))
+        h = rewire_strength_preserving(g, rng=np.random.default_rng(0))
         after = sum(d["weight"] for _, _, d in h.edges(data=True))
-        self.assertAlmostEqual(before, after, places=10)
+        self.assertAlmostEqual(before, after, places=4)
 
-    def test_weight_multiset_preserved(self) -> None:
-        from network.robustness import rewire_weights
-
-        g = self._gnp()
-        before = sorted(d["weight"] for _, _, d in g.edges(data=True))
-        h = rewire_weights(g, rng=np.random.default_rng(0))
-        after = sorted(d["weight"] for _, _, d in h.edges(data=True))
-        for a, b in zip(before, after, strict=True):
-            self.assertAlmostEqual(a, b, places=10)
-
-    def test_default_n_swaps_actually_moves_weights(self) -> None:
-        # With 10|E| attempts the probability of an identity permutation is ≈ 0.
-        from network.robustness import rewire_weights
+    def test_topology_is_randomised(self) -> None:
+        # Same edge count, but the wiring changes (that is the point of the null).
+        from network.robustness import rewire_strength_preserving
 
         g = self._gnp()
-        h = rewire_weights(g, rng=np.random.default_rng(0))
-        moved = sum(g.edges[e]["weight"] != h.edges[e]["weight"] for e in g.edges())
-        self.assertGreater(moved, g.number_of_edges() // 2)
+        h = rewire_strength_preserving(g, rng=np.random.default_rng(0))
+        self.assertEqual(g.number_of_edges(), h.number_of_edges())
+        self.assertNotEqual(set(g.edges()), set(h.edges()))
 
     def test_reproducible_with_same_seed(self) -> None:
-        from network.robustness import rewire_weights
+        from network.robustness import rewire_strength_preserving
 
         g = self._gnp()
-        h1 = rewire_weights(g, rng=np.random.default_rng(7))
-        h2 = rewire_weights(g, rng=np.random.default_rng(7))
-        for e in g.edges():
+        h1 = rewire_strength_preserving(g, rng=np.random.default_rng(7))
+        h2 = rewire_strength_preserving(g, rng=np.random.default_rng(7))
+        self.assertEqual(set(h1.edges()), set(h2.edges()))
+        for e in h1.edges():
             self.assertEqual(h1.edges[e]["weight"], h2.edges[e]["weight"])
 
     def test_does_not_mutate_input(self) -> None:
-        from network.robustness import rewire_weights
+        from network.robustness import rewire_strength_preserving
 
         g = self._gnp()
-        snapshot = {e: g.edges[e]["weight"] for e in g.edges()}
-        rewire_weights(g, rng=np.random.default_rng(0))
-        for e, w in snapshot.items():
+        edges_before = set(g.edges())
+        weights_before = {e: g.edges[e]["weight"] for e in g.edges()}
+        rewire_strength_preserving(g, rng=np.random.default_rng(0))
+        self.assertEqual(set(g.edges()), edges_before)
+        for e, w in weights_before.items():
             self.assertEqual(g.edges[e]["weight"], w)
 
-    def test_n_swaps_zero_returns_identical_weights(self) -> None:
-        from network.robustness import rewire_weights
-
-        g = self._gnp()
-        h = rewire_weights(g, n_swaps=0, rng=np.random.default_rng(0))
-        for e in g.edges():
-            self.assertEqual(g.edges[e]["weight"], h.edges[e]["weight"])
-
     def test_small_graph_returns_copy_unchanged(self) -> None:
-        from network.robustness import rewire_weights
+        from network.robustness import rewire_strength_preserving
 
         g = nx.DiGraph()
         g.add_edge("A", "B", weight=3.0)  # only 1 edge → nothing to swap
-        h = rewire_weights(g, rng=np.random.default_rng(0))
+        h = rewire_strength_preserving(g, rng=np.random.default_rng(0))
         self.assertEqual(h.edges["A", "B"]["weight"], 3.0)
         # And empty graph
-        h2 = rewire_weights(nx.DiGraph(), rng=np.random.default_rng(0))
+        h2 = rewire_strength_preserving(nx.DiGraph(), rng=np.random.default_rng(0))
         self.assertEqual(h2.number_of_nodes(), 0)
 
 
@@ -3110,7 +3107,10 @@ class NullDistributionTests(TestCase):
         result = list(null_distribution(g, n_simulations=5, rng=np.random.default_rng(0)))
         self.assertEqual(len(result), 5)
         for h in result:
-            self.assertEqual(set(h.edges()), set(g.edges()))  # same topology
+            # Strength-preserving null randomises wiring but keeps the degree sequence.
+            self.assertEqual(g.number_of_edges(), h.number_of_edges())
+            self.assertEqual(dict(g.in_degree()), dict(h.in_degree()))
+            self.assertEqual(dict(g.out_degree()), dict(h.out_degree()))
 
     def test_zero_simulations_yields_nothing(self) -> None:
         from network.robustness import null_distribution
@@ -3120,8 +3120,8 @@ class NullDistributionTests(TestCase):
         self.assertEqual(list(null_distribution(g, n_simulations=0)), [])
 
     def test_successive_simulations_differ_under_shared_rng(self) -> None:
-        # Two consecutive nulls drawn from the same rng should be different
-        # (since the rng state advances between calls).
+        # Two consecutive nulls drawn from the same rng should differ (the rng
+        # state advances between calls, producing different rewirings).
         from network.robustness import null_distribution
 
         g = nx.gnp_random_graph(30, 0.3, seed=42, directed=True)
@@ -3129,9 +3129,7 @@ class NullDistributionTests(TestCase):
         for u, v in g.edges():
             g.edges[u, v]["weight"] = float(rng_seed.uniform(0.5, 5.0))
         nulls = list(null_distribution(g, n_simulations=2, rng=np.random.default_rng(0)))
-        w1 = [nulls[0].edges[e]["weight"] for e in g.edges()]
-        w2 = [nulls[1].edges[e]["weight"] for e in g.edges()]
-        self.assertNotEqual(w1, w2)
+        self.assertNotEqual(set(nulls[0].edges()), set(nulls[1].edges()))
 
 
 class ZScoreTests(TestCase):

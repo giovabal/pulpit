@@ -831,7 +831,7 @@ class VacancyAnalysisView(View):
             # GET param can't force a multi-decade message scan; the analysis is
             # meaningless beyond that horizon anyway.
             months_before = max(1, min(120, int(request.GET.get("months_before", 12))))
-            months_after = max(1, min(120, int(request.GET.get("months_after", 12))))
+            months_after = max(1, min(120, int(request.GET.get("months_after", 24))))
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid parameters"}, status=400)
         only_after_vacancy = request.GET.get("only_after_vacancy", "1") != "0"

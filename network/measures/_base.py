@@ -1,6 +1,5 @@
 import datetime
 import logging
-from math import log
 from typing import Any
 
 from django.db.models import Count, Max, Min, Q
@@ -39,25 +38,34 @@ def apply_measure(
     return [(key, label)]
 
 
-def compute_neighbour_community_entropy(
+def compute_neighbour_community_participation(
     graph: nx.DiGraph,
     partition: dict[Any, Any],
 ) -> dict[Any, float]:
-    """Shannon entropy of the community distribution among each node's
-    weighted neighbours (predecessors ∪ successors). The bridging-
-    centrality recipe multiplies this by betweenness to surface broker
-    nodes — high entropy = node bridges many distinct communities.
+    """Participation coefficient (Guimerà & Amaral, *Nature* 2005) of each node
+    over the community distribution of its weighted neighbours (predecessors ∪
+    successors):
+
+        ``P(v) = 1 − Σ_c (w_c / W)²``
+
+    where ``w_c`` is the total edge weight from ``v`` to community ``c`` and ``W``
+    the total neighbour weight. ``P`` is 0 when every neighbour sits in a single
+    community (no bridging) and approaches 1 as ``v``'s ties spread evenly across
+    many communities. The bridging measure multiplies it by betweenness to
+    surface nodes that are both structurally central and span communities — the
+    canonical community-role quantity, and bounded in ``[0, 1]`` (unlike the
+    unbounded Shannon entropy it replaces, which left the product on no fixed
+    scale).
 
     Shared by :func:`network.measures._centrality.apply_bridging_centrality`
-    and :func:`network.robustness.attacks._bridging_with_partition`, which
-    used to carry independent copies of the same formula.
+    and :func:`network.robustness.attacks._bridging_with_partition` so the two
+    stay in lock-step.
 
     Nodes absent from ``partition``: their edges are skipped (treated as
-    "unknown community", contributing nothing to the entropy). Nodes with
-    no community-tagged neighbours, or all neighbours in one community,
-    receive 0.0.
+    "unknown community", contributing nothing). Nodes with no community-tagged
+    neighbours, or all neighbours in one community, receive 0.0.
     """
-    entropies: dict[Any, float] = {}
+    participation: dict[Any, float] = {}
     for node in graph.nodes():
         weights: dict[Any, float] = {}
         for pred in graph.predecessors(node):
@@ -72,10 +80,10 @@ def compute_neighbour_community_entropy(
                 weights[c] = weights.get(c, 0.0) + w
         total = sum(weights.values())
         if total == 0.0 or len(weights) <= 1:
-            entropies[node] = 0.0
+            participation[node] = 0.0
         else:
-            entropies[node] = -sum((w / total) * log(w / total) for w in weights.values())
-    return entropies
+            participation[node] = 1.0 - sum((w / total) ** 2 for w in weights.values())
+    return participation
 
 
 def per_channel_message_counts(

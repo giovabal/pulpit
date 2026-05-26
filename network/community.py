@@ -48,6 +48,16 @@ COMMUNITY_ALGORITHMS = {
 }
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 
+# Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
+# of the citation graph. Their reported modularity should use the undirected null
+# model (k_i·k_j / 2m), matching what they actually optimised — not the directed
+# null model (k_out_i·k_in_j / m). Keys are the lowercased community keys.
+# Everything else (leiden_directed, infomap, infomap_memory, mcl, strongcc,
+# organization) is reported with directed modularity, the form it was built against.
+UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
+    {"leiden", "leiden_cpm_coarse", "leiden_cpm_fine", "louvain", "walktrap", "labelpropagation", "kcore", "weakcc"}
+)
+
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
 # pages and in the server-side Operations panel.
