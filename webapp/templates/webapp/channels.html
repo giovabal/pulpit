@@ -60,6 +60,11 @@
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
           </span>
+          {% if channel.first_message_date %}
+          <span class="channel-row-meta">
+            <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+          </span>
+          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -89,6 +94,11 @@
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
           </span>
+          {% if channel.first_message_date %}
+          <span class="channel-row-meta">
+            <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+          </span>
+          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -117,6 +127,11 @@
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
           </span>
+          {% if channel.first_message_date %}
+          <span class="channel-row-meta">
+            <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+          </span>
+          {% endif %}
         </span>
         {% with pic=channel.profile_picture %}{% if pic %}{% if pic.is_video and pic.picture %}<video src="{{ pic.picture.url }}" class="channel-row-pic" {% if pic.thumbnail %}poster="{{ pic.thumbnail.url }}"{% endif %} autoplay loop muted playsinline aria-hidden="true"></video>{% else %}{% with src=pic.display_url %}{% if src %}<img src="{{ src }}" class="channel-row-pic" alt="" aria-hidden="true">{% endif %}{% endwith %}{% endif %}{% endif %}{% endwith %}
       </a>
@@ -145,6 +160,11 @@
             <span><i class="bi bi-people" aria-hidden="true"></i> {{ channel.participants_count }}</span>
             {% endif %}
           </span>
+          {% if channel.first_message_date %}
+          <span class="channel-row-meta">
+            <span><i class="bi bi-calendar-range" aria-hidden="true"></i> {{ channel.first_message_date|date:'m/y' }} – {{ channel.last_message_date|date:'m/y' }}</span>
+          </span>
+          {% endif %}
         </span>
       </a>
     </li>
