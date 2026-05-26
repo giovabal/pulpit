@@ -4,6 +4,7 @@ from network.measures._centrality import (
     apply_bridging_centrality,
     apply_burt_constraint,
     apply_closeness_centrality,
+    apply_community_bridging,
     apply_ego_network_density,
     apply_flow_betweenness_centrality,
     apply_harmonic_centrality,
@@ -14,6 +15,7 @@ from network.measures._centrality import (
     apply_out_degree_centrality,
     apply_pagerank,
     compute_betweenness,
+    compute_bridging_coefficient,
     compute_hits,
 )
 from network.measures._content import apply_amplification_factor, apply_content_originality, apply_diffusion_lag
@@ -42,6 +44,7 @@ __all__ = [
     "apply_bridging_centrality",
     "apply_burt_constraint",
     "apply_closeness_centrality",
+    "apply_community_bridging",
     "apply_ego_network_density",
     "apply_content_originality",
     "apply_diffusion_lag",
@@ -56,6 +59,7 @@ __all__ = [
     "apply_spreading_efficiency",
     "bridging_strategy",
     "compute_betweenness",
+    "compute_bridging_coefficient",
     "compute_hits",
     "find_bridging_token",
     "is_valid_measure",

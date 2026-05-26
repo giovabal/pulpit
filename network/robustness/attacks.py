@@ -168,12 +168,14 @@ _BRIDGING_RE = re.compile(r"^bridging(?:\((\w+)\))?$", re.IGNORECASE)
 
 
 def _bridging_with_partition(g: nx.DiGraph, partition: dict[Any, Any]) -> dict[Any, float]:
-    """Bridging centrality = betweenness × participation coefficient of the
+    """Community bridging = betweenness × participation coefficient of the
     community distribution among the node's weighted neighbours.
 
-    Both pieces come from shared helpers — ``compute_betweenness`` and
-    ``compute_neighbour_community_participation`` — so the formula stays in
-    lock-step with :func:`network.measures._centrality.apply_bridging_centrality`.
+    This is the community-participation brokerage measure, *not* the Bridging
+    Centrality of Hwang et al. (2008).  Both pieces come from shared helpers —
+    ``compute_betweenness`` and ``compute_neighbour_community_participation`` — so
+    the formula stays in lock-step with
+    :func:`network.measures._centrality.apply_community_bridging`.
     """
     betweenness = compute_betweenness(g)
     participation = compute_neighbour_community_participation(g, partition)
@@ -231,8 +233,10 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "burt_constraint": StrategySpec("Burt's constraint (low = broker)", _burt_constraint, inverse=True),
     # bridging is parameterised; the "bridging" key here is a placeholder for
     # the registry (label / kind) — the score function is invoked separately
-    # via _bridging_with_partition because it needs the chosen partition.
-    "bridging": StrategySpec("Bridging centrality", None),
+    # via _bridging_with_partition because it needs the chosen partition.  This
+    # is community bridging (Guimerà-Amaral participation), not Hwang's Bridging
+    # Centrality, which has no robustness-attack counterpart.
+    "bridging": StrategySpec("Community bridging", None),
     # Dynamical — score_fn is None: ``removal_order`` special-cases "spreading"
     # so it can thread the shared rng into the (stochastic) SIR scorer.
     "spreading": StrategySpec("Spreading efficiency (SIR)", None),

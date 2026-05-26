@@ -422,7 +422,8 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of centrality measures to compute. "
                 "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, FLOWBETWEENNESS, INDEGCENTRALITY, "
-                "OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, SPREADING, BRIDGING or BRIDGING(STRATEGY), "
+                "OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, SPREADING, BRIDGINGCENTRALITY (Hwang et al. 2008), "
+                "BRIDGING or BRIDGING(STRATEGY) (community bridging), "
                 "BURTCONSTRAINT, EGODENSITY, AMPLIFICATION, CONTENTORIGINALITY, ALL. Default: PAGERANK."
             ),
         )
@@ -1068,10 +1069,16 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
-        # Pre-compute betweenness once when both BETWEENNESS and BRIDGING are active.
-        _cached_betweenness: dict | None = None
-        if "BETWEENNESS" in selected_measures and bridging_token is not None:
-            _cached_betweenness = measures.compute_betweenness(graph)
+        # Pre-compute betweenness once and share it across every measure built on it: the
+        # standalone betweenness, Hwang bridging centrality (BRIDGINGCENTRALITY), and community
+        # bridging (the BRIDGING token).  Only worth caching when ≥2 are active; a lone consumer
+        # computes its own.
+        _betweenness_consumers = (
+            ("BETWEENNESS" in selected_measures)
+            + ("BRIDGINGCENTRALITY" in selected_measures)
+            + (bridging_token is not None)
+        )
+        _cached_betweenness: dict | None = measures.compute_betweenness(graph) if _betweenness_consumers >= 2 else None
 
         _orm_steps = [
             (
@@ -1124,11 +1131,17 @@ class Command(BaseCommand):
             measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in selected_measures]
             self.stdout.write("done")
 
+        if "BRIDGINGCENTRALITY" in selected_measures:
+            self.stdout.write("- bridging centrality (Hwang et al. 2008) … ", ending="")
+            self.stdout.flush()
+            measures_labels += measures.apply_bridging_centrality(graph_data, graph, betweenness=_cached_betweenness)
+            self.stdout.write("done")
+
         if bridging_token is not None:
             strategy_key = measures.bridging_strategy(bridging_token).lower()
-            self.stdout.write(f"- bridging centrality (community basis: {strategy_key}) … ", ending="")
+            self.stdout.write(f"- community bridging (community basis: {strategy_key}) … ", ending="")
             self.stdout.flush()
-            measures_labels += measures.apply_bridging_centrality(
+            measures_labels += measures.apply_community_bridging(
                 graph_data, graph, strategy_key, betweenness=_cached_betweenness
             )
             self.stdout.write("done")

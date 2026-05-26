@@ -44,6 +44,7 @@ from network.measures import (
     apply_bridging_centrality,
     apply_burt_constraint,
     apply_closeness_centrality,
+    apply_community_bridging,
     apply_content_originality,
     apply_ego_network_density,
     apply_flow_betweenness_centrality,
@@ -56,6 +57,7 @@ from network.measures import (
     apply_pagerank,
     apply_spreading_efficiency,
     compute_betweenness,
+    compute_bridging_coefficient,
 )
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, Message, Organization
@@ -1974,11 +1976,11 @@ class ApplyBurtConstraintTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_bridging_centrality
+# measures/_centrality.py — apply_community_bridging (betweenness × community participation)
 # ---------------------------------------------------------------------------
 
 
-class ApplyBridgingCentralityTests(TestCase):
+class ApplyCommunityBridgingTests(TestCase):
     def setUp(self) -> None:
         # Two triangles linked by a bridge node "bridge"
         self.graph = nx.DiGraph()
@@ -1999,16 +2001,96 @@ class ApplyBridgingCentralityTests(TestCase):
             "edges": [],
         }
 
+    def test_adds_community_bridging_key(self) -> None:
+        apply_community_bridging(self.graph_data, self.graph, "louvain")
+        for node in self.graph_data["nodes"]:
+            self.assertIn("community_bridging", node)
+
+    def test_bridge_node_scores_higher_than_within_community_node(self) -> None:
+        apply_community_bridging(self.graph_data, self.graph, "louvain")
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        # "bridge" connects both communities; "a" connects only within X
+        self.assertGreater(node_map["bridge"]["community_bridging"], node_map["a"]["community_bridging"])
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_bridging_centrality (Hwang et al. 2008)
+# ---------------------------------------------------------------------------
+
+
+class BridgingCoefficientTests(TestCase):
+    def _two_stars(self) -> nx.DiGraph:
+        # Two hubs, each with three leaves, joined by a single low-degree "bridge".
+        # Mutual edges → directed betweenness mirrors the undirected case.
+        g = nx.DiGraph()
+        pairs = [
+            ("hub1", "L1a"),
+            ("hub1", "L1b"),
+            ("hub1", "L1c"),
+            ("hub2", "L2a"),
+            ("hub2", "L2b"),
+            ("hub2", "L2c"),
+            ("hub1", "bridge"),
+            ("hub2", "bridge"),
+        ]
+        for u, v in pairs:
+            g.add_edge(u, v)
+            g.add_edge(v, u)
+        return g
+
+    def test_coefficient_matches_hwang_formula(self) -> None:
+        coeff = compute_bridging_coefficient(self._two_stars())
+        # bridge: (1/2) / (1/deg(hub1) + 1/deg(hub2)) = 0.5 / (1/4 + 1/4) = 1.0
+        self.assertAlmostEqual(coeff["bridge"], 1.0)
+        # a leaf: (1/1) / (1/deg(hub)) = 1 / (1/4) = 4.0 (high coefficient, but betweenness 0)
+        self.assertAlmostEqual(coeff["L1a"], 4.0)
+        # a hub: (1/4) / (3·(1/1) + 1/deg(bridge)) = 0.25 / 3.5 ≈ 0.0714
+        self.assertAlmostEqual(coeff["hub1"], 0.25 / 3.5)
+
+    def test_isolated_node_coefficient_is_zero(self) -> None:
+        g = nx.DiGraph()
+        g.add_node("lonely")
+        self.assertEqual(compute_bridging_coefficient(g)["lonely"], 0.0)
+
+
+class ApplyBridgingCentralityTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = BridgingCoefficientTests()._two_stars()
+        self.graph_data: dict = {"nodes": [{"id": n} for n in self.graph.nodes()], "edges": []}
+
     def test_adds_bridging_centrality_key(self) -> None:
-        apply_bridging_centrality(self.graph_data, self.graph, "louvain")
+        labels = apply_bridging_centrality(self.graph_data, self.graph)
+        self.assertEqual(labels, [("bridging_centrality", "Bridging Centrality")])
         for node in self.graph_data["nodes"]:
             self.assertIn("bridging_centrality", node)
 
-    def test_bridge_node_scores_higher_than_within_community_node(self) -> None:
-        apply_bridging_centrality(self.graph_data, self.graph, "louvain")
+    def test_bridge_outranks_hub_despite_lower_betweenness(self) -> None:
+        # The whole point of Hwang's measure: a hub can have *higher* betweenness than the
+        # bridge, yet the bridge — the narrow waist between high-degree regions — must score
+        # higher on bridging centrality once the bridging coefficient is folded in.
+        betweenness = compute_betweenness(self.graph)
+        self.assertGreater(betweenness["hub1"], betweenness["bridge"])  # plain betweenness favours the hub
+        apply_bridging_centrality(self.graph_data, self.graph)
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        # "bridge" connects both communities; "a" connects only within X
-        self.assertGreater(node_map["bridge"]["bridging_centrality"], node_map["a"]["bridging_centrality"])
+        self.assertGreater(node_map["bridge"]["bridging_centrality"], node_map["hub1"]["bridging_centrality"])
+
+    def test_leaf_scores_zero(self) -> None:
+        # Leaves carry no shortest paths → betweenness 0 → bridging centrality 0,
+        # even though their bridging *coefficient* is the highest in the graph.
+        apply_bridging_centrality(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertEqual(node_map["L1a"]["bridging_centrality"], 0.0)
+
+    def test_shared_betweenness_matches_internal(self) -> None:
+        # Passing a precomputed betweenness must yield identical scores to letting the
+        # function compute its own (the orchestrator shares one betweenness across measures).
+        shared = compute_betweenness(self.graph)
+        gd_shared: dict = {"nodes": [{"id": n} for n in self.graph.nodes()], "edges": []}
+        apply_bridging_centrality(gd_shared, self.graph, betweenness=shared)
+        apply_bridging_centrality(self.graph_data, self.graph)
+        a = {n["id"]: n["bridging_centrality"] for n in gd_shared["nodes"]}
+        b = {n["id"]: n["bridging_centrality"] for n in self.graph_data["nodes"]}
+        self.assertEqual(a, b)
 
 
 # ---------------------------------------------------------------------------
@@ -3501,7 +3583,7 @@ class RobustnessRunnerTests(TestCase):
         self.assertIn("bridging(leiden_directed)", out["strategies"])
         self.assertEqual(
             out["strategies"]["bridging(leiden_directed)"]["label"],
-            "Bridging centrality (leiden_directed)",
+            "Community bridging (leiden_directed)",
         )
 
     # -- reproducibility ------------------------------------------------------

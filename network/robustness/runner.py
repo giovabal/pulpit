@@ -16,7 +16,7 @@
 The strategy set is fully user-driven via ``RobustnessConfig.strategies``:
 any subset of :data:`~network.robustness.attacks.STRATEGY_SPECS` keys is
 accepted (plus ``"bridging(<community-strategy>)"`` to override the
-default ``"leiden_directed"`` partition for bridging centrality).  Default is the
+default ``"leiden_directed"`` partition for community bridging).  Default is the
 list in :data:`~network.robustness.attacks.DEFAULT_STRATEGIES`.
 
 The output is a single JSON-serialisable dict whose shape is documented on

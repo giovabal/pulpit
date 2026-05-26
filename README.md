@@ -38,7 +38,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 - Which channels are the hidden agenda-setters — forwarded by all the key players, regardless of subscriber count? *([PageRank](docs/network-measures.md#pagerank))*
 - Which channels are pure distributors — aggregating and reposting from many sources without producing original content? *([HITS Hub](docs/network-measures.md#hits-hub-score), [Content Originality](docs/network-measures.md#content-originality))*
-- Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Betweenness](docs/network-measures.md#betweenness-centrality), [Burt's Constraint](docs/network-measures.md#burts-constraint), [Bridging Centrality](docs/network-measures.md#bridging-centrality))*
+- Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Betweenness](docs/network-measures.md#betweenness-centrality), [Burt's Constraint](docs/network-measures.md#burts-constraint), [Bridging Centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008), [Community Bridging](docs/network-measures.md#community-bridging))*
 - Whose content spreads farthest per post published, despite a modest following? *([Amplification Factor](docs/network-measures.md#amplification-factor))*
 - If a channel started spreading a piece of false information, what fraction of the network would eventually receive it? *([Spreading Efficiency](docs/network-measures.md#spreading-efficiency))*
 
@@ -154,7 +154,8 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Ego network density](docs/network-measures.md#ego-network-density) | How deeply a channel is embedded in an echo-chamber clique vs. how much it bridges isolated sources |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel itself forms closed citation cycles — a direct participant in mutual amplification loops |
-| [Bridging centrality](docs/network-measures.md#bridging-centrality) | Channels that are both structurally central AND bridge genuinely distinct communities |
+| [Bridging centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008) | Topological bridges (Hwang et al. 2008) — low-degree channels wedged between high-degree regions, whose removal fragments the network |
+| [Community bridging](docs/network-measures.md#community-bridging) | Channels that are both structurally central AND bridge genuinely distinct communities |
 
 **Content and dynamics**
 

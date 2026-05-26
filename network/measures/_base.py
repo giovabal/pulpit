@@ -57,7 +57,7 @@ def compute_neighbour_community_participation(
     unbounded Shannon entropy it replaces, which left the product on no fixed
     scale).
 
-    Shared by :func:`network.measures._centrality.apply_bridging_centrality`
+    Shared by :func:`network.measures._centrality.apply_community_bridging`
     and :func:`network.robustness.attacks._bridging_with_partition` so the two
     stay in lock-step.
 

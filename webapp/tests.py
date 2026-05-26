@@ -1165,9 +1165,7 @@ class PurgeOutOfTargetTests(TestCase):
 
         self.assertFalse(MessagePicture.objects.filter(pk=purged_pic.pk).exists())  # purged row gone
         self.assertTrue(MessagePicture.objects.filter(pk=kept_pic.pk).exists())  # kept row stays
-        self.assertTrue(
-            os.path.exists(shared_path), "shared media file was deleted out from under a surviving message"
-        )
+        self.assertTrue(os.path.exists(shared_path), "shared media file was deleted out from under a surviving message")
 
     def test_mention_only_target_messages_deleted(self) -> None:
         """Channels reached only via t.me/ mentions don't shield their messages from the purge.
