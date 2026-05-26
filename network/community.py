@@ -6,6 +6,7 @@ from typing import Any
 
 from django.utils.text import slugify
 
+from network.utils import to_undirected_sum
 from webapp.models import Organization
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
@@ -190,7 +191,7 @@ def detect_louvain(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
     communities = sorted(
-        nx.community.louvain_communities(graph.to_undirected(), weight="weight", seed=0), key=len, reverse=True
+        nx.community.louvain_communities(to_undirected_sum(graph), weight="weight", seed=0), key=len, reverse=True
     )
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
@@ -315,8 +316,8 @@ def detect_leiden_directed(
 def _build_undirected_igraph(
     graph: nx.DiGraph, node_ids: list[str], node_id_map: dict[str, int]
 ) -> tuple[ig.Graph, list[float]]:
-    """Build an undirected igraph from a NetworkX DiGraph, symmetrising edges."""
-    undirected = graph.to_undirected(reciprocal=False)
+    """Build an undirected igraph from a NetworkX DiGraph, summing reciprocal edge weights."""
+    undirected = to_undirected_sum(graph)
     ig_graph = ig.Graph(n=len(node_ids), directed=False)
     edges, weights = [], []
     for s, t in undirected.edges():

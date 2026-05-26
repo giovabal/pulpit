@@ -863,7 +863,8 @@ class VacancyAnalysisView(View):
         total_orphaned = len(orphaned_pks)
 
         raw = list(
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=Channel.objects.in_target(),
                 date__gte=closure_dt,
@@ -892,12 +893,16 @@ class VacancyAnalysisView(View):
         # Strategy B: vacancy's out-neighbors (sources it forwarded from) before death
         vacancy_out_pks: set[int] = set()
         vacancy_out_dated: list[tuple[int, datetime.date]] = []
-        for fwd_id, fwd_date in Message.objects.filter(
-            channel=ch,
-            forwarded_from__isnull=False,
-            date__gte=before_start,
-            date__lt=closure_dt,
-        ).values_list("forwarded_from_id", "date"):
+        for fwd_id, fwd_date in (
+            Message.objects.alive()
+            .filter(
+                channel=ch,
+                forwarded_from__isnull=False,
+                date__gte=before_start,
+                date__lt=closure_dt,
+            )
+            .values_list("forwarded_from_id", "date")
+        ):
             vacancy_out_pks.add(fwd_id)
             if fwd_date is not None:
                 vacancy_out_dated.append((fwd_id, fwd_date.date()))
@@ -905,12 +910,16 @@ class VacancyAnalysisView(View):
         # Strategy B+C: each candidate's out-neighbors (batched)
         cand_out_pks: dict[int, set[int]] = defaultdict(set)
         cand_out_dated: list[tuple[int, int, datetime.date]] = []
-        for ch_id, fwd_id, fwd_date in Message.objects.filter(
-            channel__in=list(cand_channels),
-            forwarded_from__isnull=False,
-            date__gte=closure_dt,
-            date__lte=after_end,
-        ).values_list("channel_id", "forwarded_from_id", "date"):
+        for ch_id, fwd_id, fwd_date in (
+            Message.objects.alive()
+            .filter(
+                channel__in=list(cand_channels),
+                forwarded_from__isnull=False,
+                date__gte=closure_dt,
+                date__lte=after_end,
+            )
+            .values_list("channel_id", "forwarded_from_id", "date")
+        ):
             cand_out_pks[ch_id].add(fwd_id)
             if fwd_date is not None:
                 cand_out_dated.append((ch_id, fwd_id, fwd_date.date()))
@@ -920,7 +929,8 @@ class VacancyAnalysisView(View):
         # orphaned_pks (⊆ in-target), making cos_in a well-defined cosine.
         cand_in_pks: dict[int, set[int]] = defaultdict(set)
         for fwd_id, ch_id in (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=Channel.objects.in_target(),
                 forwarded_from__in=list(cand_channels),
                 date__gte=closure_dt,
@@ -953,7 +963,8 @@ class VacancyAnalysisView(View):
 
         # Strategy C: which orphaned channels forward each candidate (for amp orgs)
         cand_amp_rows = (
-            Message.objects.filter(
+            Message.objects.alive()
+            .filter(
                 channel__in=orphaned_pks,
                 forwarded_from__in=list(cand_channels),
                 date__gte=closure_dt,
@@ -987,7 +998,9 @@ class VacancyAnalysisView(View):
             lf = cand_map[cid]["last_forwarded"]
             fm = c.first_msg
 
-            # A — Jaccard amplifier similarity
+            # A — Amplifier coverage: fraction of the vacancy's orphaned amplifiers
+            # that also forward this candidate (|A ∩ B| / |A|). This is an asymmetric
+            # overlap / recall measure, NOT a Jaccard (which would divide by |A ∪ B|).
             score_a = round(amp_count / total_orphaned, 3) if total_orphaned else 0.0
 
             # B — Structural equivalence (cosine in + cosine out, equal weight)

@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.db.models import Exists, OuterRef, Q
 
+import networkx as nx
+
 if TYPE_CHECKING:
     from webapp.models import Channel
 
@@ -68,6 +70,30 @@ def channel_period_date_q(channel: "Channel", date_field: str = "date") -> Q:
             interval &= Q(**{f"{date_field}__date__lte": end})
         query |= interval
     return query if has_period else Q(pk__in=[])
+
+
+def to_undirected_sum(graph: nx.DiGraph, weight: str = "weight") -> nx.Graph:
+    """Undirected projection of a DiGraph that **sums** reciprocal edge weights.
+
+    ``DiGraph.to_undirected()`` keeps only one direction's weight when both
+    ``(u, v)`` and ``(v, u)`` exist — the later-inserted edge silently overwrites
+    the other — so a mutual tie loses half its weight, and *which* half survives
+    depends on edge-insertion order. For weighted community detection and
+    current-flow betweenness we want the total tie volume, i.e. the standard
+    ``W + Wᵀ`` symmetrisation: ``w_undirected(u, v) = w(u, v) + w(v, u)``.
+
+    Node attributes and isolated nodes are preserved; a self-loop keeps its single
+    weight (there is only one direction to sum).
+    """
+    undirected = nx.Graph()
+    undirected.add_nodes_from(graph.nodes(data=True))
+    for u, v, data in graph.edges(data=True):
+        w = data.get(weight, 1.0)
+        if undirected.has_edge(u, v):
+            undirected[u][v][weight] += w
+        else:
+            undirected.add_edge(u, v, **{**data, weight: w})
+    return undirected
 
 
 def make_date_q(

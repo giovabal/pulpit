@@ -785,9 +785,9 @@
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if "AMPLIFIER_JACCARD" in ad.sa_vacancy_measures %}checked{% endif %}>Amplifier Jaccard
+                <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if "AMPLIFIER_JACCARD" in ad.sa_vacancy_measures %}checked{% endif %}>Amplifier Coverage
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Fraction of orphaned amplifiers that forwarded from this candidate after the vacancy closed (Jaccard coverage, Small 1973)."></i>
+                   title="Fraction of the vacancy's orphaned amplifiers that forwarded from this candidate after closure (|A ∩ B| / |A| — coverage/recall, not a Jaccard)."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Structural Equivalence

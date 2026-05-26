@@ -203,7 +203,7 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 
 | Score | Question | Method |
 | :---- | :------- | :----- |
-| Amplifier Jaccard | What fraction of orphaned amplifiers have started forwarding the candidate? | Direct count |
+| Amplifier Coverage | What fraction of orphaned amplifiers have started forwarding the candidate? | Coverage / recall (|A ∩ B| / |A|) |
 | Structural equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
 | Brokerage role | Does the candidate bridge the same organizational communities? | Jaccard (Gould & Fernandez 1989) |
 | Cascade overlap | Does information seeded at the candidate reach the same downstream channels? | SIR simulation (Watts & Dodds 2007) |

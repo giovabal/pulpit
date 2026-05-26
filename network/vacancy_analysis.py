@@ -29,7 +29,7 @@ ALL_VACANCY_MEASURES: list[str] = [
 ]
 
 MEASURE_LABELS: dict[str, str] = {
-    "AMPLIFIER_JACCARD": "Amplifier Jaccard",
+    "AMPLIFIER_JACCARD": "Amplifier Coverage",
     "STRUCTURAL_EQUIV": "Structural Equivalence",
     "BROKERAGE": "Brokerage",
     "CASCADE_OVERLAP": "Cascade Overlap (SIR)",
@@ -168,7 +168,7 @@ def _scores_abc(
     after_end: datetime.datetime,
     selected: set[str],
 ) -> dict[int, dict[str, float | None]]:
-    """Scores A (Amplifier Jaccard), B (Structural Equivalence), C (Brokerage)."""
+    """Scores A (Amplifier Coverage), B (Structural Equivalence), C (Brokerage)."""
     total_orphaned = len(orphaned_pks)
 
     amp_counts: dict[int, int] = {}
@@ -275,6 +275,10 @@ def _scores_abc(
         a_count = amp_counts.get(cid, 0)
 
         if "AMPLIFIER_JACCARD" in selected:
+            # Coverage / recall — the fraction of the vacancy's orphaned amplifiers
+            # that also amplify this candidate, i.e. |A ∩ B| / |A|. This is an
+            # asymmetric overlap measure, NOT a Jaccard (which divides by |A ∪ B|);
+            # the token is kept verbatim only for saved-config / JS compatibility.
             scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, 3) if total_orphaned else 0.0
 
         if "STRUCTURAL_EQUIV" in selected:
