@@ -252,12 +252,20 @@ def _subgraph_metrics(nodes_set: set[str], graph: nx.DiGraph) -> dict[str, Any]:
 
 
 def _freeman_centralization(values: list[float]) -> float | None:
-    """Freeman (1978) graph centralization for a centrality measure.
+    """Normalized graph-centralization index for a centrality measure, in [0, 1].
 
-    H = Σ_i (C_max - C_i) / [(n-1) · C_max]
+    Computes ``Σ_i (C_max - C_i) / [(n-1) · C_max]`` — score dispersion around the
+    most-central node, normalized by the ``(n-1)·C_max`` *upper bound* on that sum.
+    This coincides with Freeman's (1978) centralization only when the least-central
+    node can reach 0 (e.g. directed in/out-degree on a star); for measures with a
+    non-zero periphery floor (closeness, harmonic) it is a conservative lower bound
+    on the exact Freeman value, not the published per-measure figure. The exact
+    value needs a measure-specific theoretical maximum that isn't recoverable from
+    the scores alone. Values stay in [0, 1] and monotone, so they remain comparable
+    across graphs for the *same* measure.
 
-    Returns None when the result is undefined (fewer than 2 nodes or C_max == 0).
-    None entries in values are ignored.
+    Returns None when undefined (fewer than 2 nodes or C_max == 0). None entries in
+    ``values`` are ignored.
     """
     clean = [v for v in values if v is not None]
     n = len(clean)

@@ -1143,6 +1143,32 @@ class PurgeOutOfTargetTests(TestCase):
         self._run_purge()
         self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
 
+    def test_shared_media_file_kept_when_referenced_by_surviving_message(self) -> None:
+        """A file shared (same Telegram file id ⇒ same path) by a purged out-of-target
+        message and a kept in-target message must survive — only its purged row goes."""
+        import os
+
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        # Same telegram_id ⇒ both rows resolve to the same on-disk path (photos/888.jpg).
+        kept_msg = Message.objects.create(telegram_id=300, channel=self.healthy)
+        kept_pic = MessagePicture.objects.create(message=kept_msg, telegram_id=888)
+        kept_pic.picture.save("shared.jpg", ContentFile(b"shared-bytes"), save=True)
+        shared_path = kept_pic.picture.path
+        purged_pic = MessagePicture.objects.create(message=self.purge_msg, telegram_id=888)
+        purged_pic.picture.save("shared.jpg", ContentFile(b"shared-bytes"), save=True)
+        self.assertEqual(kept_pic.picture.name, purged_pic.picture.name)  # same shared path
+
+        self._run_purge()
+
+        self.assertFalse(MessagePicture.objects.filter(pk=purged_pic.pk).exists())  # purged row gone
+        self.assertTrue(MessagePicture.objects.filter(pk=kept_pic.pk).exists())  # kept row stays
+        self.assertTrue(
+            os.path.exists(shared_path), "shared media file was deleted out from under a surviving message"
+        )
+
     def test_mention_only_target_messages_deleted(self) -> None:
         """Channels reached only via t.me/ mentions don't shield their messages from the purge.
 

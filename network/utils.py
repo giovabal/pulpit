@@ -56,6 +56,11 @@ def channel_period_date_q(channel: "Channel", date_field: str = "date") -> Q:
     has_period = False
     for start, end in channel.in_target_periods.values_list("start", "end"):
         has_period = True
+        if start is None and end is None:
+            # Fully-open period: every date qualifies. Return match-all now — folding
+            # an empty Q() into the OR-chain would be absorbed (Q() | bounded == bounded),
+            # silently dropping everything outside the other periods.
+            return Q()
         interval = Q()
         if start is not None:
             interval &= Q(**{f"{date_field}__date__gte": start})

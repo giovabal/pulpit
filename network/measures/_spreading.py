@@ -53,10 +53,14 @@ def apply_spreading_efficiency(
     """SIR spreading efficiency: mean fraction of nodes infected when each node seeds the process.
 
     Each node is used as the sole initial infective in ``runs`` independent Monte Carlo
-    SIR simulations.  Transmission probability along edge (i→j) equals the edge weight,
-    clipped to [0, 1].  Recovery probability per step is ``_SIR_GAMMA``.  The result is
-    normalised to [0, 1] by dividing by (N − 1), so 1.0 means the seed eventually infects
-    every other node on average.
+    SIR simulations.  Transmission probability along edge (i→j) is the edge weight
+    *normalised by the maximum edge weight* (so the strongest tie transmits with
+    probability 1 and the rest in proportion).  This keeps the probability scale-
+    independent — the raw ``weight`` is rescaled to max 10 by ``build_graph``, which
+    would otherwise saturate ``min(weight, 1.0)`` to near-certain transmission on most
+    edges.  Recovery probability per step is ``_SIR_GAMMA``.  The result is normalised to
+    [0, 1] by dividing by (N − 1), so 1.0 means the seed eventually infects every other
+    node on average.
     """
     key = "spreading_efficiency"
     n = graph.number_of_nodes()
@@ -65,9 +69,11 @@ def apply_spreading_efficiency(
             node[key] = 0.0
         return [(key, "Spreading Efficiency")]
 
-    # Pre-build adjacency lists with weights clipped to [0, 1]
+    # Pre-build adjacency lists with transmission probabilities = weight / max_weight.
+    edge_weights = [data.get("weight", 1.0) for _, _, data in graph.edges(data=True)]
+    max_weight = max(edge_weights) if edge_weights else 1.0
     adj: dict[str, list[tuple[str, float]]] = {
-        node_id: [(succ, min(data.get("weight", 1.0), 1.0)) for succ, data in graph[node_id].items()]
+        node_id: [(succ, min(data.get("weight", 1.0) / max_weight, 1.0)) for succ, data in graph[node_id].items()]
         for node_id in graph.nodes()
     }
 
