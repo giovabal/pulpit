@@ -639,6 +639,13 @@ class ChannelCrawler:
                     forwarded_from_private=channel_id,
                     pending_forward_telegram_id=None,
                 )
+            except Exception as e:  # noqa: BLE001 - one unresolvable id must not abort the whole crawl
+                # Other RPC errors (ChannelInvalidError, PeerIdInvalidError, transient
+                # ServerError, …) used to propagate and kill the run. Log and leave the
+                # row pending so it is retried on the next crawl.
+                logger.warning(
+                    "Unexpected error resolving forwarded channel %s (%s); leaving pending for retry", channel_id, e
+                )
 
     def refresh_message_stats(
         self,

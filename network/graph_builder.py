@@ -303,6 +303,7 @@ def build_graph(
         {
             (item["message__channel_id"], item["channel_id"]): item["total"]
             for item in references_through.objects.filter(
+                channel_cutoff_q("message__channel", "message__date"),
                 make_date_q(start_date, end_date, field="message__date"),
                 message__is_lost=False,
                 channel_id__in=channel_ids,

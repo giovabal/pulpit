@@ -196,13 +196,32 @@ class ChannelViewSet(
         if start_date and end_date and start_date > end_date:
             return Response({"error": "'end' must not be before 'start'."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Resolve/validate the organization before touching the DB so a bad id can never
+        # silently wipe attributions. Absent key = leave attributions alone; null/"" =
+        # intentional unassign; a non-existent or non-integer id is a 400.
+        assign_org = "organization_id" in request.data
+        org = None
+        if assign_org and organization_id not in (None, ""):
+            try:
+                org_pk = int(organization_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "'organization_id' must be an integer or null."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            org = Organization.objects.filter(pk=org_pk).first()
+            if org is None:
+                return Response(
+                    {"error": "'organization_id' does not match an existing organization."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         channels = Channel.objects.filter(pk__in=ids)
 
         with transaction.atomic():
-            if "organization_id" in request.data:
+            if assign_org:
                 # Replace each selected channel's attribution timeline with one period (whole lifetime
                 # when start/end are omitted). org=null leaves the channel unassigned. Never overlaps.
-                org = Organization.objects.filter(pk=organization_id).first() if organization_id else None
                 ChannelAttribution.objects.filter(channel__in=channels).delete()
                 if org is not None:
                     ChannelAttribution.objects.bulk_create(
@@ -288,4 +307,14 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        return User.objects.order_by("username")
+        # Superusers are managed through the Django admin only — never exposed for
+        # listing/edit/deletion via the backoffice API, so a (lesser) staff user
+        # cannot demote, deactivate, or delete a superuser account.
+        return User.objects.filter(is_superuser=False).order_by("username")
+
+    def perform_destroy(self, instance):
+        # Prevent an authenticated user from deleting their own account (lockout).
+        user = self.request.user
+        if user.is_authenticated and user.pk == instance.pk:
+            raise ValidationError({"detail": "You cannot delete your own account."})
+        instance.delete()

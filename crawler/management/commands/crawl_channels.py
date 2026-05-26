@@ -559,6 +559,18 @@ class Command(BaseCommand):
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
                 return None
+        except errors.FloodWaitError as error:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id} due to flood wait: {error}")
+            )
+            if not settings.IGNORE_FLOODWAIT:
+                sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return None
+        except Exception as error:  # noqa: BLE001 - other RPC errors must not crash the whole run
+            printer.newline()
+            self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
+            return None
 
     def _bulk_update_degrees(
         self,

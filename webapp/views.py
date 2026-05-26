@@ -342,12 +342,17 @@ class VacanciesView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
+        # Count the distinct in-target channels that forwarded from the vacancy channel.
+        # Grouping by the (constant) forwarded-from target collapses to a single row;
+        # .order_by() clears any model default ordering that would otherwise leak an
+        # extra column into the GROUP BY and split the count across rows.
         orphaned_sub = Subquery(
             Channel.objects.in_target()
             .filter(message_set__forwarded_from=OuterRef("channel"))
-            .values("pk")
-            .annotate(c=Count("pk"))
-            .values("c")[:1]
+            .order_by()
+            .values("message_set__forwarded_from")
+            .annotate(c=Count("pk", distinct=True))
+            .values("c")
         )
         rows = [
             {"vacancy": vac, "channel": vac.channel, "orphaned_amplifier_count": vac.orphaned_amplifier_count or 0}
@@ -529,7 +534,9 @@ class ChannelDetailView(ListView):
             videos=Count("id", filter=Q(media_type="video")),
             audio=Count("id", filter=Q(media_type="audio")),
             stickers=Count("id", filter=Q(media_type="sticker")),
-            other=Count("id", filter=~Q(media_type__in=["", *media_known_types])),
+            # "none"/"" are confirmed-no-media / text sentinels — exclude them so this
+            # matches the list view's _CONTENT_TYPE_Q["other"] (which classes them as text).
+            other=Count("id", filter=~Q(media_type__in=["", "none", *media_known_types])),
         )
         total_media = sum(media_agg.values())
         media_breakdown = [

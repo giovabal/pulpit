@@ -1,12 +1,8 @@
-import logging
-
 from network.measures._base import apply_measure
 from network.utils import GraphData
 
 import networkx as nx
 import numpy as np
-
-logger = logging.getLogger(__name__)
 
 _SIR_GAMMA = 0.3  # recovery probability per step; mean infectious period ≈ 3 steps
 

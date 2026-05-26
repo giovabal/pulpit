@@ -23,8 +23,12 @@ def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]
     """Add HITS hub and authority scores to each node."""
     try:
         hubs, authorities = nx.hits(graph)
-    except nx.PowerIterationFailedConvergence:
-        logger.warning("HITS failed to converge")
+    except Exception as exc:  # noqa: BLE001
+        # nx.hits is backed by SciPy SVDS, which raises ValueError / ArpackError
+        # (not just PowerIterationFailedConvergence) on single-node or otherwise
+        # degenerate graphs — e.g. a lone self-referencing channel. Degrade
+        # gracefully instead of aborting the whole export.
+        logger.warning("HITS could not be computed (%s); skipping hub/authority scores", exc)
         return []
     for node in graph_data["nodes"]:
         node["hits_hub"] = hubs.get(node["id"], 0.0)
