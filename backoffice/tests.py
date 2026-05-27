@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
@@ -644,3 +645,34 @@ class MaintenanceOrphanMediaApiTests(_ApiTestCase):
                 self.assertEqual(body["removed_files"], 1)
                 self.assertEqual(body["removed_bytes"], 3)
             self.assertFalse(orphan.exists())
+
+
+class MaintenanceCheckUpdatesApiTests(_ApiTestCase):
+    """Endpoint powering the "Software updates" panel's explicit Check-for-updates button."""
+
+    @override_settings(WEB_ACCESS="ALL", APP_VERSION="0.24", REPOSITORY_URL="https://github.com/giovabal/pulpit")
+    def test_reports_update_available(self):
+        with mock.patch("webapp.version_check._fetch_latest_version", return_value="0.25"):
+            resp = self.jpost(_api("maintenance/check-updates/"), {})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["current"], "0.24")
+        self.assertEqual(body["latest"], "0.25")
+        self.assertTrue(body["update_available"])
+        self.assertEqual(body["repository_url"], "https://github.com/giovabal/pulpit")
+
+    @override_settings(WEB_ACCESS="ALL", APP_VERSION="0.24", REPOSITORY_URL="https://github.com/giovabal/pulpit")
+    def test_reports_up_to_date(self):
+        with mock.patch("webapp.version_check._fetch_latest_version", return_value="0.24"):
+            resp = self.jpost(_api("maintenance/check-updates/"), {})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["update_available"])
+
+    @override_settings(WEB_ACCESS="ALL", APP_VERSION="0.24")
+    def test_fails_open_when_fetch_fails(self):
+        with mock.patch("webapp.version_check._fetch_latest_version", return_value=None):
+            resp = self.jpost(_api("maintenance/check-updates/"), {})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIsNone(body["latest"])
+        self.assertFalse(body["update_available"])

@@ -77,11 +77,18 @@ def _fetch_latest_version() -> str | None:
     return None
 
 
-def get_latest_version() -> str | None:
-    """Return the cached upstream version, fetching on a cold or expired cache."""
-    cached = cache.get(VERSION_CACHE_KEY)
-    if cached is not None:
-        return cached.get("latest")
+def get_latest_version(force_refresh: bool = False) -> str | None:
+    """Return the cached upstream version, fetching on a cold or expired cache.
+
+    With ``force_refresh`` the cached value is ignored and GitHub is contacted
+    again, but the fresh result is still written back to the shared cache — so
+    the Maintenance "Check for updates" button both answers immediately and
+    refreshes the day-cache that the attention dots and banner read from.
+    """
+    if not force_refresh:
+        cached = cache.get(VERSION_CACHE_KEY)
+        if cached is not None:
+            return cached.get("latest")
     latest = _fetch_latest_version()
     cache.set(VERSION_CACHE_KEY, {"latest": latest}, _SUCCESS_TTL if latest else _FAILURE_TTL)
     return latest
@@ -111,10 +118,14 @@ def compare_versions(current: str, latest: str) -> bool:
     return new > cur
 
 
-def version_status() -> dict:
-    """Build the payload served by the ``/version/check/`` endpoint."""
+def version_status(force_refresh: bool = False) -> dict:
+    """Build the payload served by the ``/version/check/`` endpoint.
+
+    ``force_refresh`` is threaded through to bypass the day-cache for an
+    explicit, operator-initiated check (see :func:`get_latest_version`).
+    """
     current = getattr(settings, "APP_VERSION", "") or ""
-    latest = get_latest_version()
+    latest = get_latest_version(force_refresh=force_refresh)
     return {
         "current": current,
         "latest": latest,
