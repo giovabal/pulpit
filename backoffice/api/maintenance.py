@@ -241,6 +241,21 @@ def purge_run(request: Any) -> Response:
 
 
 @api_view(["POST"])
+def check_updates(request: Any) -> Response:
+    """Force a fresh upstream version check, bypassing the once-a-day cache.
+
+    Backs the "Check for updates" button on the Maintenance page. The attention
+    dots and banner across the UI read a day-cached lookup; this refetches the
+    upstream ``.system`` from GitHub right now and refreshes that shared cache.
+    Fails open like the rest of :mod:`webapp.version_check`: a network error or a
+    non-GitHub repository yields ``latest: null`` rather than an error response.
+    """
+    from webapp.version_check import version_status
+
+    return Response(version_status(force_refresh=True))
+
+
+@api_view(["POST"])
 def maintenance_optimize(request: Any) -> Response:
     engine = connection.vendor
     if engine not in _STRATEGIES:

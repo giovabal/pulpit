@@ -280,21 +280,98 @@
     // to clear the attention dots. The banner itself stays in place — only the
     // dots are dismissed, until a newer release supersedes the stored version.
     var $verBanner = document.getElementById("bo-version-banner");
+    var $verText = document.getElementById("bo-version-banner-text");
+
+    // Reveal + populate the page-top banner for a status that signals an update.
+    // Shared by the once-a-day cached lookup (window.pulpitVersion, on load) and
+    // the explicit "Check for updates" card below, so a forced check that finds a
+    // newer release surfaces the banner immediately too.
+    function revealVersionBanner(status) {
+        if (!$verBanner || !status || !status.update_available) return;
+        if ($verText) {
+            $verText.textContent =
+                "Pulpit " + status.latest + " is available — you are running " + status.current + ".";
+        }
+        $verBanner.classList.remove("d-none");
+    }
+
     if ($verBanner && window.pulpitVersion) {
-        var $verText = document.getElementById("bo-version-banner-text");
         var $verDismiss = document.getElementById("bo-version-banner-dismiss");
-        window.pulpitVersion.ready.then(function (status) {
-            if (!status || !status.update_available) return;
-            if ($verText) {
-                $verText.textContent =
-                    "Pulpit " + status.latest + " is available — you are running " + status.current + ".";
-            }
-            $verBanner.classList.remove("d-none");
-        });
+        window.pulpitVersion.ready.then(revealVersionBanner);
         if ($verDismiss) {
             $verDismiss.addEventListener("click", function () {
                 window.pulpitVersion.dismiss();
             });
         }
     }
+
+    // ── Check for updates (explicit, cache-bypassing) ────────────────────────
+    // Forces a fresh upstream check via the Maintenance API (the dots/banner
+    // otherwise read a once-a-day cache), then reports the verdict in the card.
+    var UPDATE_CHECK = "/manage/api/maintenance/check-updates/";
+
+    var $updateLatest    = document.getElementById("bo-update-latest");
+    var $updateCheckBtn  = document.getElementById("bo-update-check");
+    var $updateHint      = document.getElementById("bo-update-hint");
+    var $updateResult    = document.getElementById("bo-update-result");
+    var $updateResultSum = document.getElementById("bo-update-result-summary");
+
+    function renderUpdateResult(data) {
+        $updateLatest.textContent = data.latest || "unknown";
+        $updateResult.classList.remove("d-none");
+        $updateResultSum.replaceChildren();
+
+        if (!data.latest) {
+            $updateResultSum.textContent =
+                "Could not determine the latest version — GitHub was unreachable, or update checks " +
+                "are unavailable for this deployment. Try again shortly.";
+            return;
+        }
+        if (!data.update_available) {
+            $updateResultSum.textContent = "You are running the latest version (" + data.current + ").";
+            return;
+        }
+        $updateResultSum.append(
+            "Pulpit " + data.latest + " is available — you are running " + data.current +
+            ". Upgrade with git pull. "
+        );
+        if (data.repository_url) {
+            var link = document.createElement("a");
+            link.href = data.repository_url;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.className = "update-banner-link";
+            link.textContent = "View on GitHub";
+            $updateResultSum.append(link);
+        }
+        revealVersionBanner(data);
+    }
+
+    function checkUpdates() {
+        var originalHtml = $updateCheckBtn.innerHTML;
+        $updateCheckBtn.disabled = true;
+        $updateCheckBtn.innerHTML = '<i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Checking…';
+        $updateLatest.textContent = "…";
+        $updateHint.textContent = "Contacting GitHub…";
+
+        apiFetch(UPDATE_CHECK, { method: "POST", body: {} })
+            .then(function (data) {
+                renderUpdateResult(data);
+                if (!data.latest) {
+                    showToast("Couldn't reach GitHub for the version check.", "error");
+                } else if (data.update_available) {
+                    showToast("Update available: Pulpit " + data.latest + ".", "success");
+                } else {
+                    showToast("You're on the latest version.", "success");
+                }
+            })
+            .catch(function (e) { showToast("Update check failed: " + e.message, "error"); })
+            .finally(function () {
+                $updateCheckBtn.innerHTML = originalHtml;
+                $updateCheckBtn.disabled = false;
+                $updateHint.textContent = "";
+            });
+    }
+
+    $updateCheckBtn.addEventListener("click", checkUpdates);
 })();

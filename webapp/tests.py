@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import datetime
+from unittest import mock
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.paginator import InvalidPage
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from network.graph_builder import channel_network_data
+from webapp import version_check
 from webapp.managers import ChannelManager, ChannelQuerySet
 from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message, Organization
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
@@ -1574,3 +1577,56 @@ class PurgeOutOfPeriodTests(TestCase):
         ch = make_channel(telegram_id=5, to_inspect=True)
         self._msg(ch, 50, 2024, 6)
         self.assertNotIn(50, self._purgeable_ids())
+
+
+# ─── version_check: explicit (cache-bypassing) upstream check ────────────────────
+
+
+@override_settings(
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+    APP_VERSION="0.24",
+    REPOSITORY_URL="https://github.com/giovabal/pulpit",
+)
+class VersionCheckForceRefreshTests(TestCase):
+    """The Maintenance "Check for updates" button forces a fresh, cache-bypassing read.
+
+    Tests run under DummyCache by default (cache.set is a no-op), so these override
+    to a real LocMemCache to exercise the cache read/write paths.
+    """
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_default_read_serves_cache_without_fetching(self) -> None:
+        cache.set(version_check.VERSION_CACHE_KEY, {"latest": "0.99"}, 3600)
+        with mock.patch.object(version_check, "_fetch_latest_version") as fetch:
+            self.assertEqual(version_check.get_latest_version(), "0.99")
+        fetch.assert_not_called()
+
+    def test_force_refresh_ignores_cache_and_refetches(self) -> None:
+        cache.set(version_check.VERSION_CACHE_KEY, {"latest": "0.99"}, 3600)
+        with mock.patch.object(version_check, "_fetch_latest_version", return_value="0.25") as fetch:
+            self.assertEqual(version_check.get_latest_version(force_refresh=True), "0.25")
+        fetch.assert_called_once()
+
+    def test_force_refresh_writes_result_back_to_cache(self) -> None:
+        with mock.patch.object(version_check, "_fetch_latest_version", return_value="0.25"):
+            version_check.get_latest_version(force_refresh=True)
+        # A subsequent ordinary read is served from the refreshed cache — no second fetch.
+        with mock.patch.object(version_check, "_fetch_latest_version") as fetch:
+            self.assertEqual(version_check.get_latest_version(), "0.25")
+        fetch.assert_not_called()
+
+    def test_version_status_force_refresh_flags_available_update(self) -> None:
+        with mock.patch.object(version_check, "_fetch_latest_version", return_value="0.25"):
+            status = version_check.version_status(force_refresh=True)
+        self.assertEqual(status["current"], "0.24")
+        self.assertEqual(status["latest"], "0.25")
+        self.assertTrue(status["update_available"])
+
+    def test_version_status_force_refresh_fails_open_on_fetch_error(self) -> None:
+        with mock.patch.object(version_check, "_fetch_latest_version", return_value=None):
+            status = version_check.version_status(force_refresh=True)
+        self.assertIsNone(status["latest"])
+        self.assertFalse(status["update_available"])

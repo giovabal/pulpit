@@ -20,6 +20,36 @@
 <div class="bo-maint">
   <div class="bo-panel">
     <div class="bo-section-header">
+      <h2 class="bo-section-title">Software updates</h2>
+    </div>
+
+    <p class="bo-maint-intro">
+      Pulpit is upgraded with <code>git pull</code>. This compares the installed version against
+      the latest release published in the project's GitHub repository. The same check runs
+      automatically about once a day to light up the update indicators — press the button to
+      check again right now, ignoring that cached result.
+    </p>
+
+    <div class="bo-maint-status">
+      <div><span class="bo-maint-status-label">Installed version:</span> <span id="bo-update-current">{{ APP_VERSION|default:"unknown" }}</span></div>
+      <div><span class="bo-maint-status-label">Latest release:</span> <span id="bo-update-latest">—</span></div>
+    </div>
+
+    <div class="bo-maint-actions">
+      <button class="bo-btn" id="bo-update-check" type="button">
+        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Check for updates
+      </button>
+      <span class="bo-maint-hint" id="bo-update-hint"></span>
+    </div>
+
+    <div id="bo-update-result" class="bo-maint-result d-none">
+      <h3 class="bo-maint-result-title">Last check</h3>
+      <p class="bo-maint-result-summary" id="bo-update-result-summary"></p>
+    </div>
+  </div>
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
       <h2 class="bo-section-title">Database maintenance</h2>
     </div>
 
