@@ -7,19 +7,18 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "HITSAUTH",
         "BETWEENNESS",
         "BRIDGINGCENTRALITY",
-        "FLOWBETWEENNESS",
         "INDEGCENTRALITY",
         "OUTDEGCENTRALITY",
         "HARMONICCENTRALITY",
-        "KATZ",
-        "CLOSENESS",
         "BURTCONSTRAINT",
         "AMPLIFICATION",
         "CONTENTORIGINALITY",
         "DIFFUSIONLAG",
         "SPREADING",
-        "EGODENSITY",
         "LOCALCLUSTERING",
+        "CORENESS",
+        "TROPHICLEVEL",
+        "MODULEROLE",
     }
 )
 
@@ -35,7 +34,8 @@ ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
 # Node-attribute keys that are genuine centrality indices — the only measures for
 # which a Freeman-style centralization (score concentration around the max) is
 # meaningful. Excludes audience/activity attributes (fans, messages_count),
-# local coefficients (burt_constraint, ego_network_density, local_clustering),
+# local coefficients (burt_constraint, local_clustering), positional/structural
+# coordinates with no star-based maximum (coreness, trophic_level, within_module_z),
 # and behavioural metrics (amplification_factor, content_originality,
 # diffusion_lag, spreading_efficiency). The weighted in/out *strength* columns
 # (in_deg, out_deg) are also excluded: strength has no star-based theoretical
@@ -48,12 +48,9 @@ CENTRALITY_MEASURE_KEYS: frozenset[str] = frozenset(
         "hits_hub",
         "hits_authority",
         "betweenness",
-        "flow_betweenness",
         "in_degree_centrality",
         "out_degree_centrality",
         "harmonic_centrality",
-        "closeness_centrality",
-        "katz_centrality",
         "bridging_centrality",
         "community_bridging",
     }
@@ -104,20 +101,19 @@ ALL_STRATEGIES: list[str] = [
 ]
 
 # Dispatch table: (settings key, progress label, apply function name)
-# HITS, BRIDGINGCENTRALITY (Hwang, shares betweenness) and BRIDGING (community bridging,
-# needs a partition basis) are handled separately because they have non-standard signatures.
+# HITS, BRIDGINGCENTRALITY (Hwang, shares betweenness), BRIDGING (community bridging) and
+# MODULEROLE (Guimerà-Amaral role) are handled separately: the last two need a community
+# partition basis, and all have non-standard signatures.
 MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("PAGERANK", "pagerank", "apply_pagerank"),
     ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),
-    ("FLOWBETWEENNESS", "flow betweenness centrality", "apply_flow_betweenness_centrality"),
     ("INDEGCENTRALITY", "in-degree centrality", "apply_in_degree_centrality"),
     ("OUTDEGCENTRALITY", "out-degree centrality", "apply_out_degree_centrality"),
     ("HARMONICCENTRALITY", "harmonic centrality", "apply_harmonic_centrality"),
-    ("KATZ", "Katz centrality", "apply_katz_centrality"),
-    ("CLOSENESS", "closeness centrality", "apply_closeness_centrality"),
     ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
-    ("EGODENSITY", "ego network density", "apply_ego_network_density"),
     ("LOCALCLUSTERING", "local clustering", "apply_local_clustering"),
+    ("CORENESS", "k-core coreness", "apply_coreness"),
+    ("TROPHICLEVEL", "trophic level", "apply_trophic_level"),
 ]
 
 

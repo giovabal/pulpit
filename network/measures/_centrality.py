@@ -6,6 +6,8 @@ from network.utils import GraphData, to_undirected_sum
 
 import networkx as nx
 import numpy as np
+from scipy.sparse import diags
+from scipy.sparse.linalg import lsqr
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     except Exception as exc:  # noqa: BLE001
         # PageRank rarely fails, but power iteration can diverge on adversarial /
         # degenerate graphs; degrade gracefully rather than aborting the whole
-        # export (parity with the HITS and Katz handlers below).
+        # export (parity with the HITS handler below).
         logger.warning("PageRank could not be computed (%s); skipping score", exc)
         return []
     for node in graph_data["nodes"]:
@@ -33,7 +35,7 @@ def compute_hits(
     """Weighted HITS hub & authority scores (Kleinberg 1999, weighted variant).
 
     NetworkX's ``hits`` ignores edge weights — it treats the graph as binary — so
-    its scores disagree with every other prestige measure here (PageRank, Katz, …)
+    its scores disagree with every other prestige measure here (PageRank, …)
     which all use tie strength. This computes HITS on the *weighted* adjacency by
     power iteration:
 
@@ -103,7 +105,7 @@ def proximity_distances(graph: nx.DiGraph) -> nx.DiGraph:
     distance-based measure (the lightly-trafficked node would score as the broker /
     the closest). Inverting strength to a proximity distance ``1 / weight``
     (Brandes 2001; Opsahl, Agneessens & Skvoretz 2010) makes heavily-forwarded
-    edges *short*, so betweenness, closeness and harmonic centrality all agree on
+    edges *short*, so betweenness and harmonic centrality both agree on
     what "close" means. Done on a copy so the source graph's ``weight`` attribute —
     which the null-model rewiring permutes — is never touched.
     """
@@ -152,7 +154,7 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     """Add harmonic centrality to each node, weighted by tie strength.
 
     Computed over the ``distance = 1 / weight`` projection (Opsahl, Agneessens &
-    Skvoretz 2010) for consistency with betweenness/closeness, then divided by
+    Skvoretz 2010) for consistency with betweenness, then divided by
     ``n − 1`` to report the mean reciprocal distance to the other nodes
     (unreachable nodes contribute 0). Because the weighted distance can be below 1,
     this no longer lies in ``[0, 1]`` — interpret it relatively, not as a fraction.
@@ -162,40 +164,6 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     g = proximity_distances(graph)
     values = {nid: v / norm for nid, v in nx.harmonic_centrality(g, distance="distance").items()}
     return apply_measure(graph_data, values, "harmonic_centrality", "Harmonic Centrality")
-
-
-def katz_alpha(graph: nx.DiGraph, *, margin: float = 0.9, default: float = 0.1) -> float:
-    """Return a Katz ``alpha`` guaranteed to be below ``1 / spectral_radius``.
-
-    Katz centrality only converges — and only yields non-negative scores — for
-    ``alpha < 1/λ_max``. ``build_graph`` rescales edge weights (max → 10), which
-    inflates ``λ_max`` well past the NetworkX default ``alpha=0.1``, so power
-    iteration diverges and the numpy solver silently returns invalid (negative)
-    scores. We bound ``λ_max`` by ``min`` of the largest weighted out-/in-degree
-    (a Perron-Frobenius/Gershgorin upper bound — O(N), needs no eigensolver and
-    is independent of the weight scale) and back off by ``margin``.
-    """
-    if graph.number_of_edges() == 0:
-        return default
-    out_max = max((w for _, w in graph.out_degree(weight="weight")), default=0.0)
-    in_max = max((w for _, w in graph.in_degree(weight="weight")), default=0.0)
-    bound = min(out_max, in_max)
-    return margin / bound if bound > 0 else default
-
-
-def apply_katz_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add Katz centrality to each node."""
-    alpha = katz_alpha(graph)
-    try:
-        values: dict[str, float] = nx.katz_centrality(graph, alpha=alpha, weight="weight")
-    except nx.PowerIterationFailedConvergence:
-        logger.warning("Katz centrality failed to converge; retrying with numpy solver")
-        try:
-            values = nx.katz_centrality_numpy(graph, alpha=alpha, weight="weight")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Katz centrality numpy fallback also failed: %s", exc)
-            return []
-    return apply_measure(graph_data, values, "katz_centrality", "Katz Centrality")
 
 
 def apply_community_bridging(
@@ -306,65 +274,16 @@ def apply_bridging_centrality(
     return apply_measure(graph_data, values, "bridging_centrality", "Bridging Centrality")
 
 
-def apply_flow_betweenness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add random-walk (current-flow) betweenness centrality to each node.
-
-    Uses ``networkx.current_flow_betweenness_centrality`` (Newman 2005), which models
-    information as a random walk rather than routing it along shortest paths.  Each node's
-    score reflects how often it lies on a random walk between any two other nodes,
-    integrating over *all* paths weighted by their probability — not just the shortest one.
-
-    The directed graph is symmetrised to undirected before computation (consistent with the
-    random-walk assumption that current flows in both directions along any edge).  Edge
-    weights are preserved.  Because the algorithm requires a connected graph, nodes outside
-    the largest weakly-connected component receive 0.0; a warning is logged when this occurs.
-    """
-    key = "flow_betweenness"
-    ugraph = to_undirected_sum(graph)
-
-    if not nx.is_connected(ugraph):
-        logger.warning(
-            "flow_betweenness: graph is not connected — computing on the largest component; all other nodes receive 0.0"
-        )
-        largest_cc = max(nx.connected_components(ugraph), key=len)
-        subgraph = ugraph.subgraph(largest_cc)
-    else:
-        subgraph = ugraph
-
-    try:
-        values: dict[str, float] = nx.current_flow_betweenness_centrality(subgraph, weight="weight")
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError) as exc:
-        logger.warning("flow_betweenness: computation failed (%s)", exc)
-        return []
-
-    return apply_measure(graph_data, values, key, "Flow Betweenness")
-
-
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add Burt's constraint to each node. Isolated nodes receive None (undefined)."""
     key = "burt_constraint"
     # Use edge weights so constraint reflects tie strength, consistent with the
-    # other structural measures (betweenness, Katz, …) which all pass weight.
+    # other structural measures (betweenness, …) which all pass weight.
     values: dict[str, float] = nx.constraint(graph, weight="weight")
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
         node[key] = None if (val is None or isnan(val)) else round(val, 6)
     return [(key, "Burt's Constraint")]
-
-
-def apply_closeness_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add closeness centrality to each node, weighted by tie strength.
-
-    Uses the Wasserman-Faust improved formula (NetworkX default), which handles partially
-    disconnected graphs correctly: nodes that cannot reach any other node receive 0.0.
-    Computed over the ``distance = 1 / weight`` projection (Opsahl, Agneessens & Skvoretz
-    2010) for consistency with betweenness/harmonic; because the weighted distance can be
-    below 1 the value may exceed 1, so interpret it relatively rather than as a fraction.
-    """
-    g = proximity_distances(graph)
-    return apply_measure(
-        graph_data, nx.closeness_centrality(g, distance="distance"), "closeness_centrality", "Closeness Centrality"
-    )
 
 
 def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -376,28 +295,135 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     return apply_measure(graph_data, nx.clustering(graph), "local_clustering", "Local Clustering")
 
 
-def apply_ego_network_density(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add ego network density to each node.
+def apply_coreness(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add the k-core coreness number (the deepest k-core a node belongs to) to each node.
 
-    For each node, the density of the directed subgraph induced by its immediate neighbours
-    (predecessors ∪ successors, ego excluded) is computed as:
-
-        actual directed edges among alters / (k × (k − 1))
-
-    where k is the number of alters.  A value near 1 means every neighbour is connected to
-    every other — the node is embedded in a cohesive echo chamber or mutual-citation clique.
-    A value near 0 means the neighbours are largely disconnected from one another — the node
-    acts as a hub or structural bridge between otherwise separate sources.
-
-    ``None`` is returned for nodes with fewer than two neighbours (density is undefined when
-    fewer than two alters exist).
+    Computed on the symmetrised, self-loop-free graph (``to_undirected_sum`` then drop
+    self-loops), matching the convention of the KCORE community strategy
+    (:func:`network.community.detect_kcore`). ``nx.core_number`` is unweighted, so coreness
+    is a topological depth, not a tie-strength quantity. High coreness = embedded in the
+    densely interconnected nucleus; low = a peripheral amplifier shed in the first peeling
+    rounds. Coreness is a robust predictor of spreading influence (Kitsak et al. 2010), often
+    outperforming degree and betweenness, and is well-behaved on the sparse, partially
+    disconnected graphs typical of Telegram ecosystems.
     """
-    key = "ego_network_density"
+    undirected = to_undirected_sum(graph)
+    undirected.remove_edges_from(nx.selfloop_edges(undirected))
+    values = {nid: float(core) for nid, core in nx.core_number(undirected).items()}
+    return apply_measure(graph_data, values, "coreness", "K-core Coreness")
+
+
+def apply_trophic_level(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add the hierarchical trophic level to each node (MacKay, Johnson & Sansom 2020).
+
+    Solves the Laplacian system ``(diag(u) − (W + Wᵀ)) h = (w_in − w_out)``, where ``W`` is
+    the weighted adjacency, ``w_in`` / ``w_out`` are the weighted in-/out-strength and
+    ``u = w_in + w_out``. This *hierarchical-levels* formulation (MacKay, Johnson & Sansom,
+    "How directed is a directed network?", Proc. R. Soc. A 2020) is always finite — unlike
+    the classic Levine 1980 trophic level, which diverges on graphs without basal nodes — so
+    it is defined on the cyclic citation graphs Pulpit builds. The system is consistent
+    (``Σ(w_in − w_out) = 0``) but singular per connected component, so it is solved by
+    least squares and each weakly-connected component is shifted to a minimum of 0.
+
+    Read it as a structural source→sink coordinate: pure originators sit near 0, terminal
+    amplifiers high. It complements CONTENTORIGINALITY, which measures the same producer↔
+    redistributor axis from message content rather than link structure. The level is
+    scale-invariant to a global edge-weight rescaling.
+    """
+    nodes = list(graph.nodes())
+    if not nodes:
+        return apply_measure(graph_data, {}, "trophic_level", "Trophic Level")
+    w = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight="weight", dtype=float, format="csr")
+    w_in = np.asarray(w.sum(axis=0)).ravel()
+    w_out = np.asarray(w.sum(axis=1)).ravel()
+    laplacian = (diags(w_in + w_out) - (w + w.T)).tocsr()
+    levels = lsqr(laplacian, w_in - w_out)[0]
+    # Levels are only defined up to an additive constant per component; pin each weakly
+    # connected component to a minimum of 0 so sources read as 0 and the scale is comparable.
+    index = {nid: i for i, nid in enumerate(nodes)}
+    for component in nx.weakly_connected_components(graph):
+        idxs = [index[nid] for nid in component]
+        shift = min(levels[i] for i in idxs)
+        for i in idxs:
+            levels[i] -= shift
+    values = {nid: round(float(levels[i]), 6) for i, nid in enumerate(nodes)}
+    return apply_measure(graph_data, values, "trophic_level", "Trophic Level")
+
+
+# Guimerà & Amaral (2005) within-module-degree-z / participation-coefficient role thresholds.
+_GA_Z_HUB = 2.5
+
+
+def _ga_role(z: float, participation: float) -> str:
+    """Map a (within-module z-score, participation coefficient) pair to one of the seven
+    Guimerà & Amaral (2005) node roles."""
+    if z < _GA_Z_HUB:  # non-hub
+        if participation <= 0.05:
+            return "Ultra-peripheral"
+        if participation <= 0.62:
+            return "Peripheral"
+        if participation <= 0.80:
+            return "Connector"
+        return "Kinless"
+    # hub
+    if participation <= 0.30:
+        return "Provincial hub"
+    if participation <= 0.75:
+        return "Connector hub"
+    return "Kinless hub"
+
+
+def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: str) -> list[tuple[str, str]]:
+    """Add the Guimerà & Amaral (2005) within-module role to each node, relative to the
+    community partition named by ``strategy_key``.
+
+    Two quantities, both measured against the node's own community (module):
+
+    * **within-module degree z-score** ``z`` — how many more (or fewer) intra-module
+      neighbours the node has than its module's average, z-scored within the module; high
+      ``z`` marks a hub *inside* its own community. Emitted as the sortable numeric measure
+      ``within_module_z``.
+    * **participation coefficient** ``P`` (Guimerà & Amaral 2005, the same helper that backs
+      community bridging) — how evenly the node's ties spread across communities.
+
+    The (z, P) pair maps to one of seven canonical roles (ultra-peripheral, peripheral,
+    connector, kinless; and provincial / connector / kinless hub), written as the categorical
+    node attribute ``module_role``. Together they answer "within-community kingpin or
+    cross-community connector?" — the embeddedness-versus-brokerage distinction, read off the
+    community partitions Pulpit already produces. Within-module degree counts distinct
+    same-module neighbours (predecessors ∪ successors), following the undirected, unweighted
+    neighbour convention of the bridging coefficient. Nodes with no community assignment
+    (e.g. dead leaves) receive ``None``.
+    """
+    community_map: dict[str, str] = {
+        node_id: node_data["communities"][strategy_key]
+        for node_id, node_data in graph.nodes(data="data")
+        if node_data and strategy_key in (node_data.get("communities") or {})
+    }
+    module_degree: dict[str, int] = {}
+    for node in graph.nodes():
+        module = community_map.get(node)
+        if module is None:
+            continue
+        neighbours = (set(graph.predecessors(node)) | set(graph.successors(node))) - {node}
+        module_degree[node] = sum(1 for nb in neighbours if community_map.get(nb) == module)
+
+    by_module: dict[str, list[int]] = {}
+    for node, deg in module_degree.items():
+        by_module.setdefault(community_map[node], []).append(deg)
+    module_stats: dict[str, tuple[float, float]] = {
+        m: (float(np.mean(degs)), float(np.std(degs))) for m, degs in by_module.items()
+    }
+    participation = compute_neighbour_community_participation(graph, community_map)
+
     for node in graph_data["nodes"]:
-        node_id = node["id"]
-        neighbors = (set(graph.predecessors(node_id)) | set(graph.successors(node_id))) - {node_id}
-        if len(neighbors) < 2:
-            node[key] = None
-        else:
-            node[key] = round(nx.density(graph.subgraph(neighbors)), 6)
-    return [(key, "Ego Network Density")]
+        nid = node["id"]
+        if nid not in module_degree:
+            node["within_module_z"] = None
+            node["module_role"] = None
+            continue
+        mean, std = module_stats[community_map[nid]]
+        z = (module_degree[nid] - mean) / std if std > 0 else 0.0
+        node["within_module_z"] = round(z, 4)
+        node["module_role"] = _ga_role(z, participation.get(nid, 0.0))
+    return [("within_module_z", "Within-module z")]

@@ -277,11 +277,16 @@ def write_csv(
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _CSV_BASE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
+    # The categorical Guimerà-Amaral role rides alongside its numeric within_module_z measure;
+    # only emit the column when that measure was computed.
+    has_module_role = any(k == "within_module_z" for k, _ in measures_labels)
 
     headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
+    if has_module_role:
+        headers.append("Module role")
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
 
@@ -303,6 +308,8 @@ def write_csv(
                 row.append(node.get(pagerank_col[0]))
             for key, _ in other_extra:
                 row.append(node.get(key))
+            if has_module_role:
+                row.append(node.get("module_role") or "")
             for s in strategies:
                 row.append(communities.get(s, ""))
             row.append(node.get("activity_start") or "")
@@ -423,6 +430,9 @@ def write_graph_files(
         "out_deg",
         "activity_start",
         "activity_end",
+        # Categorical Guimerà-Amaral role label (paired with the numeric within_module_z
+        # measure); only present on nodes when MODULEROLE was computed.
+        "module_role",
     } | {k for k, _ in measures_labels}
     channels_payload: dict[str, Any] = {
         "nodes": [

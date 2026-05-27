@@ -199,7 +199,7 @@ Go to **Manage → Event types** to define categories like *Election* or *Policy
 
 ### Robustness: resistance to node removal
 
-Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; another twelve strategies are available including HITS hub/authority, Katz, Closeness, Burt's constraint, bridging, spreading efficiency, and dynamic (re-rank-after-removal) variants. For each selected strategy Pulpit:
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; another twelve strategies are available including HITS hub/authority, harmonic, Burt's constraint, bridging, spreading efficiency, and dynamic (re-rank-after-removal) variants. For each selected strategy Pulpit:
 
 - optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
 - records the residual-size curves `S(q)` for WCC, SCC, and directed reachability,

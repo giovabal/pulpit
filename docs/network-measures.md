@@ -20,15 +20,14 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | HITS Hub | `HITSHUB` | Which channels actively amplify others — the distributors? |
 | HITS Authority | `HITSAUTH` | Which channels are the original sources that distributors spread? |
 | Betweenness centrality | `BETWEENNESS` | Which channels sit on the bridges between sub-networks? |
-| Flow betweenness | `FLOWBETWEENNESS` | Which channels are brokers that standard betweenness misses? |
 | In-degree centrality | `INDEGCENTRALITY` | Which channels are cited by the largest fraction of others? |
 | Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
 | Harmonic centrality | `HARMONICCENTRALITY` | Which channels can reach the rest of the network in the fewest hops? |
-| Closeness centrality | `CLOSENESS` | Which channels are most easily reached from the rest of the network? |
-| Katz centrality | `KATZ` | Which channels are most accessible through all paths, direct and indirect? |
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
-| Ego network density | `EGODENSITY` | How deeply is this channel embedded in a tight, mutually referencing cluster? |
 | Local clustering | `LOCALCLUSTERING` | Does this channel itself form closed citation cycles with its neighbours? |
+| K-core coreness | `CORENESS` | Is this channel in the densely interconnected nucleus, or a peripheral amplifier? |
+| Trophic level | `TROPHICLEVEL` | Where does this channel sit on the structural source→sink axis? |
+| Within-module role | `MODULEROLE` | Is this channel a within-community hub or a cross-community connector? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
@@ -98,18 +97,6 @@ Channels that bridge communities or sub-networks that would otherwise be weakly 
 
 ---
 
-## Flow betweenness
-
-*A high flow betweenness score means this channel is an important relay point for diffusing information — even when standard betweenness misses it.*
-
-Standard betweenness assumes information travels along the single shortest path. Flow betweenness, introduced by Newman (2005), relaxes that assumption: it models information as a random walk diffusing through the network along all paths simultaneously, with each path weighted by its probability. The score for a channel is the fraction of all such random-walk flows that pass through it. The graph is symmetrised to undirected before computation; channels outside the largest connected component receive 0.0.
-
-**Reference:** Newman, M.E.J. (2005) "A measure of betweenness centrality based on random walks." *Social Networks* 27(1). [doi:10.1016/j.socnet.2004.11.009](https://doi.org/10.1016/j.socnet.2004.11.009)
-
-**In practice:** flow betweenness and shortest-path betweenness identify different kinds of brokers. A channel that ranks high on flow betweenness but low on standard betweenness is structurally important to diffusion but not a bottleneck in the geodesic sense. The two measures are most informative when compared.
-
----
-
 ## In-degree centrality
 
 *The simplest measure: what fraction of all other channels in the network forward or reference this channel?*
@@ -136,37 +123,9 @@ A high out-degree score means a channel casts a wide net — pointing outward to
 
 *A high harmonic centrality score means this channel can reach the rest of the network quickly — along short, strongly-tied paths.*
 
-Harmonic centrality sums the reciprocals of shortest path lengths to every other reachable channel, then normalises by the number of other channels. Path length is measured over weighted distance `1/weight` (a strong forwarding tie counts as *short*, following Opsahl, Agneessens & Skvoretz 2010), consistent with betweenness and closeness. Unreachable channels contribute zero, making it robust in the sparse, partially disconnected networks typical of political Telegram ecosystems. Unlike betweenness, it does not require a channel to sit on paths others use; it only asks how short those paths are from its own vantage point. Because a weighted distance can be below 1, the normalised score is not bounded to `[0, 1]` — read it relatively.
+Harmonic centrality sums the reciprocals of shortest path lengths to every other reachable channel, then normalises by the number of other channels. Path length is measured over weighted distance `1/weight` (a strong forwarding tie counts as *short*, following Opsahl, Agneessens & Skvoretz 2010), consistent with betweenness. Unreachable channels contribute zero, making it robust in the sparse, partially disconnected networks typical of political Telegram ecosystems. Unlike betweenness, it does not require a channel to sit on paths others use; it only asks how short those paths are from its own vantage point. Because a weighted distance can be below 1, the normalised score is not bounded to `[0, 1]` — read it relatively.
 
 **In practice:** harmonic centrality surfaces structurally well-positioned channels that are invisible to betweenness-based rankings — channels that are structurally close to everyone without being a bottleneck.
-
----
-
-## Closeness centrality
-
-*A high closeness score means this channel is easily reached from the rest of the network — many channels can arrive at it along short, strongly-tied paths.*
-
-Closeness centrality (Wasserman-Faust normalised) measures how accessible a channel is as a destination. For each channel, the average incoming path length from all other reachable channels is computed over weighted distance `1/weight` (strong forwarding ties count as *short*, following Opsahl, Agneessens & Skvoretz 2010), then normalised by the fraction of the network that can actually reach it. A channel with high closeness sits at the convergence of many short incoming paths: the rest of the network can find it efficiently, without traversing many intermediaries. Because a weighted distance can be below 1, the score may exceed 1 — read it relatively rather than as a fraction.
-
-The Wasserman-Faust correction handles the partial connectivity typical of Telegram networks — channels in isolated components or with no incoming paths receive 0.0 — without penalising every node for the size of unreachable components.
-
-**Relationship to harmonic centrality.** Both harmonic and closeness measure how reachable a node is from the rest of the network. The formulas differ in how they aggregate distances: harmonic sums reciprocals (each extra path contributes independently), while closeness computes a mean corrected by the reachable fraction. In practice the two rankings are correlated, but they diverge at the periphery: a channel embedded in a dense sub-cluster will score well on harmonic (many short local paths) but modestly on closeness (the fraction of the full network reaching it is small). Closeness is thus sensitive to both proximity and scope.
-
-**In practice:** use closeness to identify channels that are structurally accessible from across the network — not just from a local neighbourhood. Pair it with betweenness to distinguish roles: a channel with high closeness and low betweenness is a reachable destination that information arrives at, not a bottleneck it passes through.
-
-**Example.** A major party's official channel scores 0.74 on closeness — much of the network links toward it through short paths. A small aggregator at the intersection of three communities scores 0.52 on closeness but four times higher on betweenness: information passes *through* the aggregator but converges *at* the party channel. Neither measure alone captures both roles.
-
----
-
-## Katz centrality
-
-*A high Katz score means this channel is deeply embedded in the network — reachable from many directions through many indirect paths.*
-
-Katz centrality extends PageRank by counting all paths of any length, with longer paths discounted by an attenuation factor α. Unlike PageRank, every channel receives a baseline score regardless of how important its predecessors are.
-
-**Reference:** Katz, L. (1953) "A new status index derived from sociometric analysis." *Psychometrika* 18(1). [doi:10.1007/BF02289026](https://doi.org/10.1007/BF02289026)
-
-**In practice:** Katz is particularly informative in distributed, horizontal networks where influence is not concentrated in a few dominant hubs. A regional channel receiving forwards from dozens of small local outlets — none individually prestigious — will rank low on PageRank but high on Katz, revealing that it is a genuine reference point for a wide slice of the network.
 
 ---
 
@@ -184,16 +143,6 @@ The score ranges from 0 to 1. A low score means the channel's contacts belong to
 
 ---
 
-## Ego network density
-
-*A high ego density score means this channel's immediate neighbours are all strongly connected to each other — it is embedded in a closed echo chamber. A low score means the channel's neighbours are isolated from each other, with all connections flowing through this channel.*
-
-Ego network density measures how densely the immediate neighbourhood (predecessors ∪ successors) of a channel is connected among itself, excluding the channel. A value of 1.0 means the neighbourhood is a fully connected clique — every neighbour cites every other. A value of 0.0 means neighbours share no connections at all — the channel is a hub between completely disconnected sources. Channels with fewer than two neighbours receive no score.
-
-**In practice:** use ego density in combination with PageRank or betweenness to distinguish structural roles. A channel with high betweenness and low ego density is a genuine bridge between disconnected groups. A channel with high betweenness and high ego density is a central node in a tight cluster — it appears to bridge because it is highly connected, but its neighbourhood is a single coherent echo chamber.
-
----
-
 ## Local clustering
 
 *A high local clustering score means this channel participates directly in closed citation cycles — it is embedded in a loop of mutual amplification.*
@@ -202,9 +151,7 @@ Local clustering coefficient (Fagiolo 2007) counts the directed triangles that p
 
 **Reference:** Fagiolo, G. (2007) "Clustering in complex directed networks." *Physical Review E* 76(2). [doi:10.1103/PhysRevE.76.026107](https://doi.org/10.1103/PhysRevE.76.026107)
 
-**Relationship to ego network density.** Both measures characterise the cohesion of a channel's immediate neighbourhood, but they ask different questions. Ego density asks whether the neighbours connect *to each other* (independently of the focal channel); local clustering asks whether the focal channel *itself* is part of those triangular loops. A channel can have high ego density — its neighbours form a tight cluster — while having low local clustering, if it is not part of the loop (for example, it cites into a clique without being cited back). Conversely, a channel with low ego density can have non-zero clustering if it participates in one tight triple that does not generalise to the rest of its neighbourhood.
-
-**In practice:** local clustering and ego density together produce a richer picture of local structure. Both high: the channel is embedded in a cohesive echo chamber and actively participates in its circular citation loops. High ego density, low clustering: the channel is surrounded by a clique but stands at its edge — a point of entry into a closed community rather than a member of it. Low ego density, non-zero clustering: the channel forms a tight triangular relationship with a specific pair of neighbours while otherwise bridging isolated sources.
+**In practice:** local clustering pinpoints channels that are *active participants* in mutual-amplification loops, not mere pass-throughs. A channel with high betweenness but near-zero local clustering bridges groups without being woven into any citation cycle; a channel with high local clustering sits inside a tight reciprocal-citation cluster — often a coordinated or echo-chamber core. Pair it with `BURTCONSTRAINT` (low constraint = broker spanning structural holes) to separate the loop-embedded cores from the brokers between them.
 
 **Example.** An internal channel within a tightly coordinated disinformation network — one that forwards from the network's seeder and is cited back by it — has high local clustering (0.67) because it participates in a clear citation cycle. A mainstream aggregator with the same number of connections but drawing from independent, mutually unrelated sources scores near 0 on clustering even if some of those sources have connections to each other.
 
@@ -287,6 +234,42 @@ The community basis for the participation coefficient is set by the strategy nam
 **In practice:** community bridging fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a densely connected region of the network, even if all its neighbours belong to the same ideological cluster. Community bridging penalises that: the participation-coefficient factor discounts intra-community connectors and elevates genuine cross-community bridges.
 
 **Example.** Two channels have identical betweenness scores. The first connects channels that all belong to the same nationalist bloc; the second connects channels from four distinct communities — nationalist, religious conservative, mainstream right, and state media. Standard betweenness ranks them equal. Community bridging gives the second channel a substantially higher score, identifying it as the more strategically significant node for understanding how narratives migrate across the broader information ecosystem.
+
+---
+
+## K-core coreness
+
+*A high coreness number means this channel sits in the densely interconnected nucleus of the network; a low number means it is a peripheral amplifier shed in the first peeling rounds.*
+
+The k-core decomposition repeatedly strips away every node with fewer than *k* neighbours until only nodes with at least *k* surviving neighbours remain; a channel's **coreness** is the largest *k* whose core still contains it. It is computed on the symmetrised, self-loop-free citation graph (matching the [K-core community strategy](community-detection.md#k-core)), so it measures topological depth rather than tie strength. Coreness is one of the most robust predictors of spreading influence: Kitsak et al. (2010) showed the most effective spreaders are the channels in the network's core, often outranking both degree and betweenness, and the measure stays well-behaved on the sparse, partially disconnected graphs typical of Telegram ecosystems.
+
+**Reference:** Kitsak, M., Gallos, L.K., Havlin, S., Liljeros, F., Muchnik, L., Stanley, H.E. & Makse, H.A. (2010) "Identification of influential spreaders in complex networks." *Nature Physics* 6(11). [doi:10.1038/nphys1746](https://doi.org/10.1038/nphys1746)
+
+**In practice:** a channel with high in-degree but low coreness is cited by many peripheral accounts yet sits outside the mutually-reinforcing nucleus — its reach is shallower than its raw citation count suggests. A channel with modest degree but high coreness is wired into the dense core, a position that predicts efficient onward spread. Pair coreness with PageRank to separate "popular but peripheral" from "core and influential".
+
+---
+
+## Trophic level
+
+*A low trophic level means this channel is a structural source that others draw from; a high level means it is a terminal amplifier downstream of the content it carries.*
+
+Trophic level places every channel on a single source→sink axis derived purely from the direction of citation flow. Pulpit uses the **hierarchical levels** of MacKay, Johnson & Sansom (2020): the levels `h` solve the Laplacian system `(diag(u) − (W + Wᵀ)) h = (w_in − w_out)`, where `w_in` / `w_out` are weighted in-/out-strength and `u = w_in + w_out`. Unlike the classic Levine (1980) trophic level — undefined on graphs without basal nodes — this formulation stays finite on the cyclic citation graphs Pulpit builds. Levels are shifted so the lowest channel in each weakly-connected component reads 0.
+
+**Reference:** MacKay, R.S., Johnson, S. & Sansom, B. (2020) "How directed is a directed network?" *Royal Society Open Science* 7(9). [doi:10.1098/rsos.201138](https://doi.org/10.1098/rsos.201138). Levine, S. (1980) "Several measures of trophic structure applicable to complex food webs." *Journal of Theoretical Biology* 83(2). [doi:10.1016/0022-5193(80)90288-X](https://doi.org/10.1016/0022-5193(80)90288-X)
+
+**In practice:** trophic level is the structural counterpart of [content originality](#content-originality). Content originality asks whether a channel's *messages* are original; trophic level asks whether its *position in the citation flow* is upstream — regardless of how original any single post is. A channel can repost heavily (low content originality) yet still sit upstream of an even more derivative downstream cluster. Reading the two together separates genuine sources from mid-chain relays.
+
+---
+
+## Within-module role
+
+*Is this channel a hub inside its own community, a bridge between communities, or a peripheral member? The within-module role names the position directly.*
+
+Following Guimerà & Amaral (2005), each channel is characterised by two quantities measured against the community partition (the [bridging basis](#community-bridging), defaulting to Leiden Directed): the **within-module degree z-score** `z` — how many more intra-community neighbours it has than its community's average — and the **participation coefficient** `P` — how evenly its ties spread across communities. The (z, P) pair maps to one of seven canonical roles: ultra-peripheral, peripheral, connector, and kinless non-hubs (`z < 2.5`); and provincial, connector, and kinless hubs (`z ≥ 2.5`). The numeric `z` is the sortable **Within-module z** column; the categorical label is the **Role** column.
+
+**Reference:** Guimerà, R. & Amaral, L.A.N. (2005) "Functional cartography of complex metabolic networks." *Nature* 433(7028). [doi:10.1038/nature03288](https://doi.org/10.1038/nature03288)
+
+**In practice:** the role taxonomy turns a community partition into a per-channel job description. A *provincial hub* is a kingpin within a single community — central but inward-facing. A *connector hub* is both central and spans communities: the most strategically significant brokers, whose removal both fragments a community and severs cross-community flow. A (non-hub) *connector* is a low-profile bridge. `MODULEROLE` needs at least one `--community-strategies` partition to define the modules.
 
 ---
 

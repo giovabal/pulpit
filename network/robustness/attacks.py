@@ -38,9 +38,8 @@ from typing import Any, Literal
 
 from network.measures import compute_betweenness, compute_hits
 from network.measures._base import compute_neighbour_community_participation
-from network.measures._centrality import katz_alpha, proximity_distances
+from network.measures._centrality import proximity_distances
 from network.measures._spreading import _run_sir
-from network.utils import to_undirected_sum
 
 import networkx as nx
 import numpy as np
@@ -90,19 +89,6 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
         return _in_strength(g)
 
 
-def _safe_katz(g: nx.DiGraph) -> dict[Any, float]:
-    alpha = katz_alpha(g)  # below 1/λ_max, so the result stays valid (non-negative)
-    try:
-        return nx.katz_centrality(g, alpha=alpha, weight="weight")
-    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
-        logger.warning("Katz power-iteration failed; trying numpy backend", exc_info=True)
-        try:
-            return nx.katz_centrality_numpy(g, alpha=alpha, weight="weight")
-        except Exception:  # noqa: BLE001
-            logger.warning("Katz numpy backend also failed; using in-strength proxy", exc_info=True)
-            return _in_strength(g)
-
-
 def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
     # Weighted HITS (shared with the HITS measure) so the attack ranks by the same
     # tie-strength-aware scores. Degenerate residual graphs can still misbehave;
@@ -130,30 +116,6 @@ def _harmonic(g: nx.DiGraph) -> dict[Any, float]:
     norm = (n - 1) if n > 1 else 1
     gd = proximity_distances(g)
     return {nid: v / norm for nid, v in nx.harmonic_centrality(gd, distance="distance").items()}
-
-
-def _closeness(g: nx.DiGraph) -> dict[Any, float]:
-    # Weighted over distance = 1/weight (Opsahl 2010), matching the closeness measure.
-    return nx.closeness_centrality(proximity_distances(g), distance="distance")
-
-
-def _flow_betweenness(g: nx.DiGraph) -> dict[Any, float]:
-    # Random-walk (current-flow) betweenness needs a connected undirected
-    # graph; we restrict to the largest WCC and assign 0 to every other node.
-    # Sum reciprocal weights (W + Wᵀ) so mutual ties keep their full conductance.
-    ug = to_undirected_sum(g)
-    scores: dict[Any, float] = dict.fromkeys(g.nodes(), 0.0)
-    if ug.number_of_nodes() < 2:
-        return scores
-    if nx.is_connected(ug):
-        sub = ug
-    else:
-        sub = ug.subgraph(max(nx.connected_components(ug), key=len))
-    try:
-        scores.update(nx.current_flow_betweenness_centrality(sub, weight="weight"))
-    except (nx.NetworkXError, nx.NetworkXAlgorithmError, ZeroDivisionError):
-        pass
-    return scores
 
 
 def _burt_constraint(g: nx.DiGraph) -> dict[Any, float]:
@@ -224,15 +186,12 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "out_strength": StrategySpec("Out-strength", _out_strength),
     # Prestige
     "pagerank": StrategySpec("PageRank", _safe_pagerank),
-    "katz": StrategySpec("Katz centrality", _safe_katz),
     "hits_hub": StrategySpec("HITS hub", _hits_hub),
     "hits_authority": StrategySpec("HITS authority", _hits_authority),
     # Reach
     "harmonic": StrategySpec("Harmonic centrality", _harmonic),
-    "closeness": StrategySpec("Closeness centrality", _closeness),
     # Brokerage
     "betweenness": StrategySpec("Betweenness", compute_betweenness),
-    "flow_betweenness": StrategySpec("Flow betweenness", _flow_betweenness),
     "burt_constraint": StrategySpec("Burt's constraint (low = broker)", _burt_constraint, inverse=True),
     # bridging is parameterised; the "bridging" key here is a placeholder for
     # the registry (label / kind) — the score function is invoked separately
@@ -247,7 +206,6 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
     "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
     "pagerank_dyn": StrategySpec("PageRank (dyn)", _safe_pagerank, kind="dynamic"),
-    "katz_dyn": StrategySpec("Katz (dyn)", _safe_katz, kind="dynamic"),
     "hits_hub_dyn": StrategySpec("HITS hub (dyn)", _hits_hub, kind="dynamic"),
     "hits_authority_dyn": StrategySpec("HITS authority (dyn)", _hits_authority, kind="dynamic"),
     "betweenness_dyn": StrategySpec("Betweenness (dyn)", compute_betweenness, kind="dynamic"),
@@ -319,7 +277,7 @@ def removal_order(
 
     Worst-case dynamic complexity (|V| = N, |E| = m):
         ``in_strength_dyn`` / ``out_strength_dyn``   O(N · (N + m))
-        ``pagerank_dyn`` / ``katz_dyn`` / ``hits_*_dyn``   O(N · power-iter)
+        ``pagerank_dyn`` / ``hits_*_dyn``                   O(N · power-iter)
         ``betweenness_dyn``                                 O(N² · m)
     """
     canonical, bridging_key = parse_strategy(strategy)
