@@ -37,11 +37,13 @@ ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
 # meaningful. Excludes audience/activity attributes (fans, messages_count),
 # local coefficients (burt_constraint, ego_network_density, local_clustering),
 # and behavioural metrics (amplification_factor, content_originality,
-# diffusion_lag, spreading_efficiency).
+# diffusion_lag, spreading_efficiency). The weighted in/out *strength* columns
+# (in_deg, out_deg) are also excluded: strength has no star-based theoretical
+# maximum, so the generic (n−1)·C_max normaliser is too loose to be a useful
+# Freeman approximation. The unweighted, normalised in_degree_centrality /
+# out_degree_centrality (for which the star bound is exact) stay in.
 CENTRALITY_MEASURE_KEYS: frozenset[str] = frozenset(
     {
-        "in_deg",
-        "out_deg",
         "pagerank",
         "hits_hub",
         "hits_authority",

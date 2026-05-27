@@ -73,28 +73,33 @@ function _render(d) {
         return;
     }
 
-    var stratMaps = {}, labelSet = {};
+    // Identify each channel by its pk (stable + unique). Two channels can share a
+    // title, so keying the co-association on the label alone silently merged them;
+    // `idLabel` maps the pk back to its title for display. Older communities.json
+    // files predate the `pk` field — fall back to the label there.
+    function _chanId(ch) { return (ch.pk != null) ? String(ch.pk) : ch.label; }
+    var stratMaps = {}, idLabel = {};
     nonOrgKeys.forEach(function(sk) {
         var sd = data.strategies[sk];
         if (!sd || !sd.rows) return;
         var map = {};
         sd.rows.forEach(function(row) {
-            (row.channels || []).forEach(function(ch) { map[ch.label] = row.label; labelSet[ch.label] = true; });
+            (row.channels || []).forEach(function(ch) { var id = _chanId(ch); map[id] = row.label; idLabel[id] = ch.label; });
         });
         stratMaps[sk] = map;
     });
 
-    var channelList = Object.keys(labelSet);
+    var channelList = Object.keys(idLabel);
     var pComm = {};
-    channelList.forEach(function(lbl) { pComm[lbl] = _pluralityComm(lbl, stratMaps, nonOrgKeys); });
+    channelList.forEach(function(id) { pComm[id] = _pluralityComm(id, stratMaps, nonOrgKeys); });
     channelList.sort(function(a, b) {
         if (pComm[a] !== pComm[b]) return pComm[a].localeCompare(pComm[b]);
-        return a.localeCompare(b);
+        return idLabel[a].localeCompare(idLabel[b]);
     });
 
     var n = channelList.length, maxCount = nonOrgKeys.length;
     var chanIdx = {};
-    channelList.forEach(function(lbl, i) { chanIdx[lbl] = i; });
+    channelList.forEach(function(id, i) { chanIdx[id] = i; });
 
     var consensus = [];
     for (var ci = 0; ci < n; ci++) consensus.push(new Int16Array(n));
@@ -103,7 +108,7 @@ function _render(d) {
         if (!sd || !sd.rows) return;
         sd.rows.forEach(function(row) {
             var members = [];
-            (row.channels || []).forEach(function(ch) { var ix = chanIdx[ch.label]; if (ix !== undefined) members.push(ix); });
+            (row.channels || []).forEach(function(ch) { var ix = chanIdx[_chanId(ch)]; if (ix !== undefined) members.push(ix); });
             for (var a = 0; a < members.length; a++)
                 for (var b = a + 1; b < members.length; b++) { consensus[members[a]][members[b]]++; consensus[members[b]][members[a]]++; }
         });
@@ -167,7 +172,8 @@ function _render(d) {
     triPoly.setAttribute("points", triPts.join(" ")); triPoly.setAttribute("fill", "#f2f2f2");
     svg.appendChild(triPoly);
 
-    channelList.forEach(function(lbl, i) {
+    channelList.forEach(function(id, i) {
+        var lbl = idLabel[id];
         var tx = document.createElementNS(NS, "text");
         tx.setAttribute("x", labelW - 4); tx.setAttribute("y", topPad + i * cellSize + cellSize / 2);
         tx.setAttribute("dy", "0.35em"); tx.setAttribute("text-anchor", "end");
@@ -178,7 +184,8 @@ function _render(d) {
         svg.appendChild(tx);
     });
 
-    channelList.forEach(function(lbl, j) {
+    channelList.forEach(function(id, j) {
+        var lbl = idLabel[id];
         var cx = labelW + j * cellSize + cellSize / 2, cy = topPad + n * cellSize + 4;
         var tx = document.createElementNS(NS, "text");
         tx.setAttribute("x", cx); tx.setAttribute("y", cy); tx.setAttribute("text-anchor", "end");
@@ -203,13 +210,13 @@ function _render(d) {
             circ.setAttribute("fill", _agreementColor(cnt, maxCount)); circ.setAttribute("opacity", "0.85");
             circ.setAttribute("role", "gridcell");
             circ.setAttribute("tabindex", "0");
-            circ.setAttribute("aria-label", channelList[ri] + " and " + channelList[rj] + ", " + cnt + " of " + maxCount + " partitions agree");
+            circ.setAttribute("aria-label", idLabel[channelList[ri]] + " and " + idLabel[channelList[rj]] + ", " + cnt + " of " + maxCount + " partitions agree");
             (function(lA, lB, c) {
                 circ.addEventListener("mouseenter", function(e) { _showTip(e, lA + " × " + lB + ": " + c + "/" + maxCount + " partitions agree"); });
                 circ.addEventListener("mousemove", _moveTip);
                 circ.addEventListener("focus", function(e) { _showTip(e, lA + " × " + lB + ": " + c + "/" + maxCount + " partitions agree"); });
                 circ.addEventListener("blur", _hideTip);
-            })(channelList[ri], channelList[rj], cnt);
+            })(idLabel[channelList[ri]], idLabel[channelList[rj]], cnt);
             circleG.appendChild(circ);
         }
     }

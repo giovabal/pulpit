@@ -60,6 +60,7 @@ from network.measures import (
     compute_bridging_coefficient,
 )
 from network.utils import channel_cutoff_q
+from network.vacancy_analysis import _scores_ppr
 from webapp.models import Channel, Message, Organization
 from webapp.test_helpers import make_channel
 from webapp.utils.colors import parse_color
@@ -4022,3 +4023,35 @@ class ChannelCutoffQBoundaryTests(TestCase):
             telegram_id=99, channel=ch2, date=datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
         )
         self.assertTrue(Message.objects.filter(channel=ch2).filter(channel_cutoff_q()).exists())
+
+
+class VacancyPprDirectionTests(TestCase):
+    """The PPR scorer must walk toward the orphaned channels' content *sources*
+    (the replacement candidates), honouring settings.REVERSED_EDGES rather than
+    reversing unconditionally."""
+
+    def _ppr(self, graph: nx.DiGraph) -> dict[int, float]:
+        # node "1" = orphaned amplifier; pk 2 = its real content source;
+        # pk 3 = a channel positioned on the opposite side of the amplifier.
+        return _scores_ppr(graph, {1: "1", 2: "2", 3: "3"}, {1}, [2, 3], 0.85)
+
+    @override_settings(REVERSED_EDGES=True)
+    def test_default_orientation_ranks_source_above_downstream_amplifier(self) -> None:
+        # REVERSED_EDGES=True → edges point amplifier→source: 1 forwards from 2 (1→2),
+        # while 3 forwards from 1 (3→1). The source (2) must outrank the downstream
+        # amplifier (3); reversing the graph here would invert that.
+        g = nx.DiGraph()
+        g.add_edge("1", "2")
+        g.add_edge("3", "1")
+        scores = self._ppr(g)
+        self.assertGreater(scores[2], scores[3])
+
+    @override_settings(REVERSED_EDGES=False)
+    def test_non_reversed_orientation_still_ranks_source_above(self) -> None:
+        # REVERSED_EDGES=False → edges point source→amplifier: 2 is 1's source (2→1),
+        # 3 amplifies 1 (1→3). The source (2) must still outrank the amplifier (3).
+        g = nx.DiGraph()
+        g.add_edge("2", "1")
+        g.add_edge("1", "3")
+        scores = self._ppr(g)
+        self.assertGreater(scores[2], scores[3])

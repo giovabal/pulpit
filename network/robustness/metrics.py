@@ -133,16 +133,21 @@ def weighted_global_efficiency(
     weight: str = "weight",
     nodes: set[Any] | None = None,
 ) -> float:
-    """Latora-Marchiori weighted global efficiency on the largest SCC of *G*.
+    """Weighted Latora-Marchiori efficiency of the largest SCC of *G*.
 
     Edge distance is ``d = 1 / w``; pair efficiency is ``1 / d`` (equal to
     the edge weight when the directed path has length 1).  When *nodes* is
     given the restriction happens *before* the SCC search.  Returns 0 if the
     SCC has fewer than two nodes.
 
-    Unlike the unweighted form (which lives in ``[0, 1]``), the weighted form
-    can exceed 1 when edge weights are above 1 — it is meant to be compared
-    *relatively* (pre-attack vs post-attack), not interpreted as a probability.
+    This is **not** the whole-graph "Global Efficiency" reported in the
+    network-statistics table (:func:`network.community_stats._network_summary`),
+    which is *unweighted* and averaged over *all* ordered pairs (unreachable
+    pairs contributing 0).  This robustness variant is *weighted* (``1/w``) and
+    restricted to the largest strongly-connected core, so it is a relative
+    core-cohesion indicator (pre-attack vs post-attack), not a probability and
+    not comparable to that table's value.  Unlike the unweighted form (which
+    lives in ``[0, 1]``) it can exceed 1 when edge weights are above 1.
     """
     g = G.subgraph(nodes) if nodes is not None else G
     if g.number_of_nodes() < 2:
