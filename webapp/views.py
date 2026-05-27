@@ -837,16 +837,21 @@ class VacancyAnalysisView(View):
             _shift_months(closure_date, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
         )
 
-        orphaned = (
-            Channel.objects.in_target()
+        # Period-aware (channel_cutoff_q): only messages sent while the forwarding channel
+        # was in-target at that date count — matching the graph pipeline and the shared
+        # structural-analysis scorer, so the card and the export agree by construction.
+        orphaned_pks: set[int] = set(
+            Message.objects.alive()
             .filter(
-                message_set__forwarded_from=ch,
-                message_set__date__gte=before_start,
-                message_set__date__lt=closure_dt,
+                channel__in=Channel.objects.in_target(),
+                forwarded_from=ch,
+                date__gte=before_start,
+                date__lt=closure_dt,
             )
+            .filter(channel_cutoff_q())
+            .values_list("channel_id", flat=True)
             .distinct()
         )
-        orphaned_pks: set[int] = set(orphaned.values_list("pk", flat=True))
         total_orphaned = len(orphaned_pks)
 
         raw = list(
@@ -857,6 +862,7 @@ class VacancyAnalysisView(View):
                 date__gte=closure_dt,
                 date__lte=after_end,
             )
+            .filter(channel_cutoff_q())
             .exclude(forwarded_from=ch)
             .values("forwarded_from")
             .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
