@@ -1440,10 +1440,19 @@ class Command(BaseCommand):
             measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
         )
         channel_types_raw = options["channel_types"]
-        channel_types = _parse_csv(channel_types_raw) if channel_types_raw is not None else []
+        # No --channel-types on a bare CLI run resolves to the built-in default rather than
+        # an empty list, which channel_type_filter([]) would match against nothing (→ a
+        # graph with no channels and the misleading "no relationships between channels").
+        channel_types = (
+            _parse_csv(channel_types_raw) if channel_types_raw is not None else list(settings.DEFAULT_CHANNEL_TYPES)
+        )
         channel_groups_raw = options["channel_groups"]
         channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
-        edge_weight_strategy: str = _o("edge_weight_strategy", "")
+        # Fall back to the config-derived strategy (settings.SA_EDGE_WEIGHT_STRATEGY) when
+        # no --edge-weight-strategy is passed, then to the documented default. An empty
+        # value would otherwise reach build_graph and silently zero every edge weight
+        # (the PARTIAL_REFERENCES branch only fills referencing_counts for the exact token).
+        edge_weight_strategy: str = _o("edge_weight_strategy", settings.SA_EDGE_WEIGHT_STRATEGY) or "PARTIAL_REFERENCES"
         _raw_vacancy = _o("vacancy_measures", "")
         raw_vacancy_measures = _parse_csv(_raw_vacancy) if _raw_vacancy else []
         selected_vacancy_measures = (
@@ -1502,15 +1511,27 @@ class Command(BaseCommand):
         if not export_name:
             export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        raw_palette = _o("community_palette", "")
+        # An explicit --community-palette wins; otherwise fall back to the config-derived
+        # palette (and its reversed flag). A bare CLI run with no config would otherwise
+        # resolve to "" and reach community.detect() as "palette '' not found".
+        palette_opt = options["community_palette"]
+        if palette_opt is not None:
+            raw_palette = palette_opt
+            reversed_default = False
+        else:
+            raw_palette = settings.COMMUNITY_PALETTE
+            reversed_default = settings.COMMUNITY_PALETTE_REVERSED
         if raw_palette == "ORGANIZATION":
             # Legacy alias: the old default doubled as a "use organisation
             # colours for ORG, vaporwave-reversed for everything else" marker.
             # Map it explicitly here so a CLI override of "ORGANIZATION" works.
             raw_palette = "vaporwave"
             reversed_default = True
-        else:
-            reversed_default = False
+        elif not raw_palette:
+            # Neither a flag nor a config palette: documented default — vaporwave,
+            # reversed so the most-vivid colours land on the largest communities.
+            raw_palette = "vaporwave"
+            reversed_default = True
         if raw_palette and not is_known_palette(raw_palette):
             raise CommandError(
                 f"Unknown --community-palette: {raw_palette!r}. Pick a name from the pypalettes catalogue."
