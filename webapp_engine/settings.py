@@ -400,6 +400,7 @@ SA_SPREADING_RUNS = _structural.computation.spreading_runs
 SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
 SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
+SA_BEHAVIOURAL_EQUIVALENCE = _structural.outputs.behavioural_equivalence
 SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
 SA_LEIDEN_COARSE_RESOLUTION = _structural.computation.leiden_coarse_resolution
 SA_LEIDEN_FINE_RESOLUTION = _structural.computation.leiden_fine_resolution

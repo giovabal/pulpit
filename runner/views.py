@@ -583,6 +583,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "diffusion_window", "--diffusion-window"),
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
+        ("bool_explicit", "behavioural_equivalence", "--behavioural-equivalence", "--no-behavioural-equivalence"),
         ("bool_explicit", "interest_structural", "--interest-structural", "--no-interest-structural"),
         ("value", "interest_window_days", "--interest-window-days"),
         (
@@ -680,6 +681,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("seo", "outputs.seo", "bool"),
         ("vertical_layout", "outputs.vertical_layout", "bool"),
         ("structural_similarity", "outputs.structural_similarity", "bool"),
+        ("behavioural_equivalence", "outputs.behavioural_equivalence", "bool"),
         ("consensus_matrix", "outputs.consensus_matrix", "bool"),
         ("draw_dead_leaves", "outputs.draw_dead_leaves", "bool"),
         ("dead_leaves_color", "graph.dead_leaves_color", "value"),

@@ -264,6 +264,7 @@ _COMPARE_RENAMES: dict[str, str] = {
     "community_table.html": "community_table_2.html",
     "consensus_matrix.html": "consensus_matrix_2.html",
     "structural_similarity.html": "structural_similarity_2.html",
+    "behavioural_equivalence.html": "behavioural_equivalence_2.html",
     "channel_table.xlsx": "channel_table_2.xlsx",
     "network_table.xlsx": "network_table_2.xlsx",
     "community_table.xlsx": "community_table_2.xlsx",
@@ -278,6 +279,7 @@ _HTML_LINK_RENAMES: list[tuple[str, str]] = [
     ("community_table.html", "community_table_2.html"),
     ("consensus_matrix.html", "consensus_matrix_2.html"),
     ("structural_similarity.html", "structural_similarity_2.html"),
+    ("behavioural_equivalence.html", "behavioural_equivalence_2.html"),
     ("channel_table.xlsx", "channel_table_2.xlsx"),
     ("network_table.xlsx", "network_table_2.xlsx"),
     ("community_table.xlsx", "community_table_2.xlsx"),
@@ -515,6 +517,8 @@ def write_consensus_matrix_html(
 
 
 def write_structural_similarity_json(sim_data: dict, graph_dir: str) -> None:
+    # Filename kept as structural_similarity.json for saved-config / URL compatibility;
+    # the page now shows true structural equivalence (Lorrain & White 1971).
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "structural_similarity.json"), "w") as f:
@@ -531,7 +535,28 @@ def write_structural_similarity_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Structural similarity",
+        title_part="Structural equivalence",
+    )
+
+
+def write_behavioural_equivalence_json(sim_data: dict, graph_dir: str) -> None:
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "behavioural_equivalence.json"), "w") as f:
+        f.write(json.dumps(sim_data))
+
+
+def write_behavioural_equivalence_html(
+    output_filename: str,
+    seo: bool = False,
+    project_title: str = "",
+) -> None:
+    _write_page(
+        "network/behavioural_equivalence.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Behavioural equivalence",
     )
 
 
@@ -717,6 +742,7 @@ def write_index_html(
     include_community_xlsx: bool = False,
     include_consensus_matrix_html: bool = False,
     include_structural_similarity: bool = False,
+    include_behavioural_equivalence: bool = False,
     include_compare_html: bool = False,
     compare_files: set[str] | None = None,
     strategies: list[str] | None = None,
@@ -747,6 +773,7 @@ def write_index_html(
         "include_community_xlsx": include_community_xlsx,
         "include_consensus_matrix_html": include_consensus_matrix_html,
         "include_structural_similarity": include_structural_similarity,
+        "include_behavioural_equivalence": include_behavioural_equivalence,
         "include_compare_html": include_compare_html,
         "compare_files": compare_files or set(),
         "strategies": [s.capitalize() for s in (strategies or [])],

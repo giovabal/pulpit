@@ -8,12 +8,13 @@ from typing import Any
 from django.db.models import Count, Q, QuerySet
 
 from network.community import UNDIRECTED_BASIS_STRATEGIES
-from network.measures._registry import CENTRALITY_MEASURE_KEYS
+from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
 import networkx as nx
 import numpy as np
+from scipy import sparse
 
 logger = logging.getLogger(__name__)
 
@@ -376,62 +377,122 @@ def _compute_nmi(labels_a: list, labels_b: list) -> float | None:
     return round(float(2.0 * mi / denom), 4)
 
 
-def _compute_structural_similarity(
+def _lower_triangle(sim: np.ndarray, n: int) -> list[list[float]]:
+    """Lower triangle (row i → values for j = 0..i) of a symmetric matrix, to halve JSON size."""
+    return [[round(float(sim[i, j]), 4) for j in range(i + 1)] for i in range(n)]
+
+
+def _compute_structural_equivalence(
+    graph: nx.DiGraph,
     graph_data: GraphData,
     measures_labels: "list[tuple[str, str]]",
 ) -> "dict | None":
-    """Pairwise cosine similarity of per-channel feature vectors across all measures.
+    """Lorrain & White (1971) structural equivalence: cosine similarity of each
+    channel's weighted tie *profile*.
 
-    Each channel's vector is built from ``measures_labels`` keys.  None values
-    (e.g. burt_constraint on isolated nodes) are replaced with 0 before
-    normalisation.  Measures are min-max normalised per column so every
-    dimension contributes equally regardless of its natural scale.  Rows are
-    then normalised to unit length and the similarity matrix is computed as
-    S = U · Uᵀ, clipped to [0, 1].  The lower triangle (including the
-    diagonal) is stored row-by-row to halve the JSON payload size.
+    A channel's profile is its weighted out-adjacency row concatenated with its
+    weighted in-adjacency column (self-ties dropped), so two channels score 1.0 only
+    when they cite — and are cited by — the same channels with the same relative
+    intensity. This is genuinely relational (it uses the ties themselves), unlike the
+    earlier "centrality fingerprint" cosine it replaces, where two channels could score
+    1.0 while sharing no neighbours. Built with sparse linear algebra
+    (``P = [A | Aᵀ]``, ``S = P̂ · P̂ᵀ``) so it stays cheap on large graphs.
 
-    Returns None when fewer than 2 nodes are present or no measures are given.
+    ``measures_labels`` is carried through only to populate the page's sort-by-measure
+    control. Returns None for fewer than two nodes.
     """
     nodes = graph_data["nodes"]
     n = len(nodes)
-    if n < 2 or not measures_labels:
+    if n < 2:
         return None
 
-    keys = [k for k, _ in measures_labels]
-    m = len(keys)
+    node_ids = [node["id"] for node in nodes]
+    adj = nx.to_scipy_sparse_array(graph, nodelist=node_ids, weight="weight", format="lil").astype(float)
+    adj.setdiag(0.0)  # a self-loop says nothing about whom a channel is equivalent to
+    adj = adj.tocsr()
+    adj.eliminate_zeros()
 
-    # Raw feature matrix n×m — replace None with 0.0
-    raw = np.zeros((n, m), dtype=float)
+    # Profile = [out-ties | in-ties]; row-normalise to unit length for cosine.
+    profile = sparse.hstack([adj, adj.transpose().tocsr()], format="csr")
+    norms = np.sqrt(np.asarray(profile.multiply(profile).sum(axis=1)).ravel())
+    norms[norms == 0.0] = 1.0
+    unit = sparse.diags(1.0 / norms) @ profile
+    sim = np.clip((unit @ unit.transpose()).toarray(), 0.0, 1.0)
+    np.fill_diagonal(sim, 1.0)
+
+    return {
+        "node_ids": node_ids,
+        "node_labels": [node.get("label") or node["id"] for node in nodes],
+        "measures": measures_labels,
+        "note": (
+            "Structural equivalence (Lorrain & White 1971): cosine similarity of each channel's "
+            "weighted in + out tie profile. 1.0 = identical neighbours with identical tie strengths; "
+            "0 = no shared neighbours. Lower triangle; diagonal = 1 (self)."
+        ),
+        "cells_lower": _lower_triangle(sim, n),
+    }
+
+
+def _compute_behavioural_equivalence(
+    graph_data: GraphData,
+    measures_labels: "list[tuple[str, str]]",
+) -> "dict | None":
+    """Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles.
+
+    Features are the behavioural measures present in ``measures_labels`` (amplification,
+    content originality, diffusion lag, spreading efficiency, plus audience/activity
+    volume — followers and message count; see ``BEHAVIOURAL_MEASURE_KEYS``). Missing
+    values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the
+    column **median** — a neutral "unknown" — rather than the earlier ``None → 0`` that
+    read as an extreme (zero originality, instant diffusion, maximal brokerage). Columns
+    are min-max normalised, rows normalised to unit length, similarity = U·Uᵀ in [0, 1].
+
+    Returns None for fewer than two nodes or when no behavioural measure was computed.
+    """
+    nodes = graph_data["nodes"]
+    n = len(nodes)
+    behavioural = [(k, lbl) for k, lbl in measures_labels if k in BEHAVIOURAL_MEASURE_KEYS]
+    if n < 2 or not behavioural:
+        return None
+
+    keys = [k for k, _ in behavioural]
+    m = len(keys)
+    raw = np.full((n, m), np.nan, dtype=float)
     for i, node in enumerate(nodes):
         for j, key in enumerate(keys):
             val = node.get(key)
-            raw[i, j] = float(val) if val is not None else 0.0
+            if val is not None:
+                raw[i, j] = float(val)
 
-    # Per-column min-max normalisation → all values in [0, 1]
+    # Impute missing values to the column median (neutral); an all-missing column → 0.
+    for j in range(m):
+        col = raw[:, j]
+        missing = np.isnan(col)
+        if missing.any():
+            present = col[~missing]
+            col[missing] = float(np.median(present)) if present.size else 0.0
+
     col_min = raw.min(axis=0)
     col_max = raw.max(axis=0)
     safe_ranges = np.where(col_max - col_min > 0, col_max - col_min, 1.0)
     normed = (raw - col_min) / safe_ranges
 
-    # Row-normalise to unit vectors for cosine similarity
     norms = np.linalg.norm(normed, axis=1, keepdims=True)
     safe_norms = np.where(norms > 0, norms, 1.0)
     unit_vecs = normed / safe_norms
-
-    # Symmetric cosine similarity matrix, clipped against floating-point noise
     sim = np.clip(unit_vecs @ unit_vecs.T, 0.0, 1.0)
-    # Force diagonal to 1.0: a channel is always identical to itself even when its
-    # feature vector is all-zero (happens when every measure is None / at minimum).
     np.fill_diagonal(sim, 1.0)
-
-    # Store lower triangle (row i → values for j=0..i) to halve JSON size
-    cells_lower = [[round(float(sim[i, j]), 4) for j in range(i + 1)] for i in range(n)]
 
     return {
         "node_ids": [node["id"] for node in nodes],
         "node_labels": [node.get("label") or node["id"] for node in nodes],
-        "measures": measures_labels,
-        "cells_lower": cells_lower,
+        "measures": behavioural,
+        "note": (
+            "Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles "
+            "(min-max normalised per measure; missing values imputed to the median). 1.0 = same "
+            "behavioural fingerprint, regardless of network position. Lower triangle; diagonal = 1 (self)."
+        ),
+        "cells_lower": _lower_triangle(sim, n),
     }
 
 

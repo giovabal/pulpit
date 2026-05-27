@@ -84,6 +84,7 @@ class Command(BaseCommand):
             include_community_xlsx=exists("community_table.xlsx"),
             include_consensus_matrix_html=exists("consensus_matrix.html"),
             include_structural_similarity=exists("structural_similarity.html"),
+            include_behavioural_equivalence=exists("behavioural_equivalence.html"),
             include_compare_html=True,
             compare_files=compare_files,
         )

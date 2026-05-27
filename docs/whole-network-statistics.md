@@ -254,23 +254,39 @@ Each pair is computed on the **intersection** of channels assigned in both strat
 
 **In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organizational lines. A low NMI (< 0.3) means the structural communities cut across organizations: channels from the same organization are scattered across multiple structural clusters, or a single structural cluster spans several organizations. Comparing two algorithmic strategies (e.g. LEIDEN vs LOUVAIN) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
 
-## Structural similarity matrix
+## Structural equivalence matrix
 
-Generated with `--structural-similarity`. Available as a standalone page `structural_similarity.html` (see [Export formats](export-formats.md#structural_similarityhtml--channel-cosine-similarity-matrix)).
+Generated with `--structural-similarity`. Available as a standalone page `structural_similarity.html` (the filename is kept for compatibility; the page shows structural equivalence — see [Export formats](export-formats.md#structural_similarityhtml--structural-equivalence-matrix)).
 
-Each cell (i, j) shows the cosine similarity between channel i's feature vector and channel j's feature vector, where the feature vector is built from all computed network measures (PageRank, betweenness, in-degree, out-degree, Burt's constraint, spreading efficiency, content originality, etc.).
+Each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity between their weighted *tie profiles*. A channel's profile is its weighted out-citations to every other channel concatenated with its weighted in-citations from every other channel (self-ties dropped).
 
-> **What this is (and isn't).** This compares channels by their **measure profile** — their *centrality fingerprint*. It is **not** structural equivalence in the Lorrain & White (1971) sense (equivalence of who-they-connect-to): two channels with no shared neighbours can still score 1.0 here if their centrality scores happen to match. Use it to find channels that play a *similar role* by the numbers, not channels embedded in the same local structure.
+> **What this measures.** Two channels score 1.0 when they cite — and are cited by — the *same* channels with the *same relative intensity*, i.e. they occupy interchangeable positions in the citation network. This is genuinely relational: it depends on *who* a channel connects to, not on its centrality scores. (It need not require the two channels to cite each other.) For "channels that behave alike by the numbers" see the [behavioural equivalence matrix](#behavioural-equivalence-matrix) instead.
 
-**Preprocessing:**
-1. A raw n × m matrix is built (n channels, m measures). Missing values — `None` for measures such as `burt_constraint` on isolated nodes — are replaced with 0.
-2. Each column (measure) is min-max normalised to [0, 1] so that all measures contribute equally regardless of their natural scale.
-3. Each row is normalised to unit length.
-4. Cosine similarity S = U · Uᵀ, diagonal forced to 1.0.
+**Computation:**
+1. The weighted directed adjacency `A` is built over the channels (self-loops zeroed).
+2. Each channel's profile is the row of `A` (out-ties) concatenated with the column of `A` (in-ties): `P = [A | Aᵀ]`.
+3. Rows are normalised to unit length and the similarity matrix is `S = P̂ · P̂ᵀ`, clipped to [0, 1] with the diagonal forced to 1.0. Built with sparse linear algebra so it scales to large graphs.
 
-**Range:** 0 (orthogonal profiles — no common structure) to 1 (identical profiles up to magnitude).
+**Range:** 0 (no shared neighbours) to 1 (identical neighbourhood with identical tie strengths).
 
 The heatmap colours cells from white (low similarity) to steel-blue (high similarity). The diagonal is marked in grey (always 1.0 by definition). Only the lower triangle is rendered; the upper triangle is masked.
+
+## Behavioural equivalence matrix
+
+Generated with `--behavioural-equivalence`. Available as a standalone page `behavioural_equivalence.html` (see [Export formats](export-formats.md#behavioural_equivalencehtml--behavioural-equivalence-matrix)).
+
+Each cell (i, j) shows the cosine similarity between channels i and j's **behavioural-measure profiles** — built from the behavioural measures that were computed: amplification factor, content originality, diffusion lag, spreading efficiency, plus audience/activity volume (followers, message count).
+
+> **What this measures.** Two channels score 1.0 when they *behave* alike — originate vs amplify, fast vs slow, narrow vs wide reach, similar audience size — regardless of their position in the citation network. It is the behavioural counterpart of structural equivalence: a channel can be structurally equivalent to another (same neighbours) yet behaviourally very different, or vice versa.
+
+**Computation:**
+1. A raw n × m matrix is built (n channels, m behavioural measures). Missing values — `None`, e.g. diffusion lag for a channel with no dated forwards — are imputed to the **column median** (a neutral "unknown"), not 0.
+2. Each column is min-max normalised to [0, 1] so every measure contributes equally regardless of scale.
+3. Each row is normalised to unit length; cosine similarity `S = U · Uᵀ`, clipped to [0, 1], diagonal forced to 1.0.
+
+**Range:** 0 (orthogonal behaviour) to 1 (identical behavioural profile up to magnitude).
+
+The heatmap rendering matches the structural equivalence matrix (white → steel-blue, grey diagonal, lower triangle only).
 
 **Sorting:** A dropdown above the matrix controls the row/column order. "Community" groups channels by their plurality community assignment across all strategies (revealing a block-diagonal structure if the network has clear clusters); any individual measure (e.g. PageRank) sorts channels descending by that score.
 

@@ -165,6 +165,7 @@ class ResolvedOptions:
     do_csv: bool
     do_consensus_matrix: bool
     do_structural_similarity: bool
+    do_behavioural_equivalence: bool
 
     # Layout / presentation
     seo: bool
@@ -250,6 +251,7 @@ class ResolvedOptions:
             "csv": self.do_csv,
             "consensus_matrix": self.do_consensus_matrix,
             "structural_similarity": self.do_structural_similarity,
+            "behavioural_equivalence": self.do_behavioural_equivalence,
             "seo": self.seo,
             "vertical_layout": self.vertical_layout,
             "fa2_iterations": self.fa2_iterations,
@@ -599,9 +601,21 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Generate a structural similarity matrix page (structural_similarity.html) showing "
-                "pairwise cosine similarity of per-channel feature vectors built from all computed "
-                "network measures. Measures are min-max normalised per column; None values treated as 0."
+                "Generate a structural equivalence matrix page (structural_similarity.html) showing "
+                "pairwise cosine similarity of each channel's weighted in+out tie profile "
+                "(Lorrain & White 1971): high = cite, and are cited by, the same channels."
+            ),
+        )
+        parser.add_argument(
+            "--behavioural-equivalence",
+            dest="behavioural_equivalence",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Generate a behavioural equivalence matrix page (behavioural_equivalence.html) showing "
+                "pairwise cosine similarity of channels' behavioural-measure profiles (amplification, "
+                "content originality, diffusion lag, spreading efficiency, followers, message count); "
+                "min-max normalised per measure, missing values imputed to the median."
             ),
         )
         parser.add_argument(
@@ -1514,6 +1528,7 @@ class Command(BaseCommand):
             do_csv=_o("csv", False),
             do_consensus_matrix=_o("consensus_matrix", False),
             do_structural_similarity=_o("structural_similarity", False),
+            do_behavioural_equivalence=_o("behavioural_equivalence", False),
             seo=_o("seo", False),
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
@@ -1583,6 +1598,7 @@ class Command(BaseCommand):
                 opts.do_csv,
                 opts.do_consensus_matrix,
                 opts.do_structural_similarity,
+                opts.do_behavioural_equivalence,
                 opts.selected_measures,
                 opts.communities_strategy,
                 opts.selected_network_groups,
@@ -1688,6 +1704,7 @@ class Command(BaseCommand):
             or opts.do_html
             or opts.do_consensus_matrix
             or opts.do_structural_similarity
+            or opts.do_behavioural_equivalence
             or opts.do_vacancy
             or opts.do_robustness
         )
@@ -1798,13 +1815,25 @@ class Command(BaseCommand):
             )
 
         if opts.do_structural_similarity:
-            self.stdout.write("- structural similarity (html + json)")
+            self.stdout.write("- structural equivalence (html + json)")
             os.makedirs(root_target, exist_ok=True)
-            sim_data = community_stats._compute_structural_similarity(graph_data, measures_labels)
+            sim_data = community_stats._compute_structural_equivalence(graph, graph_data, measures_labels)
             if sim_data is not None:
                 tables.write_structural_similarity_json(sim_data, root_target)
             tables.write_structural_similarity_html(
                 output_filename=os.path.join(root_target, "structural_similarity.html"),
+                seo=opts.seo,
+                project_title=project_title,
+            )
+
+        if opts.do_behavioural_equivalence:
+            self.stdout.write("- behavioural equivalence (html + json)")
+            os.makedirs(root_target, exist_ok=True)
+            beh_data = community_stats._compute_behavioural_equivalence(graph_data, measures_labels)
+            if beh_data is not None:
+                tables.write_behavioural_equivalence_json(beh_data, root_target)
+            tables.write_behavioural_equivalence_html(
+                output_filename=os.path.join(root_target, "behavioural_equivalence.html"),
                 seo=opts.seo,
                 project_title=project_title,
             )
@@ -2066,6 +2095,7 @@ class Command(BaseCommand):
             strategies=strategies,
             include_consensus_matrix_html=opts.do_consensus_matrix,
             include_structural_similarity=opts.do_structural_similarity,
+            include_behavioural_equivalence=opts.do_behavioural_equivalence,
             timeline_entries=timeline_entries or None,
             include_vacancy_analysis=opts.do_vacancy,
             include_robustness_html=opts.do_robustness and opts.do_html,
