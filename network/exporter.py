@@ -503,6 +503,7 @@ def write_summary_json(
         "vertical_layout",
         "consensus_matrix",
         "structural_similarity",
+        "behavioural_equivalence",
         "draw_dead_leaves",
         "timeline_step",
         "startdate",

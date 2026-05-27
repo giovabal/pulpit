@@ -2,18 +2,19 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Structural Similarity</h2>
+  <h2 class="mb-0">Structural equivalence</h2>
   <div class="d-flex gap-2">
+    <a href="behavioural_equivalence.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-grid-3x3" aria-hidden="true"></i> Behavioural equivalence</a>
     <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network stats</a>
     <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
     <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
   </div>
 </div>
 <p class="text-muted small mb-3">
-  Similarity of channels' <strong>measure profiles</strong> — the cosine between their vectors of computed
-  network measures (min-max normalised per measure). This is a similarity of <em>centrality fingerprints</em>,
-  not structural equivalence in the Lorrain &amp; White sense: two channels can score 1.0 here while sharing
-  no neighbours, as long as their centrality profiles match.
+  <strong>Structural equivalence</strong> (Lorrain &amp; White 1971) — the cosine between each pair of channels'
+  <em>tie profiles</em>: their weighted out-citations and in-citations to and from every other channel. Two
+  channels score 1.0 when they cite, and are cited by, the same channels with the same relative intensity —
+  i.e. they occupy interchangeable positions in the network, regardless of whether they cite each other.
 </p>
 <div id="structural-similarity-container" class="export-wide"></div>
 <script type="module" src="js/structural_similarity.js"></script>

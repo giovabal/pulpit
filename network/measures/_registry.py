@@ -57,6 +57,20 @@ CENTRALITY_MEASURE_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Node-attribute keys that describe how a channel *behaves* (originate vs amplify,
+# fast vs slow, narrow vs wide) plus its audience/activity volume — the feature set
+# for the behavioural-equivalence matrix. Each is included only when actually computed.
+BEHAVIOURAL_MEASURE_KEYS: frozenset[str] = frozenset(
+    {
+        "amplification_factor",
+        "content_originality",
+        "diffusion_lag",
+        "spreading_efficiency",
+        "fans",
+        "messages_count",
+    }
+)
+
 VALID_NETWORK_STAT_GROUPS: frozenset[str] = frozenset(
     {
         "SIZE",

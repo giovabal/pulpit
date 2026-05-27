@@ -16,7 +16,8 @@ exports/
     network_table.html      ← whole-network metrics
     community_table.html    ← per-community metrics
     consensus_matrix.html   ← cross-strategy co-clustering (optional)
-    structural_similarity.html  ← channel cosine similarity matrix (optional)
+    structural_similarity.html  ← structural equivalence matrix (optional)
+    behavioural_equivalence.html  ← behavioural equivalence matrix (optional)
     network_compare_table.html   ← network comparison (optional)
     robustness_table.html   ← node-removal R-index page (optional)
     channel_table.xlsx      ← Excel version (optional)
@@ -35,6 +36,7 @@ exports/
       meta.json
       summary.json
       structural_similarity.json  (when --structural-similarity)
+      behavioural_equivalence.json  (when --behavioural-equivalence)
       robustness.json       (when --robustness)
       timeline.json         (when --timeline-step year)
     data_YYYY/              (one per year when --timeline-step year)
@@ -62,6 +64,7 @@ Some files can be opened directly from the filesystem (`file://`); others requir
 | `community_table.html` / `.xlsx` | — |
 | `consensus_matrix.html` | — |
 | `structural_similarity.html` | — |
+| `behavioural_equivalence.html` | — |
 | `network_compare_table.html` | — |
 | `robustness_table.html` | ✓ |
 | `index.html` | — |
@@ -159,13 +162,13 @@ For a full explanation of the metrics, see [Whole-network statistics](whole-netw
 
 ---
 
-## structural_similarity.html — channel cosine similarity matrix
+## structural_similarity.html — structural equivalence matrix
 
-Generated with `--structural-similarity`.
+Generated with `--structural-similarity`. (The filename is retained for saved-config and URL compatibility; the page shows true structural equivalence.)
 
-A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity between channel i and channel j, computed from all configured network measures (PageRank, betweenness, degree, Burt's constraint, spreading efficiency, content originality, etc.). Measures are min-max normalised per column before computing cosine, so all dimensions contribute equally regardless of scale. Missing values (e.g. `burt_constraint` on isolated nodes) are treated as 0.
+A lower-triangle SVG heatmap where each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity of their weighted *tie profiles* — each channel's weighted out-citations to, and in-citations from, every other channel (`P = [A | Aᵀ]`, self-ties dropped). Two channels score high when they cite, and are cited by, the same channels.
 
-Color scale: white (similarity = 0, orthogonal profiles) → steel-blue (similarity = 1, structurally identical). Diagonal is always 1 and is marked in grey. Hover a cell for a tooltip: "Channel A × Channel B: 0.8742."
+Color scale: white (similarity = 0, no shared neighbours) → steel-blue (similarity = 1, identical neighbourhood). Diagonal is always 1 and is marked in grey. Hover a cell for a tooltip: "Channel A × Channel B: 0.8742."
 
 A sort dropdown above the matrix controls channel ordering:
 - **Community** (default): groups channels by their plurality community assignment, making block-diagonal structure visible when communities are structurally cohesive.
@@ -173,7 +176,19 @@ A sort dropdown above the matrix controls channel ordering:
 
 Pre-computed data is stored in `data/structural_similarity.json` (lower-triangle float matrix + node labels and measure list). The page loads `channels.json` and `communities.json` at runtime for sorting.
 
-See [Whole-network statistics § Structural similarity matrix](whole-network-statistics.md#structural-similarity-matrix) for interpretation guidance.
+See [Whole-network statistics § Structural equivalence matrix](whole-network-statistics.md#structural-equivalence-matrix) for interpretation guidance.
+
+---
+
+## behavioural_equivalence.html — behavioural equivalence matrix
+
+Generated with `--behavioural-equivalence`.
+
+A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity of channels i and j's **behavioural-measure profiles**: amplification factor, content originality, diffusion lag, spreading efficiency, and audience/activity volume (followers, message count) — whichever were computed. Measures are min-max normalised per column; missing values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the column median rather than 0. Two channels score high when they behave alike, independent of their network position.
+
+Color scale, sort controls, and rendering match the structural equivalence matrix. Pre-computed data is stored in `data/behavioural_equivalence.json`.
+
+See [Whole-network statistics § Behavioural equivalence matrix](whole-network-statistics.md#behavioural-equivalence-matrix) for interpretation guidance.
 
 ---
 

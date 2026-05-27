@@ -358,9 +358,13 @@
                      title="Export nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions). Most portable format for downstream analysis in R, Python, or shell scripts."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="structural_similarity" {% if ad.SA_STRUCTURAL_SIMILARITY %}checked{% endif %}>Structural similarity
+                <label class="ops-flag"><input type="checkbox" name="structural_similarity" {% if ad.SA_STRUCTURAL_SIMILARITY %}checked{% endif %}>Structural equivalence
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate a structural similarity matrix page (structural_similarity.html) showing pairwise cosine similarity between channels based on all computed network measures (min-max normalised per measure)."></i>
+                     title="Generate a structural equivalence matrix page (Lorrain & White 1971): pairwise cosine similarity of each channel's weighted in+out tie profile — high = cite, and are cited by, the same channels."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="behavioural_equivalence" {% if ad.SA_BEHAVIOURAL_EQUIVALENCE %}checked{% endif %}>Behavioural equivalence
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Generate a behavioural equivalence matrix page: pairwise cosine similarity of channels' behavioural-measure profiles (amplification, content originality, diffusion lag, spreading efficiency, followers, message count); min-max normalised, missing values imputed to the median."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -1827,6 +1831,7 @@ function showToast(msg, type) {
         setCheck('vertical_layout',  opts.vertical_layout);
         setCheck('consensus_matrix', opts.consensus_matrix);
         setCheck('structural_similarity', opts.structural_similarity);
+        setCheck('behavioural_equivalence', opts.behavioural_equivalence);
         setCheck('draw_dead_leaves', opts.draw_dead_leaves);
         setCheck('timeline_step',    opts.timeline_step === 'year');
 

@@ -77,6 +77,7 @@ STRUCTURAL_DEFAULTS: dict = {
         "seo": False,
         "vertical_layout": False,
         "structural_similarity": False,
+        "behavioural_equivalence": False,
         "consensus_matrix": False,
         "draw_dead_leaves": False,
         "timeline_step": "none",

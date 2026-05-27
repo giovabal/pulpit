@@ -1,0 +1,23 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h2 class="mb-0">Behavioural equivalence</h2>
+  <div class="d-flex gap-2">
+    <a href="structural_similarity.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-grid-3x3" aria-hidden="true"></i> Structural equivalence</a>
+    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network stats</a>
+    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+  </div>
+</div>
+<p class="text-muted small mb-3">
+  <strong>Behavioural equivalence</strong> — the cosine between each pair of channels' <em>behavioural-measure
+  profiles</em>: amplification, content originality, diffusion lag, spreading efficiency, and audience/activity
+  volume (followers, message count). Measures are min-max normalised per column and missing values are imputed to
+  the median. Two channels score 1.0 when they behave alike — originate vs amplify, fast vs slow, narrow vs wide —
+  regardless of their position in the citation network. Complements the
+  <a href="structural_similarity.html">structural equivalence</a> matrix, which asks the opposite question.
+</p>
+<div id="behavioural-equivalence-container" class="export-wide"></div>
+<script type="module" src="js/behavioural_equivalence.js"></script>
+{% endblock %}

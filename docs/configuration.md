@@ -168,7 +168,8 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 | `outputs.csv` | Write `nodes.csv` and `edges.csv` | `false` |
 | `outputs.seo` | Set indexable robots meta tags on the export HTML | `false` |
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
-| `outputs.structural_similarity` | Generate the pairwise structural similarity matrix | `false` |
+| `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles) | `false` |
+| `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (cosine of behavioural-measure profiles) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-ORGANIZATION strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |

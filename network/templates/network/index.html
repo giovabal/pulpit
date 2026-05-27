@@ -142,9 +142,20 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural similarity</h5>
-        <p class="card-text text-muted small">Channel × channel cosine similarity matrix built from all computed network measures (min-max normalised). Channels with similar <em>measure profiles</em> appear darker — a similarity of centrality fingerprints, not structural equivalence (shared neighbours).</p>
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h5>
+        <p class="card-text text-muted small">Channel × channel cosine similarity of weighted in + out tie profiles (Lorrain &amp; White 1971). Channels that cite, and are cited by, the same channels appear darker — interchangeable network positions.</p>
         <a href="structural_similarity.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if include_behavioural_equivalence %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h5>
+        <p class="card-text text-muted small">Channel × channel cosine similarity of behavioural-measure profiles (amplification, originality, diffusion lag, spreading, followers, messages; min-max normalised, missing values imputed to the median). Channels that behave alike appear darker.</p>
+        <a href="behavioural_equivalence.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
       </div>
     </div>
   </div>
@@ -249,7 +260,7 @@
 </div>
 {% endif %}
 
-{% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files or "community_table_2.html" in compare_files or "community_table_2.xlsx" in compare_files or "network_table_2.html" in compare_files or "network_table_2.xlsx" in compare_files or "consensus_matrix_2.html" in compare_files or "structural_similarity_2.html" in compare_files %}
+{% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files or "community_table_2.html" in compare_files or "community_table_2.xlsx" in compare_files or "network_table_2.html" in compare_files or "network_table_2.xlsx" in compare_files or "consensus_matrix_2.html" in compare_files or "structural_similarity_2.html" in compare_files or "behavioural_equivalence_2.html" in compare_files %}
 <div class="row g-4">
   {% if "channel_table_2.html" in compare_files or "channel_table_2.xlsx" in compare_files %}
   <div class="col-md-6 col-xl-4">
@@ -310,10 +321,23 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural similarity</h5>
-        <p class="card-text text-muted small">Cosine similarity matrix of per-channel feature vectors for the compare network.</p>
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h5>
+        <p class="card-text text-muted small">Cosine similarity of weighted in + out tie profiles for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="structural_similarity_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if "behavioural_equivalence_2.html" in compare_files %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h5>
+        <p class="card-text text-muted small">Cosine similarity of behavioural-measure profiles for the compare network.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="behavioural_equivalence_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
         </div>
       </div>
     </div>
