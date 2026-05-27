@@ -795,9 +795,9 @@
                    title="Fraction of the vacancy's orphaned amplifiers that forwarded from this candidate after closure (|A ∩ B| / |A| — coverage/recall, not a Jaccard)."></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Structural Equivalence
+                <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Neighbour-set Equivalence
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Cosine similarity of shared in-neighbours (amplifiers) and out-neighbours (sources) — does the candidate occupy the same structural position as the vacancy? (Lorrain &amp; White 1971)"></i>
+                   title="Binary set-overlap cosine of shared in-neighbours (amplifiers) and out-neighbours (sources) — does the candidate occupy the same structural position as the vacancy? Operationalises Lorrain &amp; White (1971) in binary form; distinct from the weighted structural-equivalence matrix."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if "BROKERAGE" in ad.sa_vacancy_measures %}checked{% endif %}>Brokerage overlap

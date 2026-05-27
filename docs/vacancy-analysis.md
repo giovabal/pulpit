@@ -8,7 +8,7 @@ Vacancy Analysis addresses a different class of question from standard network m
 
 Channels go silent for many reasons: voluntary deletion, platform removal, legal action, internal collapse. When a channel disappears it leaves a **structural hole** — a set of channels that previously relied on it as a source are now missing an input. The question is whether someone fills that hole, and if so, who.
 
-In practice, this matters because structural heirs are often more significant than their raw metrics suggest. A new channel with few subscribers but a high structural equivalence score is already occupying the same position in the information ecosystem as the channel it replaced. Conversely, a channel with many followers that happens to attract some of the same amplifiers may be an opportunist capitalising on an audience vacuum, not a genuine continuation of the same network role.
+In practice, this matters because structural heirs are often more significant than their raw metrics suggest. A new channel with few subscribers but a high neighbour-set equivalence score is already occupying the same position in the information ecosystem as the channel it replaced. Conversely, a channel with many followers that happens to attract some of the same amplifiers may be an opportunist capitalising on an audience vacuum, not a genuine continuation of the same network role.
 
 **Example.** In October 2023, a prominent pro-Kremlin aggregator with 280,000 subscribers stops posting. Over three months, the twelve channels that used to forward it start forwarding two new channels heavily. Vacancy Analysis scores both: one scores high across all metrics — same distributors, same upstream sources, same brokerage role, similar cascade reach, quickly adopted by the orphaned amplifiers. It is a structural heir. The other gets forwarded by the same distributors but draws from entirely different sources and is adopted much more slowly — an opportunist capitalising on the audience vacuum.
 
@@ -71,9 +71,9 @@ A score of 1.0 means every orphaned amplifier is now forwarding the candidate. T
 
 ---
 
-### Score B — Structural equivalence
+### Score B — Neighbour-set equivalence
 
-*Lorrain & White (1971), "Structural equivalence of individuals in social networks", [Journal of Mathematical Sociology 1(1)](https://doi.org/10.1080/0022250X.1971.9989788).*
+*Operationalises the structural-equivalence concept of Lorrain & White (1971), "Structural equivalence of individuals in social networks", [Journal of Mathematical Sociology 1(1)](https://doi.org/10.1080/0022250X.1971.9989788) — here as a **binary** (set-overlap) cosine, distinct from the weighted structural-equivalence matrix produced by the structural analysis.*
 
 *"Does this candidate occupy the same position in the network as the vacancy did?"*
 
@@ -86,7 +86,7 @@ The score averages two cosine similarities:
 
 The two components are averaged equally (weight 0.5 each). Out-similarity will be low for vacancy channels that rarely forwarded anything (high-originality producers), in which case the score primarily reflects in-similarity.
 
-A high structural equivalence score means the candidate has stepped into the same editorial position: forwarded by the same amplifiers, drawing from the same upstream sources.
+A high neighbour-set equivalence score means the candidate has stepped into the same editorial position: forwarded by the same amplifiers, drawing from the same upstream sources.
 
 ---
 
@@ -122,7 +122,7 @@ Two subgraphs are constructed from message forwards: one covering the *before* w
 score_d = |reach(vacancy, before) ∩ reach(candidate, after)| / |reach(vacancy, before) ∪ reach(candidate, after)|
 ```
 
-A high Cascade Overlap score means the candidate's content reaches the same downstream channels that used to receive the vacancy's content. Unlike Structural Equivalence, which is topological, this measure is dynamical: it captures whether information actually propagates to the same destinations, not just whether the candidates look similar in the static graph. **Computationally intensive** — run time scales with the number of candidates × SIR runs × graph size.
+A high Cascade Overlap score means the candidate's content reaches the same downstream channels that used to receive the vacancy's content. Unlike Neighbour-set Equivalence, which is topological, this measure is dynamical: it captures whether information actually propagates to the same destinations, not just whether the candidates look similar in the static graph. **Computationally intensive** — run time scales with the number of candidates × SIR runs × graph size.
 
 ---
 
