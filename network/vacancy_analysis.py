@@ -11,6 +11,7 @@ from typing import Any, Callable
 from django.db.models import Count, Max, Min
 
 from network.measures._spreading import sir_ever_infected
+from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
 
 import networkx as nx
@@ -88,6 +89,7 @@ def _build_spread_adj(
             date__gte=date_from,
             date__lt=date_to,
         )
+        .filter(channel_cutoff_q())
         .values("channel_id", "forwarded_from_id")
         .annotate(count=Count("id"))
     )
@@ -147,6 +149,7 @@ def _scores_abc(
                 date__gte=closure_dt,
                 date__lte=after_end,
             )
+            .filter(channel_cutoff_q())
             .values("forwarded_from_id")
             .annotate(amp_count=Count("channel", distinct=True))
         ):
@@ -166,6 +169,7 @@ def _scores_abc(
                 date__gte=closure_dt,
                 date__lte=after_end,
             )
+            .filter(channel_cutoff_q())
             .values_list("forwarded_from_id", "channel_id")
             .distinct()
         ):
@@ -178,6 +182,7 @@ def _scores_abc(
         for fwd_id, fwd_date in (
             Message.objects.alive()
             .filter(channel=vacancy_pk, forwarded_from__isnull=False, date__gte=before_start, date__lt=closure_dt)
+            .filter(channel_cutoff_q())
             .values_list("forwarded_from_id", "date")
         ):
             vacancy_out_pks.add(fwd_id)
@@ -191,6 +196,7 @@ def _scores_abc(
         for ch_id, fwd_id, fwd_date in (
             Message.objects.alive()
             .filter(channel__in=candidate_pks, forwarded_from__isnull=False, date__gte=closure_dt, date__lte=after_end)
+            .filter(channel_cutoff_q())
             .values_list("channel_id", "forwarded_from_id", "date")
         ):
             cand_out_pks[ch_id].add(fwd_id)
@@ -228,6 +234,7 @@ def _scores_abc(
                 date__gte=closure_dt,
                 date__lte=after_end,
             )
+            .filter(channel_cutoff_q())
             .values("forwarded_from_id", "channel_id")
             .distinct()
         ):
@@ -359,6 +366,7 @@ def _scores_temporal(
             date__gte=closure_dt,
             date__lte=after_end,
         )
+        .filter(channel_cutoff_q())
         .values("forwarded_from_id", "channel_id")
         .annotate(first_date=Min("date"))
     )
@@ -411,15 +419,21 @@ def _analyze_vacancy(
         _shift_months(closure_date, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
     )
 
+    # Orphaned amplifiers: in-target channels that forwarded from the vacancy in the
+    # before window *while they were in-target at that date* — period-aware, matching the
+    # graph pipeline's channel_cutoff_q() chokepoint (built from the Message side so the
+    # cutoff applies to each forwarding message's own channel and date).
     orphaned_pks: set[int] = set(
-        Channel.objects.in_target()
+        Message.objects.alive()
         .filter(
-            message_set__forwarded_from=ch,
-            message_set__date__gte=before_start,
-            message_set__date__lt=closure_dt,
+            channel__in=Channel.objects.in_target(),
+            forwarded_from=ch,
+            date__gte=before_start,
+            date__lt=closure_dt,
         )
+        .filter(channel_cutoff_q())
+        .values_list("channel_id", flat=True)
         .distinct()
-        .values_list("pk", flat=True)
     )
 
     raw_cands = list(
@@ -430,6 +444,7 @@ def _analyze_vacancy(
             date__gte=closure_dt,
             date__lte=after_end,
         )
+        .filter(channel_cutoff_q())
         .exclude(forwarded_from=ch)
         .values("forwarded_from")
         .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
