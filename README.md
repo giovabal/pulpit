@@ -147,13 +147,11 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | Measure | What it surfaces |
 | :------ | :--------------- |
 | [Betweenness centrality](docs/network-measures.md#betweenness-centrality) | Channels sitting on the shortest paths between sub-networks — the brokers |
-| [Flow betweenness](docs/network-measures.md#flow-betweenness) | Random-walk brokers that geodesic betweenness misses (Newman 2005) |
 | [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels best-positioned to reach the entire network in the fewest hops |
-| [Closeness centrality](docs/network-measures.md#closeness-centrality) | Channels most easily reached from the rest of the network — high incoming accessibility |
-| [Katz centrality](docs/network-measures.md#katz-centrality) | Deeply embedded nodes reachable through many indirect paths |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
-| [Ego network density](docs/network-measures.md#ego-network-density) | How deeply a channel is embedded in an echo-chamber clique vs. how much it bridges isolated sources |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel itself forms closed citation cycles — a direct participant in mutual amplification loops |
+| [K-core coreness](docs/network-measures.md#k-core-coreness) | Whether a channel sits in the densely interconnected nucleus or is a peripheral amplifier (Kitsak et al. 2010) |
+| [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — the Guimerà-Amaral role taxonomy |
 | [Bridging centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008) | Topological bridges (Hwang et al. 2008) — low-degree channels wedged between high-degree regions, whose removal fragments the network |
 | [Community bridging](docs/network-measures.md#community-bridging) | Channels that are both structurally central AND bridge genuinely distinct communities |
 
@@ -162,6 +160,7 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | Measure | What it surfaces |
 | :------ | :--------------- |
 | [Content originality](docs/network-measures.md#content-originality) | Producers vs. redistributors — 1 minus the fraction of forwarded messages |
+| [Trophic level](docs/network-measures.md#trophic-level) | Structural source→sink position — original source vs. terminal amplifier (MacKay, Johnson & Sansom 2020) |
 | [Diffusion lag](docs/network-measures.md#diffusion-lag) | Median hours between a forwarded message's original publication and this channel forwarding it — early adopter vs. late amplifier |
 | [Spreading efficiency](docs/network-measures.md#spreading-efficiency) | Fraction of the network reached if this channel seeds a rumour (Monte Carlo SIR simulation) |
 

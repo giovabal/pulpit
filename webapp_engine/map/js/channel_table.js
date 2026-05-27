@@ -4,8 +4,8 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
-var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"katz_centrality":1,"harmonic_centrality":1,"closeness_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
-var STRUCTURAL_KEYS = {"betweenness":1,"flow_betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1};
+var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
+var STRUCTURAL_KEYS = {"betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1,"coreness":1,"trophic_level":1,"within_module_z":1};
 var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
@@ -18,15 +18,15 @@ var COL_TOOLTIPS = {
     "hits_hub":           "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
     "hits_authority":      "HITS authority score: propensity to be cited by hub channels; high → important source",
     "betweenness":         "Betweenness centrality (normalized): fraction of shortest paths passing through this node",
-    "flow_betweenness":    "Random-walk betweenness centrality; less sensitive to specific path structure",
     "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
     "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
     "harmonic_centrality": "Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
-    "closeness_centrality":"Closeness centrality (Wasserman-Faust): how easily the rest of the network can reach this channel along citation paths",
-    "katz_centrality":     "Katz centrality: counts all directed paths with exponential penalization for length",
     "bridging_centrality": "Bridging centrality (Hwang et al. 2008): betweenness × bridging coefficient [(1/d(v)) ÷ Σ 1/d(i) over neighbours]; high → bridge sitting between high-degree regions",
     "community_bridging":  "Community bridging: betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high → broker spanning distinct communities",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
+    "coreness":            "K-core coreness (Kitsak et al. 2010): deepest k-core a channel survives in; high → dense reinforcing nucleus, low → peripheral amplifier",
+    "trophic_level":       "Trophic level (MacKay, Johnson & Sansom 2020): structural source→sink position; low → original source, high → terminal amplifier",
+    "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
     "spreading_efficiency":"Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
@@ -133,6 +133,8 @@ function _render(d) {
     var channels = d.channels, communities = d.communities, meta = d.meta;
     var nodes = channels.nodes;
     var strategies = Object.keys(communities.strategies);
+    // Guimerà–Amaral role: a categorical column present only when the MODULEROLE measure ran.
+    var has_role = nodes.some(function(n) { return n.module_role != null; });
 
     // Preamble
     var preambleTarget = document.getElementById("channel-preamble");
@@ -214,6 +216,7 @@ function _render(d) {
     addTh("#", "number", false, "Initial rank by inbound links");
     addTh("Channel", "", false);
     cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[col.key] || ""); });
+    if (has_role) addTh("Role", "", true, "Guimerà–Amaral within-module role (from the MODULEROLE measure)");
     var stratGroupStart = true;
     strategies.forEach(function(s) {
         addTh(s.charAt(0).toUpperCase() + s.slice(1), "", stratGroupStart, "Community label assigned by " + s + " detection algorithm");
@@ -276,6 +279,7 @@ function _render(d) {
                 td.dataset.displayVal = displayStr;
             }
         });
+        if (has_role) addTd(node.module_role || "—", "", node.module_role || "", "", "", true);
         var firstStrategy = true;
         strategies.forEach(function(s) {
             var comm = (node.communities || {})[s];
@@ -310,6 +314,7 @@ function _render(d) {
     addFtd("", "number", false);
     addFtd("Mean ± SD", "", false);
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
+    if (has_role) addFtd("", "", true);
     var firstStratFoot = true;
     strategies.forEach(function() { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);

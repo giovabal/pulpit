@@ -25,4 +25,5 @@ Let me choose which to remove and which to accept, if any.
 
 
 ## [2.0]
+Coordination index, as a new measure. It needs a new graph
 https://github.com/textgain/grasp

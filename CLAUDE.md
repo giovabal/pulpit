@@ -78,17 +78,16 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `HITSHUB` | HITS hub score |
 | `HITSAUTH` | HITS authority score |
 | `BETWEENNESS` | Betweenness centrality |
-| `FLOWBETWEENNESS` | Random-walk (current-flow) betweenness — Newman 2005; graph symmetrised, computed on largest connected component |
 | `INDEGCENTRALITY` | Normalized in-degree centrality |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Harmonic centrality; weighted over `distance = 1/weight` (tie strength → proximity, Opsahl 2010); mean reciprocal distance ÷ (n−1), so not bounded to [0, 1] |
-| `CLOSENESS` | Closeness centrality (Wasserman-Faust); measures how easily the rest of the network can reach this channel; weighted over `distance = 1/weight` (Opsahl 2010), so the value can exceed 1 |
-| `KATZ` | Katz centrality |
 | `BRIDGINGCENTRALITY` | **Bridging Centrality** (Hwang et al. 2008): betweenness × bridging coefficient, where the bridging coefficient `(1/d(v)) / Σ_{i∈N(v)} (1/d(i))` uses undirected, unweighted degree; high = a low-degree node wedged between high-degree regions (a topological bridge). Purely degree-based — needs no community basis. Distinct from `BRIDGING` |
 | `BRIDGING` or `BRIDGING(STRATEGY)` | **Community Bridging** (key `community_bridging`): betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); defaults to `LEIDEN_DIRECTED` (directional brokerage); strategy must also be in `--community-strategies`. The bridging-basis dropdown in the Operations panel (Linked parameters fieldset) is shared with the community-bridging robustness attack — both use the same basis. *Not* the Bridging Centrality of Hwang et al. (2008) — see `BRIDGINGCENTRALITY` |
 | `BURTCONSTRAINT` | Burt's constraint (0–1); low = structural hole broker; `null` for isolated nodes |
-| `EGODENSITY` | Density of directed edges among immediate neighbours (predecessors ∪ successors, ego excluded); 0 = neighbours share no connections (hub between disconnected sources); 1 = fully connected clique (echo chamber); `null` for fewer than 2 neighbours |
 | `LOCALCLUSTERING` | Directed local clustering coefficient (Fagiolo 2007); fraction of directed triangles through the node relative to all possible directed triads; 0 for nodes with total degree < 2 |
+| `CORENESS` | K-core coreness (Kitsak et al. 2010): deepest k-core a node survives in; computed on the symmetrised, self-loop-free, unweighted graph (matches `detect_kcore`); high = dense reinforcing nucleus, low = peripheral amplifier |
+| `TROPHICLEVEL` | Hierarchical trophic level (MacKay, Johnson & Sansom 2020): solves `(diag(u) − (W+Wᵀ)) h = w_in − w_out`, shifted to min 0 per weakly-connected component; structural source→sink position, well-defined on cyclic graphs (unlike Levine 1980) |
+| `MODULEROLE` | Guimerà & Amaral (2005) within-module role: emits numeric `within_module_z` (within-community degree z-score) + categorical `module_role` label (7 roles from the z/P plane). Dispatched specially (needs a community partition); basis auto-resolved from the labels already on the nodes (bridging basis if set, else `leiden_directed`, else first available). `module_role` is **not** in `measures_labels` — it is exported as a string column like `organization` (channels.json node_keys, CSV, XLSX, a "Role" column in `channel_table.js`); `within_module_z` flows the normal numeric measure path |
 | `AMPLIFICATION` | Forwards received from in-target channels / own message count |
 | `CONTENTORIGINALITY` | 1 − (forwarded messages / total messages); `null` if no messages |
 | `DIFFUSIONLAG` | Median hours from original post date to forward date (within a reaction window, default 30 days; set `--diffusion-window 0` to disable); `null` for channels with no dated forwards; low = early adopter, high = late amplifier |

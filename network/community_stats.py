@@ -287,7 +287,7 @@ def _freeman_centralization(values: list[float]) -> float | None:
     most-central node, normalized by the ``(n-1)·C_max`` *upper bound* on that sum.
     This coincides with Freeman's (1978) centralization only when the least-central
     node can reach 0 (e.g. directed in/out-degree on a star); for measures with a
-    non-zero periphery floor (closeness, harmonic) it is a conservative lower bound
+    non-zero periphery floor (e.g. harmonic) it is a conservative lower bound
     on the exact Freeman value, not the published per-measure figure. The exact
     value needs a measure-specific theoretical maximum that isn't recoverable from
     the scores alone. Values stay in [0, 1] and monotone, so they remain comparable
@@ -862,8 +862,8 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
             rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
         for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
             # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
-            # for measures with a zero periphery floor (e.g. degree on a star); for closeness /
-            # harmonic it is a conservative lower bound. See _freeman_centralization.
+            # for measures with a zero periphery floor (e.g. degree on a star); for harmonic
+            # it is a conservative lower bound. See _freeman_centralization.
             rows.append((f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization"))
     if _include("Content"):
         if summary.get("network_originality") is not None:

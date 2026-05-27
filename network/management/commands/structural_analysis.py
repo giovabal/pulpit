@@ -423,10 +423,11 @@ class Command(BaseCommand):
             metavar="MEASURES",
             help=(
                 "Comma-separated list of centrality measures to compute. "
-                "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, FLOWBETWEENNESS, INDEGCENTRALITY, "
-                "OUTDEGCENTRALITY, HARMONICCENTRALITY, KATZ, SPREADING, BRIDGINGCENTRALITY (Hwang et al. 2008), "
-                "BRIDGING or BRIDGING(STRATEGY) (community bridging), "
-                "BURTCONSTRAINT, EGODENSITY, AMPLIFICATION, CONTENTORIGINALITY, ALL. Default: PAGERANK."
+                "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, INDEGCENTRALITY, OUTDEGCENTRALITY, "
+                "HARMONICCENTRALITY, BURTCONSTRAINT, LOCALCLUSTERING, CORENESS, TROPHICLEVEL, "
+                "MODULEROLE (Guimerà-Amaral role; needs a community strategy), SPREADING, "
+                "BRIDGINGCENTRALITY (Hwang et al. 2008), BRIDGING or BRIDGING(STRATEGY) (community bridging), "
+                "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK."
             ),
         )
         parser.add_argument(
@@ -780,10 +781,10 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of attack strategies to run. Any of: "
-                "random, in_strength, out_strength, pagerank, katz, hits_hub, hits_authority, "
-                "harmonic, closeness, betweenness, flow_betweenness, burt_constraint, "
+                "random, in_strength, out_strength, pagerank, hits_hub, hits_authority, "
+                "harmonic, betweenness, burt_constraint, "
                 "bridging[(<community-strategy>)], spreading, and the dynamic variants "
-                "in_strength_dyn, out_strength_dyn, pagerank_dyn, katz_dyn, hits_hub_dyn, "
+                "in_strength_dyn, out_strength_dyn, pagerank_dyn, hits_hub_dyn, "
                 "hits_authority_dyn, betweenness_dyn. Use ALL for every strategy. "
                 "Default: random,in_strength,out_strength,pagerank,betweenness. "
                 "Bridging defaults to leiden_directed as the community basis (directional brokerage); "
@@ -888,6 +889,11 @@ class Command(BaseCommand):
                     f"BRIDGING community basis {bstrategy!r} is not in --community-strategies. "
                     f"Add it or change the BRIDGING strategy."
                 )
+        if "MODULEROLE" in network_measures and not communities_strategy:
+            raise CommandError(
+                "MODULEROLE (Guimerà-Amaral role) needs a community partition: add at least one "
+                "strategy to --community-strategies (LEIDEN_DIRECTED is the preferred basis)."
+            )
         invalid_stat_groups = [g for g in network_stat_groups if g not in measures.VALID_NETWORK_STAT_GROUPS]
         if invalid_stat_groups:
             valid_display = sorted(measures.VALID_NETWORK_STAT_GROUPS) + ["ALL"]
@@ -1159,6 +1165,27 @@ class Command(BaseCommand):
                 graph_data, graph, strategy_key, betweenness=_cached_betweenness
             )
             self.stdout.write("done")
+
+        if "MODULEROLE" in selected_measures:
+            # Community labels are already on the nodes (communities run before measures), so
+            # resolve a basis without threading a token: prefer the active bridging basis,
+            # else LEIDEN_DIRECTED, else any available partition (first alphabetically).
+            available_bases: set[str] = set()
+            for _nid, node_data in graph.nodes(data="data"):
+                if node_data and node_data.get("communities"):
+                    available_bases.update(node_data["communities"].keys())
+            bridging_basis = measures.bridging_strategy(bridging_token).lower() if bridging_token else None
+            role_basis = next(
+                (b for b in (bridging_basis, "leiden_directed") if b and b in available_bases),
+                next(iter(sorted(available_bases)), None),
+            )
+            if role_basis is None:
+                self.stdout.write(self.style.WARNING("- module role … skipped (no community partition)"))
+            else:
+                self.stdout.write(f"- module role (community basis: {role_basis}) … ", ending="")
+                self.stdout.flush()
+                measures_labels += measures.apply_module_role(graph_data, graph, role_basis)
+                self.stdout.write("done")
 
         if do_graph or do_3dgraph:
             self.stdout.write("- small components")

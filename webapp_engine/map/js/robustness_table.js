@@ -37,12 +37,12 @@ var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
 var _STRATEGY_ORDER = [
     "random",
     "in_strength", "out_strength",
-    "pagerank", "katz", "hits_hub", "hits_authority",
-    "harmonic", "closeness",
-    "betweenness", "flow_betweenness", "burt_constraint", "bridging",
+    "pagerank", "hits_hub", "hits_authority",
+    "harmonic",
+    "betweenness", "burt_constraint", "bridging",
     "spreading",
     "in_strength_dyn", "out_strength_dyn",
-    "pagerank_dyn", "katz_dyn", "hits_hub_dyn", "hits_authority_dyn",
+    "pagerank_dyn", "hits_hub_dyn", "hits_authority_dyn",
     "betweenness_dyn",
 ];
 
@@ -52,30 +52,30 @@ var _STRATEGY_ORDER = [
 var _STRATEGY_SHORT = {
     "random": "Random",
     "in_strength": "In-strength", "out_strength": "Out-strength",
-    "pagerank": "PageRank", "katz": "Katz",
+    "pagerank": "PageRank",
     "hits_hub": "HITS hub", "hits_authority": "HITS authority",
-    "harmonic": "Harmonic", "closeness": "Closeness",
-    "betweenness": "Betweenness", "flow_betweenness": "Flow betweenness",
+    "harmonic": "Harmonic",
+    "betweenness": "Betweenness",
     "burt_constraint": "Burt's constraint", "bridging": "Bridging",
     "spreading": "Spreading (SIR)",
     "in_strength_dyn": "In-strength dyn", "out_strength_dyn": "Out-strength dyn",
-    "pagerank_dyn": "PageRank dyn", "katz_dyn": "Katz dyn",
+    "pagerank_dyn": "PageRank dyn",
     "hits_hub_dyn": "HITS hub dyn", "hits_authority_dyn": "HITS authority dyn",
     "betweenness_dyn": "Betweenness dyn",
 };
 
-// 21-colour accessible palette grouped by attack-family hue.
+// Accessible palette grouped by attack-family hue.
 var _STRATEGY_COLOR = {
     "random": "#94a3b8",
     "in_strength": "#3b82f6", "out_strength": "#06b6d4",
-    "pagerank": "#ef4444", "katz": "#dc2626",
+    "pagerank": "#ef4444",
     "hits_hub": "#a855f7", "hits_authority": "#7c3aed",
-    "harmonic": "#10b981", "closeness": "#059669",
-    "betweenness": "#f59e0b", "flow_betweenness": "#d97706",
+    "harmonic": "#10b981",
+    "betweenness": "#f59e0b",
     "burt_constraint": "#8b5cf6", "bridging": "#ec4899",
     "spreading": "#14b8a6",
     "in_strength_dyn": "#1d4ed8", "out_strength_dyn": "#0e7490",
-    "pagerank_dyn": "#b91c1c", "katz_dyn": "#991b1b",
+    "pagerank_dyn": "#b91c1c",
     "hits_hub_dyn": "#6b21a8", "hits_authority_dyn": "#5b21b6",
     "betweenness_dyn": "#b45309",
 };

@@ -43,19 +43,18 @@ from network.measures import (
     apply_betweenness_centrality,
     apply_bridging_centrality,
     apply_burt_constraint,
-    apply_closeness_centrality,
     apply_community_bridging,
     apply_content_originality,
-    apply_ego_network_density,
-    apply_flow_betweenness_centrality,
+    apply_coreness,
     apply_harmonic_centrality,
     apply_hits,
     apply_in_degree_centrality,
-    apply_katz_centrality,
     apply_local_clustering,
+    apply_module_role,
     apply_out_degree_centrality,
     apply_pagerank,
     apply_spreading_efficiency,
+    apply_trophic_level,
     compute_betweenness,
     compute_bridging_coefficient,
 )
@@ -1805,7 +1804,7 @@ class ApplyBetweennessTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# measures/_centrality.py — in/out degree, harmonic, Katz centralities
+# measures/_centrality.py — in/out degree, harmonic centralities
 # ---------------------------------------------------------------------------
 
 
@@ -1861,87 +1860,106 @@ class ApplyHarmonicCentralityTests(TestCase):
             self.assertLessEqual(node["harmonic_centrality"], 1.0)
 
 
-class ApplyKatzCentralityTests(TestCase):
+class ApplyCorenessTests(TestCase):
     def setUp(self) -> None:
         self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1")])
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+        # Triangle a-b-c (coreness 2) plus a pendant leaf d (coreness 1).
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
+        self.graph_data: dict = {"nodes": [{"id": n} for n in ("a", "b", "c", "d")], "edges": []}
 
-    def test_adds_katz_centrality_key(self) -> None:
-        apply_katz_centrality(self.graph_data, self.graph)
+    def test_adds_coreness_key_and_label(self) -> None:
+        labels = apply_coreness(self.graph_data, self.graph)
+        self.assertEqual(labels, [("coreness", "K-core Coreness")])
         for node in self.graph_data["nodes"]:
-            self.assertIn("katz_centrality", node)
+            self.assertIn("coreness", node)
 
-    def test_values_are_positive_floats(self) -> None:
-        apply_katz_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertIsInstance(node["katz_centrality"], float)
-            self.assertGreater(node["katz_centrality"], 0.0)
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_closeness_centrality
-# ---------------------------------------------------------------------------
-
-
-class ApplyClosenessCentralityTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
-
-    def test_adds_closeness_centrality_key(self) -> None:
-        apply_closeness_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertIn("closeness_centrality", node)
-
-    def test_values_in_unit_interval(self) -> None:
-        apply_closeness_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertGreaterEqual(node["closeness_centrality"], 0.0)
-            self.assertLessEqual(node["closeness_centrality"], 1.0)
-
-    def test_sink_node_has_highest_closeness(self) -> None:
-        # Node "3" is reachable from all others in 1 hop, so it has maximal in-closeness.
-        apply_closeness_centrality(self.graph_data, self.graph)
+    def test_triangle_outranks_leaf(self) -> None:
+        apply_coreness(self.graph_data, self.graph)
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertGreater(node_map["3"]["closeness_centrality"], node_map["1"]["closeness_centrality"])
+        self.assertEqual(node_map["a"]["coreness"], 2.0)
+        self.assertEqual(node_map["d"]["coreness"], 1.0)
 
     def test_isolated_node_gets_zero(self) -> None:
         graph = nx.DiGraph()
         graph.add_node("isolated")
         graph_data: dict = {"nodes": [{"id": "isolated"}], "edges": []}
-        apply_closeness_centrality(graph_data, graph)
-        self.assertEqual(graph_data["nodes"][0]["closeness_centrality"], 0.0)
+        apply_coreness(graph_data, graph)
+        self.assertEqual(graph_data["nodes"][0]["coreness"], 0.0)
 
 
 # ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_flow_betweenness_centrality
+# measures/_centrality.py — apply_trophic_level
 # ---------------------------------------------------------------------------
 
 
-class ApplyFlowBetweennessTests(TestCase):
+class ApplyTrophicLevelTests(TestCase):
     def setUp(self) -> None:
         self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
+        # Linear chain a → b → c: a is the source, c the sink.
+        self.graph.add_edge("a", "b", weight=1.0)
+        self.graph.add_edge("b", "c", weight=1.0)
+        self.graph_data: dict = {"nodes": [{"id": n} for n in ("a", "b", "c")], "edges": []}
 
-    def test_adds_flow_betweenness_key(self) -> None:
-        apply_flow_betweenness_centrality(self.graph_data, self.graph)
+    def test_adds_trophic_level_key_and_label(self) -> None:
+        labels = apply_trophic_level(self.graph_data, self.graph)
+        self.assertEqual(labels, [("trophic_level", "Trophic Level")])
         for node in self.graph_data["nodes"]:
-            self.assertIn("flow_betweenness", node)
+            self.assertIn("trophic_level", node)
 
-    def test_disconnected_graph_outside_nodes_get_zero(self) -> None:
+    def test_source_is_zero_and_sink_is_highest(self) -> None:
+        apply_trophic_level(self.graph_data, self.graph)
+        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
+        self.assertAlmostEqual(node_map["a"]["trophic_level"], 0.0)
+        self.assertGreater(node_map["b"]["trophic_level"], node_map["a"]["trophic_level"])
+        self.assertGreater(node_map["c"]["trophic_level"], node_map["b"]["trophic_level"])
+
+    def test_empty_graph_returns_label(self) -> None:
+        labels = apply_trophic_level({"nodes": [], "edges": []}, nx.DiGraph())
+        self.assertEqual(labels, [("trophic_level", "Trophic Level")])
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_module_role (Guimerà-Amaral within-module role)
+# ---------------------------------------------------------------------------
+
+
+class ApplyModuleRoleTests(TestCase):
+    _ROLES = {
+        "Ultra-peripheral",
+        "Peripheral",
+        "Connector",
+        "Kinless",
+        "Provincial hub",
+        "Connector hub",
+        "Kinless hub",
+    }
+
+    def _graph_with_communities(self):
         graph = nx.DiGraph()
-        graph.add_edges_from([("a", "b"), ("b", "c")])
-        graph.add_node("isolated")
-        graph_data: dict = {
-            "nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "isolated"}],
-            "edges": [],
-        }
-        apply_flow_betweenness_centrality(graph_data, graph)
+        graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
+        for n in graph.nodes():
+            comm = "2-ld" if n == "d" else "1-ld"
+            graph.nodes[n]["data"] = {"communities": {"leiden_directed": comm}}
+        graph_data: dict = {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}
+        return graph, graph_data
+
+    def test_emits_numeric_z_measure_and_role_label(self) -> None:
+        graph, graph_data = self._graph_with_communities()
+        labels = apply_module_role(graph_data, graph, "leiden_directed")
+        self.assertEqual(labels, [("within_module_z", "Within-module z")])
+        for node in graph_data["nodes"]:
+            self.assertIn("within_module_z", node)
+            self.assertIn(node["module_role"], self._ROLES)
+
+    def test_node_without_community_gets_none(self) -> None:
+        graph, graph_data = self._graph_with_communities()
+        graph.add_node("loner")
+        graph.nodes["loner"]["data"] = {"communities": {}}
+        graph_data["nodes"].append({"id": "loner"})
+        apply_module_role(graph_data, graph, "leiden_directed")
         node_map = {n["id"]: n for n in graph_data["nodes"]}
-        self.assertEqual(node_map["isolated"]["flow_betweenness"], 0.0)
+        self.assertIsNone(node_map["loner"]["within_module_z"])
+        self.assertIsNone(node_map["loner"]["module_role"])
 
 
 # ---------------------------------------------------------------------------
@@ -2092,104 +2110,6 @@ class ApplyBridgingCentralityTests(TestCase):
         a = {n["id"]: n["bridging_centrality"] for n in gd_shared["nodes"]}
         b = {n["id"]: n["bridging_centrality"] for n in self.graph_data["nodes"]}
         self.assertEqual(a, b)
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_ego_network_density
-# ---------------------------------------------------------------------------
-
-
-class ApplyEgoNetworkDensityTests(TestCase):
-    def test_adds_ego_network_density_key(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_edges_from([("v", "a"), ("v", "b"), ("a", "b")])
-        gd: dict = {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}
-        apply_ego_network_density(gd, graph)
-        for node in gd["nodes"]:
-            self.assertIn("ego_network_density", node)
-
-    def test_returns_label(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_edges_from([("v", "a"), ("v", "b")])
-        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
-        labels = apply_ego_network_density(gd, graph)
-        self.assertEqual(labels, [("ego_network_density", "Ego Network Density")])
-
-    def test_hub_with_disconnected_neighbours_gets_zero(self) -> None:
-        # hub → a, b, c; a, b, c share no edges → density 0.0
-        graph = nx.DiGraph()
-        graph.add_edges_from([("hub", "a"), ("hub", "b"), ("hub", "c")])
-        gd: dict = {"nodes": [{"id": "hub"}], "edges": []}
-        apply_ego_network_density(gd, graph)
-        self.assertAlmostEqual(gd["nodes"][0]["ego_network_density"], 0.0)
-
-    def test_echo_with_fully_connected_neighbours_gets_one(self) -> None:
-        # echo → a, b, c; a, b, c have all 6 directed edges between them → density 1.0
-        graph = nx.DiGraph()
-        graph.add_edges_from(
-            [
-                ("echo", "a"),
-                ("echo", "b"),
-                ("echo", "c"),
-                ("a", "b"),
-                ("b", "a"),
-                ("b", "c"),
-                ("c", "b"),
-                ("a", "c"),
-                ("c", "a"),
-            ]
-        )
-        gd: dict = {"nodes": [{"id": "echo"}], "edges": []}
-        apply_ego_network_density(gd, graph)
-        self.assertAlmostEqual(gd["nodes"][0]["ego_network_density"], 1.0)
-
-    def test_isolated_node_gets_none(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_node("isolated")
-        gd: dict = {"nodes": [{"id": "isolated"}], "edges": []}
-        apply_ego_network_density(gd, graph)
-        self.assertIsNone(gd["nodes"][0]["ego_network_density"])
-
-    def test_single_neighbour_gets_none(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_edge("v", "x")
-        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
-        apply_ego_network_density(gd, graph)
-        self.assertIsNone(gd["nodes"][0]["ego_network_density"])
-
-    def test_echo_scores_higher_than_hub(self) -> None:
-        hub_graph = nx.DiGraph()
-        hub_graph.add_edges_from([("hub", "a"), ("hub", "b"), ("hub", "c")])
-        hub_gd: dict = {"nodes": [{"id": "hub"}], "edges": []}
-        apply_ego_network_density(hub_gd, hub_graph)
-
-        echo_graph = nx.DiGraph()
-        echo_graph.add_edges_from(
-            [
-                ("echo", "a"),
-                ("echo", "b"),
-                ("echo", "c"),
-                ("a", "b"),
-                ("b", "a"),
-                ("b", "c"),
-                ("c", "b"),
-                ("a", "c"),
-                ("c", "a"),
-            ]
-        )
-        echo_gd: dict = {"nodes": [{"id": "echo"}], "edges": []}
-        apply_ego_network_density(echo_gd, echo_graph)
-
-        self.assertGreater(echo_gd["nodes"][0]["ego_network_density"], hub_gd["nodes"][0]["ego_network_density"])
-
-    def test_values_in_unit_interval(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_edges_from([("v", "a"), ("v", "b"), ("a", "b")])
-        gd: dict = {"nodes": [{"id": "v"}], "edges": []}
-        apply_ego_network_density(gd, graph)
-        val = gd["nodes"][0]["ego_network_density"]
-        self.assertGreaterEqual(val, 0.0)
-        self.assertLessEqual(val, 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -2875,11 +2795,11 @@ class RemovalOrderTests(TestCase):
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        # Static includes random + degree (2) + prestige (4) + reach (2) + brokerage (4) + spreading (1) = 14
-        self.assertEqual(len(STATIC_STRATEGIES), 14)
-        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, katz_dyn, hits_hub_dyn, hits_authority_dyn, betweenness_dyn
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 7)
-        self.assertEqual(len(ALL_STRATEGIES), 21)
+        # Static includes random + degree (2) + prestige (3) + reach (1) + brokerage (3) + spreading (1) = 11
+        self.assertEqual(len(STATIC_STRATEGIES), 11)
+        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, hits_hub_dyn, hits_authority_dyn, betweenness_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 6)
+        self.assertEqual(len(ALL_STRATEGIES), 17)
         # The default set is the original 5 (preserves backwards-compatible behaviour)
         self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
 
@@ -3015,12 +2935,9 @@ class RemovalOrderTests(TestCase):
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
         for strat in (
-            "katz",
             "hits_hub",
             "hits_authority",
             "harmonic",
-            "closeness",
-            "flow_betweenness",
             "burt_constraint",
             "spreading",
         ):
@@ -3034,7 +2951,7 @@ class RemovalOrderTests(TestCase):
         g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
-        for strat in ("out_strength_dyn", "katz_dyn", "hits_hub_dyn", "hits_authority_dyn"):
+        for strat in ("out_strength_dyn", "hits_hub_dyn", "hits_authority_dyn"):
             with self.subTest(strategy=strat):
                 order = removal_order(g, strat)
                 self.assertEqual(sorted(order), sorted(g.nodes()))

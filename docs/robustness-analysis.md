@@ -38,7 +38,7 @@ Channels with a single edge in a given direction always keep that edge — there
 
 ## Attack strategies
 
-Twenty-one strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
+Seventeen strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
 
 The five default strategies are described in detail below — they cover the four main "what makes a channel critical?" axes (random / degree / prestige / brokerage). The remaining twelve are summarised compactly in [Other available strategies](#other-available-strategies); see [Network measures](network-measures.md) for the underlying definitions.
 
@@ -50,7 +50,7 @@ The five default strategies are described in detail below — they cover the fou
 | `pagerank` | static | "Take down the highest-prestige channels" — moderation aware of inherited prestige |
 | `betweenness` | static | "Take down the brokers" — moderation aimed at fragmenting cross-community flow |
 | `in_strength_dyn` / `out_strength_dyn` | dynamic | Degree-based attacks with cascade awareness — re-rank after every removal |
-| `pagerank_dyn` / `katz_dyn` / `hits_*_dyn` | dynamic | Prestige attacks with cascade awareness |
+| `pagerank_dyn` / `hits_*_dyn` | dynamic | Prestige attacks with cascade awareness |
 | `betweenness_dyn` | dynamic | The most destructive attack class; also the most expensive |
 
 The whole point of running multiple strategies is comparison. If they all produce similar R values, the network has no specific weak class of channels — it is *homogeneously* resilient or fragile. If one strategy gives a much lower R than the others, you have found the network's specific vulnerability: an attacker following that strategy would do disproportionate damage.
@@ -103,24 +103,21 @@ Uses weighted betweenness centrality (see [Network measures § Betweenness](netw
 
 Static attacks rank once and remove in that fixed order; dynamic attacks ask, after every removal, *who is the most critical now?* This matters because the structurally-second-most-important channel before any removal might become the most-important after the first one is gone — especially under PageRank, where prestige redistributes through the residual.
 
-Pulpit ships seven dynamic variants — one per cheap-to-recompute static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `katz_dyn`, `hits_hub_dyn`, `hits_authority_dyn`, `betweenness_dyn`. Pick whichever ones you want via `--robustness-strategies`; the spreading / reach / brokerage variants (closeness, harmonic, flow betweenness, bridging, spreading) are static-only because their per-step recomputation would dominate runtime even on small graphs.
+Pulpit ships six dynamic variants — one per cheap-to-recompute static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `hits_hub_dyn`, `hits_authority_dyn`, `betweenness_dyn`. Pick whichever ones you want via `--robustness-strategies`; the reach / brokerage / spreading variants (harmonic, bridging, spreading) are static-only because their per-step recomputation would dominate runtime even on small graphs.
 
-**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank/Katz/HITS, `O(N²·m)` for betweenness. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants and tens of minutes once dynamic betweenness joins in.
+**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank/HITS, `O(N²·m)` for betweenness. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants and tens of minutes once dynamic betweenness joins in.
 
 **Example.** Under static PageRank the first ten removals are the ten highest-PageRank channels at q=0. Under `pagerank_dyn`, after removing #1 PageRank is recomputed: the original #2 might or might not still be #2 (it might have inherited prestige from the removed #1, or lost prestige if its incoming edges came from it). Networks where dynamic gives a much lower R than static are ones whose importance distribution is *fragile* — knocking out one channel makes its neighbours suddenly critical.
 
 ### Other available strategies
 
-These nine static strategies don't make the default set but unlock genuinely different vulnerability angles — pick them with `--robustness-strategies` when the question warrants it.
+These six static strategies don't make the default set but unlock genuinely different vulnerability angles — pick them with `--robustness-strategies` when the question warrants it.
 
 | Strategy | What it models | When to use |
 | :------- | :------------- | :---------- |
-| `katz` | Path-based prestige with attenuation (see [Katz](network-measures.md#katz-centrality)) | Networks where influence flows through long indirect paths — Katz often diverges from PageRank on horizontal, distributed ecosystems |
 | `hits_hub` | Removes the primary *distributors* (see [HITS Hub](network-measures.md#hits-hub-score)) | When the network's distributors and producers play distinct structural roles — `hits_hub` and `hits_authority` together separate "remove the relay layer" from "remove the source layer" cleanly |
 | `hits_authority` | Removes the primary *sources* (see [HITS Authority](network-measures.md#hits-authority-score)) | Same as above, opposite side. Often the most informative *prestige* attack on Telegram political networks because authorities are usually the moderation target rather than aggregators |
 | `harmonic` | Removes the channels best-positioned to reach the rest of the network (see [Harmonic](network-measures.md#harmonic-centrality)) | When the question is about "who can reach everyone?" rather than "who do they reach through?" |
-| `closeness` | Removes the most-easily-reached channels (see [Closeness](network-measures.md#closeness-centrality)) | Reach attacks viewed from the receiving side — different curves than `harmonic` on graphs with asymmetric in/out connectivity |
-| `flow_betweenness` | Random-walk betweenness (see [Flow betweenness](network-measures.md#flow-betweenness)) | When information might travel along longer-than-shortest paths; flow betweenness picks up brokers that geodesic betweenness misses |
 | `burt_constraint` | **Inverse ranking** — *low* Burt's constraint flags structural-hole brokers (see [Burt's constraint](network-measures.md#burts-constraint)) | Identifies quiet bridges that PageRank/betweenness can miss because they connect *small* otherwise-unconnected groups |
 | `bridging` / `bridging(<community-strategy>)` | Betweenness × neighbour-community participation coefficient (see [Community bridging](network-measures.md#community-bridging); *not* Hwang's degree-based Bridging Centrality) | When you want a brokerage attack that specifically targets cross-community ties (not within-community hubs). The community basis defaults to `leiden_directed` (its directed null model respects citation direction, which matches the brokerage question); use `bridging(leiden)`, `bridging(louvain)`, `bridging(infomap)`, etc. to pick a different one (it must also be in `--community-strategies`). In the Operations panel the **Bridging basis** dropdown is shared with the [Community Bridging measure](network-measures.md#community-bridging) — both pick up the same partition |
 | `spreading` | Removes the *dynamical superspreaders* (see [Spreading efficiency](network-measures.md#spreading-efficiency)) | When you care about *what information would reach* in an SIR cascade, not just structural position. **Expensive**: Monte Carlo SIR per ranking computation, scales with `--robustness-runs` |
