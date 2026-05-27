@@ -1,4 +1,8 @@
 # Roadmap for Pulpit: Activities for Next Versions
+## [0.24]
+Structural and behavioural similarity
+generalize UI for measures depending on other measures or values
+
 ## [1.0]
 Have a review of all measurements available in Pulpit. Read documentation for having a good grasp of what is the Pulpit goal. Then:
 1. find measures that Pulpit offers and that aren't useful in this specific case;

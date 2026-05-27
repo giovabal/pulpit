@@ -1,5 +1,5 @@
 # Changelog
-## [0.23] - To be announced
+## [0.23] - 2026-05-27
 *Time-bounded organization attribution. Fixes, lots and important ones.*
 
 ### New features
