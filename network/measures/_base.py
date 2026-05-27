@@ -151,8 +151,13 @@ def apply_base_node_measures(
     ]
 
     channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
-    # Base totals historically include lost messages (alive=False).
-    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, alive=False)
+    # Count only alive (non-lost) messages, so the displayed "Messages" column
+    # reconciles with the Amplification / Content-originality denominators and the
+    # network-wide content metrics — all of which run on Message.objects.alive().
+    # (Previously alive=False, which inflated the column with un-fetchable lost-message
+    # placeholders that the ratios never count, so the figures could not be derived
+    # from one another.)
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, alive=True)
     # Activity bounds need Min/Max aggregates, not the per-channel count shape.
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
     activity_bounds: dict[int, dict] = {

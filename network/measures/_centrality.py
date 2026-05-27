@@ -213,6 +213,10 @@ def apply_community_bridging(
     structurally central and span communities. The participation coefficient is bounded in
     ``[0, 1]``, so the product stays on betweenness' scale.
 
+    The *product* is a project composite: both factors are standard (Freeman 1977 betweenness;
+    Guimerà & Amaral 2005 participation), but their multiplication is not itself a single named
+    published index — read it as "central *and* spanning", not as a canonical centrality.
+
     This is *not* the Bridging Centrality of Hwang et al. (2008) — see
     :func:`apply_bridging_centrality` for that. This measure asks "broker between *detected
     communities*" (and so needs a community partition); the Hwang measure asks "bridge between

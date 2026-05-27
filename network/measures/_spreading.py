@@ -81,6 +81,12 @@ def apply_spreading_efficiency(
     edges.  Recovery probability per step is ``_SIR_GAMMA``.  The result is normalised to
     [0, 1] by dividing by (N − 1), so 1.0 means the seed eventually infects every other
     node on average.
+
+    Caveat: the weight->transmission-probability mapping is a heuristic — there is no
+    canonical way to turn citation frequency into an infection probability, and tying the
+    single strongest edge in the graph to certain transmission is a modelling choice. Read
+    Spreading Efficiency *ordinally* (to rank channels by reach) rather than as a calibrated
+    probability; absolute values shift with the mapping and the ``runs`` / ``_SIR_GAMMA`` knobs.
     """
     key = "spreading_efficiency"
     n = graph.number_of_nodes()

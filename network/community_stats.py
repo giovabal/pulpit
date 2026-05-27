@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 # skipping them avoids calling weakly_connected_components on many 1–2 node subgraphs.
 _PATH_LENGTH_MIN_NODES = 3
 
+# Strategies dropped from the NMI matrix: connectivity/shell decompositions that are not
+# community detections (the consensus matrix also excludes them, plus ORGANIZATION — which
+# the NMI matrix keeps, since detection-vs-manual-labels is the comparison it exists for).
+_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"weakcc", "strongcc", "kcore"})
+
 # Exceptions networkx routines may raise on graphs that are too small, empty,
 # or disconnected for a given metric. Centralised so a new "expected failure"
 # exception type only needs to be added in one place.
@@ -433,6 +438,11 @@ def _compute_structural_equivalence(
     }
 
 
+# Behavioural features that are heavy-tailed volume counts (not bounded rates): they
+# are log1p-scaled before normalisation so a few very large channels don't dominate.
+_VOLUME_BEHAVIOURAL_KEYS: frozenset[str] = frozenset({"fans", "messages_count"})
+
+
 def _compute_behavioural_equivalence(
     graph_data: GraphData,
     measures_labels: "list[tuple[str, str]]",
@@ -444,8 +454,11 @@ def _compute_behavioural_equivalence(
     volume — followers and message count; see ``BEHAVIOURAL_MEASURE_KEYS``). Missing
     values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the
     column **median** — a neutral "unknown" — rather than the earlier ``None → 0`` that
-    read as an extreme (zero originality, instant diffusion, maximal brokerage). Columns
-    are min-max normalised, rows normalised to unit length, similarity = U·Uᵀ in [0, 1].
+    read as an extreme (zero originality, instant diffusion, maximal brokerage). The
+    heavy-tailed volume features (followers, message count; see
+    ``_VOLUME_BEHAVIOURAL_KEYS``) are then log1p-scaled so a few very large channels don't
+    compress everyone else; columns are min-max normalised, rows normalised to unit length,
+    similarity = U·Uᵀ in [0, 1].
 
     Returns None for fewer than two nodes or when no behavioural measure was computed.
     """
@@ -472,6 +485,15 @@ def _compute_behavioural_equivalence(
             present = col[~missing]
             col[missing] = float(np.median(present)) if present.size else 0.0
 
+    # Log-scale the heavy-tailed volume features (audience size, message count) before
+    # normalisation. Min-max on raw counts lets a handful of very large channels stretch
+    # the column range so everyone else collapses into a narrow band near 0 — distorting
+    # the cosine. log1p compresses that tail so the normalised feature reflects relative,
+    # order-of-magnitude differences. The bounded rate features (0–1) are left as-is.
+    for j, key in enumerate(keys):
+        if key in _VOLUME_BEHAVIOURAL_KEYS:
+            raw[:, j] = np.log1p(np.clip(raw[:, j], 0.0, None))
+
     col_min = raw.min(axis=0)
     col_max = raw.max(axis=0)
     safe_ranges = np.where(col_max - col_min > 0, col_max - col_min, 1.0)
@@ -489,7 +511,8 @@ def _compute_behavioural_equivalence(
         "measures": behavioural,
         "note": (
             "Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles "
-            "(min-max normalised per measure; missing values imputed to the median). 1.0 = same "
+            "(volume features log-scaled, then min-max normalised per measure; missing values "
+            "imputed to the median). 1.0 = same "
             "behavioural fingerprint, regardless of network position. Lower triangle; diagonal = 1 (self)."
         ),
         "cells_lower": _lower_triangle(sim, n),
@@ -597,7 +620,7 @@ def _compute_strategy_entry(
         )
         channels = sorted(
             (
-                {"label": id_to_node[nid].get("label") or nid, "url": id_to_node[nid].get("url") or ""}
+                {"pk": nid, "label": id_to_node[nid].get("label") or nid, "url": id_to_node[nid].get("url") or ""}
                 for nid in nodes_set
                 if nid in id_to_node
             ),
@@ -727,11 +750,17 @@ def compute_community_metrics(
     # Pairwise Normalized Mutual Information between community strategies.
     # Each pair is computed on the nodes assigned in both strategies (intersection),
     # which matters for ORGANIZATION where unassigned nodes are silently skipped.
-    if len(strategies) >= 2:
+    # WEAKCC/STRONGCC/KCORE are connectivity/shell decompositions, not community
+    # detections, so pairwise partition-similarity against them is uninformative (the
+    # giant component co-assigns almost everything) — drop them, matching the consensus
+    # matrix. ORGANIZATION is deliberately *kept*: validating detected communities
+    # against the manual org labels is exactly what this matrix is for.
+    nmi_strategies = [s for s in strategies if s not in _NMI_EXCLUDED_STRATEGIES]
+    if len(nmi_strategies) >= 2:
         node_comms: dict[str, dict[str, Any]] = {n["id"]: (n.get("communities") or {}) for n in graph_data["nodes"]}
-        nmi_cells: list[list[float | None]] = [[None] * len(strategies) for _ in range(len(strategies))]
-        for i, sk_a in enumerate(strategies):
-            for j, sk_b in enumerate(strategies):
+        nmi_cells: list[list[float | None]] = [[None] * len(nmi_strategies) for _ in range(len(nmi_strategies))]
+        for i, sk_a in enumerate(nmi_strategies):
+            for j, sk_b in enumerate(nmi_strategies):
                 if i == j:
                     nmi_cells[i][j] = 1.0
                 elif j > i:
@@ -743,7 +772,7 @@ def compute_community_metrics(
                     v = _compute_nmi([p[0] for p in pairs], [p[1] for p in pairs]) if pairs else None
                     nmi_cells[i][j] = v
                     nmi_cells[j][i] = v
-        result["nmi_matrix"] = {"strategies": strategies, "cells": nmi_cells}
+        result["nmi_matrix"] = {"strategies": nmi_strategies, "cells": nmi_cells}
 
     return result
 

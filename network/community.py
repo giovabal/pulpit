@@ -190,10 +190,13 @@ def detect_label_propagation(
     nodes into colour classes before each sweep to avoid oscillation.  The
     algorithm is deterministic, parameter-free, and runs in near-linear time.
 
-    Edge weights are not used — all edges are treated equally.
-    The graph is symmetrised to undirected before running.
+    Edge weights are not used — all edges are treated equally. The graph is
+    symmetrised with ``to_undirected_sum`` (the same projection the other
+    undirected detectors and the reported modularity use); since the algorithm
+    ignores weights this yields the identical partition to a plain
+    ``to_undirected()`` while keeping the projection consistent across strategies.
     """
-    communities = sorted(nx.community.label_propagation_communities(graph.to_undirected()), key=len, reverse=True)
+    communities = sorted(nx.community.label_propagation_communities(to_undirected_sum(graph)), key=len, reverse=True)
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
@@ -226,7 +229,9 @@ def detect_kcore(
 ) -> tuple[CommunityMap, CommunityPalette]:
     # nx.core_number rejects graphs with self-loops, which are present whenever
     # --self-references is enabled; strip them from the undirected view first.
-    undirected = graph.to_undirected()
+    # Use to_undirected_sum for projection parity with the other undirected
+    # strategies (core_number is unweighted, so the partition is unchanged).
+    undirected = to_undirected_sum(graph)
     undirected.remove_edges_from(nx.selfloop_edges(undirected))
     coreness = nx.core_number(undirected)
     # Nodes with coreness 0 (isolated) are grouped together at shell 1
@@ -244,7 +249,10 @@ def detect_infomap(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
     node_ids, node_id_map = _node_id_index(graph)
-    infomap = Infomap("--two-level --directed --silent")
+    # seed=123 pins reproducibility for parity with the other seeded detectors
+    # (Leiden/Louvain seed=0, Memory Infomap seed=123); it matches Infomap's own
+    # current default but makes the run independent of that default ever changing.
+    infomap = Infomap("--two-level --directed --silent", seed=123)
     for source, target, edge_data in graph.edges(data=True):
         infomap.addLink(node_id_map[source], node_id_map[target], edge_data.get("weight", 1.0))
 

@@ -142,7 +142,7 @@ function _renderHeaderSummary(payload) {
         "seed=" + c.seed,
     ];
     if (payload.efficiency && payload.efficiency.baseline !== undefined) {
-        parts.push("baseline efficiency=" + _fmt(payload.efficiency.baseline, 3));
+        parts.push("baseline SCC efficiency=" + _fmt(payload.efficiency.baseline, 3));
     }
     document.getElementById("rb-summary").textContent = parts.join(" · ");
 }

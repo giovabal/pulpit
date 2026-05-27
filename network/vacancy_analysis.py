@@ -8,6 +8,7 @@ import math
 from collections import defaultdict
 from typing import Any, Callable
 
+from django.conf import settings
 from django.db.models import Count, Max, Min
 
 from network.measures._spreading import sir_ever_infected
@@ -32,7 +33,7 @@ ALL_VACANCY_MEASURES: list[str] = [
 
 MEASURE_LABELS: dict[str, str] = {
     "AMPLIFIER_JACCARD": "Amplifier Coverage",
-    "STRUCTURAL_EQUIV": "Structural Equivalence",
+    "STRUCTURAL_EQUIV": "Neighbour-set Equivalence",
     "BROKERAGE": "Brokerage overlap",
     "CASCADE_OVERLAP": "Cascade Overlap (SIR)",
     "PPR": "Pers. PageRank",
@@ -136,7 +137,16 @@ def _scores_abc(
     after_end: datetime.datetime,
     selected: set[str],
 ) -> dict[int, dict[str, float | None]]:
-    """Scores A (Amplifier Coverage), B (Structural Equivalence), C (Brokerage)."""
+    """Scores A (Amplifier Coverage), B (Neighbour-set Equivalence), C (Brokerage overlap).
+
+    Note: score B here is a *binary* (Ochiai) cosine over in/out neighbour **sets** —
+    it ignores tie strength and is computed between one vacancy and each candidate. It
+    is deliberately distinct from the weighted Lorrain & White (1971) structural-
+    equivalence *matrix* computed across all graph nodes in
+    :func:`network.community_stats._compute_structural_equivalence`; the two answer
+    related questions with different maths, hence the separate "Neighbour-set
+    Equivalence" label.
+    """
     total_orphaned = len(orphaned_pks)
 
     amp_counts: dict[int, int] = {}
@@ -255,6 +265,9 @@ def _scores_abc(
             scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, 3) if total_orphaned else 0.0
 
         if "STRUCTURAL_EQUIV" in selected:
+            # Binary (Ochiai) cosine of in-neighbour sets (who amplifies them) and
+            # out-neighbour sets (whom they source from), averaged. Set-based, so tie
+            # strength is ignored — distinct from the weighted Lorrain & White matrix.
             cos_in = _cosine(orphaned_pks, cand_in_pks.get(cid, set()))
             cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
             scores["STRUCTURAL_EQUIV"] = round(0.5 * cos_in + 0.5 * cos_out, 3)
@@ -312,24 +325,37 @@ def _scores_ppr(
     ppr_alpha: float,
 ) -> dict[int, float]:
     """
-    Personalized PageRank from orphaned amplifiers on the reversed graph.
+    Personalized PageRank seeded at the orphaned amplifiers, walking toward the
+    channels they forward *from* — their content sources, which is exactly the pool
+    the replacement candidates are drawn from.
 
-    The reversed graph is used so the random walk travels upstream from orphaned
-    channels toward their content sources; candidates with high PPR are structurally
-    situated in the same upstream supply chain as the vacancy.
+    Personalized PageRank propagates mass along **out-edges** from the seed set, so
+    the walk must run on whichever orientation makes a content source an *out*-neighbour
+    of its amplifiers. That orientation depends on ``settings.REVERSED_EDGES`` (the
+    same switch ``build_graph`` honours):
+
+      * ``REVERSED_EDGES`` (default) builds edges amplifier→source, so a source is
+        already reachable by following the orphaned channels' out-edges — walk on
+        ``graph`` as-is.
+      * Without it, edges are source→amplifier, so we reverse first.
+
+    Reversing unconditionally (the previous behaviour) inverted the walk under the
+    default config, ranking the orphaned channels' *downstream amplifiers* instead of
+    their sources. Candidates with high PPR sit in the same upstream supply chain as
+    the vacancy.
     """
     orphaned_nodes = [pk_to_node[pk] for pk in orphaned_pks if pk in pk_to_node]
     if not orphaned_nodes or graph.number_of_nodes() <= 1:
         return dict.fromkeys(candidate_pks, 0.0)
 
-    rev = graph.reverse(copy=True)
+    walk_graph = graph if settings.REVERSED_EDGES else graph.reverse(copy=True)
     per_node = 1.0 / len(orphaned_nodes)
-    personalization = dict.fromkeys(rev.nodes(), 0.0)
+    personalization = dict.fromkeys(walk_graph.nodes(), 0.0)
     for n in orphaned_nodes:
         personalization[n] = per_node
 
     try:
-        ppr = nx.pagerank(rev, alpha=ppr_alpha, personalization=personalization, max_iter=200, tol=1e-6)
+        ppr = nx.pagerank(walk_graph, alpha=ppr_alpha, personalization=personalization, max_iter=200, tol=1e-6)
     except nx.PowerIterationFailedConvergence:
         return dict.fromkeys(candidate_pks, 0.0)
 

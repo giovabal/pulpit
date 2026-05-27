@@ -13,8 +13,9 @@
 <p class="text-muted small mb-3">
   <strong>Behavioural equivalence</strong> — the cosine between each pair of channels' <em>behavioural-measure
   profiles</em>: amplification, content originality, diffusion lag, spreading efficiency, and audience/activity
-  volume (followers, message count). Measures are min-max normalised per column and missing values are imputed to
-  the median. Two channels score 1.0 when they behave alike — originate vs amplify, fast vs slow, narrow vs wide —
+  volume (followers, message count). The volume features are log-scaled (so a few very large channels don't dominate),
+  then measures are min-max normalised per column and missing values are imputed to the median. Two channels score
+  1.0 when they behave alike — originate vs amplify, fast vs slow, narrow vs wide —
   regardless of their position in the citation network. Complements the
   <a href="structural_similarity.html">structural equivalence</a> matrix, which asks the opposite question.
 </p>
