@@ -6,7 +6,7 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
 var STRUCTURAL_KEYS = {"betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1,"coreness":1,"trophic_level":1,"within_module_z":1};
-var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"spreading_efficiency":1};
+var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
 var COL_TOOLTIPS = {
@@ -29,6 +29,7 @@ var COL_TOOLTIPS = {
     "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
+    "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
     "spreading_efficiency":"Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
 };
 
