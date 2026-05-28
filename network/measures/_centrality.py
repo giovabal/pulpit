@@ -166,7 +166,25 @@ def apply_betweenness_centrality(
 
 
 def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add normalized in-degree centrality to each node."""
+    """Add Freeman-normalised in-degree centrality to each node.
+
+    The canonical degree centrality of a directed graph: ``C_in(v) = deg_in(v) / (n − 1)``,
+    where ``deg_in(v)`` is the number of *distinct* predecessors of ``v`` and ``n − 1`` is the
+    maximum achievable on a star graph. ``build_graph`` writes edges amplifier→source, so
+    the in-degree counts how many distinct channels cite this one — the audience / prestige
+    side of the prestige↔expansiveness pair (Wasserman & Faust 1994 §5).
+
+    Unweighted by design: ``nx.in_degree_centrality`` discards edge weights and counts
+    distinct predecessors, mirroring Freeman's (1978) original definition. The weighted
+    counterpart — the in-strength ``in_deg = Σ_u w(u→v)`` — is reported separately by
+    :func:`apply_base_node_measures` and answers a different question (intensity, not
+    breadth). The unweighted measure is the one fed to Freeman centralisation in
+    ``network/community_stats.py`` because the star bound is exact for it; the in-strength
+    has no comparable theoretical maximum and is excluded there. See
+    `docs/network-measures.md#in-degree-centrality` for the prose write-up.
+
+    Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
+    """
     return apply_measure(graph_data, nx.in_degree_centrality(graph), "in_degree_centrality", "In-degree Centrality")
 
 

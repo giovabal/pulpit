@@ -79,7 +79,7 @@ Configured via `--measures` on `structural_analysis` (comma-separated).
 | `HITSHUB` | HITS hub score |
 | `HITSAUTH` | HITS authority score |
 | `BETWEENNESS` | Betweenness centrality |
-| `INDEGCENTRALITY` | Normalized in-degree centrality |
+| `INDEGCENTRALITY` | Freeman-normalised in-degree centrality (Freeman 1978; Wasserman & Faust 1994 §5): `deg_in(v) / (n−1)`, the count of *distinct* citing channels normalised by the star-graph maximum. **Unweighted** — `nx.in_degree_centrality` discards edge weights, so the ranking is invariant to `--edge-weight-strategy`; the weighted counterpart is the **In-strength** column `in_deg`. Feeds Freeman centralisation in `community_stats` (the star bound is exact for it) |
 | `OUTDEGCENTRALITY` | Normalized out-degree centrality |
 | `HARMONICCENTRALITY` | Harmonic centrality; weighted over `distance = 1/weight` (tie strength → proximity, Opsahl 2010); mean reciprocal distance ÷ (n−1), so not bounded to [0, 1] |
 | `BRIDGINGCENTRALITY` | **Bridging Centrality** (Hwang et al. 2008): betweenness × bridging coefficient, where the bridging coefficient `(1/d(v)) / Σ_{i∈N(v)} (1/d(i))` uses undirected, unweighted degree; high = a low-degree node wedged between high-degree regions (a topological bridge). Purely degree-based — needs no community basis. Distinct from `BRIDGING` |

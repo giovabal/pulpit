@@ -104,7 +104,7 @@ Goel et al.'s structural-virality measure is the Wiener index of the diffusion t
 
 *"How prestigious were the channels that forwarded this post?"*
 
-Same downstream-forwarder set as C, but instead of counting distinct communities Pulpit sums each forwarder's authority centrality. The default authority is PageRank (computed via the existing [PAGERANK measure](network-measures.md#pagerank)), with a fallback chain to HITS authority and then to in-degree centrality based on what `--measures` selected.
+Same downstream-forwarder set as C, but instead of counting distinct communities Pulpit sums each forwarder's authority centrality. The default authority is PageRank (computed via the existing [PAGERANK measure](network-measures.md#pagerank)), with a fallback chain to HITS authority and then to the **In-strength** column (`in_deg`, always populated by `apply_base_node_measures` regardless of `--measures`) based on what `--measures` selected. The in-strength fallback is the closest match to Cha et al.'s original "weighted indegree" — the raw count of incoming citations, tie-strength-weighted — and is preferred over the unweighted, normalised [in-degree centrality](network-measures.md#in-degree-centrality), which would treat one forward and a hundred forwards from the same channel identically.
 
 **Reference:** Cha, M., Haddadi, H., Benevenuto, F. & Gummadi, K. P. (2010) "Measuring user influence in Twitter: the million follower fallacy." *ICWSM* 2010. [aaai.org/ojs/index.php/ICWSM/article/view/14033](https://ojs.aaai.org/index.php/ICWSM/article/view/14033)
 
