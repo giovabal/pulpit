@@ -339,8 +339,6 @@ WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).split("#", 1)[0].stri
 
 # ── Network and analysis options (configuration/.operations-structural) ──────
 
-REVERSED_EDGES = _structural.graph.reversed_edges
-
 DEFAULT_CHANNEL_TYPES: list[str] = [t.strip().upper() for t in _crawl.scope.channel_types if str(t).strip()]
 
 DEAD_LEAVES_COLOR = _structural.graph.dead_leaves_color

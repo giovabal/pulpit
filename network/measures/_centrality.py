@@ -325,15 +325,20 @@ def apply_trophic_level(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[
     (``Σ(w_in − w_out) = 0``) but singular per connected component, so it is solved by
     least squares and each weakly-connected component is shifted to a minimum of 0.
 
-    Read it as a structural source→sink coordinate: pure originators sit near 0, terminal
-    amplifiers high. It complements CONTENTORIGINALITY, which measures the same producer↔
-    redistributor axis from message content rather than link structure. The level is
-    scale-invariant to a global edge-weight rescaling.
+    ``build_graph`` orients edges amplifier→source (citation convention), but MacKay's
+    formulation treats edges as energy/information flow — w_in is "what reaches the node",
+    w_out is "what leaves it" — so the Laplacian is solved on the *reversed* graph (edges
+    source→amplifier). That way pure originators (w_in = 0 in the flow graph) anchor each
+    component at level 0 and terminal amplifiers (w_out = 0) sit at the top, matching the
+    intuitive Telegram-diffusion reading and complementing CONTENTORIGINALITY, which
+    measures the same producer↔redistributor axis from message content rather than link
+    structure. The level is scale-invariant to a global edge-weight rescaling.
     """
     nodes = list(graph.nodes())
     if not nodes:
         return apply_measure(graph_data, {}, "trophic_level", "Trophic Level")
-    w = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight="weight", dtype=float, format="csr")
+    flow_graph = graph.reverse(copy=False)
+    w = nx.to_scipy_sparse_array(flow_graph, nodelist=nodes, weight="weight", dtype=float, format="csr")
     w_in = np.asarray(w.sum(axis=0)).ravel()
     w_out = np.asarray(w.sum(axis=1)).ravel()
     laplacian = (diags(w_in + w_out) - (w + w.T)).tocsr()
@@ -341,7 +346,7 @@ def apply_trophic_level(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[
     # Levels are only defined up to an additive constant per component; pin each weakly
     # connected component to a minimum of 0 so sources read as 0 and the scale is comparable.
     index = {nid: i for i, nid in enumerate(nodes)}
-    for component in nx.weakly_connected_components(graph):
+    for component in nx.weakly_connected_components(flow_graph):
         idxs = [index[nid] for nid in component]
         shift = min(levels[i] for i in idxs)
         for i in idxs:

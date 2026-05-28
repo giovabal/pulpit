@@ -513,19 +513,12 @@ class BuildGraphTests(TestCase):
             self.assertLessEqual(data["weight"], 10.0)
             self.assertGreater(data["weight"], 0)
 
-    @override_settings(REVERSED_EDGES=False)
-    def test_reversed_edges_false_gives_source_to_target_direction(self) -> None:
-        self._create_forward()
+    def test_edges_run_amplifier_to_source(self) -> None:
+        """build_graph fixes the citation orientation: amplifier→source (citing→cited)."""
+        self._create_forward()  # ch2 forwards content from ch1 → edge ch2 → ch1
         graph, _, _, _ = build_graph()
-        # ch1 is source of forwards, ch2 is destination → edge ch1→ch2
-        self.assertIn((str(self.ch1.pk), str(self.ch2.pk)), graph.edges())
-
-    @override_settings(REVERSED_EDGES=True)
-    def test_reversed_edges_true_flips_direction(self) -> None:
-        self._create_forward()
-        graph, _, _, _ = build_graph()
-        # With REVERSED_EDGES, direction is flipped: ch2→ch1
         self.assertIn((str(self.ch2.pk), str(self.ch1.pk)), graph.edges())
+        self.assertNotIn((str(self.ch1.pk), str(self.ch2.pk)), graph.edges())
 
     def test_builds_graph_with_reference_edges(self) -> None:
         msg = Message.objects.create(telegram_id=1, channel=self.ch2)
@@ -1895,9 +1888,12 @@ class ApplyCorenessTests(TestCase):
 class ApplyTrophicLevelTests(TestCase):
     def setUp(self) -> None:
         self.graph = nx.DiGraph()
-        # Linear chain a → b → c: a is the source, c the sink.
-        self.graph.add_edge("a", "b", weight=1.0)
-        self.graph.add_edge("b", "c", weight=1.0)
+        # Linear chain in citation orientation (amplifier→source): c → b → a.
+        # 'a' is the pure source (no out-edges, w_in only); 'c' is the terminal
+        # amplifier (w_out only). Trophic level reverses internally to the
+        # content-flow direction, so 'a' anchors at 0 and 'c' is highest.
+        self.graph.add_edge("c", "b", weight=1.0)
+        self.graph.add_edge("b", "a", weight=1.0)
         self.graph_data: dict = {"nodes": [{"id": n} for n in ("a", "b", "c")], "edges": []}
 
     def test_adds_trophic_level_key_and_label(self) -> None:
@@ -2184,6 +2180,19 @@ class ApplySpreadingEfficiencyTests(TestCase):
         for node in self.graph_data["nodes"]:
             self.assertGreaterEqual(node["spreading_efficiency"], 0.0)
             self.assertLessEqual(node["spreading_efficiency"], 1.0)
+
+    def test_seeds_propagate_along_content_flow_not_citation(self) -> None:
+        """The graph is in citation orientation (amplifier→source). SIR must
+        reverse internally so seeding a source infects its downstream amplifier,
+        and seeding the amplifier — which has no upstream sources here — does
+        not reach the source."""
+        graph = nx.DiGraph()
+        graph.add_edge("amp", "src", weight=1.0)  # amp forwards content from src
+        graph_data: dict = {"nodes": [{"id": "amp"}, {"id": "src"}], "edges": []}
+        apply_spreading_efficiency(graph_data, graph, runs=50)
+        node_map = {n["id"]: n for n in graph_data["nodes"]}
+        self.assertEqual(node_map["src"]["spreading_efficiency"], 1.0)
+        self.assertEqual(node_map["amp"]["spreading_efficiency"], 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -3943,32 +3952,16 @@ class ChannelCutoffQBoundaryTests(TestCase):
 
 
 class VacancyPprDirectionTests(TestCase):
-    """The PPR scorer must walk toward the orphaned channels' content *sources*
-    (the replacement candidates), honouring settings.REVERSED_EDGES rather than
-    reversing unconditionally."""
+    """The PPR scorer walks toward the orphaned channels' content *sources*
+    (the replacement candidates) — which under the citation orientation
+    (amplifier→source) means following out-edges from the seeds."""
 
-    def _ppr(self, graph: nx.DiGraph) -> dict[int, float]:
-        # node "1" = orphaned amplifier; pk 2 = its real content source;
-        # pk 3 = a channel positioned on the opposite side of the amplifier.
-        return _scores_ppr(graph, {1: "1", 2: "2", 3: "3"}, {1}, [2, 3], 0.85)
-
-    @override_settings(REVERSED_EDGES=True)
     def test_default_orientation_ranks_source_above_downstream_amplifier(self) -> None:
-        # REVERSED_EDGES=True → edges point amplifier→source: 1 forwards from 2 (1→2),
-        # while 3 forwards from 1 (3→1). The source (2) must outrank the downstream
-        # amplifier (3); reversing the graph here would invert that.
+        # Citation orientation: 1 forwards from 2 (edge 1→2), and 3 forwards
+        # from 1 (edge 3→1). Seeding PPR at 1 must surface the source (2)
+        # above the downstream amplifier (3).
         g = nx.DiGraph()
         g.add_edge("1", "2")
         g.add_edge("3", "1")
-        scores = self._ppr(g)
-        self.assertGreater(scores[2], scores[3])
-
-    @override_settings(REVERSED_EDGES=False)
-    def test_non_reversed_orientation_still_ranks_source_above(self) -> None:
-        # REVERSED_EDGES=False → edges point source→amplifier: 2 is 1's source (2→1),
-        # 3 amplifies 1 (1→3). The source (2) must still outrank the amplifier (3).
-        g = nx.DiGraph()
-        g.add_edge("2", "1")
-        g.add_edge("1", "3")
-        scores = self._ppr(g)
+        scores = _scores_ppr(g, {1: "1", 2: "2", 3: "3"}, {1}, [2, 3], 0.85)
         self.assertGreater(scores[2], scores[3])

@@ -1603,12 +1603,9 @@ class Command(BaseCommand):
 
                 channels_to_update = list(Channel.objects.filter(pk__in=in_target_pks))
                 for ch in channels_to_update:
-                    cited_by = cited_by_counts.get(ch.pk, 0)
-                    cites = cites_counts.get(ch.pk, 0)
-                    if settings.REVERSED_EDGES:
-                        ch.in_degree, ch.out_degree = cited_by, cites
-                    else:
-                        ch.in_degree, ch.out_degree = cites, cited_by
+                    # Citation orientation: incoming = cited by others, outgoing = cites others.
+                    ch.in_degree = cited_by_counts.get(ch.pk, 0)
+                    ch.out_degree = cites_counts.get(ch.pk, 0)
 
                 self._bulk_update_degrees(
                     channels_to_update,
@@ -1637,11 +1634,10 @@ class Command(BaseCommand):
 
                 cited_channels = list(Channel.objects.filter(pk__in=cited_pks))
                 for ch in cited_channels:
-                    citations = citations_counts.get(ch.pk, 0)
-                    if settings.REVERSED_EDGES:
-                        ch.in_degree, ch.out_degree = citations, 0
-                    else:
-                        ch.in_degree, ch.out_degree = 0, citations
+                    # Out-of-target channels: only the citation count matters; it
+                    # lives in in_degree under the amplifier→source convention.
+                    ch.in_degree = citations_counts.get(ch.pk, 0)
+                    ch.out_degree = 0
 
                 self._bulk_update_degrees(
                     cited_channels,
