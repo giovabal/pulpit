@@ -189,7 +189,26 @@ def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
 
 
 def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add normalized out-degree centrality to each node."""
+    """Add Freeman-normalised out-degree centrality to each node.
+
+    The directed counterpart to :func:`apply_in_degree_centrality`:
+    ``C_out(v) = deg_out(v) / (n − 1)``, where ``deg_out(v)`` is the number of *distinct*
+    successors of ``v`` and ``n − 1`` is the maximum achievable on a star graph. ``build_graph``
+    writes edges amplifier→source, so out-degree counts how many distinct channels ``v`` cites
+    or forwards — the *expansiveness* / curatorial-breadth side of the prestige↔expansiveness
+    pair (Wasserman & Faust 1994 §5).
+
+    Unweighted by design: ``nx.out_degree_centrality`` discards edge weights and counts distinct
+    successors, mirroring Freeman's (1978) original definition. The weighted counterpart — the
+    out-strength ``out_deg = Σ_w w(v→w)`` — is reported separately by
+    :func:`apply_base_node_measures` and answers a different question (intensity of citing
+    activity, not breadth). The unweighted measure is the one fed to Freeman centralisation in
+    ``network/community_stats.py`` because the star bound is exact for it; the out-strength has
+    no comparable theoretical maximum and is excluded there. See
+    `docs/network-measures.md#out-degree-centrality` for the prose write-up.
+
+    Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
+    """
     return apply_measure(graph_data, nx.out_degree_centrality(graph), "out_degree_centrality", "Out-degree Centrality")
 
 
