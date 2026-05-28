@@ -147,7 +147,7 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | Measure | What it surfaces |
 | :------ | :--------------- |
 | [Betweenness centrality](docs/network-measures.md#betweenness-centrality) | Channels sitting on the shortest paths between sub-networks — the brokers |
-| [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels best-positioned to reach the entire network in the fewest hops |
+| [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels the rest of the network reaches in the fewest hops — a multi-hop generalisation of in-degree |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel itself forms closed citation cycles — a direct participant in mutual amplification loops |
 | [K-core coreness](docs/network-measures.md#k-core-coreness) | Whether a channel sits in the densely interconnected nucleus or is a peripheral amplifier (Kitsak et al. 2010) |

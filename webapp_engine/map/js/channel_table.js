@@ -20,7 +20,7 @@ var COL_TOOLTIPS = {
     "betweenness":         "Betweenness centrality (normalized): fraction of shortest paths passing through this node",
     "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
     "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
-    "harmonic_centrality": "Harmonic centrality: sum of inverse distances to all other nodes; handles disconnected graphs",
+    "harmonic_centrality": "Harmonic centrality (Boldi & Vigna 2014): Σ 1/d(v,u) ÷ (n−1), mean reciprocal incoming distance — how easily the rest of the network reaches this channel via short citation chains. A multi-hop generalisation of in-degree; handles disconnected graphs (unreachable pairs contribute 0).",
     "bridging_centrality": "Bridging centrality (Hwang et al. 2008): betweenness × bridging coefficient [(1/d(v)) ÷ Σ 1/d(i) over neighbours]; high → bridge sitting between high-degree regions",
     "community_bridging":  "Community bridging: betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high → broker spanning distinct communities",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",

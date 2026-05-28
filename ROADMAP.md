@@ -27,3 +27,8 @@ Let me choose which to remove and which to accept, if any.
 ## [2.0]
 Coordination index, as a new measure. It needs a new graph
 https://github.com/textgain/grasp
+
+
+
+.has the right citations, a readable description,
+Have a deep inspection of Python code for calculating Structural and behavioural similarity. Do search for bugs, implementations that doesn't have a strong academic validation, and incoherence between different calculations. Produce a detailed todo list and let me approve each action before writing anything.
