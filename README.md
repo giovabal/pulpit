@@ -149,7 +149,7 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | [Betweenness centrality](docs/network-measures.md#betweenness-centrality) | Channels sitting on the shortest paths between sub-networks — the brokers |
 | [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels the rest of the network reaches in the fewest hops — a multi-hop generalisation of in-degree |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
-| [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel itself forms closed citation cycles — a direct participant in mutual amplification loops |
+| [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel's immediate contacts also cite each other — a tight mutual-amplification neighbourhood vs. an open star of independent sources (Fagiolo 2007) |
 | [K-core coreness](docs/network-measures.md#k-core-coreness) | Whether a channel sits in the densely interconnected nucleus or is a peripheral amplifier (Kitsak et al. 2010) |
 | [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — the Guimerà-Amaral role taxonomy |
 | [Bridging centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008) | Topological bridges (Hwang et al. 2008) — low-degree channels wedged between high-degree regions, whose removal fragments the network |
