@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - When you touch any first-party JavaScript (`webapp_engine/map/js/`, `backoffice/static/`, `webapp/static/`), run `npm run lint:js` (ESLint flat config in `eslint.config.mjs`; requires `npm install` once). Inline `<script>` JS in Django templates is not in scope of this linter.
 - When you touch the static-export HTML files (`webapp_engine/map/*.html`), run `npm run lint:html` to catch accessibility regressions (requires `npm install` once). Django templates are not in scope of this linter.
 - `npm run lint` runs both JS and HTML linters.
+- CHANGELOG entries should be informative but short: one tight paragraph (or a few bullets for larger changes) that names *what* shipped and *why it matters*, not a feature-by-feature walkthrough. Avoid long flag inventories and configuration dumps — link to the relevant docs instead.
 
 ## Commands
 
