@@ -65,11 +65,17 @@ The score is the stationary distribution of a damped random walk on the citation
 
 *A high hub score means this channel actively amplifies others — it is a distributor, not a producer.*
 
-The HITS algorithm (Hyperlink-Induced Topic Search) assigns two scores simultaneously: hubs and authorities. A channel scores high as a hub if it forwards content from many authoritative channels. Hubs are the connective tissue of a political network: they produce little original content but ensure that content from producers reaches a broad audience.
+The HITS algorithm (Hyperlink-Induced Topic Search) of Kleinberg (1999) assigns two mutually reinforcing scores to every node — a **hub** score `h` and an **authority** score `a` — by jointly solving `a = Aᵀ h`, `h = A a`, the principal eigenvectors of `AᵀA` and `AAᵀ`. In Pulpit's amplifier→source orientation (the same citing→cited convention PageRank is built on), `A[u,v] = w(u→v)` is the tie strength from a citing channel `u` to a cited channel `v`, so a channel's hub score is the *weighted sum of the authority scores of the channels it forwards or references*: a node scores high as a hub only if its outgoing ties land on channels that are themselves recognised authorities. Pulpit runs the **weighted variant** (Kleinberg discusses weighting in §4 of the JACM paper; Borodin et al. 2005 surveys the formal extension) — edge weights enter the iteration directly, so a single dense forwarding relationship outweighs many incidental mentions. The implementation iterates the two updates with per-step max-rescaling for numerical stability and a final sum-to-1 normalisation, matching `nx.hits(normalized=True)`; Pulpit ships its own iteration so the same routine can be reused by the robustness attack module and so it degrades gracefully on the near-empty residual graphs that show up during attack simulations.
 
-**Reference:** Kleinberg, J. (1999) "Authoritative sources in a hyperlinked environment." *Journal of the ACM* 46(5). [doi:10.1145/324133.324140](https://doi.org/10.1145/324133.324140)
+**References:**
+- Kleinberg, J. (1999) "Authoritative sources in a hyperlinked environment." *Journal of the ACM* 46(5). [doi:10.1145/324133.324140](https://doi.org/10.1145/324133.324140) — the canonical reference; defines hub and authority on a directed link graph, exactly the structure of Pulpit's citation graph.
+- Borodin, A., Roberts, G.O., Rosenthal, J.S. & Tsaparas, P. (2005) "Link analysis ranking: algorithms, theory, and experiments." *ACM Transactions on Internet Technology* 5(1). [doi:10.1145/1052934.1052942](https://doi.org/10.1145/1052934.1052942) — surveys the weighted extension Pulpit uses and its convergence behaviour.
 
-**In practice:** hub channels answer the question: *who are the distributors?* A channel running as a daily digest — forwarding from a dozen political commentators without adding much commentary — will score very high as a hub. Its removal would fragment information flow across the network.
+**Edge-weight choice.** Unlike PageRank, HITS rankings *do* depend on the choice of `--edge-weight-strategy`: the iteration uses the raw weights (no row-normalisation), so `TOTAL`, `PARTIAL_MESSAGES`, `PARTIAL_REFERENCES` and `NONE` produce materially different hub orderings. See [Edge-weight strategies](configuration.md#edge-weight-strategies).
+
+**In practice:** hub score answers the question Pulpit's whole pipeline is built around — *who are the distributors?* It complements PageRank (which ranks the network's authoritative *targets*) and content originality (a behavioural signal from message content rather than link structure): high hub + low content originality = pure relay channel. Removing a top-ranked hub fragments information flow across the network without silencing any original source. Pair with [HITS Authority](#hits-authority-score) to read off the producer/distributor split as a single two-axis snapshot.
+
+**Example.** In an Italian far-right Telegram ecosystem, a daily-digest aggregator with 8 000 subscribers forwards from twenty consistently-cited commentators. PageRank puts it in the middle of the pack because few channels cite *it back*; in-degree is low for the same reason. Its hub score, however, is the highest in the network: it links outward to the channels that the rest of the ecosystem treats as authorities, so the eigenvector iteration concentrates hub mass on it. Read alongside PageRank, the pair correctly diagnoses this channel as the network's main *redistribution layer* — a structurally critical node that classical prestige measures miss.
 
 ---
 
@@ -77,13 +83,13 @@ The HITS algorithm (Hyperlink-Induced Topic Search) assigns two scores simultane
 
 *A high authority score means this channel is one of the original sources that distributors choose to spread.*
 
-The counterpart to Hub. A channel scores high as an authority if it is pointed to by many good hubs. Authorities are the primary content producers whose material circulates widely because the network's distributors have chosen to amplify it.
+The counterpart to Hub from the same Kleinberg (1999) co-eigenvector system: `a = Aᵀ h`, the principal eigenvector of `AᵀA`. In Pulpit's amplifier→source orientation, a channel's authority score is the *weighted sum of the hub scores of the channels that cite it* (predecessors in the citation graph), so a node scores high as an authority only when it is forwarded or mentioned by channels that are themselves recognised distributors. Computation is shared with [HITS Hub](#hits-hub-score) — same weighted power iteration, same max-rescale-then-sum-to-1 normalisation, same dependence on `--edge-weight-strategy`.
 
-**Reference:** Kleinberg (1999), as above.
+**References:** Kleinberg (1999) and Borodin et al. (2005), as above.
 
-**In practice:** authority score is particularly useful for identifying propaganda sources. A channel with a modest following may function as the primary content farm for a large distribution network. Its actual reach — through the hubs — is far larger than its subscriber count suggests.
+**In practice:** authority is the prestige-side answer to *who is the source?* It complements PageRank — both reward being cited by central channels, but HITS authority specifically rewards being cited by good *hubs*, while PageRank rewards being cited by anyone with high PageRank (which need not be a hub at all). When authority and PageRank diverge sharply on a node, the divergence is itself informative: a channel with very high authority but middling PageRank is a niche source whose audience reaches it only through the distribution layer; the opposite pattern signals a source cited broadly but rarely by the network's main relays. Authority is especially useful for surfacing **propaganda sources**: a small channel that nevertheless gets forwarded by every aggregator in the ecosystem will outrank its raw subscriber count.
 
-**Example.** A political strategist's channel with 5,000 subscribers might rank as the top authority in a network because fifteen high-traffic aggregator channels forward its posts daily.
+**Example.** A political strategist's channel with 5 000 subscribers ranks as the top authority in a network because fifteen high-traffic aggregator channels (all of them top-ten hubs) forward its posts daily. Subscriber count would mislead an analyst into ignoring it; PageRank would rank it high but not first; HITS authority puts it at the top because the channels that cite it are precisely those whose hub scores are highest. Read together with the daily-digest aggregator from the Hub example above, this is the canonical producer/distributor pair: low authority + high hub on one side, high authority + low hub on the other.
 
 ---
 

@@ -53,18 +53,24 @@ def compute_hits(
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Weighted HITS hub & authority scores (Kleinberg 1999, weighted variant).
 
-    NetworkX's ``hits`` ignores edge weights — it treats the graph as binary — so
-    its scores disagree with every other prestige measure here (PageRank, …)
-    which all use tie strength. This computes HITS on the *weighted* adjacency by
-    power iteration:
+    Computes HITS on the *weighted* adjacency ``A`` (``A[u,v] = w(u→v)``) by power
+    iteration:
 
         ``a = Aᵀ h``   (authority of v = Σ_u w(u→v) · hub(u))
         ``h = A a``    (hub of v       = Σ_u w(v→u) · authority(u))
 
-    iterated to convergence (each vector rescaled by its max per step, as NetworkX
-    does) and finally normalised so each vector sums to 1 (matching
-    ``nx.hits(normalized=True)``). Returns ``(hubs, authorities)`` keyed by node id;
-    ``({}, {})`` for an empty graph.
+    iterated to convergence (each vector rescaled by its max per step) and finally
+    normalised so each vector sums to 1 — matching ``nx.hits(normalized=True)``,
+    which is also weight-aware on this NetworkX version (it builds the adjacency
+    via ``nx.adjacency_matrix`` with its default ``weight="weight"``). The reason
+    Pulpit keeps its own implementation is twofold: ``nx.hits`` is backed by SciPy
+    SVDS, which raises ``ArpackNoConvergence`` on degenerate residual graphs (lone
+    self-loops, near-empty backbones) that show up during robustness attacks; and
+    the same routine is reused by ``robustness.attacks`` so the attack ranking and
+    the measure cannot drift if NetworkX changes its internals.
+
+    Returns ``(hubs, authorities)`` keyed by node id; ``({}, {})`` for an empty
+    graph.
     """
     nodes = list(graph.nodes())
     n = len(nodes)
