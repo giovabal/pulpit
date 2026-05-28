@@ -224,10 +224,12 @@ def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[
     Direction. ``nx.harmonic_centrality`` sums distances *to* a node, not *from* it
     (it computes ``Σ_v 1/d(v, u)``, the in-coming reciprocal distances). Pulpit keeps
     the graph in its as-built amplifier→source orientation — the same convention as
-    PageRank, HITS, betweenness, Burt's constraint and bridging — so on this citing→cited
-    graph the score measures *how easily the rest of the network reaches u* via short
-    citation chains. Functionally it is a closeness-style prestige index: the multi-hop
-    generalisation of in-degree (which counts only direct citers).
+    PageRank, HITS, betweenness and bridging — so on this citing→cited graph the score
+    measures *how easily the rest of the network reaches u* via short citation chains.
+    Functionally it is a closeness-style prestige index: the multi-hop generalisation
+    of in-degree (which counts only direct citers). (``BURTCONSTRAINT`` is excluded
+    from this list because ``nx.constraint`` symmetrises direction internally — see
+    :func:`apply_burt_constraint`.)
 
     Weighting. Computed over the ``distance = 1 / weight`` projection (Opsahl,
     Agneessens & Skvoretz 2010) so heavily-forwarded edges are *short* — shared with
@@ -353,10 +355,36 @@ def apply_bridging_centrality(
 
 
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add Burt's constraint to each node. Isolated nodes receive None (undefined)."""
+    """Add Burt's constraint to each node. Isolated nodes receive None (undefined).
+
+    Burt's constraint (Burt 1992 *Structural Holes*; Burt 2004 *AJS* 110(2)):
+
+        ``c(v) = Σ_{w ∈ N(v)\\{v}} (p_vw + Σ_q p_vq · p_qw)²``
+
+    where ``p_xy = mutual_weight(x, y) / Σ_k mutual_weight(x, k)`` is x's normalised
+    investment in y. The dyadic term ``ℓ(v, w)`` combines *direct* investment in w
+    with *indirect* investment via shared neighbours q; the total is small when
+    ego's contacts are mutually disjoint (the structural-hole / broker regime) and
+    large when they cite each other (the embedded / redundant regime). Typical
+    range is [0, 1]; the theoretical upper bound is ≈ 1.125, occasionally reached
+    by perfectly redundant ego-networks (Burt 1992 ch. 2; Borgatti 1997).
+
+    **Direction.** ``nx.constraint`` symmetrises the directed graph internally:
+    the mutual weight of (u, v) is ``w(u→v) + w(v→u)`` and ``N(v) =
+    predecessors(v) ∪ successors(v)``. This is the academically correct treatment
+    of Burt's framework — structural holes are about ego's *contacts*, not the
+    citation direction — and makes constraint **direction-invariant**, unlike
+    PageRank, HITS, betweenness, harmonic and the bridging measures. Robustness
+    attacks (:mod:`network.robustness.attacks`) sort *ascending* on the same
+    score (low constraint = broker) via the ``inverse=True`` flag.
+
+    Edge weights still matter: pass-through ``weight="weight"`` means
+    ``--edge-weight-strategy`` affects rankings via the row-normalised mutual
+    weight.
+
+    See ``docs/network-measures.md#burts-constraint`` for the prose write-up.
+    """
     key = "burt_constraint"
-    # Use edge weights so constraint reflects tie strength, consistent with the
-    # other structural measures (betweenness, …) which all pass weight.
     values: dict[str, float] = nx.constraint(graph, weight="weight")
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
