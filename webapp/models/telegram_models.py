@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     )
     from webapp.models.organization_models import ChannelAttribution, Organization
 
-from django.conf import settings
 from django.db import models
 from django.db.models import Max, Min, Q
 from django.urls import reverse
@@ -219,10 +218,10 @@ class Channel(TelegramBaseModel):
         """Recompute and persist in_degree and out_degree from current message data.
 
         Counts both forwarded-from citations and t.me/username reference citations,
-        matching the edge construction in graph_builder. Respects REVERSED_EDGES:
-        when True, citations are incoming edges (stored in in_degree); when False,
-        citations are outgoing edges (stored in out_degree), consistent with
-        refresh_cited_degree() for out-of-target channels.
+        matching the citation orientation of ``graph_builder._build_edge_list``:
+        edges run amplifier→source, so being cited is an *incoming* edge and is
+        stored in ``in_degree``; forwarding/mentioning others is an outgoing edge
+        and is stored in ``out_degree``.
         """
         from network.utils import channel_cutoff_q
 
@@ -244,20 +243,15 @@ class Channel(TelegramBaseModel):
             .distinct()
             .count()
         )
-        if settings.REVERSED_EDGES:
-            self._set_degrees(cited_by, cites)
-        else:
-            self._set_degrees(cites, cited_by)
+        self._set_degrees(cited_by, cites)
 
     def refresh_cited_degree(self) -> None:
-        """Recompute and persist the citation count for a out-of-target channel.
+        """Recompute and persist the citation count for an out-of-target channel.
 
         Counts how many messages from in-target channels cite this channel (via
-        forwards or t.me/username references) and stores the total in the field that
-        matches the graph edge direction:
-          - in_degree  when REVERSED_EDGES=True  (citations arrive as incoming edges)
-          - out_degree when REVERSED_EDGES=False (citations leave as outgoing edges)
-        The other field is set to 0.
+        forwards or t.me/username references) and stores the total in ``in_degree``
+        (citations arrive as incoming edges under the amplifier→source convention);
+        ``out_degree`` is set to 0.
         """
         from network.utils import channel_cutoff_q
 
@@ -270,10 +264,7 @@ class Channel(TelegramBaseModel):
             .distinct()
             .count()
         )
-        if settings.REVERSED_EDGES:
-            self._set_degrees(citations, 0)
-        else:
-            self._set_degrees(0, citations)
+        self._set_degrees(citations, 0)
 
 
 class Message(TelegramBaseModel):

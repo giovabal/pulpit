@@ -151,6 +151,11 @@ def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generato
     """Per-node SIR spreading efficiency — mean fraction infected when each
     node seeds the cascade.  Reuses :func:`network.measures._spreading._run_sir`.
 
+    The input graph carries edges in the citation orientation (amplifier→source),
+    so the adjacency is built from the *reversed* graph: SIR propagates along
+    out-edges, and content diffusion flows source→amplifier (matching
+    :func:`network.measures._spreading.apply_spreading_efficiency`).
+
     Cost: O(runs × N × mean outbreak size) per call.  Used as an attack
     strategy, this runs once per ranking computation — heavy but feasible
     on moderately-sized backbones.
@@ -160,16 +165,19 @@ def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generato
     n = g.number_of_nodes()
     if n <= 1:
         return dict.fromkeys(g.nodes(), 0.0)
-    # Transmission probability = weight / max_weight (scale-independent; the raw
-    # weight is rescaled to max 10 by build_graph, which would saturate min(w, 1)).
-    edge_weights = [d.get("weight", 1.0) for _, _, d in g.edges(data=True)]
+    # Reverse to content-flow direction (see docstring). Transmission probability
+    # = weight / max_weight (scale-independent; the raw weight is rescaled to max
+    # 10 by build_graph, which would saturate min(w, 1)).
+    flow_g = g.reverse(copy=False)
+    edge_weights = [d.get("weight", 1.0) for _, _, d in flow_g.edges(data=True)]
     max_weight = max(edge_weights) if edge_weights else 1.0
     adj: dict[Any, list[tuple[Any, float]]] = {
-        nid: [(s, min(d.get("weight", 1.0) / max_weight, 1.0)) for s, d in g[nid].items()] for nid in g.nodes()
+        nid: [(s, min(d.get("weight", 1.0) / max_weight, 1.0)) for s, d in flow_g[nid].items()]
+        for nid in flow_g.nodes()
     }
     norm = n - 1
     scores: dict[Any, float] = {}
-    for nid in g.nodes():
+    for nid in flow_g.nodes():
         total = sum(_run_sir(adj, nid, rng) for _ in range(runs))
         scores[nid] = (total / runs - 1) / norm
     return scores

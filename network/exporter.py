@@ -454,7 +454,6 @@ def write_meta_json(
     graph_dir: str,
     *,
     project_title: str = "",
-    reversed_edges: bool = True,
     edge_weight_strategy: str = "COMBINED",
     start_date: "datetime.date | None" = None,
     end_date: "datetime.date | None" = None,
@@ -463,23 +462,22 @@ def write_meta_json(
     community_distribution_threshold: int = 10,
     has_consensus_matrix: bool = False,
 ) -> None:
-    """Write data/meta.json with export metadata consumed by table preambles."""
+    """Write data/meta.json with export metadata consumed by table preambles.
+
+    The graph orientation is fixed to citing→cited (amplifier→source) — the
+    citation convention that ``build_graph`` uses — so ``edge_direction`` is a
+    constant string rather than a parameter.
+    """
     _weight_labels = {
         "NONE": "unweighted (all edges equal)",
         "TOTAL": "raw forward + mention count",
         "PARTIAL_MESSAGES": "count divided by total messages",
         "PARTIAL_REFERENCES": "count divided by forwarding/citing messages",
     }
-    edge_direction = (
-        "edges point from citing channel to cited channel"
-        if reversed_edges
-        else "edges point from cited channel to citing channel"
-    )
     payload: dict[str, object] = {
         "export_date": datetime.date.today().isoformat(),
         "project_title": project_title,
-        "reversed_edges": reversed_edges,
-        "edge_direction": edge_direction,
+        "edge_direction": "edges point from citing channel to cited channel",
         "edge_weight_strategy": edge_weight_strategy,
         "edge_weight_label": _weight_labels.get(edge_weight_strategy, edge_weight_strategy),
         "start_date": start_date.isoformat() if start_date else None,

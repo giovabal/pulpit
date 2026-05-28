@@ -8,7 +8,6 @@ import math
 from collections import defaultdict
 from typing import Any, Callable
 
-from django.conf import settings
 from django.db.models import Count, Max, Min
 
 from network.measures._spreading import sir_ever_infected
@@ -330,32 +329,22 @@ def _scores_ppr(
     the replacement candidates are drawn from.
 
     Personalized PageRank propagates mass along **out-edges** from the seed set, so
-    the walk must run on whichever orientation makes a content source an *out*-neighbour
-    of its amplifiers. That orientation depends on ``settings.REVERSED_EDGES`` (the
-    same switch ``build_graph`` honours):
-
-      * ``REVERSED_EDGES`` (default) builds edges amplifier→source, so a source is
-        already reachable by following the orphaned channels' out-edges — walk on
-        ``graph`` as-is.
-      * Without it, edges are source→amplifier, so we reverse first.
-
-    Reversing unconditionally (the previous behaviour) inverted the walk under the
-    default config, ranking the orphaned channels' *downstream amplifiers* instead of
-    their sources. Candidates with high PPR sit in the same upstream supply chain as
-    the vacancy.
+    the walk needs an orientation where a content source is an *out*-neighbour of its
+    amplifiers. ``build_graph`` writes edges amplifier→source (citation convention),
+    which is exactly that orientation — so the walk runs on ``graph`` as-is. Candidates
+    with high PPR sit in the same upstream supply chain as the vacancy.
     """
     orphaned_nodes = [pk_to_node[pk] for pk in orphaned_pks if pk in pk_to_node]
     if not orphaned_nodes or graph.number_of_nodes() <= 1:
         return dict.fromkeys(candidate_pks, 0.0)
 
-    walk_graph = graph if settings.REVERSED_EDGES else graph.reverse(copy=True)
     per_node = 1.0 / len(orphaned_nodes)
-    personalization = dict.fromkeys(walk_graph.nodes(), 0.0)
+    personalization = dict.fromkeys(graph.nodes(), 0.0)
     for n in orphaned_nodes:
         personalization[n] = per_node
 
     try:
-        ppr = nx.pagerank(walk_graph, alpha=ppr_alpha, personalization=personalization, max_iter=200, tol=1e-6)
+        ppr = nx.pagerank(graph, alpha=ppr_alpha, personalization=personalization, max_iter=200, tol=1e-6)
     except nx.PowerIterationFailedConvergence:
         return dict.fromkeys(candidate_pks, 0.0)
 

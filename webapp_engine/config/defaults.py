@@ -56,11 +56,10 @@ STRUCTURAL_DEFAULTS: dict = {
     # `python manage.py structural_analysis` with no flags must do nothing.
     # Tuning constants that only matter when an opt-in feature is enabled
     # (leiden resolutions, mcl inflation, spreading runs, vacancy windows,
-    # robustness numerics, reversed_edges, dead_leaves_color, output_dir)
-    # keep sensible values — they're never consulted when no flag selects
-    # the feature that needs them.
+    # robustness numerics, dead_leaves_color, output_dir) keep sensible
+    # values — they're never consulted when no flag selects the feature
+    # that needs them.
     "graph": {
-        "reversed_edges": True,
         "dead_leaves_color": "#596a64",
         "community_palette": "",
         "community_palette_reversed": False,

@@ -82,6 +82,12 @@ def apply_spreading_efficiency(
     [0, 1] by dividing by (N − 1), so 1.0 means the seed eventually infects every other
     node on average.
 
+    ``build_graph`` writes edges amplifier→source (citation orientation); information,
+    by contrast, flows source→amplifier. SIR propagates along NetworkX out-edges, so
+    the adjacency is built from the *reversed* graph — that way seeding a source
+    correctly cascades down to its amplifiers, matching the diffusion model of
+    Kitsak et al. 2010 rather than the (meaningless) backward citation walk.
+
     Caveat: the weight->transmission-probability mapping is a heuristic — there is no
     canonical way to turn citation frequency into an infection probability, and tying the
     single strongest edge in the graph to certain transmission is a modelling choice. Read
@@ -95,19 +101,21 @@ def apply_spreading_efficiency(
             node[key] = 0.0
         return [(key, "Spreading Efficiency")]
 
-    # Pre-build adjacency lists with transmission probabilities = weight / max_weight.
-    edge_weights = [data.get("weight", 1.0) for _, _, data in graph.edges(data=True)]
+    # Reverse for content-flow direction (see docstring). Pre-build adjacency lists
+    # with transmission probabilities = weight / max_weight.
+    flow_graph = graph.reverse(copy=False)
+    edge_weights = [data.get("weight", 1.0) for _, _, data in flow_graph.edges(data=True)]
     max_weight = max(edge_weights) if edge_weights else 1.0
     adj: dict[str, list[tuple[str, float]]] = {
-        node_id: [(succ, min(data.get("weight", 1.0) / max_weight, 1.0)) for succ, data in graph[node_id].items()]
-        for node_id in graph.nodes()
+        node_id: [(succ, min(data.get("weight", 1.0) / max_weight, 1.0)) for succ, data in flow_graph[node_id].items()]
+        for node_id in flow_graph.nodes()
     }
 
     rng = np.random.default_rng(42)
     results: dict[str, float] = {}
     norm = n - 1
 
-    for node_id in graph.nodes():
+    for node_id in flow_graph.nodes():
         total_infected = sum(_run_sir(adj, node_id, rng) for _ in range(runs))
         # Subtract 1 per run to exclude the seed itself from the spreading count
         results[node_id] = round((total_infected / runs - 1) / norm, 6)

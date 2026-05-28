@@ -175,26 +175,29 @@ def _build_edge_list(
     (before any normalisation) available for CSV export.
     """
     edge_list: list[list[str | float]] = []
-    for target_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
-        if not include_self_references and target_pk == source_pk:
+    for amplifier_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
+        if not include_self_references and amplifier_pk == source_pk:
             continue
-        f_count = forwarded_counts.get((target_pk, source_pk), 0)
-        m_count = reference_counts.get((target_pk, source_pk), 0)
+        f_count = forwarded_counts.get((amplifier_pk, source_pk), 0)
+        m_count = reference_counts.get((amplifier_pk, source_pk), 0)
         total = f_count + m_count
         if edge_weight_strategy == "NONE":
             weight = 1.0
         elif edge_weight_strategy == "TOTAL":
             weight = float(total)
         elif edge_weight_strategy == "PARTIAL_MESSAGES":
-            message_count = messages_per_channel.get(target_pk, 0)
+            message_count = messages_per_channel.get(amplifier_pk, 0)
             weight = total / message_count if message_count else 0.0
         else:  # PARTIAL_REFERENCES (default)
-            ref_count = referencing_counts.get(target_pk, 0)
+            ref_count = referencing_counts.get(amplifier_pk, 0)
             weight = total / ref_count if ref_count else 0.0
         if weight > 0:
-            target_str = pk_to_str[target_pk]
-            source_str = pk_to_str[source_pk]
-            edge: list[str | float] = [target_str, source_str] if settings.REVERSED_EDGES else [source_str, target_str]
+            # Citation orientation: a forward of source's content by amplifier
+            # produces an amplifier→source edge, mirroring the citing→cited
+            # convention of scientometric PageRank/HITS. Measures that need
+            # the opposite content-flow orientation (SIR spreading, trophic
+            # level) reverse the graph internally.
+            edge: list[str | float] = [pk_to_str[amplifier_pk], pk_to_str[source_pk]]
             edge.extend([weight, float(f_count), float(m_count)])
             edge_list.append(edge)
     return edge_list
@@ -222,8 +225,7 @@ def build_graph(
     channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
     gated by ``draw_dead_leaves``: ``Channel.refresh_cited_degree()`` counts
     every such forward/mention from the in-target set and stores the total in
-    ``in_degree`` (when ``REVERSED_EDGES=True``) or ``out_degree`` (otherwise),
-    so a non-zero degree on that side is exactly the dead-leaf criterion.
+    ``in_degree``, so a non-zero in-degree is exactly the dead-leaf criterion.
     """
     # Node set: channels with an in-target period overlapping [start_date, end_date]
     # (the whole timeline when the window is open), plus dead leaves when requested.
@@ -236,8 +238,8 @@ def build_graph(
     if draw_dead_leaves:
         # Dead-leaf criterion: an out-of-target channel cited (forwarded or
         # mentioned) at least once by some in-target channel. The cited count
-        # lives in in_degree when REVERSED_EDGES=True, out_degree otherwise.
-        qs_filter |= Q(in_degree__gt=0) if settings.REVERSED_EDGES else Q(out_degree__gt=0)
+        # lives in in_degree under the citation orientation (amplifier→source).
+        qs_filter |= Q(in_degree__gt=0)
     channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
     if not include_private:
         channel_qs = channel_qs.exclude(is_private=True)

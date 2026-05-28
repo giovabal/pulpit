@@ -1343,7 +1343,6 @@ class Command(BaseCommand):
             exporter.write_meta_json(
                 graph_dir=tmp_dir,
                 project_title=project_title,
-                reversed_edges=settings.REVERSED_EDGES,
                 edge_weight_strategy=edge_weight_strategy,
                 start_date=start_date,
                 end_date=end_date,
@@ -1790,7 +1789,6 @@ class Command(BaseCommand):
         exporter.write_meta_json(
             graph_dir=root_target,
             project_title=project_title,
-            reversed_edges=settings.REVERSED_EDGES,
             edge_weight_strategy=opts.edge_weight_strategy,
             start_date=opts.start_date,
             end_date=opts.end_date,

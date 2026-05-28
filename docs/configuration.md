@@ -147,9 +147,10 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 ## `[graph]` — palette and base options
 
+Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (citing→cited, citation convention). The previous `graph.reversed_edges` toggle has been removed; SIR spreading and trophic level reverse the graph internally to model content flow, every other measure uses the as-built citation orientation. A leftover `reversed_edges = …` line in an existing `.operations-structural` file is silently ignored.
+
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `graph.reversed_edges` | When `true`, a forward of Y's content by X produces a Y→X edge (influence flows toward the source) | `true` |
 | `graph.community_palette` | Colour palette for communities. Any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order). The legacy value `"ORGANIZATION"` is silently translated to `"vaporwave"` *reversed* at load time. Empty `""` disables palette rendering. | `""` |
 | `graph.community_palette_reversed` | Reverse the palette so the most-vivid colours land on the largest communities | `false` |
 | `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link) | `#596a64` |
