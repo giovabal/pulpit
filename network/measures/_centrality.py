@@ -393,10 +393,18 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
 
 
 def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add directed local clustering coefficient to each node (Fagiolo 2007).
+    """Add Fagiolo (2007) directed local clustering coefficient to each node.
 
-    Counts the fraction of directed triangles through the node relative to all possible
-    directed triads.  Nodes with total degree < 2 receive 0.0.
+    ``nx.clustering`` on a ``DiGraph`` implements Fagiolo's "total" directed clustering:
+    ``c^D(u) = T^D(u) / [2 · (d^tot · (d^tot − 1) − 2 d^↔)]``, the count of directed
+    triangles through ``u`` summed over the four pattern types (cycle, middleman,
+    in-triangle, out-triangle) divided by the maximum allowed by ``u``'s degree
+    configuration. Score is in ``[0, 1]``; 0 for isolated nodes and for nodes with
+    total degree < 2 (no triangle geometrically possible). Called *without* a
+    ``weight=`` argument, so it is unweighted — ``--edge-weight-strategy`` does not
+    affect the ranking. The formula sums all 8 directed triangle orientations
+    symmetrically, so the score is also direction-invariant (same value on ``G`` and
+    ``G.reverse()``).
     """
     return apply_measure(graph_data, nx.clustering(graph), "local_clustering", "Local Clustering")
 
