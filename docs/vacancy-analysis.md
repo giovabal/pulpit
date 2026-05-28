@@ -132,7 +132,7 @@ A high Cascade Overlap score means the candidate's content reaches the same down
 
 *"How deeply is this candidate embedded in the upstream content supply chain of the orphaned channels?"*
 
-PageRank is computed on the **reversed graph** (edges reversed so the random walk travels upstream from amplifiers toward sources) with the teleportation probability concentrated on the set of orphaned amplifiers:
+Personalized PageRank is computed directly on the citation graph `build_graph` writes — edges already run amplifier→source, so the random walk's out-edges naturally lead from an orphaned amplifier upstream toward its content sources — with the teleportation probability concentrated on the set of orphaned amplifiers:
 
 ```
 personalization[node] = 1 / |orphaned_amplifiers|  if node is an orphaned amplifier

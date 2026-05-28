@@ -223,6 +223,19 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `false` |
 | `edges.include_self_references` | Include self-loop edges where a channel forwards or mentions itself | `false` |
 
+### Edge-weight strategies
+
+For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` be the count of X's messages contributing the citation, `total(X)` the amplifier's full message count, and `citing(X)` the count of X's messages that carry at least one `forwarded_from` or `t.me/` reference (a single message can contribute several citations but counts as one citing message).
+
+| Strategy | Weight formula | Semantics | Academic basis |
+| :------- | :------------- | :-------- | :------------- |
+| `NONE` | `1` | binary — citation present / absent | Brin & Page 1998; Kleinberg 1999; Wasserman & Faust 1994 |
+| `TOTAL` | `n(X→Y)` | raw citation volume | Newman 2004; Opsahl & Panzarasa 2009; Granovetter 1973 (tie *frequency*) |
+| `PARTIAL_MESSAGES` | `n(X→Y) / total(X)` | share of X's whole output that cites Y — the right denominator for diffusion / share-of-attention questions | Opsahl, Agneessens & Skvoretz 2010 (ego-normalised tie strength) |
+| `PARTIAL_REFERENCES` (default) | `n(X→Y) / citing(X)` | share of X's *citing decisions* that pick Y — original-content posts don't dilute the denominator, matching Brin-Page's random-surfer reading (a surfer follows links, never just "stays on the page") | Closest published analogue: engagement-rate normalisation in Twitter influence studies (Cha et al. 2010, "The million follower fallacy" *ICWSM*; Bakshy et al. 2011, "Everyone's an influencer" *WSDM*) |
+
+**Practical note — PageRank is invariant across `TOTAL`, `PARTIAL_MESSAGES`, and `PARTIAL_REFERENCES`.** NetworkX's `pagerank` row-normalises edge weights internally (via `nx.stochastic_graph`), and those three strategies differ only by a per-row constant in the numerator — they collapse to the same stochastic transition matrix after normalisation. `NONE` is the only strategy that materially changes the PageRank ranking (it flattens each row to a uniform out-distribution). The choice *does* affect every other directional measure (HITS, betweenness/harmonic through the `1/weight` proximity projection, Burt constraint, Leiden/Louvain modularity, SIR spreading, trophic level), so the strategy still matters end-to-end — just not for PageRank.
+
 ## `[scope]`
 
 | Path | Description | Built-in default |
