@@ -471,8 +471,8 @@ def write_meta_json(
     _weight_labels = {
         "NONE": "unweighted (all edges equal)",
         "TOTAL": "raw forward + mention count",
-        "PARTIAL_MESSAGES": "count divided by total messages",
-        "PARTIAL_REFERENCES": "count divided by forwarding/citing messages",
+        "PARTIAL_MESSAGES": "count divided by the citing channel's total messages",
+        "PARTIAL_REFERENCES": "count divided by the citing channel's forwarding/citing messages",
     }
     payload: dict[str, object] = {
         "export_date": datetime.date.today().isoformat(),

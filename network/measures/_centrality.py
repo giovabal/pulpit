@@ -13,7 +13,26 @@ logger = logging.getLogger(__name__)
 
 
 def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add PageRank score to each node."""
+    """Add the PageRank score to each node.
+
+    Channels the network's own key players treat as authoritative: a node's score
+    aggregates the PageRank of the channels that forward or mention it, each
+    amplifier's vote split proportionally to the edge weight it dedicates to that
+    source. The citation orientation ``build_graph`` writes (amplifier→source,
+    citing→cited) is exactly the orientation Brin & Page defined PageRank on —
+    incoming edges are *received* citations, so the standard fixed-point
+
+        ``PR(v) = (1 - α)/N + α · Σ_u PR(u) · w(u→v) / Σ_w w(u→w)``
+
+    propagates prestige toward sources without any orientation tricks. NetworkX's
+    ``nx.pagerank`` is used with its defaults (``α = 0.85`` damping, dangling
+    nodes redistributed uniformly, edge weight = ``"weight"``); the random walk
+    is scale-invariant to ``build_graph``'s global max-10 rescaling. See
+    `docs/network-measures.md#pagerank` for the prose write-up.
+
+    Refs: Brin & Page 1998, *Computer Networks* 30(1–7); Page, Brin, Motwani &
+    Winograd 1999, "The PageRank citation ranking", Stanford TR.
+    """
     key = "pagerank"
     try:
         pagerank_values: dict[str, float] = nx.pagerank(graph)

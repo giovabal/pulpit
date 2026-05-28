@@ -170,9 +170,10 @@ def _build_edge_list(
 ) -> list[list[str | float]]:
     """Compute weighted edge list from raw count dicts.
 
-    Each row: [source, target, weight, weight_forwards, weight_mentions]
-    weight_forwards and weight_mentions are the raw forward/mention counts
-    (before any normalisation) available for CSV export.
+    Each row: ``[amplifier, cited, weight, weight_forwards, weight_mentions]``,
+    matching the citation orientation the graph is built in (citing → cited).
+    ``weight_forwards`` and ``weight_mentions`` are the raw forward/mention
+    counts (before any normalisation), available for CSV export.
     """
     edge_list: list[list[str | float]] = []
     for amplifier_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):

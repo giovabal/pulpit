@@ -207,7 +207,7 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 | Structural equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
 | Brokerage overlap | Does the candidate bridge the same organizational communities? | Jaccard of bridged org-pairs; brokerage *concept* per Gould & Fernandez 1989 (not their census) |
 | Cascade overlap | Does information seeded at the candidate reach the same downstream channels? | SIR simulation (Watts & Dodds 2007) |
-| Personalized PageRank | How deeply embedded is the candidate in the orphaned channels' content supply chain? | PPR on reversed graph (Haveliwala 2002) |
+| Personalized PageRank | How deeply embedded is the candidate in the orphaned channels' content supply chain? | PPR seeded on orphaned amplifiers (Haveliwala 2002) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage × recency decay |
 
 The six scores span two analytical perspectives: A–C characterise structural position topologically; D–F characterise dynamics and timing. A channel scoring high on all six is a strong structural heir. A channel scoring high only on D–F was already well-positioned in the broader diffusion network but does not mirror the vacancy's immediate neighbourhood — a lateral successor rather than a direct replacement.
