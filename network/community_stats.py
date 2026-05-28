@@ -859,7 +859,7 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
             rows.append((assort_label, summary.get("assortativity", {}).get(assort_key), "Degree correlation"))
     if _include("Centralization"):
         if summary.get("mean_burt_constraint") is not None:
-            rows.append(("Mean Burt's Constraint (0–1)", summary["mean_burt_constraint"], "Centralization"))
+            rows.append(("Mean Burt's Constraint (~0–1)", summary["mean_burt_constraint"], "Centralization"))
         for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
             # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
             # for measures with a zero periphery floor (e.g. degree on a star); for harmonic
