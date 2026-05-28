@@ -433,7 +433,7 @@ def apply_trophic_level(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[
     Solves the Laplacian system ``(diag(u) − (W + Wᵀ)) h = (w_in − w_out)``, where ``W`` is
     the weighted adjacency, ``w_in`` / ``w_out`` are the weighted in-/out-strength and
     ``u = w_in + w_out``. This *hierarchical-levels* formulation (MacKay, Johnson & Sansom,
-    "How directed is a directed network?", Proc. R. Soc. A 2020) is always finite — unlike
+    "How directed is a directed network?", *Royal Society Open Science* 7(9), 2020) is always finite — unlike
     the classic Levine 1980 trophic level, which diverges on graphs without basal nodes — so
     it is defined on the cyclic citation graphs Pulpit builds. The system is consistent
     (``Σ(w_in − w_out) = 0``) but singular per connected component, so it is solved by
