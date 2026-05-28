@@ -215,11 +215,27 @@ def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> lis
 def apply_harmonic_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add harmonic centrality to each node, weighted by tie strength.
 
-    Computed over the ``distance = 1 / weight`` projection (Opsahl, Agneessens &
-    Skvoretz 2010) for consistency with betweenness, then divided by
-    ``n − 1`` to report the mean reciprocal distance to the other nodes
-    (unreachable nodes contribute 0). Because the weighted distance can be below 1,
-    this no longer lies in ``[0, 1]`` — interpret it relatively, not as a fraction.
+    Harmonic centrality (Marchiori & Latora 2000; Rochat 2009; Boldi & Vigna 2014):
+    ``C_H(u) = Σ_{v ≠ u} 1/d(v, u)``, divided by ``n − 1`` to report the mean
+    reciprocal distance. Unreachable pairs contribute 0 (not infinity, as in
+    classical closeness), which is why harmonic is the right reach measure on the
+    sparse, partially disconnected citation graphs Pulpit builds (Boldi & Vigna 2014).
+
+    Direction. ``nx.harmonic_centrality`` sums distances *to* a node, not *from* it
+    (it computes ``Σ_v 1/d(v, u)``, the in-coming reciprocal distances). Pulpit keeps
+    the graph in its as-built amplifier→source orientation — the same convention as
+    PageRank, HITS, betweenness, Burt's constraint and bridging — so on this citing→cited
+    graph the score measures *how easily the rest of the network reaches u* via short
+    citation chains. Functionally it is a closeness-style prestige index: the multi-hop
+    generalisation of in-degree (which counts only direct citers).
+
+    Weighting. Computed over the ``distance = 1 / weight`` projection (Opsahl,
+    Agneessens & Skvoretz 2010) so heavily-forwarded edges are *short* — shared with
+    betweenness and the matching robustness attack scorer. Because a weighted distance
+    can fall below 1 (when an edge weight exceeds 1), the normalised score is **not
+    bounded to [0, 1]**; interpret it relatively, not as a fraction.
+
+    See ``docs/network-measures.md#harmonic-centrality`` for the prose write-up.
     """
     n = graph.number_of_nodes()
     norm = (n - 1) if n > 1 else 1
