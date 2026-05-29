@@ -260,7 +260,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
 | [Network measures](docs/network-measures.md) | All 18 per-channel measures with academic references and worked examples |
-| [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Community detection](docs/community-detection.md) | 11 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
