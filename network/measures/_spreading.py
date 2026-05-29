@@ -69,6 +69,7 @@ def apply_spreading_efficiency(
     graph_data: GraphData,
     graph: nx.DiGraph,
     runs: int = 200,
+    rng: np.random.Generator | None = None,
 ) -> list[tuple[str, str]]:
     """SIR spreading efficiency: mean fraction of nodes infected when each node seeds the process.
 
@@ -111,7 +112,8 @@ def apply_spreading_efficiency(
         for node_id in flow_graph.nodes()
     }
 
-    rng = np.random.default_rng(42)
+    if rng is None:
+        rng = np.random.default_rng(42)
     results: dict[str, float] = {}
     norm = n - 1
 

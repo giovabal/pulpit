@@ -30,7 +30,7 @@ from .utils import UnaccentLower, normalize_for_search
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
@@ -217,12 +217,15 @@ class ChannelViewSet(
                             for ch in channels
                         ]
                     )
+            # Pass raw ids to ``add()``/``remove()`` so the M2M operation runs once
+            # per group, rather than re-evaluating the ``channels`` queryset for each
+            # ``*channels`` unpack (which would hit the DB N extra times).
             if add_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
-                    grp.channels.add(*channels)
+                    grp.channels.add(*ids)
             if remove_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=remove_group_ids):
-                    grp.channels.remove(*channels)
+                    grp.channels.remove(*ids)
 
         return Response({"updated": channels.count()})
 
@@ -303,5 +306,5 @@ class UserViewSet(viewsets.ModelViewSet):
         # Prevent an authenticated user from deleting their own account (lockout).
         user = self.request.user
         if user.is_authenticated and user.pk == instance.pk:
-            raise ValidationError({"detail": "You cannot delete your own account."})
+            raise PermissionDenied("You cannot delete your own account.")
         instance.delete()

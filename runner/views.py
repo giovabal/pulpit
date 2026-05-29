@@ -196,7 +196,7 @@ class RunTaskView(View):
                     SearchTerm.objects.get_or_create(word=word)
         try:
             tasks.launch(task, args)
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError) as exc:
             return JsonResponse({"error": str(exc)}, status=500)
         return JsonResponse({"status": "started", "args": args})
 
@@ -301,11 +301,18 @@ class GraphDirsView(View):
             pass
 
         # Scan sibling directories of BASE_DIR for other Pulpit projects.
+        # Cap the scan so a workstation with hundreds of unrelated sibling
+        # directories doesn't stall the request thread on meta.json reads.
         parent = Path(settings.BASE_DIR).parent
+        _SIBLING_SCAN_CAP = 100
         try:
+            inspected = 0
             for item in sorted(parent.iterdir()):
                 if not item.is_dir():
                     continue
+                if inspected >= _SIBLING_SCAN_CAP:
+                    break
+                inspected += 1
                 # Direct graph/ dir (e.g. sibling_project/graph/)
                 _check(item / settings.GRAPH_OUTPUT_DIR)
                 # Or the directory itself if it looks like a graph export
@@ -638,7 +645,6 @@ def _build_args(task: str, post: Any) -> list[str]:
 #   "bool"                     post.get(key) truthy → True else False
 #   "list"                     post.getlist(key) verbatim
 #   "value"                    post.get(key, "").strip()
-#   "value_optional"           same as value, empty string preserved
 #   "int" / "float"            cast; empty → fall back to defaults.py value
 #   "bool_to_enum:<off>,<on>"  checkbox → on-string or off-string
 #   "channel_types_triplet"    three checkboxes (CHANNEL/GROUP/USER) → list
@@ -704,7 +710,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("layouts_2d", "layouts.layouts_2d", "list"),
         ("layouts_3d", "layouts.layouts_3d", "list"),
         ("measures", "measures.selected", "list"),
-        ("bridging_basis", "measures.bridging_basis", "value_optional"),
+        ("bridging_basis", "measures.bridging_basis", "value"),
         ("community_strategies", "communities.strategies", "list"),
         ("network_stat_groups", "network_stats.groups", "list"),
         ("vacancy_measures", "vacancy.measures", "list"),
@@ -865,8 +871,6 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
         elif kind == "list":
             value = list(post.getlist(post_key))
         elif kind == "value":
-            value = post.get(post_key, "").strip()
-        elif kind == "value_optional":
             value = post.get(post_key, "").strip()
         elif kind == "palette_name":
             value = post.get(post_key, "").strip()
