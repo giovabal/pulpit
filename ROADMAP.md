@@ -30,5 +30,20 @@ https://github.com/textgain/grasp
 
 
 
+Analyze how Infomap community detection is used in Pulpit. Verify it's used in a way that's academically validated and that code and documentation are coherent.
+Take care documentation is structured with a title, a one liner as short description, a longer description, at least one reference (more than one if this is important), what does it means in practice (considering Pulpit goals) and a clear example.
+
+
+Review explanaitions for measures in /docs/network-measures.md
+They should be structured with a title, a one liner as short description, a longer description, at least one reference (more than one if this is important), what does it means in practice (considering Pulpit goals) and a clear example.
+"In practice" and "example" should be worded in non technical ways, in particular "example" should be a clear text aimed a journalists, activists and other people interested in the outcome but not in the technical details.
+References should be essentials, we do not expect to have here a complete list of references.
+Even the introduction should be short and not going deep in implementation details.
+The first one òiner should be readable and meaningful for non technical people.
+
+Try to keep coherence between different measures, not only for the content but even for the length of the text.
+
+
+
 .has the right citations, a readable description,
 Have a deep inspection of Python code for calculating Structural and behavioural similarity. Do search for bugs, implementations that doesn't have a strong academic validation, and incoherence between different calculations. Produce a detailed todo list and let me approve each action before writing anything.
