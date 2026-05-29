@@ -390,12 +390,32 @@ def detect_leiden_cpm(
 def detect_mcl(
     graph: nx.DiGraph, palette_name: str, inflation: float, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Markov Clustering (MCL) — van Dongen 2000.
+    """Markov Clustering (MCL) — van Dongen 2000 (thesis); 2008 *SIAM J. Matrix Anal. Appl.* 30(1) for the formal analysis.
 
-    Works natively on the directed weighted graph: alternates matrix expansion
-    (random-walk diffusion) and inflation (contrast enhancement) until
-    convergence.  The ``inflation`` parameter controls granularity: higher
-    values produce more, smaller communities.
+    Alternates matrix expansion (raise to power 2, the library default) and
+    inflation (raise each entry to ``inflation``, column-renormalise) until
+    the stochastic matrix becomes near-idempotent; the row supports of the
+    surviving diagonal entries are the clusters. ``inflation`` controls
+    granularity — higher → smaller, tighter communities. No null model, so
+    *not* subject to the Fortunato-Barthélemy resolution limit.
+
+    Pulpit feeds the directed citation graph directly: ``matrix[source, target]
+    = w(source → target)`` with the chosen ``--edge-weight-strategy``. The
+    ``markov_clustering`` library adds a unit self-loop to every row, then
+    column-normalises (column-stochastic convention) — so the implied random
+    walker traverses edges in *reverse* (content-cascade direction
+    source→amplifier), the same orientation Pulpit uses for SIR ``SPREADING``
+    and ``TROPHICLEVEL``. Both citation directions still shape the partition
+    through the asymmetric matrix; MCL clusters channels that share a
+    source's content flow, not channels that share citing behaviour. The
+    isolated-node self-loop below is belt-and-braces — ``run_mcl`` overwrites
+    the full diagonal anyway — but keeps the matrix well-defined before
+    normalisation. Overlap (a node landing in two attractors' row supports)
+    is resolved by "last attractor wins" in ``_assign_from_partition``; the
+    practical consequence is that hub-and-spoke amplification patterns get
+    fragmented (the hub goes to one peripheral cluster, the spokes scatter
+    into singletons) — prefer ``LOUVAIN``/``LEIDEN`` for that case. Fully
+    deterministic given the input matrix; no random seed.
     """
     node_ids, node_id_map = _node_id_index(graph)
     n = len(node_ids)
