@@ -193,22 +193,20 @@ See [Community detection](docs/community-detection.md) for descriptions, referen
 
 ---
 
-## Vacancy analysis — 6 algorithms
+## Vacancy analysis — 4 algorithms
 
 When a channel goes silent — removed from Telegram, legally forced offline, or simply abandoned — it leaves a structural hole in the network. Channels that used to rely on it as a source now need to find an alternative. Pulpit's Vacancy Analysis answers: *who fills that structural role?*
 
-An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by six complementary scores:
+An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by four complementary scores:
 
 | Score | Question | Method |
 | :---- | :------- | :----- |
 | Amplifier Coverage | What fraction of orphaned amplifiers have started forwarding the candidate? | Coverage / recall (|A ∩ B| / |A|) |
-| Structural equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
+| Neighbour-set Equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
 | Brokerage overlap | Does the candidate bridge the same organizational communities? | Jaccard of bridged org-pairs; brokerage *concept* per Gould & Fernandez 1989 (not their census) |
-| Cascade overlap | Does information seeded at the candidate reach the same downstream channels? | SIR simulation (Watts & Dodds 2007) |
-| Personalized PageRank | How deeply embedded is the candidate in the orphaned channels' content supply chain? | PPR seeded on orphaned amplifiers (Haveliwala 2002) |
-| Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage × recency decay |
+| Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage hyperbolically discounted by mean days-to-adoption (Mazur 1987) |
 
-The six scores span two analytical perspectives: A–C characterise structural position topologically; D–F characterise dynamics and timing. A channel scoring high on all six is a strong structural heir. A channel scoring high only on D–F was already well-positioned in the broader diffusion network but does not mirror the vacancy's immediate neighbourhood — a lateral successor rather than a direct replacement.
+A–C characterise structural position topologically; Temporal adoption adds the timing dimension. A channel scoring high on all four is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, all settled on quickly.
 
 See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score interpretation patterns, and the batch export API.
 
@@ -264,7 +262,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Network measures](docs/network-measures.md) | All 18 per-channel measures with academic references and worked examples |
 | [Community detection](docs/community-detection.md) | 13 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
-| [Vacancy analysis](docs/vacancy-analysis.md) | 6 algorithms for identifying structural replacement channels after a node disappears |
+| [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |

@@ -118,7 +118,6 @@ STRUCTURAL_DEFAULTS: dict = {
         "months_before": 12,
         "months_after": 24,
         "max_candidates": 30,
-        "ppr_alpha": 0.85,
     },
     "robustness": {
         # `enabled` is intentionally absent — it is derived from `bool(strategies)`

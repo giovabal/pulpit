@@ -537,7 +537,6 @@ def write_summary_json(
         "vacancy_months_before",
         "vacancy_months_after",
         "vacancy_max_candidates",
-        "vacancy_ppr_alpha",
         "robustness",
         "robustness_alpha",
         "robustness_strategies",

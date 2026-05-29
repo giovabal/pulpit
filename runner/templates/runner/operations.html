@@ -802,20 +802,6 @@
                    title="Jaccard overlap of the (source-org × amplifier-org) pairs the candidate bridges vs. those the vacancy bridged — does it mediate the same inter-organisation flows? Operationalises the brokerage-role concept (Gould &amp; Fernandez 1989), not their brokerage census."></i>
               </label>
               <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="CASCADE_OVERLAP" {% if "CASCADE_OVERLAP" in ad.sa_vacancy_measures %}checked{% endif %}>Cascade Overlap
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Jaccard of SIR diffusion reach sets: vacancy content reach before closure vs candidate reach after. Reuses Spreading runs from Linked parameters. Computationally intensive."></i>
-                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Tunable: Spreading runs (Linked parameters)"></i>
-              </label>
-              <label class="ops-flag">
-                <input type="checkbox" name="vacancy_measures" value="PPR" {% if "PPR" in ad.sa_vacancy_measures %}checked{% endif %}>Pers. PageRank
-                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Personalized PageRank seeded on the orphaned amplifiers, walking upstream along the citation graph as-built (amplifier→source, no reversal) — scores how deeply each candidate is embedded in their upstream content supply chain. (Haveliwala 2002)"></i>
-                <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Tunable: PPR α (see below)"></i>
-              </label>
-              <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Coverage of the orphaned amplifier set hyperbolically discounted by mean days-to-first-adoption (halved at a 30-day mean delay; Mazur 1987) — rewards candidates adopted quickly by many orphaned channels."></i>
@@ -842,14 +828,6 @@
                      title="Maximum replacement candidates scored per vacancy, ranked by orphaned-amplifier count. Default: 30."></i>
                 </label>
                 <input type="number" name="vacancy_max_candidates" id="vacancy_max_candidates" placeholder="{{ ad.SA_VACANCY_MAX_CANDIDATES }}" value="{{ ad.SA_VACANCY_MAX_CANDIDATES }}" min="1" max="200">
-              </div>
-              <div class="ops-param">
-                <label for="vacancy_ppr_alpha">PPR α
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Damping factor for Personalized PageRank. Higher values weight long-range connections more. Only active when PPR is selected. Default: 0.85."></i>
-                </label>
-                <input type="number" name="vacancy_ppr_alpha" id="vacancy_ppr_alpha" placeholder="{{ ad.SA_VACANCY_PPR_ALPHA }}" value="{{ ad.SA_VACANCY_PPR_ALPHA }}"
-                       min="0.01" max="0.99" step="0.01" data-requires-vacancy="PPR">
               </div>
             </div>
           </fieldset>
@@ -1484,16 +1462,6 @@ function showToast(msg, type) {
       );
       _setDependentInputEnabled(input, on);
     });
-    // CASCADE_OVERLAP also needs Spreading runs — override the disable if it is selected.
-    var spreadingRunsEl = document.querySelector('[name="spreading_runs"]');
-    if (spreadingRunsEl && spreadingRunsEl.disabled) {
-      var cascadeCb = document.querySelector('input[name="vacancy_measures"][value="CASCADE_OVERLAP"]');
-      if (cascadeCb && cascadeCb.checked) {
-        spreadingRunsEl.disabled = false;
-        var paramEl = spreadingRunsEl.closest('.ops-param');
-        if (paramEl) paramEl.classList.remove('ops-param--disabled');
-      }
-    }
   }
   syncLinkedInputs();
   document.querySelectorAll('input[name="measures"], input[name="community_strategies"], input[name="vacancy_measures"], input[name="robustness_strategies"]').forEach(function (cb) {
@@ -1872,7 +1840,6 @@ function showToast(msg, type) {
         setVal('vacancy_months_before',    opts.vacancy_months_before != null ? opts.vacancy_months_before : '');
         setVal('vacancy_months_after',     opts.vacancy_months_after  != null ? opts.vacancy_months_after  : '');
         setVal('vacancy_max_candidates',   opts.vacancy_max_candidates != null ? opts.vacancy_max_candidates : '');
-        setVal('vacancy_ppr_alpha',        opts.vacancy_ppr_alpha != null ? opts.vacancy_ppr_alpha : '');
 
         // Robustness analysis — the master switch is implicit (any strategy ⇒ on).
         // Strategies: comma-separated, may include bridging(<basis>) — split out the basis
