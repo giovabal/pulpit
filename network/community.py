@@ -185,16 +185,25 @@ def detect_label_propagation(
     """Label propagation community detection — Cordasco & Gargano 2010 / Raghavan et al. 2007.
 
     Each node is initialised with a unique label; at each step every node adopts
-    the label held by the majority of its neighbours.  The NetworkX implementation
-    uses the semi-synchronous variant (Cordasco & Gargano 2010), which partitions
-    nodes into colour classes before each sweep to avoid oscillation.  The
-    algorithm is deterministic, parameter-free, and runs in near-linear time.
+    the most frequent label among its neighbours, with ties broken by the
+    deterministic Prec-Max rule (keep the current label if it is among the
+    tied top labels, otherwise pick the lexicographically largest). The
+    NetworkX implementation uses the semi-synchronous variant (Cordasco &
+    Gargano 2010): nodes are greedy-coloured so neighbours get different
+    colours, and only same-coloured nodes update in each sweep — the
+    safeguard that makes the algorithm provably terminate and avoid the
+    bipartite oscillations the original asynchronous variant suffers from.
+    Parameter-free, deterministic given the input, and near-linear time per
+    iteration; no random seed required.
 
-    Edge weights are not used — all edges are treated equally. The graph is
-    symmetrised with ``to_undirected_sum`` (the same projection the other
-    undirected detectors and the reported modularity use); since the algorithm
-    ignores weights this yields the identical partition to a plain
-    ``to_undirected()`` while keeping the projection consistent across strategies.
+    Edge weights are not used — ``label_propagation_communities`` discards
+    them, so ``--edge-weight-strategy`` does not affect the partition.
+    Citation direction is also discarded: the function rejects directed
+    input, so Pulpit symmetrises the graph with ``to_undirected_sum``
+    (W+Wᵀ, the same projection used by ``LEIDEN``/``LOUVAIN``/``WALKTRAP``/
+    ``KCORE`` and the reported modularity). Because weights are ignored,
+    this yields the identical partition to a plain ``to_undirected()``;
+    the W+Wᵀ choice is for consistency across strategies, not for effect.
     """
     communities = sorted(nx.community.label_propagation_communities(to_undirected_sum(graph)), key=len, reverse=True)
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
