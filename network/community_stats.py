@@ -26,7 +26,7 @@ _PATH_LENGTH_MIN_NODES = 3
 # Strategies dropped from the NMI matrix: connectivity/shell decompositions that are not
 # community detections (the consensus matrix also excludes them, plus ORGANIZATION — which
 # the NMI matrix keeps, since detection-vs-manual-labels is the comparison it exists for).
-_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"weakcc", "strongcc", "kcore"})
+_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"strongcc", "kcore"})
 
 # Exceptions networkx routines may raise on graphs that are too small, empty,
 # or disconnected for a given metric. Centralised so a new "expected failure"
@@ -750,11 +750,11 @@ def compute_community_metrics(
     # Pairwise Normalized Mutual Information between community strategies.
     # Each pair is computed on the nodes assigned in both strategies (intersection),
     # which matters for ORGANIZATION where unassigned nodes are silently skipped.
-    # WEAKCC/STRONGCC/KCORE are connectivity/shell decompositions, not community
-    # detections, so pairwise partition-similarity against them is uninformative (the
-    # giant component co-assigns almost everything) — drop them, matching the consensus
-    # matrix. ORGANIZATION is deliberately *kept*: validating detected communities
-    # against the manual org labels is exactly what this matrix is for.
+    # STRONGCC/KCORE are connectivity/shell decompositions, not community detections,
+    # so pairwise partition-similarity against them is uninformative — drop them,
+    # matching the consensus matrix. ORGANIZATION is deliberately *kept*: validating
+    # detected communities against the manual org labels is exactly what this matrix
+    # is for.
     nmi_strategies = [s for s in strategies if s not in _NMI_EXCLUDED_STRATEGIES]
     if len(nmi_strategies) >= 2:
         node_comms: dict[str, dict[str, Any]] = {n["id"]: (n.get("communities") or {}) for n in graph_data["nodes"]}

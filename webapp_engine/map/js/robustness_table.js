@@ -32,7 +32,7 @@ var _METRICS = ["wcc", "scc", "reach"];
 var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
 
 // Strategy ordering — matches network.robustness.attacks.ALL_STRATEGIES.
-// Bridging variants (bridging(LEIDEN), bridging(LOUVAIN), …) are slotted in
+// Bridging variants (bridging(LEIDEN), bridging(LEIDEN_DIRECTED), …) are slotted in
 // after bare "bridging" in alphabetical order at render time; see _orderedStrategies.
 var _STRATEGY_ORDER = [
     "random",

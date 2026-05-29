@@ -59,12 +59,11 @@ function _render(d) {
     }
 
     // Exclude ORGANIZATION (manual labels) plus the structural decompositions
-    // WEAKCC / STRONGCC / KCORE — these are component/shell partitions, not
-    // community detection, and bias the co-association count (e.g. WEAKCC's
-    // giant component co-assigns almost every pair). Keys in communities.json are
+    // STRONGCC / KCORE — these are component/shell partitions, not community
+    // detection, and bias the co-association count. Keys in communities.json are
     // lowercase, so the previous `s !== "ORGANIZATION"` test never matched and
     // silently kept ORGANIZATION in the consensus; compare case-insensitively.
-    var _CONSENSUS_EXCLUDE = { organization: 1, weakcc: 1, strongcc: 1, kcore: 1 };
+    var _CONSENSUS_EXCLUDE = { organization: 1, strongcc: 1, kcore: 1 };
     var nonOrgKeys = strategies.filter(function(s) { return !_CONSENSUS_EXCLUDE[String(s).toLowerCase()]; });
     if (nonOrgKeys.length < 2) {
         var msg = document.createElement("p"); msg.className = "text-muted";

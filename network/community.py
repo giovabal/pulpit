@@ -32,7 +32,6 @@ sys.stderr = _stderr
 del _stderr
 
 COMMUNITY_ALGORITHMS = {
-    "LOUVAIN",
     "LABELPROPAGATION",
     "KCORE",
     "INFOMAP",
@@ -43,7 +42,6 @@ COMMUNITY_ALGORITHMS = {
     "LEIDEN_CPM_FINE",
     "MCL",
     "WALKTRAP",
-    "WEAKCC",
     "STRONGCC",
 }
 VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
@@ -55,7 +53,7 @@ VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 # Everything else (leiden_directed, infomap, infomap_memory, mcl, strongcc,
 # organization) is reported with directed modularity, the form it was built against.
 UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
-    {"leiden", "leiden_cpm_coarse", "leiden_cpm_fine", "louvain", "walktrap", "labelpropagation", "kcore", "weakcc"}
+    {"leiden", "leiden_cpm_coarse", "leiden_cpm_fine", "walktrap", "labelpropagation", "kcore"}
 )
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
@@ -67,14 +65,12 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN_DIRECTED": "Leiden directed",
     "LEIDEN_CPM_COARSE": "Leiden CPM coarse",
     "LEIDEN_CPM_FINE": "Leiden CPM fine",
-    "LOUVAIN": "Louvain",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
     "INFOMAP": "Infomap",
     "INFOMAP_MEMORY": "Memory Infomap",
     "MCL": "MCL",
     "WALKTRAP": "Walktrap",
-    "WEAKCC": "Weakly connected components",
     "STRONGCC": "Strongly connected components",
 }
 
@@ -200,21 +196,12 @@ def detect_label_propagation(
     them, so ``--edge-weight-strategy`` does not affect the partition.
     Citation direction is also discarded: the function rejects directed
     input, so Pulpit symmetrises the graph with ``to_undirected_sum``
-    (W+Wᵀ, the same projection used by ``LEIDEN``/``LOUVAIN``/``WALKTRAP``/
-    ``KCORE`` and the reported modularity). Because weights are ignored,
-    this yields the identical partition to a plain ``to_undirected()``;
-    the W+Wᵀ choice is for consistency across strategies, not for effect.
+    (W+Wᵀ, the same projection used by ``LEIDEN``/``WALKTRAP``/``KCORE``
+    and the reported modularity). Because weights are ignored, this yields
+    the identical partition to a plain ``to_undirected()``; the W+Wᵀ choice
+    is for consistency across strategies, not for effect.
     """
     communities = sorted(nx.community.label_propagation_communities(to_undirected_sum(graph)), key=len, reverse=True)
-    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
-
-
-def detect_louvain(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    communities = sorted(
-        nx.community.louvain_communities(to_undirected_sum(graph), weight="weight", seed=0), key=len, reverse=True
-    )
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
@@ -276,8 +263,8 @@ def detect_infomap(
     """
     node_ids, node_id_map = _node_id_index(graph)
     # seed=123 pins reproducibility for parity with the other seeded detectors
-    # (Leiden/Louvain seed=0, Memory Infomap seed=123); it matches Infomap's own
-    # current default but makes the run independent of that default ever changing.
+    # (Leiden seed=0, Memory Infomap seed=123); it matches Infomap's own current
+    # default but makes the run independent of that default ever changing.
     infomap = Infomap("--two-level --directed --silent", seed=123)
     for source, target, edge_data in graph.edges(data=True):
         infomap.addLink(node_id_map[source], node_id_map[target], edge_data.get("weight", 1.0))
@@ -296,15 +283,6 @@ def detect_infomap(
             community_map[node_id] = next_community
 
     return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_weakcc(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    components = sorted(nx.weakly_connected_components(graph), key=len, reverse=True)
-    return _finalize_partition(
-        graph, _assign_from_node_sets(components), palette_name, reverse=reverse, merge_isolated=False
-    )
 
 
 def detect_strongcc(
@@ -423,8 +401,8 @@ def detect_mcl(
     is resolved by "last attractor wins" in ``_assign_from_partition``; the
     practical consequence is that hub-and-spoke amplification patterns get
     fragmented (the hub goes to one peripheral cluster, the spokes scatter
-    into singletons) — prefer ``LOUVAIN``/``LEIDEN`` for that case. Fully
-    deterministic given the input matrix; no random seed.
+    into singletons) — prefer ``LEIDEN`` for that case. Fully deterministic
+    given the input matrix; no random seed.
     """
     node_ids, node_id_map = _node_id_index(graph)
     n = len(node_ids)
@@ -544,8 +522,8 @@ def detect_walktrap(
     structure drives the partition, not just direct edge density.
 
     Graph is symmetrised via ``to_undirected_sum`` (W+Wᵀ, same projection as
-    ``LEIDEN``/``LOUVAIN``/``LABELPROPAGATION``/``KCORE``), so citation
-    direction is not preserved. Edge weights are honoured —
+    ``LEIDEN``/``LABELPROPAGATION``/``KCORE``), so citation direction is not
+    preserved. Edge weights are honoured —
     ``community_walktrap`` accepts weighted walks. The modularity cut means
     Walktrap inherits the Fortunato-Barthélemy resolution limit *at the
     cut step* even though the random-walk distance itself has no such
@@ -575,8 +553,6 @@ def detect(
     """Run community detection. Returns (community_map, community_palette)."""
     if strategy == "LABELPROPAGATION":
         return detect_label_propagation(graph, palette_name, reverse=reverse)
-    if strategy == "LOUVAIN":
-        return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
     if strategy == "INFOMAP":
@@ -595,8 +571,6 @@ def detect(
         return detect_mcl(graph, palette_name, mcl_inflation, reverse=reverse)
     if strategy == "WALKTRAP":
         return detect_walktrap(graph, palette_name, reverse=reverse)
-    if strategy == "WEAKCC":
-        return detect_weakcc(graph, palette_name, reverse=reverse)
     if strategy == "STRONGCC":
         return detect_strongcc(graph, palette_name, reverse=reverse)
     if strategy == "ORGANIZATION":

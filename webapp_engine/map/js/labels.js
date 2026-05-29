@@ -4,13 +4,11 @@ export var STRATEGY_LABELS = {
     leiden_directed:   'Leiden directed',
     leiden_cpm_coarse: 'Leiden CPM coarse',
     leiden_cpm_fine:   'Leiden CPM fine',
-    louvain:           'Louvain',
     kcore:             'K-core',
     infomap:           'Infomap',
     infomap_memory:    'Infomap memory',
     mcl:               'MCL',
     walktrap:          'Walktrap',
-    weakcc:            'Weakly connected components',
     strongcc:          'Strongly connected components',
 };
 

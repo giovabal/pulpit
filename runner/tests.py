@@ -797,7 +797,7 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertIn("--spreading-runs", args)
 
     def test_community_strategies_csv(self):
-        post = FakePost({"community_strategies": ["LEIDEN", "LOUVAIN"]})
+        post = FakePost({"community_strategies": ["LEIDEN", "INFOMAP"]})
         args = _build_args("structural_analysis", post)
         idx = args.index("--community-strategies")
         self.assertIn("LEIDEN", args[idx + 1])
@@ -885,12 +885,12 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         post = FakePost(
             {
                 "robustness_strategies": ["pagerank", "bridging"],
-                "bridging_basis": "LOUVAIN",
+                "bridging_basis": "KCORE",
             }
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--robustness-strategies")
-        self.assertEqual(args[idx + 1], "pagerank,bridging(louvain)")
+        self.assertEqual(args[idx + 1], "pagerank,bridging(kcore)")
 
     def test_bridging_basis_blank_leaves_bare_bridging(self) -> None:
         # Empty dropdown value means "use the backend default" — emit bare bridging
@@ -905,18 +905,18 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         post = FakePost(
             {
                 "measures": ["PAGERANK", "BRIDGING"],
-                "bridging_basis": "LOUVAIN",
+                "bridging_basis": "KCORE",
             }
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--measures")
-        self.assertEqual(args[idx + 1], "PAGERANK,BRIDGING(LOUVAIN)")
+        self.assertEqual(args[idx + 1], "PAGERANK,BRIDGING(KCORE)")
 
     def test_measures_without_bridging_unchanged_by_basis(self) -> None:
         post = FakePost(
             {
                 "measures": ["PAGERANK", "BETWEENNESS"],
-                "bridging_basis": "LOUVAIN",
+                "bridging_basis": "KCORE",
             }
         )
         args = _build_args("structural_analysis", post)
