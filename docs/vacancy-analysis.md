@@ -57,17 +57,27 @@ Each replacement candidate receives three complementary scores, each ranging fro
 
 ---
 
-### Score A — Amplifier similarity
+### Score A — Amplifier Coverage
 
-Inspired by co-citation analysis ([Small 1973](https://doi.org/10.1002/asi.4630240103), "Co-citation in the scientific literature").
+*The fraction of the vacancy's old amplifiers that now also amplify the candidate — a direct read of audience inheritance.*
 
-*"How many of the orphaned amplifiers have started forwarding this candidate?"*
+When a vacancy closes, the in-target channels that used to forward from it — the **orphaned amplifiers** — are left without that input. Amplifier Coverage asks, for each replacement candidate, what share of those same orphaned amplifiers has been observed forwarding the candidate in the after-window. It is an asymmetric set overlap, bounded in `[0, 1]`:
 
 ```
-score_a = amplifier_count / total_orphaned_amplifiers
+score_a = |orphaned_amplifiers ∩ candidate_amplifiers| / |orphaned_amplifiers|
 ```
 
-A score of 1.0 means every orphaned amplifier is now forwarding the candidate. This is the most direct signal of audience inheritance: the same distributors that pushed the vacancy's content are now pushing this channel's content. It does not, however, tell you whether the candidate serves the same structural function — only that it has attracted the same distribution network.
+The numerator is the count of *distinct* orphaned channels with at least one forward of the candidate in the after-window; tie strength is ignored. The **Amplifiers** column on the same row carries the absolute numerator alongside the normalised score. A score of 1.0 means every orphaned amplifier has re-pointed to the candidate; 0.0 means none have.
+
+The measure is the information-retrieval definition of **recall**, applied to amplifier sets rather than retrieved documents — the same shape that the audience-fragmentation literature uses to map media systems through audience-overlap networks.
+
+**References:**
+- Salton, G. & McGill, M.J. (1983) *Introduction to Modern Information Retrieval.* McGraw-Hill. — recall as `|relevant ∩ retrieved| / |relevant|`, the mathematical definition the score instantiates.
+- Webster, J.G. & Ksiazek, T.B. (2012) "The Dynamics of Audience Fragmentation: Public Attention in an Age of Digital Media." *Journal of Communication* 62(1):39–56. [doi:10.1111/j.1460-2466.2011.01616.x](https://doi.org/10.1111/j.1460-2466.2011.01616.x) — audience-overlap networks: the social-science framing, where outlets are linked by the share of audience they have in common (here amplifiers stand in for audience members).
+
+**In practice:** Amplifier Coverage is the most direct evidence of audience inheritance and the natural first filter when triaging a vacancy. A high score is *necessary but not sufficient* for a structural heir: it shows the vacancy's distribution network has re-attached to the candidate, but says nothing about whether the candidate also draws from the same upstream sources (Neighbour-set Equivalence), bridges the same organisational divides (Brokerage overlap), reaches the same downstream channels through content cascades (Cascade Overlap), or is well-embedded in the orphaned channels' upstream supply chain (Personalized PageRank). Conversely, a candidate with a low Amplifier Coverage rarely deserves attention on the other five scores — the vacancy's distributors have not picked it up. Read this column first; the other five tell you what kind of successor a high-coverage candidate actually is.
+
+**Example.** A pro-Kremlin aggregator with twelve in-target amplifiers stops posting on the 14th of October. In the 24 months that follow, three candidates surface. Candidate X is forwarded by eleven of the twelve orphaned amplifiers — Amplifier Coverage 0.92; Y by four — 0.33; Z by one — 0.08. Candidate X has clearly inherited the vacancy's distribution network; Y has picked up a partial slice; Z is barely on the same radar. The score does not yet tell you *whether* X is a genuine structural heir or an opportunist who happened to absorb the audience gap — that is what the other five scores are for — but it tells you X is the candidate worth reading them on.
 
 ---
 
