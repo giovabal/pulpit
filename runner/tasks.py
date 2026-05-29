@@ -87,6 +87,11 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
     if not log_path.exists():
         return [], 0
 
+    # `launch` truncates the log via open("wb"), so an offset from a previous
+    # run can land past the current EOF. Detect that and reset.
+    if offset > log_path.stat().st_size:
+        offset = 0
+
     with open(log_path, "rb") as f:
         f.seek(offset)
         data = f.read()
@@ -136,9 +141,25 @@ from pathlib import Path
 
 meta_path = Path(sys.argv[1])
 cmd = sys.argv[2:]
-proc = subprocess.Popen(cmd)
-signal.signal(signal.SIGTERM, lambda _sig, _frame: proc.send_signal(signal.SIGTERM))
-exit_code = proc.wait()
+
+# Install SIGTERM handler before Popen: if a signal arrives in the gap
+# between Popen returning and the handler being installed, the default
+# disposition exits the wrapper and orphans the child management command,
+# making it unreachable from the abort button.
+_proc = None
+_pending_sigterm = False
+def _handle(_sig, _frame):
+    global _pending_sigterm
+    if _proc is None:
+        _pending_sigterm = True
+    else:
+        _proc.send_signal(signal.SIGTERM)
+signal.signal(signal.SIGTERM, _handle)
+
+_proc = subprocess.Popen(cmd)
+if _pending_sigterm:
+    _proc.send_signal(signal.SIGTERM)
+exit_code = _proc.wait()
 try:
     m = json.loads(meta_path.read_text())
     m["exit_code"] = exit_code

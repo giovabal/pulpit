@@ -5,7 +5,7 @@ from time import sleep
 from typing import Any
 
 from django.conf import settings
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from django.db.models import Max, Min, Q
 from django.utils import timezone
 
@@ -40,7 +40,6 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
     Custom-emoji / sticker reactions are tallied together under the synthetic emoji "custom"
     so that total reaction counts are not understated on channels that use custom emoji packs.
     """
-    MessageReaction.objects.filter(message_id=message_pk).delete()
     to_create: list[MessageReaction] = []
     reactions_obj = getattr(telegram_message, "reactions", None)
     if reactions_obj:
@@ -52,11 +51,15 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
                 custom_total += rc.count
         if custom_total:
             to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
-    if to_create:
-        MessageReaction.objects.bulk_create(to_create)
-    # Keep Message.total_reactions in sync — including the N → 0 case, so the
-    # denormalised sort key never goes stale.
-    Message.objects.filter(pk=message_pk).update(total_reactions=sum(r.count for r in to_create))
+    # Wrap delete + insert + total update so a mid-flight crash can't leave the
+    # message with no reactions and a stale total_reactions count.
+    with transaction.atomic():
+        MessageReaction.objects.filter(message_id=message_pk).delete()
+        if to_create:
+            MessageReaction.objects.bulk_create(to_create)
+        # Keep Message.total_reactions in sync — including the N → 0 case, so
+        # the denormalised sort key never goes stale.
+        Message.objects.filter(pk=message_pk).update(total_reactions=sum(r.count for r in to_create))
 
 
 def _save_poll(message_pk: int, telegram_message: Any) -> None:
@@ -403,13 +406,13 @@ class ChannelCrawler:
             return 0
 
         channel_label = f"[id={channel.id}] {channel}"
+        profile_picture_count = 0
         if update_info:
             update_status(f"{channel_label} | fetching profile pictures")
-            image_count = self.media_handler.download_profile_picture(telegram_channel)
+            profile_picture_count = self.media_handler.download_profile_picture(telegram_channel)
             update_status(f"{channel_label} | fetching channel details")
             self.set_more_channel_details(channel, telegram_channel)
-        else:
-            image_count = 0
+        image_count = 0
 
         id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
         last_known_id = id_agg["max_id"] or 0
@@ -465,7 +468,10 @@ class ChannelCrawler:
         channel.is_lost = False
         channel.is_private = False
         channel.save()
-        update_status(f"{channel_label} | completed ({message_count} new messages, {image_count} downloaded images)")
+        completion_parts = [f"{message_count} new messages", f"{image_count} downloaded images"]
+        if profile_picture_count:
+            completion_parts.append(f"{profile_picture_count} profile pictures")
+        update_status(f"{channel_label} | completed ({', '.join(completion_parts)})")
         return last_known_id
 
     @staticmethod

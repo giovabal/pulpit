@@ -542,6 +542,7 @@ class Command(BaseCommand):
         "retry-lost", …).
         """
         try:
+            crawler.api_client.wait()
             return crawler.api_client.client.get_entity(channel.telegram_id)
         except ValueError:
             if not channel.username:
@@ -554,6 +555,7 @@ class Command(BaseCommand):
                 )
                 return None
             try:
+                crawler.api_client.wait()
                 return crawler.api_client.client.get_entity(channel.username)
             except Exception as error:  # noqa: BLE001 - logged for the operator
                 printer.newline()
@@ -608,6 +610,7 @@ class Command(BaseCommand):
         printer: ProgressPrinter,
     ) -> None:
         try:
+            crawler.api_client.wait()
             telegram_channel = crawler.api_client.client.get_entity(channel.telegram_id)
         except errors.FloodWaitError as exc:
             printer.newline()

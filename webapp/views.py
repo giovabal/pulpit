@@ -477,11 +477,15 @@ class ChannelDetailView(ListView):
         tab = self.request.GET.get("tab", "messages")
         q = self.request.GET.get("q", "").strip()
         if tab == "received":
+            # Period-aware: a forward by an in-target amplifier counts only when
+            # the amplifier was in an in-target period at the message date,
+            # matching the summary card on the same page (line 584).
             qs = (
                 Message.objects.filter(
                     forwarded_from=self.selected_channel,
                     channel__in=Channel.objects.in_target().values("pk"),
                 )
+                .filter(channel_cutoff_q())
                 .select_related("channel", "forwarded_from")
                 .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
             )
