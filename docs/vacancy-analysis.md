@@ -53,7 +53,7 @@ The analysis proceeds in two steps:
 
 ## Scoring
 
-Each replacement candidate receives three complementary scores, each ranging from 0 to 1.
+Each replacement candidate is scored on up to six complementary metrics ranging from 0 to 1. Scores A–C appear in both the interactive per-channel card and the batch export; Scores D–F are batch-only, enabled via `--vacancy-measures`.
 
 ---
 
@@ -136,50 +136,98 @@ This operationalises the **concept** of brokerage roles from inter-group mediati
 
 ### Score D — Cascade overlap
 
-*Watts & Dodds (2007), "Influentials, networks, and public opinion formation", [Journal of Consumer Research 34(4)](https://doi.org/10.1086/518527). Kermack & McKendrick (1927), "A contribution to the mathematical theory of epidemics", [Proceedings of the Royal Society A 115(772)](https://doi.org/10.1098/rspa.1927.0118).*
+*Whether a Monte Carlo SIR (Susceptible–Infected–Recovered) cascade seeded at the candidate after closure reaches the same downstream channels that the vacancy's cascade used to reach before closure — a dynamical successor test rather than a topological one.*
 
-*"Does information flow through this candidate to the same nodes it used to flow through the vacancy?"*
+Scores A–C compare the candidate's *static* neighbourhood to the vacancy's: who forwards them, what they forward from, what organisational pairs they bridge. Score D asks a different question: when content is seeded at the candidate and allowed to propagate through the network via probabilistic forwards, does it eventually reach the same downstream channels that used to receive the vacancy's content? Two channels can share most of their direct amplifiers and still cascade to entirely different audiences — different mid-tier amplifiers reshare them, and a few-hop walk through the forward graph lands in different communities — and conversely, two channels with little immediate overlap can light up the same downstream basin if their amplifiers feed into the same secondary distributors.
 
-Two subgraphs are constructed from message forwards: one covering the *before* window (vacancy alive) and one the *after* window (candidate alive, vacancy excluded). For each subgraph, a Monte Carlo SIR (Susceptible–Infected–Recovered) epidemic process is seeded at the focal channel and run for `--spreading-runs` replicates. A node is counted as part of the *reach set* if it is infected in at least 25% of runs. The score is:
+The computation builds two SIR substrates:
+
+- **Before subgraph** — every in-target channel plus the vacancy. Edges run `source → amplifier` (information-flow direction) with transmission probability equal to the fraction of the amplifier's window-restricted forwards that came from that source — so an amplifier that drew most of its content from one source transmits that source's cascade with high probability, while an aggregator drawing equally from many sources transmits each with low probability. Built from `Message.objects.alive()` filtered to the before-window and the period-aware `channel_cutoff_q()` chokepoint, so each forward counts only when the amplifier was in-target on the message date.
+- **After subgraph** — same construction in the after-window, with the vacancy removed (it can neither transmit nor be transmitted to once closed).
+
+For each focal channel, an SIR process is seeded at that channel and run for `--spreading-runs` independent Monte Carlo replicates (default 200; per-step recovery probability γ = 0.3, mean infectious period ≈ 3 steps; the SIR engine — `network/measures/_spreading.py:sir_ever_infected` — is shared with the per-channel **Spreading Efficiency** measure). A node belongs to the focal channel's **reach set** if it was ever infected in ≥ 25 % of runs — a majority-reach cutoff that filters out the long tail of rare reachability events — and is not the seed itself. The score is the Jaccard similarity of the vacancy's and the candidate's reach sets:
 
 ```
-score_d = |reach(vacancy, before) ∩ reach(candidate, after)| / |reach(vacancy, before) ∪ reach(candidate, after)|
+reach(seed, subgraph) = { n ≠ seed : n infected in ≥ 25 % of SIR runs seeded at seed }
+v_reach               = reach(vacancy_pk,  before_subgraph)
+c_reach               = reach(candidate_pk, after_subgraph)
+score_d               = |v_reach ∩ c_reach| / |v_reach ∪ c_reach|
 ```
 
-A high Cascade Overlap score means the candidate's content reaches the same downstream channels that used to receive the vacancy's content. Unlike Neighbour-set Equivalence, which is topological, this measure is dynamical: it captures whether information actually propagates to the same destinations, not just whether the candidates look similar in the static graph. **Computationally intensive** — run time scales with the number of candidates × SIR runs × graph size.
+Like Spreading Efficiency, the weight → transmission-probability mapping is an empirical heuristic rather than a calibrated rate, so read the score **ordinally** — to rank candidates against each other for the *same* vacancy — rather than as a calibrated overlap fraction; absolute values shift with `--spreading-runs`, γ, and the choice of weight normalisation.
+
+**References:**
+- Kermack, W.O. & McKendrick, A.G. (1927) "A contribution to the mathematical theory of epidemics." *Proceedings of the Royal Society A* 115(772):700–721. [doi:10.1098/rspa.1927.0118](https://doi.org/10.1098/rspa.1927.0118) — foundational SIR formalism: susceptible neighbours catch the infection independently per time step at rate β, infectious nodes recover at rate γ. Score D instantiates this on a per-vacancy forwarding subgraph.
+- Watts, D.J. & Dodds, P.S. (2007) "Influentials, networks, and public opinion formation." *Journal of Consumer Research* 34(4):441–458. [doi:10.1086/518527](https://doi.org/10.1086/518527) — the use of stochastic cascade simulations on directed influence networks to characterise *who reaches whom*. Score D applies the same machinery to two channels (vacancy vs candidate) instead of one population.
+- Kitsak, M., Gallos, L.K., Havlin, S., Liljeros, F., Muchnik, L., Stanley, H.E. & Makse, H.A. (2010) "Identification of influential spreaders in complex networks." *Nature Physics* 6:888–893. [doi:10.1038/nphys1746](https://doi.org/10.1038/nphys1746) — the SIR-based "spreader influence" framing reused here: a channel's diffusion role read off the set of nodes its cascade reaches, comparable across channels.
+
+**In practice:** Cascade overlap is the dynamical counterpart to Scores A and B. Those ask "is the candidate's first-hop neighbourhood the vacancy's?"; Score D asks "does content actually flow to the same downstream audience, two or more hops out?" A candidate can score high on A and B (the orphaned amplifiers re-attached, the in/out neighbourhoods overlap) yet low on D when those amplifiers' onward forwards land in a different mid-tier community — the candidate has inherited the audience but not the cascade footprint. Conversely a candidate with low A and B but high D is reaching the vacancy's broader downstream basin through a different first-hop path: a **lateral successor** whose content ends up in the right places even though it travelled by a different route. Score D is **computationally heavy** — run time scales linearly with the number of candidates, the SIR replicate count, and the number of in-target channels — so enable it on the batch export when the topological screens (A–C) have narrowed the candidate list, or when the analytical question is specifically about downstream reach rather than immediate audience.
+
+**Example.** The pro-Kremlin aggregator that goes silent on the 14th of October once cascaded — in the before window — into a downstream basin of roughly 90 channels: the 12 orphaned amplifiers, the ~50 mid-tier channels those amplifiers themselves seed via secondary forwards, and a long tail of ~30 further-hop channels reached only sporadically across the 200 SIR runs. After closure, Candidate X (the structural heir from Scores A–C) cascades to 75 channels in the after window, of which 70 sit in the vacancy's old reach set: score_d = 70 / (90 + 75 − 70) ≈ 0.74 — content is propagating to nearly the same destinations as before. Candidate Y, the partial broker from Score C, cascades to 60 channels of which 30 overlap the vacancy's: score_d = 30 / (90 + 60 − 30) = 0.25 — Y has inherited a slice of the immediate audience but its cascade lands largely in a different downstream basin. Candidate Z, a high-A high-B aggregator that the topological tests favoured, cascades to 80 channels of which only 25 overlap the vacancy's: score_d ≈ 0.18 — Z's first-hop neighbourhood matches the vacancy's, but two hops out the orphaned amplifiers' onward forwards now feed into a different community. Cascade overlap separates X (the cascade heir) from Z (the topological look-alike) on a dimension Scores A–C cannot see.
 
 ---
 
 ### Score E — Personalized PageRank
 
-*Haveliwala (2002), "Topic-sensitive PageRank", [WWW 2002](https://doi.org/10.1145/511446.511513). Page et al. (1999), "The PageRank citation ranking: bringing order to the Web", [Stanford Technical Report](http://ilpubs.stanford.edu:8090/422/).*
+*A random walk on the citation graph that teleports back to the orphaned amplifiers — high score = the candidate sits in the upstream supply chain those orphans repeatedly reach when walking toward their sources.*
 
-*"How deeply is this candidate embedded in the upstream content supply chain of the orphaned channels?"*
+A random surfer who starts at one of the orphaned amplifiers and, at each step, either follows one of its outgoing citation edges (with probability α) or teleports back to a uniformly chosen orphan (with probability 1 − α) will, over time, accumulate mass on the channels that the orphans cite directly, the channels their sources cite, the channels *those* sources cite, and so on. Score E reads off this stationary distribution at each candidate. It is Page et al.'s (1999) PageRank with one twist: the teleportation vector is concentrated on the orphaned amplifier set instead of uniform across the network (Haveliwala 2002, "Topic-Sensitive PageRank"), so the rank reflects relevance *from the perspective of the vacancy's distribution network* rather than the network as a whole.
 
-Personalized PageRank is computed directly on the citation graph `build_graph` writes — edges already run amplifier→source, so the random walk's out-edges naturally lead from an orphaned amplifier upstream toward its content sources — with the teleportation probability concentrated on the set of orphaned amplifiers:
+The walk runs on the citation graph `build_graph` writes — with no reversal. Edges already point amplifier → source, so following an out-edge from an orphan steps upstream toward its content source — exactly the direction the question asks about. (The SIR-based `Spreading Efficiency` and `Cascade overlap` measures *do* reverse the graph because *they* model the opposite flow — information moving downstream from source to amplifier.) The personalisation vector and stationary equation are:
 
 ```
-personalization[node] = 1 / |orphaned_amplifiers|  if node is an orphaned amplifier
-personalization[node] = 0                           otherwise
+personalization[node] = 1 / |orphaned_amplifiers|  if node ∈ orphaned_amplifiers
+                      = 0                          otherwise
+
+ppr = stationary distribution of a random surfer that, at each step,
+      follows a uniformly chosen out-edge with probability α
+      or teleports to a node sampled from `personalization` with probability 1 − α
+
+score_e[candidate] = ppr[candidate] / max_c ppr[c]
 ```
 
-Damping factor α = 0.85 by default (tunable via `--vacancy-ppr-alpha`). The resulting PPR value for each candidate reflects how much of the random walk mass starting from orphaned channels flows upstream toward that candidate. Scores are normalised to [0, 1] relative to the maximum across all candidates for the same vacancy.
+Damping factor α defaults to 0.85 (tunable via `--vacancy-ppr-alpha`). Raw PPR values sum to 1 across the full graph (typically O(1/N) at each node), so Pulpit divides each candidate's value by the maximum candidate value for the *same* vacancy — the top candidate rescales to 1.0 and the rest sit in (0, 1]. This makes scores comparable *within* a vacancy's candidate list but not *across* vacancies; if the iterative solver fails to converge in 200 power-iteration steps every candidate gets 0.0. The walk also uses the citation graph the structural analysis built across the **full analysis window** — not just the before/after windows that Scores A/B/C/D/F restrict themselves to — so PPR is the only one of the six scores that does not respect the per-vacancy temporal split.
 
-A high PPR score means the candidate sits in the heart of the content ecosystem that orphaned channels draw from — well-connected to their sources of information, not just incidentally forwarded.
+**References:**
+- Page, L., Brin, S., Motwani, R. & Winograd, T. (1999) *The PageRank Citation Ranking: Bringing Order to the Web.* [Stanford InfoLab Technical Report](http://ilpubs.stanford.edu:8090/422/). — the original algorithm: a stationary distribution of a random surfer who follows out-edges with probability α and teleports uniformly at random with probability 1 − α.
+- Haveliwala, T.H. (2002) "Topic-Sensitive PageRank." *Proceedings of WWW 2002*, 517–526. [doi:10.1145/511446.511513](https://doi.org/10.1145/511446.511513) — replaces the uniform teleportation vector with a topic-biased one, so the rank reflects relevance from the perspective of a chosen seed set. Score E uses the orphaned amplifiers as that seed set.
+- Jeh, G. & Widom, J. (2003) "Scaling Personalized Web Search." *Proceedings of WWW 2003*, 271–279. [doi:10.1145/775152.775191](https://doi.org/10.1145/775152.775191) — formalises personalised PageRank as a linear operator on the personalisation vector and proves the decomposition results that justify reading PPR mass at a target as the share of the seed-rooted walk that lands there — the interpretation Score E asks the analyst to take.
+
+**In practice:** PPR is the only one of the six scores that probes the orphans' **upstream supply chain** rather than their immediate audience. Scores A and B (and D) ask whether the orphans re-attached to the candidate and whether downstream cascades land in the same places; Score C asks about cross-organisation bridging; Score E asks whether the candidate is structurally embedded in the same set of sources the orphans repeatedly hit on their way upstream. A candidate can score low on A (the orphans have not started forwarding it directly yet) and still rank highly on E — the random walk reaches it through *the orphans' own existing sources*, signalling a likely future heir whose role the network is already wired for. Conversely, a high-A but low-E candidate has audience inheritance without supply-chain embedding: the orphans forward it, but the deeper upstream graph routes mass elsewhere. Because the normalisation is per-vacancy and the walk ignores edge timestamps, Score E answers "which candidate is most central to *these* orphans' supply chain across the full window we have data for?" — not "is candidate X more central than candidate Y under a different vacancy?" nor "is X more central this year than last."
+
+**Example.** The pro-Kremlin aggregator that goes silent on the 14th of October: its 12 orphaned amplifiers collectively forward, across the analysis window, from a pool of state outlets, war-correspondent feeds, and three regional aggregators. Starting a random walk that teleports back to one of those 12 orphans 15 % of the time (1 − α = 0.15) and otherwise follows their citation edges upstream, the walk accumulates the most mass on the channels the orphans cite most consistently and which themselves cite each other in tight loops — typically a state news agency reading at PPR-raw ≈ 4.3 × 10⁻³, a war-correspondent hub at 3.9 × 10⁻³, and several mid-tier aggregators clustered around 2.0 – 2.5 × 10⁻³. Candidate X (the structural heir from Scores A–C) reads PPR-raw ≈ 4.1 × 10⁻³ — extremely well embedded in this supply chain, near the top of the candidate list; normalised against the top candidate (≈ 4.3 × 10⁻³), score_e ≈ 0.95. Candidate Y (the partial broker from Score C) reads PPR-raw ≈ 1.8 × 10⁻³, normalised to ≈ 0.42 — Y appears in the supply chain but is downstream of the main loops the orphans walk through. Candidate Z (the topological look-alike from Score D's example) reads PPR-raw ≈ 6.0 × 10⁻⁴, normalised to ≈ 0.14 — although Z's first-hop neighbourhood matches the vacancy's, the random walk almost never reaches it through the orphans' upstream paths, because Z draws from a different ecosystem of sources. Score E flags X as the supply-chain heir, separating it from Z (whose topological resemblance is superficial when the deeper graph is queried) on a dimension Scores A and B alone cannot see.
 
 ---
 
 ### Score F — Temporal adoption
 
-*"How quickly and how broadly did the orphaned channels adopt this candidate?"*
+*Coverage of the orphaned amplifier set discounted by the mean delay before each adopter's first forward — a candidate adopted quickly by many orphans scores high; one adopted late, or only by a few, scores low.*
 
-For each orphaned amplifier, the first message that forwards from the candidate after the closure date is recorded. The **days-to-adoption** is the gap between the closure date and that first forward. The score combines coverage (fraction of orphaned channels that adopted the candidate) with adoption speed using a 30-day half-life:
+When a content source disappears, its old amplifiers do not all pivot at once. Some attach to a replacement within days; others drift for months. Score F treats the orphaned set as a local diffusion population anchored at the closure date and asks two diffusion-of-innovations questions at once — *what fraction of the orphans ever adopted the candidate?* and *how quickly did the adopters get there?* — then collapses both into a single discounted-coverage figure. For each orphan that ever forwarded the candidate in the after-window the **days-to-adoption** is the gap between the closure date and that orphan's first such forward:
 
 ```
-score_f = coverage / (1 + mean_days_to_adoption / 30)
+coverage  = adopting_orphans / total_orphaned
+mean_days = mean of (first_forward_date − closure_date) over the adopting orphans
+score_f   = coverage / (1 + mean_days / 30)
 ```
 
-Where `coverage = adopting_orphans / total_orphaned`. A score of 1.0 would require every orphaned channel to have adopted the candidate on the day of the vacancy. Fast adoption by many orphaned channels indicates a channel that was already positioned to absorb the audience gap, rather than one that grew into the role gradually.
+The denominator instantiates the **hyperbolic discount function** `V = A / (1 + k · d)` of Mazur (1987) with `k = 1 / 30 days⁻¹`, so a mean delay of 30 days halves the score, 60 days drops it to a third, 90 days to a quarter. This is *not* an exponential half-life: hyperbolic and exponential decay coincide only at `d = 30`, and past that the hyperbolic falls much more slowly (at 90 days hyperbolic ≈ 0.25 vs exponential ≈ 0.125, at 180 days ≈ 0.14 vs ≈ 0.016), which preserves a usable signal from broad-but-late adoptions instead of crushing them to zero. A score of 1.0 would require every orphan to have adopted the candidate on the day of the vacancy.
+
+The mean-then-discount order matters: `1 / (1 + mean(d) / 30)` is **more conservative** than `mean(1 / (1 + d_i / 30))` because the discount function is convex, so by Jensen's inequality a candidate with one very fast and one very slow adopter scores lower under Pulpit's formula than under the alternative — uniformly moderate delay is preferred to bimodal adoption. Days are clamped to ≥ 0, so any forward dated before the registered closure (timezone drift, late registration) is treated as same-day adoption. Messages are restricted to the after-window and to the period-aware `channel_cutoff_q()`, matching the rest of the pipeline.
+
+The combination of cumulative coverage and a hyperbolic time discount is a **heuristic operationalisation** of the diffusion-of-innovations frame — both constituent quantities are canonical, but their multiplicative composition is Pulpit-specific. Read the score ordinally to rank candidates against each other for the *same* vacancy; absolute values shift with the closure-date precision and the choice of time constant.
+
+**References:**
+- Mazur, J.E. (1987) "An adjusting procedure for studying delayed reinforcement." In Commons, M.L., Mazur, J.E., Nevin, J.A. & Rachlin, H. (eds.) *Quantitative Analyses of Behavior, Vol. 5: The Effect of Delay and of Intervening Events on Reinforcement Value*, pp. 55–73. Erlbaum. — the canonical hyperbolic discount function `V = A / (1 + kd)`. Score F instantiates it with `A` = coverage and `k = 1/30 days⁻¹` on the mean adoption delay.
+- Rogers, E.M. (2003) *Diffusion of Innovations* (5th ed.). Free Press. — the diffusion framework where an innovation's spread is characterised by both the *cumulative* fraction of adopters and the *time profile* by which they got there: the same two-parameter (breadth × speed) description Score F collapses into a single number.
+- Valente, T.W. (1995) *Network Models of the Diffusion of Innovations.* Hampton Press. — extends Rogers to networked settings: each actor has a *time of adoption* relative to a diffusion start, and population-level curves aggregate those times. Score F reads the orphaned amplifier set as exactly such a localised diffusion population, anchored at the closure date.
+
+**In practice:** Temporal adoption is the only one of the six scores that integrates *when* the adoption happened, not just *whether* it happened — and the only one anchored to the closure date as a temporal origin. Two candidates with identical Amplifier Coverage can score very differently here: a candidate adopted by ten orphans within the first month outscores a candidate adopted by the same ten orphans only after a year of drift, because the first absorbed the vacancy's distribution network at the moment the gap opened (evidence of a pre-positioned heir) while the second only inherited it after the orphans had tried and discarded other options. The four high/low combinations with Score A read as: *high A + high F* — broad and fast, a strong heir; *high A + low F* — broad but late, a lateral successor the network eventually settled on; *low A + high F* — narrow but fast, a specialised pickup serving a sub-niche of the orphaned set; *low A + low F* — neither broad nor fast, not a heir. The score is sensitive to the closure date being correct: registering a closure date later than the channel's actual fade makes every "first forward after closure" artificially close to zero and inflates the score uniformly across all candidates; registering it earlier counts pre-closure forwards as adoptions and produces the same direction of bias.
+
+**Example.** The pro-Kremlin aggregator that goes silent on the 14th of October leaves twelve orphaned amplifiers. Over the 24 months that follow:
+- Candidate X — the structural heir from Scores A–C — is adopted by ten orphans (coverage 10/12 ≈ 0.83) with a mean delay of 18 days: `score_f = 0.83 / (1 + 18/30) ≈ 0.83 / 1.6 ≈ 0.52`. Broad, fast adoption — the orphans pivoted to X almost as soon as the vacancy opened.
+- Candidate Y — the partial broker from Score C — is adopted by four orphans (coverage 4/12 ≈ 0.33) with a mean delay of 65 days: `score_f = 0.33 / (1 + 65/30) ≈ 0.33 / 3.17 ≈ 0.11`. A slower pickup by a smaller fraction — Y took time to register with the orphaned set and never fully absorbed it.
+- Candidate Z — the topological look-alike from Score D's example, with a high Amplifier Coverage but a divergent cascade footprint — is eventually adopted by all twelve orphans (coverage 12/12 = 1.0) but only after a mean delay of 320 days: `score_f = 1.0 / (1 + 320/30) ≈ 1.0 / 11.67 ≈ 0.09`. Universal adoption, but only after nearly a year of drift — Score F flags this as *late* absorption rather than *immediate* succession. Z probably absorbed the audience by attrition once the orphans had given up on a direct heir, not because it was structurally positioned to inherit the role at the moment of closure.
 
 ---
 
@@ -212,8 +260,8 @@ The HTML page is linked from `index.html` under a **Vacancy Analysis** section t
 | `STRUCTURAL_EQUIV` | Cosine of shared amplifiers + shared sources | Cheap (DB query) |
 | `BROKERAGE` | Jaccard of (source-org × amplifier-org) pairs | Cheap (DB query) |
 | `CASCADE_OVERLAP` | SIR diffusion reach Jaccard (vacancy before vs candidate after) | **Heavy** — reuses `--spreading-runs` |
-| `PPR` | Personalized PageRank from orphaned amplifiers on the reversed graph | Moderate (one power iteration per vacancy) |
-| `TEMPORAL` | Recency-weighted coverage fraction (30-day half-life) | Cheap (DB query) |
+| `PPR` | Personalized PageRank seeded on orphaned amplifiers (walk runs on the citation graph as-built; no reversal) | Moderate (one power iteration per vacancy) |
+| `TEMPORAL` | Coverage hyperbolically discounted by mean days-to-adoption (halved at 30 days) | Cheap (DB query) |
 | `ALL` | All of the above | — |
 
 ### Parameters

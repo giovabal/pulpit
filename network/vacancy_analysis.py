@@ -362,12 +362,17 @@ def _scores_temporal(
     after_end: datetime.datetime,
 ) -> dict[int, float]:
     """
-    Temporal adoption: recency-weighted coverage fraction.
+    Temporal adoption: coverage of the orphaned amplifier set discounted by the mean
+    delay before each adopter's first forward.
 
-    For each candidate C, score = (fraction of orphaned channels that adopted C)
-    divided by (1 + mean_days_to_first_adoption / 30).  This is a hyperbolic recency
-    weight 1/(1 + days/30): it equals 0.5 at 30 days then decays gradually (not an
-    exponential half-life), rewarding candidates adopted quickly by the orphaned audience.
+    For each candidate C: score = coverage / (1 + mean_days_to_first_adoption / 30),
+    where coverage = fraction of orphaned channels that adopted C. The denominator is
+    the hyperbolic discount function V = A / (1 + kd) of Mazur (1987) with
+    k = 1/30 days⁻¹ — the score halves at a 30-day mean delay, but this is NOT an
+    exponential half-life (hyperbolic decay is much slower past d = 30 days).
+    Mean-then-discount is deliberate: by Jensen's inequality on the convex 1/(1+x),
+    1/(1 + mean(d)/30) ≤ mean(1/(1 + d_i/30)), so Pulpit's score is more pessimistic
+    on bimodal (fast + slow) adopter sets than the alternative would be.
     """
     total_orphaned = len(orphaned_pks)
     if not total_orphaned or not candidate_pks:

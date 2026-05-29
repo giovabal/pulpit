@@ -813,14 +813,14 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="PPR" {% if "PPR" in ad.sa_vacancy_measures %}checked{% endif %}>Pers. PageRank
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Personalized PageRank on the reversed graph starting from orphaned amplifiers — scores how deeply each candidate is embedded in their upstream content supply chain. (Haveliwala 2002)"></i>
+                   title="Personalized PageRank seeded on the orphaned amplifiers, walking upstream along the citation graph as-built (amplifier→source, no reversal) — scores how deeply each candidate is embedded in their upstream content supply chain. (Haveliwala 2002)"></i>
                 <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Tunable: PPR α (see below)"></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Coverage-weighted inverse mean days-to-first-adoption — rewards candidates adopted quickly by many orphaned channels (30-day half-life)."></i>
+                   title="Coverage of the orphaned amplifier set hyperbolically discounted by mean days-to-first-adoption (halved at a 30-day mean delay; Mazur 1987) — rewards candidates adopted quickly by many orphaned channels."></i>
               </label>
             </div>
             <div class="ops-params mt-2">
