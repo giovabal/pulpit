@@ -81,22 +81,30 @@ The measure is the information-retrieval definition of **recall**, applied to am
 
 ---
 
-### Score B — Neighbour-set equivalence
+### Score B — Neighbour-set Equivalence
 
-*Operationalises the structural-equivalence concept of Lorrain & White (1971), "Structural equivalence of individuals in social networks", [Journal of Mathematical Sociology 1(1)](https://doi.org/10.1080/0022250X.1971.9989788) — here as a **binary** (set-overlap) cosine, distinct from the weighted structural-equivalence matrix produced by the structural analysis.*
+*How much of the candidate's amplifier set and source set overlaps the vacancy's — a topological test of whether the candidate sits in the same network position.*
 
-*"Does this candidate occupy the same position in the network as the vacancy did?"*
+Two channels share the same **structural position** when the rest of the network treats them interchangeably: they are amplified by the same channels and they forward from the same sources. The vacancy left behind a position defined by its in-neighbours (the orphaned amplifiers) and its out-neighbours (the channels it forwarded from in the before-window). Score B asks, for each candidate, how closely its own in- and out-neighbour sets — measured in the after-window — match the vacancy's. It is the unweighted average of two **Ochiai (binary cosine)** similarities, one per side of the citation relation:
 
-Two channels are structurally equivalent if they are forwarded by the same channels (same amplifiers) and forward from the same sources (same inputs). A perfect replacement would be structurally identical to the channel it replaces.
+```
+cos_in  = |vacancy_amplifiers ∩ candidate_amplifiers| / √(|vacancy_amplifiers| · |candidate_amplifiers|)
+cos_out = |vacancy_sources    ∩ candidate_sources|    / √(|vacancy_sources|    · |candidate_sources|)
+score_b = ½ · cos_in + ½ · cos_out
+```
 
-The score averages two cosine similarities:
+`vacancy_amplifiers` is the orphaned set — the in-target channels that forwarded from the vacancy in the before-window. `candidate_amplifiers` is the candidate's *full* in-target amplifier set in the after-window: every channel that forwarded from the candidate while in-target, not just the orphaned ones. So two candidates with identical Amplifier Coverage can score very differently here — a candidate forwarded only by the ten orphans scores higher than one forwarded by the same ten plus a hundred other channels, because the larger denominator drags the cosine down. `vacancy_sources` and `candidate_sources` are the channels each one forwarded from in its window. All four sets are period-aware: a forward counts only when its channel was inside an in-target attribution period at the message date, matching the rest of the pipeline.
 
-- **In-similarity** — overlap between the vacancy's amplifier set and the candidate's amplifier set. Because the candidate's amplifiers are drawn from the orphaned set, this simplifies to √(shared orphaned amplifiers / total orphaned amplifiers).
-- **Out-similarity** — cosine similarity between the vacancy's forwarding sources (before) and the candidate's forwarding sources (after): |vacancy\_sources ∩ candidate\_sources| / (√|vacancy\_sources| × √|candidate\_sources|).
+Tie strength is ignored — only set membership counts — so this is the *binary* cousin of the **Structural equivalence matrix** the structural analysis writes (`network/community_stats.py:_compute_structural_equivalence`), which is a **weighted** cosine over the full in + out tie *profile* across every node pair. The two answer related questions with different maths and are kept apart in the UI: this one is labelled *Neighbour-set Equivalence*. Out-similarity collapses to zero for high-originality vacancies that rarely forward (the vacancy source set is empty), in which case the score reflects in-similarity alone.
 
-The two components are averaged equally (weight 0.5 each). Out-similarity will be low for vacancy channels that rarely forwarded anything (high-originality producers), in which case the score primarily reflects in-similarity.
+**References:**
+- Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1):49–80. [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the foundational definition: two actors are structurally equivalent iff they hold identical relations to identical others. Score B is the set-overlap relaxation of that equality, which is otherwise degenerate on real data.
+- Wasserman, S. & Faust, K. (1994) *Social Network Analysis: Methods and Applications.* Cambridge University Press, chapter 9. — the canonical treatment of similarity-based structural equivalence in SNA, including the cosine-on-relational-vectors formulation Score B instantiates on binary in- and out-neighbour sets.
+- Leicht, E.A., Holme, P. & Newman, M.E.J. (2006) "Vertex similarity in networks." *Physical Review E* 73:026120. [doi:10.1103/PhysRevE.73.026120](https://doi.org/10.1103/PhysRevE.73.026120) — the modern vertex-similarity form `|N(u) ∩ N(v)| / √(|N(u)| · |N(v)|)`, separable into in- and out-neighbour components for directed graphs.
 
-A high neighbour-set equivalence score means the candidate has stepped into the same editorial position: forwarded by the same amplifiers, drawing from the same upstream sources.
+**In practice:** Score B is the topological successor test, complementary to Score A. Amplifier Coverage tells you whether the vacancy's distributors picked up the candidate; Score B tells you whether they re-attached to a candidate that *also looks like the vacancy from the rest of the network's point of view*. A candidate with high A but low B has absorbed the audience without taking on the editorial role: typically a broad-reach aggregator that everybody forwards anyway. A candidate with high B has slotted into the same in/out neighbourhood and is the structural heir even when its raw reach is smaller. The out-side of the score, in particular, catches something Amplifier Coverage cannot see at all: whether the candidate draws on the same upstream pool — the same correspondents, agencies, regional outlets — as the vacancy did. For a vacancy that rarely forwarded anything (an originator rather than a curator), the out-similarity collapses to zero and the score reflects in-similarity alone; read it together with Score A in that case, not in isolation.
+
+**Example.** A pro-Kremlin aggregator with twelve orphaned amplifiers stops posting on the 14th of October; in the year before, it forwarded from sixteen upstream channels (state outlets, war-correspondent feeds, three regional aggregators). Candidate X, a smaller new channel, is forwarded by ten of the twelve orphans and by no other in-target channel, and forwards from fourteen of the same sixteen sources plus two new regionals: cos_in = 10 / √(12 · 10) ≈ 0.91, cos_out = 14 / √(16 · 16) ≈ 0.88, Score B ≈ 0.90 — a near-perfect structural heir. Candidate Y is forwarded by the same ten orphans, but also by sixty other in-target channels, and forwards from forty upstream channels of which only three overlap the vacancy's set: cos_in = 10 / √(12 · 70) ≈ 0.35, cos_out = 3 / √(16 · 40) ≈ 0.12, Score B ≈ 0.23 — an opportunist that absorbed part of the audience while serving a different editorial niche. Both have an identical Amplifier Coverage of 10/12 ≈ 0.83; only Score B tells X and Y apart.
 
 ---
 
