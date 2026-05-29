@@ -47,15 +47,22 @@ This is the most interpretable strategy because the groupings reflect your own d
 
 ## Louvain
 
-*Louvain finds unexpected sub-structure by maximising modularity — a measure of how much more densely channels are connected within a group than you would expect by chance.*
+*Louvain partitions the network by greedy maximisation of modularity — a measure of how much more densely channels are connected within a group than would be expected at random.*
 
-The algorithm produces no fixed number of groups: it finds however many communities best fit the data. It requires no prior knowledge and is the most widely used community detection algorithm in network analysis.
+Modularity compares the observed weight of edges inside each community to what a degree-preserving null model would produce: `Q = (1/2m) Σ_ij [A_ij − k_i k_j / (2m)] δ(c_i, c_j)`. Louvain hill-climbs Q in two alternating phases — single-node moves between neighbouring communities, then aggregation of communities into super-nodes — until no further single move can improve the objective. It requires no prior knowledge, produces no fixed number of groups, and runs in near-linear time, which has made it the de-facto baseline for community detection in large networks.
 
-**Reference:** Blondel, V.D., Guillaume, J.-L., Lambiotte, R. & Lefebvre, E. (2008) "Fast unfolding of communities in large networks." *Journal of Statistical Mechanics* 2008(10). [doi:10.1088/1742-5468/2008/10/P10008](https://doi.org/10.1088/1742-5468/2008/10/P10008)
+Pulpit runs Louvain on the symmetrised view of the citation graph: each pair of channels with reciprocal forwards is collapsed to a single undirected edge whose weight is the **sum** of the two directional weights (`w(u→v) + w(v→u)`). Edge weights are honoured, so the chosen `--edge-weight-strategy` does affect the partition — the unweighted case (`NONE`) and the weighted ones can disagree. The random seed is fixed at 0 so repeated exports of the same graph produce identical partitions.
 
-**In practice:** Louvain is good at finding unexpected sub-structure — communities that cut across your predefined categories, or that split a group you thought was unified.
+Two well-known limitations are worth keeping in mind. First, modularity has a **resolution limit** (Fortunato & Barthélemy 2007): communities smaller than roughly √(m/2) edges tend to be merged into larger ones even when they are well-separated structurally — run `LEIDEN_CPM_FINE` alongside Louvain to probe at higher resolution if you suspect this. Second, Louvain can produce **internally disconnected communities** because its node-move phase doesn't verify post-move connectivity — this is the defect that `LEIDEN` (Traag, Waltman & van Eck 2019) was designed to repair; prefer Leiden when partition quality matters more than the marginal runtime saving.
 
-**Example.** You have grouped channels under "populist right." Louvain may split them into two distinct communities: one centred on economic grievances and one centred on cultural identity. The cross-referencing patterns reveal that these two sub-movements are more internally coherent than their shared political label suggests.
+**References:**
+- Blondel, V.D., Guillaume, J.-L., Lambiotte, R. & Lefebvre, E. (2008) "Fast unfolding of communities in large networks." *Journal of Statistical Mechanics* 2008(10). [doi:10.1088/1742-5468/2008/10/P10008](https://doi.org/10.1088/1742-5468/2008/10/P10008) — the algorithm.
+- Newman, M.E.J. & Girvan, M. (2004) "Finding and evaluating community structure in networks." *Physical Review E* 69. [doi:10.1103/PhysRevE.69.026113](https://doi.org/10.1103/PhysRevE.69.026113) — definition of modularity, the objective Louvain optimises.
+- Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — proof of the resolution limit that affects every modularity-based method.
+
+**In practice:** Louvain is the cheapest way to surface unexpected sub-structure — communities that cut across analyst-defined `ORGANIZATION` groupings, or that split a category you treated as unified. In Pulpit it is most useful as a **structurally cheap baseline**: a partition that takes a fraction of a second to compute and that you can compare against `ORGANIZATION` (via the Organization × community panel) or against `LEIDEN` / `LEIDEN_DIRECTED` (via the consensus matrix). If a grouping appears under both Louvain and Leiden, it is likely a genuine structural feature; if Louvain merges what Leiden splits, the resolution limit is a plausible culprit; if a Louvain community looks suspiciously sprawling, it may be one of the internally-disconnected partitions that motivated the Leiden refinement.
+
+**Example.** You have grouped 40 channels under the analyst label "populist right". Louvain returns two distinct communities of comparable size: one cluster forwards mostly economic-grievance content from a single national aggregator, the other cross-references religious-conservative outlets and identitarian channels. The Organization × community panel shows the analyst label spread across both detected communities; the consensus matrix shows the two halves are also separated by Leiden and Infomap. The split is structurally robust: the "populist right" label is, at this snapshot, two distinguishable sub-movements that happen to share a banner.
 
 ---
 
