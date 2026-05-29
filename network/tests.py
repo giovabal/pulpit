@@ -58,7 +58,6 @@ from network.measures import (
     compute_bridging_coefficient,
 )
 from network.utils import channel_cutoff_q
-from network.vacancy_analysis import _scores_ppr
 from webapp.models import Channel, Message, Organization
 from webapp.test_helpers import make_channel
 from webapp.utils.colors import parse_color
@@ -3885,19 +3884,3 @@ class ChannelCutoffQBoundaryTests(TestCase):
             telegram_id=99, channel=ch2, date=datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
         )
         self.assertTrue(Message.objects.filter(channel=ch2).filter(channel_cutoff_q()).exists())
-
-
-class VacancyPprDirectionTests(TestCase):
-    """The PPR scorer walks toward the orphaned channels' content *sources*
-    (the replacement candidates) — which under the citation orientation
-    (amplifier→source) means following out-edges from the seeds."""
-
-    def test_default_orientation_ranks_source_above_downstream_amplifier(self) -> None:
-        # Citation orientation: 1 forwards from 2 (edge 1→2), and 3 forwards
-        # from 1 (edge 3→1). Seeding PPR at 1 must surface the source (2)
-        # above the downstream amplifier (3).
-        g = nx.DiGraph()
-        g.add_edge("1", "2")
-        g.add_edge("3", "1")
-        scores = _scores_ppr(g, {1: "1", 2: "2", 3: "3"}, {1}, [2, 3], 0.85)
-        self.assertGreater(scores[2], scores[3])

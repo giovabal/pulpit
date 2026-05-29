@@ -10,23 +10,15 @@ from typing import Any, Callable
 
 from django.db.models import Count, Max, Min
 
-from network.measures._spreading import sir_ever_infected
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
 
-import networkx as nx
-import numpy as np
-
-VALID_VACANCY_MEASURES: frozenset[str] = frozenset(
-    {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "CASCADE_OVERLAP", "PPR", "TEMPORAL"}
-)
+VALID_VACANCY_MEASURES: frozenset[str] = frozenset({"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "TEMPORAL"})
 
 ALL_VACANCY_MEASURES: list[str] = [
     "AMPLIFIER_JACCARD",
     "STRUCTURAL_EQUIV",
     "BROKERAGE",
-    "CASCADE_OVERLAP",
-    "PPR",
     "TEMPORAL",
 ]
 
@@ -34,12 +26,8 @@ MEASURE_LABELS: dict[str, str] = {
     "AMPLIFIER_JACCARD": "Amplifier Coverage",
     "STRUCTURAL_EQUIV": "Neighbour-set Equivalence",
     "BROKERAGE": "Brokerage overlap",
-    "CASCADE_OVERLAP": "Cascade Overlap (SIR)",
-    "PPR": "Pers. PageRank",
     "TEMPORAL": "Temporal Adoption",
 }
-
-_SIR_REACH_THRESHOLD = 0.25  # fraction of runs a node must be infected to count as "reached"
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -62,66 +50,6 @@ def _cosine(a: set, b: set) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / (math.sqrt(len(a)) * math.sqrt(len(b)))
-
-
-# ── SIR for Cascade Overlap ───────────────────────────────────────────────────
-
-
-def _build_spread_adj(
-    channel_pks: list[int],
-    date_from: datetime.datetime,
-    date_to: datetime.datetime,
-) -> tuple[dict[int, list[tuple[int, float]]], set[int]]:
-    """
-    Build spread adjacency: source_pk → [(amplifier_pk, weight), …]
-
-    Direction matches information flow: source is forwarded by amplifier.
-    Weight = forward_count_by_amplifier / total_forwards_by_amplifier in window.
-    """
-    if date_from >= date_to or not channel_pks:
-        return {pk: [] for pk in channel_pks}, set(channel_pks)
-
-    rows = list(
-        Message.objects.alive()
-        .filter(
-            channel__in=channel_pks,
-            forwarded_from__in=channel_pks,
-            date__gte=date_from,
-            date__lt=date_to,
-        )
-        .filter(channel_cutoff_q())
-        .values("channel_id", "forwarded_from_id")
-        .annotate(count=Count("id"))
-    )
-
-    total_per_amplifier: dict[int, int] = defaultdict(int)
-    for r in rows:
-        total_per_amplifier[r["channel_id"]] += r["count"]
-
-    adj: dict[int, list[tuple[int, float]]] = {pk: [] for pk in channel_pks}
-    for r in rows:
-        w = r["count"] / total_per_amplifier[r["channel_id"]]
-        adj.setdefault(r["forwarded_from_id"], []).append((r["channel_id"], min(w, 1.0)))
-
-    return adj, set(channel_pks)
-
-
-def _majority_reach(
-    adj: dict[int, list[tuple[int, float]]],
-    all_nodes: set[int],
-    seed: int,
-    runs: int,
-    rng: np.random.Generator,
-) -> frozenset[int]:
-    """Run SIR `runs` times from seed; return nodes infected in ≥ threshold fraction of runs."""
-    if seed not in all_nodes:
-        return frozenset()
-    counts: dict[int, int] = defaultdict(int)
-    for _ in range(runs):
-        for n in sir_ever_infected(adj, seed, rng, universe=all_nodes):
-            counts[n] += 1
-    min_count = max(1, int(runs * _SIR_REACH_THRESHOLD))
-    return frozenset(n for n, c in counts.items() if c >= min_count and n != seed)
 
 
 # ── Per-algorithm scorers ─────────────────────────────────────────────────────
@@ -286,75 +214,6 @@ def _scores_abc(
     return result
 
 
-def _scores_cascade(
-    vacancy_pk: int,
-    candidate_pks: list[int],
-    all_channel_pks: list[int],
-    before_start: datetime.datetime,
-    closure_dt: datetime.datetime,
-    after_end: datetime.datetime,
-    sir_runs: int,
-    rng: np.random.Generator,
-) -> dict[int, float]:
-    """Cascade Overlap: Jaccard similarity of SIR content-reach sets (vacancy before vs candidate after)."""
-    before_channels = list({*all_channel_pks, vacancy_pk})
-    before_adj, before_nodes = _build_spread_adj(before_channels, before_start, closure_dt)
-    after_channels = [pk for pk in all_channel_pks if pk != vacancy_pk]
-    after_adj, after_nodes = _build_spread_adj(after_channels, closure_dt, after_end)
-
-    v_reach = _majority_reach(before_adj, before_nodes, vacancy_pk, sir_runs, rng)
-    if not v_reach:
-        return dict.fromkeys(candidate_pks, 0.0)
-
-    scores: dict[int, float] = {}
-    for cid in candidate_pks:
-        c_reach = _majority_reach(after_adj, after_nodes, cid, sir_runs, rng)
-        intersection = len(v_reach & c_reach)
-        union = len(v_reach | c_reach)
-        scores[cid] = round(intersection / union, 3) if union else 0.0
-
-    return scores
-
-
-def _scores_ppr(
-    graph: nx.DiGraph,
-    pk_to_node: dict[int, str],
-    orphaned_pks: set[int],
-    candidate_pks: list[int],
-    ppr_alpha: float,
-) -> dict[int, float]:
-    """
-    Personalized PageRank seeded at the orphaned amplifiers, walking toward the
-    channels they forward *from* — their content sources, which is exactly the pool
-    the replacement candidates are drawn from.
-
-    Personalized PageRank propagates mass along **out-edges** from the seed set, so
-    the walk needs an orientation where a content source is an *out*-neighbour of its
-    amplifiers. ``build_graph`` writes edges amplifier→source (citation convention),
-    which is exactly that orientation — so the walk runs on ``graph`` as-is. Candidates
-    with high PPR sit in the same upstream supply chain as the vacancy.
-    """
-    orphaned_nodes = [pk_to_node[pk] for pk in orphaned_pks if pk in pk_to_node]
-    if not orphaned_nodes or graph.number_of_nodes() <= 1:
-        return dict.fromkeys(candidate_pks, 0.0)
-
-    per_node = 1.0 / len(orphaned_nodes)
-    personalization = dict.fromkeys(graph.nodes(), 0.0)
-    for n in orphaned_nodes:
-        personalization[n] = per_node
-
-    try:
-        ppr = nx.pagerank(graph, alpha=ppr_alpha, personalization=personalization, max_iter=200, tol=1e-6)
-    except nx.PowerIterationFailedConvergence:
-        return dict.fromkeys(candidate_pks, 0.0)
-
-    raw = {cid: ppr.get(pk_to_node.get(cid, ""), 0.0) for cid in candidate_pks}
-    max_val = max(raw.values(), default=0.0)
-    if max_val <= 0.0:
-        return dict.fromkeys(candidate_pks, 0.0)
-    return {cid: round(v / max_val, 3) for cid, v in raw.items()}
-
-
 def _scores_temporal(
     orphaned_pks: set[int],
     candidate_pks: list[int],
@@ -418,16 +277,10 @@ def _scores_temporal(
 
 def _analyze_vacancy(
     vac: "ChannelVacancy",
-    graph: nx.DiGraph,
-    pk_to_node: dict[int, str],
-    all_channel_pks: list[int],
     selected_measures: set[str],
     months_before: int,
     months_after: int,
     max_candidates: int,
-    sir_runs: int,
-    ppr_alpha: float,
-    rng: np.random.Generator,
 ) -> dict[str, Any]:
     ch = vac.channel
     closure_date = vac.closure_date
@@ -488,16 +341,6 @@ def _analyze_vacancy(
         for cid, s in _scores_abc(ch.pk, orphaned_pks, cand_pks, before_start, closure_dt, after_end, abc_sel).items():
             score_map[cid].update(s)
 
-    if "CASCADE_OVERLAP" in selected_measures:
-        for cid, s in _scores_cascade(
-            ch.pk, cand_pks, all_channel_pks, before_start, closure_dt, after_end, sir_runs, rng
-        ).items():
-            score_map[cid]["CASCADE_OVERLAP"] = s
-
-    if "PPR" in selected_measures:
-        for cid, s in _scores_ppr(graph, pk_to_node, orphaned_pks, cand_pks, ppr_alpha).items():
-            score_map[cid]["PPR"] = s
-
     if "TEMPORAL" in selected_measures:
         for cid, s in _scores_temporal(orphaned_pks, cand_pks, closure_dt, after_end).items():
             score_map[cid]["TEMPORAL"] = s
@@ -540,14 +383,10 @@ def _analyze_vacancy(
 
 
 def compute_vacancy_analysis(
-    graph: nx.DiGraph,
-    channel_dict: dict[str, Any],
     selected_measures: set[str],
     months_before: int = 12,
     months_after: int = 24,
     max_candidates: int = 30,
-    sir_runs: int = 200,
-    ppr_alpha: float = 0.85,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Score replacement candidates for all vacancies.
@@ -555,11 +394,6 @@ def compute_vacancy_analysis(
     Returns a payload dict suitable for serialisation to vacancy_analysis.json.
     """
     vacancies = list(ChannelVacancy.objects.select_related("channel").all())
-
-    pk_to_node: dict[int, str] = {data["channel"].pk: node_id for node_id, data in channel_dict.items()}
-    all_channel_pks: list[int] = [data["channel"].pk for data in channel_dict.values()]
-
-    rng = np.random.default_rng(42)
     results: list[dict[str, Any]] = []
 
     for vac in vacancies:
@@ -568,16 +402,10 @@ def compute_vacancy_analysis(
         results.append(
             _analyze_vacancy(
                 vac,
-                graph,
-                pk_to_node,
-                all_channel_pks,
                 selected_measures,
                 months_before,
                 months_after,
                 max_candidates,
-                sir_runs,
-                ppr_alpha,
-                rng,
             )
         )
 

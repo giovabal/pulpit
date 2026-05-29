@@ -125,7 +125,6 @@ class OperationsView(View):
             "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
             "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
             "SA_VACANCY_MAX_CANDIDATES": settings.SA_VACANCY_MAX_CANDIDATES,
-            "SA_VACANCY_PPR_ALPHA": settings.SA_VACANCY_PPR_ALPHA,
             # SA robustness params
             "SA_ROBUSTNESS": settings.SA_ROBUSTNESS,
             "SA_ROBUSTNESS_ALPHA": settings.SA_ROBUSTNESS_ALPHA,
@@ -605,7 +604,6 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "vacancy_months_before", "--vacancy-months-before"),
         ("value", "vacancy_months_after", "--vacancy-months-after"),
         ("value", "vacancy_max_candidates", "--vacancy-max-candidates"),
-        ("value", "vacancy_ppr_alpha", "--vacancy-ppr-alpha"),
         ("value", "robustness_alpha", "--robustness-alpha"),
         ("robustness_strategies", "--robustness-strategies"),
         ("value", "robustness_runs", "--robustness-runs"),
@@ -710,7 +708,6 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("vacancy_months_before", "vacancy.months_before", "int"),
         ("vacancy_months_after", "vacancy.months_after", "int"),
         ("vacancy_max_candidates", "vacancy.max_candidates", "int"),
-        ("vacancy_ppr_alpha", "vacancy.ppr_alpha", "float"),
         ("robustness_alpha", "robustness.alpha", "float"),
         ("robustness_strategies", "robustness.strategies", "list"),
         ("robustness_runs", "robustness.runs", "int"),

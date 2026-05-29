@@ -411,7 +411,6 @@ SA_VACANCY_MEASURES = ",".join(_structural.vacancy.measures)
 SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before
 SA_VACANCY_MONTHS_AFTER = _structural.vacancy.months_after
 SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
-SA_VACANCY_PPR_ALPHA = _structural.vacancy.ppr_alpha
 # Derived: robustness runs iff at least one strategy is configured. A separate
 # file-level "enabled" key would drift from the strategy list (no separate
 # enable knob in the Operations panel).

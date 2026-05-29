@@ -216,7 +216,6 @@ class ResolvedOptions:
     vacancy_months_before: int = 0
     vacancy_months_after: int = 0
     vacancy_max_candidates: int = 0
-    vacancy_ppr_alpha: float = 0.85
 
     # Robustness analysis
     do_robustness: bool = False
@@ -273,7 +272,6 @@ class ResolvedOptions:
             "vacancy_months_before": self.vacancy_months_before,
             "vacancy_months_after": self.vacancy_months_after,
             "vacancy_max_candidates": self.vacancy_max_candidates,
-            "vacancy_ppr_alpha": self.vacancy_ppr_alpha,
             "robustness": self.do_robustness,
             "robustness_alpha": self.robustness_alpha,
             "robustness_strategies": ",".join(self.robustness_strategies) if self.robustness_strategies else "",
@@ -687,8 +685,7 @@ class Command(BaseCommand):
             metavar="MEASURES",
             help=(
                 "Comma-separated list of vacancy succession algorithms to compute. "
-                "Available: AMPLIFIER_JACCARD, STRUCTURAL_EQUIV, BROKERAGE, "
-                "CASCADE_OVERLAP, PPR, TEMPORAL, ALL. "
+                "Available: AMPLIFIER_JACCARD, STRUCTURAL_EQUIV, BROKERAGE, TEMPORAL, ALL. "
                 "When at least one is selected, data/vacancy_analysis.json and "
                 "vacancy_analysis.html are written for all vacancies in the database. "
                 "Default: none (vacancy analysis disabled)."
@@ -717,17 +714,6 @@ class Command(BaseCommand):
             default=None,
             metavar="N",
             help="Maximum replacement candidates scored per vacancy. Default: 30.",
-        )
-        parser.add_argument(
-            "--vacancy-ppr-alpha",
-            dest="vacancy_ppr_alpha",
-            type=float,
-            default=None,
-            metavar="α",
-            help=(
-                "Damping factor for Personalized PageRank (PPR measure). "
-                "Higher values weight long-range connections more. Default: 0.85."
-            ),
         )
         # ── Robustness analysis ───────────────────────────────────────────────
         parser.add_argument(
@@ -1610,7 +1596,6 @@ class Command(BaseCommand):
             vacancy_months_before=_o("vacancy_months_before", 12),
             vacancy_months_after=_o("vacancy_months_after", 24),
             vacancy_max_candidates=_o("vacancy_max_candidates", 30),
-            vacancy_ppr_alpha=_o("vacancy_ppr_alpha", 0.85),
             do_robustness=do_robustness,
             robustness_alpha=_o("robustness_alpha", 0.05),
             robustness_strategies=robustness_strategies,
@@ -1914,14 +1899,10 @@ class Command(BaseCommand):
                 self.stdout.flush()
 
             vac_payload = vacancy_analysis.compute_vacancy_analysis(
-                graph=graph,
-                channel_dict=channel_dict,
                 selected_measures=opts.selected_vacancy_measures,
                 months_before=opts.vacancy_months_before,
                 months_after=opts.vacancy_months_after,
                 max_candidates=opts.vacancy_max_candidates,
-                sir_runs=opts.spreading_runs,
-                ppr_alpha=opts.vacancy_ppr_alpha,
                 progress_callback=_vac_progress,
             )
             if _vac_n[0] > 0:
