@@ -40,19 +40,6 @@ BASE_ID = "base"
 _TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 
 
-def optional_int(value):
-    """Normalise empty/blank/None/'none' to None; otherwise coerce to int.
-
-    The "blank means None" sentinel lets a TOML knob carry an "unset" state
-    (TOML can't encode `None`).
-    """
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in {"none", ""}:
-        return None
-    return int(value)
-
-
 def _deep_merge(base: dict, overlay: dict) -> dict:
     out = dict(base)
     for k, v in overlay.items():

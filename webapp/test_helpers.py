@@ -33,8 +33,6 @@ def make_channel(
     **kwargs,
 ) -> Channel:
     """Create a Channel and, when ``organization`` is given, one attribution period."""
-    # ``out_of_target_after`` used to be a Channel field; map a legacy kwarg onto the period end.
-    attribution_end = kwargs.pop("out_of_target_after", attribution_end)
     channel = Channel.objects.create(**kwargs)
     if organization is not None:
         attribute(channel, organization, attribution_start, attribution_end)

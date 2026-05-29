@@ -139,11 +139,6 @@ def forceatlas2_positions(graph: nx.DiGraph, initial_pos: dict, iterations: int 
     )
 
 
-def compute_layout(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float]]:
-    """Run Kamada-Kawai then ForceAtlas2 on *graph*; return positions keyed by node pk."""
-    return forceatlas2_positions(graph, kamada_kawai_positions(graph), iterations)
-
-
 _EXTRA_LAYOUT_SCALE = 500.0
 
 
@@ -402,8 +397,3 @@ def forceatlas2_positions_3d(
     return _build_forceatlas2(dim=3).forceatlas2_networkx_layout(
         graph.to_undirected(), pos=initial_pos, iterations=iterations
     )
-
-
-def compute_layout_3d(graph: nx.DiGraph, iterations: int = 10) -> dict[str, tuple[float, float, float]]:
-    """Run Kamada-Kawai then ForceAtlas2 in 3D on *graph*; return 3D positions keyed by node id."""
-    return forceatlas2_positions_3d(graph, kamada_kawai_positions_3d(graph), iterations)

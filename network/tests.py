@@ -35,7 +35,6 @@ from network.exporter import (
     write_graph_files,
 )
 from network.graph_builder import build_graph, resolve_window_organization
-from network.layout import compute_layout
 from network.measures import (
     apply_amplification_factor,
     apply_base_node_measures,
@@ -1049,36 +1048,6 @@ class WriteGraphFilesTests(TestCase):
             with open(os.path.join(tmpdir, "data", "channels.json")) as f:
                 acc_data = json.load(f)
             self.assertEqual(acc_data["total_pages_count"], self.channel_qs.count())
-
-
-# ---------------------------------------------------------------------------
-# layout.py — compute_layout
-# ---------------------------------------------------------------------------
-
-
-class ComputeLayoutTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_nodes_from(["a", "b", "c"])
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a")])
-
-    def test_returns_positions_for_all_nodes(self) -> None:
-        positions = compute_layout(self.graph, iterations=10)
-        self.assertEqual(set(positions.keys()), set(self.graph.nodes()))
-
-    def test_positions_are_float_tuples(self) -> None:
-        positions = compute_layout(self.graph, iterations=10)
-        for _node_id, pos in positions.items():
-            self.assertIsInstance(pos, tuple)
-            self.assertEqual(len(pos), 2)
-            self.assertIsInstance(pos[0], float)
-            self.assertIsInstance(pos[1], float)
-
-    def test_single_node_graph_gets_position(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_node("solo")
-        positions = compute_layout(graph, iterations=5)
-        self.assertIn("solo", positions)
 
 
 # ---------------------------------------------------------------------------
