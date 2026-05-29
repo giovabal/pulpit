@@ -531,15 +531,27 @@ def detect_infomap_memory(
 def detect_walktrap(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Walktrap community detection — Pons & Latapy 2005.
+    """Walktrap — Pons & Latapy (ISCIS 2005, *LNCS* 3733; extended in *JGAA* 2006).
 
-    Computes short random-walk distances between nodes (default 4 steps): two
-    nodes are considered similar if a random walker starting at one tends to
-    visit the other within a few hops.  Ward's agglomerative clustering is then
-    applied to these distances, producing a full dendrogram that is cut at the
-    partition maximising modularity.
+    For each node u, builds the probability distribution P_u over where a
+    random walker of length t=4 (the library default) ends up; two nodes are
+    similar when their distributions are close in a degree-weighted L²
+    distance. Ward's method merges nodes bottom-up by minimum distance into
+    a dendrogram, which ``.as_clustering()`` cuts at the modularity-
+    maximising level. The distinctive property is that two nodes with no
+    direct edge between them can still cluster together when their walk
+    distributions converge on the same neighbours — shared-neighbourhood
+    structure drives the partition, not just direct edge density.
 
-    The graph is symmetrised to undirected before clustering (same as LEIDEN).
+    Graph is symmetrised via ``to_undirected_sum`` (W+Wᵀ, same projection as
+    ``LEIDEN``/``LOUVAIN``/``LABELPROPAGATION``/``KCORE``), so citation
+    direction is not preserved. Edge weights are honoured —
+    ``community_walktrap`` accepts weighted walks. The modularity cut means
+    Walktrap inherits the Fortunato-Barthélemy resolution limit *at the
+    cut step* even though the random-walk distance itself has no such
+    limit. Pulpit consumes only the flat partition; the dendrogram is built
+    internally by igraph but is not exported or visualised. Fully
+    deterministic given the input weights; no random seed.
     """
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
