@@ -10,8 +10,8 @@ export var STRATEGY_LABELS = {
     infomap_memory:    'Infomap memory',
     mcl:               'MCL',
     walktrap:          'Walktrap',
-    weakcc:            'Weak connected components',
-    strongcc:          'Strong connected components',
+    weakcc:            'Weakly connected components',
+    strongcc:          'Strongly connected components',
 };
 
 export function strategy_label(key) {
