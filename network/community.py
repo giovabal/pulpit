@@ -254,6 +254,17 @@ def detect_kcore(
 def detect_infomap(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
+    """First-order Infomap — Rosvall & Bergstrom (PNAS 2008); map equation Rosvall, Axelsson & Bergstrom (EPJ ST 2009).
+
+    Minimises the map equation L(M) for a flat (``--two-level``) partition of a
+    random walker on the directed citation graph. Edges keep Pulpit's as-built
+    amplifier→source orientation (``--directed``, no symmetrisation); edge
+    weights from ``--edge-weight-strategy`` are passed through ``addLink`` and
+    shape the partition. Truly isolated nodes — those Infomap leaves out of
+    every module — are folded into one fallback community so they still
+    receive a label (``merge_isolated=False`` skips the usual isolated-node
+    bundling because the fallback already covers them).
+    """
     node_ids, node_id_map = _node_id_index(graph)
     # seed=123 pins reproducibility for parity with the other seeded detectors
     # (Leiden/Louvain seed=0, Memory Infomap seed=123); it matches Infomap's own
