@@ -89,14 +89,12 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM_COARSE",
     "LEIDEN_CPM_FINE",
-    "LOUVAIN",
     "LABELPROPAGATION",
     "KCORE",
     "INFOMAP",
     "INFOMAP_MEMORY",
     "MCL",
     "WALKTRAP",
-    "WEAKCC",
     "STRONGCC",
 ]
 

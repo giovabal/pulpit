@@ -44,7 +44,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 **About communities:**
 
-- How does the network cluster when the citation data decides the boundaries — not your own labels? *([Leiden](docs/community-detection.md#leiden), [Louvain](docs/community-detection.md#louvain), [Infomap](docs/community-detection.md#infomap), [MCL](docs/community-detection.md#mcl-markov-clustering), and more)*
+- How does the network cluster when the citation data decides the boundaries — not your own labels? *([Leiden](docs/community-detection.md#leiden), [Infomap](docs/community-detection.md#infomap), [MCL](docs/community-detection.md#mcl-markov-clustering), and more)*
 - Which channels form a genuine echo chamber — where content circulates in a closed loop and almost never escapes? *([Infomap](docs/community-detection.md#infomap), [Strongly Connected Components](docs/community-detection.md#strongly-connected-components-strongcc))*
 - Which community detection algorithms agree on a grouping, and which disagree? *([Consensus matrix](docs/community-detection.md#consensus-matrix))*
 - How cohesive or competitive are the communities? How much do they interact? *([E-I Index, Modularity](docs/whole-network-statistics.md))*
@@ -168,9 +168,9 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 13 algorithms and one custom selection
+## Community detection — 11 algorithms and one custom selection
 
-Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to 11 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
@@ -179,14 +179,12 @@ Pulpit runs up to 13 community detection algorithms simultaneously. Each reveals
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
 | [Leiden CPM coarse](docs/community-detection.md#leiden-cpm-coarse-and-fine) | Few, large communities — even weak citation ties bind | No |
 | [Leiden CPM fine](docs/community-detection.md#leiden-cpm-coarse-and-fine) | More, smaller communities — only dense mutual citation | No |
-| [Louvain](docs/community-detection.md#louvain) | Modularity maximisation — fast, widely used baseline | No |
 | [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
 | [Infomap](docs/community-detection.md#infomap) | Echo chambers: communities where information circulates in closed loops | Yes |
 | [Memory Infomap](docs/community-detection.md#memory-infomap-second-order) | Second-order Infomap: path-dependent flow traps invisible to first-order methods | Yes |
 | [MCL](docs/community-detection.md#mcl-markov-clustering) | Flow-based communities: channels bound by shared circulation patterns | Yes |
 | [Walktrap](docs/community-detection.md#walktrap) | Proximity by shared neighbourhood — also produces a full dendrogram | No |
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
-| [Weakly connected](docs/community-detection.md#weakly-connected-components-weakcc) | Structurally isolated sub-ecosystems with no cross-referencing links | No |
 | [Strongly connected](docs/community-detection.md#strongly-connected-components-strongcc) | Mutually reinforcing circular cores — coordinated circular amplification | Yes |
 
 The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates all non-Organization strategies into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.

@@ -94,7 +94,7 @@ def _pick_interest_community_strategy(strategies: list[str]) -> str:
     resort. The chosen strategy must be one of those already requested via
     ``--community-strategies`` so its labels are present on the graph.
     """
-    preference = ["LEIDEN_DIRECTED", "LEIDEN", "LOUVAIN", "INFOMAP", "LEIDEN_CPM_FINE", "LEIDEN_CPM_COARSE"]
+    preference = ["LEIDEN_DIRECTED", "LEIDEN", "INFOMAP", "LEIDEN_CPM_FINE", "LEIDEN_CPM_COARSE"]
     for candidate in preference:
         if candidate in strategies:
             return candidate
@@ -437,7 +437,7 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LOUVAIN, KCORE, INFOMAP, ALL. "
+                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, ALL. "
                 "Default: ORGANIZATION."
             ),
         )
@@ -787,7 +787,7 @@ class Command(BaseCommand):
                 "Use ALL for every strategy. "
                 "Default: random,in_strength,out_strength,pagerank,betweenness. "
                 "Bridging defaults to leiden_directed as the community basis (directional brokerage); "
-                "bridging(louvain) etc. picks a different one. "
+                "bridging(leiden) etc. picks a different one. "
                 "At least one strategy must be selected."
             ),
         )

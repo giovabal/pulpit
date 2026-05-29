@@ -286,7 +286,7 @@ python manage.py structural_analysis --robustness --robustness-alpha 0        # 
 python manage.py structural_analysis --robustness --robustness-null 0         # observed R only, no null model (no z-scores)
 python manage.py structural_analysis --robustness --robustness-strategies ALL          # every available strategy (including dynamic)
 python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging,harmonic,spreading   # custom subset
-python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging\(louvain\)  # explicit bridging basis (escape parens in bash)
+python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging\(leiden\)  # explicit bridging basis (escape parens in bash)
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 
 # Interesting messages — structural reach layer (hot per-channel z-scores are always on)

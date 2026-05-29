@@ -219,7 +219,7 @@ def community_shell_positions(
     ``{STRATEGY_NAME: (community_map, palette)}`` where *community_map* is
     ``{node_id: community_label}``.
     """
-    preferred = ["LEIDEN", "LOUVAIN", "LABELPROPAGATION"]
+    preferred = ["LEIDEN", "LEIDEN_DIRECTED", "LABELPROPAGATION"]
     community_map: dict | None = None
     for key in preferred:
         if key in strategy_results:

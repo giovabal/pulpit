@@ -18,7 +18,6 @@ from network.community import (
     detect_kcore,
     detect_label_propagation,
     detect_leiden,
-    detect_louvain,
     detect_organization,
     normalize_community_map,
 )
@@ -110,7 +109,7 @@ class NormalizeCommunityMapTests(TestCase):
 
 class BuildCommunityLabelTests(TestCase):
     def test_integer_id_with_algorithm_strategy(self) -> None:
-        self.assertEqual(build_community_label(1, "LOUVAIN"), "1-louvain")
+        self.assertEqual(build_community_label(1, "LEIDEN"), "1-leiden")
 
     def test_string_id_with_organization_strategy(self) -> None:
         self.assertEqual(build_community_label("my-org", "ORGANIZATION"), "my-org-organization")
@@ -257,39 +256,6 @@ class DetectLabelPropagationTests(TestCase):
             self.assertIn(community_id, palette)
 
 
-# community.py — detect_louvain
-# ---------------------------------------------------------------------------
-
-
-class DetectLouvainTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_nodes_from(["a", "b", "c", "d"])
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("d", "a")])
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_louvain(self.graph, "SomePalette")
-        self.assertIsInstance(community_map, dict)
-        self.assertIsInstance(palette, dict)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_louvain(self.graph, "SomePalette")
-        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_louvain(self.graph, "SomePalette")
-        self.assertGreaterEqual(min(community_map.values()), 1)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_louvain(self.graph, "SomePalette")
-        for community_id in community_map.values():
-            self.assertIn(community_id, palette)
-
-
 # ---------------------------------------------------------------------------
 # community.py — detect_kcore
 # ---------------------------------------------------------------------------
@@ -338,31 +304,31 @@ class ApplyToGraphTests(TestCase):
         }
 
     def test_sets_communities_on_graph_nodes(self) -> None:
-        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
+        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LEIDEN")
         for node_id in ["1", "2"]:
             self.assertIn("communities", self.graph.nodes[node_id]["data"])
 
     def test_sets_color_on_graph_nodes(self) -> None:
-        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
+        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LEIDEN")
         for node_id in ["1", "2"]:
             color = self.graph.nodes[node_id]["data"]["color"]
             self.assertIsInstance(color, str)
             self.assertEqual(len(color.split(",")), 3)  # "r,g,b" format
 
     def test_updates_channel_dict_with_communities_and_color(self) -> None:
-        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
+        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LEIDEN")
         for key in ["1", "2"]:
             self.assertIn("communities", self.channel_dict[key]["data"])
             self.assertIn("color", self.channel_dict[key]["data"])
 
-    def test_louvain_community_label_includes_community_id_and_strategy(self) -> None:
-        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LOUVAIN")
-        self.assertEqual(self.graph.nodes["1"]["data"]["communities"]["louvain"], "1-louvain")
-        self.assertEqual(self.graph.nodes["2"]["data"]["communities"]["louvain"], "2-louvain")
+    def test_algorithm_community_label_includes_community_id_and_strategy(self) -> None:
+        apply_to_graph(self.graph, self.channel_dict, self.community_map, self.community_palette, "LEIDEN")
+        self.assertEqual(self.graph.nodes["1"]["data"]["communities"]["leiden"], "1-leiden")
+        self.assertEqual(self.graph.nodes["2"]["data"]["communities"]["leiden"], "2-leiden")
 
     def test_node_without_community_gets_fallback_color(self) -> None:
         # community_map is empty → no community assigned → nodes use DEFAULT_FALLBACK_COLOR
-        apply_to_graph(self.graph, self.channel_dict, {}, self.community_palette, "LOUVAIN")
+        apply_to_graph(self.graph, self.channel_dict, {}, self.community_palette, "LEIDEN")
         for node_id in ["1", "2"]:
             color = self.graph.nodes[node_id]["data"]["color"]
             self.assertIsInstance(color, str)
@@ -422,17 +388,17 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_algorithm_strategy_builds_groups_from_community_map(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 2}
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LOUVAIN"], {"LOUVAIN": (community_map, community_palette)})
-        self.assertIn("louvain", result)
-        self.assertIn("groups", result["louvain"])
-        self.assertIn("main_groups", result["louvain"])
-        self.assertEqual(len(result["louvain"]["groups"]), 2)
+        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        self.assertIn("leiden", result)
+        self.assertIn("groups", result["leiden"])
+        self.assertIn("main_groups", result["leiden"])
+        self.assertEqual(len(result["leiden"]["groups"]), 2)
 
     def test_groups_sorted_by_count_descending(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 1, "d": 2}  # community 1: 3 nodes, 2: 1 node
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LOUVAIN"], {"LOUVAIN": (community_map, community_palette)})
-        counts = [g[1] for g in result["louvain"]["groups"]]
+        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        counts = [g[1] for g in result["leiden"]["groups"]]
         self.assertEqual(counts, sorted(counts, reverse=True))
 
     def test_algorithm_main_groups_maps_id_to_label(self) -> None:
@@ -465,11 +431,11 @@ class BuildCommunitiesPayloadTests(TestCase):
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
         results = {
-            "LOUVAIN": (community_map, community_palette),
+            "LEIDEN": (community_map, community_palette),
             "KCORE": (community_map, community_palette),
         }
-        result = build_communities_payload(["LOUVAIN", "KCORE"], results)
-        self.assertIn("louvain", result)
+        result = build_communities_payload(["LEIDEN", "KCORE"], results)
+        self.assertIn("leiden", result)
         self.assertIn("kcore", result)
 
 
@@ -732,7 +698,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
         "pk": "1",
         "label": "Ch1",
         "organization": "Org A",
-        "communities": {"louvain": "1-louvain"},
+        "communities": {"leiden": "1-leiden"},
         "color": "255,0,0",
         "pic": "",
         "url": "https://t.me/ch1",
@@ -748,7 +714,7 @@ def _make_graph_with_positions() -> tuple[nx.DiGraph, dict, dict[str, tuple[floa
         "pk": "2",
         "label": "Ch2",
         "organization": "Org B",
-        "communities": {"louvain": "2-louvain"},
+        "communities": {"leiden": "2-leiden"},
         "color": "0,0,255",
         "pic": "",
         "url": "https://t.me/ch2",
@@ -1049,9 +1015,9 @@ class WriteGraphFilesTests(TestCase):
         self.channel_qs = Channel.objects.filter(pk=self.ch.pk)
         self.graph_data = {"nodes": [{"id": "1", "x": 0.0, "y": 0.0}], "edges": []}
         self.communities_data = {
-            "louvain": {
-                "main_groups": {"1": "1-louvain"},
-                "groups": [("1", 5, "1-louvain", "#FF0000")],
+            "leiden": {
+                "main_groups": {"1": "1-leiden"},
+                "groups": [("1", 5, "1-leiden", "#FF0000")],
             }
         }
         self.measures_labels = [("in_deg", "Inbound connections"), ("pagerank", "PageRank")]
@@ -1242,14 +1208,6 @@ class DetectDispatcherTests(TestCase):
             str(self.ch1.pk): {"channel": self.ch1, "data": {}},
             str(self.ch2.pk): {"channel": self.ch2, "data": {}},
         }
-
-    @patch("network.community.detect_louvain")
-    def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
-        from network.community import detect
-
-        mock_detect.return_value = ({}, {})
-        detect("LOUVAIN", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_kcore")
     def test_kcore_strategy_calls_detect_kcore(self, mock_detect: MagicMock) -> None:
@@ -2010,19 +1968,19 @@ class ApplyCommunityBridgingTests(TestCase):
             ]
         )
         for node_id, comm in [("a", "X"), ("b", "X"), ("bridge", "Y"), ("c", "Y"), ("d", "Y")]:
-            self.graph.nodes[node_id]["data"] = {"communities": {"louvain": comm}}
+            self.graph.nodes[node_id]["data"] = {"communities": {"leiden": comm}}
         self.graph_data: dict = {
             "nodes": [{"id": n} for n in ["a", "b", "bridge", "c", "d"]],
             "edges": [],
         }
 
     def test_adds_community_bridging_key(self) -> None:
-        apply_community_bridging(self.graph_data, self.graph, "louvain")
+        apply_community_bridging(self.graph_data, self.graph, "leiden")
         for node in self.graph_data["nodes"]:
             self.assertIn("community_bridging", node)
 
     def test_bridge_node_scores_higher_than_within_community_node(self) -> None:
-        apply_community_bridging(self.graph_data, self.graph, "louvain")
+        apply_community_bridging(self.graph_data, self.graph, "leiden")
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
         # "bridge" connects both communities; "a" connects only within X
         self.assertGreater(node_map["bridge"]["community_bridging"], node_map["a"]["community_bridging"])
@@ -2969,7 +2927,7 @@ class RemovalOrderTests(TestCase):
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
         partition = {n: (n % 2) for n in g.nodes()}
-        order = removal_order(g, "bridging(louvain)", partitions={"louvain": partition})
+        order = removal_order(g, "bridging(leiden)", partitions={"leiden": partition})
         self.assertEqual(sorted(order), sorted(g.nodes()))
 
     def test_bridging_bare_defaults_to_leiden_directed(self) -> None:
@@ -2994,7 +2952,7 @@ class RemovalOrderTests(TestCase):
         with self.assertRaises(ValueError):
             removal_order(g, "bridging")  # no partitions kwarg
         with self.assertRaises(ValueError):
-            removal_order(g, "bridging(louvain)", partitions={"leiden": {"A": 0, "B": 0}})
+            removal_order(g, "bridging(kcore)", partitions={"leiden": {"A": 0, "B": 0}})
 
     def test_strategy_names_are_case_insensitive(self) -> None:
         from network.robustness import removal_order
@@ -3471,10 +3429,10 @@ class RobustnessRunnerTests(TestCase):
         from network.robustness import run_robustness
 
         g = self._toy_graph(n=10)
-        # bridging(louvain) requires "louvain" in partitions; we only supply "leiden".
+        # bridging(kcore) requires "kcore" in partitions; we only supply "leiden".
         partition = {n: (n % 2) for n in g.nodes()}
         with self.assertRaises(ValueError):
-            run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging(louvain)"]))
+            run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging(kcore)"]))
 
     def test_bridging_runs_with_matching_partition(self) -> None:
         from network.robustness import run_robustness

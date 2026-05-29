@@ -100,7 +100,7 @@ The circular layout assigns positions purely by rank along a circle, with no inf
 
 Community shells uses NetworkX's `shell_layout` algorithm with community assignments as input. The largest community occupies the outermost ring, progressively smaller communities fill inner rings, and isolated nodes sit in the centre. Each ring's nodes are arranged at equal angular intervals around their shell.
 
-Pulpit picks the community strategy in this order of preference: **LEIDEN → LOUVAIN → first available strategy**. If no community strategy has been computed, it falls back to a plain shell layout without community grouping.
+Pulpit picks the community strategy in this order of preference: **LEIDEN → LEIDEN_DIRECTED → first available strategy**. If no community strategy has been computed, it falls back to a plain shell layout without community grouping.
 
 **In practice:** community shells is the most *presentation-ready* layout. It makes community boundaries spatially unambiguous in a way that force-directed layouts cannot guarantee — communities that appear as overlapping blobs in FA2 are cleanly separated as distinct rings. Use it for reports, publications, or any situation where the audience needs to immediately understand which channels belong to which group.
 
