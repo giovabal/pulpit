@@ -425,14 +425,23 @@ def detect_mcl(
 def detect_infomap_memory(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Second-order (memory) Infomap — Rosvall et al., Nature Communications 2014.
+    """Second-order Infomap on a synthetic state network — Rosvall et al. (Nature Comms 2014); state-network API Edler, Bohlin & Rosvall (Algorithms 2017).
 
-    Builds a higher-order state network: each state node represents the context
-    "currently at channel B, having arrived from channel A".  The random walker
-    then follows the outgoing edges of B weighted by their actual citation
-    frequencies.  This captures sequential forwarding patterns that first-order
-    Infomap treats as independent.  Channels with no incoming edges receive a
-    virtual entry state so they participate in the flow.
+    Builds a state network where every directed edge A→B becomes a state node
+    ``(A, B)`` representing the context "currently at B, came from A". Pulpit
+    has no observed trigram data, so the transition ``(A, B) → (B, C)`` carries
+    the first-order edge weight ``w(B, C)`` regardless of A — the *outgoing*
+    step is memoryless. The variant still differs from first-order Infomap
+    because state nodes are clustered individually, so a hub B can be
+    reassigned to a different module than first-order picks based on the
+    topology of which neighbours feed its state nodes; the state-level
+    assignments are then collapsed back to physical channels by plurality vote.
+    Source channels (no incoming edges) receive a virtual entry state so they
+    participate in the flow; ``--recorded-teleportation`` keeps teleportation
+    events inside the description length, the stricter formulation needed for
+    directed networks. Truly isolated nodes (no state nodes at all) become
+    singleton communities — unlike ``detect_infomap``, which bundles them into
+    one shared fallback.
     """
     community_map: CommunityMap = {}
     node_ids, node_id_map = _node_id_index(graph)
