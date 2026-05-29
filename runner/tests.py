@@ -871,13 +871,13 @@ class BuildArgsStructuralRobustnessTests(TestCase):
             self.assertNotIn(flag, args)
 
     def test_strategy_checkboxes_imply_robustness_and_emit_csv(self) -> None:
-        post = FakePost({"robustness_strategies": ["pagerank", "betweenness_dyn", "hits_authority"]})
+        post = FakePost({"robustness_strategies": ["pagerank", "betweenness_dyn", "harmonic"]})
         args = _build_args("structural_analysis", post)
         self.assertIn("--robustness", args)
         self.assertNotIn("--no-robustness", args)
         self.assertIn("--robustness-strategies", args)
         idx = args.index("--robustness-strategies")
-        self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,hits_authority")
+        self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,harmonic")
 
     def test_bridging_basis_dropdown_rewrites_to_parenthesised_form(self) -> None:
         # The bridging-basis dropdown is shared between the BRIDGING measure and

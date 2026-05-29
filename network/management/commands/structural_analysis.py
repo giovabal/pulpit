@@ -781,11 +781,10 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of attack strategies to run. Any of: "
-                "random, in_strength, out_strength, pagerank, hits_hub, hits_authority, "
-                "harmonic, betweenness, burt_constraint, "
+                "random, in_strength, out_strength, pagerank, harmonic, betweenness, "
                 "bridging[(<community-strategy>)], spreading, and the dynamic variants "
-                "in_strength_dyn, out_strength_dyn, pagerank_dyn, hits_hub_dyn, "
-                "hits_authority_dyn, betweenness_dyn. Use ALL for every strategy. "
+                "in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn. "
+                "Use ALL for every strategy. "
                 "Default: random,in_strength,out_strength,pagerank,betweenness. "
                 "Bridging defaults to leiden_directed as the community basis (directional brokerage); "
                 "bridging(louvain) etc. picks a different one. "
