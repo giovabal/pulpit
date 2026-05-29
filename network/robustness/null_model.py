@@ -45,13 +45,14 @@ from collections.abc import Iterator
 import networkx as nx
 import numpy as np
 
+_IPF_ITERATIONS = 50
+
 
 def rewire_strength_preserving(
     G: nx.DiGraph,
     *,
     weight: str = "weight",
     n_swaps: int | None = None,
-    ipf_iterations: int = 50,
     rng: np.random.Generator | None = None,
 ) -> nx.DiGraph:
     """Return a randomised copy of *G* that preserves the in/out degree sequence
@@ -68,9 +69,9 @@ def rewire_strength_preserving(
        *attempts* and defaults to ``10 · |E|``.
     2. **Iterative proportional fitting** (Sinkhorn): alternately rescale every
        node's out-edges to its observed out-strength and in-edges to its observed
-       in-strength, for ``ipf_iterations`` rounds. Because the degree sequence is
-       preserved the system is feasible, so the rewired weights converge onto G's
-       strength sequence (and hence its total weight).
+       in-strength, for ``_IPF_ITERATIONS`` rounds. Because the degree sequence
+       is preserved the system is feasible, so the rewired weights converge onto
+       G's strength sequence (and hence its total weight).
 
     The result shares G's degree *and* strength sequences but not its wiring, so a
     robustness deviation from this null reflects higher-order structure rather than
@@ -116,7 +117,7 @@ def rewire_strength_preserving(
     # ── Stage 2: IPF rescaling onto the observed strength sequence ────────────
     target_out = dict(G.out_degree(weight=weight))
     target_in = dict(G.in_degree(weight=weight))
-    for _ in range(ipf_iterations):
+    for _ in range(_IPF_ITERATIONS):
         cur_out = dict(H.out_degree(weight=weight))
         for u in H.nodes():
             cur, tgt = cur_out.get(u, 0.0), target_out.get(u, 0.0)

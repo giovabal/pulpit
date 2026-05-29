@@ -17,7 +17,6 @@ from .loader import (
     load_payload_by_id,
     load_structural_payload,
     load_structural_settings,
-    optional_int,
     read_pulpit_version,
 )
 from .paths import (
@@ -67,7 +66,6 @@ __all__ = [
     "load_payload_by_id",
     "load_structural_payload",
     "load_structural_settings",
-    "optional_int",
     "read_pulpit_version",
     "save_named",
     "write_baseline",

@@ -78,26 +78,6 @@ class ChannelGroupViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return ChannelGroup.objects.annotate(channel_count=Count("channels")).order_by("name")
 
-    @action(detail=True, methods=["post"], url_path="channels")
-    def add_channels(self, request, pk=None):
-        ids = _validate_id_list(request.data.get("ids", []))
-        if ids is None:
-            return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
-        group = self.get_object()
-        channels = Channel.objects.filter(pk__in=ids)
-        group.channels.add(*channels)
-        return Response({"added": channels.count()})
-
-    @action(detail=True, methods=["delete"], url_path="channels")
-    def remove_channels(self, request, pk=None):
-        ids = _validate_id_list(request.data.get("ids", []))
-        if ids is None:
-            return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
-        group = self.get_object()
-        channels = Channel.objects.filter(pk__in=ids)
-        group.channels.remove(*channels)
-        return Response({"removed": channels.count()})
-
 
 class ChannelViewSet(
     mixins.ListModelMixin,

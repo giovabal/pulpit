@@ -158,14 +158,3 @@ def expand_colors(colors: Sequence[Any], count: int) -> list[Any]:
         return list(colors[:count])
     repeats = (count + len(colors) - 1) // len(colors)
     return (list(colors) * repeats)[:count]
-
-
-def average_color(colors: Sequence[Any]) -> ColorTuple:
-    if not colors:
-        return DEFAULT_FALLBACK_COLOR
-    totals = [0, 0, 0]
-    for color in colors:
-        for index, value in enumerate(parse_color(color)):
-            totals[index] += value
-    count = len(colors)
-    return tuple(int(total / count) for total in totals)

@@ -18,7 +18,7 @@ import datetime as _dt
 import os
 
 from .defaults import CRAWL_DEFAULTS, STRUCTURAL_DEFAULTS
-from .loader import BASE_ID, get_app_version
+from .loader import get_app_version
 from .paths import CONFIG_DIR, TASK_STEMS
 from .schema import (
     CRAWL_HEADER_COMMENT,
@@ -137,4 +137,4 @@ def _overlay_payload(doc: TOMLDocument, payload: dict) -> None:
 
 
 # Reserved id constants kept here so views can avoid magic strings.
-__all__ = ["save_named", "write_baseline", "BASE_ID"]
+__all__ = ["save_named", "write_baseline"]

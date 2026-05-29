@@ -30,11 +30,6 @@ def iter_hole_ranges(
         prev_id, prev_date = current_id, current_date
 
 
-def find_missing_message_ids(channel: Channel, min_telegram_id: int | None = None) -> list[int]:
-    """Return the list of telegram_ids that are absent from channel's stored messages."""
-    return [mid for start, end, _, _ in iter_hole_ranges(channel, min_telegram_id) for mid in range(start, end + 1)]
-
-
 def _gap_could_be_in_target(
     prev_date: datetime.datetime | None,
     current_date: datetime.datetime | None,

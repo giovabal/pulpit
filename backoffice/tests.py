@@ -236,29 +236,6 @@ class ChannelGroupViewSetTests(_ApiTestCase):
         group = next(g for g in resp.json()["results"] if g["name"] == "GroupA")
         self.assertEqual(group["channel_count"], 1)
 
-    def test_add_channels_action(self):
-        resp = self.jpost(_api(f"groups/{self.group.pk}/channels/"), {"ids": [self.ch1.pk, self.ch2.pk]})
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(self.group.channels.count(), 2)
-
-    def test_remove_channels_action(self):
-        # DRF 3.17 generates separate URL patterns for add_channels (POST) and
-        # remove_channels (DELETE) even though they share url_path="channels".
-        # Django routes to the first match (POST only), so DELETE returns 405
-        # through the URL router. Call the viewset method directly instead.
-        from backoffice.api.views import ChannelGroupViewSet
-
-        from rest_framework.test import APIRequestFactory
-
-        self.group.channels.add(self.ch1, self.ch2)
-        factory = APIRequestFactory()
-        request = factory.delete("/", json.dumps({"ids": [self.ch1.pk]}), content_type="application/json")
-        view = ChannelGroupViewSet.as_view({"delete": "remove_channels"})
-        resp = view(request, pk=self.group.pk)
-        self.assertEqual(resp.status_code, 200)
-        self.assertNotIn(self.ch1, self.group.channels.all())
-        self.assertIn(self.ch2, self.group.channels.all())
-
     def test_create_group(self):
         resp = self.jpost(_api("groups/"), {"name": "GroupB"})
         self.assertEqual(resp.status_code, 201)

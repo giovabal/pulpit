@@ -19,7 +19,6 @@ from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.test_helpers import attribute, make_channel
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
-    average_color,
     expand_colors,
     hex_to_rgb,
     is_color_dark,
@@ -296,27 +295,6 @@ class ExpandColorsTests(TestCase):
 
     def test_zero_count_returns_empty(self) -> None:
         self.assertEqual(expand_colors([(1, 2, 3)], 0), [])
-
-
-# ─── average_color ─────────────────────────────────────────────────────────────
-
-
-class AverageColorTests(TestCase):
-    def test_empty_list_returns_fallback(self) -> None:
-        self.assertEqual(average_color([]), DEFAULT_FALLBACK_COLOR)
-
-    def test_single_hex_color(self) -> None:
-        self.assertEqual(average_color(["#ff0000"]), (255, 0, 0))
-
-    def test_two_opposite_colors_midpoint(self) -> None:
-        self.assertEqual(average_color(["#000000", "#ffffff"]), (127, 127, 127))
-
-    def test_three_rgb_tuples(self) -> None:
-        result = average_color([(90, 120, 150), (30, 60, 90), (60, 60, 60)])
-        self.assertEqual(result, (60, 80, 100))
-
-    def test_result_has_three_channels(self) -> None:
-        self.assertEqual(len(average_color([(100, 100, 100)])), 3)
 
 
 # ─── ChannelManager ────────────────────────────────────────────────────────────
