@@ -68,50 +68,68 @@ Two well-known limitations are worth keeping in mind. First, modularity has a **
 
 ## Leiden
 
-*Leiden is a refinement of Louvain that guarantees each community is internally well-connected.*
+*Leiden refines Louvain by guaranteeing every detected community is internally well-connected — no node is left stranded in a group it does not actually belong to.*
 
-Louvain can produce internally disconnected communities — nodes loosely attached to a group they don't actually belong in. Leiden adds a local refinement phase after each merge step, breaking apart poorly integrated communities and reassigning nodes until every community is guaranteed to be well-connected. Like `LOUVAIN`, it operates on a symmetrised (undirected) view of the graph. Use `LEIDEN_DIRECTED` when citation direction matters.
+The Leiden algorithm replaces Louvain's two-phase local-move + aggregation cycle with three phases: local moves, a **refinement** step that subdivides poorly connected communities, and aggregation. The refinement is the load-bearing addition: after each merge the algorithm verifies that every community is internally connected and reassigns nodes that fail the test. The result is a partition that maximises modularity *and* guarantees that, within each community, every node is reachable from every other along internal edges only — a property Louvain's hill-climb does not preserve.
 
-**Reference:** Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z)
+Pulpit's `LEIDEN` runs the standard undirected modularity quality function `Q = (1/2m) Σᵢⱼ [Aᵢⱼ − kᵢkⱼ/(2m)] δ(σᵢ, σⱼ)` on the symmetrised view of the citation graph: each pair of channels with reciprocal forwards is collapsed to a single undirected edge whose weight is the **sum** of the two directional weights (`w(u→v) + w(v→u)`). Edge weights are honoured, so the chosen `--edge-weight-strategy` does affect the partition. The random seed is fixed at 0, so repeated exports of the same graph produce identical partitions. When citation direction is what carries the meaning, use [`LEIDEN_DIRECTED`](#leiden-directed) instead.
 
-**In practice:** Leiden produces sharper, more cohesive communities than Louvain, particularly in larger or noisier networks. It is a good default choice when Louvain's results feel fragmented or include suspiciously large catch-all communities.
+**References:**
+- Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the Leiden refinement and the connectivity guarantee.
+- Newman, M.E.J. & Girvan, M. (2004) "Finding and evaluating community structure in networks." *Physical Review E* 69, 026113. [doi:10.1103/PhysRevE.69.026113](https://doi.org/10.1103/PhysRevE.69.026113) — the modularity objective Leiden optimises.
+
+**In practice:** Leiden is the recommended default whenever you don't have a specific reason to honour citation direction. It produces sharper, more cohesive communities than `LOUVAIN` — particularly in larger or noisier networks where Louvain's internally-disconnected partitions become a concrete worry — and it is the reliable baseline against which `INFOMAP` (flow-based), `MCL` (matrix-based), and the CPM variants are compared in the consensus matrix and the Organization × community panel. When Leiden splits a category you treated as a single bloc, the network is telling you the bloc has internal substructure worth investigating.
+
+**Example.** A researcher monitors 200 channels labelled in the admin interface as "national press". Leiden returns three communities of comparable size. The Organization × community panel shows the analyst label spread across all three. Inspection reveals one community is centred on a regional aggregator hub, another on foreign-correspondent outlets, and the third on opinion-style channels. The split is reproduced by Louvain, Infomap, and the consensus matrix — strong evidence that "national press" is, at this snapshot, three distinguishable sub-networks operating under one banner.
 
 ---
 
 ## Leiden (directed)
 
-*`LEIDEN_DIRECTED` runs the same Leiden optimisation but with a directed null model — it respects the asymmetry of citation direction.*
+*`LEIDEN_DIRECTED` runs the same Leiden optimisation as [`LEIDEN`](#leiden), but with the directed null model — it respects the asymmetry of who cites whom.*
 
-Standard modularity partitions assume edges form in proportion to total degree. The directed version refines this: the expected weight of an edge from channel A to channel B is proportional to A's **out-degree** multiplied by B's **in-degree**. A channel that cites many others but is rarely cited back contributes differently to the null model than one that is heavily cited without citing back.
+Standard modularity assumes edges form in proportion to total degree, so it cannot distinguish "A is widely cited" from "A widely cites others". The directed formulation of Leicht & Newman (2008) replaces the `kᵢkⱼ/(2m)` null term with `kᵢᵒᵘᵗ · kⱼⁱⁿ / m` — the expected weight of an edge from A to B is the product of A's out-degree and B's in-degree, not total degree squared. A channel that cites widely without being cited back, and a channel widely cited without citing back, contribute differently to the null and are therefore allowed to live in different communities even when their undirected edge density would have merged them.
 
-**Reference:** Leicht, E.A. & Newman, M.E.J. (2008) "Community structure in directed networks." *Physical Review Letters* 100. [doi:10.1103/PhysRevLett.100.118703](https://doi.org/10.1103/PhysRevLett.100.118703)
+Pulpit's `LEIDEN_DIRECTED` builds the igraph directly from the directed citation graph — no symmetrisation — and calls `leidenalg.ModularityVertexPartition`, which automatically applies the Leicht-Newman directed-modularity quality function on directed input. Edge weights are honoured, so the chosen `--edge-weight-strategy` shapes the partition. The Leiden refinement (the connectivity guarantee inherited from `LEIDEN`) still runs. The seed is fixed at 0 for reproducibility.
 
-**In practice:** use `LEIDEN_DIRECTED` when the distinction between who cites and who is cited matters for your research question. In political Telegram networks, where direction carries semantic weight — amplification flows from small channels toward influential ones — the directed null model tends to produce communities that align better with observed information flow.
+This is also the default community basis for the [Community-bridging measure](network-measures.md#community-bridging) and for the [`bridging` robustness attack](robustness-analysis.md) — both interpret communities through a directional brokerage lens that pairs naturally with the directed null model.
 
-**Example.** A cluster of regional nationalist channels all cite a single national aggregator but are never cited by it. Under standard Leiden they may be merged with the aggregator because undirected edge density is high. With the directed null model the asymmetry is penalised and the cluster is more likely to be assigned its own community.
+**References:**
+- Leicht, E.A. & Newman, M.E.J. (2008) "Community structure in directed networks." *Physical Review Letters* 100, 118703. [doi:10.1103/PhysRevLett.100.118703](https://doi.org/10.1103/PhysRevLett.100.118703) — the directed modularity quality function.
+- Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the Leiden refinement, the same one used by `LEIDEN`.
+
+**In practice:** use `LEIDEN_DIRECTED` when the distinction between *who cites* and *who is cited* carries semantic weight — which it almost always does on Telegram political networks, where amplification flows asymmetrically from smaller channels toward influential sources. Picking `LEIDEN_DIRECTED` also keeps Pulpit's downstream chain — community-bridging measure, within-module-role classification, the brokerage robustness attack — consistent in their treatment of direction, since they all default to this same basis.
+
+**Example.** A cluster of seven regional nationalist channels all forward content from a single national aggregator but are never cited by it. Under `LEIDEN` (undirected projection) the seven plus the aggregator are merged into one community because the undirected edge density is high. Under `LEIDEN_DIRECTED` the asymmetry of the citations is penalised by the directed null: the seven form their own community while the aggregator joins a separate group whose other members it cites symmetrically. The hub-and-spoke amplification pattern becomes visible at a glance — what looked like a single bloc is actually one broadcaster and seven amplifiers.
 
 ---
 
 ## Leiden CPM (coarse and fine)
 
-*The Constant Potts Model replaces modularity's objective with a direct edge-density threshold — removing the "resolution limit" that prevents modularity from detecting small communities.*
+*The Constant Potts Model swaps modularity's degree-based null for a direct edge-density threshold — communities are kept (or split) according to whether their internal density exceeds a chosen γ, which removes modularity's resolution limit.*
 
-The CPM quality function is:
+Modularity (the objective optimised by `LEIDEN` and `LOUVAIN`) is provably blind to communities smaller than roughly √(m/2) edges — the **resolution limit** of Fortunato & Barthélemy (2007). No matter how clear the sub-structure is, a modularity optimiser will merge sufficiently small communities into bigger ones. The Constant Potts Model (CPM) avoids this by switching to an absolute, size-independent criterion:
 
 > Q = Σ_c [ m_c − γ · C(n_c, 2) ]
 
-where m_c is the number of internal edges in community c, n_c is its size, C(n,2) = n(n−1)/2 is the number of possible pairs, and γ is the resolution parameter. A community is stable when its internal edge density exceeds γ, independently of size. This removes modularity's resolution limit: modularity cannot reliably detect communities smaller than roughly √(m/2) edges, whereas CPM can detect communities of any size as long as their internal density is above γ.
+where `m_c` is the number of internal edges in community c, `n_c` its size, `C(n,2) = n(n−1)/2` the number of possible pairs, and γ a resolution parameter. A community is stable when its internal edge density exceeds γ, independently of size: small dense groups are preserved when γ is high enough; weakly bound clumps merge when γ is low enough. Pulpit runs CPM through the same Leiden machinery as `LEIDEN` — same `leidenalg` backend, same W+Wᵀ undirected projection, same connectivity refinement, same seed=0 — only the quality function differs.
 
-**Reference:** Traag, V.A., Van Dooren, P. & Nesterov, Y. (2011) "Narrow scope for resolution-limit-free community detection." *Physical Review E* 83. [doi:10.1103/PhysRevE.83.016114](https://doi.org/10.1103/PhysRevE.83.016114)
+Two presets ship with Pulpit, tuned to the size and density typical of Telegram citation graphs:
 
 | Key | Default γ | Effect |
 |:----|:---------|:-------|
 | `LEIDEN_CPM_COARSE` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
 | `LEIDEN_CPM_FINE` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
 
-Both can be adjusted at export time with `--leiden-coarse-resolution` and `--leiden-fine-resolution`.
+Both can be tuned at export time via `--leiden-coarse-resolution` and `--leiden-fine-resolution`.
 
-**In practice:** run both alongside `LEIDEN` to probe the network at multiple resolution scales. Communities that appear consistently across all three Leiden variants are the most structurally robust. Communities appearing only at fine resolution are tight local clusters embedded within larger blocs — useful for identifying specific coordinated cores inside broader ideological movements.
+**References:**
+- Traag, V.A., Van Dooren, P. & Nesterov, Y. (2011) "Narrow scope for resolution-limit-free community detection." *Physical Review E* 84, 016114. [doi:10.1103/PhysRevE.84.016114](https://doi.org/10.1103/PhysRevE.84.016114) — the CPM quality function and its resolution-limit-free property.
+- Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — the resolution limit of modularity that motivates CPM.
+
+**In practice:** run `LEIDEN`, `LEIDEN_CPM_COARSE` and `LEIDEN_CPM_FINE` side by side for a three-scale view of the same network. Communities that survive across all three are the most structurally robust — dense enough to pass the fine-resolution threshold *and* well-separated enough to surface under the modularity-based grouping. Communities appearing only at fine resolution are tight local cores embedded inside broader blocs — useful for identifying small coordinated nuclei within bigger ideological movements. The CPM variants are the right tool whenever you suspect modularity has merged sub-communities you can see by eye.
+
+**Example.** A 600-channel anti-vaccine network is partitioned by `LEIDEN` into six communities. `LEIDEN_CPM_FINE` returns 14 — eight of which sit *inside* a single Leiden community and turn out, on inspection, to be language- or country-specific cores of coordinated activity (one Italian, one French, one Brazilian Portuguese, etc.). The Leiden partition revealed the broad movement; the CPM-fine partition revealed the operational coordination cells that share content within their language community before it crosses over to the others.
 
 ---
 
