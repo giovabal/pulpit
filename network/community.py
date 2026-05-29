@@ -227,18 +227,24 @@ def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, Com
 def detect_kcore(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    # nx.core_number rejects graphs with self-loops, which are present whenever
-    # --self-references is enabled; strip them from the undirected view first.
-    # Use to_undirected_sum for projection parity with the other undirected
-    # strategies (core_number is unweighted, so the partition is unchanged).
+    """K-core decomposition (Seidman 1983; Kitsak et al. 2010).
+
+    A node's coreness is the largest k such that it belongs to the maximal subgraph
+    where every member has at least k internal connections. Communities are the
+    resulting k-shells, numbered from the innermost (community 1) outwards — the
+    shell order IS the information, so we bypass ``_finalize_partition`` rather
+    than renumbering by community size like every other detector.
+
+    Computed on the W+Wᵀ undirected projection (``to_undirected_sum``) with self-loops
+    removed (``nx.core_number`` rejects them, and they're present whenever
+    ``--self-references`` is on). ``nx.core_number`` is unweighted, so the partition
+    is invariant to ``--edge-weight-strategy``. Isolated nodes (coreness 0) are
+    folded into shell 1 and end up in the outermost community.
+    """
     undirected = to_undirected_sum(graph)
     undirected.remove_edges_from(nx.selfloop_edges(undirected))
     coreness = nx.core_number(undirected)
-    # Nodes with coreness 0 (isolated) are grouped together at shell 1
     raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
-    # Assign community IDs ordered from most internal (highest k-shell) to outermost.
-    # K-core deliberately preserves the shell order — it does NOT renormalise by
-    # community size like the other detectors, so we bypass _finalize_partition.
     shells = sorted(set(raw.values()), reverse=True)
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
