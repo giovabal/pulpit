@@ -10,8 +10,9 @@ A *removal order* is a list of node IDs ordered from "first to remove" to
   removal (``_dyn`` suffix).  Much more aggressive and much costlier.
 
 Tie-breaking is deterministic (ascending node ID) so non-random strategies
-are reproducible without an ``rng``.  Most strategies sort *descending* by
-score; Burt's constraint sorts *ascending* (low constraint = broker).
+are reproducible without an ``rng``.  All current strategies sort *descending*
+by score; the ``inverse`` flag on :class:`StrategySpec` exists for future
+strategies whose low values flag the critical nodes.
 
 A single registry — :data:`STRATEGY_SPECS` — drives the available
 strategies, their human labels, score functions, and sort direction.
@@ -29,22 +30,18 @@ References:
         https://doi.org/10.1103/PhysRevE.65.056109
 """
 
-import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from math import isnan
 from typing import Any, Literal
 
-from network.measures import compute_betweenness, compute_hits
+from network.measures import compute_betweenness
 from network.measures._base import compute_neighbour_community_participation
 from network.measures._centrality import proximity_distances
 from network.measures._spreading import _run_sir
 
 import networkx as nx
 import numpy as np
-
-logger = logging.getLogger(__name__)
 
 # ── Spec registry ────────────────────────────────────────────────────────────
 
@@ -57,7 +54,7 @@ class StrategySpec:
     ``score_fn``        ``(g: nx.DiGraph) -> dict[node, float]``; ignored for
                         ``"random"``
     ``inverse``         when True, sort *ascending* — used for measures where
-                        low values flag critical nodes (e.g. Burt's constraint)
+                        low values flag critical nodes
     ``kind``            ``"random"``, ``"static"``, or ``"dynamic"``
     """
 
@@ -89,44 +86,12 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
         return _in_strength(g)
 
 
-def _hits_hub(g: nx.DiGraph) -> dict[Any, float]:
-    # Weighted HITS (shared with the HITS measure) so the attack ranks by the same
-    # tie-strength-aware scores. Degenerate residual graphs can still misbehave;
-    # catch broadly and fall back to out-strength as a structural proxy.
-    try:
-        hubs, _ = compute_hits(g)
-        return hubs
-    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
-        logger.warning("HITS hub failed; using out-strength proxy", exc_info=True)
-        return _out_strength(g)
-
-
-def _hits_authority(g: nx.DiGraph) -> dict[Any, float]:
-    try:
-        _, auth = compute_hits(g)
-        return auth
-    except Exception:  # noqa: BLE001 - logged before falling back to structural proxy
-        logger.warning("HITS authority failed; using in-strength proxy", exc_info=True)
-        return _in_strength(g)
-
-
 def _harmonic(g: nx.DiGraph) -> dict[Any, float]:
     # Weighted over distance = 1/weight (Opsahl 2010), matching the harmonic measure.
     n = g.number_of_nodes()
     norm = (n - 1) if n > 1 else 1
     gd = proximity_distances(g)
     return {nid: v / norm for nid, v in nx.harmonic_centrality(gd, distance="distance").items()}
-
-
-def _burt_constraint(g: nx.DiGraph) -> dict[Any, float]:
-    # Low constraint = structural-hole broker.  Sort direction reversed via the
-    # ``inverse`` flag on the StrategySpec.  Isolated nodes get NaN from
-    # NetworkX; we coerce to +infinity so they sort last under ascending order
-    # (treated as "not a broker").
-    out: dict[Any, float] = {}
-    for nid, val in nx.constraint(g, weight="weight").items():
-        out[nid] = float("inf") if val is None or isnan(val) else val
-    return out
 
 
 _BRIDGING_RE = re.compile(r"^bridging(?:\((\w+)\))?$", re.IGNORECASE)
@@ -194,13 +159,10 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "out_strength": StrategySpec("Out-strength", _out_strength),
     # Prestige
     "pagerank": StrategySpec("PageRank", _safe_pagerank),
-    "hits_hub": StrategySpec("HITS hub", _hits_hub),
-    "hits_authority": StrategySpec("HITS authority", _hits_authority),
     # Reach
     "harmonic": StrategySpec("Harmonic centrality", _harmonic),
     # Brokerage
     "betweenness": StrategySpec("Betweenness", compute_betweenness),
-    "burt_constraint": StrategySpec("Burt's constraint (low = broker)", _burt_constraint, inverse=True),
     # bridging is parameterised; the "bridging" key here is a placeholder for
     # the registry (label / kind) — the score function is invoked separately
     # via _bridging_with_partition because it needs the chosen partition.  This
@@ -214,8 +176,6 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
     "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
     "pagerank_dyn": StrategySpec("PageRank (dyn)", _safe_pagerank, kind="dynamic"),
-    "hits_hub_dyn": StrategySpec("HITS hub (dyn)", _hits_hub, kind="dynamic"),
-    "hits_authority_dyn": StrategySpec("HITS authority (dyn)", _hits_authority, kind="dynamic"),
     "betweenness_dyn": StrategySpec("Betweenness (dyn)", compute_betweenness, kind="dynamic"),
 }
 

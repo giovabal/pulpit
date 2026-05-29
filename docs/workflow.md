@@ -199,7 +199,7 @@ Go to **Manage → Event types** to define categories like *Election* or *Policy
 
 ### Robustness: resistance to node removal
 
-Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; another twelve strategies are available including HITS hub/authority, harmonic, Burt's constraint, bridging, spreading efficiency, and dynamic (re-rank-after-removal) variants. For each selected strategy Pulpit:
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; another seven strategies are available including harmonic, bridging, spreading efficiency, and dynamic (re-rank-after-removal) variants. For each selected strategy Pulpit:
 
 - optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
 - records the residual-size curves `S(q)` for WCC, SCC, and directed reachability,
@@ -285,7 +285,7 @@ python manage.py structural_analysis --robustness --html --xlsx               # 
 python manage.py structural_analysis --robustness --robustness-alpha 0        # skip disparity filter, attack the full graph
 python manage.py structural_analysis --robustness --robustness-null 0         # observed R only, no null model (no z-scores)
 python manage.py structural_analysis --robustness --robustness-strategies ALL          # every available strategy (including dynamic)
-python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging,burt_constraint,hits_authority,spreading   # custom subset
+python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging,harmonic,spreading   # custom subset
 python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging\(louvain\)  # explicit bridging basis (escape parens in bash)
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 

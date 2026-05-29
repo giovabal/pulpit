@@ -2804,11 +2804,11 @@ class RemovalOrderTests(TestCase):
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        # Static includes random + degree (2) + prestige (3) + reach (1) + brokerage (3) + spreading (1) = 11
-        self.assertEqual(len(STATIC_STRATEGIES), 11)
-        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, hits_hub_dyn, hits_authority_dyn, betweenness_dyn
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 6)
-        self.assertEqual(len(ALL_STRATEGIES), 17)
+        # Static includes random + degree (2) + prestige (1) + reach (1) + brokerage (2) + spreading (1) = 8
+        self.assertEqual(len(STATIC_STRATEGIES), 8)
+        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 4)
+        self.assertEqual(len(ALL_STRATEGIES), 12)
         # The default set is the original 5 (preserves backwards-compatible behaviour)
         self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
 
@@ -2944,10 +2944,7 @@ class RemovalOrderTests(TestCase):
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
         for strat in (
-            "hits_hub",
-            "hits_authority",
             "harmonic",
-            "burt_constraint",
             "spreading",
         ):
             with self.subTest(strategy=strat):
@@ -2960,29 +2957,10 @@ class RemovalOrderTests(TestCase):
         g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
-        for strat in ("out_strength_dyn", "hits_hub_dyn", "hits_authority_dyn"):
+        for strat in ("out_strength_dyn",):
             with self.subTest(strategy=strat):
                 order = removal_order(g, strat)
                 self.assertEqual(sorted(order), sorted(g.nodes()))
-
-    def test_burt_constraint_sorts_ascending(self) -> None:
-        # A bridge node between two cliques has low constraint (~0); clique-internal
-        # nodes have higher constraint.  Ascending sort puts the bridge first.
-        from network.robustness import removal_order
-
-        g = nx.DiGraph()
-        # Two 3-cliques (A,B,C) and (D,E,F) connected via bridge node X
-        for a, b in [("A", "B"), ("B", "C"), ("C", "A"), ("B", "A"), ("C", "B"), ("A", "C")]:
-            g.add_edge(a, b, weight=1.0)
-        for a, b in [("D", "E"), ("E", "F"), ("F", "D"), ("E", "D"), ("F", "E"), ("D", "F")]:
-            g.add_edge(a, b, weight=1.0)
-        g.add_edge("A", "X", weight=1.0)
-        g.add_edge("X", "A", weight=1.0)
-        g.add_edge("X", "D", weight=1.0)
-        g.add_edge("D", "X", weight=1.0)
-        order = removal_order(g, "burt_constraint")
-        # X is the only bridge node — should have the lowest constraint and be removed first.
-        self.assertEqual(order[0], "X")
 
     def test_bridging_with_explicit_partition_basis(self) -> None:
         from network.robustness import removal_order
@@ -3387,7 +3365,7 @@ class RobustnessRunnerTests(TestCase):
     def test_payload_strategy_keys_match_explicit_selection(self) -> None:
         from network.robustness import run_robustness
 
-        chosen = ["pagerank", "betweenness_dyn", "hits_authority", "spreading"]
+        chosen = ["pagerank", "betweenness_dyn", "harmonic", "spreading"]
         out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(strategies=chosen))
         self.assertEqual(set(out["strategies"].keys()), set(chosen))
 
