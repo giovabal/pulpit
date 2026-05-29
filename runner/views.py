@@ -107,6 +107,7 @@ class OperationsView(View):
             "SA_COMMUNITY_PALETTE_REVERSED": settings.COMMUNITY_PALETTE_REVERSED,
             "SA_BRIDGING_BASIS": settings.SA_BRIDGING_BASIS,
             "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
+            "SA_BEHAVIOURAL_EQUIVALENCE": settings.SA_BEHAVIOURAL_EQUIVALENCE,
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
             "SA_INTEREST_STRUCTURAL": settings.SA_INTEREST_STRUCTURAL,
             "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,
@@ -180,17 +181,19 @@ class RunTaskView(View):
             return JsonResponse({"error": "Unknown task"}, status=404)
         if tasks.get_status(task)["status"] == "running":
             return JsonResponse({"error": "Task already running"}, status=409)
+        try:
+            _validate_post_constraints(task, request.POST)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        args = _build_args(task, request.POST)
+        # Persist any new search terms only after validation passes; otherwise a
+        # 400 leaves the DB written despite the user-visible failure.
         if task == "search_channels" and request.POST.get("save_terms"):
             extra_raw = request.POST.get("extra_terms", "")
             for line in extra_raw.splitlines():
                 word = " ".join(line.split()).lower()
                 if word:
                     SearchTerm.objects.get_or_create(word=word)
-        try:
-            _validate_post_constraints(task, request.POST)
-        except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-        args = _build_args(task, request.POST)
         try:
             tasks.launch(task, args)
         except Exception as exc:

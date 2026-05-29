@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
+from django.db import transaction
 from django.utils import timezone
 
 from crawler.client import TelegramAPIClient
@@ -151,12 +152,19 @@ class ReferenceResolver:
                 message.missing_references = new_value
                 to_update.append(message)
             if len(to_update) >= 500:
-                Message.objects.bulk_update(to_update, ["missing_references"])
+                # bulk_update and bulk_add together: if the M2M create fails
+                # after the missing_references string is shortened, the
+                # message ends up with no record of the resolved references
+                # and no entry in missing_references to retry.
+                with transaction.atomic():
+                    Message.objects.bulk_update(to_update, ["missing_references"])
+                    _bulk_add_references(to_add)
                 to_update.clear()
-                _bulk_add_references(to_add)
                 to_add.clear()
             if status_callback is not None:
                 status_callback(f"{index}/{total}")
-        if to_update:
-            Message.objects.bulk_update(to_update, ["missing_references"])
-        _bulk_add_references(to_add)
+        if to_update or to_add:
+            with transaction.atomic():
+                if to_update:
+                    Message.objects.bulk_update(to_update, ["missing_references"])
+                _bulk_add_references(to_add)

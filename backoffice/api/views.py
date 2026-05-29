@@ -132,11 +132,18 @@ class ChannelViewSet(
 
         org_id = self.request.query_params.get("organization", "").strip()
         if org_id:
-            qs = qs.filter(attributions__organization_id=org_id).distinct()
+            # Postgres raises InvalidTextRepresentation on a non-integer FK
+            # value (500); SQLite silently returns nothing. Reject explicitly
+            # so the contract is the same across backends.
+            if not org_id.isdigit():
+                raise ValidationError({"organization": "must be an integer"})
+            qs = qs.filter(attributions__organization_id=int(org_id)).distinct()
 
         group_id = self.request.query_params.get("group", "").strip()
         if group_id:
-            qs = qs.filter(groups__id=group_id).distinct()
+            if not group_id.isdigit():
+                raise ValidationError({"group": "must be an integer"})
+            qs = qs.filter(groups__id=int(group_id)).distinct()
 
         status_filter = self.request.query_params.get("status", "").strip()
         if status_filter == "unassigned":

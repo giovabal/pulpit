@@ -230,6 +230,9 @@ class UserSerializer(serializers.ModelSerializer):
         email = validated_data.get("email", "").strip()
         if not email:
             raise serializers.ValidationError({"email": "Email is required."})
+        if User.objects.filter(username=email).exists():
+            raise serializers.ValidationError({"email": "A user with this email already exists."})
+        validated_data["email"] = email
         validated_data["username"] = email
         user = User(**validated_data)
         user.set_password(password)
@@ -239,7 +242,13 @@ class UserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         if "email" in validated_data:
-            validated_data["username"] = validated_data["email"]
+            email = validated_data["email"].strip()
+            if not email:
+                raise serializers.ValidationError({"email": "Email is required."})
+            if User.objects.filter(username=email).exclude(pk=instance.pk).exists():
+                raise serializers.ValidationError({"email": "A user with this email already exists."})
+            validated_data["email"] = email
+            validated_data["username"] = email
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:

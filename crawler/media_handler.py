@@ -170,6 +170,7 @@ class MediaHandler:
                 if not pp.thumbnail or not os.path.exists(pp.thumbnail.path):
                     continue
             fresh_picture_ids.add(pp.telegram_id)
+        self.api_client.wait()
         for telegram_picture in self.api_client.client.get_profile_photos(telegram_channel):
             if telegram_picture.id in fresh_picture_ids:
                 continue
@@ -177,6 +178,7 @@ class MediaHandler:
             # a recoverable error on the current avatar must not abort the loop
             # and leave older pictures unchecked.
             try:
+                self.api_client.wait()
                 picture_filename = self._download_media(telegram_picture)
                 if not picture_filename:
                     # Skip empty downloads outright — creating a ProfilePicture
@@ -196,6 +198,7 @@ class MediaHandler:
                     # template contexts that can't render <video> (small list
                     # rows, posters) still have something to show.
                     try:
+                        self.api_client.wait()
                         thumbnail_filename = self._download_media(telegram_picture, thumb=-1)
                     except (
                         errors.rpcerrorlist.FileMigrateError,
