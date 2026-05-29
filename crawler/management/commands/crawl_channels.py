@@ -560,6 +560,7 @@ class Command(BaseCommand):
             except Exception as error:  # noqa: BLE001 - logged for the operator
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
+                logger.exception("%s username lookup failed for channel %s", action, channel.telegram_id)
                 return None
         except errors.FloodWaitError as error:
             printer.newline()
@@ -572,6 +573,7 @@ class Command(BaseCommand):
         except Exception as error:  # noqa: BLE001 - other RPC errors must not crash the whole run
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
+            logger.exception("%s entity lookup failed for channel %s", action, channel.telegram_id)
             return None
 
     def _bulk_update_degrees(
@@ -621,6 +623,7 @@ class Command(BaseCommand):
         except Exception as exc:
             printer.newline()
             self.stdout.write(self.style.WARNING(f"Could not resolve entity for {channel}: {exc}"))
+            logger.exception("fix-holes entity lookup failed for %s", channel)
             return
         channel_label = f"[id={channel.id}] {channel}"
         with per_channel_step(self.stdout, self.style, printer, action="fixing holes", channel=channel):
@@ -992,6 +995,7 @@ class Command(BaseCommand):
             except Exception as exc:
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Could not get entity for {channel}: {exc}"))
+                logger.exception("fix-missing-media entity lookup failed for %s", channel)
                 skipped += n
                 continue
 
@@ -1010,6 +1014,7 @@ class Command(BaseCommand):
                 except Exception as exc:
                     printer.newline()
                     self.stdout.write(self.style.WARNING(f"Error fetching messages for {channel}: {exc}"))
+                    logger.exception("fix-missing-media batch fetch failed for %s", channel)
                     skipped += len(batch_tids)
                     continue
 

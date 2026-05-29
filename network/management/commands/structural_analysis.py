@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -67,7 +68,7 @@ def _compute_extra_layouts(
     *,
     dim: int = 2,
     strategy_results: dict | None = None,
-    on_progress: "callable[[str], None] | None" = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, dict]:
     """Compute every extra layout in ``names`` (excluding FA2, which is the
     primary layout) and return ``{lower_case_name: positions}``."""
@@ -1267,30 +1268,11 @@ class Command(BaseCommand):
         year_extra_positions: dict[str, dict] = {}
         year_extra_positions_3d: dict[str, dict] = {}
         if do_graph and extra_layout_names:
-            _extra_layout_funcs_2d = {
-                "CIRCULAR": layout.circular_positions,
-                "KAMADA_KAWAI": layout.kamada_kawai_positions,
-                "COMMUNITY_SHELL": lambda g: layout.community_shell_positions(g, strategy_results),
-                "TSNE": layout.tsne_positions_2d,
-                "UMAP": layout.umap_positions_2d,
-                "HYPERBOLIC": layout.hyperbolic_positions,
-            }
-            for name in extra_layout_names:
-                if name == "FA2":
-                    continue
-                year_extra_positions[name.lower()] = _extra_layout_funcs_2d[name](graph)
+            year_extra_positions = _compute_extra_layouts(
+                graph, extra_layout_names, dim=2, strategy_results=strategy_results
+            )
         if do_3dgraph and extra_layout_names_3d:
-            _extra_layout_funcs_3d = {
-                "SPECTRAL": layout.spectral_positions,
-                "SPRING": layout.spring_positions,
-                "KAMADA_KAWAI": layout.kamada_kawai_positions_3d,
-                "TSNE": layout.tsne_positions_3d,
-                "UMAP": layout.umap_positions_3d,
-            }
-            for name in extra_layout_names_3d:
-                if name == "FA2":
-                    continue
-                year_extra_positions_3d[name.lower()] = _extra_layout_funcs_3d[name](graph)
+            year_extra_positions_3d = _compute_extra_layouts(graph, extra_layout_names_3d, dim=3)
 
         self.stdout.write("\nBuild graph data … ", ending="")
         self.stdout.flush()

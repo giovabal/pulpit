@@ -238,6 +238,13 @@ def abort(task: str) -> bool:
     current = get_status(task)
     if current["status"] != "running" or not current["pid"]:
         return False
+    # Second _is_running() check immediately before the kill shrinks (but does
+    # not close) the PID-recycle race window: between get_status() and the
+    # kill, the wrapper could exit and the kernel could recycle the PID for an
+    # unrelated process. Closing the window completely would need holding the
+    # Popen handle across requests.
+    if not _is_running(current["pid"]):
+        return False
     try:
         os.kill(current["pid"], signal.SIGTERM)
         return True

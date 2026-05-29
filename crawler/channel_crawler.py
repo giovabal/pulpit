@@ -648,9 +648,14 @@ class ChannelCrawler:
             except Exception as e:  # noqa: BLE001 - one unresolvable id must not abort the whole crawl
                 # Other RPC errors (ChannelInvalidError, PeerIdInvalidError, transient
                 # ServerError, …) used to propagate and kill the run. Log and leave the
-                # row pending so it is retried on the next crawl.
+                # row pending so it is retried on the next crawl. ``exc_info=True``
+                # surfaces the traceback so the operator can tell a real programming
+                # bug from a benign Telegram RPC error.
                 logger.warning(
-                    "Unexpected error resolving forwarded channel %s (%s); leaving pending for retry", channel_id, e
+                    "Unexpected error resolving forwarded channel %s (%s); leaving pending for retry",
+                    channel_id,
+                    e,
+                    exc_info=True,
                 )
 
     def refresh_message_stats(
