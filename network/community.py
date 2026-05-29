@@ -348,14 +348,15 @@ def _build_undirected_igraph(
 def detect_leiden_cpm(
     graph: nx.DiGraph, palette_name: str, resolution: float, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Leiden algorithm with Constant Potts Model (CPM) objective.
+    """Leiden algorithm with the Constant Potts Model objective (Traag, Van Dooren & Nesterov 2011).
 
-    Unlike modularity, CPM has no resolution limit: communities are defined as
-    groups whose internal edge density exceeds ``resolution``.  A low resolution
-    gives a coarse partition (few large communities); a high resolution gives a
-    fine partition (many small ones).
+    Unlike modularity, CPM has no resolution limit: a community is stable when
+    its internal edge density exceeds ``resolution`` (γ), independently of
+    community size.  Low γ → few large communities; high γ → many small ones.
 
-    The graph is symmetrised to undirected before optimisation (same as LEIDEN).
+    Same Leiden machinery as ``detect_leiden``: undirected W+Wᵀ projection via
+    ``to_undirected_sum``, weights honoured, seed=0, connectivity refinement.
+    Only the quality function differs.
     """
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)

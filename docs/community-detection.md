@@ -112,16 +112,18 @@ Modularity (the objective optimised by `LEIDEN` and `LOUVAIN`) is provably blind
 
 > Q = Σ_c [ m_c − γ · C(n_c, 2) ]
 
-where `m_c` is the number of internal edges in community c, `n_c` its size, `C(n,2) = n(n−1)/2` the number of possible pairs, and γ a resolution parameter. A community is stable when its internal edge density exceeds γ, independently of size: small dense groups are preserved when γ is high enough; weakly bound clumps merge when γ is low enough. Pulpit runs CPM through the same Leiden machinery as `LEIDEN` — same `leidenalg` backend, same W+Wᵀ undirected projection, same connectivity refinement, same seed=0 — only the quality function differs.
+where `m_c` is the number of internal edges in community c (weighted when the graph is weighted), `n_c` its size, `C(n,2) = n(n−1)/2` the number of possible pairs, and γ a resolution parameter. A community is stable when its internal edge density exceeds γ, independently of size: small dense groups are preserved when γ is high enough; weakly bound clumps merge when γ is low enough.
 
-Two presets ship with Pulpit, tuned to the size and density typical of Telegram citation graphs:
+Pulpit runs CPM through the same Leiden machinery as `LEIDEN` — same `leidenalg` backend, same W+Wᵀ undirected projection (reciprocal forwards collapsed to one edge whose weight is `w(u→v) + w(v→u)`), same connectivity refinement, same seed=0. Edge weights are honoured, so the chosen `--edge-weight-strategy` does affect the partition and also rescales the meaningful range of γ — denser-weight strategies (`TOTAL`, `NONE`) want larger γ than sparser fractional ones (`PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`).
+
+Two presets ship with Pulpit, chosen as sensible starting points for the fractional weights of the default `PARTIAL_REFERENCES` strategy:
 
 | Key | Default γ | Effect |
 |:----|:---------|:-------|
 | `LEIDEN_CPM_COARSE` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
 | `LEIDEN_CPM_FINE` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
 
-Both can be tuned at export time via `--leiden-coarse-resolution` and `--leiden-fine-resolution`.
+Both can be tuned at export time via `--leiden-coarse-resolution` and `--leiden-fine-resolution`; tune γ upward when switching to `--edge-weight-strategy TOTAL` or `NONE`.
 
 **References:**
 - Traag, V.A., Van Dooren, P. & Nesterov, Y. (2011) "Narrow scope for resolution-limit-free community detection." *Physical Review E* 84, 016114. [doi:10.1103/PhysRevE.84.016114](https://doi.org/10.1103/PhysRevE.84.016114) — the CPM quality function and its resolution-limit-free property.
