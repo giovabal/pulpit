@@ -8,7 +8,7 @@ This guide walks you through installing Pulpit, connecting it to your Telegram a
 
 You will need three things:
 
-**1. Python** — the programming language Pulpit runs on. Download the installer from [python.org/downloads](https://www.python.org/downloads/) and run it. Choose version 3.12 or later. On the download page, click the button for your operating system (Windows, Mac, or Linux).
+**1. Python** — the programming language Pulpit runs on. Download the installer from [python.org/downloads](https://www.python.org/downloads/) and run it. Choose version 3.12, 3.13, or 3.14 — Pulpit fully supports all three. On the download page, click the button for your operating system (Windows, Mac, or Linux).
 
 > **Windows users:** During the Python installer, tick the box that says **"Add Python to PATH"** before clicking Install. If you miss this step, the terminal commands below will not work.
 

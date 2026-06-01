@@ -61,6 +61,8 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 ## Quick start
 
+> **Prerequisites:** Python 3.12, 3.13, or 3.14 (all fully supported) and Git.
+
 **macOS / Linux**
 ```sh
 git clone https://github.com/giovabal/pulpit

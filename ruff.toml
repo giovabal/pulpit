@@ -27,7 +27,8 @@ exclude = [
 line-length = 120
 indent-width = 4
 
-# Assume Python 3.12
+# Pulpit supports Python 3.12–3.14; target the floor (3.12) so lint/format stay
+# compatible with the oldest supported interpreter.
 target-version = "py312"
 
 [lint]
