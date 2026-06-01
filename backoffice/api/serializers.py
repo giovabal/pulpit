@@ -1,7 +1,15 @@
 from django.contrib.auth.models import User
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelAttribution, ChannelGroup, ChannelVacancy, Organization, SearchTerm
+from webapp.models import (
+    Channel,
+    ChannelAttribution,
+    ChannelGroup,
+    ChannelVacancy,
+    Organization,
+    Project,
+    SearchTerm,
+)
 
 from rest_framework import serializers
 
@@ -12,6 +20,12 @@ class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = ["id", "name", "color", "is_in_target", "channel_count"]
+
+
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ["title", "description", "criteria", "notes"]
 
 
 class ChannelVacancySerializer(serializers.ModelSerializer):

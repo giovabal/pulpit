@@ -11,3 +11,4 @@ from .media_models import (  # NOQA
 )
 from .group_models import ChannelGroup  # NOQA
 from .vacancy_models import ChannelVacancy  # NOQA
+from .project_models import Project  # NOQA

@@ -15,6 +15,7 @@ from .models import (
     Poll,
     PollAnswer,
     ProfilePicture,
+    Project,
     SearchTerm,
 )
 
@@ -162,6 +163,19 @@ class ChannelGroupAdmin(admin.ModelAdmin):
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("name", "color", "is_in_target")
     list_editable = ["color", "is_in_target"]
+
+
+@admin.register(Project)
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ("title",)
+
+    # Singleton: never offer "add another" once the row exists, and never allow
+    # deletion — the row is the project's identity, edited from the Manage panel.
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return not Project.objects.exists()
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
 
 
 class PollAnswerInline(admin.TabularInline):

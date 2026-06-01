@@ -36,6 +36,10 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'vacancies' %} active{% endif %}">
       <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Vacancies
     </a>
+    <a href="{% url 'backoffice:project' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'project' %} active{% endif %}">
+      <i class="bi bi-journal-text me-1" aria-hidden="true"></i>Project
+    </a>
     <a href="{% url 'backoffice:maintenance' %}"
        class="bo-subnav-link position-relative{% if request.resolver_match.url_name == 'maintenance' %} active{% endif %}">
       <i class="bi bi-tools me-1" aria-hidden="true"></i>Maintenance

@@ -56,5 +56,9 @@ class VacanciesManageView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/vacancies.html"
 
 
+class ProjectView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/project.html"
+
+
 class MaintenanceView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/maintenance.html"

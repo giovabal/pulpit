@@ -466,6 +466,13 @@ tr:hover .bo-detail-btn { opacity: 1; }
 
 .bo-ch-update-btns { display: flex; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); margin-top: var(--space-2); }
 
+/* ── Project page ───────────────────────────────────────────────────────── */
+
+.bo-project-form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 720px; }
+.bo-project-form textarea { resize: vertical; min-height: 5rem; line-height: 1.5; }
+.bo-field-hint { font-size: .8125rem; color: var(--muted); }
+.bo-project-btns { display: flex; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+
 /* ── Toast ──────────────────────────────────────────────────────────────── */
 
 .bo-toast-container {

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from network import tables
+from webapp.models import Project
 
 
 class Command(BaseCommand):
@@ -54,7 +55,7 @@ class Command(BaseCommand):
         if not target_name:
             raise CommandError("--target is required: specify the name of the export to write comparison files into.")
         root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
-        project_title: str = settings.PROJECT_TITLE
+        project_title: str = Project.load().title
         seo = options["seo"]
 
         def exists(name: str) -> bool:

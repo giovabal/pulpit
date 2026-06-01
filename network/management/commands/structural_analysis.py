@@ -28,7 +28,7 @@ from network import (
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.utils import GraphData
 from webapp import scoring
-from webapp.models import Message
+from webapp.models import Message, Project
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 from webapp.utils.colors import is_known_palette
 
@@ -1701,7 +1701,7 @@ class Command(BaseCommand):
         root_target = _final_target + ".tmp"
         shutil.rmtree(root_target, ignore_errors=True)  # clean up any interrupted previous run
         shutil.rmtree(_final_target + ".old", ignore_errors=True)  # clean up any orphaned backup
-        project_title: str = settings.PROJECT_TITLE
+        project_title: str = Project.load().title
         self.stdout.write("Build communities data … ", ending="")
         self.stdout.flush()
         communities_data = community.build_communities_payload(opts.communities_strategy, strategy_results)

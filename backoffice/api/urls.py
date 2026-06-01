@@ -17,6 +17,7 @@ from .views import (
     EventTypeViewSet,
     EventViewSet,
     OrganizationViewSet,
+    ProjectView,
     SearchTermViewSet,
     UserViewSet,
 )
@@ -36,6 +37,7 @@ router.register("vacancies", ChannelVacancyViewSet, basename="api-vacancies")
 
 urlpatterns = [
     *router.urls,
+    path("project/", ProjectView.as_view(), name="api-project"),
     path("maintenance/", maintenance_info, name="api-maintenance-info"),
     path("maintenance/check-updates/", check_updates, name="api-maintenance-check-updates"),
     path("maintenance/optimize/", maintenance_optimize, name="api-maintenance-optimize"),
