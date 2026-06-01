@@ -17,8 +17,10 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "SPREADING",
         "LOCALCLUSTERING",
         "CORENESS",
+        "COLLECTIVEINFLUENCE",
         "TROPHICLEVEL",
         "MODULEROLE",
+        "BROKERAGEROLES",
     }
 )
 
@@ -35,8 +37,9 @@ ALL_MEASURES: list[str] = [*sorted(VALID_MEASURES), "BRIDGING"]
 # which a Freeman-style centralization (score concentration around the max) is
 # meaningful. Excludes audience/activity attributes (fans, messages_count),
 # local coefficients (burt_constraint, local_clustering), positional/structural
-# coordinates with no star-based maximum (coreness, trophic_level, within_module_z),
-# and behavioural metrics (amplification_factor, content_originality,
+# coordinates with no star-based maximum (coreness, collective_influence,
+# trophic_level, within_module_z, brokerage_total), and behavioural metrics
+# (amplification_factor, content_originality,
 # diffusion_lag, spreading_efficiency). The weighted in/out *strength* columns
 # (in_deg, out_deg) are also excluded: strength has no star-based theoretical
 # maximum, so the generic (n−1)·C_max normaliser is too loose to be a useful
@@ -100,8 +103,9 @@ ALL_STRATEGIES: list[str] = [
 
 # Dispatch table: (settings key, progress label, apply function name)
 # HITS, BRIDGINGCENTRALITY (Hwang, shares betweenness), BRIDGING (community bridging) and
-# MODULEROLE (Guimerà-Amaral role) are handled separately: the last two need a community
-# partition basis, and all have non-standard signatures.
+# MODULEROLE / BROKERAGEROLES (Guimerà-Amaral role; Gould-Fernandez brokerage census) are
+# handled separately: the partition-based ones need a community basis, and all have
+# non-standard signatures.
 MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("PAGERANK", "pagerank", "apply_pagerank"),
     ("BETWEENNESS", "betweenness centrality", "apply_betweenness_centrality"),
@@ -111,6 +115,7 @@ MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
     ("LOCALCLUSTERING", "local clustering", "apply_local_clustering"),
     ("CORENESS", "k-core coreness", "apply_coreness"),
+    ("COLLECTIVEINFLUENCE", "collective influence", "apply_collective_influence"),
     ("TROPHICLEVEL", "trophic level", "apply_trophic_level"),
 ]
 

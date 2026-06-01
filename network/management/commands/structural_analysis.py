@@ -423,8 +423,10 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of centrality measures to compute. "
                 "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, INDEGCENTRALITY, OUTDEGCENTRALITY, "
-                "HARMONICCENTRALITY, BURTCONSTRAINT, LOCALCLUSTERING, CORENESS, TROPHICLEVEL, "
-                "MODULEROLE (Guimerà-Amaral role; needs a community strategy), SPREADING, "
+                "HARMONICCENTRALITY, BURTCONSTRAINT, LOCALCLUSTERING, CORENESS, COLLECTIVEINFLUENCE "
+                "(Morone-Makse 2015), TROPHICLEVEL, "
+                "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
+                "BROKERAGEROLES (Gould-Fernandez brokerage census; needs a community strategy), SPREADING, "
                 "BRIDGINGCENTRALITY (Hwang et al. 2008), BRIDGING or BRIDGING(STRATEGY) (community bridging), "
                 "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK."
             ),
@@ -880,6 +882,11 @@ class Command(BaseCommand):
                 "MODULEROLE (Guimerà-Amaral role) needs a community partition: add at least one "
                 "strategy to --community-strategies (LEIDEN_DIRECTED is the preferred basis)."
             )
+        if "BROKERAGEROLES" in network_measures and not communities_strategy:
+            raise CommandError(
+                "BROKERAGEROLES (Gould-Fernandez brokerage census) needs a group partition: add at "
+                "least one strategy to --community-strategies (ORGANIZATION is the preferred basis)."
+            )
         invalid_stat_groups = [g for g in network_stat_groups if g not in measures.VALID_NETWORK_STAT_GROUPS]
         if invalid_stat_groups:
             valid_display = sorted(measures.VALID_NETWORK_STAT_GROUPS) + ["ALL"]
@@ -1171,6 +1178,28 @@ class Command(BaseCommand):
                 self.stdout.write(f"- module role (community basis: {role_basis}) … ", ending="")
                 self.stdout.flush()
                 measures_labels += measures.apply_module_role(graph_data, graph, role_basis)
+                self.stdout.write("done")
+
+        if "BROKERAGEROLES" in selected_measures:
+            # Gould-Fernandez brokerage roles are read against a group partition; prefer the
+            # ORGANIZATION partition (the roles are most interpretable as brokerage between the
+            # analyst's organisations), then the active bridging basis, then LEIDEN_DIRECTED,
+            # then any available partition.
+            available_bases = set()
+            for _nid, node_data in graph.nodes(data="data"):
+                if node_data and node_data.get("communities"):
+                    available_bases.update(node_data["communities"].keys())
+            bridging_basis = measures.bridging_strategy(bridging_token).lower() if bridging_token else None
+            broker_basis = next(
+                (b for b in ("organization", bridging_basis, "leiden_directed") if b and b in available_bases),
+                next(iter(sorted(available_bases)), None),
+            )
+            if broker_basis is None:
+                self.stdout.write(self.style.WARNING("- brokerage roles … skipped (no community partition)"))
+            else:
+                self.stdout.write(f"- brokerage roles (Gould–Fernandez; basis: {broker_basis}) … ", ending="")
+                self.stdout.flush()
+                measures_labels += measures.apply_gould_fernandez(graph_data, graph, broker_basis)
                 self.stdout.write("done")
 
         if do_graph or do_3dgraph:

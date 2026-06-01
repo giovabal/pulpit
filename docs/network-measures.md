@@ -6,7 +6,7 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 
 <figure>
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
-<figcaption><em>Channel table: 18 measures as sortable columns. Click any header to rank channels by that measure.</em></figcaption>
+<figcaption><em>Channel table: every computed measure as a sortable column. Click any header to rank channels by that measure.</em></figcaption>
 </figure>
 <br>
 
@@ -26,8 +26,10 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Local clustering | `LOCALCLUSTERING` | Do this channel's contacts also cite each other — is its immediate neighbourhood closed in on itself? |
 | K-core coreness | `CORENESS` | Is this channel in the densely interconnected nucleus, or a peripheral amplifier? |
+| Collective influence | `COLLECTIVEINFLUENCE` | Which channels are the optimal-percolation key spreaders whose removal most fragments the network? |
 | Trophic level | `TROPHICLEVEL` | Where does this channel sit on the structural source→sink axis? |
 | Within-module role | `MODULEROLE` | Is this channel a within-community hub or a cross-community connector? |
+| Brokerage roles | `BROKERAGEROLES` | What kind of broker is this channel between groups — gatekeeper, representative, liaison? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
@@ -195,6 +197,21 @@ Coreness is the depth of the densest layer a channel survives in when the networ
 
 ---
 
+## Collective Influence
+
+*A high collective-influence score flags a channel whose removal would most fragment the network — the optimal-percolation key spreaders, found by looking a couple of hops out rather than only at immediate ties.*
+
+Collective Influence comes from optimal-percolation theory: the search for the minimal set of nodes whose removal shatters a network's giant connected component. For each channel it multiplies `(degree − 1)` by the sum of `(degree − 1)` over every channel sitting *exactly* ℓ hops away (Pulpit fixes ℓ = 2). A channel scores high only when it is itself well-connected *and* its two-hop surroundings are well-connected too — the signature of a node wedged at the heart of a dense region, whose deletion does maximal structural damage. The headline finding from the original study is that this ranking pinpoints the influential set more reliably than degree, k-core, PageRank or betweenness.
+
+**References:**
+- Morone, F. & Makse, H.A. (2015) "Influence maximization in complex networks through optimal percolation." *Nature* 524(7563). [doi:10.1038/nature14604](https://doi.org/10.1038/nature14604)
+
+**In practice:** Collective Influence is the per-channel companion to Pulpit's [robustness analysis](robustness-analysis.md): robustness *removes* channels by a ranking and watches the network shrink, while collective influence *is* the near-optimal removal ranking read straight off the static graph. It complements two neighbours: where k-core coreness gives a coarse onion-layer depth and SIR spreading efficiency averages stochastic cascades, collective influence is a deterministic, percolation-grounded score of how structurally load-bearing a channel is. It is computed on the symmetrised, unweighted graph (matching coreness), so it reads the topology of who-connects-to-whom rather than tie strength, and is read **ordinally** — the ranking is the signal, not the raw magnitude.
+
+**Example.** In a 400-channel political ecosystem, two channels have nearly identical k-core coreness — both sit in the same deep shell. Collective Influence separates them. The first is surrounded, two hops out, by a sprawl of other well-connected channels: removing it tears a hole that the surrounding density cannot route around, and its collective-influence score is among the highest in the network. The second sits in the same shell but its two-hop neighbourhood thins out into peripheral leaves, so its score is middling. Coreness calls them equals; collective influence correctly flags the first as the structurally load-bearing one — the channel a moderation effort aiming to fragment the ecosystem would target first.
+
+---
+
 ## Trophic level
 
 *A low trophic level means this channel is a structural source that others draw from; a high level means it is a terminal amplifier downstream of the content it carries.*
@@ -222,6 +239,29 @@ The within-module role characterises every channel by two scores measured *again
 **In practice:** The role labels turn a coloured-blob community map into a concrete job description: a *provincial hub* is a kingpin of one community that rarely speaks outside it; a *connector hub* is both central within and spanning out, the most strategically significant broker; a non-hub *connector* is a low-profile bridge with modest internal weight but ties that systematically cross community boundaries. The label pairs naturally with global prestige measures: a top-decile PageRank channel can be either a *provincial hub* (locally dominant but not network-spanning) or a *connector hub* (both), and the label tells you which.
 
 **Example.** In a 400-channel political ecosystem, two channels look nearly identical on the static prestige columns — comparable PageRank, similar core depth, similar citation strength. The role taxonomy separates them. The first lands as a *connector hub* — both internally central in its community *and* with ties that span multiple distinct communities. The second is a *provincial hub* — the kingpin of its own community, but with ties that do not systematically cross out. Reading PageRank alone, the two look like equivalent leaders; reading the role labels, they are different jobs. Removing the first severs both internal cohesion and cross-community flow; removing the second only fragments one community.
+
+---
+
+## Brokerage roles (Gould-Fernandez 1989)
+
+*Burt's constraint and community bridging tell you that a channel is a broker; the brokerage census tells you what kind — does it guard what enters a faction, push its faction's content outward, or bridge two camps it belongs to neither of?*
+
+The Gould–Fernandez census classifies every citation chain a channel mediates. Whenever channel *i* cites *v* and *v* cites *j* (a directed two-path `i → v → j`), the broker *v* is performing one of five distinct roles, decided by the groups — by default the analyst's **Organizations** — that *i*, *v* and *j* belong to:
+
+- **Coordinator** — *i*, *v*, *j* all in *v*'s own group: a broker *within* its faction.
+- **Gatekeeper** — *i* is an outsider, *v* and *j* share *v*'s group: *v* controls what flows *into* its faction.
+- **Representative** — *i* and *v* share *v*'s group, *j* is an outsider: *v* controls what flows *out* of its faction.
+- **Consultant** — *i* and *j* belong to one other group that is not *v*'s: *v* brokers between two members of a faction it sits outside.
+- **Liaison** — *i*, *v*, *j* are in three different groups: *v* bridges two foreign camps, belonging to neither.
+
+Pulpit reports the **total** number of two-paths a channel brokers (the sortable *Brokerage* column) and its **dominant role** (the *Brokerage role* column, alongside it exactly as the within-module Role sits beside its z-score). The five individual role counts are written to `nodes.csv` and the GEXF/GraphML exports for the full census.
+
+**References:**
+- Gould, R.V. & Fernandez, R.M. (1989) "Structures of mediation: A formal approach to brokerage in transaction networks." *Sociological Methodology* 19. [doi:10.2307/270949](https://doi.org/10.2307/270949)
+
+**In practice:** This is the typed complement to Pulpit's other brokerage measures, which all report brokerage *intensity* without naming the *kind*. Burt's constraint says a channel's contacts are non-redundant; betweenness and [community bridging](#community-bridging) say it lies on cross-group paths — but none distinguishes a **gatekeeper** (which decides what reaches a faction's audience) from a **representative** (which carries a faction's message outward) from a **liaison** (an unaligned channel bridging two camps). In an influence-operation context these are different jobs with different leverage: gatekeepers are chokepoints for inbound narratives, representatives are a faction's outward megaphone, liaisons are the deniable conduits between camps that never cite each other directly. The dominant-role label is a quick descriptor — biased toward whichever role the channel's group sizes give it the most opportunity for — so read it together with the five raw counts in the export when the distinction matters. The census needs a meaningful group partition; with `ORGANIZATION` the roles read as brokerage between the analyst's own factions, and the measure returns nothing for a channel with no organisation.
+
+**Example.** In a mapped national ecosystem, three channels have almost identical betweenness. The census pulls them apart. The first is overwhelmingly a **gatekeeper**: nearly all the two-paths it mediates run from outside channels into its own religious-nationalist organisation — it is the faction's inbound filter, deciding which external narratives its audience ever sees. The second is a **representative**: its brokered paths run the other way, from inside its economic-nationalist organisation out to channels in three rival camps — it is the organisation's outward voice. The third belongs, by organisation, to neither of the camps it connects: a **liaison** whose brokered paths almost all run between a state-media organisation and a diaspora organisation that never cite each other directly. Betweenness ranks the three as equals; the brokerage census identifies one as a chokepoint, one as a megaphone, and one as a bridge — and only the liaison is invisible to a measure that assumes brokers sit inside the groups they connect.
 
 ---
 

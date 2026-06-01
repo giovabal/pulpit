@@ -546,3 +546,192 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
         node["within_module_z"] = round(z, 4)
         node["module_role"] = _ga_role(z, participation.get(nid, 0.0))
     return [("within_module_z", "Within-module z")]
+
+
+# Collective Influence ball radius (Morone & Makse 2015). ℓ = 2 is the value used
+# throughout their paper: large enough to see beyond the immediate neighbourhood,
+# small enough to stay local and cheap. The optimal-percolation ranking is
+# insensitive to ℓ in the small-ℓ regime, so it is fixed rather than exposed as a flag.
+_CI_RADIUS = 2
+
+
+def apply_collective_influence(
+    graph_data: GraphData, graph: nx.DiGraph, radius: int = _CI_RADIUS
+) -> list[tuple[str, str]]:
+    """Add the Collective Influence score to each node (Morone & Makse 2015, *Nature*).
+
+    Collective Influence is the optimal-percolation measure of a node's importance to
+    global connectivity:
+
+        ``CI_ℓ(i) = (k_i − 1) · Σ_{j ∈ ∂Ball(i, ℓ)} (k_j − 1)``
+
+    where ``k`` is the degree, ``Ball(i, ℓ)`` is the set of nodes within shortest-path
+    distance ``ℓ`` of ``i`` and ``∂Ball(i, ℓ)`` is its *frontier* (nodes at distance
+    *exactly* ``ℓ``). A node scores high only when it has many links *and* sits ``ℓ`` hops
+    from many other well-connected nodes — the signature of a node whose removal most
+    fragments the giant component. Morone & Makse show the ranking identifies the minimal
+    set of structurally critical spreaders better than degree, k-core, PageRank or
+    betweenness; it is the per-node companion to Pulpit's robustness attacks (the optimal
+    dismantling order) and complements CORENESS (a depth label) and SPREADING (a per-node
+    cascade average).
+
+    Computed on the symmetrised, self-loop-free, **unweighted** projection
+    (``to_undirected_sum`` then drop self-loops), matching CORENESS — so the score is
+    direction-invariant and ``--edge-weight-strategy`` does not affect the ranking. Degree-0
+    and degree-1 nodes score 0 (the ``k_i − 1`` factor vanishes), as do nodes whose
+    distance-``ℓ`` frontier is empty. The raw values are unbounded and have no star-based
+    maximum, so the score is read **ordinally** (to rank channels) and is excluded from
+    Freeman centralisation — like CORENESS and TROPHICLEVEL.
+
+    Refs: Morone, F. & Makse, H.A. (2015) "Influence maximization in complex networks
+    through optimal percolation", *Nature* 524(7563):65–68.
+    """
+    undirected = to_undirected_sum(graph)
+    undirected.remove_edges_from(nx.selfloop_edges(undirected))
+    adjacency: dict[str, set] = {node: set(undirected.neighbors(node)) for node in undirected.nodes()}
+    degree: dict[str, int] = {node: len(nbrs) for node, nbrs in adjacency.items()}
+
+    values: dict[str, float] = {}
+    for node in undirected.nodes():
+        k_minus_1 = degree[node] - 1
+        if k_minus_1 <= 0:
+            values[node] = 0.0
+            continue
+        # Expand BFS shells to obtain the frontier at distance == radius exactly.
+        visited = {node}
+        frontier = {node}
+        for _ in range(radius):
+            nxt: set = set()
+            for u in frontier:
+                nxt |= adjacency[u]
+            nxt -= visited
+            visited |= nxt
+            frontier = nxt
+            if not frontier:
+                break
+        ball_sum = sum(degree[j] - 1 for j in frontier)
+        values[node] = float(k_minus_1 * ball_sum)
+    return apply_measure(graph_data, values, "collective_influence", "Collective Influence")
+
+
+# Gould & Fernandez (1989) brokerage roles. Each directed 2-path i→v→j (the broker v is
+# cited by i and itself cites j) is classified by the group memberships of i, v, j into
+# one of five mutually exclusive, exhaustive roles. Ordered (key, display) — the list order
+# is also the tie-break priority for the dominant-role label.
+_GF_ROLES: tuple[tuple[str, str], ...] = (
+    ("brokerage_coordinator", "Coordinator"),
+    ("brokerage_gatekeeper", "Gatekeeper"),
+    ("brokerage_representative", "Representative"),
+    ("brokerage_consultant", "Consultant"),
+    ("brokerage_liaison", "Liaison"),
+)
+_GF_ROLE_KEYS: tuple[str, ...] = tuple(k for k, _ in _GF_ROLES)
+
+
+def _gf_role_of(gi: str, gv: str, gj: str) -> str:
+    """Classify a directed 2-path i→v→j by the groups of its endpoints (i ≠ j assumed).
+
+    Returns the node-attribute key of the broker role of *v* (Gould & Fernandez 1989):
+
+    * **Coordinator** ``w_I`` — i, v, j all in v's group (within-group broker).
+    * **Consultant** ``w_O`` — i and j share a group that is *not* v's (itinerant broker
+      mediating two members of another group).
+    * **Gatekeeper** ``b_IO`` — i is outside, v and j share v's group (controls inflow into
+      the broker's own group).
+    * **Representative** ``b_OI`` — i and v share v's group, j is outside (controls outflow
+      from the broker's own group).
+    * **Liaison** ``b_O`` — i, v, j all in different groups (broker between two foreign groups).
+    """
+    if gi == gv == gj:
+        return "brokerage_coordinator"
+    if gi == gj:  # gv differs → two members of one foreign group
+        return "brokerage_consultant"
+    if gv == gj:  # gi differs, v & j together → inflow gatekeeper
+        return "brokerage_gatekeeper"
+    if gi == gv:  # j differs, i & v together → outflow representative
+        return "brokerage_representative"
+    return "brokerage_liaison"
+
+
+def apply_gould_fernandez(graph_data: GraphData, graph: nx.DiGraph, strategy_key: str) -> list[tuple[str, str]]:
+    """Add the Gould & Fernandez (1989) brokerage-role census to each node.
+
+    A channel ``v`` *brokers* a directed 2-path ``i → v → j`` (``i`` cites ``v`` and ``v``
+    cites ``j``, with ``i ≠ j``). Each such ordered 2-path is classified by the group
+    memberships — taken from the partition named by ``strategy_key`` — of ``i``, ``v`` and
+    ``j`` into one of the five mutually exclusive Gould–Fernandez roles (coordinator,
+    gatekeeper, representative, consultant, liaison; see :func:`_gf_role_of`). The census
+    answers *what kind of broker is this channel* — a question Burt's constraint (redundancy)
+    and community bridging (brokerage intensity) cannot: with the **Organization** partition
+    a gatekeeper controls what enters a faction, a representative what leaves it, a liaison
+    bridges two factions it belongs to neither of.
+
+    Emits, per node:
+
+    * ``brokerage_total`` — the count of all brokered 2-paths (the only value returned as a
+      sortable numeric measure column);
+    * ``brokerage_role`` — the categorical *dominant* role label (the role with the most
+      2-paths, list-order tie-break; ``None`` when the node brokers nothing or has no group),
+      which rides alongside ``brokerage_total`` exactly as ``module_role`` rides alongside
+      ``within_module_z``;
+    * the five raw role counts (``brokerage_coordinator`` … ``brokerage_liaison``) — written
+      onto the node for the channels.json payload, the CSV, and the GEXF/GraphML exports, but
+      not surfaced as table columns.
+
+    Only 2-paths whose three endpoints all carry a group membership are counted; a node with
+    no group assignment (e.g. a dead leaf) receives ``None`` for every field. **Unweighted**
+    (paths are counted, not weighted) and computed in the as-built citation orientation —
+    matching the other brokerage measures (betweenness, community bridging, bridging
+    centrality), so a citation chain ``i → v → j`` is the brokered transaction. The raw
+    counts have no star-based maximum, so ``brokerage_total`` is excluded from Freeman
+    centralisation (like coreness/trophic), and the dominant-role label is biased toward
+    whichever role has the most structural opportunity (largest groups) — read it as a quick
+    descriptor and the five counts as the rigorous census.
+
+    Refs: Gould, R.V. & Fernandez, R.M. (1989) "Structures of mediation: A formal approach to
+    brokerage in transaction networks", *Sociological Methodology* 19:89–126.
+    """
+    community_map: dict[str, str] = {
+        node_id: node_data["communities"][strategy_key]
+        for node_id, node_data in graph.nodes(data="data")
+        if node_data and strategy_key in (node_data.get("communities") or {})
+    }
+
+    counts: dict[str, dict[str, int]] = {}
+    for v in graph.nodes():
+        gv = community_map.get(v)
+        if gv is None:
+            continue
+        role_counts = dict.fromkeys(_GF_ROLE_KEYS, 0)
+        preds = [(p, community_map.get(p)) for p in graph.predecessors(v) if p != v]
+        succs = [(s, community_map.get(s)) for s in graph.successors(v) if s != v]
+        for i, gi in preds:
+            if gi is None:
+                continue
+            for j, gj in succs:
+                if gj is None or j == i:
+                    continue
+                role_counts[_gf_role_of(gi, gv, gj)] += 1
+        counts[v] = role_counts
+
+    for node in graph_data["nodes"]:
+        nid = node["id"]
+        role_counts = counts.get(nid)
+        if role_counts is None:
+            node["brokerage_total"] = None
+            node["brokerage_role"] = None
+            for key in _GF_ROLE_KEYS:
+                node[key] = None
+            continue
+        total = sum(role_counts.values())
+        for key in _GF_ROLE_KEYS:
+            node[key] = role_counts[key]
+        node["brokerage_total"] = total
+        dominant = None
+        best = 0
+        for key, display in _GF_ROLES:
+            if role_counts[key] > best:
+                best = role_counts[key]
+                dominant = display
+        node["brokerage_role"] = dominant
+    return [("brokerage_total", "Brokerage")]
