@@ -1,4 +1,7 @@
 # Changelog
+## [0.25] - To be announced
+
+
 ## [0.24] - 2026-06-01
 *Further consolidation of measures.*
 
