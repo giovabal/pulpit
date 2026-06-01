@@ -328,9 +328,11 @@ IGNORE_FLOODWAIT = config("TELEGRAM_IGNORE_FLOODWAIT", default=True, cast=bool)
 TELEGRAM_FLOODWAIT_SLEEP_SECONDS = config("TELEGRAM_FLOODWAIT_SLEEP_SECONDS", default=900, cast=int)
 TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, cast=int)
 
-# ── Project identity (.env) ───────────────────────────────────────────────────
+# ── Access control (.env) ─────────────────────────────────────────────────────
+# The project title (and its description/criteria/notes) now lives in the DB,
+# editable at Manage › Project (webapp.models.Project); it is no longer an
+# environment variable.
 
-PROJECT_TITLE = config("PROJECT_TITLE", default="Pulpit project", cast=str)
 # `python-decouple` does not strip inline `#` comments from env-var values,
 # so defensively drop them: a user `.env` that copies env.example's format
 # `WEB_ACCESS=ALL  # …` would otherwise produce a value like "ALL  # …" that

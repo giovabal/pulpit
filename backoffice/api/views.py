@@ -12,6 +12,7 @@ from webapp.models import (
     ChannelVacancy,
     Organization,
     ProfilePicture,
+    Project,
     SearchTerm,
 )
 
@@ -23,12 +24,13 @@ from .serializers import (
     EventSerializer,
     EventTypeSerializer,
     OrganizationSerializer,
+    ProjectSerializer,
     SearchTermSerializer,
     UserSerializer,
 )
 from .utils import UnaccentLower, normalize_for_search
 
-from rest_framework import mixins, status, viewsets
+from rest_framework import generics, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import OrderingFilter
@@ -308,3 +310,12 @@ class UserViewSet(viewsets.ModelViewSet):
         if user.is_authenticated and user.pk == instance.pk:
             raise PermissionDenied("You cannot delete your own account.")
         instance.delete()
+
+
+class ProjectView(generics.RetrieveUpdateAPIView):
+    """GET/PUT/PATCH the project dossier singleton (title + description/criteria/notes)."""
+
+    serializer_class = ProjectSerializer
+
+    def get_object(self):
+        return Project.load()

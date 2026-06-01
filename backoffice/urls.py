@@ -8,6 +8,7 @@ from .views import (
     GroupsView,
     MaintenanceView,
     OrganizationsView,
+    ProjectView,
     SearchTermsView,
     UsersView,
     VacanciesManageView,
@@ -25,6 +26,7 @@ urlpatterns = [
     path("events/", EventsView.as_view(), name="events"),
     path("users/", UsersView.as_view(), name="users"),
     path("vacancies/", VacanciesManageView.as_view(), name="vacancies"),
+    path("project/", ProjectView.as_view(), name="project"),
     path("maintenance/", MaintenanceView.as_view(), name="maintenance"),
     path("api/", include("backoffice.api.urls")),
 ]
