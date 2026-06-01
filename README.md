@@ -122,14 +122,14 @@ After export, the output directory contains self-contained files that can be sha
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
-| **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
+| **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table (plus the five Gould-Fernandez brokerage role counts when computed). `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
 | **GEXF and GraphML** | For Gephi, Cytoscape, R/igraph, and any graph-analysis tool [more](docs/export-formats.md#networkgexf--networkgraphml--network-exchange-formats) |
 
 ---
 
-## Network measures — 18 per channel
+## Network measures — 20 per channel
 
-Each channel receives a score for up to 18 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 20 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -151,9 +151,11 @@ Each channel receives a score for up to 18 measures. All can be used to size nod
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel's immediate contacts also cite each other — a tight mutual-amplification neighbourhood vs. an open star of independent sources (Fagiolo 2007) |
 | [K-core coreness](docs/network-measures.md#k-core-coreness) | Whether a channel sits in the densely interconnected nucleus or is a peripheral amplifier (Kitsak et al. 2010) |
+| [Collective influence](docs/network-measures.md#collective-influence) | The optimal-percolation key spreaders whose removal most fragments the network (Morone & Makse 2015) |
 | [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — the Guimerà-Amaral role taxonomy |
 | [Bridging centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008) | Topological bridges (Hwang et al. 2008) — low-degree channels wedged between high-degree regions, whose removal fragments the network |
 | [Community bridging](docs/network-measures.md#community-bridging) | Channels that are both structurally central AND bridge genuinely distinct communities |
+| [Brokerage roles](docs/network-measures.md#brokerage-roles-gould-fernandez-1989) | What kind of broker a channel is between groups — gatekeeper, representative, liaison (Gould & Fernandez 1989) |
 
 **Content and dynamics**
 

@@ -256,6 +256,16 @@ def write_graphml(graph: nx.DiGraph, graph_data: GraphData, output_filename: str
 
 _CSV_BASE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
+# Gould-Fernandez brokerage role-count node keys, in the column order used by nodes.csv
+# (and any other full-census export). Matches the "Coordinator … Liaison" CSV headers.
+_GF_COUNT_KEYS: tuple[str, ...] = (
+    "brokerage_coordinator",
+    "brokerage_gatekeeper",
+    "brokerage_representative",
+    "brokerage_consultant",
+    "brokerage_liaison",
+)
+
 
 def write_csv(
     graph_data: GraphData,
@@ -266,7 +276,9 @@ def write_csv(
 ) -> None:
     """Write nodes.csv and edges.csv to output_dir.
 
-    nodes.csv has the same columns as channel_table.xlsx.
+    nodes.csv mirrors channel_table.xlsx, plus the five Gould-Fernandez brokerage role counts
+    (Coordinator … Liaison) when BROKERAGEROLES was computed — these ride in the CSV and the
+    graph-exchange formats rather than the on-screen channel table.
     edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions
     where weight_forwards and weight_mentions are the raw forward/mention counts.
     """
@@ -280,6 +292,9 @@ def write_csv(
     # The categorical Guimerà-Amaral role rides alongside its numeric within_module_z measure;
     # only emit the column when that measure was computed.
     has_module_role = any(k == "within_module_z" for k, _ in measures_labels)
+    # The Gould-Fernandez dominant-role label and the five raw role counts ride alongside the
+    # numeric brokerage_total measure; only emit them when BROKERAGEROLES was computed.
+    has_brokerage = any(k == "brokerage_total" for k, _ in measures_labels)
 
     headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
@@ -287,6 +302,8 @@ def write_csv(
     headers += [lbl for _, lbl in other_extra]
     if has_module_role:
         headers.append("Module role")
+    if has_brokerage:
+        headers += ["Brokerage role", "Coordinator", "Gatekeeper", "Representative", "Consultant", "Liaison"]
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
 
@@ -310,6 +327,10 @@ def write_csv(
                 row.append(node.get(key))
             if has_module_role:
                 row.append(node.get("module_role") or "")
+            if has_brokerage:
+                row.append(node.get("brokerage_role") or "")
+                for key in _GF_COUNT_KEYS:
+                    row.append(node.get(key))
             for s in strategies:
                 row.append(communities.get(s, ""))
             row.append(node.get("activity_start") or "")
@@ -433,6 +454,16 @@ def write_graph_files(
         # Categorical Guimerà-Amaral role label (paired with the numeric within_module_z
         # measure); only present on nodes when MODULEROLE was computed.
         "module_role",
+        # Gould-Fernandez brokerage census: the categorical dominant-role label plus the five
+        # raw role counts ride alongside the numeric brokerage_total measure (kept in the
+        # payload / CSV / GEXF / GraphML, not surfaced as channel-table columns); only present
+        # when BROKERAGEROLES was computed.
+        "brokerage_role",
+        "brokerage_coordinator",
+        "brokerage_gatekeeper",
+        "brokerage_representative",
+        "brokerage_consultant",
+        "brokerage_liaison",
     } | {k for k, _ in measures_labels}
     channels_payload: dict[str, Any] = {
         "nodes": [

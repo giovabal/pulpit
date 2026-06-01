@@ -246,7 +246,7 @@ Generated with `--csv`. Two plain-text CSV files, the most portable format for d
 
 ### nodes.csv
 
-One row per channel, same columns as `channel_table.xlsx`:
+One row per channel, mirroring `channel_table.xlsx` — plus the five Gould-Fernandez brokerage role counts when `BROKERAGEROLES` was computed (these ride in the CSV and the graph-exchange exports rather than the on-screen channel table):
 
 | Column | Content |
 | :----- | :------ |
@@ -257,6 +257,7 @@ One row per channel, same columns as `channel_table.xlsx`:
 | Inbound | In-degree (number of channels that forward or cite this channel) |
 | Outbound | Out-degree (number of channels this channel forwards or cites) |
 | *Measure columns* | One column per computed measure (PageRank, Betweenness, etc.) — only present when the measure was selected at export time |
+| *Brokerage census* | When `BROKERAGEROLES` was computed: a `Brokerage role` label plus five role-count columns (Coordinator, Gatekeeper, Representative, Consultant, Liaison) — in `nodes.csv` and GEXF/GraphML only, not the HTML/Excel channel table |
 | *Community columns* | One column per active community strategy, containing the community label assigned to this channel |
 | Activity start | Earliest message date (`YYYY-MM`), empty if no messages |
 | Activity end | Most recent message date (`YYYY-MM`), empty if no messages |

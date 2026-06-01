@@ -90,6 +90,8 @@ def write_table_xlsx(
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     # Categorical Guimerà-Amaral role rides alongside its numeric within_module_z measure.
     has_module_role = any(k == "within_module_z" for k, _ in measures_labels)
+    # Gould-Fernandez dominant-role label rides alongside its numeric brokerage_total measure.
+    has_brokerage = any(k == "brokerage_total" for k, _ in measures_labels)
 
     headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
@@ -97,6 +99,8 @@ def write_table_xlsx(
     headers += [lbl for _, lbl in other_extra]
     if has_module_role:
         headers.append("Module role")
+    if has_brokerage:
+        headers.append("Brokerage role")
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
 
@@ -121,6 +125,8 @@ def write_table_xlsx(
                 row.append(node.get(key))
             if has_module_role:
                 row.append(node.get("module_role") or "")
+            if has_brokerage:
+                row.append(node.get("brokerage_role") or "")
             for s in strategies:
                 row.append(communities.get(s, ""))
             row.append(node.get("activity_start") or "")

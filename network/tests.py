@@ -41,9 +41,11 @@ from network.measures import (
     apply_betweenness_centrality,
     apply_bridging_centrality,
     apply_burt_constraint,
+    apply_collective_influence,
     apply_community_bridging,
     apply_content_originality,
     apply_coreness,
+    apply_gould_fernandez,
     apply_harmonic_centrality,
     apply_hits,
     apply_in_degree_centrality,
@@ -1882,6 +1884,97 @@ class ApplyModuleRoleTests(TestCase):
         node_map = {n["id"]: n for n in graph_data["nodes"]}
         self.assertIsNone(node_map["loner"]["within_module_z"])
         self.assertIsNone(node_map["loner"]["module_role"])
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_collective_influence (Morone & Makse 2015)
+# ---------------------------------------------------------------------------
+
+
+class ApplyCollectiveInfluenceTests(TestCase):
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        # Two triangles (a-b-c) and (d-e-f) joined by the single bridge edge c–d.
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c"), ("c", "d"), ("d", "e"), ("e", "f"), ("d", "f")])
+        self.graph_data: dict = {"nodes": [{"id": n} for n in "abcdef"], "edges": []}
+
+    def test_adds_key_and_label(self) -> None:
+        labels = apply_collective_influence(self.graph_data, self.graph)
+        self.assertEqual(labels, [("collective_influence", "Collective Influence")])
+        for node in self.graph_data["nodes"]:
+            self.assertIn("collective_influence", node)
+
+    def test_bridge_nodes_outrank_periphery(self) -> None:
+        apply_collective_influence(self.graph_data, self.graph)
+        ci = {n["id"]: n["collective_influence"] for n in self.graph_data["nodes"]}
+        # CI_2(i) = (k_i−1)·Σ_{dist=2}(k_j−1). Bridge endpoints c,d (degree 3) reach the far
+        # triangle's two degree-2 nodes at distance 2 → 2·(1+1)=4; each peripheral node reaches
+        # only the opposite bridge endpoint at distance 2 → 1·2=2.
+        self.assertEqual(ci, {"a": 2.0, "b": 2.0, "c": 4.0, "d": 4.0, "e": 2.0, "f": 2.0})
+
+    def test_isolated_and_degree_one_nodes_get_zero(self) -> None:
+        graph = nx.DiGraph()
+        graph.add_edge("hub", "leaf")  # both degree 1 → (k−1) factor vanishes
+        graph.add_node("isolated")  # degree 0
+        graph_data: dict = {"nodes": [{"id": n} for n in ("hub", "leaf", "isolated")], "edges": []}
+        apply_collective_influence(graph_data, graph)
+        for node in graph_data["nodes"]:
+            self.assertEqual(node["collective_influence"], 0.0)
+
+    def test_direction_invariant(self) -> None:
+        apply_collective_influence(self.graph_data, self.graph)
+        forward = {n["id"]: n["collective_influence"] for n in self.graph_data["nodes"]}
+        reversed_data: dict = {"nodes": [{"id": n} for n in "abcdef"], "edges": []}
+        apply_collective_influence(reversed_data, self.graph.reverse(copy=True))
+        self.assertEqual(forward, {n["id"]: n["collective_influence"] for n in reversed_data["nodes"]})
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_gould_fernandez (brokerage role census)
+# ---------------------------------------------------------------------------
+
+
+class ApplyGouldFernandezTests(TestCase):
+    def _graph(self):
+        graph = nx.DiGraph()
+        # Broker '2' (org A) sits on every directed citation 2-path i→2→j. Predecessors
+        # {1:A, 4:B, 6:C}, successors {3:A, 4:B, 5:B} exercise all five roles.
+        orgs = {"1": "A", "2": "A", "3": "A", "4": "B", "5": "B", "6": "C"}
+        for n, o in orgs.items():
+            graph.add_node(n, data={"communities": {"organization": o}})
+        graph.add_edges_from([("1", "2"), ("4", "2"), ("6", "2"), ("2", "3"), ("2", "4"), ("2", "5")])
+        graph_data: dict = {"nodes": [{"id": n} for n in orgs], "edges": []}
+        return graph, graph_data
+
+    def test_emits_total_measure_and_full_census(self) -> None:
+        graph, graph_data = self._graph()
+        labels = apply_gould_fernandez(graph_data, graph, "organization")
+        self.assertEqual(labels, [("brokerage_total", "Brokerage")])
+        node2 = next(n for n in graph_data["nodes"] if n["id"] == "2")
+        self.assertEqual(node2["brokerage_coordinator"], 1)  # 1A→2A→3A
+        self.assertEqual(node2["brokerage_gatekeeper"], 2)  # 4B→2A→3A, 6C→2A→3A
+        self.assertEqual(node2["brokerage_representative"], 2)  # 1A→2A→4B, 1A→2A→5B
+        self.assertEqual(node2["brokerage_consultant"], 1)  # 4B→2A→5B
+        self.assertEqual(node2["brokerage_liaison"], 2)  # 6C→2A→4B, 6C→2A→5B
+        self.assertEqual(node2["brokerage_total"], 8)
+        self.assertEqual(node2["brokerage_role"], "Gatekeeper")
+
+    def test_grouped_node_with_no_paths_has_zero_total_and_no_role(self) -> None:
+        graph, graph_data = self._graph()
+        apply_gould_fernandez(graph_data, graph, "organization")
+        node1 = next(n for n in graph_data["nodes"] if n["id"] == "1")  # has a group, no predecessors
+        self.assertEqual(node1["brokerage_total"], 0)
+        self.assertIsNone(node1["brokerage_role"])
+
+    def test_node_without_group_gets_none(self) -> None:
+        graph, graph_data = self._graph()
+        graph.add_node("loner", data={"communities": {}})
+        graph_data["nodes"].append({"id": "loner"})
+        apply_gould_fernandez(graph_data, graph, "organization")
+        loner = next(n for n in graph_data["nodes"] if n["id"] == "loner")
+        self.assertIsNone(loner["brokerage_total"])
+        self.assertIsNone(loner["brokerage_role"])
+        self.assertIsNone(loner["brokerage_coordinator"])
 
 
 # ---------------------------------------------------------------------------

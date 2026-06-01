@@ -5,7 +5,7 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
-var STRUCTURAL_KEYS = {"betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1,"coreness":1,"trophic_level":1,"within_module_z":1};
+var STRUCTURAL_KEYS = {"betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1,"coreness":1,"collective_influence":1,"trophic_level":1,"within_module_z":1,"brokerage_total":1};
 var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1,"spreading_efficiency":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
@@ -25,8 +25,10 @@ var COL_TOOLTIPS = {
     "community_bridging":  "Community bridging: betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high → broker spanning distinct communities",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
     "coreness":            "K-core coreness (Kitsak et al. 2010): deepest k-core a channel survives in; high → dense reinforcing nucleus, low → peripheral amplifier",
+    "collective_influence":"Collective Influence (Morone & Makse 2015): (k−1) × Σ(k−1) over nodes two hops away; high → an optimal-percolation key spreader whose removal most fragments the network. Symmetrised, unweighted; read ordinally.",
     "trophic_level":       "Trophic level (MacKay, Johnson & Sansom 2020): structural source→sink position; low → original source, high → terminal amplifier",
     "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
+    "brokerage_total":     "Brokerage (Gould & Fernandez 1989): count of directed citation 2-paths i→this→j the channel mediates between groups; pairs with the Brokerage role column. The five role counts are in nodes.csv / GEXF.",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
     "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
@@ -136,6 +138,8 @@ function _render(d) {
     var strategies = Object.keys(communities.strategies);
     // Guimerà–Amaral role: a categorical column present only when the MODULEROLE measure ran.
     var has_role = nodes.some(function(n) { return n.module_role != null; });
+    // Gould–Fernandez dominant brokerage role: categorical column present only when BROKERAGEROLES ran.
+    var has_brokerage_role = nodes.some(function(n) { return n.brokerage_role != null; });
 
     // Preamble
     var preambleTarget = document.getElementById("channel-preamble");
@@ -218,6 +222,7 @@ function _render(d) {
     addTh("Channel", "", false);
     cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[col.key] || ""); });
     if (has_role) addTh("Role", "", true, "Guimerà–Amaral within-module role (from the MODULEROLE measure)");
+    if (has_brokerage_role) addTh("Brokerage role", "", !has_role, "Gould–Fernandez dominant brokerage role (from the BROKERAGEROLES measure)");
     var stratGroupStart = true;
     strategies.forEach(function(s) {
         addTh(s.charAt(0).toUpperCase() + s.slice(1), "", stratGroupStart, "Community label assigned by " + s + " detection algorithm");
@@ -281,6 +286,7 @@ function _render(d) {
             }
         });
         if (has_role) addTd(node.module_role || "—", "", node.module_role || "", "", "", true);
+        if (has_brokerage_role) addTd(node.brokerage_role || "—", "", node.brokerage_role || "", "", "", !has_role);
         var firstStrategy = true;
         strategies.forEach(function(s) {
             var comm = (node.communities || {})[s];
@@ -316,6 +322,7 @@ function _render(d) {
     addFtd("Mean ± SD", "", false);
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
     if (has_role) addFtd("", "", true);
+    if (has_brokerage_role) addFtd("", "", !has_role);
     var firstStratFoot = true;
     strategies.forEach(function() { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);
