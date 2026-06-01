@@ -108,7 +108,7 @@ Only messages dated **within a channel's in-target attribution periods** contrib
 
 ### Code style
 
-- Python 3.12, line length 120, double quotes (see `ruff.toml`)
+- Python 3.12–3.14 (all fully supported), line length 120, double quotes (see `ruff.toml`)
 - `ruff` for linting and formatting
 
 ### Configuration

@@ -4,15 +4,21 @@
 
 set -e
 
-# Require Python 3.12
-PY=$(command -v python3.12 2>/dev/null || command -v python3 2>/dev/null || true)
+# Require Python 3.12, 3.13, or 3.14 (Pulpit supports all three; prefer the newest available)
+PY=""
+for candidate in python3.14 python3.13 python3.12 python3 python; do
+    bin=$(command -v "$candidate" 2>/dev/null) || continue
+    version=$("$bin" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null) || continue
+    case "$version" in
+        3.12 | 3.13 | 3.14)
+            PY="$bin"
+            break
+            ;;
+    esac
+done
 if [ -z "$PY" ]; then
-    echo "Error: Python 3.12 not found." >&2
-    exit 1
-fi
-PY_VERSION=$("$PY" -c "import sys; print('%d.%d' % sys.version_info[:2])")
-if [ "$PY_VERSION" != "3.12" ]; then
-    echo "Error: Python 3.12 required, found $PY_VERSION." >&2
+    echo "Error: Python 3.12, 3.13, or 3.14 is required but was not found." >&2
+    echo "Download it from https://www.python.org/downloads/" >&2
     exit 1
 fi
 

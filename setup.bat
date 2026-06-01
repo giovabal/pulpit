@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem Require Python 3.12
-python -c "import sys; exit(0 if sys.version_info[:2] == (3, 12) else 1)" 2>nul
+rem Require Python 3.12, 3.13, or 3.14 (Pulpit supports all three)
+python -c "import sys; exit(0 if (3, 12) <= sys.version_info[:2] <= (3, 14) else 1)" 2>nul
 if errorlevel 1 (
-    echo Error: Python 3.12 required. Download from https://python.org/downloads
+    echo Error: Python 3.12, 3.13, or 3.14 is required. Download from https://python.org/downloads
     exit /b 1
 )
 
