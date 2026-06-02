@@ -368,6 +368,138 @@
 }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
 
+/* ---- drag-and-drop measure builder ---- */
+.ops-measures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+}
+@media (max-width: 720px) {
+  .ops-measures { grid-template-columns: 1fr; }
+}
+.ops-measures-col { min-width: 0; display: flex; flex-direction: column; }
+.ops-measures-head {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin: 0 0 .35rem;
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+}
+.ops-measures-hint { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .7; }
+
+.ops-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+  align-content: flex-start;
+}
+
+/* palette chip — a draggable source */
+.ops-mchip {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  font-size: .8rem;
+  padding: .3rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: grab;
+  user-select: none;
+}
+.ops-mchip:hover { border-color: var(--accent); }
+.ops-mchip.ops-mchip--used { opacity: .4; cursor: default; }
+.ops-mchip.ops-mchip--dragging { opacity: .5; }
+.ops-mchip-label { white-space: nowrap; }
+.ops-mchip-add {
+  margin-left: .15rem;
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ops-mchip-add:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ops-mchip-add:disabled { opacity: .5; cursor: default; }
+
+/* drop zone — the ordered selected list */
+.ops-dropzone {
+  border: 1px dashed var(--border);
+  border-radius: .375rem;
+  padding: .375rem;
+  min-height: 5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  background: var(--bg);
+  transition: border-color .12s, background .12s;
+}
+.ops-dropzone.ops-dropzone--over { border-color: var(--accent); background: var(--accent-bg); }
+.ops-dropzone-empty { margin: auto; font-size: .76rem; color: var(--muted); opacity: .8; text-align: center; }
+
+/* a selected measure instance (a row in the drop zone) */
+.ops-selchip {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+  padding: .3rem .4rem;
+  border: 1px solid var(--accent);
+  border-radius: .375rem;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: .8rem;
+}
+.ops-selchip.ops-selchip--dragging { opacity: .4; }
+.ops-selchip-head { display: inline-flex; align-items: center; gap: .3rem; min-width: 0; }
+.ops-selchip-grip { cursor: grab; opacity: .55; font-size: .9rem; }
+.ops-selchip-label { font-weight: 600; white-space: nowrap; }
+.ops-selchip-params { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.ops-mparam {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  font-size: .7rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ops-mparam-input {
+  border: 1px solid var(--border);
+  border-radius: .3rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .75rem;
+  padding: .12rem .35rem;
+}
+.ops-mparam-input[type="number"] { width: 5rem; }
+.ops-mparam-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(67,56,202,.15); }
+.ops-selchip-ctrls { display: inline-flex; gap: .15rem; margin-left: auto; }
+.ops-selchip-btn {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  border-radius: .25rem;
+  background: transparent;
+  color: var(--accent);
+  font-size: .72rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.ops-selchip-btn:hover { background: var(--surface); border-color: var(--border); }
+.ops-selchip-btn:disabled { opacity: .3; cursor: default; }
+.ops-selchip-remove:hover { color: var(--danger-hover); }
+
 /* ---- linked-param indicator (pushed to right edge of chip) ---- */
 .ops-tip.ops-flag-param {
   margin-left: auto;

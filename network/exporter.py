@@ -12,6 +12,7 @@ from typing import Any
 from django.conf import settings
 from django.db.models import QuerySet
 
+from network.measures._registry import role_companions
 from network.utils import GraphData
 from webapp.models import Channel
 
@@ -256,15 +257,28 @@ def write_graphml(graph: nx.DiGraph, graph_data: GraphData, output_filename: str
 
 _CSV_BASE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
-# Gould-Fernandez brokerage role-count node keys, in the column order used by nodes.csv
-# (and any other full-census export). Matches the "Coordinator … Liaison" CSV headers.
-_GF_COUNT_KEYS: tuple[str, ...] = (
-    "brokerage_coordinator",
-    "brokerage_gatekeeper",
-    "brokerage_representative",
-    "brokerage_consultant",
-    "brokerage_liaison",
-)
+
+def _label_param_annotation(label: str) -> str:
+    """Trailing ``" (param=value)"`` of a measure label, else ``""``.
+
+    A role measure's base label ("Within-module z", "Brokerage") carries no parentheses, so the
+    only parenthetical on its numeric column label is the per-instance parameter annotation —
+    reused verbatim on the categorical companion columns so they stay aligned with their numeric
+    column when a role measure is requested more than once.
+    """
+    idx = label.find(" (")
+    return label[idx:] if idx != -1 else ""
+
+
+def _role_companion_groups(measures_labels: list[tuple[str, str]]) -> list[tuple[dict, str]]:
+    """Categorical companion column groups (module / brokerage role + brokerage counts), one per
+    role-measure instance, derived from each ``within_module_z*`` / ``brokerage_total*`` column."""
+    groups: list[tuple[dict, str]] = []
+    for key, label in measures_labels:
+        comp = role_companions(key)
+        if comp:
+            groups.append((comp, _label_param_annotation(label)))
+    return groups
 
 
 def write_csv(
@@ -278,7 +292,9 @@ def write_csv(
 
     nodes.csv mirrors channel_table.xlsx, plus the five Gould-Fernandez brokerage role counts
     (Coordinator … Liaison) when BROKERAGEROLES was computed — these ride in the CSV and the
-    graph-exchange formats rather than the on-screen channel table.
+    graph-exchange formats rather than the on-screen channel table. A role measure requested with
+    several community bases contributes one companion column group per instance, each carrying its
+    parameter annotation.
     edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions
     where weight_forwards and weight_mentions are the raw forward/mention counts.
     """
@@ -289,21 +305,15 @@ def write_csv(
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _CSV_BASE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    # The categorical Guimerà-Amaral role rides alongside its numeric within_module_z measure;
-    # only emit the column when that measure was computed.
-    has_module_role = any(k == "within_module_z" for k, _ in measures_labels)
-    # The Gould-Fernandez dominant-role label and the five raw role counts ride alongside the
-    # numeric brokerage_total measure; only emit them when BROKERAGEROLES was computed.
-    has_brokerage = any(k == "brokerage_total" for k, _ in measures_labels)
+    role_groups = _role_companion_groups(measures_labels)
 
     headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
-    if has_module_role:
-        headers.append("Module role")
-    if has_brokerage:
-        headers += ["Brokerage role", "Coordinator", "Gatekeeper", "Representative", "Consultant", "Liaison"]
+    for comp, annot in role_groups:
+        headers.append(comp["role_label"] + annot)
+        headers += [cl + annot for cl in comp["count_labels"]]
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
 
@@ -325,12 +335,10 @@ def write_csv(
                 row.append(node.get(pagerank_col[0]))
             for key, _ in other_extra:
                 row.append(node.get(key))
-            if has_module_role:
-                row.append(node.get("module_role") or "")
-            if has_brokerage:
-                row.append(node.get("brokerage_role") or "")
-                for key in _GF_COUNT_KEYS:
-                    row.append(node.get(key))
+            for comp, _annot in role_groups:
+                row.append(node.get(comp["role_key"]) or "")
+                for count_key in comp["count_keys"]:
+                    row.append(node.get(count_key))
             for s in strategies:
                 row.append(communities.get(s, ""))
             row.append(node.get("activity_start") or "")
@@ -435,7 +443,11 @@ def write_graph_files(
             with open(os.path.join(data_dir, f"channel_position_3d_{algo}.json"), "w") as f:
                 f.write(json.dumps(extra_payload))
 
-    # channels.json — per-node metadata, computed measures, community assignments, measure labels
+    # channels.json — per-node metadata, computed measures, community assignments, measure labels.
+    # The numeric measure keys come straight from measures_labels; each role measure's categorical
+    # companions (the parameter-suffixed module_role / brokerage_role label and the five brokerage
+    # role counts — kept in the payload / CSV / GEXF / GraphML, not surfaced as channel-table
+    # columns) are derived per instance from its within_module_z* / brokerage_total* column.
     node_keys: set[str] = {
         "id",
         "label",
@@ -451,20 +463,12 @@ def write_graph_files(
         "out_deg",
         "activity_start",
         "activity_end",
-        # Categorical Guimerà-Amaral role label (paired with the numeric within_module_z
-        # measure); only present on nodes when MODULEROLE was computed.
-        "module_role",
-        # Gould-Fernandez brokerage census: the categorical dominant-role label plus the five
-        # raw role counts ride alongside the numeric brokerage_total measure (kept in the
-        # payload / CSV / GEXF / GraphML, not surfaced as channel-table columns); only present
-        # when BROKERAGEROLES was computed.
-        "brokerage_role",
-        "brokerage_coordinator",
-        "brokerage_gatekeeper",
-        "brokerage_representative",
-        "brokerage_consultant",
-        "brokerage_liaison",
     } | {k for k, _ in measures_labels}
+    for measure_key, _label in measures_labels:
+        comp = role_companions(measure_key)
+        if comp:
+            node_keys.add(comp["role_key"])
+            node_keys.update(comp["count_keys"])
     channels_payload: dict[str, Any] = {
         "nodes": [
             {**{k: n[k] for k in node_keys if k in n}, "communities": n.get("communities", {})}

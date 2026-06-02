@@ -55,8 +55,11 @@ from network.measures import (
     apply_pagerank,
     apply_spreading_efficiency,
     apply_trophic_level,
+    canonical_measure_key,
     compute_betweenness,
     compute_bridging_coefficient,
+    parse_measures,
+    role_companions,
 )
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, Message, Organization
@@ -3946,3 +3949,122 @@ class ChannelCutoffQBoundaryTests(TestCase):
             telegram_id=99, channel=ch2, date=datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
         )
         self.assertTrue(Message.objects.filter(channel=ch2).filter(channel_cutoff_q()).exists())
+
+
+# ---------------------------------------------------------------------------
+# measures/_registry.py — parse_measures / MeasureInstance / canonical / companions
+# ---------------------------------------------------------------------------
+
+
+class MeasureParserTests(TestCase):
+    def test_plain_and_parameterised_tokens(self) -> None:
+        insts = parse_measures(["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=leiden)"])
+        self.assertEqual([i.token() for i in insts], ["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=LEIDEN)"])
+        self.assertEqual([i.suffix() for i in insts], ["", "_runs_2000", "_basis_leiden"])
+
+    def test_all_expands_with_defaults(self) -> None:
+        tokens = {i.measure for i in parse_measures(["ALL"])}
+        self.assertIn("PAGERANK", tokens)
+        self.assertIn("BRIDGING", tokens)
+        self.assertIn("BROKERAGEROLES", tokens)
+
+    def test_same_measure_twice_with_different_params(self) -> None:
+        insts = parse_measures(["SPREADING(runs=200)", "SPREADING(runs=2000)"])
+        self.assertEqual([i.suffix() for i in insts], ["_runs_200", "_runs_2000"])
+
+    def test_default_override_fills_bare_token(self) -> None:
+        (inst,) = parse_measures(["SPREADING"], defaults={"SPREADING": {"runs": 500}})
+        self.assertEqual(inst.token(), "SPREADING(runs=500)")
+
+    def test_legacy_positional_bridging(self) -> None:
+        (inst,) = parse_measures(["BRIDGING(LEIDEN_DIRECTED)"])
+        self.assertEqual(inst.token(), "BRIDGING(basis=LEIDEN_DIRECTED)")
+
+    def test_rejects_duplicate_drop_once(self) -> None:
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            parse_measures(["PAGERANK", "PAGERANK"])
+
+    def test_rejects_identical_parameterised(self) -> None:
+        with self.assertRaisesRegex(ValueError, "identical parameters"):
+            parse_measures(["SPREADING(runs=200)", "SPREADING(runs=200)"])
+
+    def test_rejects_params_on_drop_once(self) -> None:
+        with self.assertRaisesRegex(ValueError, "takes no parameters"):
+            parse_measures(["PAGERANK(runs=5)"])
+
+    def test_rejects_out_of_range_and_unknown_param(self) -> None:
+        with self.assertRaisesRegex(ValueError, "below the minimum"):
+            parse_measures(["SPREADING(runs=0)"])
+        with self.assertRaisesRegex(ValueError, "has no parameter"):
+            parse_measures(["SPREADING(foo=1)"])
+
+    def test_rejects_unknown_measure_and_bad_enum(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown measure"):
+            parse_measures(["NOTAMEASURE"])
+        with self.assertRaisesRegex(ValueError, "not a valid community strategy"):
+            parse_measures(["BRIDGING(basis=NOPE)"])
+
+    def test_canonical_measure_key(self) -> None:
+        self.assertEqual(canonical_measure_key("spreading_efficiency_runs_2000"), "spreading_efficiency")
+        self.assertEqual(canonical_measure_key("community_bridging_basis_leiden_directed"), "community_bridging")
+        self.assertEqual(canonical_measure_key("brokerage_total_basis_organization"), "brokerage_total")
+        self.assertEqual(canonical_measure_key("pagerank"), "pagerank")  # non-parameterised unchanged
+
+    def test_role_companions(self) -> None:
+        mod = role_companions("within_module_z_basis_leiden")
+        self.assertEqual(mod["role_key"], "module_role_basis_leiden")
+        self.assertEqual(mod["count_keys"], [])
+        brk = role_companions("brokerage_total_basis_organization")
+        self.assertEqual(brk["role_key"], "brokerage_role_basis_organization")
+        self.assertIn("brokerage_coordinator_basis_organization", brk["count_keys"])
+        self.assertEqual(len(brk["count_keys"]), 5)
+        self.assertIsNone(role_companions("pagerank"))
+
+
+class MeasureComputeHelpersTests(TestCase):
+    """Command-layer helpers that suffix node keys per instance and resolve a community basis."""
+
+    def test_rebind_suffixes_numeric_and_aux_keys(self) -> None:
+        from network.management.commands.structural_analysis import _rebind_measure_keys
+
+        gd = {
+            "nodes": [
+                {"id": "1", "within_module_z": 1.2, "module_role": "Connector"},
+                {"id": "2", "within_module_z": None, "module_role": None},
+            ]
+        }
+        (inst,) = parse_measures(["MODULEROLE(basis=LEIDEN_DIRECTED)"])
+        labels = _rebind_measure_keys(gd, inst, [("within_module_z", "Within-module z")])
+        # Numeric column suffixed and label annotated.
+        self.assertEqual(labels, [("within_module_z_basis_leiden_directed", "Within-module z (basis=leiden_directed)")])
+        # Both the numeric key and the categorical companion are renamed on every node.
+        self.assertEqual(gd["nodes"][0]["within_module_z_basis_leiden_directed"], 1.2)
+        self.assertEqual(gd["nodes"][0]["module_role_basis_leiden_directed"], "Connector")
+        self.assertNotIn("within_module_z", gd["nodes"][0])
+        self.assertNotIn("module_role", gd["nodes"][0])
+
+    def test_rebind_noop_for_unparameterised(self) -> None:
+        from network.management.commands.structural_analysis import _rebind_measure_keys
+
+        gd = {"nodes": [{"id": "1", "pagerank": 0.5}]}
+        (inst,) = parse_measures(["PAGERANK"])
+        labels = _rebind_measure_keys(gd, inst, [("pagerank", "PageRank")])
+        self.assertEqual(labels, [("pagerank", "PageRank")])
+        self.assertEqual(gd["nodes"][0]["pagerank"], 0.5)
+
+    def test_resolve_basis_explicit_and_auto(self) -> None:
+        from network.management.commands.structural_analysis import _resolve_community_basis
+
+        (explicit,) = parse_measures(["MODULEROLE(basis=LEIDEN)"])
+        self.assertEqual(_resolve_community_basis("MODULEROLE", explicit, {"leiden", "organization"}), "leiden")
+        # Explicit basis that was not computed → None (skip).
+        self.assertIsNone(_resolve_community_basis("MODULEROLE", explicit, {"organization"}))
+        # Auto (blank) brokerage prefers organization; module role prefers leiden_directed.
+        (auto_brk,) = parse_measures(["BROKERAGEROLES"])
+        self.assertEqual(
+            _resolve_community_basis("BROKERAGEROLES", auto_brk, {"organization", "leiden"}), "organization"
+        )
+        (auto_mod,) = parse_measures(["MODULEROLE"])
+        self.assertEqual(
+            _resolve_community_basis("MODULEROLE", auto_mod, {"leiden_directed", "leiden"}), "leiden_directed"
+        )

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.template.loader import render_to_string
 
 from network.community_stats import network_summary_rows
+from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
 
 import openpyxl
@@ -88,19 +89,21 @@ def write_table_xlsx(
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    # Categorical Guimerà-Amaral role rides alongside its numeric within_module_z measure.
-    has_module_role = any(k == "within_module_z" for k, _ in measures_labels)
-    # Gould-Fernandez dominant-role label rides alongside its numeric brokerage_total measure.
-    has_brokerage = any(k == "brokerage_total" for k, _ in measures_labels)
+    # Categorical role label (Module role / Brokerage role) rides alongside its numeric measure
+    # (within_module_z* / brokerage_total*) — one column per role-measure instance, carrying the
+    # instance's parameter annotation. The brokerage role *counts* stay in the CSV/GEXF, not here.
+    role_label_cols: list[tuple[str, str]] = []
+    for key, label in measures_labels:
+        comp = role_companions(key)
+        if comp:
+            annot = label[label.find(" (") :] if " (" in label else ""
+            role_label_cols.append((comp["role_key"], comp["role_label"] + annot))
 
     headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
-    if has_module_role:
-        headers.append("Module role")
-    if has_brokerage:
-        headers.append("Brokerage role")
+    headers += [hdr for _, hdr in role_label_cols]
     headers += [s.capitalize() for s in strategies]
     headers += ["Activity start", "Activity end"]
 
@@ -123,10 +126,8 @@ def write_table_xlsx(
                 row.append(node.get(pagerank_col[0]))
             for key, _ in other_extra:
                 row.append(node.get(key))
-            if has_module_role:
-                row.append(node.get("module_role") or "")
-            if has_brokerage:
-                row.append(node.get("brokerage_role") or "")
+            for role_key, _ in role_label_cols:
+                row.append(node.get(role_key) or "")
             for s in strategies:
                 row.append(communities.get(s, ""))
             row.append(node.get("activity_start") or "")
