@@ -1,6 +1,12 @@
 # Changelog
 ## [0.25] - To be announced
+*Measures gain parameters and a drag-and-drop builder.*
 
+### New features
+- **Measures are selected by drag-and-drop, and parameterised ones can be added more than once with different parameters.** The Operations panel's measure checkboxes become a palette → ordered drop-zone; `SPREADING`, `DIFFUSIONLAG`, `BRIDGING`, `MODULEROLE` and `BROKERAGEROLES` carry inline parameters and may repeat (e.g. `SPREADING(runs=200)` alongside `SPREADING(runs=2000)`), each producing its own parameter-suffixed output column. On the CLI, `--measures` gains keyword tokens — `SPREADING(runs=2000)`, `BRIDGING(basis=LEIDEN_DIRECTED)`, etc. The community basis is now chosen per instance, and the robustness bridging attack has its own basis selector.
+
+### Migration notes
+- Old `configuration/.operations-structural` files upgrade automatically (the shared `[measures].bridging_basis` folds into the `BRIDGING` token and seeds `[robustness].bridging_basis`). Parameterised-measure export columns are renamed to their suffixed form — external readers of the old `spreading_efficiency` / `community_bridging` / `module_role` / `brokerage_*` CSV/GEXF column names must update.
 
 ## [0.24] - 2026-06-01
 *Further consolidation of measures.*

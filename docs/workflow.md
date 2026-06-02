@@ -272,7 +272,12 @@ python manage.py structural_analysis --gexf --graphml
 python manage.py structural_analysis --csv
 python manage.py structural_analysis --measures PAGERANK,BETWEENNESS
 python manage.py structural_analysis --measures ALL
-python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # reaction window in days; 0 disables
+# Parameterised measures take keyword args in parens and may repeat with different params
+# (each combination produces its own parameter-suffixed output column):
+python manage.py structural_analysis --measures "SPREADING(runs=2000),DIFFUSIONLAG(window=7)"
+python manage.py structural_analysis --measures "SPREADING(runs=200),SPREADING(runs=2000)"   # same measure twice
+python manage.py structural_analysis --measures "BRIDGING(basis=LEIDEN_DIRECTED)" --community-strategies LEIDEN_DIRECTED
+python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # bare token inherits the global default; 0 disables
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31

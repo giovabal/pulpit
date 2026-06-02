@@ -104,8 +104,11 @@ STRUCTURAL_DEFAULTS: dict = {
         "layouts_3d": [],
     },
     "measures": {
+        # Ordered measure tokens, each carrying its own parameters where applicable, e.g.
+        # ["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=LEIDEN_DIRECTED)"]. A measure may
+        # appear more than once with different parameters. (The old shared `bridging_basis` key was
+        # folded into the per-instance tokens in v0.25 — see loader._migrate_bridging_basis.)
         "selected": [],
-        "bridging_basis": "",
     },
     "communities": {
         "strategies": [],
@@ -128,6 +131,9 @@ STRUCTURAL_DEFAULTS: dict = {
         # The bundled .operations-structural baseline supplies an opinionated list.
         "alpha": 0.05,
         "strategies": [],
+        # Community basis for the robustness "bridging" attack (its own field since v0.25 — it used
+        # to share measures.bridging_basis). Empty = the backend default (LEIDEN_DIRECTED).
+        "bridging_basis": "",
         "runs": 100,
         "null": 20,
         "seed": 42,

@@ -429,11 +429,11 @@ class WriteCliCommandViewTests(TestCase):
         self.assertIn("--extra-term bearbeit", cmd)
 
     def test_structural_validation_rejects_bad_bridging(self):
+        # The community basis now travels inside the BRIDGING token; ORGANIZATION is excluded.
         resp = self.client.post(
             reverse("operations-write-cli-command", args=["structural_analysis"]),
             data={
-                "measures": ["BRIDGING"],
-                "bridging_basis": "ORGANIZATION",
+                "measures": ["BRIDGING(basis=ORGANIZATION)"],
                 "community_strategies": ["LEIDEN"],
             },
         )
@@ -879,49 +879,35 @@ class BuildArgsStructuralRobustnessTests(TestCase):
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,harmonic")
 
-    def test_bridging_basis_dropdown_rewrites_to_parenthesised_form(self) -> None:
-        # The bridging-basis dropdown is shared between the BRIDGING measure and
-        # the bridging robustness attack — both pick it up under the same field name.
+    def test_robustness_bridging_basis_rewrites_to_parenthesised_form(self) -> None:
+        # The robustness "bridging" attack has its own basis dropdown (robustness_bridging_basis).
         post = FakePost(
             {
                 "robustness_strategies": ["pagerank", "bridging"],
-                "bridging_basis": "KCORE",
+                "robustness_bridging_basis": "KCORE",
             }
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "pagerank,bridging(kcore)")
 
-    def test_bridging_basis_blank_leaves_bare_bridging(self) -> None:
+    def test_robustness_bridging_basis_blank_leaves_bare_bridging(self) -> None:
         # Empty dropdown value means "use the backend default" — emit bare bridging
         # so the runner picks leiden_directed.
-        post = FakePost({"robustness_strategies": ["bridging"], "bridging_basis": ""})
+        post = FakePost({"robustness_strategies": ["bridging"], "robustness_bridging_basis": ""})
         args = _build_args("structural_analysis", post)
         idx = args.index("--robustness-strategies")
         self.assertEqual(args[idx + 1], "bridging")
 
-    def test_bridging_basis_also_rewrites_measures(self) -> None:
-        # Shared field — BRIDGING in measures gets the same basis appended.
+    def test_measure_tokens_pass_through_verbatim(self) -> None:
+        # Each chip already carries its parameters in the token; --measures is a plain CSV join,
+        # preserving order and per-instance parameters (a measure may repeat with different params).
         post = FakePost(
-            {
-                "measures": ["PAGERANK", "BRIDGING"],
-                "bridging_basis": "KCORE",
-            }
+            {"measures": ["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=KCORE)", "SPREADING(runs=500)"]}
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--measures")
-        self.assertEqual(args[idx + 1], "PAGERANK,BRIDGING(KCORE)")
-
-    def test_measures_without_bridging_unchanged_by_basis(self) -> None:
-        post = FakePost(
-            {
-                "measures": ["PAGERANK", "BETWEENNESS"],
-                "bridging_basis": "KCORE",
-            }
-        )
-        args = _build_args("structural_analysis", post)
-        idx = args.index("--measures")
-        self.assertEqual(args[idx + 1], "PAGERANK,BETWEENNESS")
+        self.assertEqual(args[idx + 1], "PAGERANK,SPREADING(runs=2000),BRIDGING(basis=KCORE),SPREADING(runs=500)")
 
     def test_no_strategies_omits_robustness(self) -> None:
         # Without any strategy ticked, the analysis is explicitly turned off.
@@ -1054,8 +1040,7 @@ class DefaultsViewTests(TestCase):
                     "graph": "on",
                     "html": "on",
                     "fa2_iterations": "3000",
-                    "measures": ["PAGERANK", "BETWEENNESS"],
-                    "bridging_basis": "LEIDEN",
+                    "measures": ["PAGERANK", "SPREADING(runs=500)"],
                     "timeline_step": "on",
                     "robustness_strategies": ["pagerank", "random"],
                 },
@@ -1064,8 +1049,8 @@ class DefaultsViewTests(TestCase):
             content = _saved_file_content(tmp, ".operations-structural")
             self.assertIn("graph = true", content)
             self.assertIn("fa2_iterations = 3000", content)
-            self.assertIn('selected = ["PAGERANK", "BETWEENNESS"]', content)
-            self.assertIn('bridging_basis = "LEIDEN"', content)
+            # Measure tokens are saved verbatim, including per-instance parameters.
+            self.assertIn('selected = ["PAGERANK", "SPREADING(runs=500)"]', content)
             self.assertIn('timeline_step = "year"', content)
             self.assertIn('strategies = ["pagerank", "random"]', content)
             self.assertNotIn("enabled", content.split("[robustness]", 1)[-1].split("[", 1)[0])
@@ -1157,15 +1142,14 @@ class DefaultsViewTests(TestCase):
             self.assertIn("Unknown palette", resp.json()["error"])
 
     def test_save_rejects_bridging_basis_not_in_strategies(self) -> None:
-        # BRIDGING(LEIDEN) is configured but community_strategies doesn't include LEIDEN —
+        # BRIDGING(basis=LEIDEN) is configured but community_strategies doesn't include LEIDEN —
         # the BRIDGING measure would point at a partition that's never computed.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "bad-bridging",
-                    "measures": ["BRIDGING"],
-                    "bridging_basis": "LEIDEN",
+                    "measures": ["BRIDGING(basis=LEIDEN)"],
                     "community_strategies": ["INFOMAP"],
                 },
             )
@@ -1193,22 +1177,20 @@ class DefaultsViewTests(TestCase):
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "good-bridging",
-                    "measures": ["BRIDGING"],
-                    "bridging_basis": "LEIDEN",
+                    "measures": ["BRIDGING(basis=LEIDEN)"],
                     "community_strategies": ["LEIDEN", "INFOMAP"],
                 },
             )
             self.assertEqual(resp.status_code, 200)
 
     def test_save_rejects_bridging_basis_organization(self) -> None:
-        # ORGANIZATION is excluded from the dropdown — direct POST shouldn't smuggle it in.
+        # ORGANIZATION is excluded from the bridging basis — direct POST shouldn't smuggle it in.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "org-basis",
-                    "measures": ["BRIDGING"],
-                    "bridging_basis": "ORGANIZATION",
+                    "measures": ["BRIDGING(basis=ORGANIZATION)"],
                     "community_strategies": ["ORGANIZATION", "LEIDEN"],
                 },
             )
@@ -1216,18 +1198,42 @@ class DefaultsViewTests(TestCase):
             self.assertIn("not a valid community-detection strategy", resp.json()["error"])
 
     def test_save_rejects_bridging_basis_unknown_strategy(self) -> None:
+        # An unknown basis is rejected by the measure-token parser itself.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "bogus-basis",
-                    "measures": ["BRIDGING"],
-                    "bridging_basis": "NOT_A_REAL_STRATEGY",
+                    "measures": ["BRIDGING(basis=NOT_A_REAL_STRATEGY)"],
                     "community_strategies": ["LEIDEN"],
                 },
             )
             self.assertEqual(resp.status_code, 400)
-            self.assertIn("not a valid community-detection strategy", resp.json()["error"])
+            self.assertIn("not a valid community strategy", resp.json()["error"])
+
+    def test_save_accepts_repeated_parameterised_measure(self) -> None:
+        # The same measure may be saved more than once with different parameters.
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "two-spreads",
+                    "measures": ["SPREADING(runs=200)", "SPREADING(runs=2000)"],
+                    "community_strategies": ["LEIDEN"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = _saved_file_content(tmp, ".operations-structural")
+            self.assertIn('selected = ["SPREADING(runs=200)", "SPREADING(runs=2000)"]', content)
+
+    def test_save_rejects_duplicate_drop_once_measure(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "dup", "measures": ["PAGERANK", "PAGERANK"]},
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("more than once", resp.json()["error"])
 
     def test_save_rejects_consensus_matrix_with_few_strategies(self) -> None:
         # Consensus matrix needs ≥2 non-ORGANIZATION strategies; ORGANIZATION-only is empty output.

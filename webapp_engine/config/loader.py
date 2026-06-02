@@ -99,6 +99,32 @@ def _migrate_legacy_keys(parsed: dict) -> dict:
     return parsed
 
 
+def _migrate_bridging_basis(parsed: dict) -> dict:
+    """v0.24→v0.25: the single shared ``measures.bridging_basis`` became per-instance.
+
+    A measure's community basis now travels inside its token (``BRIDGING(basis=LEIDEN_DIRECTED)``),
+    and the robustness panel carries its own ``robustness.bridging_basis``. Fold a legacy basis into
+    any bare ``BRIDGING`` token in ``measures.selected`` (preserving the analyst's choice), seed the
+    new robustness basis from the same value (they used to share one field), then drop the old key.
+    """
+    measures = parsed.get("measures")
+    if not isinstance(measures, dict) or "bridging_basis" not in measures:
+        return parsed
+    basis = str(measures.get("bridging_basis") or "").strip().upper()
+    if basis:
+        selected = measures.get("selected")
+        if isinstance(selected, list):
+            measures["selected"] = [
+                (f"BRIDGING(basis={basis})" if str(token).strip().upper() == "BRIDGING" else token)
+                for token in selected
+            ]
+        robustness = parsed.setdefault("robustness", {})
+        if isinstance(robustness, dict):
+            robustness.setdefault("bridging_basis", basis)
+    del measures["bridging_basis"]
+    return parsed
+
+
 def _parse_toml(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -118,6 +144,7 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
         return _to_namespace(defaults)
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
+    _migrate_bridging_basis(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
@@ -132,6 +159,7 @@ def _load_payload(path: Path, defaults: dict) -> dict | None:
         return None
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
+    _migrate_bridging_basis(parsed)
     return _deep_merge(defaults, parsed)
 
 

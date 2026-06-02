@@ -8,7 +8,7 @@ from typing import Any
 from django.db.models import Count, Q, QuerySet
 
 from network.community import UNDIRECTED_BASIS_STRATEGIES
-from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS
+from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
@@ -464,7 +464,16 @@ def _compute_behavioural_equivalence(
     """
     nodes = graph_data["nodes"]
     n = len(nodes)
-    behavioural = [(k, lbl) for k, lbl in measures_labels if k in BEHAVIOURAL_MEASURE_KEYS]
+    # One feature per behavioural concept. A measure requested more than once (e.g. two SPREADING
+    # runs counts) canonicalises to the same concept; keep the first instance so the matrix stays a
+    # fixed per-concept profile rather than double-counting a doubled-up measure.
+    behavioural = []
+    _seen_behavioural: set[str] = set()
+    for k, lbl in measures_labels:
+        canon = canonical_measure_key(k)
+        if canon in BEHAVIOURAL_MEASURE_KEYS and canon not in _seen_behavioural:
+            _seen_behavioural.add(canon)
+            behavioural.append((k, lbl))
     if n < 2 or not behavioural:
         return None
 
@@ -704,8 +713,9 @@ def compute_community_metrics(
         for key, label in measures_labels:
             # Freeman centralization is only meaningful for genuine centrality
             # indices; skip audience/activity attributes, local coefficients, and
-            # behavioural metrics (see CENTRALITY_MEASURE_KEYS).
-            if key not in CENTRALITY_MEASURE_KEYS:
+            # behavioural metrics (see CENTRALITY_MEASURE_KEYS). canonical_measure_key strips a
+            # parameter suffix so each community-bridging instance still qualifies.
+            if canonical_measure_key(key) not in CENTRALITY_MEASURE_KEYS:
                 continue
             values = [node[key] for node in graph_data["nodes"] if key in node]
             centralizations[key] = (_freeman_centralization(values), label)

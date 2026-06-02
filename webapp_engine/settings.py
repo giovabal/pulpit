@@ -390,7 +390,6 @@ SA_FA2_ITERATIONS = _structural.computation.fa2_iterations
 SA_LAYOUTS_2D = ",".join(_structural.layouts.layouts_2d)
 SA_LAYOUTS_3D = ",".join(_structural.layouts.layouts_3d)
 SA_MEASURES = ",".join(_structural.measures.selected)
-SA_BRIDGING_BASIS = _structural.measures.bridging_basis
 SA_COMMUNITY_STRATEGIES = ",".join(_structural.communities.strategies)
 SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
@@ -419,6 +418,9 @@ SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
 SA_ROBUSTNESS = bool(_structural.robustness.strategies)
 SA_ROBUSTNESS_ALPHA = _structural.robustness.alpha
 SA_ROBUSTNESS_STRATEGIES = ",".join(_structural.robustness.strategies)
+# Community basis for the robustness "bridging" attack (its own knob since v0.25 — measure bases
+# now live per-instance inside the --measures tokens). Empty → backend default (LEIDEN_DIRECTED).
+SA_ROBUSTNESS_BRIDGING_BASIS = _structural.robustness.bridging_basis
 SA_ROBUSTNESS_RUNS = _structural.robustness.runs
 SA_ROBUSTNESS_NULL = _structural.robustness.null
 SA_ROBUSTNESS_SEED = _structural.robustness.seed

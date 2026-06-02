@@ -107,16 +107,94 @@ def _pick_interest_community_strategy(strategies: list[str]) -> str:
     raise CommandError("--interest-structural requires at least one community strategy in --community-strategies.")
 
 
-def _pick_interest_authority_key(selected_measures: set[str]) -> str:
+def _pick_interest_authority_key(present_measures: "set[str]") -> str:
     """Choose the node attribute used as D's authority weight.
 
-    Falls through PAGERANK → HITSAUTH → in_deg (always populated by
-    ``apply_base_node_measures``)."""
-    if "PAGERANK" in selected_measures:
+    ``present_measures`` is the set of requested measure *names* (instance parameters are
+    irrelevant here — PAGERANK and HITSAUTH take none). Falls through PAGERANK → HITSAUTH →
+    in_deg (always populated by ``apply_base_node_measures``)."""
+    if "PAGERANK" in present_measures:
         return "pagerank"
-    if "HITSAUTH" in selected_measures:
+    if "HITSAUTH" in present_measures:
         return "hits_authority"
     return "in_deg"
+
+
+# Progress-line phrase per measure token (the "- … done" lines during computation).
+_MEASURE_PROGRESS: dict[str, str] = {
+    "PAGERANK": "pagerank",
+    "BETWEENNESS": "betweenness centrality",
+    "INDEGCENTRALITY": "in-degree centrality",
+    "OUTDEGCENTRALITY": "out-degree centrality",
+    "HARMONICCENTRALITY": "harmonic centrality",
+    "BURTCONSTRAINT": "Burt's constraint",
+    "LOCALCLUSTERING": "local clustering",
+    "CORENESS": "k-core coreness",
+    "COLLECTIVEINFLUENCE": "collective influence",
+    "TROPHICLEVEL": "trophic level",
+    "AMPLIFICATION": "amplification factor",
+    "CONTENTORIGINALITY": "content originality",
+    "DIFFUSIONLAG": "diffusion lag",
+    "SPREADING": "spreading efficiency (SIR)",
+    "HITSHUB": "HITS hub",
+    "HITSAUTH": "HITS authority",
+    "BRIDGINGCENTRALITY": "bridging centrality (Hwang et al. 2008)",
+    "BRIDGING": "community bridging",
+    "MODULEROLE": "module role",
+    "BROKERAGEROLES": "brokerage roles (Gould–Fernandez)",
+}
+
+
+def _rebind_measure_keys(
+    graph_data: GraphData,
+    instance: "measures.MeasureInstance",
+    returned_labels: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Move a parameterised instance's bare node keys to their parameter-suffixed form.
+
+    The ``apply_*`` functions always write their canonical bare keys (e.g.
+    ``spreading_efficiency``, plus categorical companions like ``module_role``). For a
+    parameterised instance every numeric (returned) key *and* every categorical aux key
+    declared on the measure spec is renamed to ``<base><suffix>`` on every node, so two
+    instances of the same measure never overwrite each other's columns. Returns the
+    suffixed ``(key, label)`` pairs (label annotated with the parameters) for
+    ``measures_labels``; a no-param instance is returned unchanged.
+    """
+    suffix = instance.suffix()
+    if not suffix:
+        return list(returned_labels)
+    spec = instance.spec
+    rename = {k: k + suffix for k, _ in returned_labels}
+    if spec:
+        rename.update({k: k + suffix for k in spec.aux_keys})
+    for node in graph_data["nodes"]:
+        for old, new in rename.items():
+            if old in node:
+                node[new] = node.pop(old)
+    annotation = instance.label_annotation()
+    return [(k + suffix, f"{lbl}{annotation}") for k, lbl in returned_labels]
+
+
+def _resolve_community_basis(
+    measure: str,
+    instance: "measures.MeasureInstance",
+    available_bases: "set[str]",
+) -> str | None:
+    """Resolve the lowercase community-partition key for a partition-based measure instance.
+
+    An explicit ``basis`` parameter is used verbatim (returning None if that partition was not
+    computed); an empty/auto basis falls through a measure-specific preference list
+    (ORGANIZATION first for brokerage roles, else LEIDEN_DIRECTED), then any available
+    partition. Returns None when no partition is available at all.
+    """
+    explicit = (instance.params_dict.get("basis") or "").lower()
+    if explicit:
+        return explicit if explicit in available_bases else None
+    prefer = ("organization", "leiden_directed") if measure == "BROKERAGEROLES" else ("leiden_directed",)
+    return next(
+        (b for b in prefer if b in available_bases),
+        next(iter(sorted(available_bases)), None),
+    )
 
 
 def _date_window_filter(start_date: datetime.date | None, end_date: datetime.date | None) -> dict[str, Any]:
@@ -197,9 +275,11 @@ class ResolvedOptions:
     # Communities and measures
     communities_strategy: list[str]
     strategies_lower: list[str]
-    selected_measures: set[str]
+    # Ordered, de-duplicated list of requested measures, each carrying its own resolved
+    # parameters (a measure may appear more than once with different params — e.g. two
+    # SPREADING runs counts). Replaces the old set[str] + single bridging_token.
+    measure_instances: list[measures.MeasureInstance]
     selected_network_groups: frozenset[str]
-    bridging_token: str | None
 
     # Tunable measure / strategy parameters
     spreading_runs: int
@@ -427,8 +507,14 @@ class Command(BaseCommand):
                 "(Morone-Makse 2015), TROPHICLEVEL, "
                 "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
                 "BROKERAGEROLES (Gould-Fernandez brokerage census; needs a community strategy), SPREADING, "
-                "BRIDGINGCENTRALITY (Hwang et al. 2008), BRIDGING or BRIDGING(STRATEGY) (community bridging), "
-                "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK."
+                "BRIDGINGCENTRALITY (Hwang et al. 2008), BRIDGING (community bridging), "
+                "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK. "
+                "Parameterised measures take keyword arguments in parentheses and may be listed more "
+                "than once with different parameters: SPREADING(runs=2000), DIFFUSIONLAG(window=60), "
+                "BRIDGING(basis=LEIDEN_DIRECTED), MODULEROLE(basis=LEIDEN), BROKERAGEROLES(basis=ORGANIZATION). "
+                "The legacy positional form BRIDGING(STRATEGY) is still accepted. A bare SPREADING / "
+                "DIFFUSIONLAG inherits --spreading-runs / --diffusion-window as its default; each parameter "
+                "combination produces its own parameter-suffixed output column."
             ),
         )
         parser.add_argument(
@@ -847,42 +933,46 @@ class Command(BaseCommand):
     def _validate_settings(
         self,
         communities_strategy: list[str],
-        network_measures: list[str],
+        measure_instances: "list[measures.MeasureInstance]",
         network_stat_groups: list[str],
         channel_types: list[str],
         edge_weight_strategy: str,
         vacancy_measures: list[str],
-    ) -> str | None:
-        """Validate all settings. Raises CommandError on failure. Returns the BRIDGING token or None."""
+    ) -> None:
+        """Validate all settings. Raises CommandError on failure.
+
+        Measure tokens and their parameters are already validated by ``measures.parse_measures``;
+        here we only cross-check the *community-basis* parameters against --community-strategies
+        (a basis that isn't computed cannot be read).
+        """
         invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
                 f"Invalid --community-strategies value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
-        invalid_measures = [m for m in network_measures if not measures.is_valid_measure(m)]
-        if invalid_measures:
-            valid_display = sorted(measures.VALID_MEASURES) + ["ALL", "BRIDGING", "BRIDGING(<STRATEGY>)"]
-            raise CommandError(f"Invalid --measures value(s): {invalid_measures!r}. Choose from {valid_display}.")
-        bridging_token = measures.find_bridging_token(network_measures)
-        if bridging_token is not None:
-            bstrategy = measures.bridging_strategy(bridging_token)
-            if bstrategy not in community.VALID_STRATEGIES:
-                raise CommandError(
-                    f"Invalid strategy in {bridging_token!r}: {bstrategy!r}. "
-                    f"Choose from {sorted(community.VALID_STRATEGIES)}."
-                )
-            if bstrategy not in communities_strategy:
-                raise CommandError(
-                    f"BRIDGING community basis {bstrategy!r} is not in --community-strategies. "
-                    f"Add it or change the BRIDGING strategy."
-                )
-        if "MODULEROLE" in network_measures and not communities_strategy:
+        for inst in measure_instances:
+            if inst.measure == "BRIDGING":
+                basis = inst.params_dict["basis"]
+                if basis not in communities_strategy:
+                    raise CommandError(
+                        f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
+                        f"Add it or change the BRIDGING basis."
+                    )
+            elif inst.measure in ("MODULEROLE", "BROKERAGEROLES"):
+                basis = inst.params_dict.get("basis") or ""
+                if basis and basis not in communities_strategy:
+                    raise CommandError(
+                        f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
+                        f"Add it, or clear the basis to auto-resolve from the computed partitions."
+                    )
+        measure_names = {i.measure for i in measure_instances}
+        if "MODULEROLE" in measure_names and not communities_strategy:
             raise CommandError(
                 "MODULEROLE (Guimerà-Amaral role) needs a community partition: add at least one "
                 "strategy to --community-strategies (LEIDEN_DIRECTED is the preferred basis)."
             )
-        if "BROKERAGEROLES" in network_measures and not communities_strategy:
+        if "BROKERAGEROLES" in measure_names and not communities_strategy:
             raise CommandError(
                 "BROKERAGEROLES (Gould-Fernandez brokerage census) needs a group partition: add at "
                 "least one strategy to --community-strategies (ORGANIZATION is the preferred basis)."
@@ -910,7 +1000,6 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --vacancy-measures value(s): {invalid_vacancy!r}. Choose from {valid_display}."
             )
-        return bridging_token
 
     def _parse_date(self, value: str | None, flag: str) -> datetime.date | None:
         if value is None:
@@ -1061,16 +1150,20 @@ class Command(BaseCommand):
         graph: nx.DiGraph,
         graph_data: GraphData,
         channel_dict: dict,
-        selected_measures: set[str],
-        bridging_token: str | None,
+        measure_instances: "list[measures.MeasureInstance]",
         start_date: datetime.date | None,
         end_date: datetime.date | None,
         do_graph: bool,
         do_3dgraph: bool,
-        spreading_runs: int,
-        diffusion_window: int,
     ) -> list[tuple[str, str]]:
-        """Compute all network measures and return (key, label) pairs for each active measure."""
+        """Compute every requested measure instance in order, returning suffixed (key, label) pairs.
+
+        Each instance is dispatched to its ``apply_*`` function with its own parameters; the bare
+        node keys it writes are then rebound to parameter-suffixed keys (:func:`_rebind_measure_keys`)
+        so a measure requested more than once (e.g. two SPREADING runs counts) keeps distinct
+        columns. Betweenness is shared across the standalone betweenness, Hwang bridging centrality
+        and every community-bridging instance; HITS is computed at most once.
+        """
         self.stdout.write("\nCalculations on the graph")
         self.stdout.write("- largest component … ", ending="")
         self.stdout.flush()
@@ -1082,125 +1175,84 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
-        # Pre-compute betweenness once and share it across every measure built on it: the
-        # standalone betweenness, Hwang bridging centrality (BRIDGINGCENTRALITY), and community
-        # bridging (the BRIDGING token).  Only worth caching when ≥2 are active; a lone consumer
-        # computes its own.
-        _betweenness_consumers = (
-            ("BETWEENNESS" in selected_measures)
-            + ("BRIDGINGCENTRALITY" in selected_measures)
-            + (bridging_token is not None)
-        )
-        _cached_betweenness: dict | None = measures.compute_betweenness(graph) if _betweenness_consumers >= 2 else None
+        names = [inst.measure for inst in measure_instances]
+        # Pre-compute betweenness once and share it across every consumer (standalone betweenness,
+        # Hwang bridging centrality, each community-bridging instance). Only worth caching when ≥2
+        # consumers are active; a lone consumer computes its own.
+        betweenness_consumers = names.count("BETWEENNESS") + names.count("BRIDGINGCENTRALITY") + names.count("BRIDGING")
+        cached_betweenness: dict | None = measures.compute_betweenness(graph) if betweenness_consumers >= 2 else None
 
-        _orm_steps = [
-            (
-                "AMPLIFICATION",
-                "amplification factor",
-                lambda gd, g: measures.apply_amplification_factor(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date
-                ),
-            ),
-            (
-                "CONTENTORIGINALITY",
-                "content originality",
-                lambda gd, g: measures.apply_content_originality(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date
-                ),
-            ),
-            (
-                "DIFFUSIONLAG",
-                "diffusion lag",
-                lambda gd, g: measures.apply_diffusion_lag(
-                    gd, g, channel_dict, start_date=start_date, end_date=end_date, window_days=diffusion_window
-                ),
-            ),
-            (
-                "SPREADING",
-                "spreading efficiency (SIR)",
-                lambda gd, g: measures.apply_spreading_efficiency(gd, g, runs=spreading_runs),
-            ),
-        ]
-        for key, label, fn in [*measures.MEASURE_STEPS, *_orm_steps]:
-            if key in selected_measures:
-                self.stdout.write(f"- {label} … ", ending="")
-                self.stdout.flush()
-                if key == "BETWEENNESS" and _cached_betweenness is not None:
-                    step_labels = measures.apply_betweenness_centrality(
-                        graph_data, graph, betweenness=_cached_betweenness
+        # Community-partition keys present on the nodes (lowercase), for basis resolution.
+        available_bases: set[str] = set()
+        for _nid, node_data in graph.nodes(data="data"):
+            if node_data and node_data.get("communities"):
+                available_bases.update(node_data["communities"].keys())
+
+        step_fn = {key: fn for key, _label, fn in measures.MEASURE_STEPS}
+        hits_computed = False
+
+        for inst in measure_instances:
+            m = inst.measure
+            resolved = inst
+            # Resolve the community basis up-front for partition-based measures so we can skip
+            # cleanly (and label the progress line / output columns with the concrete basis).
+            if m in ("BRIDGING", "MODULEROLE", "BROKERAGEROLES"):
+                basis = _resolve_community_basis(m, inst, available_bases)
+                if basis is None:
+                    self.stdout.write(
+                        self.style.WARNING(f"- {_MEASURE_PROGRESS[m]} … skipped (no community partition)")
                     )
-                elif isinstance(fn, str):
-                    step_labels = getattr(measures, fn)(graph_data, graph)
+                    continue
+                resolved = inst.resolved_with(basis=basis.upper())
+
+            self.stdout.write(f"- {_MEASURE_PROGRESS.get(m, m.lower())}{resolved.label_annotation()} … ", ending="")
+            self.stdout.flush()
+
+            if m in step_fn:
+                if m == "BETWEENNESS" and cached_betweenness is not None:
+                    labels = measures.apply_betweenness_centrality(graph_data, graph, betweenness=cached_betweenness)
                 else:
-                    step_labels = fn(graph_data, graph)
-                measures_labels += step_labels
-                self.stdout.write("done")
+                    labels = getattr(measures, step_fn[m])(graph_data, graph)
+            elif m == "AMPLIFICATION":
+                labels = measures.apply_amplification_factor(
+                    graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+                )
+            elif m == "CONTENTORIGINALITY":
+                labels = measures.apply_content_originality(
+                    graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+                )
+            elif m == "DIFFUSIONLAG":
+                labels = measures.apply_diffusion_lag(
+                    graph_data,
+                    graph,
+                    channel_dict,
+                    start_date=start_date,
+                    end_date=end_date,
+                    window_days=resolved.params_dict["window"],
+                )
+            elif m == "SPREADING":
+                labels = measures.apply_spreading_efficiency(graph_data, graph, runs=resolved.params_dict["runs"])
+            elif m in ("HITSHUB", "HITSAUTH"):
+                if not hits_computed:
+                    measures.apply_hits(graph_data, graph)  # writes both hub and authority on every node
+                    hits_computed = True
+                labels = [("hits_hub", "HITS Hub")] if m == "HITSHUB" else [("hits_authority", "HITS Authority")]
+            elif m == "BRIDGINGCENTRALITY":
+                labels = measures.apply_bridging_centrality(graph_data, graph, betweenness=cached_betweenness)
+            elif m == "BRIDGING":
+                labels = measures.apply_community_bridging(
+                    graph_data, graph, resolved.params_dict["basis"].lower(), betweenness=cached_betweenness
+                )
+            elif m == "MODULEROLE":
+                labels = measures.apply_module_role(graph_data, graph, resolved.params_dict["basis"].lower())
+            elif m == "BROKERAGEROLES":
+                labels = measures.apply_gould_fernandez(graph_data, graph, resolved.params_dict["basis"].lower())
+            else:  # defensive — parse_measures already rejected unknown tokens
+                self.stdout.write(self.style.WARNING("unknown measure, skipped"))
+                continue
 
-        if selected_measures & {"HITSHUB", "HITSAUTH"}:
-            self.stdout.write("- HITS … ", ending="")
-            self.stdout.flush()
-            hits_labels = measures.apply_hits(graph_data, graph)
-            _hits_key_map = {"hits_hub": "HITSHUB", "hits_authority": "HITSAUTH"}
-            measures_labels += [(k, lbl) for k, lbl in hits_labels if _hits_key_map[k] in selected_measures]
+            measures_labels += _rebind_measure_keys(graph_data, resolved, labels)
             self.stdout.write("done")
-
-        if "BRIDGINGCENTRALITY" in selected_measures:
-            self.stdout.write("- bridging centrality (Hwang et al. 2008) … ", ending="")
-            self.stdout.flush()
-            measures_labels += measures.apply_bridging_centrality(graph_data, graph, betweenness=_cached_betweenness)
-            self.stdout.write("done")
-
-        if bridging_token is not None:
-            strategy_key = measures.bridging_strategy(bridging_token).lower()
-            self.stdout.write(f"- community bridging (community basis: {strategy_key}) … ", ending="")
-            self.stdout.flush()
-            measures_labels += measures.apply_community_bridging(
-                graph_data, graph, strategy_key, betweenness=_cached_betweenness
-            )
-            self.stdout.write("done")
-
-        if "MODULEROLE" in selected_measures:
-            # Community labels are already on the nodes (communities run before measures), so
-            # resolve a basis without threading a token: prefer the active bridging basis,
-            # else LEIDEN_DIRECTED, else any available partition (first alphabetically).
-            available_bases: set[str] = set()
-            for _nid, node_data in graph.nodes(data="data"):
-                if node_data and node_data.get("communities"):
-                    available_bases.update(node_data["communities"].keys())
-            bridging_basis = measures.bridging_strategy(bridging_token).lower() if bridging_token else None
-            role_basis = next(
-                (b for b in (bridging_basis, "leiden_directed") if b and b in available_bases),
-                next(iter(sorted(available_bases)), None),
-            )
-            if role_basis is None:
-                self.stdout.write(self.style.WARNING("- module role … skipped (no community partition)"))
-            else:
-                self.stdout.write(f"- module role (community basis: {role_basis}) … ", ending="")
-                self.stdout.flush()
-                measures_labels += measures.apply_module_role(graph_data, graph, role_basis)
-                self.stdout.write("done")
-
-        if "BROKERAGEROLES" in selected_measures:
-            # Gould-Fernandez brokerage roles are read against a group partition; prefer the
-            # ORGANIZATION partition (the roles are most interpretable as brokerage between the
-            # analyst's organisations), then the active bridging basis, then LEIDEN_DIRECTED,
-            # then any available partition.
-            available_bases = set()
-            for _nid, node_data in graph.nodes(data="data"):
-                if node_data and node_data.get("communities"):
-                    available_bases.update(node_data["communities"].keys())
-            bridging_basis = measures.bridging_strategy(bridging_token).lower() if bridging_token else None
-            broker_basis = next(
-                (b for b in ("organization", bridging_basis, "leiden_directed") if b and b in available_bases),
-                next(iter(sorted(available_bases)), None),
-            )
-            if broker_basis is None:
-                self.stdout.write(self.style.WARNING("- brokerage roles … skipped (no community partition)"))
-            else:
-                self.stdout.write(f"- brokerage roles (Gould–Fernandez; basis: {broker_basis}) … ", ending="")
-                self.stdout.flush()
-                measures_labels += measures.apply_gould_fernandez(graph_data, graph, broker_basis)
-                self.stdout.write("done")
 
         if do_graph or do_3dgraph:
             self.stdout.write("- small components")
@@ -1213,8 +1265,7 @@ class Command(BaseCommand):
         year: int,
         root_target: str,
         options: dict,
-        selected_measures: set[str],
-        bridging_token: str | None,
+        measure_instances: "list[measures.MeasureInstance]",
         communities_strategy: list[str],
         strategies: list[str],
         do_graph: bool,
@@ -1311,14 +1362,11 @@ class Command(BaseCommand):
             graph,
             graph_data,
             channel_dict,
-            selected_measures,
-            bridging_token,
+            measure_instances,
             start_date,
             end_date,
             do_graph,
             do_3dgraph,
-            options["spreading_runs"],
-            options["diffusion_window"],
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
@@ -1391,7 +1439,7 @@ class Command(BaseCommand):
                     graph_data,
                     channel_dict,
                     community_strategy=_pick_interest_community_strategy(communities_strategy),
-                    authority_key=_pick_interest_authority_key(selected_measures),
+                    authority_key=_pick_interest_authority_key({i.measure for i in measure_instances}),
                     window_days=interest_window_days,
                     include_mentions=interest_include_mentions,
                     window_filter=year_window_filter,
@@ -1456,7 +1504,19 @@ class Command(BaseCommand):
             measures.ALL_STRATEGIES if "ALL" in raw_community_strategies else raw_community_strategies
         )
         raw_network_measures = _parse_csv(_o("measures", ""))
-        network_measures = measures.ALL_MEASURES if "ALL" in raw_network_measures else raw_network_measures
+        # Parse into ordered MeasureInstance objects (handles ALL, legacy BRIDGING(STRATEGY),
+        # keyword params, duplicate detection). Paren-less SPREADING / DIFFUSIONLAG inherit the
+        # global --spreading-runs / --diffusion-window as their default parameter value.
+        try:
+            measure_instances = measures.parse_measures(
+                raw_network_measures,
+                defaults={
+                    "SPREADING": {"runs": _o("spreading_runs", 200)},
+                    "DIFFUSIONLAG": {"window": _o("diffusion_window", 30)},
+                },
+            )
+        except ValueError as exc:
+            raise CommandError(f"--measures: {exc}") from exc
         raw_network_stat_groups = _parse_csv(_o("network_stat_groups", ""))
         network_stat_groups = (
             measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
@@ -1480,9 +1540,9 @@ class Command(BaseCommand):
         selected_vacancy_measures = (
             set(vacancy_analysis.ALL_VACANCY_MEASURES) if "ALL" in raw_vacancy_measures else set(raw_vacancy_measures)
         )
-        bridging_token = self._validate_settings(
+        self._validate_settings(
             communities_strategy,
-            network_measures,
+            measure_instances,
             network_stat_groups,
             channel_types,
             edge_weight_strategy,
@@ -1593,9 +1653,8 @@ class Command(BaseCommand):
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
             strategies_lower=[s.lower() for s in communities_strategy],
-            selected_measures=set(network_measures),
+            measure_instances=measure_instances,
             selected_network_groups=frozenset(network_stat_groups),
-            bridging_token=bridging_token,
             spreading_runs=_o("spreading_runs", 200),
             diffusion_window=_o("diffusion_window", 30),
             leiden_coarse_resolution=_o("leiden_coarse_resolution", 0.01),
@@ -1641,7 +1700,7 @@ class Command(BaseCommand):
                 opts.do_consensus_matrix,
                 opts.do_structural_similarity,
                 opts.do_behavioural_equivalence,
-                opts.selected_measures,
+                opts.measure_instances,
                 opts.communities_strategy,
                 opts.selected_network_groups,
                 opts.selected_vacancy_measures,
@@ -1714,14 +1773,11 @@ class Command(BaseCommand):
             graph,
             graph_data,
             channel_dict,
-            opts.selected_measures,
-            opts.bridging_token,
+            opts.measure_instances,
             opts.start_date,
             opts.end_date,
             opts.do_graph,
             opts.do_3dgraph,
-            opts.spreading_runs,
-            opts.diffusion_window,
         )
 
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
@@ -1933,7 +1989,7 @@ class Command(BaseCommand):
         if opts.do_interest_structural:
             self.stdout.write("\nInterest structural")
             int_community = _pick_interest_community_strategy(opts.communities_strategy)
-            int_authority = _pick_interest_authority_key(opts.selected_measures)
+            int_authority = _pick_interest_authority_key({i.measure for i in opts.measure_instances})
             self.stdout.write(f"- basis: {int_community.lower()} communities, {int_authority} authority")
 
             def _int_progress(label: str) -> None:
@@ -2029,8 +2085,7 @@ class Command(BaseCommand):
                         yr,
                         root_target,
                         options,
-                        opts.selected_measures,
-                        opts.bridging_token,
+                        opts.measure_instances,
                         opts.communities_strategy,
                         strategies,
                         opts.do_graph,

@@ -257,3 +257,30 @@ class LegacyTopLevelHeaderTests(TestCase):
             )
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(ns.graph.community_palette, "ORGANIZATION")
+
+
+class LegacyBridgingBasisMigrationTests(TestCase):
+    """v0.24→v0.25: the shared measures.bridging_basis is folded into the BRIDGING token and
+    seeds the robustness panel's own basis; the old key is dropped."""
+
+    def test_legacy_basis_folds_into_token_and_robustness(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                "[measures]\n"
+                'selected = ["PAGERANK", "BRIDGING"]\n'
+                'bridging_basis = "LEIDEN"\n'
+                "[robustness]\n"
+                'strategies = ["bridging"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.measures.selected, ["PAGERANK", "BRIDGING(basis=LEIDEN)"])
+            self.assertEqual(ns.robustness.bridging_basis, "LEIDEN")
+            self.assertFalse(hasattr(ns.measures, "bridging_basis"))
+
+    def test_new_file_with_per_instance_token_is_untouched(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[measures]\nselected = ["BRIDGING(basis=LEIDEN_DIRECTED)", "SPREADING(runs=2000)"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.measures.selected, ["BRIDGING(basis=LEIDEN_DIRECTED)", "SPREADING(runs=2000)"])

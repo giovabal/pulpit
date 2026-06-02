@@ -35,6 +35,40 @@ var COL_TOOLTIPS = {
     "spreading_efficiency":"Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
 };
 
+// Parameterised measures may be requested more than once, each producing a parameter-suffixed
+// column key (e.g. "spreading_efficiency_runs_2000", "community_bridging_basis_leiden_directed").
+// canonicalKey strips that suffix back to the base so column grouping and tooltips still match;
+// it mirrors network.measures._registry.canonical_measure_key. (Longest-first so the most specific
+// base wins; the five here are the numeric measure keys that can carry a suffix.)
+var PARAM_BASE_KEYS = ["spreading_efficiency", "community_bridging", "within_module_z", "brokerage_total", "diffusion_lag"]
+    .sort(function(a, b) { return b.length - a.length; });
+function canonicalKey(key) {
+    for (var i = 0; i < PARAM_BASE_KEYS.length; i++) {
+        var base = PARAM_BASE_KEYS[i];
+        if (key === base || key.indexOf(base + "_") === 0) return base;
+    }
+    return key;
+}
+// Trailing " (param=value)" of a measure label, for annotating the categorical role column that
+// rides alongside a within_module_z* / brokerage_total* numeric column.
+function labelAnnotation(label) {
+    var i = label.indexOf(" (");
+    return i !== -1 ? label.slice(i) : "";
+}
+// Categorical companion (the suffixed module_role / brokerage_role node attribute) of a numeric
+// role-measure column key; mirrors network.measures._registry.role_companions.
+function roleCompanion(numericKey) {
+    var base = canonicalKey(numericKey);
+    var suffix = numericKey.slice(base.length);
+    if (base === "within_module_z")
+        return { roleKey: "module_role" + suffix, roleLabel: "Module role",
+                 tip: "Guimerà–Amaral within-module role (from the MODULEROLE measure)" };
+    if (base === "brokerage_total")
+        return { roleKey: "brokerage_role" + suffix, roleLabel: "Brokerage role",
+                 tip: "Gould–Fernandez dominant brokerage role (from the BROKERAGEROLES measure)" };
+    return null;
+}
+
 // ── Module-level state ─────────────────────────────────────────────────────────
 var _dd = window.DATA_DIR || "data/";
 var _ym = _dd.match(/data_(\d{4,})\//);   // 4+ digit = calendar year, not compare suffix
@@ -136,10 +170,14 @@ function _render(d) {
     var channels = d.channels, communities = d.communities, meta = d.meta;
     var nodes = channels.nodes;
     var strategies = Object.keys(communities.strategies);
-    // Guimerà–Amaral role: a categorical column present only when the MODULEROLE measure ran.
-    var has_role = nodes.some(function(n) { return n.module_role != null; });
-    // Gould–Fernandez dominant brokerage role: categorical column present only when BROKERAGEROLES ran.
-    var has_brokerage_role = nodes.some(function(n) { return n.brokerage_role != null; });
+    // Categorical role columns (Module role / Brokerage role), one per role-measure instance,
+    // derived from the within_module_z* / brokerage_total* numeric columns so each carries its
+    // own community-basis annotation when a role measure is requested more than once.
+    var roleCols = [];
+    (channels.measures || []).forEach(function(m) {
+        var comp = roleCompanion(m[0]);
+        if (comp) roleCols.push({ key: comp.roleKey, label: comp.roleLabel + labelAnnotation(m[1]), tip: comp.tip });
+    });
 
     // Preamble
     var preambleTarget = document.getElementById("channel-preamble");
@@ -162,10 +200,10 @@ function _render(d) {
 
     // Categorise extra measures
     var extraMeasures = (channels.measures || []).filter(function(m) { return BASE_KEYS.indexOf(m[0]) === -1; });
-    var influenceCols  = extraMeasures.filter(function(m) { return INFLUENCE_KEYS[m[0]]; });
-    var structuralCols = extraMeasures.filter(function(m) { return STRUCTURAL_KEYS[m[0]]; });
-    var contentCols    = extraMeasures.filter(function(m) { return CONTENT_KEYS[m[0]]; });
-    var otherCols      = extraMeasures.filter(function(m) { return !INFLUENCE_KEYS[m[0]] && !STRUCTURAL_KEYS[m[0]] && !CONTENT_KEYS[m[0]]; });
+    var influenceCols  = extraMeasures.filter(function(m) { return INFLUENCE_KEYS[canonicalKey(m[0])]; });
+    var structuralCols = extraMeasures.filter(function(m) { return STRUCTURAL_KEYS[canonicalKey(m[0])]; });
+    var contentCols    = extraMeasures.filter(function(m) { return CONTENT_KEYS[canonicalKey(m[0])]; });
+    var otherCols      = extraMeasures.filter(function(m) { var c = canonicalKey(m[0]); return !INFLUENCE_KEYS[c] && !STRUCTURAL_KEYS[c] && !CONTENT_KEYS[c]; });
 
     var cols = [];
     POSITION_ORDER.forEach(function(key) { cols.push({key: key, label: POSITION_LABELS[key], group: "network_position", isBase: true}); });
@@ -220,9 +258,8 @@ function _render(d) {
     }
     addTh("#", "number", false, "Initial rank by inbound links");
     addTh("Channel", "", false);
-    cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[col.key] || ""); });
-    if (has_role) addTh("Role", "", true, "Guimerà–Amaral within-module role (from the MODULEROLE measure)");
-    if (has_brokerage_role) addTh("Brokerage role", "", !has_role, "Gould–Fernandez dominant brokerage role (from the BROKERAGEROLES measure)");
+    cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[canonicalKey(col.key)] || ""); });
+    roleCols.forEach(function(rc, i) { addTh(rc.label, "", i === 0, rc.tip); });
     var stratGroupStart = true;
     strategies.forEach(function(s) {
         addTh(s.charAt(0).toUpperCase() + s.slice(1), "", stratGroupStart, "Community label assigned by " + s + " detection algorithm");
@@ -285,8 +322,7 @@ function _render(d) {
                 td.dataset.displayVal = displayStr;
             }
         });
-        if (has_role) addTd(node.module_role || "—", "", node.module_role || "", "", "", true);
-        if (has_brokerage_role) addTd(node.brokerage_role || "—", "", node.brokerage_role || "", "", "", !has_role);
+        roleCols.forEach(function(rc, i) { addTd(node[rc.key] || "—", "", node[rc.key] || "", "", "", i === 0); });
         var firstStrategy = true;
         strategies.forEach(function(s) {
             var comm = (node.communities || {})[s];
@@ -321,8 +357,7 @@ function _render(d) {
     addFtd("", "number", false);
     addFtd("Mean ± SD", "", false);
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
-    if (has_role) addFtd("", "", true);
-    if (has_brokerage_role) addFtd("", "", !has_role);
+    roleCols.forEach(function(rc, i) { addFtd("", "", i === 0); });
     var firstStratFoot = true;
     strategies.forEach(function() { addFtd("", "", firstStratFoot); firstStratFoot = false; });
     addFtd("", "", true);
