@@ -62,8 +62,10 @@ class Command(BaseCommand):
             media_handler = MediaHandler(api_client)
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
+            searched_words: set[str] = set()
             for term in qs:
                 result = self._run_search(crawler, term.word, "Searching: ")
+                searched_words.add(term.word)  # term.word is already normalised by SearchTerm.save()
                 if result is None:
                     continue  # leave last_check untouched so a failed term is retried first next run
                 found, new = result
@@ -72,6 +74,11 @@ class Command(BaseCommand):
                 term.last_check = timezone.now()
                 term.save(update_fields=["last_check"])
             for word in extra_terms:
+                # A term saved to the database before launch (Operations panel "Save to
+                # database") is also passed as --extra-term; skip it here so it is not
+                # searched twice in the same run. Normalise to match SearchTerm.save().
+                if " ".join(word.split()).lower() in searched_words:
+                    continue
                 result = self._run_search(crawler, word, "Searching (extra): ")
                 if result is None:
                     continue

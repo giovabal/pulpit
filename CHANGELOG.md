@@ -5,6 +5,9 @@
 ### New features
 - **Measures are selected by drag-and-drop, and parameterised ones can be added more than once with different parameters.** The Operations panel's measure checkboxes become a palette → ordered drop-zone; `SPREADING`, `DIFFUSIONLAG`, `BRIDGING`, `MODULEROLE` and `BROKERAGEROLES` carry inline parameters and may repeat (e.g. `SPREADING(runs=200)` alongside `SPREADING(runs=2000)`), each producing its own parameter-suffixed output column. On the CLI, `--measures` gains keyword tokens — `SPREADING(runs=2000)`, `BRIDGING(basis=LEIDEN_DIRECTED)`, etc. The community basis is now chosen per instance, and the robustness bridging attack has its own basis selector.
 
+### Fixes
+- **A search term saved to the database from the Operations panel was searched twice** — checking "Save to database" both persisted the term and passed it as `--extra-term`, so `search_channels` hit it once as a database term and again as an extra term; the command now skips an extra term already searched as a database term in the same run.
+
 ### Migration notes
 - Old `configuration/.operations-structural` files upgrade automatically (the shared `[measures].bridging_basis` folds into the `BRIDGING` token and seeds `[robustness].bridging_basis`). Parameterised-measure export columns are renamed to their suffixed form — external readers of the old `spreading_efficiency` / `community_bridging` / `module_role` / `brokerage_*` CSV/GEXF column names must update.
 

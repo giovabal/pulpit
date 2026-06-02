@@ -1995,6 +1995,48 @@ class SearchChannelsCommandTests(TestCase):
 
         self.assertEqual(mock_crawler.search_channel.call_count, 15)
 
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_extra_term_matching_db_term_searched_once(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from django.core.management import call_command
+
+        mock_crawler = MagicMock()
+        mock_crawler.search_channel.return_value = (0, 0)
+        mock_crawler_cls.return_value = mock_crawler
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+        # "ukraine" already exists as a DB term (setUp). Passing it as an extra term —
+        # as the Operations panel does when "Save to database" is checked — must not
+        # search it twice. Mixed case exercises the normalisation in the dedup.
+        call_command("search_channels", extra_terms=["Ukraine"])
+
+        searched = [c.args[0] for c in mock_crawler.search_channel.call_args_list]
+        self.assertEqual(searched.count("ukraine"), 1)
+        self.assertNotIn("Ukraine", searched)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_extra_term_not_in_db_is_searched(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from django.core.management import call_command
+
+        mock_crawler = MagicMock()
+        mock_crawler.search_channel.return_value = (0, 0)
+        mock_crawler_cls.return_value = mock_crawler
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+
+        call_command("search_channels", extra_terms=["belarus"])
+
+        searched = [c.args[0] for c in mock_crawler.search_channel.call_args_list]
+        self.assertIn("belarus", searched)
+
 
 # ---------------------------------------------------------------------------
 # crawl_channels management command
