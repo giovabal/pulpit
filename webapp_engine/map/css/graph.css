@@ -256,10 +256,6 @@ html, body {
     color: rgba(var(--c-fg-raw), 0.85);
 }
 
-.link {
-    cursor: pointer;
-}
-
 #infobar a.node-link,
 #infobar a.node-link:visited {
     color: rgba(var(--c-fg-raw), 0.6);
