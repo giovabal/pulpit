@@ -1,5 +1,6 @@
 import { build_year_nav } from './year_nav.js';
 import { mini_hist } from './charts.js';
+import { strategy_label } from './labels.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ function _render(d) {
     roleCols.forEach(function(rc, i) { addTh(rc.label, "", i === 0, rc.tip); });
     var stratGroupStart = true;
     strategies.forEach(function(s) {
-        addTh(s.charAt(0).toUpperCase() + s.slice(1), "", stratGroupStart, "Community label assigned by " + s + " detection algorithm");
+        addTh(strategy_label(s), "", stratGroupStart, "Community label assigned by the " + strategy_label(s) + " strategy");
         stratGroupStart = false;
     });
     addTh("Activity", "", true, "Date range of channel activity in the crawled dataset (start–end)");

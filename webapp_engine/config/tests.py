@@ -284,3 +284,34 @@ class LegacyBridgingBasisMigrationTests(TestCase):
             )
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(ns.measures.selected, ["BRIDGING(basis=LEIDEN_DIRECTED)", "SPREADING(runs=2000)"])
+
+
+class LegacyCommunityParamsMigrationTests(TestCase):
+    """v0.24→v0.25: the fixed LEIDEN_CPM_COARSE/FINE presets and the [computation] CPM/MCL keys fold
+    into per-instance LEIDEN_CPM(resolution=…) / MCL(inflation=…) tokens; the old keys are dropped."""
+
+    def test_legacy_presets_fold_into_tokens(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                "[communities]\n"
+                'strategies = ["ORGANIZATION", "LEIDEN_CPM_COARSE", "LEIDEN_CPM_FINE", "MCL"]\n'
+                "[computation]\n"
+                "leiden_coarse_resolution = 0.01\n"
+                "leiden_fine_resolution = 0.05\n"
+                "mcl_inflation = 3.0\n"
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(
+                ns.communities.strategies,
+                ["ORGANIZATION", "LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)", "MCL(inflation=3.0)"],
+            )
+            self.assertFalse(hasattr(ns.computation, "leiden_coarse_resolution"))
+            self.assertFalse(hasattr(ns.computation, "mcl_inflation"))
+
+    def test_new_file_with_per_instance_tokens_untouched(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[communities]\nstrategies = ["LEIDEN_DIRECTED", "LEIDEN_CPM(resolution=0.02)"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.communities.strategies, ["LEIDEN_DIRECTED", "LEIDEN_CPM(resolution=0.02)"])

@@ -1,6 +1,11 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.24]
-generalize UI for measures depending on other measures or values
+The same way measures in Structural Analysis are dragged and dropped, and have their own options tunable (when they have options), I want the same pattern, UI and logic applied to community strategies.
+
+Produce a todo list first and ask for details if needed. Do not code anything before my review
+
+
+
 
 ## [1.0]
 Have a review of all measurements available in Pulpit. Read documentation for having a good grasp of what is the Pulpit goal. Then:

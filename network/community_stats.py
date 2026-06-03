@@ -7,7 +7,7 @@ from typing import Any
 
 from django.db.models import Count, Q, QuerySet
 
-from network.community import UNDIRECTED_BASIS_STRATEGIES
+from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
@@ -605,7 +605,7 @@ def _compute_strategy_entry(
     # graph otherwise. Computed once per strategy and reused for the per-community
     # contributions so they stay consistent with the overall value.
     mod_graph: "nx.DiGraph | nx.Graph" = (
-        to_undirected_sum(graph) if strategy_key in UNDIRECTED_BASIS_STRATEGIES else graph
+        to_undirected_sum(graph) if canonical_strategy_key(strategy_key) in UNDIRECTED_BASIS_STRATEGIES else graph
     )
 
     rows = []

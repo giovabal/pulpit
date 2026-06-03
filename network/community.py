@@ -6,6 +6,7 @@ from typing import Any
 
 from django.utils.text import slugify
 
+from network.tokens import TokenInstance, TokenParam, TokenSpec, base_keys_for, canonical_key, parse_tokens
 from network.utils import to_undirected_sum
 from webapp.models import Organization
 from webapp.utils.colors import (
@@ -31,20 +32,25 @@ import markov_clustering as mc  # noqa: E402
 sys.stderr = _stderr
 del _stderr
 
-COMMUNITY_ALGORITHMS = {
+# Canonical ordered list of community-strategy names. Mirrors measures.ALL_STRATEGIES (which feeds
+# the measure "basis" choices); a guard test keeps the two in sync. LEIDEN_CPM is a single
+# parameterised strategy (its resolution γ is per-instance and it may be requested more than once),
+# replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets.
+ALL_STRATEGIES: list[str] = [
+    "ORGANIZATION",
+    "LEIDEN",
+    "LEIDEN_DIRECTED",
+    "LEIDEN_CPM",
     "LABELPROPAGATION",
     "KCORE",
     "INFOMAP",
     "INFOMAP_MEMORY",
-    "LEIDEN",
-    "LEIDEN_DIRECTED",
-    "LEIDEN_CPM_COARSE",
-    "LEIDEN_CPM_FINE",
     "MCL",
     "WALKTRAP",
     "STRONGCC",
-}
-VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
+]
+COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES) - {"ORGANIZATION"}
+VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
 
 # Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
 # of the citation graph. Their reported modularity should use the undirected null
@@ -52,8 +58,10 @@ VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
 # null model (k_out_i·k_in_j / m). Keys are the lowercased community keys.
 # Everything else (leiden_directed, infomap, infomap_memory, mcl, strongcc,
 # organization) is reported with directed modularity, the form it was built against.
+# Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
+# canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
 UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
-    {"leiden", "leiden_cpm_coarse", "leiden_cpm_fine", "walktrap", "labelpropagation", "kcore"}
+    {"leiden", "leiden_cpm", "walktrap", "labelpropagation", "kcore"}
 )
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
@@ -63,8 +71,7 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "ORGANIZATION": "Organization",
     "LEIDEN": "Leiden",
     "LEIDEN_DIRECTED": "Leiden directed",
-    "LEIDEN_CPM_COARSE": "Leiden CPM coarse",
-    "LEIDEN_CPM_FINE": "Leiden CPM fine",
+    "LEIDEN_CPM": "Leiden CPM",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
     "INFOMAP": "Infomap",
@@ -73,6 +80,142 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "WALKTRAP": "Walktrap",
     "STRONGCC": "Strongly connected components",
 }
+
+# ── Parameterised community strategies & strategy instances ────────────────────
+#
+# Most strategies are parameter-free, but a couple take a tunable knob and may be requested more
+# than once with different settings — e.g. LEIDEN_CPM(resolution=0.01) alongside
+# LEIDEN_CPM(resolution=0.05), or MCL(inflation=2.0) alongside MCL(inflation=4.0). The shared token
+# machinery (network.tokens) turns the comma-separated --community-strategies value into an ordered
+# list of StrategyInstance objects; each instance maps to a distinct, parameter-suffixed partition
+# key (``StrategyInstance.key``) so two instances of one strategy never overwrite each other's
+# communities[...] entry. This mirrors the measures system one-for-one.
+
+StrategyParam = TokenParam
+StrategySpec = TokenSpec
+
+CPM_DEFAULT_RESOLUTION = 0.05
+MCL_DEFAULT_INFLATION = 2.0
+
+PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
+    "LEIDEN_CPM": StrategySpec(
+        "LEIDEN_CPM",
+        "Leiden CPM",
+        params=(
+            StrategyParam(
+                "resolution",
+                "float",
+                CPM_DEFAULT_RESOLUTION,
+                minimum=0.0,
+                label="Resolution γ",
+                help="CPM resolution: a community is stable when its internal edge density exceeds γ. "
+                "Lower = fewer, larger communities (γ ≈ 0.01, the old 'coarse' preset); higher = more, "
+                "smaller communities (γ ≈ 0.05, the old 'fine' preset).",
+            ),
+        ),
+        primary_keys=("leiden_cpm",),
+    ),
+    "MCL": StrategySpec(
+        "MCL",
+        "MCL",
+        params=(
+            StrategyParam(
+                "inflation",
+                "float",
+                MCL_DEFAULT_INFLATION,
+                minimum=1.0,
+                label="Inflation r",
+                help="Markov Clustering inflation: higher → more, smaller communities. Typical range 1.5–4.0.",
+            ),
+        ),
+        primary_keys=("mcl",),
+    ),
+}
+
+# Base partition keys owned by a parameterised strategy, longest first — feeds canonical_strategy_key.
+_STRATEGY_BASE_KEYS: tuple[str, ...] = base_keys_for(PARAMETERISED_STRATEGIES)
+
+
+class StrategyInstance(TokenInstance):
+    """One requested community strategy with its resolved parameters.
+
+    Thin :class:`~network.tokens.TokenInstance` subclass exposing ``strategy`` (the name), its
+    ``spec`` from ``PARAMETERISED_STRATEGIES``, and ``key`` — the parameter-suffixed node-attribute
+    key under which this instance's partition lives in ``node['communities']`` (e.g.
+    ``leiden_cpm_resolution_0_05``; just ``leiden_directed`` for parameter-free strategies, identical
+    to the legacy lowercase name).
+    """
+
+    @property
+    def strategy(self) -> str:
+        return self.name
+
+    @property
+    def spec(self) -> "StrategySpec | None":
+        return PARAMETERISED_STRATEGIES.get(self.name)
+
+    @property
+    def key(self) -> str:
+        return self.name.lower() + self.suffix()
+
+    @property
+    def label(self) -> str:
+        return COMMUNITY_STRATEGY_LABELS.get(self.name, self.name.title()) + self.label_annotation()
+
+
+def parse_strategies(
+    tokens: list[str],
+    *,
+    defaults: dict[str, dict[str, object]] | None = None,
+) -> list["StrategyInstance"]:
+    """Parse ``--community-strategies`` tokens into ordered, de-duplicated StrategyInstance objects.
+
+    ``ALL`` expands to every strategy with default parameters. ``defaults`` supplies per-strategy
+    parameter overrides for omitted values (the command passes the global ``--leiden-cpm-resolution``
+    / ``--mcl-inflation`` so a bare ``LEIDEN_CPM`` / ``MCL`` inherits them). Raises ``ValueError`` on
+    unknown strategies, bad/duplicate parameters — mirroring ``measures.parse_measures``.
+    """
+    return parse_tokens(
+        tokens,
+        registry=PARAMETERISED_STRATEGIES,
+        known_tokens=VALID_STRATEGIES,
+        all_tokens=ALL_STRATEGIES,
+        instance_cls=StrategyInstance,
+        defaults=defaults,
+        noun="strategy",
+    )
+
+
+def canonical_strategy_key(key: str) -> str:
+    """Strip a parameter suffix back to the base strategy key (``leiden_cpm_resolution_0_05`` →
+    ``leiden_cpm``; ``mcl_inflation_2_0`` → ``mcl``). Parameter-free keys are returned unchanged."""
+    return canonical_key(key, _STRATEGY_BASE_KEYS)
+
+
+def strategy_display_label(key: str) -> str:
+    """Human label for a partition key, e.g. ``leiden_cpm_resolution_0_05`` → ``Leiden CPM (resolution=0.05)``.
+
+    Mirrors ``StrategyInstance.label`` but works from the bare node-attribute key (used by the static
+    table/CSV writers, which only have the key). The base maps through ``COMMUNITY_STRATEGY_LABELS``; the
+    parameter suffix is reconstructed from the spec's param names (the float value slug ``0_05`` reads
+    back as ``0.05``). The JS mirror is ``strategy_label`` in ``webapp_engine/map/js/labels.js``.
+    """
+    base = canonical_strategy_key(key)
+    label = COMMUNITY_STRATEGY_LABELS.get(base.upper(), base.replace("_", " ").title())
+    if key == base:
+        return label
+    spec = PARAMETERISED_STRATEGIES.get(base.upper())
+    rest = key[len(base) + 1 :]  # drop "base_" → e.g. "resolution_0_05"
+    parts: list[str] = []
+    for param in spec.params if spec else ():
+        prefix = f"{param.name}_"
+        if rest.startswith(prefix):
+            raw = rest[len(prefix) :]
+            value = raw.replace("_", ".") if param.kind == "float" else raw
+            parts.append(f"{param.name}={value}")
+            rest = ""
+    return f"{label} ({', '.join(parts)})" if parts else label
+
 
 type CommunityMap = dict[str, int]
 type CommunityPalette = dict[int, ColorTuple]
@@ -540,17 +683,24 @@ def detect_walktrap(
 
 
 def detect(
-    strategy: str,
+    instance: "StrategyInstance | str",
     palette_name: str,
     graph: nx.DiGraph,
     channel_dict: dict[str, Any],
     *,
     reverse: bool = False,
-    leiden_coarse_resolution: float = 0.01,
-    leiden_fine_resolution: float = 0.05,
-    mcl_inflation: float = 2.0,
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Run community detection. Returns (community_map, community_palette)."""
+    """Run community detection for one strategy instance. Returns (community_map, community_palette).
+
+    ``instance`` is a :class:`StrategyInstance`; a bare strategy-name string is also accepted (wrapped
+    as a parameter-free instance) for convenience. Parameterised strategies read their tunable value
+    from the instance — LEIDEN_CPM its ``resolution`` γ, MCL its ``inflation`` — each falling back to
+    the module default when omitted.
+    """
+    if isinstance(instance, str):
+        instance = StrategyInstance(instance.upper())
+    strategy = instance.name
+    params = instance.params_dict
     if strategy == "LABELPROPAGATION":
         return detect_label_propagation(graph, palette_name, reverse=reverse)
     if strategy == "KCORE":
@@ -563,12 +713,12 @@ def detect(
         return detect_leiden(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_DIRECTED":
         return detect_leiden_directed(graph, palette_name, reverse=reverse)
-    if strategy == "LEIDEN_CPM_COARSE":
-        return detect_leiden_cpm(graph, palette_name, leiden_coarse_resolution, reverse=reverse)
-    if strategy == "LEIDEN_CPM_FINE":
-        return detect_leiden_cpm(graph, palette_name, leiden_fine_resolution, reverse=reverse)
+    if strategy == "LEIDEN_CPM":
+        return detect_leiden_cpm(
+            graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
+        )
     if strategy == "MCL":
-        return detect_mcl(graph, palette_name, mcl_inflation, reverse=reverse)
+        return detect_mcl(graph, palette_name, float(params.get("inflation", MCL_DEFAULT_INFLATION)), reverse=reverse)
     if strategy == "WALKTRAP":
         return detect_walktrap(graph, palette_name, reverse=reverse)
     if strategy == "STRONGCC":
@@ -585,11 +735,18 @@ def apply_to_graph(
     channel_dict: dict[str, Any],
     community_map: CommunityMap,
     community_palette: CommunityPalette,
-    strategy: str,
+    strategy: "StrategyInstance | str",
 ) -> None:
-    """Write community label for this strategy into the communities dict on each node, and update node colors."""
-    strategy_key = strategy.lower()
-    if strategy not in COMMUNITY_ALGORITHMS:
+    """Write this strategy instance's community label into each node's communities dict, plus colours.
+
+    ``strategy`` is a :class:`StrategyInstance` (a bare name string is also accepted); the partition is
+    stored under ``instance.key`` — the parameter-suffixed key for parameterised strategies, the plain
+    lowercase name otherwise.
+    """
+    instance = strategy if isinstance(strategy, StrategyInstance) else StrategyInstance(str(strategy).upper())
+    strategy_name = instance.name
+    strategy_key = instance.key
+    if strategy_name not in COMMUNITY_ALGORITHMS:
         org_ids = set(community_map.values())
         org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=org_ids)}
 
@@ -597,8 +754,8 @@ def apply_to_graph(
         community_id = community_map.get(node_id)
         if community_id is not None:
             detected_community = (
-                build_community_label(community_id, strategy)
-                if strategy in COMMUNITY_ALGORITHMS
+                build_community_label(community_id, strategy_name)
+                if strategy_name in COMMUNITY_ALGORITHMS
                 else org_names.get(community_id, str(community_id))
             )
             node_data.setdefault("communities", {})[strategy_key] = detected_community
@@ -622,14 +779,19 @@ def apply_edge_colors(graph: nx.DiGraph, edge_list: list[list[str | float]], cha
 
 
 def build_communities_payload(
-    strategies: list[str],
+    strategies: list["StrategyInstance"],
     results: dict[str, tuple[CommunityMap, CommunityPalette]],
 ) -> dict[str, Any]:
-    """Build the communities metadata dict for the accessory JSON file, covering all strategies."""
+    """Build the communities metadata dict for the accessory JSON file, covering all strategy instances.
+
+    ``results`` is keyed by ``StrategyInstance.key`` (the parameter-suffixed partition key); the
+    returned dict is keyed the same way.
+    """
     communities_data: dict[str, Any] = {}
-    for strategy in strategies:
-        community_map, community_palette = results[strategy]
-        strategy_key = strategy.lower()
+    for instance in strategies:
+        strategy = instance.name
+        strategy_key = instance.key
+        community_map, community_palette = results[strategy_key]
         if strategy in COMMUNITY_ALGORITHMS:
             community_counts = Counter(community_map.values())
             groups = []

@@ -125,6 +125,40 @@ def _migrate_bridging_basis(parsed: dict) -> dict:
     return parsed
 
 
+def _migrate_community_params(parsed: dict) -> dict:
+    """v0.24→v0.25: the fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets collapsed into one
+    parameterised LEIDEN_CPM, and CPM resolution / MCL inflation moved from ``[computation]`` into the
+    per-instance strategy tokens. Convert an old config in place: each preset becomes
+    ``LEIDEN_CPM(resolution=<its γ>)`` and a bare ``MCL`` picks up ``MCL(inflation=<computation γ>)``;
+    the now-defunct ``[computation]`` keys are dropped. Gated on the presence of those keys so a
+    current config is left untouched (idempotent).
+    """
+    communities = parsed.get("communities")
+    computation = parsed.get("computation")
+    if not isinstance(communities, dict) or not isinstance(computation, dict):
+        return parsed
+    coarse = computation.pop("leiden_coarse_resolution", None)
+    fine = computation.pop("leiden_fine_resolution", None)
+    inflation = computation.pop("mcl_inflation", None)
+    if coarse is None and fine is None and inflation is None:
+        return parsed  # already migrated / written by ≥0.25
+    selected = communities.get("strategies")
+    if isinstance(selected, list):
+        converted: list = []
+        for token in selected:
+            name = str(token).strip().upper()
+            if name == "LEIDEN_CPM_COARSE":
+                converted.append(f"LEIDEN_CPM(resolution={coarse})" if coarse is not None else "LEIDEN_CPM")
+            elif name == "LEIDEN_CPM_FINE":
+                converted.append(f"LEIDEN_CPM(resolution={fine})" if fine is not None else "LEIDEN_CPM")
+            elif name == "MCL" and inflation is not None:
+                converted.append(f"MCL(inflation={inflation})")
+            else:
+                converted.append(token)
+        communities["strategies"] = converted
+    return parsed
+
+
 def _parse_toml(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -145,6 +179,7 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
     _migrate_bridging_basis(parsed)
+    _migrate_community_params(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
@@ -160,6 +195,7 @@ def _load_payload(path: Path, defaults: dict) -> dict | None:
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
     _migrate_bridging_basis(parsed)
+    _migrate_community_params(parsed)
     return _deep_merge(defaults, parsed)
 
 

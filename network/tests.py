@@ -9,17 +9,21 @@ from django.test import TestCase, override_settings
 
 from network.community import (
     COMMUNITY_ALGORITHMS,
+    VALID_STRATEGIES,
     apply_edge_colors,
     apply_to_graph,
     build_communities_payload,
     build_community_label,
     build_community_palette,
+    canonical_strategy_key,
     detect_infomap,
     detect_kcore,
     detect_label_propagation,
     detect_leiden,
     detect_organization,
     normalize_community_map,
+    parse_strategies,
+    strategy_display_label,
 )
 from network.community_stats import (
     _freeman_centralization,
@@ -391,7 +395,7 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_algorithm_strategy_builds_groups_from_community_map(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 2}
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["LEIDEN"]), {"leiden": (community_map, community_palette)})
         self.assertIn("leiden", result)
         self.assertIn("groups", result["leiden"])
         self.assertIn("main_groups", result["leiden"])
@@ -400,20 +404,22 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_groups_sorted_by_count_descending(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 1, "d": 2}  # community 1: 3 nodes, 2: 1 node
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["LEIDEN"]), {"leiden": (community_map, community_palette)})
         counts = [g[1] for g in result["leiden"]["groups"]]
         self.assertEqual(counts, sorted(counts, reverse=True))
 
     def test_algorithm_main_groups_maps_id_to_label(self) -> None:
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
-        result = build_communities_payload(["KCORE"], {"KCORE": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["KCORE"]), {"kcore": (community_map, community_palette)})
         self.assertIn("1", result["kcore"]["main_groups"])
 
     def test_organization_strategy_uses_resolved_map(self) -> None:
         org = Organization.objects.create(name="My Org", is_in_target=True)
         cmap = {"n1": org.pk, "n2": org.pk}
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": (cmap, {org.pk: (1, 2, 3)})})
+        result = build_communities_payload(
+            parse_strategies(["ORGANIZATION"]), {"organization": (cmap, {org.pk: (1, 2, 3)})}
+        )
         groups = result["organization"]["groups"]
         self.assertIn("My Org", [g[2] for g in groups])
         # Count comes from the resolved community map (2 nodes), not a raw FK count.
@@ -422,24 +428,83 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_org_with_no_resolved_nodes_excluded(self) -> None:
         # An org that owns no node in the window does not appear in the ORGANIZATION groups.
         Organization.objects.create(name="Absent Org", is_in_target=True)
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
+        result = build_communities_payload(parse_strategies(["ORGANIZATION"]), {"organization": ({}, {})})
         self.assertNotIn("Absent Org", [g[2] for g in result["organization"]["groups"]])
 
     def test_organization_strategy_main_groups_uses_key_and_name(self) -> None:
         org = Organization.objects.create(name="My Org", is_in_target=True)
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({"n1": org.pk}, {org.pk: (1, 2, 3)})})
+        result = build_communities_payload(
+            parse_strategies(["ORGANIZATION"]), {"organization": ({"n1": org.pk}, {org.pk: (1, 2, 3)})}
+        )
         self.assertEqual(result["organization"]["main_groups"].get(org.key), org.name)
 
     def test_multiple_strategies_all_included(self) -> None:
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
         results = {
-            "LEIDEN": (community_map, community_palette),
-            "KCORE": (community_map, community_palette),
+            "leiden": (community_map, community_palette),
+            "kcore": (community_map, community_palette),
         }
-        result = build_communities_payload(["LEIDEN", "KCORE"], results)
+        result = build_communities_payload(parse_strategies(["LEIDEN", "KCORE"]), results)
         self.assertIn("leiden", result)
         self.assertIn("kcore", result)
+
+
+# ---------------------------------------------------------------------------
+# community.py — parse_strategies / StrategyInstance / canonical / labels
+# ---------------------------------------------------------------------------
+
+
+class StrategyParserTests(TestCase):
+    def test_plain_and_parameterised_keys(self) -> None:
+        insts = parse_strategies(["LEIDEN_DIRECTED", "LEIDEN_CPM(resolution=0.01)", "MCL(inflation=3.0)"])
+        self.assertEqual([i.name for i in insts], ["LEIDEN_DIRECTED", "LEIDEN_CPM", "MCL"])
+        self.assertEqual([i.key for i in insts], ["leiden_directed", "leiden_cpm_resolution_0_01", "mcl_inflation_3_0"])
+        self.assertEqual(insts[1].token(), "LEIDEN_CPM(resolution=0.01)")
+
+    def test_same_strategy_twice_with_different_params(self) -> None:
+        insts = parse_strategies(["LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"])
+        self.assertEqual([i.key for i in insts], ["leiden_cpm_resolution_0_01", "leiden_cpm_resolution_0_05"])
+
+    def test_rejects_identical_parameterised(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["MCL(inflation=2.0)", "MCL(inflation=2.0)"])
+
+    def test_rejects_duplicate_plain(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN", "LEIDEN"])
+
+    def test_rejects_params_on_plain(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN(resolution=0.1)"])
+
+    def test_rejects_unknown(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["NOTASTRATEGY"])
+
+    def test_all_expands_to_every_strategy(self) -> None:
+        self.assertEqual({i.name for i in parse_strategies(["ALL"])}, set(VALID_STRATEGIES))
+
+    def test_bare_token_inherits_default(self) -> None:
+        (inst,) = parse_strategies(["LEIDEN_CPM"], defaults={"LEIDEN_CPM": {"resolution": 0.02}})
+        self.assertEqual(inst.params_dict["resolution"], 0.02)
+        self.assertEqual(inst.key, "leiden_cpm_resolution_0_02")
+
+    def test_canonical_strategy_key(self) -> None:
+        self.assertEqual(canonical_strategy_key("leiden_cpm_resolution_0_05"), "leiden_cpm")
+        self.assertEqual(canonical_strategy_key("mcl_inflation_2_0"), "mcl")
+        self.assertEqual(canonical_strategy_key("leiden_directed"), "leiden_directed")  # plain unchanged
+
+    def test_strategy_display_label(self) -> None:
+        self.assertEqual(strategy_display_label("leiden_cpm_resolution_0_05"), "Leiden CPM (resolution=0.05)")
+        self.assertEqual(strategy_display_label("mcl_inflation_2_0"), "MCL (inflation=2.0)")
+        self.assertEqual(strategy_display_label("leiden_directed"), "Leiden directed")
+
+    def test_strategy_name_sources_stay_in_sync(self) -> None:
+        # Guard: measures.ALL_STRATEGIES (the measure "basis" choices) must match the community list.
+        from network import measures
+
+        self.assertEqual(set(measures.ALL_STRATEGIES), set(VALID_STRATEGIES))
 
 
 # ---------------------------------------------------------------------------
@@ -4001,7 +4066,7 @@ class MeasureParserTests(TestCase):
     def test_rejects_unknown_measure_and_bad_enum(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown measure"):
             parse_measures(["NOTAMEASURE"])
-        with self.assertRaisesRegex(ValueError, "not a valid community strategy"):
+        with self.assertRaisesRegex(ValueError, "not a valid choice"):
             parse_measures(["BRIDGING(basis=NOPE)"])
 
     def test_canonical_measure_key(self) -> None:

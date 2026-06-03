@@ -86,24 +86,25 @@ def _compute_extra_layouts(
     return out
 
 
-def _pick_interest_community_strategy(strategies: list[str]) -> str:
-    """Pick the community strategy used by interest-structural's C metric.
+def _pick_interest_community_strategy(strategies: "list[community.StrategyInstance]") -> str:
+    """Pick the community-partition *key* used by interest-structural's C metric.
 
-    Prefer LEIDEN_DIRECTED (matches ``_BRIDGING_DEFAULT_STRATEGY``: directional
-    brokerage makes more sense for forwarding cascades than undirected modularity),
-    then LEIDEN, then any non-ORGANIZATION strategy, then ORGANIZATION as a last
-    resort. The chosen strategy must be one of those already requested via
-    ``--community-strategies`` so its labels are present on the graph.
+    Prefer LEIDEN_DIRECTED (matches ``_BRIDGING_DEFAULT_STRATEGY``: directional brokerage makes more
+    sense for forwarding cascades than undirected modularity), then LEIDEN, then any non-ORGANIZATION
+    strategy, then ORGANIZATION as a last resort. Returns the chosen instance's node-attribute key
+    (e.g. ``leiden_directed`` or ``leiden_cpm_resolution_0_05``); the first instance of a family wins.
     """
-    preference = ["LEIDEN_DIRECTED", "LEIDEN", "INFOMAP", "LEIDEN_CPM_FINE", "LEIDEN_CPM_COARSE"]
-    for candidate in preference:
-        if candidate in strategies:
-            return candidate
-    for candidate in strategies:
-        if candidate != "ORGANIZATION":
-            return candidate
-    if "ORGANIZATION" in strategies:
-        return "ORGANIZATION"
+    by_name: dict[str, community.StrategyInstance] = {}
+    for inst in strategies:
+        by_name.setdefault(inst.name, inst)
+    for candidate in ("LEIDEN_DIRECTED", "LEIDEN", "INFOMAP", "LEIDEN_CPM"):
+        if candidate in by_name:
+            return by_name[candidate].key
+    for inst in strategies:
+        if inst.name != "ORGANIZATION":
+            return inst.key
+    if "ORGANIZATION" in by_name:
+        return by_name["ORGANIZATION"].key
     raise CommandError("--interest-structural requires at least one community strategy in --community-strategies.")
 
 
@@ -178,23 +179,32 @@ def _rebind_measure_keys(
 def _resolve_community_basis(
     measure: str,
     instance: "measures.MeasureInstance",
-    available_bases: "set[str]",
+    available_bases: "list[str]",
 ) -> str | None:
-    """Resolve the lowercase community-partition key for a partition-based measure instance.
+    """Resolve the concrete community-partition key for a partition-based measure instance.
 
-    An explicit ``basis`` parameter is used verbatim (returning None if that partition was not
-    computed); an empty/auto basis falls through a measure-specific preference list
-    (ORGANIZATION first for brokerage roles, else LEIDEN_DIRECTED), then any available
-    partition. Returns None when no partition is available at all.
+    ``available_bases`` is the ordered list of partition keys present on the graph (selection order).
+    An explicit ``basis`` is matched first as an exact instance key, then as a strategy *family* —
+    resolving to the first selected instance of that family (e.g. ``basis=LEIDEN_CPM`` →
+    ``leiden_cpm_resolution_0_01`` when that is the first CPM instance). An empty/auto basis falls
+    through a measure-specific family preference (ORGANIZATION first for brokerage roles, else
+    LEIDEN_DIRECTED), then any available partition. Returns None when none is available.
     """
+
+    def _family_match(family: str) -> str | None:
+        if family in available_bases:
+            return family
+        return next((b for b in available_bases if community.canonical_strategy_key(b) == family), None)
+
     explicit = (instance.params_dict.get("basis") or "").lower()
     if explicit:
-        return explicit if explicit in available_bases else None
+        return _family_match(explicit)
     prefer = ("organization", "leiden_directed") if measure == "BROKERAGEROLES" else ("leiden_directed",)
-    return next(
-        (b for b in prefer if b in available_bases),
-        next(iter(sorted(available_bases)), None),
-    )
+    for family in prefer:
+        match = _family_match(family)
+        if match:
+            return match
+    return available_bases[0] if available_bases else None
 
 
 def _date_window_filter(start_date: datetime.date | None, end_date: datetime.date | None) -> dict[str, Any]:
@@ -273,8 +283,8 @@ class ResolvedOptions:
     edge_weight_strategy: str
 
     # Communities and measures
-    communities_strategy: list[str]
-    strategies_lower: list[str]
+    communities_strategy: list["community.StrategyInstance"]
+    strategies_lower: list[str]  # parameter-suffixed partition keys, one per instance, in order
     # Ordered, de-duplicated list of requested measures, each carrying its own resolved
     # parameters (a measure may appear more than once with different params — e.g. two
     # SPREADING runs counts). Replaces the old set[str] + single bridging_token.
@@ -284,8 +294,7 @@ class ResolvedOptions:
     # Tunable measure / strategy parameters
     spreading_runs: int
     diffusion_window: int
-    leiden_coarse_resolution: float
-    leiden_fine_resolution: float
+    leiden_cpm_resolution: float
     mcl_inflation: float
     community_distribution_threshold: int
 
@@ -346,8 +355,7 @@ class ResolvedOptions:
             "timeline_step": self.timeline_step,
             "spreading_runs": self.spreading_runs,
             "diffusion_window": self.diffusion_window,
-            "leiden_coarse_resolution": self.leiden_coarse_resolution,
-            "leiden_fine_resolution": self.leiden_fine_resolution,
+            "leiden_cpm_resolution": self.leiden_cpm_resolution,
             "mcl_inflation": self.mcl_inflation,
             "community_distribution_threshold": self.community_distribution_threshold,
             "vacancy_months_before": self.vacancy_months_before,
@@ -638,28 +646,31 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--leiden-cpm-resolution",
+            dest="leiden_cpm_resolution",
+            type=float,
+            default=None,
+            metavar="γ",
+            help=(
+                "Default CPM resolution γ for a bare LEIDEN_CPM token. Communities form when their "
+                "internal edge density exceeds γ. Reference points: γ ≈ 0.01 = fewer, larger communities "
+                "(the old 'coarse' preset); γ ≈ 0.05 = more, smaller communities (the old 'fine' preset). "
+                "Default: 0.05. Override per instance with LEIDEN_CPM(resolution=…) and list it more than "
+                "once for a multi-resolution scan."
+            ),
+        )
+        # Deprecated: the two fixed CPM presets collapsed into one parameterised LEIDEN_CPM. These
+        # aliases still seed the bare-token default (coarse preferred) for one release; prefer
+        # --leiden-cpm-resolution or per-instance LEIDEN_CPM(resolution=…).
+        parser.add_argument(
             "--leiden-coarse-resolution",
             dest="leiden_coarse_resolution",
             type=float,
             default=None,
-            metavar="γ",
-            help=(
-                "CPM resolution parameter for LEIDEN_CPM_COARSE. "
-                "Communities form when their internal edge density exceeds γ. "
-                "Lower values → fewer, larger communities. Default: 0.01."
-            ),
+            help=argparse.SUPPRESS,
         )
         parser.add_argument(
-            "--leiden-fine-resolution",
-            dest="leiden_fine_resolution",
-            type=float,
-            default=None,
-            metavar="γ",
-            help=(
-                "CPM resolution parameter for LEIDEN_CPM_FINE. "
-                "Communities form when their internal edge density exceeds γ. "
-                "Higher values → more, smaller communities. Default: 0.05."
-            ),
+            "--leiden-fine-resolution", dest="leiden_fine_resolution", type=float, default=None, help=argparse.SUPPRESS
         )
         parser.add_argument(
             "--mcl-inflation",
@@ -945,23 +956,25 @@ class Command(BaseCommand):
         here we only cross-check the *community-basis* parameters against --community-strategies
         (a basis that isn't computed cannot be read).
         """
-        invalid_strategies = [s for s in communities_strategy if s not in community.VALID_STRATEGIES]
+        invalid_strategies = [i.name for i in communities_strategy if i.name not in community.VALID_STRATEGIES]
         if invalid_strategies:
             raise CommandError(
                 f"Invalid --community-strategies value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
             )
+        # A measure basis names a strategy *family*; check it against the selected strategy names.
+        strategy_names = {i.name for i in communities_strategy}
         for inst in measure_instances:
             if inst.measure == "BRIDGING":
                 basis = inst.params_dict["basis"]
-                if basis not in communities_strategy:
+                if basis not in strategy_names:
                     raise CommandError(
                         f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
                         f"Add it or change the BRIDGING basis."
                     )
             elif inst.measure in ("MODULEROLE", "BROKERAGEROLES"):
                 basis = inst.params_dict.get("basis") or ""
-                if basis and basis not in communities_strategy:
+                if basis and basis not in strategy_names:
                     raise CommandError(
                         f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
                         f"Add it, or clear the basis to auto-resolve from the computed partitions."
@@ -1021,24 +1034,23 @@ class Command(BaseCommand):
         strategy_results: dict[str, tuple] = {}
         self.stdout.write("Calculate communities")
         self.stdout.flush()
-        for strategy in communities_strategy:
-            self.stdout.write(f"- {strategy.lower()} … ", ending="")
+        for instance in communities_strategy:
+            self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
             try:
+                # Parameterised strategies (LEIDEN_CPM γ, MCL inflation) read their tunable value
+                # from the instance; the global flags only seed bare-token defaults at parse time.
                 community_map, community_palette = community.detect(
-                    strategy,
+                    instance,
                     options["community_palette"],
                     graph,
                     channel_dict,
                     reverse=options["community_palette_reversed"],
-                    leiden_coarse_resolution=options["leiden_coarse_resolution"],
-                    leiden_fine_resolution=options["leiden_fine_resolution"],
-                    mcl_inflation=options["mcl_inflation"],
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
-            community.apply_to_graph(graph, channel_dict, community_map, community_palette, strategy)
-            strategy_results[strategy] = (community_map, community_palette)
+            community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
+            strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
             self.stdout.write(f"{n_communities} communities")
             self.stdout.flush()
@@ -1182,11 +1194,16 @@ class Command(BaseCommand):
         betweenness_consumers = names.count("BETWEENNESS") + names.count("BRIDGINGCENTRALITY") + names.count("BRIDGING")
         cached_betweenness: dict | None = measures.compute_betweenness(graph) if betweenness_consumers >= 2 else None
 
-        # Community-partition keys present on the nodes (lowercase), for basis resolution.
-        available_bases: set[str] = set()
+        # Ordered community-partition keys present on the nodes (selection order), for basis
+        # resolution — order matters so a family basis resolves to the *first* selected instance.
+        available_bases: list[str] = []
+        seen_bases: set[str] = set()
         for _nid, node_data in graph.nodes(data="data"):
             if node_data and node_data.get("communities"):
-                available_bases.update(node_data["communities"].keys())
+                for base_key in node_data["communities"]:
+                    if base_key not in seen_bases:
+                        seen_bases.add(base_key)
+                        available_bases.append(base_key)
 
         step_fn = {key: fn for key, _label, fn in measures.MEASURE_STEPS}
         hits_computed = False
@@ -1412,11 +1429,13 @@ class Command(BaseCommand):
 
             rob_payload: dict | None = None
             if do_robustness:
-                rob_partitions = {
-                    s.lower(): strategy_results[s][0]
-                    for s in communities_strategy
-                    if len(set(strategy_results[s][0].values())) > 1
-                }
+                rob_partitions: dict = {}
+                for inst in communities_strategy:
+                    cmap = strategy_results[inst.key][0]
+                    if len(set(cmap.values())) > 1:
+                        rob_partitions[inst.key] = cmap
+                        # Family alias so a bridging(<family>) attack resolves to the first instance.
+                        rob_partitions.setdefault(inst.name.lower(), cmap)
                 rob_payload = robustness.run_robustness(
                     graph,
                     partitions=rob_partitions or None,
@@ -1500,9 +1519,26 @@ class Command(BaseCommand):
             return v if v is not None else default
 
         raw_community_strategies = _parse_csv(_o("community_strategies", ""))
-        communities_strategy = (
-            measures.ALL_STRATEGIES if "ALL" in raw_community_strategies else raw_community_strategies
-        )
+        # The deprecated --leiden-coarse/fine-resolution flags still seed the bare-LEIDEN_CPM default
+        # for one release (coarse preferred); prefer --leiden-cpm-resolution or LEIDEN_CPM(resolution=…).
+        leiden_cpm_resolution = _o("leiden_cpm_resolution", None)
+        if leiden_cpm_resolution is None:
+            leiden_cpm_resolution = options.get("leiden_coarse_resolution") or options.get("leiden_fine_resolution")
+        if leiden_cpm_resolution is None:
+            leiden_cpm_resolution = community.CPM_DEFAULT_RESOLUTION
+        mcl_inflation = _o("mcl_inflation", community.MCL_DEFAULT_INFLATION)
+        # Parse into ordered StrategyInstance objects (handles ALL, keyword params, duplicate
+        # detection); a bare LEIDEN_CPM / MCL inherits the resolved global default above.
+        try:
+            communities_strategy = community.parse_strategies(
+                raw_community_strategies,
+                defaults={
+                    "LEIDEN_CPM": {"resolution": leiden_cpm_resolution},
+                    "MCL": {"inflation": mcl_inflation},
+                },
+            )
+        except ValueError as exc:
+            raise CommandError(f"--community-strategies: {exc}") from exc
         raw_network_measures = _parse_csv(_o("measures", ""))
         # Parse into ordered MeasureInstance objects (handles ALL, legacy BRIDGING(STRATEGY),
         # keyword params, duplicate detection). Paren-less SPREADING / DIFFUSIONLAG inherit the
@@ -1563,10 +1599,11 @@ class Command(BaseCommand):
                 robustness.parse_strategy(token)
             except ValueError as exc:
                 raise CommandError(f"--robustness-strategies: {exc}") from exc
-        # Bridging tokens need their community basis to be in --community-strategies
+        # Bridging tokens need their community basis to be in --community-strategies (by family name)
+        _robustness_basis_names = {i.name for i in communities_strategy}
         for token in robustness_strategies:
             canonical, bridging_key = robustness.parse_strategy(token)
-            if canonical == "bridging" and bridging_key.upper() not in communities_strategy:
+            if canonical == "bridging" and bridging_key.upper() not in _robustness_basis_names:
                 raise CommandError(
                     f"--robustness-strategies includes {token!r} but the community basis "
                     f"{bridging_key.upper()!r} is not in --community-strategies. "
@@ -1652,14 +1689,13 @@ class Command(BaseCommand):
             channel_groups=channel_groups,
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
-            strategies_lower=[s.lower() for s in communities_strategy],
+            strategies_lower=[inst.key for inst in communities_strategy],
             measure_instances=measure_instances,
             selected_network_groups=frozenset(network_stat_groups),
             spreading_runs=_o("spreading_runs", 200),
             diffusion_window=_o("diffusion_window", 30),
-            leiden_coarse_resolution=_o("leiden_coarse_resolution", 0.01),
-            leiden_fine_resolution=_o("leiden_fine_resolution", 0.05),
-            mcl_inflation=_o("mcl_inflation", 2.0),
+            leiden_cpm_resolution=leiden_cpm_resolution,
+            mcl_inflation=mcl_inflation,
             community_distribution_threshold=_o("community_distribution_threshold", 0),
             timeline_step=_o("timeline_step", "none"),
             selected_vacancy_measures=selected_vacancy_measures,
@@ -2037,11 +2073,13 @@ class Command(BaseCommand):
 
             # Only feed partitions with more than one community — trivial partitions
             # would make every edge intra and produce a flat modular curve.
-            partitions = {
-                s.lower(): strategy_results[s][0]
-                for s in opts.communities_strategy
-                if len(set(strategy_results[s][0].values())) > 1
-            }
+            partitions: dict = {}
+            for inst in opts.communities_strategy:
+                cmap = strategy_results[inst.key][0]
+                if len(set(cmap.values())) > 1:
+                    partitions[inst.key] = cmap
+                    # Family alias so a bridging(<family>) attack resolves to the first instance.
+                    partitions.setdefault(inst.name.lower(), cmap)
             global_rob_payload = robustness.run_robustness(
                 graph,
                 partitions=partitions or None,
