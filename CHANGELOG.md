@@ -4,6 +4,7 @@
 
 ### New features
 - **Measures are selected by drag-and-drop, and parameterised ones can be added more than once with different parameters.** The Operations panel's measure checkboxes become a palette → ordered drop-zone; `SPREADING`, `DIFFUSIONLAG`, `BRIDGING`, `MODULEROLE` and `BROKERAGEROLES` carry inline parameters and may repeat (e.g. `SPREADING(runs=200)` alongside `SPREADING(runs=2000)`), each producing its own parameter-suffixed output column. On the CLI, `--measures` gains keyword tokens — `SPREADING(runs=2000)`, `BRIDGING(basis=LEIDEN_DIRECTED)`, etc. The community basis is now chosen per instance, and the robustness bridging attack has its own basis selector.
+- **The project title now shows in the web app, not just the exports.** The Manage › Project title appears in the browser-tab `<title>` and the About modal, so analysts running several instances can tell them apart at a glance; it previously surfaced only in the HTML/XLSX exports. The login page stays generic so the project name isn't shown to anonymous visitors in `PROTECTED` mode.
 
 ### Fixes
 - **A search term saved to the database from the Operations panel was searched twice** — checking "Save to database" both persisted the term and passed it as `--extra-term`, so `search_channels` hit it once as a database term and again as an extra term; the command now skips an extra term already searched as a database term in the same run.
