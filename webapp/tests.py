@@ -14,7 +14,7 @@ from django.urls import reverse
 from network.graph_builder import channel_network_data
 from webapp import version_check
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message, Organization
+from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message, Organization, Project
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.test_helpers import attribute, make_channel
 from webapp.utils.colors import (
@@ -713,6 +713,29 @@ class OrganizationModelTests(TestCase):
 class HomeViewTests(TestCase):
     def test_get_returns_200(self) -> None:
         self.assertEqual(self.client.get(reverse("home")).status_code, 200)
+
+
+# ─── Project title in page chrome ───────────────────────────────────────────────
+
+
+class ProjectTitleInChromeTests(TestCase):
+    """The Manage › Project title surfaces in the page <title> and the About modal."""
+
+    def test_title_and_modal_show_project_title(self) -> None:
+        p = Project.load()
+        p.title = "Operation Nightfall"
+        p.save()
+        html = self.client.get(reverse("home")).content.decode()
+        self.assertIn("<title>Operation Nightfall</title>", html)
+        self.assertIn(">Operation Nightfall</p>", html)  # the About-modal line
+
+    def test_blank_title_falls_back_to_pulpit(self) -> None:
+        p = Project.load()
+        p.title = ""
+        p.save()
+        html = self.client.get(reverse("home")).content.decode()
+        self.assertIn("<title>Pulpit</title>", html)
+        self.assertNotIn(">Pulpit</p>", html)  # modal line is guarded out when blank
 
 
 # ─── ChannelDetailView ─────────────────────────────────────────────────────────
