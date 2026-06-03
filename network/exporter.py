@@ -12,6 +12,7 @@ from typing import Any
 from django.conf import settings
 from django.db.models import QuerySet
 
+from network.community import strategy_display_label
 from network.measures._registry import role_companions
 from network.utils import GraphData
 from webapp.models import Channel
@@ -314,7 +315,7 @@ def write_csv(
     for comp, annot in role_groups:
         headers.append(comp["role_label"] + annot)
         headers += [cl + annot for cl in comp["count_labels"]]
-    headers += [s.capitalize() for s in strategies]
+    headers += [strategy_display_label(s) for s in strategies]
     headers += ["Activity start", "Activity end"]
 
     with open(os.path.join(output_dir, "nodes.csv"), "w", newline="", encoding="utf-8") as fh:
@@ -557,8 +558,7 @@ def write_summary_json(
         "spreading_runs",
         "diffusion_window",
         "community_distribution_threshold",
-        "leiden_coarse_resolution",
-        "leiden_fine_resolution",
+        "leiden_cpm_resolution",
         "mcl_inflation",
         "measures",
         "community_strategies",

@@ -1,9 +1,10 @@
 # Changelog
 ## [0.25] - To be announced
-*Measures gain parameters and a drag-and-drop builder.*
+*Measures and community strategies gain per-instance parameters and a shared drag-and-drop builder.*
 
 ### New features
 - **Measures are selected by drag-and-drop, and parameterised ones can be added more than once with different parameters.** The Operations panel's measure checkboxes become a palette → ordered drop-zone; `SPREADING`, `DIFFUSIONLAG`, `BRIDGING`, `MODULEROLE` and `BROKERAGEROLES` carry inline parameters and may repeat (e.g. `SPREADING(runs=200)` alongside `SPREADING(runs=2000)`), each producing its own parameter-suffixed output column. On the CLI, `--measures` gains keyword tokens — `SPREADING(runs=2000)`, `BRIDGING(basis=LEIDEN_DIRECTED)`, etc. The community basis is now chosen per instance, and the robustness bridging attack has its own basis selector.
+- **Community strategies now use the same drag-and-drop builder as measures, with per-instance parameters.** The Operations panel's community-strategy checkboxes become a palette → ordered drop-zone (the measures builder, factored into a shared component). `LEIDEN_CPM` and `MCL` carry inline parameters — resolution γ and inflation — and may be added more than once, e.g. a multi-resolution scan `LEIDEN_CPM(resolution=0.01)` alongside `LEIDEN_CPM(resolution=0.05)`, each producing its own parameter-suffixed partition column. This folds the old fixed `LEIDEN_CPM_COARSE` / `LEIDEN_CPM_FINE` presets into one parameterised `LEIDEN_CPM`. On the CLI, `--community-strategies` gains keyword tokens (`LEIDEN_CPM(resolution=0.05)`, `MCL(inflation=3.0)`) and `--leiden-coarse-resolution` / `--leiden-fine-resolution` are replaced by `--leiden-cpm-resolution` (old flags kept as deprecated aliases for one release). Measures and community strategies share one token engine (`network/tokens.py`) and one JS builder, so the two stay in lock-step.
 - **The project title now shows in the web app, not just the exports.** The Manage › Project title appears in the browser-tab `<title>` and the About modal, so analysts running several instances can tell them apart at a glance; it previously surfaced only in the HTML/XLSX exports. The login page stays generic so the project name isn't shown to anonymous visitors in `PROTECTED` mode.
 
 ### Fixes
@@ -11,6 +12,7 @@
 
 ### Migration notes
 - Old `configuration/.operations-structural` files upgrade automatically (the shared `[measures].bridging_basis` folds into the `BRIDGING` token and seeds `[robustness].bridging_basis`). Parameterised-measure export columns are renamed to their suffixed form — external readers of the old `spreading_efficiency` / `community_bridging` / `module_role` / `brokerage_*` CSV/GEXF column names must update.
+- Community strategies upgrade automatically too: `LEIDEN_CPM_COARSE` / `LEIDEN_CPM_FINE` and the `[computation]` `leiden_coarse_resolution` / `leiden_fine_resolution` / `mcl_inflation` keys fold into per-instance `LEIDEN_CPM(resolution=…)` / `MCL(inflation=…)` tokens (those `[computation]` keys are then dropped). `LEIDEN_CPM` / `MCL` community columns in CSV / GEXF / GraphML are now parameter-suffixed (e.g. `community_leiden_cpm_resolution_0_05`) — external readers must update.
 
 ## [0.24] - 2026-06-01
 *Further consolidation of measures.*

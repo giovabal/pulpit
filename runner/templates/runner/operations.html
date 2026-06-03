@@ -626,36 +626,17 @@
             <fieldset class="ops-fieldset">
               <legend>Linked parameters
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Parameters for specific community strategies. Each input is enabled only when the matching strategy is selected. (Measure parameters now live on each measure chip in the Measures builder.)"></i>
+                   title="Parameters tied to other options. The Interest-window inputs apply only when Interesting messages is on."></i>
               </legend>
               {% comment %}
-                Spreading runs, Diffusion window and the Community-Bridging basis used to live here
-                as shared "Linked parameters"; since v0.25 they are per-instance controls inside the
-                drag-and-drop Measures builder below (a measure can be added more than once with
-                different parameters). The robustness bridging attack keeps its own basis dropdown.
+                Measure parameters (spreading runs, diffusion window, bridging basis) and community
+                parameters (CPM resolution γ, MCL inflation) used to live here as shared "Linked
+                parameters". Since v0.25 they are per-instance controls on each chip inside the
+                drag-and-drop Measures / Community-strategies builders below (an item can be added
+                more than once with different parameters). The robustness bridging attack keeps its
+                own basis dropdown. Only the Interesting-messages inputs remain here.
               {% endcomment %}
               <div class="ops-params">
-                <div class="ops-param">
-                  <label for="leiden_coarse_resolution">CPM coarse γ
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Resolution parameter for LEIDEN_CPM_COARSE. Communities form when internal edge density exceeds γ. Lower = fewer, larger communities. Default: 0.01."></i>
-                  </label>
-                  <input type="number" name="leiden_coarse_resolution" id="leiden_coarse_resolution" placeholder="{{ ad.SA_LEIDEN_COARSE_RESOLUTION }}" value="{{ ad.SA_LEIDEN_COARSE_RESOLUTION }}" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_COARSE">
-                </div>
-                <div class="ops-param">
-                  <label for="leiden_fine_resolution">CPM fine γ
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Resolution parameter for LEIDEN_CPM_FINE. Communities form when internal edge density exceeds γ. Higher = more, smaller communities. Default: 0.05."></i>
-                  </label>
-                  <input type="number" name="leiden_fine_resolution" id="leiden_fine_resolution" placeholder="{{ ad.SA_LEIDEN_FINE_RESOLUTION }}" value="{{ ad.SA_LEIDEN_FINE_RESOLUTION }}" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_FINE">
-                </div>
-                <div class="ops-param">
-                  <label for="mcl_inflation">MCL inflation r
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Inflation parameter for Markov Clustering. Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."></i>
-                  </label>
-                  <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="{{ ad.SA_MCL_INFLATION }}" value="{{ ad.SA_MCL_INFLATION }}" min="1" max="10" step="0.1" data-requires-strategy="MCL">
-                </div>
                 {# data-requires-flag on the wrapper (not the <input>) so the input stays #}
                 {# DOM-enabled when Interesting messages is off — the visual disable is    #}
                 {# styling only, and we still want the value to ride along in FormData so  #}
@@ -733,26 +714,37 @@
           <fieldset class="ops-fieldset">
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Community detection algorithms to run. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
+                 title="Drag a strategy into the Selected area (or press +). → = uses edge direction; ↔ = graph symmetrised. Parameterised strategies (⚙ Leiden CPM, MCL) can be added more than once with different parameters; each instance gets its own partition column."></i>
               <span class="ops-legend-actions">
-                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="community_strategies">All</button>
-                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="community_strategies">None</button>
+                <button type="button" class="ops-legend-btn" data-strategy-action="all">All</button>
+                <button type="button" class="ops-legend-btn" data-strategy-action="none">None</button>
               </span>
             </legend>
-            <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" {% if "ORGANIZATION" in ad.sa_strategies %}checked{% endif %}>Organization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organization in the database — not a detection algorithm, reflects manual categorisation."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" {% if "LEIDEN" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" {% if "LEIDEN_DIRECTED" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Leiden directed<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" {% if "LEIDEN_CPM_COARSE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden CPM coarse<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective at low resolution (γ ≈ 0.01) — fewer, larger communities. Resolution tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: CPM coarse γ (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_FINE" {% if "LEIDEN_CPM_FINE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden CPM fine<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective at higher resolution (γ ≈ 0.05) — more, smaller communities. Resolution tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: CPM fine γ (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LABELPROPAGATION" {% if "LABELPROPAGATION" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Label propagation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="KCORE" {% if "KCORE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>K-core<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP" {% if "INFOMAP" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Infomap<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Infomap (Rosvall &amp; Bergstrom 2008) — minimises description length of a random walk on the directed graph; captures information-flow communities."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP_MEMORY" {% if "INFOMAP_MEMORY" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Infomap memory<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Second-order (memory) Infomap — models sequential forwarding paths as context-dependent states, capturing propagation patterns invisible to first-order methods."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="MCL" {% if "MCL" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>MCL<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Markov Clustering — alternates random-walk expansion and inflation steps until convergence. Works on the directed graph. Inflation tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: MCL inflation r (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WALKTRAP" {% if "WALKTRAP" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Walktrap<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Walktrap (Pons &amp; Latapy 2006) — short random-walk distances clustered with Ward's method on the undirected graph."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" {% if "STRONGCC" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Strong CC<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Strongly connected components — groups channels that can reach each other following directed edges. Only large SCCs are meaningful in sparse networks."></i></label>
+            <div class="ops-measures">
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
+                <div class="ops-palette" id="strategy-palette">
+                  <div class="ops-mchip" draggable="true" data-strategy="ORGANIZATION" data-label="Organization"><span class="ops-mchip-label">Organization</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organization in the database — not a detection algorithm, reflects manual categorisation."></i><button type="button" class="ops-mchip-add" aria-label="Add Organization" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN" data-label="Leiden"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_DIRECTED" data-label="Leiden directed"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Leiden directed</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden directed" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective — a community is stable when its internal edge density exceeds the resolution γ. γ ≈ 0.01 = fewer, larger communities (the old 'coarse' preset); γ ≈ 0.05 = more, smaller (the old 'fine' preset). Add it more than once for a multi-resolution scan."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="INFOMAP" data-label="Infomap"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Infomap</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Infomap (Rosvall &amp; Bergstrom 2008) — minimises description length of a random walk on the directed graph; captures information-flow communities."></i><button type="button" class="ops-mchip-add" aria-label="Add Infomap" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="INFOMAP_MEMORY" data-label="Infomap memory"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Infomap memory</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Second-order (memory) Infomap — models sequential forwarding paths as context-dependent states, capturing propagation patterns invisible to first-order methods."></i><button type="button" class="ops-mchip-add" aria-label="Add Infomap memory" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="MCL" data-label="MCL" data-multi="1" data-params='[{"name":"inflation","kind":"float","default":{{ ad.SA_MCL_INFLATION }},"min":1,"step":0.1,"label":"Inflation r"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">MCL</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Markov Clustering — alternates random-walk expansion and inflation steps until convergence. Works on the directed graph. Higher inflation = more, smaller communities (typical 1.5–4.0). Add it more than once to compare inflations."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: inflation r. Can be added multiple times with different inflations."></i><button type="button" class="ops-mchip-add" aria-label="Add MCL" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="WALKTRAP" data-label="Walktrap"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Walktrap</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Walktrap (Pons &amp; Latapy 2006) — short random-walk distances clustered with Ward's method on the undirected graph."></i><button type="button" class="ops-mchip-add" aria-label="Add Walktrap" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="STRONGCC" data-label="Strong CC"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Strong CC</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Strongly connected components — groups channels that can reach each other following directed edges. Only large SCCs are meaningful in sparse networks."></i><button type="button" class="ops-mchip-add" aria-label="Add Strong CC" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                </div>
+              </div>
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Selected <span class="ops-measures-hint" id="strategy-count"></span></p>
+                <div class="ops-dropzone" id="strategy-dropzone" aria-label="Selected community strategies — drop here">
+                  <p class="ops-dropzone-empty">Nothing selected. Drag a strategy here, or press + on one.</p>
+                </div>
+              </div>
             </div>
+            {{ sa_strategy_tokens|json_script:"sa-strategy-tokens" }}
           </fieldset>
           </div>
 
@@ -1087,6 +1079,7 @@
 {% endblock content %}
 
 {% block extra_scripts %}
+<script src="{% static 'runner/js/token_builder.js' %}"></script>
 <script>
 // Shared helpers used by multiple IIFEs in this file. They live at script-top-level
 // (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
@@ -1439,11 +1432,6 @@ function showToast(msg, type) {
       var on = cb ? cb.checked : false;
       _setDependentInputEnabled(input, on);
     });
-    document.querySelectorAll('[data-requires-strategy]').forEach(function (input) {
-      var cb = document.querySelector('input[name="community_strategies"][value="' + input.dataset.requiresStrategy + '"]');
-      var on = cb ? cb.checked : false;
-      _setDependentInputEnabled(input, on);
-    });
     document.querySelectorAll('[data-requires-flag]').forEach(function (input) {
       var form = input.closest('form');
       var cb = form ? form.querySelector('[name="' + input.dataset.requiresFlag + '"]') : null;
@@ -1492,262 +1480,40 @@ function showToast(msg, type) {
   })();
   // ── Drag-and-drop measure builder ────────────────────────────────────────
   // Palette chips (left) are dragged — or +-clicked — into the ordered drop zone (right).
-  // Parameterised measures (data-multi) can be added repeatedly, each with its own inline
-  // parameter inputs; drop-once measures grey out in the palette once placed. Each selected chip
-  // owns a hidden <input name="measures"> whose value is the composed token (e.g.
-  // "SPREADING(runs=2000)"); the form submits one per chip, in visual order.
-  (function () {
-    var palette = document.getElementById('measure-palette');
-    var dropzone = document.getElementById('measure-dropzone');
-    if (!palette || !dropzone) return;
-    var emptyMsg = dropzone.querySelector('.ops-dropzone-empty');
-    var countEl = document.getElementById('measure-count');
-
-    var META = {};
-    palette.querySelectorAll('.ops-mchip').forEach(function (chip) {
-      var dir = chip.querySelector('.ops-dir');
-      META[chip.dataset.measure] = {
-        label: chip.dataset.label || chip.dataset.measure,
-        dirIcon: dir ? dir.outerHTML : '',
-        multi: chip.dataset.multi === '1',
-        params: chip.dataset.params ? JSON.parse(chip.dataset.params) : [],
-      };
-    });
-
-    function basisOptionsHTML(kind) {
+  // Measure builder: instantiate the shared drag-and-drop token factory (token_builder.js) for the
+  // Measures palette/drop-zone. Each selected chip owns a hidden <input name="measures"> whose value
+  // is the composed token (e.g. "SPREADING(runs=2000)"); the form submits one per chip, in order.
+  // The Community-strategies builder below uses the same factory.
+  var measureBuilder = window.initTokenBuilder({
+    paletteId: 'measure-palette',
+    dropzoneId: 'measure-dropzone',
+    countId: 'measure-count',
+    seedId: 'sa-measure-tokens',
+    fieldName: 'measures',
+    itemKey: 'measure',
+    actionSelector: '[data-measure-action]',
+    actionKey: 'measureAction',
+    selectOptions: function (kind) {
       var tpl = document.getElementById(kind === 'basis-role' ? 'tpl-mbasis-role' : 'tpl-mbasis-bridging');
       return tpl ? tpl.innerHTML : '';
-    }
+    },
+  });
+  // Back-compat: the load-defaults handlers call window.rebuildMeasureBuilder.
+  window.rebuildMeasureBuilder = measureBuilder.rebuild;
 
-    function composeToken(chip) {
-      var parts = [];
-      chip.querySelectorAll('.ops-mparam-input').forEach(function (inp) {
-        var v = String(inp.value).trim();
-        if (v !== '') parts.push(inp.dataset.pname + '=' + v);
-      });
-      return parts.length ? chip.dataset.measure + '(' + parts.join(',') + ')' : chip.dataset.measure;
-    }
-    function updateToken(chip) {
-      var hidden = chip.querySelector('input[name="measures"]');
-      if (hidden) hidden.value = composeToken(chip);
-    }
-
-    function refreshState() {
-      var chips = dropzone.querySelectorAll('.ops-selchip');
-      if (emptyMsg) emptyMsg.style.display = chips.length ? 'none' : '';
-      if (countEl) countEl.textContent = chips.length ? (chips.length + ' selected') : '';
-      var present = {};
-      chips.forEach(function (c) { present[c.dataset.measure] = true; });
-      palette.querySelectorAll('.ops-mchip').forEach(function (pc) {
-        var used = pc.dataset.multi !== '1' && present[pc.dataset.measure];
-        pc.classList.toggle('ops-mchip--used', !!used);
-        pc.setAttribute('draggable', used ? 'false' : 'true');
-        var add = pc.querySelector('.ops-mchip-add');
-        if (add) add.disabled = !!used;
-      });
-    }
-
-    function makeParam(p, value) {
-      var wrap = document.createElement('label');
-      wrap.className = 'ops-mparam';
-      wrap.appendChild(document.createTextNode(p.label || p.name));
-      var input;
-      if (p.kind === 'int') {
-        input = document.createElement('input');
-        input.type = 'number';
-        if (p.min != null) input.min = p.min;
-        input.value = (value != null && value !== '') ? value : p.default;
-      } else {
-        input = document.createElement('select');
-        input.innerHTML = basisOptionsHTML(p.kind);
-        input.value = (value != null && value !== '') ? String(value).toUpperCase() : (p.default || '');
-      }
-      input.className = 'ops-mparam-input';
-      input.dataset.pname = p.name;
-      wrap.appendChild(input);
-      return wrap;
-    }
-
-    function addMeasure(key, params) {
-      var meta = META[key];
-      if (!meta) return null;
-      var existing = dropzone.querySelector('.ops-selchip[data-measure="' + key + '"]');
-      if (!meta.multi && existing) return existing;
-
-      var chip = document.createElement('div');
-      chip.className = 'ops-selchip';
-      chip.dataset.measure = key;
-      chip.setAttribute('draggable', 'true');
-
-      var head = document.createElement('span');
-      head.className = 'ops-selchip-head';
-      head.innerHTML = '<i class="bi bi-grip-vertical ops-selchip-grip" aria-hidden="true"></i>' + meta.dirIcon +
-        '<span class="ops-selchip-label"></span>';
-      head.querySelector('.ops-selchip-label').textContent = meta.label;
-      chip.appendChild(head);
-
-      if (meta.params.length) {
-        var pwrap = document.createElement('span');
-        pwrap.className = 'ops-selchip-params';
-        meta.params.forEach(function (p) { pwrap.appendChild(makeParam(p, params ? params[p.name] : undefined)); });
-        chip.appendChild(pwrap);
-      }
-
-      var ctrls = document.createElement('span');
-      ctrls.className = 'ops-selchip-ctrls';
-      ctrls.innerHTML =
-        '<button type="button" class="ops-selchip-btn" data-move="up" aria-label="Move up" title="Move up"><i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
-        '<button type="button" class="ops-selchip-btn" data-move="down" aria-label="Move down" title="Move down"><i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
-        '<button type="button" class="ops-selchip-btn ops-selchip-remove" data-remove="1" aria-label="Remove ' + meta.label + '" title="Remove"><i class="bi bi-x-lg" aria-hidden="true"></i></button>';
-      chip.appendChild(ctrls);
-
-      var hidden = document.createElement('input');
-      hidden.type = 'hidden';
-      hidden.name = 'measures';
-      chip.appendChild(hidden);
-
-      dropzone.appendChild(chip);
-      chip.querySelectorAll('.ops-mparam-input').forEach(function (inp) {
-        inp.addEventListener('change', function () { updateToken(chip); });
-        inp.addEventListener('input', function () { updateToken(chip); });
-      });
-      updateToken(chip);
-      refreshState();
-      return chip;
-    }
-
-    function parseToken(token) {
-      var m = String(token).match(/^\s*([A-Za-z_]+)\s*(?:\(\s*(.*?)\s*\))?\s*$/);
-      if (!m) return null;
-      var key = m[1].toUpperCase();
-      var params = {};
-      var meta = META[key];
-      (m[2] || '').split(',').forEach(function (piece, i) {
-        piece = piece.trim();
-        if (!piece) return;
-        var eq = piece.indexOf('=');
-        if (eq !== -1) params[piece.slice(0, eq).trim().toLowerCase()] = piece.slice(eq + 1).trim();
-        else if (meta && meta.params[i]) params[meta.params[i].name] = piece;  // legacy positional, e.g. BRIDGING(LEIDEN)
-      });
-      return { key: key, params: params };
-    }
-
-    // Rebuild the drop zone from an ordered list of tokens (used on first load and by both
-    // load-options paths). Exposed globally so those handlers can call it.
-    window.rebuildMeasureBuilder = function (tokens) {
-      dropzone.querySelectorAll('.ops-selchip').forEach(function (c) { c.remove(); });
-      (tokens || []).forEach(function (tok) {
-        var parsed = parseToken(tok);
-        if (parsed && META[parsed.key]) addMeasure(parsed.key, parsed.params);
-      });
-      refreshState();
-    };
-
-    function getDragAfter(y) {
-      var els = Array.prototype.slice.call(dropzone.querySelectorAll('.ops-selchip:not(.ops-selchip--dragging)'));
-      var closest = { offset: -Infinity, el: null };
-      els.forEach(function (el) {
-        var box = el.getBoundingClientRect();
-        var offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) closest = { offset: offset, el: el };
-      });
-      return closest.el;
-    }
-
-    palette.addEventListener('dragstart', function (e) {
-      var chip = e.target.closest('.ops-mchip');
-      if (!chip || chip.getAttribute('draggable') === 'false') return;
-      e.dataTransfer.setData('text/measure', chip.dataset.measure);
-      e.dataTransfer.effectAllowed = 'copy';
-      chip.classList.add('ops-mchip--dragging');
-    });
-    palette.addEventListener('dragend', function (e) {
-      var chip = e.target.closest('.ops-mchip');
-      if (chip) chip.classList.remove('ops-mchip--dragging');
-    });
-
-    var draggingChip = null;
-    dropzone.addEventListener('dragstart', function (e) {
-      var chip = e.target.closest('.ops-selchip');
-      if (!chip) return;
-      draggingChip = chip;
-      chip.classList.add('ops-selchip--dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/reorder', '1');
-    });
-    dropzone.addEventListener('dragend', function () {
-      if (draggingChip) draggingChip.classList.remove('ops-selchip--dragging');
-      draggingChip = null;
-      dropzone.classList.remove('ops-dropzone--over');
-    });
-    dropzone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      dropzone.classList.add('ops-dropzone--over');
-      if (draggingChip) {
-        var after = getDragAfter(e.clientY);
-        if (after == null) dropzone.appendChild(draggingChip);
-        else dropzone.insertBefore(draggingChip, after);
-      }
-    });
-    dropzone.addEventListener('dragleave', function (e) {
-      if (e.target === dropzone) dropzone.classList.remove('ops-dropzone--over');
-    });
-    dropzone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      dropzone.classList.remove('ops-dropzone--over');
-      var key = e.dataTransfer.getData('text/measure');
-      if (key) {
-        var chip = addMeasure(key);
-        if (chip) {
-          var after = getDragAfter(e.clientY);
-          if (after == null) dropzone.appendChild(chip);
-          else dropzone.insertBefore(chip, after);
-        }
-      }
-    });
-
-    palette.addEventListener('click', function (e) {
-      var add = e.target.closest('.ops-mchip-add');
-      if (!add || add.disabled) return;
-      var chip = add.closest('.ops-mchip');
-      if (chip) addMeasure(chip.dataset.measure);
-    });
-    dropzone.addEventListener('click', function (e) {
-      var btn = e.target.closest('.ops-selchip-btn');
-      if (!btn) return;
-      var chip = btn.closest('.ops-selchip');
-      if (!chip) return;
-      if (btn.dataset.remove) { chip.remove(); refreshState(); return; }
-      var sib;
-      if (btn.dataset.move === 'up') {
-        sib = chip.previousElementSibling;
-        if (sib && sib.classList.contains('ops-selchip')) dropzone.insertBefore(chip, sib);
-      } else if (btn.dataset.move === 'down') {
-        sib = chip.nextElementSibling;
-        if (sib && sib.classList.contains('ops-selchip')) dropzone.insertBefore(sib, chip);
-      }
-    });
-
-    document.querySelectorAll('[data-measure-action]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (btn.dataset.measureAction === 'none') {
-          dropzone.querySelectorAll('.ops-selchip').forEach(function (c) { c.remove(); });
-          refreshState();
-        } else {
-          palette.querySelectorAll('.ops-mchip').forEach(function (pc) {
-            if (!dropzone.querySelector('.ops-selchip[data-measure="' + pc.dataset.measure + '"]')) {
-              addMeasure(pc.dataset.measure);
-            }
-          });
-        }
-      });
-    });
-
-    var initEl = document.getElementById('sa-measure-tokens');
-    var initial = [];
-    if (initEl) { try { initial = JSON.parse(initEl.textContent) || []; } catch (err) { initial = []; } }
-    window.rebuildMeasureBuilder(initial);
-  })();
+  // Community-strategy builder: the same factory, fed by the strategy palette/drop-zone. Each chip's
+  // hidden <input name="community_strategies"> holds a token (e.g. "LEIDEN_CPM(resolution=0.05)").
+  var strategyBuilder = window.initTokenBuilder({
+    paletteId: 'strategy-palette',
+    dropzoneId: 'strategy-dropzone',
+    countId: 'strategy-count',
+    seedId: 'sa-strategy-tokens',
+    fieldName: 'community_strategies',
+    itemKey: 'strategy',
+    actionSelector: '[data-strategy-action]',
+    actionKey: 'strategyAction',
+  });
+  window.rebuildStrategyBuilder = strategyBuilder.rebuild;
 
   // All / None buttons in fieldset legends.
   document.addEventListener('click', function (e) {
@@ -2064,16 +1830,15 @@ function showToast(msg, type) {
         if (opts.dead_leaves_color) setVal('dead_leaves_color', opts.dead_leaves_color);
         setVal('fa2_iterations',                 opts.fa2_iterations);
         setVal('community_distribution_threshold', opts.community_distribution_threshold);
-        setVal('leiden_coarse_resolution',       opts.leiden_coarse_resolution);
-        setVal('leiden_fine_resolution',         opts.leiden_fine_resolution);
-        setVal('mcl_inflation',                  opts.mcl_inflation);
 
         // Measures: rebuild the drag-and-drop builder from the ordered token list (each token
         // carries its own parameters, e.g. "SPREADING(runs=2000)").
         if (window.rebuildMeasureBuilder) {
             window.rebuildMeasureBuilder((opts.measures || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
         }
-        setMulti('community_strategies', opts.community_strategies);
+        if (window.rebuildStrategyBuilder) {
+            window.rebuildStrategyBuilder((opts.community_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+        }
         setMulti('network_stat_groups',  opts.network_stat_groups);
         setMulti('layouts_2d',           opts.layouts_2d || '');
         setMulti('layouts_3d',           opts.layouts_3d || '');
@@ -2135,10 +1900,17 @@ function showToast(msg, type) {
   function applyLoadedDefaults(form, values) {
     Object.keys(values).forEach(function (name) {
       var value = values[name];
-      // Measures are an ordered token list driving the drag-and-drop builder, not form controls.
+      // Measures and community strategies are ordered token lists driving their drag-and-drop
+      // builders, not plain form controls.
       if (name === 'measures') {
         if (window.rebuildMeasureBuilder) {
           window.rebuildMeasureBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+        }
+        return;
+      }
+      if (name === 'community_strategies') {
+        if (window.rebuildStrategyBuilder) {
+          window.rebuildStrategyBuilder(Array.isArray(value) ? value : String(value || '').split(','));
         }
         return;
       }

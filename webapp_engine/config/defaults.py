@@ -93,9 +93,9 @@ STRUCTURAL_DEFAULTS: dict = {
     "computation": {
         "fa2_iterations": "",
         "community_distribution_threshold": 0,
-        "leiden_coarse_resolution": 0.01,
-        "leiden_fine_resolution": 0.05,
-        "mcl_inflation": 2.0,
+        # CPM resolution / MCL inflation are no longer stored here — since v0.25 they travel inside
+        # the per-instance community-strategy tokens (e.g. "LEIDEN_CPM(resolution=0.05)"). Old files
+        # are upgraded by loader._migrate_community_params.
         "spreading_runs": 200,
         "diffusion_window": 30,
     },

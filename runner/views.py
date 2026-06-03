@@ -119,9 +119,9 @@ class OperationsView(View):
             "SA_FA2_ITERATIONS": settings.SA_FA2_ITERATIONS,
             "SA_SPREADING_RUNS": settings.SA_SPREADING_RUNS,
             "SA_DIFFUSION_WINDOW": settings.SA_DIFFUSION_WINDOW,
-            "SA_LEIDEN_COARSE_RESOLUTION": settings.SA_LEIDEN_COARSE_RESOLUTION,
-            "SA_LEIDEN_FINE_RESOLUTION": settings.SA_LEIDEN_FINE_RESOLUTION,
-            "SA_MCL_INFLATION": settings.SA_MCL_INFLATION,
+            # Default values pre-filled on a freshly-dragged community-strategy chip (per-instance).
+            "SA_CPM_RESOLUTION": net_community.CPM_DEFAULT_RESOLUTION,
+            "SA_MCL_INFLATION": net_community.MCL_DEFAULT_INFLATION,
             "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
             "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
             "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
@@ -139,10 +139,8 @@ class OperationsView(View):
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
             # SA expanded sets for checkbox groups
-            # Ordered measure tokens (each may carry parameters, e.g. "SPREADING(runs=2000)") used to
-            # pre-fill the drag-and-drop measure builder. Replaces the old checkbox `_expand` set.
-            "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
-            "sa_strategies": _expand(settings.SA_COMMUNITY_STRATEGIES, set(net_community.VALID_STRATEGIES)),
+            # sa_measure_tokens / sa_strategy_tokens seed the drag-and-drop builders; passed at top
+            # level (below) so the templates' json_script tags can read them.
             "sa_stat_groups": _expand(settings.SA_NETWORK_STAT_GROUPS, set(net_measures.ALL_NETWORK_STAT_GROUPS)),
             "sa_layouts_2d": {s.strip().upper() for s in settings.SA_LAYOUTS_2D.split(",") if s.strip()},
             "sa_layouts_3d": {s.strip().upper() for s in settings.SA_LAYOUTS_3D.split(",") if s.strip()},
@@ -182,6 +180,11 @@ class OperationsView(View):
                     key=lambda kv: kv[1],
                 ),
                 "palette_names": palette_utils.list_palette_names(),
+                # Ordered token lists seeding the drag-and-drop builders (measures + community
+                # strategies); each token may carry parameters, e.g. "SPREADING(runs=2000)" /
+                # "LEIDEN_CPM(resolution=0.05)".
+                "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
+                "sa_strategy_tokens": [t.strip() for t in settings.SA_COMMUNITY_STRATEGIES.split(",") if t.strip()],
                 "ad": ad,
             },
         )
@@ -599,9 +602,8 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
             "--no-interest-include-mentions",
         ),
         ("value", "community_distribution_threshold", "--community-distribution-threshold"),
-        ("value", "leiden_coarse_resolution", "--leiden-coarse-resolution"),
-        ("value", "leiden_fine_resolution", "--leiden-fine-resolution"),
-        ("value", "mcl_inflation", "--mcl-inflation"),
+        # CPM resolution / MCL inflation now ride inside the community-strategy tokens
+        # (e.g. "LEIDEN_CPM(resolution=0.05)"), so they are not separate CLI flags from the panel.
         ("channel_types", "--channel-types"),
         ("csv", "channel_groups", "--channel-groups"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
@@ -699,9 +701,6 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("include_private", "scope.include_private", "bool"),
         ("fa2_iterations", "computation.fa2_iterations", "fa2_iterations"),
         ("community_distribution_threshold", "computation.community_distribution_threshold", "int"),
-        ("leiden_coarse_resolution", "computation.leiden_coarse_resolution", "float"),
-        ("leiden_fine_resolution", "computation.leiden_fine_resolution", "float"),
-        ("mcl_inflation", "computation.mcl_inflation", "float"),
         ("spreading_runs", "computation.spreading_runs", "int"),
         ("diffusion_window", "computation.diffusion_window", "int"),
         ("layouts_2d", "layouts.layouts_2d", "list"),
@@ -779,14 +778,20 @@ def _validate_post_constraints(task: str, post: Any) -> None:
     if task == "structural_analysis":
         measure_tokens = post.getlist("measures") or []
         robust = post.getlist("robustness_strategies") or []
-        strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
+        strategy_tokens = post.getlist("community_strategies") or []
 
-        # Parse the measure tokens up-front for a friendly error (syntax / unknown param / range /
-        # duplicate) before the subprocess launches.
+        # Parse measure + strategy tokens up-front for a friendly error (syntax / unknown param /
+        # range / duplicate) before the subprocess launches.
         try:
             parsed_measures = net_measures.parse_measures(measure_tokens)
         except ValueError as exc:
             raise ValueError(f"Measures: {exc}") from exc
+        try:
+            parsed_strategies = net_community.parse_strategies(strategy_tokens)
+        except ValueError as exc:
+            raise ValueError(f"Community strategies: {exc}") from exc
+        # A measure basis names a strategy *family*; check it against the selected family names.
+        strategies = {inst.name for inst in parsed_strategies}
 
         # Each partition-based measure's community basis must be among the selected community
         # strategies (BRIDGING additionally excludes ORGANIZATION, matching the backend / dropdown).
@@ -827,11 +832,11 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                 )
 
         if post.get("consensus_matrix"):
-            non_org = strategies - {"ORGANIZATION"}
+            non_org = [inst for inst in parsed_strategies if inst.name != "ORGANIZATION"]
             if len(non_org) < 2:
                 raise ValueError(
                     "Consensus matrix requires at least two non-ORGANIZATION community strategies"
-                    f" (currently: {', '.join(sorted(non_org)) or 'none'})"
+                    f" (currently: {len(non_org)})"
                 )
         return
 

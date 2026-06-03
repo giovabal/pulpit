@@ -195,9 +195,6 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | :--- | :---------- | ---------------: |
 | `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. Empty `""` disables FA2. | `""` |
 | `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables. `0` keeps every community. | `0` |
-| `computation.leiden_coarse_resolution` | CPM resolution γ for `LEIDEN_CPM_COARSE` (few large communities) | `0.01` |
-| `computation.leiden_fine_resolution` | CPM resolution γ for `LEIDEN_CPM_FINE` (many small communities) | `0.05` |
-| `computation.mcl_inflation` | Inflation parameter r for `MCL` (typical range 1.5–4.0) | `2.0` |
 | `computation.spreading_runs` | Monte Carlo SIR simulations per node for `SPREADING` | `200` |
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
 

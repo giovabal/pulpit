@@ -21,8 +21,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Organization | `ORGANIZATION` | Domain knowledge | — |
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
-| Leiden CPM coarse | `LEIDEN_CPM_COARSE` | Constant Potts Model | No |
-| Leiden CPM fine | `LEIDEN_CPM_FINE` | Constant Potts Model | No |
+| Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
 | K-core | `KCORE` | Structural hierarchy | No |
 | Infomap | `INFOMAP` | Information-theoretic | Yes |
 | Memory Infomap | `INFOMAP_MEMORY` | Information-theoretic (2nd order) | Yes |
@@ -49,7 +48,7 @@ This is the only strategy in Pulpit that is not an algorithm: the communities ar
 
 *Leiden groups channels that connect to each other more than chance would predict, and guarantees every detected community is internally well-connected — no channel stranded in a group it doesn't really belong to.*
 
-Leiden looks for partitions where the density of connections inside each group is significantly higher than what would be expected if edges were placed at random. It runs a fast greedy search and then adds a refinement step that checks, after every merge, that every community is genuinely cohesive on the inside — so no channel ends up stranded in a group it isn't really connected to. The result is a clean, reliable partition that has become the standard modularity-based community detector across network science. Pulpit runs Leiden on the symmetrised view of the citation graph: direction is dropped but edge weights from `--edge-weight-strategy` shape the partition. When citation direction carries the meaning, use [Leiden (directed)](#leiden-directed) instead; when small dense clusters need to survive merging, see the [CPM variants](#leiden-cpm-coarse-and-fine).
+Leiden looks for partitions where the density of connections inside each group is significantly higher than what would be expected if edges were placed at random. It runs a fast greedy search and then adds a refinement step that checks, after every merge, that every community is genuinely cohesive on the inside — so no channel ends up stranded in a group it isn't really connected to. The result is a clean, reliable partition that has become the standard modularity-based community detector across network science. Pulpit runs Leiden on the symmetrised view of the citation graph: direction is dropped but edge weights from `--edge-weight-strategy` shape the partition. When citation direction carries the meaning, use [Leiden (directed)](#leiden-directed) instead; when small dense clusters need to survive merging, see [Leiden CPM](#leiden-cpm).
 
 **References:**
 - Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the algorithm and the connectivity guarantee.
@@ -77,18 +76,20 @@ Standard Leiden treats every forward the same regardless of direction, which can
 
 ---
 
-## Leiden CPM (coarse and fine)
+## Leiden CPM
 
-*The CPM variants let you tune how granular the communities should be — useful for surfacing small, tight clusters that other strategies would merge into bigger ones.*
+*A tunable-granularity Leiden variant — useful for surfacing small, tight clusters that other strategies would merge into bigger ones. Set its resolution per instance, and add it more than once for a multi-scale view.*
 
-Standard Leiden compares each candidate group against what would be expected at random, which has the side effect of absorbing small dense clusters into bigger ones (the resolution limit). The Constant Potts Model replaces that comparison with a tunable threshold γ: a community is kept only if its internal connection density exceeds γ. Higher γ produces more, smaller communities; lower γ produces fewer, larger ones — and either choice escapes the modularity resolution limit. Pulpit ships two presets, chosen as sensible starting points for the default `PARTIAL_REFERENCES` edge-weight strategy:
+Standard Leiden compares each candidate group against what would be expected at random, which has the side effect of absorbing small dense clusters into bigger ones (the resolution limit). The Constant Potts Model replaces that comparison with a tunable threshold γ: a community is kept only if its internal connection density exceeds γ. Higher γ produces more, smaller communities; lower γ produces fewer, larger ones — and either choice escapes the modularity resolution limit. The internal machinery is the same as standard Leiden: same symmetrised projection, same connectivity guarantee, edge weights honoured.
 
-| Key | Default γ | Effect |
-|:----|:---------|:-------|
-| `LEIDEN_CPM_COARSE` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
-| `LEIDEN_CPM_FINE` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
+`LEIDEN_CPM` carries its resolution as a per-instance parameter, so you set it on the chip (Operations panel) or in the token (CLI) — and you can request it **more than once** at different resolutions for a multi-scale view, each producing its own partition column (e.g. `leiden_cpm_resolution_0_01`):
 
-Both can be tuned at export time with `--leiden-coarse-resolution` and `--leiden-fine-resolution`. The internal machinery is the same as standard Leiden: same symmetrised projection, same connectivity guarantee, edge weights honoured.
+| Token | γ | Effect |
+|:------|:--|:-------|
+| `LEIDEN_CPM(resolution=0.01)` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
+| `LEIDEN_CPM(resolution=0.05)` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
+
+A bare `LEIDEN_CPM` starts at γ = 0.05; override per instance, or change the default with `--leiden-cpm-resolution`. (Earlier releases shipped two fixed presets, `LEIDEN_CPM_COARSE` / `LEIDEN_CPM_FINE`; saved configs upgrade to the parameterised form automatically.)
 
 **References:**
 - Traag, V.A., Van Dooren, P. & Nesterov, Y. (2011) "Narrow scope for resolution-limit-free community detection." *Physical Review E* 84, 016114. [doi:10.1103/PhysRevE.84.016114](https://doi.org/10.1103/PhysRevE.84.016114) — the CPM quality function and its resolution-limit-free property.
@@ -149,7 +150,7 @@ Standard Infomap places each channel into one community. Memory Infomap goes fur
 
 *MCL surfaces tight reciprocal cores — small groups of channels where everyone forwards everyone else's content.*
 
-MCL simulates a diffusion process on the citation network: information flow is concentrated along strong reciprocal ties and diluted along weak or one-way ones. After enough rounds, the channels condense into clearly separated attractor blocks — the communities. MCL has no resolution limit and no null model, so a four-channel reciprocal cell will survive intact even when Leiden would merge it into a larger community. The `--mcl-inflation` parameter (default 2.0, typical range 1.5–4.0) controls how sharply the contrast is enhanced; higher inflation produces smaller, tighter communities. Pulpit runs MCL on the original directed citation graph, with edge weights from `--edge-weight-strategy` shaping the partition. The flip side of MCL's strength: it **fragments hub-and-spoke** structures, where many amplifiers cite a common source without citing each other. For those patterns, Leiden is the right tool.
+MCL simulates a diffusion process on the citation network: information flow is concentrated along strong reciprocal ties and diluted along weak or one-way ones. After enough rounds, the channels condense into clearly separated attractor blocks — the communities. MCL has no resolution limit and no null model, so a four-channel reciprocal cell will survive intact even when Leiden would merge it into a larger community. MCL's inflation (set per instance, e.g. `MCL(inflation=3.0)`; default 2.0, typical range 1.5–4.0, and repeatable to compare values) controls how sharply the contrast is enhanced; higher inflation produces smaller, tighter communities. Pulpit runs MCL on the original directed citation graph, with edge weights from `--edge-weight-strategy` shaping the partition. The flip side of MCL's strength: it **fragments hub-and-spoke** structures, where many amplifiers cite a common source without citing each other. For those patterns, Leiden is the right tool.
 
 **References:**
 - van Dongen, S. (2008) "Graph clustering via a discrete uncoupling process." *SIAM Journal on Matrix Analysis and Applications* 30(1), 121–141. [doi:10.1137/040608635](https://doi.org/10.1137/040608635) — the formal treatment of the expansion/inflation algorithm and the structural argument for why MCL concentrates on tight reciprocal cores.
@@ -258,7 +259,7 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | Identify echo chambers and information traps | `INFOMAP` |
 | Detect context-dependent brokers | `INFOMAP_MEMORY` |
 | Find the ideological core vs. periphery | `KCORE` |
-| Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM_COARSE` + `LEIDEN_CPM_FINE` |
+| Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
 | Surface tight reciprocal amplification cores | `MCL` |
 | Group channels by shared sources (not direct ties) | `WALKTRAP` |
 | Detect coordinated circular amplification | `STRONGCC` |

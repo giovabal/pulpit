@@ -212,7 +212,7 @@ The hot layer is interpretable on every channel above the cold-start floor — t
 
 The structural layer adds a third pitfall:
 
-- **A network with few community boundaries.** If `LEIDEN_DIRECTED` produces a small number of large communities, most posts will reach all of them at once and C saturates near the partition count. Try a finer partition (`LEIDEN_CPM_FINE`) if the community-strategies list permits.
+- **A network with few community boundaries.** If `LEIDEN_DIRECTED` produces a small number of large communities, most posts will reach all of them at once and C saturates near the partition count. Try a finer partition (`LEIDEN_CPM(resolution=0.05)` or higher) if the community-strategies list permits.
 
 The system as a whole is *not* meant to detect what humans would call *interesting* in the semantic / editorial sense — that requires NLP and content models. It is a *structural* lens: which posts stand out from their channel's engagement baseline, and which posts spread structurally beyond their origin community. The two questions are surprisingly often the right ones, but they are not the only ones, and the doc would lie to claim otherwise.
 

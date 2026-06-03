@@ -211,10 +211,10 @@ def community_shell_positions(
     community data is available.
 
     *strategy_results* has the shape returned by ``_compute_communities``:
-    ``{STRATEGY_NAME: (community_map, palette)}`` where *community_map* is
-    ``{node_id: community_label}``.
+    ``{strategy_key: (community_map, palette)}`` keyed by the parameter-suffixed partition key
+    (``StrategyInstance.key``) where *community_map* is ``{node_id: community_label}``.
     """
-    preferred = ["LEIDEN", "LEIDEN_DIRECTED", "LABELPROPAGATION"]
+    preferred = ["leiden", "leiden_directed", "labelpropagation"]
     community_map: dict | None = None
     for key in preferred:
         if key in strategy_results:

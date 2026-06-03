@@ -440,6 +440,26 @@ class WriteCliCommandViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("BRIDGING basis", resp.json()["error"])
 
+    def test_structural_accepts_parameterised_strategy_and_family_basis(self):
+        # A repeated parameterised strategy + a BRIDGING basis naming the family validates fine.
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={
+                "measures": ["BRIDGING(basis=LEIDEN_CPM)"],
+                "community_strategies": ["LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"],
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("--community-strategies", resp.json()["command"])
+
+    def test_structural_validation_rejects_malformed_strategy_token(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["LEIDEN(resolution=0.1)"]},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Community strategies", resp.json()["error"])
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — AbortTaskView
@@ -801,6 +821,22 @@ class BuildArgsExportNetworkTests(TestCase):
         args = _build_args("structural_analysis", post)
         idx = args.index("--community-strategies")
         self.assertIn("LEIDEN", args[idx + 1])
+
+    def test_community_strategies_parameterised_tokens_join_in_order(self):
+        # The builder posts one token per chip (with its parameters); csv joins them in order,
+        # and repeated LEIDEN_CPM at different resolutions both survive.
+        post = FakePost(
+            {
+                "community_strategies": [
+                    "LEIDEN_CPM(resolution=0.01)",
+                    "LEIDEN_CPM(resolution=0.05)",
+                    "MCL(inflation=3.0)",
+                ]
+            }
+        )
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--community-strategies")
+        self.assertEqual(args[idx + 1], "LEIDEN_CPM(resolution=0.01),LEIDEN_CPM(resolution=0.05),MCL(inflation=3.0)")
 
     def test_timeline_step_year(self):
         args = _build_args("structural_analysis", FakePost({"timeline_step": "1"}))
@@ -1209,7 +1245,7 @@ class DefaultsViewTests(TestCase):
                 },
             )
             self.assertEqual(resp.status_code, 400)
-            self.assertIn("not a valid community strategy", resp.json()["error"])
+            self.assertIn("not a valid choice", resp.json()["error"])
 
     def test_save_accepts_repeated_parameterised_measure(self) -> None:
         # The same measure may be saved more than once with different parameters.
