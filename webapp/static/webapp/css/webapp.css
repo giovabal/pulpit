@@ -3,6 +3,7 @@
   --accent: #4338ca;
   --accent-hover: #3730a3;
   --accent-bg: #eef2ff;
+  --accent-border: #c7d2fe;
   --hover: #efede8;
   --surface: #ffffff;
   --bg: #f5f4f0;
@@ -13,6 +14,8 @@
   --radius: .5rem;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
   --shadow: 0 4px 12px rgba(0,0,0,.08);
+  /* Focus ring — rgba(var(--bs-primary-rgb)) so it tracks the theme accent (incl. dark) */
+  --focus-ring: 0 0 0 3px rgba(var(--bs-primary-rgb), .15);
   /* fonts */
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --font-serif: "IBM Plex Serif", Georgia, serif;
@@ -66,6 +69,7 @@
   --accent:        #818cf8;
   --accent-hover:  #a5b4fc;
   --accent-bg:     #1e1b4b;
+  --accent-border: #312e81;
   --hover:         #26262d;
   --surface:       #1a1a1f;
   --bg:            #0f0f12;
@@ -170,26 +174,6 @@ html, body { background: var(--bg); color: var(--text); }
   --bs-btn-focus-shadow-rgb: 185, 28, 28;
 }
 
-/* Ghost variant — transparent background, neutral colour, hover fills with surface tint */
-.btn-ghost {
-  --bs-btn-color: var(--muted);
-  --bs-btn-bg: transparent;
-  --bs-btn-border-color: transparent;
-  --bs-btn-hover-color: var(--text);
-  --bs-btn-hover-bg: var(--hover);
-  --bs-btn-hover-border-color: transparent;
-  --bs-btn-active-color: var(--text);
-  --bs-btn-active-bg: var(--hover);
-  --bs-btn-active-border-color: transparent;
-  --bs-btn-focus-shadow-rgb: 67, 56, 202;
-}
-
-/* Compact icon-only button — pair with .btn-sm and/or .btn-ghost. */
-.btn-icon {
-  padding: .25rem .375rem;
-  line-height: 1;
-}
-
 /* ---------- Pulpit-namespaced buttons (bo-btn family) ----------
    Originally introduced for the backoffice but used app-wide. Independent of
    Bootstrap's .btn cascade so they can be used without inheriting Bootstrap's
@@ -225,29 +209,20 @@ html, body { background: var(--bg); color: var(--text); }
 
 /* ---------- Utilities ---------- */
 .page-subtitle { font-size: .85rem; }
-.page-heading  { font-family: var(--font-serif); font-weight: 700; }
 .mono          { font-family: var(--font-mono); }
 
-/* ---------- Panel — shared surface for card-like containers ----------
-   ``.panel`` is the forward-looking class for new code. The legacy class
-   names (summary-card, channel-card, data-card, bo-panel, ops-card) are
-   group-selected here so the base bg/border/radius declarations live in
-   one place — each specific class only carries its own padding, hover
-   state, and decorative modifiers. */
-.panel,
+/* ---------- Card surface — shared base for card-like containers ----------
+   summary-card, channel-card, bo-panel and ops-card are group-selected here
+   so the base bg/border/radius declarations live in one place — each specific
+   class only carries its own padding, hover state, and decorative modifiers. */
 .summary-card,
 .channel-card,
-.data-card,
 .bo-panel,
 .ops-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-
-.panel--accent-top { border-top: 3px solid var(--accent); }
-.panel--shadow-sm  { box-shadow: var(--shadow-sm); }
-.panel--padded     { padding: 1rem 1.25rem; }
 
 /* ---------- Base ---------- */
 body {
@@ -486,15 +461,24 @@ body {
   text-decoration: none;
 }
 
-.forwarded-banner {
+/* Shared banner strip skeleton — forwarded / pin / album. */
+.forwarded-banner,
+.pin-banner,
+.album-banner {
   display: flex;
   align-items: center;
   gap: .375rem;
+  padding: .3rem .875rem;
+  font-size: .7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.forwarded-banner {
   padding: .35rem .875rem;
   font-size: .72rem;
   color: #0369a1;
   background: #f0f9ff;
-  border-bottom: 1px solid #bae6fd;
+  border-bottom-color: #bae6fd;
 }
 
 .forwarded-banner a { color: #0369a1; font-weight: 500; }
@@ -509,14 +493,10 @@ body {
 [data-theme="dark"] .forwarded-banner a:hover { color: #38bdf8; }
 
 .pin-banner {
-  display: flex;
-  align-items: center;
   gap: .3rem;
-  padding: .3rem .875rem;
-  font-size: .7rem;
   color: var(--warning);
   background: var(--warning-bg);
-  border-bottom: 1px solid #fde68a;
+  border-bottom-color: #fde68a;
 }
 
 .pin-banner.subtle {
@@ -526,14 +506,8 @@ body {
 }
 
 .album-banner {
-  display: flex;
-  align-items: center;
-  gap: .375rem;
-  padding: .3rem .875rem;
-  font-size: .7rem;
   color: var(--muted);
   background: var(--hover);
-  border-bottom: 1px solid var(--border);
 }
 
 .post-body {
@@ -859,49 +833,7 @@ body {
 .stats-table td:last-child { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* ---------- Home ---------- */
-.home-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 60vh;
-  max-width: 30rem;
-}
-
-.home-icon {
-  width: 52px;
-  height: 52px;
-  background: var(--accent-bg);
-  border-radius: .625rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.375rem;
-  color: var(--accent);
-  margin-bottom: 1rem;
-}
-
 .home-page .stats-panel { max-width: none; }
-
-.home-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.75rem;
-}
-
-.home-brand { display: flex; align-items: center; gap: .875rem; }
-
-.home-brand .home-icon {
-  width: 44px;
-  height: 44px;
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  margin-bottom: 0;
-}
-
-.home-tagline { font-size: .85rem; }
 
 .summary-grid {
   display: grid;
@@ -1074,8 +1006,9 @@ body {
   margin-bottom: .75rem;
 }
 
-.search-input-wrap {
-  flex: 1;
+/* Shared input-wrap surface (search box + channel filter). */
+.search-input-wrap,
+.channel-filter-wrap {
   display: flex;
   align-items: center;
   background: var(--surface);
@@ -1084,11 +1017,12 @@ body {
   overflow: hidden;
   transition: border-color .12s, box-shadow .12s;
 }
-
-.search-input-wrap:focus-within {
+.search-input-wrap:focus-within,
+.channel-filter-wrap:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+  box-shadow: var(--focus-ring);
 }
+.search-input-wrap { flex: 1; }
 
 .search-icon {
   padding: 0 .625rem 0 .875rem;
@@ -1263,21 +1197,8 @@ body {
   margin-bottom: 1.25rem;
 }
 
-.channel-filter-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  transition: border-color .12s, box-shadow .12s;
-  width: 16rem;
-}
-
-.channel-filter-wrap:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
-}
+/* Base surface shared with .search-input-wrap (see Search section). */
+.channel-filter-wrap { width: 16rem; }
 
 .channel-filter-icon {
   padding: 0 .5rem 0 .75rem;
@@ -1332,7 +1253,7 @@ body {
 .channel-date-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+  box-shadow: var(--focus-ring);
 }
 
 .channel-date-sep {
@@ -1345,40 +1266,6 @@ body {
   font-size: .75rem;
   color: var(--muted);
   flex-shrink: 0;
-}
-
-.channel-status-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .375rem;
-}
-
-.channel-status-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: .35rem;
-  font: inherit;
-  font-size: .8rem;
-  height: 2.1rem;
-  padding: 0 .6rem;
-  border: 1px solid var(--border);
-  border-radius: .5rem;
-  background: var(--surface);
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-  transition: background .1s, border-color .1s, color .1s;
-}
-.channel-status-flag input[type="checkbox"] {
-  width: 13px; height: 13px;
-  accent-color: var(--accent);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.channel-status-flag:has(input:checked) {
-  background: var(--accent-bg);
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .channel-org-select {
@@ -1395,7 +1282,7 @@ body {
 .channel-org-select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+  box-shadow: var(--focus-ring);
 }
 
 .channel-sort {
@@ -1428,7 +1315,7 @@ body {
 .channel-sort-dir:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(67,56,202,.15);
+  box-shadow: var(--focus-ring);
 }
 
 .channels-list {
@@ -1555,76 +1442,6 @@ body {
   opacity: .55;
 }
 
-/* ---------- Data page ---------- */
-.data-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.75rem;
-}
-
-.data-card {
-  /* base bg/border/radius from .panel */
-  display: flex;
-  gap: 1rem;
-  padding: 1.125rem 1.25rem;
-  height: 100%;
-}
-
-.data-card-icon {
-  width: 36px;
-  height: 36px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: .375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.05rem;
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.data-card-title {
-  font-size: .9rem;
-  font-weight: 600;
-  margin: 0 0 .35rem;
-}
-
-.data-card-desc {
-  font-size: .8rem;
-  color: var(--muted);
-  line-height: 1.55;
-  margin-bottom: .75rem;
-}
-
-.data-export-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-  margin-bottom: 1.75rem;
-}
-
-.data-export-item {
-  display: flex;
-  flex-direction: column;
-  padding: .5rem .875rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  text-decoration: none;
-  font-size: .8125rem;
-  transition: border-color .15s, background .15s;
-  cursor: pointer;
-}
-.data-export-item:hover { border-color: var(--accent); background: var(--hover); color: var(--text); }
-.data-export-item.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
-
-.data-export-name { font-weight: 600; }
-.data-export-meta { color: var(--muted); font-size: .75rem; margin-top: .1rem; }
-
 /* ---------- Login page ---------- */
 .login-body {
   min-height: 100vh;
@@ -1742,13 +1559,6 @@ body {
   margin-bottom: 1.25rem;
   overflow: hidden;
 }
-.vacancy-analysis-card--inactive {
-  border-color: var(--border);
-  border-left-color: var(--border);
-}
-.vacancy-analysis-card--inactive .vacancy-impact-icon,
-.vacancy-analysis-card--inactive .vacancy-impact-title { color: var(--text-muted); }
-.vacancy-analysis-card--inactive .vacancy-analysis-header { border-bottom: none; }
 .vacancy-analysis-header {
   display: flex;
   align-items: flex-start;
@@ -1787,18 +1597,18 @@ body {
   color: var(--text);
 }
 .vacancy-form-input:focus { border-color: var(--danger); }
-/* .vacancy-form-btn was a bespoke red button — now uses ``.btn .btn-danger .btn-sm``
-   from the global Bootstrap override above. */
 .vacancy-form-check { gap: .35rem; cursor: pointer; }
 
 .vacancy-candidates-title { font-size: .875rem; font-weight: 600; margin: 0 0 .35rem; }
 .vac-sort-th { cursor: pointer; user-select: none; white-space: nowrap; padding: 0; }
 .vac-sort-th:hover { background: var(--hover); }
 .vac-sort-idle { opacity: .3; font-size: .7em; }
-.vac-sort-btn {
+/* Header sort button — unstyled to inherit the <th>'s look. Shared with
+   backoffice's .bo-th-sort-btn (each keeps only its own padding). */
+.vac-sort-btn,
+.bo-th-sort-btn {
   background: none;
   border: 0;
-  padding: .2rem .4rem;
   font: inherit;
   color: inherit;
   text-transform: inherit;
@@ -1808,8 +1618,11 @@ body {
   width: 100%;
   display: block;
 }
-.vac-sort-btn:focus { outline: none; }
-.vac-sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.vac-sort-btn:focus,
+.bo-th-sort-btn:focus { outline: none; }
+.vac-sort-btn:focus-visible,
+.bo-th-sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.vac-sort-btn { padding: .2rem .4rem; }
 .vacancy-meta { font-size: .78rem; color: var(--text-muted); margin: 0 0 .75rem; }
 .vacancy-empty { font-size: .82rem; color: var(--text-muted); margin: 0; font-style: italic; }
 .vacancy-candidates-table { width: 100%; }
