@@ -4,6 +4,8 @@ A *robustness analysis* asks: **how well does this network hold up when channels
 
 Pulpit's robustness analysis turns this intuition into measurable curves and a single score per attack strategy, with a statistical sanity check against a randomised version of the same network. The whole battery runs on the directed citation graph that the rest of `structural_analysis` already builds, so no extra crawl is needed.
 
+> **Read this first.** Robustness touches Pulpit's *one-degree* amplification model in two ways — the attack *order* (several strategies rank by invalidated flow measures) and what the curves *measure* (structural cohesion, not diffusion). See [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption).
+
 Enable with `--robustness` on `structural_analysis` (off by default; see [Workflow § Robustness](workflow.md#robustness-resistance-to-node-removal) for the CLI block and [Configuration § Robustness](configuration.md#robustness) for the `[robustness]` section in `.operations-structural`).
 
 ---
@@ -17,6 +19,34 @@ Enable with `--robustness` on `structural_analysis` (off by default; see [Workfl
 | `R` z-score vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring |
 | Intra/inter community survival | Does the attack strip the bridges between communities first (decoupling), or the ties within them first (eroding cohesion)? |
 | Baseline weighted efficiency | A pre-attack characterisation of how easily information traverses the network at full strength |
+
+---
+
+## Interpretation guardrails: the one-degree assumption
+
+Pulpit records **one-degree amplification**: every forward is attributed to the original source, so a real A → B → C chain is stored as the star {B→A, C→A}, and any 2-path that survives in the graph is two unrelated citations rather than a transmission route (full argument: [Network measures → Interpretation guardrails](network-measures.md#interpretation-guardrails-the-one-degree-assumption)). Robustness analysis meets this assumption in **two** places — the attack *order*, and what the curves *measure*.
+
+### Which attack orders stay valid
+
+An attack ranks channels by a measure and removes them in that order; the ranking is only as sound as the measure behind it.
+
+| Attack order | Verdict | Why under one-degree |
+| :----------- | :------ | :------------------- |
+| `random` | **Sound** | Baseline — no ranking, no flow assumption; the control every targeted attack is compared against. |
+| `in_strength`, `out_strength` (+ `_dyn`) | **Sound** | Rank by weighted in / out-degree — the canonical valid measures here (most-cited / most-citing). |
+| `pagerank` (+ `pagerank_dyn`) | **Sound** (prestige) | Ranks by recursive citation *prestige* — a defensible prestige-targeted attack. Read it as prestige, not reach. |
+| `harmonic` | **Undermined** | Ranks by multi-hop reciprocal-distance reach — fictitious under one-degree (collapses to a noisy `in_strength`). |
+| `betweenness` (+ `betweenness_dyn`) | **Undermined** | Ranks by geodesic-flow brokerage, but a graph 2-path is not a transmission route — the "remove the brokers" premise has no flow referent. |
+| `bridging` / `bridging(…)` | **Undermined** | Betweenness × community participation; inherits betweenness's missing referent. |
+| `spreading` | **Undermined** | Ranks by SIR spreading efficiency — the multi-generation cascade it simulates does not exist on a one-degree graph. |
+
+### What the curves measure
+
+Even behind a *sound* attack order, keep in view what the response metrics track. `R_wcc` / `R_scc` / `R_reach` and the critical threshold `f_c` measure how fast the network's **connected structure** fragments, and the baseline weighted efficiency is the mean reciprocal shortest-path distance — a pure multi-hop quantity. Under one-degree, multi-hop paths are not transmission routes, so these read as the fragility of the **citation web's structural cohesion**, *not* the resilience of information *diffusion*. The connectivity indices still track a real structural property (which channels hold the web together); **weighted global efficiency is the most affected** — built entirely from multi-hop distances, it is best read as a structural-compactness summary, not a diffusion-speed measure. (This sharpens the point in [When the results are interpretable](#when-the-results-are-interpretable-and-when-they-arent): the analysis characterises *structural* vulnerability.)
+
+### The default selection
+
+The Operations-panel form defaults to the sound subset — `random` (baseline) + `in_strength` (degree) + `pagerank` (prestige) — dropping the `betweenness` brokerage attack the legacy form default carried. The undermined attacks (`betweenness`, `bridging`, `harmonic`, `spreading`, and the `*_dyn` variants) stay fully available for comparison or when you relax the one-degree assumption. This governs the **web form only**; the CLI `--robustness-strategies` default and a bare `--robustness` run are unchanged.
 
 ---
 
@@ -40,7 +70,7 @@ Channels with a single edge in a given direction always keep that edge — there
 
 Seventeen strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
 
-The five default strategies are described in detail below — they cover the four main "what makes a channel critical?" axes (random / degree / prestige / brokerage). The remaining twelve are summarised compactly in [Other available strategies](#other-available-strategies); see [Network measures](network-measures.md) for the underlying definitions.
+The five strategies in the CLI default are described in detail below — they cover the four main "what makes a channel critical?" axes (random / degree / prestige / brokerage). The **brokerage axis (`betweenness`) is undermined** under Pulpit's one-degree model — see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption) — so the Operations-panel form default drops it. The remaining twelve are summarised compactly in [Other available strategies](#other-available-strategies); see [Network measures](network-measures.md) for the underlying definitions.
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -91,6 +121,8 @@ Uses the same PageRank logic described in [Network measures § PageRank](network
 
 *Target the channels that sit on the bridges between sub-communities.*
 
+> **Undermined under one-degree.** This attack ranks by betweenness, whose flow-brokerage premise has no referent on a one-degree graph — see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption). Kept for comparison and backward compatibility; the form default no longer includes it.
+
 Uses weighted betweenness centrality (see [Network measures § Betweenness](network-measures.md#betweenness-centrality)) — channels lying on many of the shortest paths between other channels. Removing a high-betweenness channel lengthens the routes between the communities it used to connect.
 
 **In practice:** the betweenness attack is the one that most directly models *decoupling* scenarios. A moderator targeting bridge channels can fragment an ecosystem into mutually unreachable sub-communities even if every individual community remains internally intact. The modular robustness curves (below) often reveal this most clearly.
@@ -112,6 +144,8 @@ Pulpit ships four dynamic variants — one per cheap-to-recompute static strateg
 ### Other available strategies
 
 These three static strategies don't make the default set but unlock genuinely different vulnerability angles — pick them with `--robustness-strategies` when the question warrants it.
+
+> **All three are *undermined* under Pulpit's one-degree model** (see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption)): `harmonic` ranks by multi-hop reach, `bridging` by flow-brokerage, `spreading` by an SIR cascade — each presupposes the multi-hop transmission a one-degree graph lacks. Use them to compare against the sound attacks, or when you relax that assumption.
 
 | Strategy | What it models | When to use |
 | :------- | :------------- | :---------- |

@@ -173,7 +173,7 @@ You can select multiple strategies at once; the map lets you switch between them
 
 | Option | What it does |
 | :----- | :----------- |
-| **Measures** | Which influence scores to compute for each channel (PageRank, betweenness, etc.). Start with the default (PageRank). See [Network measures](network-measures.md) for what each one means. |
+| **Measures** | Which influence scores to compute for each channel. The default selection is restricted to the measures that stay valid under Pulpit's one-degree amplification model; see [Network measures](network-measures.md), especially [Interpretation guardrails](network-measures.md#interpretation-guardrails-the-one-degree-assumption), for what each one means and which to avoid. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
 | **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |

@@ -6,6 +6,8 @@ Imagine you have a map of 400 channels. Community detection automatically draws 
 
 Multiple strategies can be computed simultaneously and switched between in the graph viewer and table outputs.
 
+> **Read this first.** Pulpit records *one-degree* amplification, which makes the **flow-based** strategies (Infomap, Memory Infomap, MCL, Walktrap) and `STRONGCC` theoretically misaligned with the data. The density-based and domain strategies are unaffected. See [Interpretation guardrails](#interpretation-guardrails-density-vs-flow) for the split.
+
 <figure>
 <img src="../webapp_engine/static/screenshot_00.jpg" alt="2D graph coloured by communities">
 <figcaption><em>2D graph coloured by Leiden directed communities, print layout. Each colour cluster is one detected community.</em></figcaption>
@@ -29,6 +31,41 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Walktrap | `WALKTRAP` | Random-walk distance | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
 | Strongly connected components | `STRONGCC` | Connectivity | Yes |
+
+---
+
+## Interpretation guardrails: density vs. flow
+
+Pulpit records **one-degree amplification**: every forward is attributed to the original source, so a real A → B → C chain is stored as the star {B→A, C→A}, and any 2-path that survives in the graph is two unrelated citations rather than a transmission route (the full argument is in [Network measures → Interpretation guardrails](network-measures.md#interpretation-guardrails-the-one-degree-assumption)). For community detection this draws one bright line:
+
+- **Density / structural methods** define a community by how much its members *cite each other* — a property of single, observed edges. They read one-degree structure directly and are **valid**.
+- **Flow methods** define a community by where a *random walker* lingers as it traverses the network over many hops. That walker is the fictitious multi-hop flow one-degree forbids, so these methods optimise for a process the data does not contain.
+
+There is even a flow-theoretic way to see why modularity survives and the walk-based methods do not: modularity is equivalent to a random walk at Markov time *t* = 1 — a *single* step (Lambiotte, Delvenne & Barahona 2014) — which is exactly one-degree amplification, whereas Infomap, MCL and Walktrap integrate the walker over *many* steps.
+
+### Verdict by strategy
+
+| Strategy | Verdict | Why under one-degree |
+| :------- | :------ | :------------------- |
+| Organization (`ORGANIZATION`) | **Valid** | Exogenous analyst labels — no flow assumption at all. |
+| Leiden (`LEIDEN`) | **Valid** | Modularity compares within-group citation *density* to a degree null (Newman & Girvan 2004) — a structural criterion, not a flow one. |
+| Leiden directed (`LEIDEN_DIRECTED`) | **Valid** | Directed modularity (Leicht & Newman 2008): the same density-vs-null logic, respecting citation direction. The canonical Pulpit partition. |
+| Leiden CPM (`LEIDEN_CPM`) | **Valid** | Constant Potts Model (Traag et al. 2011): internal density against a constant resolution γ. Density criterion, no flow. |
+| Label propagation (`LABELPROPAGATION`) | **Valid** (heuristic) | Local majority-label consensus (Raghavan et al. 2007): each node joins its densest local neighbourhood. No flow quality function — but fast and unstable; read it as a rough density grouping. |
+| K-core (`KCORE`) | **Valid** (structural) | k-core degeneracy (Seidman 1983): a core-periphery nestedness stratification. Structural, *not* a spreading hierarchy — do not import the Kitsak (2010) spreader reading. |
+| Infomap (`INFOMAP`) | **Undermined** | The map equation minimises the description length of a *random walker's multi-hop trajectory* (Rosvall & Bergstrom 2008): communities = where flow gets trapped. That flow does not traverse a one-degree graph. |
+| Memory Infomap (`INFOMAP_MEMORY`) | **Undermined** (most) | Second-order Markov flow (Rosvall et al. 2014): the walker's next step depends on the previous one — it encodes exactly the i→j→k 2-paths one-degree forbids. The most flow-dependent method here. |
+| MCL (`MCL`) | **Undermined** | Markov Clustering *is* flow simulation (van Dongen 2000): expansion is a multi-step random walk, and communities are where simulated flow pools. Fictitious under one-degree. |
+| Walktrap (`WALKTRAP`) | **Undermined** | Groups nodes by multi-step random-walk transition similarity (Pons & Latapy 2005). Often recovers density-like partitions in practice (walk proximity tracks density), but its justification is multi-hop flow. |
+| Strongly connected components (`STRONGCC`) | **Undermined** | SCCs require mutual reachability via *directed paths* (Tarjan 1972). Only 2-cycles (genuine reciprocal citation) are real; larger SCCs rest on multi-hop reachability that does not transmit. |
+
+### Reading the catalogue below
+
+Each strategy's own section — and the *Choosing a strategy* table at the bottom — describes its textbook use. Where the verdict above reads *Undermined*, treat that section as background on the algorithm: the echo-chamber, information-trap, context-dependent-broker, shared-source and circular-amplification framings all presuppose the multi-hop flow that a one-degree graph does not carry.
+
+### The default selection
+
+The Operations-panel default ships the strategies that read one-degree structure directly: `ORGANIZATION` (your baseline) + `LEIDEN_DIRECTED` (the canonical directed-modularity partition, and the default community basis for the bridging / role measures and the bridging robustness attack). The other density / structural methods — `LEIDEN`, `LEIDEN_CPM`, `LABELPROPAGATION`, `KCORE` — are equally valid and one click away when you want alternative partitions to compare. The flow methods (`INFOMAP`, `INFOMAP_MEMORY`, `MCL`, `WALKTRAP`) and `STRONGCC` remain fully available but are off by default. This governs the **web form only**; a bare `structural_analysis` CLI run detects no communities unless you pass `--community-strategies`.
 
 ---
 
@@ -264,6 +301,8 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | Group channels by shared sources (not direct ties) | `WALKTRAP` |
 | Detect coordinated circular amplification | `STRONGCC` |
 | Compare algorithms for robustness | `ALL` + `--consensus-matrix` |
+
+> Several rows above recommend flow-based strategies (`INFOMAP`, `INFOMAP_MEMORY`, `MCL`, `WALKTRAP`, `STRONGCC`) — for information traps, context-dependent brokers, shared-source grouping, circular amplification. Under Pulpit's one-degree data model these are theoretically misaligned; see [Interpretation guardrails](#interpretation-guardrails-density-vs-flow) before relying on them, and prefer a density-based strategy where one answers the same question.
 
 ---
 
