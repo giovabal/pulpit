@@ -4,6 +4,8 @@ A network measure assigns a numerical score to each channel based on its positio
 
 All measures can be used to size nodes in the graph viewer, making the most significant channels visually prominent.
 
+> **Read this first.** Pulpit's edges record *one-degree* amplification — every forward is attributed to the original source, so a citation always points straight at the origin. That makes several otherwise-standard path- and flow-based measures (betweenness, spreading, trophic level, brokerage, bridging, …) invalid on this graph. See [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption) for which measures to trust and which to avoid.
+
 <figure>
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
 <figcaption><em>Channel table: every computed measure as a sortable column. Click any header to rank channels by that measure.</em></figcaption>
@@ -42,6 +44,59 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 <figcaption><em>Measure comparison: drag any two measures onto the axes to compare their distributions across channels.</em></figcaption>
 </figure>
 <br>
+
+---
+
+## Interpretation guardrails: the one-degree assumption
+
+Pulpit's edges encode one narrow fact: **channel X amplified channel Y's content at least once** (a forward, or a `t.me/` reference). Telegram attributes every forward to the *original* author, not the intermediate sharer — so when content travels A → B → C in the real world (C forwards what it saw on B, which B had taken from A), Telegram stamps C's copy as originating from A. Pulpit therefore records the edges **B→A** and **C→A**, and *never* C→B. Amplification is **one degree only**: every citation points straight at the origin.
+
+That single fact has a sharp consequence — **the graph's paths are not diffusion paths, and the two are in fact disjoint:**
+
+- A *real* diffusion chain A → B → C collapses to a star — edges B→A and C→A, with B and C left unconnected. The multi-hop chain disappears from the topology.
+- A directed 2-path that *does* appear in the graph, X→Y→Z, can only mean "X amplified Y's *own* content **and** Y amplified Z's *own* content" — two unrelated content streams. If X had received Z's content *through* Y, the edge would read X→Z. So Y relays nothing between X and Z.
+
+In short: genuine multi-hop diffusion is **absent** from the graph (flattened into stars), while the multi-hop paths that are **present** carry no transmission meaning. This is precisely Borgatti's warning that every centrality presupposes a particular flow process and is valid only when the real process matches it (Borgatti 2005, *Centrality and network flow*; Borgatti & Everett 2006). One-degree amplification fixes that process as **single-step broadcast duplication** — and in the Borgatti–Everett typology, *volume / degree* measures survive it while *length* (closeness/harmonic) and *medial* (betweenness) measures do not.
+
+### Verdict by measure
+
+| Measure | Verdict | Why under one-degree |
+| :------ | :------ | :------------------- |
+| In-degree centrality (`INDEGCENTRALITY`) | **Valid** | One-degree attribution makes in-degree (and the `in_deg` in-strength) *the* canonical influence index — every amplifier of your content points directly at you. |
+| Out-degree centrality (`OUTDEGCENTRALITY`) | **Valid** | Curatorial breadth; a direct one-step count, no path assumption. |
+| Amplification factor (`AMPLIFICATION`) | **Valid** | Local content ratio (forwards received ÷ own output). |
+| Content originality (`CONTENTORIGINALITY`) | **Valid** | Local content ratio. |
+| Diffusion lag (`DIFFUSIONLAG`) | **Valid** | Built from forward timestamps — direct events; reads as latency relative to the origin. |
+| Within-module role (`MODULEROLE`) | **Valid** | Degree distribution across communities — connection diversity, not flow mediation. |
+| PageRank (`PAGERANK`) | **Structural only** | Defensible as recursive citation *prestige* ("endorsed by the much-endorsed"); do **not** read it as reach or flow. |
+| HITS hub / authority (`HITSHUB` / `HITSAUTH`) | **Structural only** | Co-citation / coupling structure → curator (hub) / source (authority) roles; endorsement, not transmission. |
+| Burt's constraint (`BURTCONSTRAINT`) | **Structural only** | Ego-network redundancy is real and local; the "broker controls flow across the hole" gloss is weakened. |
+| Local clustering (`LOCALCLUSTERING`) | **Structural only** | Measures transitive closure — the very thing one-degree denies as flow; survives only as a local-redundancy signal. |
+| Harmonic centrality (`HARMONICCENTRALITY`) | **Undermined** | Reciprocal-distance reach over multi-hop paths; the 1-hop terms are just in-degree, the rest is fictitious reach. Prefer in-degree. |
+| Collective influence (`COLLECTIVEINFLUENCE`) | **Undermined** | An optimal-percolation spreader score over a 2-hop ball; with no real spreading process its justification lapses (residue: a 2-hop-degree index). |
+| K-core coreness (`CORENESS`) | **Undermined** | Fine as structural nestedness, but the Kitsak (2010) "best spreaders" claim it is sold on needs a spreading process the graph does not carry. |
+| Betweenness (`BETWEENNESS`) | **Invalid** | Counts geodesic traffic through a node, but a graph 2-path is never a transmission route — the "broker controls flow" reading has no referent. |
+| Spreading efficiency (`SPREADING`) | **Invalid** | Simulates a multi-generation SIR cascade; generations ≥ 2 are exactly what one-degree flattens into stars, so the cascade is an artefact. |
+| Trophic level (`TROPHICLEVEL`) | **Invalid** | A flow-hierarchy coordinate (level = 1 + mean upstream level); with no multi-step flow, every level ≥ 1 is built from spurious 2-paths. |
+| Brokerage roles (`BROKERAGEROLES`) | **Invalid** | Classifies 2-paths i→v→j as v brokering between i and j, but a brokered forward is attributed to the origin (edge i→j) — the census counts mediations that never happened. |
+| Bridging centrality (`BRIDGINGCENTRALITY`) | **Invalid** | Betweenness × a degree-based bridging coefficient; inherits betweenness's missing flow referent. |
+| Community bridging (`BRIDGING`) | **Invalid** | Betweenness × neighbour-community participation coefficient; same inheritance. |
+
+### Reading the catalogue below
+
+The quick-reference questions above and each measure's own section describe its **textbook** interpretation — written for a generic graph where paths carry flow. Where the verdict table marks a measure *Undermined* or *Invalid*, read that section as background on what the algorithm computes, **not** as a licence to read its flow / brokerage / spreading story into a Pulpit graph. The worked examples there illustrate the measure's general behaviour; they are not claims that the corresponding inference is sound under one-degree attribution.
+
+### References vs. forwards
+
+The argument is cleanest for forwards, where Telegram's original-author attribution is what flattens the chain. `t.me/` **references** have no intermediate-attribution step — a mention simply points at whoever is named. But a mention is still a one-step pointer, never a conduit: a reference 2-path (X mentions Y, Y mentions Z) transmits nothing from Z to X either. So the same conclusion holds for both edge types, by slightly different routes.
+
+### The default measure set
+
+Because of all this, the Operations-panel default selection ships only the surviving measures — the *Valid* and *Structural-only* tiers:
+
+`PAGERANK`, `HITSHUB`, `HITSAUTH`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `BURTCONSTRAINT`, `LOCALCLUSTERING`, `MODULEROLE`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `DIFFUSIONLAG`.
+
+The *Undermined* and *Invalid* measures stay fully available — select them on the measure builder, or pass them to `--measures`, whenever you want them (for comparison, or if your reading of the data justifies relaxing the one-degree assumption). This default governs the **web form only**; a bare `structural_analysis` CLI run computes nothing unless you pass `--measures` explicitly.
 
 ---
 
