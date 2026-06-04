@@ -405,13 +405,19 @@ function refresh_edge_colors() {
 }
 
 // Maps each edge's weight to a sigma `size` (line thickness) when the
-// "show edge weight" toggle is on; when off, the `size` attribute is removed so
-// edges render at sigma's default thickness — pixel-identical to the unweighted
-// view. Called after every (re)build and whenever the toggle flips.
+// "show edge weight" toggle is on. When weight is off the `size` attribute is
+// removed so edges render at sigma's thin default — pixel-identical to the
+// unweighted view — UNLESS arrows are on: the curved-arrow program scales the
+// arrowhead by the edge thickness, so the thin default would make the heads
+// invisible; a uniform base width keeps them legible. Called after every
+// (re)build and whenever the weight or arrows toggle flips.
 function apply_edge_widths() {
     if (!graph_loaded) return;
     if (!show_edge_weight) {
-        graph.edges().forEach(function(edgeId) { graph.removeEdgeAttribute(edgeId, 'size'); });
+        graph.edges().forEach(function(edgeId) {
+            if (show_edge_arrows) graph.setEdgeAttribute(edgeId, 'size', EDGE_WEIGHT_BASE_SIZE);
+            else graph.removeEdgeAttribute(edgeId, 'size');
+        });
         sigma_instance.refresh();
         return;
     }
@@ -1288,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', function() {
     el('edge-arrows-toggle').addEventListener('change', function() {
         show_edge_arrows = this.checked;
         apply_edge_type();
-        sigma_instance.refresh();
+        apply_edge_widths();   // also refreshes; gives edges a visible width so arrowheads read
         update_info_bar();
     });
 
