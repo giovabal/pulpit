@@ -79,8 +79,9 @@ def compute_interest_structural(
     progress
         Optional callback for stage labels.
     window_filter
-        Optional Django ORM filter kwargs (e.g. ``{"date__gte": ..., "date__lte":
-        ...}``) applied to both forwarder queries. Targets the forwarder row's
+        Optional Django ORM filter kwargs (production passes the ``__date``
+        transform: ``{"date__date__gte": ..., "date__date__lte": ...}``) applied
+        to both forwarder queries. Targets the forwarder row's
         ``date``, not the origin's — so an older origin counts if it was
         forwarded inside the window. Without this, C, D and the forwarder
         counts are computed over all-time forwards regardless of the export's
@@ -254,8 +255,16 @@ def _scope_label(window_filter: dict[str, Any] | None) -> str:
     """Render a window filter as a human-readable scope string for the payload."""
     if not window_filter:
         return "all-time"
-    start = window_filter.get("date__gte")
-    end = window_filter.get("date__lte") or window_filter.get("date__lt")
+    # Production builds the filter with the ``__date`` transform
+    # (``_date_window_filter`` → ``date__date__gte`` / ``date__date__lte``);
+    # tolerate the plain ``date__gte`` / ``date__lte`` form too.
+    start = window_filter.get("date__date__gte") or window_filter.get("date__gte")
+    end = (
+        window_filter.get("date__date__lte")
+        or window_filter.get("date__date__lt")
+        or window_filter.get("date__lte")
+        or window_filter.get("date__lt")
+    )
     if start is None and end is None:
         return "windowed"
     return f"window {_iso(start)}..{_iso(end)}"
