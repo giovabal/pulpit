@@ -151,11 +151,11 @@ class Channel(TelegramBaseModel):
             return None
         active = [a for a in attrs if (a.start is None or a.start <= today) and (a.end is None or a.end >= today)]
         if active:
-            return max(active, key=lambda a: (a.start or datetime.date.min))
+            return max(active, key=lambda a: a.start or datetime.date.min)
         past = [a for a in attrs if a.end is not None and a.end < today]
         if past:
             return max(past, key=lambda a: (a.end, a.start or datetime.date.min))
-        return min(attrs, key=lambda a: (a.start or datetime.date.min))
+        return min(attrs, key=lambda a: a.start or datetime.date.min)
 
     @property
     def current_organization(self) -> "Organization | None":

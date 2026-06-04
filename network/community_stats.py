@@ -26,7 +26,7 @@ _PATH_LENGTH_MIN_NODES = 3
 # Strategies dropped from the NMI matrix: connectivity/shell decompositions that are not
 # community detections (the consensus matrix also excludes them, plus ORGANIZATION — which
 # the NMI matrix keeps, since detection-vs-manual-labels is the comparison it exists for).
-_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"strongcc", "kcore"})
+_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"kcore"})
 
 # Exceptions networkx routines may raise on graphs that are too small, empty,
 # or disconnected for a given metric. Centralised so a new "expected failure"
@@ -287,7 +287,7 @@ def _freeman_centralization(values: list[float]) -> float | None:
     most-central node, normalized by the ``(n-1)·C_max`` *upper bound* on that sum.
     This coincides with Freeman's (1978) centralization only when the least-central
     node can reach 0 (e.g. directed in/out-degree on a star); for measures with a
-    non-zero periphery floor (e.g. harmonic) it is a conservative lower bound
+    non-zero periphery floor (e.g. PageRank) it is a conservative lower bound
     on the exact Freeman value, not the published per-measure figure. The exact
     value needs a measure-specific theoretical maximum that isn't recoverable from
     the scores alone. Values stay in [0, 1] and monotone, so they remain comparable
@@ -450,11 +450,11 @@ def _compute_behavioural_equivalence(
     """Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles.
 
     Features are the behavioural measures present in ``measures_labels`` (amplification,
-    content originality, diffusion lag, spreading efficiency, plus audience/activity
-    volume — followers and message count; see ``BEHAVIOURAL_MEASURE_KEYS``). Missing
-    values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the
-    column **median** — a neutral "unknown" — rather than the earlier ``None → 0`` that
-    read as an extreme (zero originality, instant diffusion, maximal brokerage). The
+    content originality, diffusion lag, plus audience/activity volume — followers and
+    message count; see ``BEHAVIOURAL_MEASURE_KEYS``). Missing values (e.g. diffusion lag
+    for a channel with no dated forwards) are imputed to the column **median** — a neutral
+    "unknown" — rather than the earlier ``None → 0`` that read as an extreme (zero
+    originality, instant diffusion). The
     heavy-tailed volume features (followers, message count; see
     ``_VOLUME_BEHAVIOURAL_KEYS``) are then log1p-scaled so a few very large channels don't
     compress everyone else; columns are min-max normalised, rows normalised to unit length,
@@ -464,8 +464,8 @@ def _compute_behavioural_equivalence(
     """
     nodes = graph_data["nodes"]
     n = len(nodes)
-    # One feature per behavioural concept. A measure requested more than once (e.g. two SPREADING
-    # runs counts) canonicalises to the same concept; keep the first instance so the matrix stays a
+    # One feature per behavioural concept. A measure requested more than once (e.g. two DIFFUSIONLAG
+    # windows) canonicalises to the same concept; keep the first instance so the matrix stays a
     # fixed per-concept profile rather than double-counting a doubled-up measure.
     behavioural = []
     _seen_behavioural: set[str] = set()
@@ -714,7 +714,7 @@ def compute_community_metrics(
             # Freeman centralization is only meaningful for genuine centrality
             # indices; skip audience/activity attributes, local coefficients, and
             # behavioural metrics (see CENTRALITY_MEASURE_KEYS). canonical_measure_key strips a
-            # parameter suffix so each community-bridging instance still qualifies.
+            # parameter suffix so a parameterised instance still qualifies.
             if canonical_measure_key(key) not in CENTRALITY_MEASURE_KEYS:
                 continue
             values = [node[key] for node in graph_data["nodes"] if key in node]
@@ -760,9 +760,9 @@ def compute_community_metrics(
     # Pairwise Normalized Mutual Information between community strategies.
     # Each pair is computed on the nodes assigned in both strategies (intersection),
     # which matters for ORGANIZATION where unassigned nodes are silently skipped.
-    # STRONGCC/KCORE are connectivity/shell decompositions, not community detections,
-    # so pairwise partition-similarity against them is uninformative — drop them,
-    # matching the consensus matrix. ORGANIZATION is deliberately *kept*: validating
+    # KCORE is a shell decomposition, not a community detection, so pairwise
+    # partition-similarity against it is uninformative — drop it, matching the
+    # consensus matrix. ORGANIZATION is deliberately *kept*: validating
     # detected communities against the manual org labels is exactly what this matrix
     # is for.
     nmi_strategies = [s for s in strategies if s not in _NMI_EXCLUDED_STRATEGIES]
@@ -872,8 +872,9 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
             rows.append(("Mean Burt's Constraint (~0–1)", summary["mean_burt_constraint"], "Centralization"))
         for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
             # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
-            # for measures with a zero periphery floor (e.g. degree on a star); for harmonic
-            # it is a conservative lower bound. See _freeman_centralization.
+            # for measures with a zero periphery floor (e.g. degree on a star); for measures
+            # with a non-zero floor (e.g. PageRank's teleport term) it is a conservative lower
+            # bound. See _freeman_centralization.
             rows.append((f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization"))
     if _include("Content"):
         if summary.get("network_originality") is not None:

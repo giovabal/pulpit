@@ -5,9 +5,9 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
-var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"harmonic_centrality":1,"in_degree_centrality":1,"out_degree_centrality":1};
-var STRUCTURAL_KEYS = {"betweenness":1,"bridging_centrality":1,"community_bridging":1,"burt_constraint":1,"coreness":1,"collective_influence":1,"trophic_level":1,"within_module_z":1,"brokerage_total":1};
-var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1,"spreading_efficiency":1};
+var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"in_degree_centrality":1,"out_degree_centrality":1};
+var STRUCTURAL_KEYS = {"burt_constraint":1,"within_module_z":1};
+var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
 var COL_TOOLTIPS = {
@@ -18,30 +18,21 @@ var COL_TOOLTIPS = {
     "pagerank":           "PageRank: steady-state visit probability in a random walk; higher → more central",
     "hits_hub":           "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
     "hits_authority":      "HITS authority score: propensity to be cited by hub channels; high → important source",
-    "betweenness":         "Betweenness centrality (normalized): fraction of shortest paths passing through this node",
     "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
     "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
-    "harmonic_centrality": "Harmonic centrality (Boldi & Vigna 2014): Σ 1/d(v,u) ÷ (n−1), mean reciprocal incoming distance — how easily the rest of the network reaches this channel via short citation chains. A multi-hop generalisation of in-degree; handles disconnected graphs (unreachable pairs contribute 0).",
-    "bridging_centrality": "Bridging centrality (Hwang et al. 2008): betweenness × bridging coefficient [(1/d(v)) ÷ Σ 1/d(i) over neighbours]; high → bridge sitting between high-degree regions",
-    "community_bridging":  "Community bridging: betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high → broker spanning distinct communities",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
-    "coreness":            "K-core coreness (Kitsak et al. 2010): deepest k-core a channel survives in; high → dense reinforcing nucleus, low → peripheral amplifier",
-    "collective_influence":"Collective Influence (Morone & Makse 2015): (k−1) × Σ(k−1) over nodes two hops away; high → an optimal-percolation key spreader whose removal most fragments the network. Symmetrised, unweighted; read ordinally.",
-    "trophic_level":       "Trophic level (MacKay, Johnson & Sansom 2020): structural source→sink position; low → original source, high → terminal amplifier",
     "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
-    "brokerage_total":     "Brokerage (Gould & Fernandez 1989): count of directed citation 2-paths i→this→j the channel mediates between groups; pairs with the Brokerage role column. The five role counts are in nodes.csv / GEXF.",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
     "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
-    "spreading_efficiency":"Spreading efficiency (SIR Monte Carlo): mean fraction of network reached when seeding from this channel",
 };
 
 // Parameterised measures may be requested more than once, each producing a parameter-suffixed
-// column key (e.g. "spreading_efficiency_runs_2000", "community_bridging_basis_leiden_directed").
+// column key (e.g. "diffusion_lag_window_60", "within_module_z_basis_leiden_directed").
 // canonicalKey strips that suffix back to the base so column grouping and tooltips still match;
 // it mirrors network.measures._registry.canonical_measure_key. (Longest-first so the most specific
-// base wins; the five here are the numeric measure keys that can carry a suffix.)
-var PARAM_BASE_KEYS = ["spreading_efficiency", "community_bridging", "within_module_z", "brokerage_total", "diffusion_lag"]
+// base wins; these are the numeric measure keys that can carry a suffix.)
+var PARAM_BASE_KEYS = ["within_module_z", "diffusion_lag"]
     .sort(function(a, b) { return b.length - a.length; });
 function canonicalKey(key) {
     for (var i = 0; i < PARAM_BASE_KEYS.length; i++) {
@@ -51,22 +42,19 @@ function canonicalKey(key) {
     return key;
 }
 // Trailing " (param=value)" of a measure label, for annotating the categorical role column that
-// rides alongside a within_module_z* / brokerage_total* numeric column.
+// rides alongside a within_module_z* numeric column.
 function labelAnnotation(label) {
     var i = label.indexOf(" (");
     return i !== -1 ? label.slice(i) : "";
 }
-// Categorical companion (the suffixed module_role / brokerage_role node attribute) of a numeric
-// role-measure column key; mirrors network.measures._registry.role_companions.
+// Categorical companion (the suffixed module_role node attribute) of a numeric role-measure
+// column key; mirrors network.measures._registry.role_companions.
 function roleCompanion(numericKey) {
     var base = canonicalKey(numericKey);
     var suffix = numericKey.slice(base.length);
     if (base === "within_module_z")
         return { roleKey: "module_role" + suffix, roleLabel: "Module role",
                  tip: "Guimerà–Amaral within-module role (from the MODULEROLE measure)" };
-    if (base === "brokerage_total")
-        return { roleKey: "brokerage_role" + suffix, roleLabel: "Brokerage role",
-                 tip: "Gould–Fernandez dominant brokerage role (from the BROKERAGEROLES measure)" };
     return null;
 }
 
@@ -171,9 +159,9 @@ function _render(d) {
     var channels = d.channels, communities = d.communities, meta = d.meta;
     var nodes = channels.nodes;
     var strategies = Object.keys(communities.strategies);
-    // Categorical role columns (Module role / Brokerage role), one per role-measure instance,
-    // derived from the within_module_z* / brokerage_total* numeric columns so each carries its
-    // own community-basis annotation when a role measure is requested more than once.
+    // Categorical role columns (Module role), one per role-measure instance, derived from the
+    // within_module_z* numeric columns so each carries its own community-basis annotation when a
+    // role measure is requested more than once.
     var roleCols = [];
     (channels.measures || []).forEach(function(m) {
         var comp = roleCompanion(m[0]);

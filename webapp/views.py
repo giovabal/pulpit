@@ -911,7 +911,7 @@ class VacancyAnalysisView(View):
             s = score_map.get(cid, {})
             score_a = s.get("AMPLIFIER_JACCARD", 0.0)  # amplifier coverage (recall): |A ∩ B| / |A|
             score_b = s.get("STRUCTURAL_EQUIV", 0.0)  # neighbour-set equiv. (binary Ochiai): 0.5·cos_in + 0.5·cos_out
-            score_c: float | None = s.get("BROKERAGE")  # brokerage overlap: Jaccard of bridged org-pairs
+            score_c: float | None = s.get("BROKERAGE")  # brokerage overlap: Jaccard of spanned (src-org, amp-org) pairs (structural position, one-degree)
 
             candidates.append(
                 {

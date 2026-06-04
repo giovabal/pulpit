@@ -4,8 +4,6 @@ A *robustness analysis* asks: **how well does this network hold up when channels
 
 Pulpit's robustness analysis turns this intuition into measurable curves and a single score per attack strategy, with a statistical sanity check against a randomised version of the same network. The whole battery runs on the directed citation graph that the rest of `structural_analysis` already builds, so no extra crawl is needed.
 
-> **Read this first.** Robustness touches Pulpit's *one-degree* amplification model in two ways — the attack *order* (several strategies rank by invalidated flow measures) and what the curves *measure* (structural cohesion, not diffusion). See [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption).
-
 Enable with `--robustness` on `structural_analysis` (off by default; see [Workflow § Robustness](workflow.md#robustness-resistance-to-node-removal) for the CLI block and [Configuration § Robustness](configuration.md#robustness) for the `[robustness]` section in `.operations-structural`).
 
 ---
@@ -19,34 +17,6 @@ Enable with `--robustness` on `structural_analysis` (off by default; see [Workfl
 | `R` z-score vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring |
 | Intra/inter community survival | Does the attack strip the bridges between communities first (decoupling), or the ties within them first (eroding cohesion)? |
 | Baseline weighted efficiency | A pre-attack characterisation of how easily information traverses the network at full strength |
-
----
-
-## Interpretation guardrails: the one-degree assumption
-
-Pulpit records **one-degree amplification**: every forward is attributed to the original source, so a real A → B → C chain is stored as the star {B→A, C→A}, and any 2-path that survives in the graph is two unrelated citations rather than a transmission route (full argument: [Network measures → Interpretation guardrails](network-measures.md#interpretation-guardrails-the-one-degree-assumption)). Robustness analysis meets this assumption in **two** places — the attack *order*, and what the curves *measure*.
-
-### Which attack orders stay valid
-
-An attack ranks channels by a measure and removes them in that order; the ranking is only as sound as the measure behind it.
-
-| Attack order | Verdict | Why under one-degree |
-| :----------- | :------ | :------------------- |
-| `random` | **Sound** | Baseline — no ranking, no flow assumption; the control every targeted attack is compared against. |
-| `in_strength`, `out_strength` (+ `_dyn`) | **Sound** | Rank by weighted in / out-degree — the canonical valid measures here (most-cited / most-citing). |
-| `pagerank` (+ `pagerank_dyn`) | **Sound** (prestige) | Ranks by recursive citation *prestige* — a defensible prestige-targeted attack. Read it as prestige, not reach. |
-| `harmonic` | **Undermined** | Ranks by multi-hop reciprocal-distance reach — fictitious under one-degree (collapses to a noisy `in_strength`). |
-| `betweenness` (+ `betweenness_dyn`) | **Undermined** | Ranks by geodesic-flow brokerage, but a graph 2-path is not a transmission route — the "remove the brokers" premise has no flow referent. |
-| `bridging` / `bridging(…)` | **Undermined** | Betweenness × community participation; inherits betweenness's missing referent. |
-| `spreading` | **Undermined** | Ranks by SIR spreading efficiency — the multi-generation cascade it simulates does not exist on a one-degree graph. |
-
-### What the curves measure
-
-Even behind a *sound* attack order, keep in view what the response metrics track. `R_wcc` / `R_scc` / `R_reach` and the critical threshold `f_c` measure how fast the network's **connected structure** fragments, and the baseline weighted efficiency is the mean reciprocal shortest-path distance — a pure multi-hop quantity. Under one-degree, multi-hop paths are not transmission routes, so these read as the fragility of the **citation web's structural cohesion**, *not* the resilience of information *diffusion*. The connectivity indices still track a real structural property (which channels hold the web together); **weighted global efficiency is the most affected** — built entirely from multi-hop distances, it is best read as a structural-compactness summary, not a diffusion-speed measure. (This sharpens the point in [When the results are interpretable](#when-the-results-are-interpretable-and-when-they-arent): the analysis characterises *structural* vulnerability.)
-
-### The default selection
-
-The Operations-panel form defaults to the sound subset — `random` (baseline) + `in_strength` (degree) + `pagerank` (prestige) — dropping the `betweenness` brokerage attack the legacy form default carried. The undermined attacks (`betweenness`, `bridging`, `harmonic`, `spreading`, and the `*_dyn` variants) stay fully available for comparison or when you relax the one-degree assumption. This governs the **web form only**; the CLI `--robustness-strategies` default and a bare `--robustness` run are unchanged.
 
 ---
 
@@ -68,9 +38,9 @@ Channels with a single edge in a given direction always keep that edge — there
 
 ## Attack strategies
 
-Seventeen strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
+Seven strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`); at least one must be selected.
 
-The five strategies in the CLI default are described in detail below — they cover the four main "what makes a channel critical?" axes (random / degree / prestige / brokerage). The **brokerage axis (`betweenness`) is undermined** under Pulpit's one-degree model — see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption) — so the Operations-panel form default drops it. The remaining twelve are summarised compactly in [Other available strategies](#other-available-strategies); see [Network measures](network-measures.md) for the underlying definitions.
+The strategies are described in detail below — they cover the three main "what makes a channel critical?" axes (random / degree / prestige); see [Network measures](network-measures.md) for the underlying definitions.
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -78,10 +48,8 @@ The five strategies in the CLI default are described in detail below — they co
 | `in_strength` | static | "Take down everything that's heavily cited" — moderation aimed at popular destinations |
 | `out_strength` | static | "Take down everything that cites heavily" — moderation aimed at aggregators |
 | `pagerank` | static | "Take down the highest-prestige channels" — moderation aware of inherited prestige |
-| `betweenness` | static | "Take down the brokers" — moderation aimed at fragmenting cross-community flow |
 | `in_strength_dyn` / `out_strength_dyn` | dynamic | Degree-based attacks with cascade awareness — re-rank after every removal |
-| `pagerank_dyn` / `hits_*_dyn` | dynamic | Prestige attacks with cascade awareness |
-| `betweenness_dyn` | dynamic | The most destructive attack class; also the most expensive |
+| `pagerank_dyn` | dynamic | Prestige attack with cascade awareness |
 
 The whole point of running multiple strategies is comparison. If they all produce similar R values, the network has no specific weak class of channels — it is *homogeneously* resilient or fragile. If one strategy gives a much lower R than the others, you have found the network's specific vulnerability: an attacker following that strategy would do disproportionate damage.
 
@@ -117,43 +85,17 @@ Uses the same PageRank logic described in [Network measures § PageRank](network
 
 **Example.** A nationalist commentator whose posts are routinely reposted by the three most-followed party-aligned channels might have a modest in-strength (only three forwarders) but very high PageRank (because those three forwarders are themselves prestigious). PageRank attack removes it first; in-strength attack might leave it untouched until much later.
 
-### Brokerage attack (`betweenness`)
-
-*Target the channels that sit on the bridges between sub-communities.*
-
-> **Undermined under one-degree.** This attack ranks by betweenness, whose flow-brokerage premise has no referent on a one-degree graph — see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption). Kept for comparison and backward compatibility; the form default no longer includes it.
-
-Uses weighted betweenness centrality (see [Network measures § Betweenness](network-measures.md#betweenness-centrality)) — channels lying on many of the shortest paths between other channels. Removing a high-betweenness channel lengthens the routes between the communities it used to connect.
-
-**In practice:** the betweenness attack is the one that most directly models *decoupling* scenarios. A moderator targeting bridge channels can fragment an ecosystem into mutually unreachable sub-communities even if every individual community remains internally intact. The modular robustness curves (below) often reveal this most clearly.
-
-**Example.** Two ideological clusters — religious nationalists and economic libertarians — might be connected by just three channels that forward from both sides. Those three would have low PageRank inside either cluster but very high betweenness (every cross-cluster path runs through them). PageRank attack might leave them untouched until late; betweenness attack removes them first, and the two clusters become structurally disconnected.
-
 ### Dynamic variants (`*_dyn`)
 
 *The same attacks, but with the ranking recomputed on the residual network after every removal — so cascading effects shape the order of subsequent deletions.*
 
 Static attacks rank once and remove in that fixed order; dynamic attacks ask, after every removal, *who is the most critical now?* This matters because the structurally-second-most-important channel before any removal might become the most-important after the first one is gone — especially under PageRank, where prestige redistributes through the residual.
 
-Pulpit ships four dynamic variants — one per cheap-to-recompute static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`. Pick whichever ones you want via `--robustness-strategies`; the reach / brokerage / spreading variants (harmonic, bridging, spreading) are static-only because their per-step recomputation would dominate runtime even on small graphs.
+Pulpit ships three dynamic variants — one per cheap-to-recompute static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`. Pick whichever ones you want via `--robustness-strategies`.
 
-**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank, `O(N²·m)` for betweenness. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants and tens of minutes once dynamic betweenness joins in.
+**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants.
 
 **Example.** Under static PageRank the first ten removals are the ten highest-PageRank channels at q=0. Under `pagerank_dyn`, after removing #1 PageRank is recomputed: the original #2 might or might not still be #2 (it might have inherited prestige from the removed #1, or lost prestige if its incoming edges came from it). Networks where dynamic gives a much lower R than static are ones whose importance distribution is *fragile* — knocking out one channel makes its neighbours suddenly critical.
-
-### Other available strategies
-
-These three static strategies don't make the default set but unlock genuinely different vulnerability angles — pick them with `--robustness-strategies` when the question warrants it.
-
-> **All three are *undermined* under Pulpit's one-degree model** (see [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption)): `harmonic` ranks by multi-hop reach, `bridging` by flow-brokerage, `spreading` by an SIR cascade — each presupposes the multi-hop transmission a one-degree graph lacks. Use them to compare against the sound attacks, or when you relax that assumption.
-
-| Strategy | What it models | When to use |
-| :------- | :------------- | :---------- |
-| `harmonic` | Removes the channels the rest of the network reaches first through short citation chains (see [Harmonic](network-measures.md#harmonic-centrality)) | A reach-style prestige attack — multi-hop generalisation of `in_strength`. Complements `pagerank` (also a prestige attack) by measuring topological closeness rather than eigenvector mass |
-| `bridging` / `bridging(<community-strategy>)` | Betweenness × neighbour-community participation coefficient (see [Community bridging](network-measures.md#community-bridging); *not* Hwang's degree-based Bridging Centrality) | When you want a brokerage attack that specifically targets cross-community ties (not within-community hubs). The community basis defaults to `leiden_directed` (its directed null model respects citation direction, which matches the brokerage question); use `bridging(leiden)`, `bridging(infomap)`, `bridging(mcl)`, etc. to pick a different one (it must also be in `--community-strategies`). In the Operations panel the **Bridging basis** dropdown is shared with the [Community Bridging measure](network-measures.md#community-bridging) — both pick up the same partition |
-| `spreading` | Removes the *dynamical superspreaders* (see [Spreading efficiency](network-measures.md#spreading-efficiency)) | When you care about *what information would reach* in an SIR cascade, not just structural position. **Expensive**: Monte Carlo SIR per ranking computation, scales with `--robustness-runs` |
-
-**In practice for new analyses:** the most informative additions to a default run are usually `bridging` (community-aware brokers) and `spreading` (dynamical importance). Adding them to a default-five run takes you to seven static curves on the chart — still readable, and each one surfaces vulnerabilities the original five miss.
 
 ---
 
@@ -177,7 +119,7 @@ After each removal, Pulpit asks: how many channels remain in the largest weakly 
 
 A strongly connected component is a group of channels that all ultimately cite each other in a closed loop. `R_scc` tracks how much of the network's mutually-reinforcing core survives the attack.
 
-**In practice:** `R_scc` is meaningful when the network has a non-trivial core — an "echo chamber" or "coordinated nucleus" in the sense of [Infomap](community-detection.md#infomap) or the [Strongly Connected Components](community-detection.md#strongly-connected-components-strongcc) partition. On sparse trees or one-way fan-out structures, `R_scc` will be near zero from `q=0` and won't tell you much. Use `R_wcc` or `R_reach` for those.
+**In practice:** `R_scc` is meaningful when the network has a non-trivial core — an "echo chamber" or "coordinated nucleus" of channels that cite each other along closed citation cycles, like the tight nucleus surfaced by the [K-core](community-detection.md#k-core) partition. On sparse trees or one-way fan-out structures, `R_scc` will be near zero from `q=0` and won't tell you much. Use `R_wcc` or `R_reach` for those.
 
 **Example.** In a coordinated disinformation network where 8 channels repost each other in a cycle (the SCC), `R_scc` drops sharply the moment the first of those 8 is removed — the cycle breaks into chains and no SCC larger than 1 remains. The network's overall information-flow capacity might decay more gradually, which is why `R_scc` is compared against `R_wcc` and `R_reach`.
 
@@ -208,11 +150,11 @@ Range and rough interpretation:
 - **R ≈ 0.5** — typical value for *random failure* on a moderately resilient network
 - **R close to 1** — extraordinarily resilient: the residual stays large even when most channels are gone (e.g. a dense clique)
 
-The diagnostic of interest is `R_observed < R_random`. When a targeted strategy (PageRank, betweenness) gives a much lower R than random, the network has identifiable critical channels. When all targeted strategies give R values close to random, the network is *homogeneous* — no single class of channels is uniquely critical.
+The diagnostic of interest is `R_observed < R_random`. When a targeted strategy (PageRank, in-strength) gives a much lower R than random, the network has identifiable critical channels. When all targeted strategies give R values close to random, the network is *homogeneous* — no single class of channels is uniquely critical.
 
-**In practice:** read the per-(strategy, metric) cells in the summary table top-to-bottom. The strategy with the *lowest* R is the one this particular network is most vulnerable to. If PageRank attack and betweenness attack both score very low, the same channels are both prestige-anchors *and* bridges (a common signature of tightly-coordinated propaganda networks). If only betweenness scores low, the prestige is widely distributed but the connectivity is brittle.
+**In practice:** read the per-(strategy, metric) cells in the summary table top-to-bottom. The strategy with the *lowest* R is the one this particular network is most vulnerable to. If PageRank attack and in-strength attack both score very low, the same channels are both prestige-anchors *and* the most-cited destinations (a common signature of tightly-coordinated propaganda networks). If only in-strength scores low, the prestige is widely distributed but the raw citation structure is brittle.
 
-**Example.** A research group monitoring a far-right ecosystem might find `R_wcc(random) = 0.45`, `R_wcc(pagerank) = 0.18`, `R_wcc(betweenness) = 0.42`. Interpretation: the network's resilience to *random* attrition is moderate (R ≈ 0.5); it is not particularly sensitive to bridge removal (betweenness R is barely below random); but it is extremely vulnerable to prestige-targeted removal (PageRank R is 2.5× lower than random). The PageRank ranking is structurally a hit list for moderation that wants to fragment this ecosystem.
+**Example.** A research group monitoring a far-right ecosystem might find `R_wcc(random) = 0.45`, `R_wcc(pagerank) = 0.18`, `R_wcc(in_strength) = 0.42`. Interpretation: the network's resilience to *random* attrition is moderate (R ≈ 0.5); it is not particularly sensitive to removing the most-cited destinations (in-strength R is barely below random); but it is extremely vulnerable to prestige-targeted removal (PageRank R is 2.5× lower than random). The PageRank ranking is structurally a hit list for moderation that wants to fragment this ecosystem.
 
 ### Critical threshold `f_c`
 
@@ -264,9 +206,9 @@ For every (partition, strategy) combination, the runner records three normalised
 
 The partition is whatever you ran with `--community-strategies`. See [Community detection](community-detection.md) for what each strategy detects.
 
-**In practice:** the modular curves tell you whether the attack is *decoupling sub-ecosystems* or *eroding cohesion within them*. Under betweenness attack on a network whose bridge channels carry most of the betweenness, `inter` drops to zero almost immediately while `intra` decays gradually — the network fragments into still-cohesive sub-blobs that no longer communicate. Under random attack on the same network, `intra` and `inter` decay in proportion (no targeting bias). Comparing the two patterns is often the clearest evidence that the network's vulnerability is specifically structural and not just statistical.
+**In practice:** the modular curves tell you whether the attack is *decoupling sub-ecosystems* or *eroding cohesion within them*. Under a targeted attack on a network whose cross-camp ties hang off a few high-prestige channels, `inter` can drop to zero well before `intra` does — the network fragments into still-cohesive sub-blobs that no longer communicate. Under random attack on the same network, `intra` and `inter` decay in proportion (no targeting bias). Comparing the two patterns is often the clearest evidence that the network's vulnerability is specifically structural and not just statistical.
 
-**Example.** In a far-right + religious-conservative coalition network, betweenness attack typically takes `inter` from 1.0 down to near 0 within the first 5% of removals (the small handful of channels that bridge the two camps). The `intra` curves stay near 1.0 for much longer — each ideological camp internally survives the attack just fine. Operationally: a moderator targeting brokers would effectively split the coalition without dismantling either side.
+**Example.** In a far-right + religious-conservative coalition network, a PageRank attack can take `inter` from 1.0 down sharply within the first removals when the channels bridging the two camps are also the network's highest-prestige ones. The `intra` curves stay near 1.0 for much longer — each ideological camp internally survives the attack just fine. Operationally: a moderator following that ranking would effectively split the coalition without dismantling either side.
 
 ---
 

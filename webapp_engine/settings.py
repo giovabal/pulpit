@@ -395,13 +395,12 @@ SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
 SA_INCLUDE_SELF_REFERENCES = _structural.edges.include_self_references
 SA_EDGE_WEIGHT_STRATEGY = _structural.edges.weight_strategy
-SA_SPREADING_RUNS = _structural.computation.spreading_runs
 SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
 SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
 SA_BEHAVIOURAL_EQUIVALENCE = _structural.outputs.behavioural_equivalence
 SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
-# CPM resolution / MCL inflation moved into the per-instance community-strategy tokens (v0.25).
+# CPM resolution moved into the per-instance community-strategy tokens (v0.25).
 SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold
 SA_INCLUDE_LOST = _structural.scope.include_lost
 SA_INCLUDE_PRIVATE = _structural.scope.include_private
@@ -416,9 +415,6 @@ SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
 SA_ROBUSTNESS = bool(_structural.robustness.strategies)
 SA_ROBUSTNESS_ALPHA = _structural.robustness.alpha
 SA_ROBUSTNESS_STRATEGIES = ",".join(_structural.robustness.strategies)
-# Community basis for the robustness "bridging" attack (its own knob since v0.25 — measure bases
-# now live per-instance inside the --measures tokens). Empty → backend default (LEIDEN_DIRECTED).
-SA_ROBUSTNESS_BRIDGING_BASIS = _structural.robustness.bridging_basis
 SA_ROBUSTNESS_RUNS = _structural.robustness.runs
 SA_ROBUSTNESS_NULL = _structural.robustness.null
 SA_ROBUSTNESS_SEED = _structural.robustness.seed

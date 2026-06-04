@@ -28,7 +28,7 @@ Click → modal asks for a **title** (e.g. *"Production crawl, no media"*) → `
 
 The committed baseline is read-only via the API. Saves always create a new file; duplicate titles are allowed (uniqueness comes from the filename's timestamp). Same-second collisions advance the timestamp by 1 second so concurrent saves don't overwrite each other.
 
-Server-side validation (`_validate_post_constraints` in `runner/views.py`) rejects inconsistent inputs before writing — e.g. a BRIDGING measure with a `bridging_basis` that isn't in the selected `community_strategies`, a `consensus_matrix` request with fewer than two non-ORGANIZATION strategies, an `amount` ≤ 0 for `search_channels`, an empty `project_dir` for `compare_analysis`.
+Server-side validation (`_validate_post_constraints` in `runner/views.py`) rejects inconsistent inputs before writing — e.g. a `consensus_matrix` request with fewer than two non-ORGANIZATION strategies, an `amount` ≤ 0 for `search_channels`, an empty `project_dir` for `compare_analysis`.
 
 ### Load defaults
 

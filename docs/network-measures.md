@@ -4,13 +4,25 @@ A network measure assigns a numerical score to each channel based on its positio
 
 All measures can be used to size nodes in the graph viewer, making the most significant channels visually prominent.
 
-> **Read this first.** Pulpit's edges record *one-degree* amplification — every forward is attributed to the original source, so a citation always points straight at the origin. That makes several otherwise-standard path- and flow-based measures (betweenness, spreading, trophic level, brokerage, bridging, …) invalid on this graph. See [Interpretation guardrails](#interpretation-guardrails-the-one-degree-assumption) for which measures to trust and which to avoid.
-
 <figure>
 <img src="../webapp_engine/static/screenshot_01.jpg" alt="Channel table with network measures">
 <figcaption><em>Channel table: every computed measure as a sortable column. Click any header to rank channels by that measure.</em></figcaption>
 </figure>
 <br>
+
+---
+
+## What this catalogue covers
+
+Pulpit's edges record **one-degree** amplification: Telegram attributes every forward to the original author, so a citation points straight at the source and the graph is a *citation* network, not a transmission network — its multi-hop paths carry no flow. This is borne out empirically on Telegram, where forwarding cascades form depth-1 stars with no onward propagation, unlike the multi-hop retweet trees of other platforms (Kuznetsov *et al.* 2026). The measures documented below are the ones that stay well-defined under that assumption: degree and prestige, local structure, community role, and behavioural ratios.
+
+Path-, flow-, and brokerage-based measures that presuppose traffic *moving* along shortest paths — betweenness and its relatives — are deliberately **not** computed, because the flow they quantify does not exist in this graph (Borgatti 2005). That exclusion extends to Gould–Fernandez brokerage, which is a constrained *2-betweenness* measure and so inherits the same flow dependence (Borgatti & Everett 2006), and to the "best spreader" reading of k-core, which fails on a structurally identifiable class of networks independent of the attribution issue (Liu, Tang & Zhou 2015).
+
+**References:**
+- Borgatti, S.P. (2005) "Centrality and network flow." *Social Networks* 27(1):55–71. [doi:10.1016/j.socnet.2004.11.008](https://doi.org/10.1016/j.socnet.2004.11.008) — betweenness assumes traffic that *moves/transfers* along geodesics, and is "completely inappropriate" as an index for infection or information that *diffuses by copying*.
+- Borgatti, S.P. & Everett, M.G. (2006) "A graph-theoretic perspective on centrality." *Social Networks* 28(4):466–484. [doi:10.1016/j.socnet.2005.11.005](https://doi.org/10.1016/j.socnet.2005.11.005) — "Gould and Fernandez (1989) develop brokerage measures that are specific variants of 2-betweenness measures."
+- Kuznetsov, O. *et al.* (2026) "Delay-driven information diffusion in Telegram: modeling, empirical analysis, and the limits of competition." *Big Data and Cognitive Computing* 10(1):30. [doi:10.3390/bdcc10010030](https://doi.org/10.3390/bdcc10010030) — 5,000+ Pushshift cascades form perfect depth-1 stars (zero multi-hop propagation), an API-forced property of forward attribution, vs. Twitter chains of depth 5+.
+- Liu, Y., Tang, M. & Zhou, T. (2015) "Core-like groups result in invalidation of identifying super-spreader by k-shell decomposition." *Scientific Reports* 5:9602. [doi:10.1038/srep09602](https://doi.org/10.1038/srep09602) — in networks with "core-like groups", high-k-shell nodes are *not* good spreaders, breaking the Kitsak et al. (2010) core-equals-spreader claim.
 
 ---
 
@@ -21,82 +33,20 @@ All measures can be used to size nodes in the graph viewer, making the most sign
 | PageRank | `PAGERANK` | Which channels do the network's key players treat as authoritative? |
 | HITS Hub | `HITSHUB` | Which channels actively amplify others — the distributors? |
 | HITS Authority | `HITSAUTH` | Which channels are the original sources that distributors spread? |
-| Betweenness centrality | `BETWEENNESS` | Which channels sit on the bridges between sub-networks? |
 | In-degree centrality | `INDEGCENTRALITY` | Which channels are cited by the largest fraction of others? |
 | Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
-| Harmonic centrality | `HARMONICCENTRALITY` | Which channels does the rest of the network reach in the fewest hops? |
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Local clustering | `LOCALCLUSTERING` | Do this channel's contacts also cite each other — is its immediate neighbourhood closed in on itself? |
-| K-core coreness | `CORENESS` | Is this channel in the densely interconnected nucleus, or a peripheral amplifier? |
-| Collective influence | `COLLECTIVEINFLUENCE` | Which channels are the optimal-percolation key spreaders whose removal most fragments the network? |
-| Trophic level | `TROPHICLEVEL` | Where does this channel sit on the structural source→sink axis? |
 | Within-module role | `MODULEROLE` | Is this channel a within-community hub or a cross-community connector? |
-| Brokerage roles | `BROKERAGEROLES` | What kind of broker is this channel between groups — gatekeeper, representative, liaison? |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
-| Spreading efficiency | `SPREADING` | If this channel starts spreading a message, what fraction of the network eventually receives it? |
-| Bridging centrality | `BRIDGINGCENTRALITY` | Which channels are topological bridges wedged between high-degree regions? |
-| Community bridging | `BRIDGING` / `BRIDGING(STRATEGY)` | Which channels bridge distinct communities AND lie on structurally important paths? |
 
 <figure>
 <img src="../webapp_engine/static/screenshot_05.jpg" alt="Measure comparison scatter plot">
 <figcaption><em>Measure comparison: drag any two measures onto the axes to compare their distributions across channels.</em></figcaption>
 </figure>
 <br>
-
----
-
-## Interpretation guardrails: the one-degree assumption
-
-Pulpit's edges encode one narrow fact: **channel X amplified channel Y's content at least once** (a forward, or a `t.me/` reference). Telegram attributes every forward to the *original* author, not the intermediate sharer — so when content travels A → B → C in the real world (C forwards what it saw on B, which B had taken from A), Telegram stamps C's copy as originating from A. Pulpit therefore records the edges **B→A** and **C→A**, and *never* C→B. Amplification is **one degree only**: every citation points straight at the origin.
-
-That single fact has a sharp consequence — **the graph's paths are not diffusion paths, and the two are in fact disjoint:**
-
-- A *real* diffusion chain A → B → C collapses to a star — edges B→A and C→A, with B and C left unconnected. The multi-hop chain disappears from the topology.
-- A directed 2-path that *does* appear in the graph, X→Y→Z, can only mean "X amplified Y's *own* content **and** Y amplified Z's *own* content" — two unrelated content streams. If X had received Z's content *through* Y, the edge would read X→Z. So Y relays nothing between X and Z.
-
-In short: genuine multi-hop diffusion is **absent** from the graph (flattened into stars), while the multi-hop paths that are **present** carry no transmission meaning. This is precisely Borgatti's warning that every centrality presupposes a particular flow process and is valid only when the real process matches it (Borgatti 2005, *Centrality and network flow*; Borgatti & Everett 2006). One-degree amplification fixes that process as **single-step broadcast duplication** — and in the Borgatti–Everett typology, *volume / degree* measures survive it while *length* (closeness/harmonic) and *medial* (betweenness) measures do not.
-
-### Verdict by measure
-
-| Measure | Verdict | Why under one-degree |
-| :------ | :------ | :------------------- |
-| In-degree centrality (`INDEGCENTRALITY`) | **Valid** | One-degree attribution makes in-degree (and the `in_deg` in-strength) *the* canonical influence index — every amplifier of your content points directly at you. |
-| Out-degree centrality (`OUTDEGCENTRALITY`) | **Valid** | Curatorial breadth; a direct one-step count, no path assumption. |
-| Amplification factor (`AMPLIFICATION`) | **Valid** | Local content ratio (forwards received ÷ own output). |
-| Content originality (`CONTENTORIGINALITY`) | **Valid** | Local content ratio. |
-| Diffusion lag (`DIFFUSIONLAG`) | **Valid** | Built from forward timestamps — direct events; reads as latency relative to the origin. |
-| Within-module role (`MODULEROLE`) | **Valid** | Degree distribution across communities — connection diversity, not flow mediation. |
-| PageRank (`PAGERANK`) | **Structural only** | Defensible as recursive citation *prestige* ("endorsed by the much-endorsed"); do **not** read it as reach or flow. |
-| HITS hub / authority (`HITSHUB` / `HITSAUTH`) | **Structural only** | Co-citation / coupling structure → curator (hub) / source (authority) roles; endorsement, not transmission. |
-| Burt's constraint (`BURTCONSTRAINT`) | **Structural only** | Ego-network redundancy is real and local; the "broker controls flow across the hole" gloss is weakened. |
-| Local clustering (`LOCALCLUSTERING`) | **Structural only** | Measures transitive closure — the very thing one-degree denies as flow; survives only as a local-redundancy signal. |
-| Harmonic centrality (`HARMONICCENTRALITY`) | **Undermined** | Reciprocal-distance reach over multi-hop paths; the 1-hop terms are just in-degree, the rest is fictitious reach. Prefer in-degree. |
-| Collective influence (`COLLECTIVEINFLUENCE`) | **Undermined** | An optimal-percolation spreader score over a 2-hop ball; with no real spreading process its justification lapses (residue: a 2-hop-degree index). |
-| K-core coreness (`CORENESS`) | **Undermined** | Fine as structural nestedness, but the Kitsak (2010) "best spreaders" claim it is sold on needs a spreading process the graph does not carry. |
-| Betweenness (`BETWEENNESS`) | **Invalid** | Counts geodesic traffic through a node, but a graph 2-path is never a transmission route — the "broker controls flow" reading has no referent. |
-| Spreading efficiency (`SPREADING`) | **Invalid** | Simulates a multi-generation SIR cascade; generations ≥ 2 are exactly what one-degree flattens into stars, so the cascade is an artefact. |
-| Trophic level (`TROPHICLEVEL`) | **Invalid** | A flow-hierarchy coordinate (level = 1 + mean upstream level); with no multi-step flow, every level ≥ 1 is built from spurious 2-paths. |
-| Brokerage roles (`BROKERAGEROLES`) | **Invalid** | Classifies 2-paths i→v→j as v brokering between i and j, but a brokered forward is attributed to the origin (edge i→j) — the census counts mediations that never happened. |
-| Bridging centrality (`BRIDGINGCENTRALITY`) | **Invalid** | Betweenness × a degree-based bridging coefficient; inherits betweenness's missing flow referent. |
-| Community bridging (`BRIDGING`) | **Invalid** | Betweenness × neighbour-community participation coefficient; same inheritance. |
-
-### Reading the catalogue below
-
-The quick-reference questions above and each measure's own section describe its **textbook** interpretation — written for a generic graph where paths carry flow. Where the verdict table marks a measure *Undermined* or *Invalid*, read that section as background on what the algorithm computes, **not** as a licence to read its flow / brokerage / spreading story into a Pulpit graph. The worked examples there illustrate the measure's general behaviour; they are not claims that the corresponding inference is sound under one-degree attribution.
-
-### References vs. forwards
-
-The argument is cleanest for forwards, where Telegram's original-author attribution is what flattens the chain. `t.me/` **references** have no intermediate-attribution step — a mention simply points at whoever is named. But a mention is still a one-step pointer, never a conduit: a reference 2-path (X mentions Y, Y mentions Z) transmits nothing from Z to X either. So the same conclusion holds for both edge types, by slightly different routes.
-
-### The default measure set
-
-Because of all this, the Operations-panel default selection ships only the surviving measures — the *Valid* and *Structural-only* tiers:
-
-`PAGERANK`, `HITSHUB`, `HITSAUTH`, `INDEGCENTRALITY`, `OUTDEGCENTRALITY`, `BURTCONSTRAINT`, `LOCALCLUSTERING`, `MODULEROLE`, `AMPLIFICATION`, `CONTENTORIGINALITY`, `DIFFUSIONLAG`.
-
-The *Undermined* and *Invalid* measures stay fully available — select them on the measure builder, or pass them to `--measures`, whenever you want them (for comparison, or if your reading of the data justifies relaxing the one-degree assumption). This default governs the **web form only**; a bare `structural_analysis` CLI run computes nothing unless you pass `--measures` explicitly.
 
 ---
 
@@ -145,21 +95,6 @@ Authority is the counterpart to hub in the same Kleinberg system: a channel scor
 
 ---
 
-## Betweenness centrality
-
-*A high betweenness score means this channel sits on many of the shortest paths between other channels — a broker through which information flows.*
-
-Betweenness counts the fraction of shortest paths between all pairs of channels that pass through a given channel. A channel with high betweenness is a structural broker: information moving from one part of the network to another tends to route through it. The measure rewards lying *between* clusters rather than being prominent *within* one, so it picks out very different channels from prestige measures like PageRank.
-
-**References:**
-- Freeman, L.C. (1977) "A set of measures of centrality based on betweenness." *Sociometry* 40(1). [doi:10.2307/3033543](https://doi.org/10.2307/3033543)
-
-**In practice:** Betweenness is Pulpit's primary measure for finding the channels that hold a network together. A bridge between two ideological camps will score high even without high prestige within either — and prestige measures routinely miss these brokers because they may be cited by few and themselves cite many. Removing high-betweenness channels typically fragments the network faster than removing high-prestige ones.
-
-**Example.** A channel regularly references both a cluster of religious nationalist outlets and a cluster of economic libertarian outlets — two groups that do not directly cross-reference. Its citation count is modest and its PageRank ordinary, because neither cluster cites it heavily. Yet every shortest path between the two ecosystems runs through it, so its betweenness is among the highest in the network. It is the main vector through which narratives migrate from one community to the other.
-
----
-
 ## In-degree centrality
 
 *The simplest prestige measure: what fraction of the network's other channels cite this one?*
@@ -190,21 +125,6 @@ Out-degree centrality is the mirror image of in-degree: it counts how many disti
 
 ---
 
-## Harmonic centrality
-
-*A high harmonic centrality score means the rest of the network can reach this channel through short citation chains — even when its direct citers are few, indirect ones via aggregators count.*
-
-Harmonic centrality measures how easily the rest of the network reaches a channel through citation chains, with closer citers counting for more than distant ones: a direct citer contributes full weight, a two-hop citer half, a three-hop citer a third, and so on. It generalises in-degree from direct citers to all citers via multi-hop paths, and stays well-defined on the sparse, partially disconnected citation graphs Pulpit typically builds — channels that cannot be reached simply do not contribute.
-
-**References:**
-- Boldi, P. & Vigna, S. (2014) "Axioms for centrality." *Internet Mathematics* 10(3–4). [doi:10.1080/15427951.2013.865686](https://doi.org/10.1080/15427951.2013.865686)
-
-**In practice:** Harmonic centrality picks up channels that are *deeply embedded* in the citation graph even when they are not cited by many direct citers — a small channel that the network's main aggregators cite, and which those aggregators are themselves widely cited, will score high. The difference with in-degree is informative: a channel can have modest in-degree but high harmonic centrality if its few citers each have wide audiences of their own. The pair separates "broadly cited" from "well-positioned in the citation chain".
-
-**Example.** A political strategist's channel is cited directly by only three high-traffic aggregators — its in-degree is just 3. But each of those three aggregators is itself cited by twenty other channels in the same ecosystem, so the strategist is two hops from sixty more. Harmonic centrality picks up both the direct and the two-hop citers, so its score is much higher than in-degree alone suggests. A second channel cited directly by twenty peripheral accounts (none of which is itself cited) has a higher in-degree but a lower harmonic centrality — because nobody reaches it *through* anyone interesting.
-
----
-
 ## Burt's constraint
 
 *A low Burt's constraint score means this channel sits at a structural hole — its contacts cluster into groups that do not interact, so it is the only bridge between them.*
@@ -214,9 +134,9 @@ Burt's constraint quantifies how much of a channel's interaction is invested in 
 **References:**
 - Burt, R.S. (1992) *Structural Holes: The Social Structure of Competition*. Harvard University Press. [doi:10.4159/9780674038714](https://doi.org/10.4159/9780674038714)
 
-**In practice:** Burt's constraint catches brokers that betweenness can miss. Betweenness rewards lying on many shortest paths — a global signal that floods toward high-traffic hubs. A small channel connecting two otherwise-disconnected, low-traffic clusters can have negligible betweenness yet very low constraint — its handful of contacts simply do not talk to each other. The pair `(BETWEENNESS, BURTCONSTRAINT)` cleanly separates global flow brokers from quiet local ones.
+**In practice:** Burt's constraint catches brokers that prestige measures can miss. A small channel connecting two otherwise-disconnected, low-traffic clusters can have an unremarkable in-degree yet very low constraint — its handful of contacts simply do not talk to each other. Paired with local clustering, it gives the canonical structural-holes-vs-echo-chamber decomposition.
 
-**Example.** In a mapped Italian political network, a channel with modest PageRank and a few thousand subscribers has a Burt's constraint of 0.08 — the lowest in the network. Investigation reveals it is run by a political operative who curates content from both far-right and religious-nationalist ecosystems, forwarding selectively to each. Its in-degree is unremarkable and its betweenness is mid-pack (the two ecosystems it bridges are themselves small), but its contacts on each side do not cite each other. Burt's constraint is the only measure Pulpit reports that flags this channel as a structural broker.
+**Example.** In a mapped Italian political network, a channel with modest PageRank and a few thousand subscribers has a Burt's constraint of 0.08 — the lowest in the network. Investigation reveals it is run by a political operative who curates content from both far-right and religious-nationalist ecosystems, forwarding selectively to each. Its in-degree is unremarkable, but its contacts on each side do not cite each other. Burt's constraint is the only measure Pulpit reports that flags this channel as a structural broker.
 
 ---
 
@@ -232,53 +152,7 @@ Local clustering measures the density of citations *among a channel's contacts*:
 
 **In practice:** Local clustering pinpoints channels embedded in mutual-amplification triangles — which is exactly the shape of a *coordinated cell*: a small group of channels that all forward each other's content. No other Pulpit measure singles out this pattern: a five-channel cell can look unremarkable on every prestige column yet have local clustering near 1.0 across all five members. Paired with Burt's constraint, it gives the canonical structural-holes-vs-echo-chamber decomposition.
 
-**Example.** In a mapped extremist-channel ecosystem, five channels all cross-forwarding each other show up with local clustering between 0.6 and 0.8 per member — even though three of them have low PageRank and unremarkable citation counts, so none of the global-prestige or brokerage measures flag them. By contrast, a mainstream news aggregator drawing from twelve unrelated sources (a national newswire, an academic blog, a sports outlet, a foreign-policy magazine, and so on) scores near 0 on clustering: its sources do not cite each other.
-
----
-
-## K-core coreness
-
-*A high coreness number means this channel sits in the densely interconnected nucleus of the network; a low number means it is a peripheral amplifier on the network's edge.*
-
-Coreness is the depth of the densest layer a channel survives in when the network is *peeled*: starting from the outermost layer, channels with too few connections are repeatedly removed; the layer in which a channel finally disappears is its coreness. A channel in the top layer sits in a tight nucleus where every member is connected to many others in the same nucleus — being there requires the channel's neighbours, and their neighbours' neighbours, all to clear the same threshold.
-
-**References:**
-- Seidman, S.B. (1983) "Network structure and minimum degree." *Social Networks* 5(3). [doi:10.1016/0378-8733(83)90028-X](https://doi.org/10.1016/0378-8733(83)90028-X)
-- Kitsak, M. et al. (2010) "Identification of influential spreaders in complex networks." *Nature Physics* 6(11). [doi:10.1038/nphys1746](https://doi.org/10.1038/nphys1746)
-
-**In practice:** Coreness answers a question prestige measures don't quite get to: *is this channel embedded in the network's reinforcing nucleus, or on its periphery?* A channel can have very high in-degree from many peripheral citers yet low coreness — its audience is broad but shallow. A modest in-degree with high coreness is the opposite case — a channel woven into a tight, mutually reinforcing core. The headline finding from network science is that coreness predicts how far a message would spread *better than in-degree does*, so high-coreness channels are typically more consequential than their citation counts alone suggest.
-
-**Example.** A long-running nationalist outlet sits in the deepest coreness layer of a 400-channel ecosystem: each of its citers is itself cited by at least seven others in the same nucleus. Its in-degree puts it third overall, but coreness puts it first. A viral aggregator with 50,000 subscribers has the network's top in-degree, yet only middling coreness — its citers are mostly peripheral leaves that nobody else amplifies. Coreness identifies the nationalist outlet as the structurally consequential one; in-degree would put the aggregator first.
-
----
-
-## Collective Influence
-
-*A high collective-influence score flags a channel whose removal would most fragment the network — the optimal-percolation key spreaders, found by looking a couple of hops out rather than only at immediate ties.*
-
-Collective Influence comes from optimal-percolation theory: the search for the minimal set of nodes whose removal shatters a network's giant connected component. For each channel it multiplies `(degree − 1)` by the sum of `(degree − 1)` over every channel sitting *exactly* ℓ hops away (Pulpit fixes ℓ = 2). A channel scores high only when it is itself well-connected *and* its two-hop surroundings are well-connected too — the signature of a node wedged at the heart of a dense region, whose deletion does maximal structural damage. The headline finding from the original study is that this ranking pinpoints the influential set more reliably than degree, k-core, PageRank or betweenness.
-
-**References:**
-- Morone, F. & Makse, H.A. (2015) "Influence maximization in complex networks through optimal percolation." *Nature* 524(7563). [doi:10.1038/nature14604](https://doi.org/10.1038/nature14604)
-
-**In practice:** Collective Influence is the per-channel companion to Pulpit's [robustness analysis](robustness-analysis.md): robustness *removes* channels by a ranking and watches the network shrink, while collective influence *is* the near-optimal removal ranking read straight off the static graph. It complements two neighbours: where k-core coreness gives a coarse onion-layer depth and SIR spreading efficiency averages stochastic cascades, collective influence is a deterministic, percolation-grounded score of how structurally load-bearing a channel is. It is computed on the symmetrised, unweighted graph (matching coreness), so it reads the topology of who-connects-to-whom rather than tie strength, and is read **ordinally** — the ranking is the signal, not the raw magnitude.
-
-**Example.** In a 400-channel political ecosystem, two channels have nearly identical k-core coreness — both sit in the same deep shell. Collective Influence separates them. The first is surrounded, two hops out, by a sprawl of other well-connected channels: removing it tears a hole that the surrounding density cannot route around, and its collective-influence score is among the highest in the network. The second sits in the same shell but its two-hop neighbourhood thins out into peripheral leaves, so its score is middling. Coreness calls them equals; collective influence correctly flags the first as the structurally load-bearing one — the channel a moderation effort aiming to fragment the ecosystem would target first.
-
----
-
-## Trophic level
-
-*A low trophic level means this channel is a structural source that others draw from; a high level means it is a terminal amplifier downstream of the content it carries.*
-
-Trophic level places every channel on a single source-to-sink axis derived from the direction of citations. Channels at low levels publish content that flows downstream; channels at high levels mostly receive and re-broadcast content from elsewhere. The measure is well-defined even on the cyclic networks Pulpit builds (where the classical food-web definition fails) — it captures the same intuition as a balance equation across the whole citation flow, so it handles the messy structure of real citation graphs cleanly.
-
-**References:**
-- MacKay, R.S., Johnson, S. & Sansom, B. (2020) "How directed is a directed network?" *Royal Society Open Science* 7(9). [doi:10.1098/rsos.201138](https://doi.org/10.1098/rsos.201138)
-
-**In practice:** Trophic level is the structural counterpart of content originality — content originality reads per-message provenance, trophic level reads citation-graph position. The pair separates *genuine sources* (high originality, low level) from *mid-chain relays* (low originality, mid level) and *terminal amplifiers* (low originality, high level). The score is particularly useful when a prestige measure ranks a heavily-cited aggregator first: trophic level can reveal that the aggregator sits mid-chain, with the actual source above it.
-
-**Example.** In a 400-channel political ecosystem, a small commentary outlet with 4,000 subscribers and modest in-degree sits at trophic level 0 — the structural source of its part of the network. PageRank puts it in the second decile and in-degree puts it 87th, but trophic level identifies it as the chain's origin. A viral aggregator with 50,000 subscribers and the network's top citation count sits at trophic level 1.6 — receiving from the commentator and re-broadcasting to many peripheral channels. Every static prestige column ranks the aggregator first; trophic level correctly places it as a relay, not an origin.
+**Example.** In a mapped extremist-channel ecosystem, five channels all cross-forwarding each other show up with local clustering between 0.6 and 0.8 per member — even though three of them have low PageRank and unremarkable citation counts, so none of the global-prestige measures flag them. By contrast, a mainstream news aggregator drawing from twelve unrelated sources (a national newswire, an academic blog, a sports outlet, a foreign-policy magazine, and so on) scores near 0 on clustering: its sources do not cite each other.
 
 ---
 
@@ -294,29 +168,6 @@ The within-module role characterises every channel by two scores measured *again
 **In practice:** The role labels turn a coloured-blob community map into a concrete job description: a *provincial hub* is a kingpin of one community that rarely speaks outside it; a *connector hub* is both central within and spanning out, the most strategically significant broker; a non-hub *connector* is a low-profile bridge with modest internal weight but ties that systematically cross community boundaries. The label pairs naturally with global prestige measures: a top-decile PageRank channel can be either a *provincial hub* (locally dominant but not network-spanning) or a *connector hub* (both), and the label tells you which.
 
 **Example.** In a 400-channel political ecosystem, two channels look nearly identical on the static prestige columns — comparable PageRank, similar core depth, similar citation strength. The role taxonomy separates them. The first lands as a *connector hub* — both internally central in its community *and* with ties that span multiple distinct communities. The second is a *provincial hub* — the kingpin of its own community, but with ties that do not systematically cross out. Reading PageRank alone, the two look like equivalent leaders; reading the role labels, they are different jobs. Removing the first severs both internal cohesion and cross-community flow; removing the second only fragments one community.
-
----
-
-## Brokerage roles (Gould-Fernandez 1989)
-
-*Burt's constraint and community bridging tell you that a channel is a broker; the brokerage census tells you what kind — does it guard what enters a faction, push its faction's content outward, or bridge two camps it belongs to neither of?*
-
-The Gould–Fernandez census classifies every citation chain a channel mediates. Whenever channel *i* cites *v* and *v* cites *j* (a directed two-path `i → v → j`), the broker *v* is performing one of five distinct roles, decided by the groups — by default the analyst's **Organizations** — that *i*, *v* and *j* belong to:
-
-- **Coordinator** — *i*, *v*, *j* all in *v*'s own group: a broker *within* its faction.
-- **Gatekeeper** — *i* is an outsider, *v* and *j* share *v*'s group: *v* controls what flows *into* its faction.
-- **Representative** — *i* and *v* share *v*'s group, *j* is an outsider: *v* controls what flows *out* of its faction.
-- **Consultant** — *i* and *j* belong to one other group that is not *v*'s: *v* brokers between two members of a faction it sits outside.
-- **Liaison** — *i*, *v*, *j* are in three different groups: *v* bridges two foreign camps, belonging to neither.
-
-Pulpit reports the **total** number of two-paths a channel brokers (the sortable *Brokerage* column) and its **dominant role** (the *Brokerage role* column, alongside it exactly as the within-module Role sits beside its z-score). The five individual role counts are written to `nodes.csv` and the GEXF/GraphML exports for the full census.
-
-**References:**
-- Gould, R.V. & Fernandez, R.M. (1989) "Structures of mediation: A formal approach to brokerage in transaction networks." *Sociological Methodology* 19. [doi:10.2307/270949](https://doi.org/10.2307/270949)
-
-**In practice:** This is the typed complement to Pulpit's other brokerage measures, which all report brokerage *intensity* without naming the *kind*. Burt's constraint says a channel's contacts are non-redundant; betweenness and [community bridging](#community-bridging) say it lies on cross-group paths — but none distinguishes a **gatekeeper** (which decides what reaches a faction's audience) from a **representative** (which carries a faction's message outward) from a **liaison** (an unaligned channel bridging two camps). In an influence-operation context these are different jobs with different leverage: gatekeepers are chokepoints for inbound narratives, representatives are a faction's outward megaphone, liaisons are the deniable conduits between camps that never cite each other directly. The dominant-role label is a quick descriptor — biased toward whichever role the channel's group sizes give it the most opportunity for — so read it together with the five raw counts in the export when the distinction matters. The census needs a meaningful group partition; with `ORGANIZATION` the roles read as brokerage between the analyst's own factions, and the measure returns nothing for a channel with no organisation.
-
-**Example.** In a mapped national ecosystem, three channels have almost identical betweenness. The census pulls them apart. The first is overwhelmingly a **gatekeeper**: nearly all the two-paths it mediates run from outside channels into its own religious-nationalist organisation — it is the faction's inbound filter, deciding which external narratives its audience ever sees. The second is a **representative**: its brokered paths run the other way, from inside its economic-nationalist organisation out to channels in three rival camps — it is the organisation's outward voice. The third belongs, by organisation, to neither of the camps it connects: a **liaison** whose brokered paths almost all run between a state-media organisation and a diaspora organisation that never cite each other directly. Betweenness ranks the three as equals; the brokerage census identifies one as a chokepoint, one as a megaphone, and one as a bridge — and only the liaison is invisible to a measure that assumes brokers sit inside the groups they connect.
 
 ---
 
@@ -346,7 +197,7 @@ Content originality is the fraction of a channel's own messages that are not nat
 - Boyd, D., Golder, S. & Lotan, G. (2010) "Tweet, Tweet, Retweet: Conversational Aspects of Retweeting on Twitter." *HICSS-43*. [doi:10.1109/HICSS.2010.412](https://doi.org/10.1109/HICSS.2010.412)
 - Kwak, H., Lee, C., Park, H. & Moon, S. (2010) "What is Twitter, a Social Network or a News Media?" *WWW 2010*. [doi:10.1145/1772690.1772751](https://doi.org/10.1145/1772690.1772751)
 
-**In practice:** Content originality is Pulpit's most direct answer to *whose voice is genuinely original, post-for-post, and whose is curatorial?* It is the behavioural counterpart to the structural measures. Paired with amplification factor it spans four roles — primary source whose content travels (high on both), original niche (high originality, low amplification), curated aggregator (low originality, high amplification), and passive consumer (low on both). Paired with trophic level it separates genuine sources from mid-chain relays.
+**In practice:** Content originality is Pulpit's most direct answer to *whose voice is genuinely original, post-for-post, and whose is curatorial?* It is the behavioural counterpart to the structural measures. Paired with amplification factor it spans four roles — primary source whose content travels (high on both), original niche (high originality, low amplification), curated aggregator (low originality, high amplification), and passive consumer (low on both).
 
 **Example.** A commentary outlet that publishes its own analyses emits 600 messages over the analysis window, 30 of which are forwards from peer channels — originality score 0.95: almost every post is original, with a thin layer of curated forwards. A content aggregator on the same topics emits 800 messages, 720 of which are forwards from a handful of sources — originality 0.10: by volume, almost all content is other people's. Subscriber count might rank the aggregator first, but originality flips the framing: the first channel is the local *producer*, the second the local *amplifier*.
 
@@ -365,55 +216,6 @@ Diffusion lag is the median number of hours between when a piece of content is f
 **In practice:** Diffusion lag answers a question no structural measure can: *when* does a channel typically react? It is the temporal companion of the volume and position measures. Paired with amplification factor, it splits forwarders into agenda-setters (low lag, high amplification — fast and well-amplified), consolidators (high lag, high amplification — slow takes that still travel), followers (low lag, low amplification — quick but unheard), and peripheral re-broadcasters (high lag, low amplification). The dimension is invisible to any static-graph measure.
 
 **Example.** Two channels in a nationalist commentator network each forward roughly 60% of a primary broadcaster's posts, with comparable in-degree. One has a diffusion lag of 1.8 hours, the other 17. On every static and behavioural-volume measure they look interchangeable; temporally they are not. The first is part of the broadcaster's same-day distribution chain — an agenda-setter that extends the broadcaster's news window. The second re-broadcasts after the news cycle has moved on — a consolidator whose role is reinforcing narratives rather than seeding them.
-
----
-
-## Spreading efficiency
-
-*If this channel were the first to publish a piece of information, what fraction of the network would eventually receive it under a simulated cascade?*
-
-Spreading efficiency simulates a simple cascade — analogous to an epidemic — seeded at each channel: the channel "infects" its forwarders with a probability proportional to how heavily they cite it, those forwarders infect their own citers in turn, and so on until the cascade dies out. The score is the average fraction of the network ever reached, taken across many simulated runs. A score of 0.32 means a cascade seeded at that channel reaches, on average, 32% of the other channels.
-
-**References:**
-- Kitsak, M. et al. (2010) "Identification of influential spreaders in complex networks." *Nature Physics* 6(11). [doi:10.1038/nphys1746](https://doi.org/10.1038/nphys1746)
-- Pastor-Satorras, R., Castellano, C., Van Mieghem, P. & Vespignani, A. (2015) "Epidemic processes in complex networks." *Reviews of Modern Physics* 87(3). [doi:10.1103/RevModPhys.87.925](https://doi.org/10.1103/RevModPhys.87.925)
-
-**In practice:** Spreading efficiency is Pulpit's only purely *dynamic* per-channel reach measure — every other measure characterises a channel by its static position. It identifies *superspreaders* in the original sense of the term: channels whose content would percolate furthest if the network were to relay a single piece of content. The most useful comparison is with amplification factor — high spreading + low amplification = unrealised potential; low spreading + high amplification = observed reach the structure alone wouldn't predict. The score should be read ordinally — what matters is the ranking, not the absolute percentages.
-
-**Example.** A small commentary outlet with 4,000 subscribers has a second-decile PageRank and unremarkable citation count — every static prestige column dismisses it. Its spreading-efficiency score, however, places it among the top — each simulated cascade reaches roughly a third of the network. Inspection reveals the channel sits one hop upstream of three large aggregators, which themselves fan out to dozens of dependent channels; cascades percolate through that two-step neighbourhood before dying out. A political party's official channel with the highest citation count has a much lower spreading score — its citers are mostly peripheral leaves, and the cascade dies within one hop. Static prestige misses the commentator; spreading efficiency identifies it as the network's dynamical superspreader.
-
----
-
-## Bridging centrality (Hwang et al. 2008)
-
-*A high bridging centrality score means this channel is a topological bridge — a low-degree node wedged between high-degree regions, whose removal would most fragment the network.*
-
-Bridging centrality combines betweenness (lying on shortest paths) with a *bridging coefficient* that asks whether the channel's contacts are themselves high-traffic. The combined score is high only for channels with both qualities: on many traversal paths *and* sitting at the narrow waist between busy regions. A channel deep inside a single dense cluster can have very high betweenness, but if its neighbours are themselves high-degree cluster members, the bridging coefficient knocks it down. Only true topological bridges keep both factors high.
-
-**References:**
-- Hwang, W., Kim, T., Ramanathan, M. & Zhang, A. (2008) "Bridging Centrality: Graph Mining from Element Level to Group Level." *KDD '08*. [doi:10.1145/1401890.1401941](https://doi.org/10.1145/1401890.1401941)
-
-**In practice:** Bridging centrality separates *true bottlenecks* from *mere hubs*. A hub inside a dense cluster can have very high betweenness, but if its contacts are themselves high-degree, its bridging coefficient is small and the product knocks it down. By contrast, a modest channel that quietly connects two large clusters — whose disappearance would fracture the network — scores high on both factors. It does not need a community partition (it uses only degree information), so it can be read directly off the citation graph without any additional analysis step.
-
-**Example.** A mapped political ecosystem of 400 channels contains a 200-channel nationalist cluster and a 200-channel religious-conservative cluster that otherwise share no direct contact. A within-cluster aggregator with in-degree 47 and top-decile PageRank has the network's highest plain betweenness — the channel every prestige column picks first. A second channel has just two meaningful ties, one into each cluster: its in-degree is 2, PageRank middling, plain betweenness three times smaller. Bridging centrality inverts the ordering. The aggregator's contacts are themselves high-degree cluster members, so its bridging coefficient is small. The two-tie channel's neighbours are both cluster hubs, so its bridging coefficient is huge. Bridging centrality correctly flags it as the single point of failure between the two clusters.
-
----
-
-## Community bridging
-
-*A high community bridging score means this channel is both structurally central AND bridges genuinely distinct communities.*
-
-Community bridging combines betweenness centrality with a measure of how widely a channel's contacts spread across the network's detected communities. A channel that lies on shortest paths *and* whose contacts span multiple communities scores high; a channel that lies on shortest paths but whose contacts all belong to a single community scores zero. The measure requires a community partition, which Pulpit picks automatically from the strategies the user has configured for the run.
-
-> **Naming note.** This composite was previously labelled "Bridging centrality", but that name properly belongs to the degree-based measure of Hwang et al. (2008) — now exposed separately as `BRIDGINGCENTRALITY`. This measure was renamed **Community bridging** (key `community_bridging`); the question it answers ("does this broker span *distinct communities*?") is the Guimerà–Amaral one.
-
-**References:**
-- Guimerà, R. & Amaral, L.A.N. (2005) "Functional cartography of complex metabolic networks." *Nature* 433(7028). [doi:10.1038/nature03288](https://doi.org/10.1038/nature03288)
-- Freeman, L.C. (1977) "A set of measures of centrality based on betweenness." *Sociometry* 40(1). [doi:10.2307/3033543](https://doi.org/10.2307/3033543)
-
-**In practice:** Community bridging fills a gap left by betweenness alone. A channel can rank highly on betweenness simply because it sits in a dense region, even if all its contacts belong to one community. Community bridging discounts this case: a *within-community kingpin* (high betweenness, low community bridging) is one role; a *genuine cross-community broker* (high on both) is another. The pair is the cleanest way to identify channels whose removal would not just shift traffic but split the network's coalition structure.
-
-**Example.** Two channels have nearly identical betweenness scores. The first sits at the centre of a tightly cross-citing nationalist bloc; all its contacts belong to the same community. Its community-bridging score is 0 — it is a within-community kingpin. The second has similar betweenness but its contacts split across four distinct communities — nationalist, religious-conservative, mainstream right, and state media. Its community-bridging score is well above the first. Plain betweenness ranks them tied; community bridging correctly distinguishes a within-community kingpin from a strategically significant cross-community broker.
 
 ---
 

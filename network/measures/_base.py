@@ -51,15 +51,10 @@ def compute_neighbour_community_participation(
     where ``w_c`` is the total edge weight from ``v`` to community ``c`` and ``W``
     the total neighbour weight. ``P`` is 0 when every neighbour sits in a single
     community (no bridging) and approaches 1 as ``v``'s ties spread evenly across
-    many communities. The bridging measure multiplies it by betweenness to
-    surface nodes that are both structurally central and span communities — the
-    canonical community-role quantity, and bounded in ``[0, 1]`` (unlike the
-    unbounded Shannon entropy it replaces, which left the product on no fixed
-    scale).
+    many communities — the canonical community-role quantity, bounded in ``[0, 1]``.
 
-    Shared by :func:`network.measures._centrality.apply_community_bridging`
-    and :func:`network.robustness.attacks._bridging_with_partition` so the two
-    stay in lock-step.
+    Used by :func:`network.measures._centrality.apply_module_role` as the P axis
+    of the Guimerà & Amaral within-module-role plane.
 
     Nodes absent from ``partition``: their edges are skipped (treated as
     "unknown community", contributing nothing). Nodes with no community-tagged
