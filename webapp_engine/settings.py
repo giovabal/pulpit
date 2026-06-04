@@ -21,6 +21,18 @@ warnings.filterwarnings(
     category=DeprecationWarning,
 )
 
+# Under the test runner, silence logging: the suite deliberately exercises
+# flood-wait, failed-download, unresolved-reference and parse-failure paths
+# whose log records would otherwise flood the output. No test asserts on log
+# output (no assertLogs anywhere), so disabling it wholesale is safe. Match the
+# `test` subcommand precisely (argv[1]) so a stray "test" argument to another
+# command can't accidentally mute logging. Migration 0045 also reads this flag.
+TESTING = sys.argv[1:2] == ["test"]
+if TESTING:
+    import logging
+
+    logging.disable(logging.CRITICAL)
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
