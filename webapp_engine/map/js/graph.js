@@ -1,6 +1,6 @@
 import { Sigma } from 'sigma';
 import Graph from 'graphology';
-import EdgeCurveProgram from '@sigma/edge-curve';
+import EdgeCurveProgram, { EdgeCurvedArrowProgram } from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel } from 'sigma/rendering';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
@@ -40,6 +40,7 @@ var active_layout               = 'fa2';
 var active_theme                = 'dark';
 var colored_edges               = true;
 var show_edge_weight            = false;   // off by default; maps edge weight → line thickness
+var show_edge_arrows            = false;   // off by default; draws an arrowhead at each edge's target
 
 // Sigma edge `size` units for the weighted-edge view. Sigma floors rendered
 // thickness at its own minEdgeThickness, so the thinnest edges still read; the
@@ -49,6 +50,13 @@ var show_edge_weight            = false;   // off by default; maps edge weight �
 var EDGE_WEIGHT_MIN_SIZE        = 0.5;
 var EDGE_WEIGHT_MAX_SIZE        = 7.0;
 var EDGE_WEIGHT_BASE_SIZE       = 2.5;
+
+// A two-way connection is stored as two directed edges (one per direction), each
+// with its own weight. Bowing those two edges by this curvature puts them on
+// opposite sides — the curve program offsets the control point perpendicular to
+// source→target, so the same value lands A→B and B→A on opposite arcs — so each
+// direction reads as its own edge. One-way edges stay straight (curvature 0).
+var RECIPROCAL_CURVATURE        = 0.25;
 
 // =============================================================================
 // Sigma and graph instances
@@ -108,7 +116,7 @@ function make_node_hover_renderer(fillStyle) {
 var THEMES = {
     dark: {
         label: 'Dark', canvas: 'rgba(17, 34, 51, 1)', fade: 'rgba(27, 44, 61, .75)',
-        labelColor: '#ffffff', edgeOpacity: 0.25, defaultEdgeType: 'curved',
+        labelColor: '#ffffff', edgeOpacity: 0.25,
         defaultEdgeColor: '#484848', nodeBorderSize: 0, nodeBorderColor: 'transparent',
         hoverFill: '#111111',
         cssVars: {
@@ -122,7 +130,7 @@ var THEMES = {
     },
     light: {
         label: 'Light', canvas: 'rgba(240, 244, 248, 1)', fade: 'rgba(180, 195, 210, .75)',
-        labelColor: '#1a2a3a', edgeOpacity: 0.30, defaultEdgeType: 'curved',
+        labelColor: '#1a2a3a', edgeOpacity: 0.30,
         defaultEdgeColor: '#aaaaaa', nodeBorderSize: 0.08, nodeBorderColor: 'rgba(255,255,255,0.8)',
         hoverFill: '#cddaeb',
         cssVars: {
@@ -134,7 +142,7 @@ var THEMES = {
     },
     minimal: {
         label: 'Minimal', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(210, 210, 210, .75)',
-        labelColor: '#333333', edgeOpacity: 0.18, defaultEdgeType: 'line',
+        labelColor: '#333333', edgeOpacity: 0.18,
         defaultEdgeColor: '#cccccc', nodeBorderSize: 0.15, nodeBorderColor: '#ffffff',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -146,7 +154,7 @@ var THEMES = {
     },
     print: {
         label: 'Print', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(200, 200, 200, .75)',
-        labelColor: '#000000', edgeOpacity: 0.15, defaultEdgeType: 'line',
+        labelColor: '#000000', edgeOpacity: 0.15,
         defaultEdgeColor: '#999999', nodeBorderSize: 0.20, nodeBorderColor: '#222222',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -177,7 +185,7 @@ var sigma_instance = new Sigma(graph, el(app_settings.container), {
     minCameraRatio:             0.03125,
     maxCameraRatio:             20,
     defaultEdgeType:            'curved',
-    edgeProgramClasses:         { curved: EdgeCurveProgram },
+    edgeProgramClasses:         { curved: EdgeCurveProgram, curvedArrow: EdgeCurvedArrowProgram },
     defaultNodeType:            'border',
     nodeProgramClasses:         { border: NodeBorderProgram },
     defaultDrawNodeHover:       make_node_hover_renderer('#111111'),
@@ -210,9 +218,9 @@ function apply_theme(themeKey) {
     app_settings.container_background_color = theme.canvas;
     app_settings.fade_color = theme.fade;
 
-    // Sigma rendering settings
+    // Sigma rendering settings. The edge type (curved vs. curved-with-arrow) is
+    // driven by the arrows toggle, not the theme, so it is left untouched here.
     sigma_instance.setSetting('labelColor', { color: theme.labelColor });
-    sigma_instance.setSetting('defaultEdgeType', theme.defaultEdgeType);
     sigma_instance.setSetting('defaultEdgeColor', theme.defaultEdgeColor);
     sigma_instance.setSetting('defaultDrawNodeHover', make_node_hover_renderer(theme.hoverFill));
 
@@ -415,6 +423,28 @@ function apply_edge_widths() {
     sigma_instance.refresh();
 }
 
+// A two-way (reciprocal) connection arrives as two directed edges with their own
+// weights; curve them so each direction is a distinct arc. One-way edges stay
+// straight (curvature 0). Self-loops keep a curve so they render as a visible
+// arc. Called after every (re)build, before the first render.
+function assign_edge_curvatures() {
+    if (!graph_loaded) return;
+    graph.forEachEdge(function(edge, attrs, source, target) {
+        var curved = source === target || graph.hasEdge(target, source);
+        graph.setEdgeAttribute(edge, 'curvature', curved ? RECIPROCAL_CURVATURE : 0);
+    });
+}
+
+// Switch every edge between the plain curve program ('curved') and the
+// curve+arrowhead program ('curvedArrow') by setting each edge's `type`. Sigma
+// buckets edges into programs by `data.type` and reprocesses on attribute change,
+// so this (unlike flipping the global defaultEdgeType) re-renders existing edges.
+function apply_edge_type() {
+    if (!graph_loaded) return;
+    var t = show_edge_arrows ? 'curvedArrow' : 'curved';
+    graph.forEachEdge(function(edge) { graph.setEdgeAttribute(edge, 'type', t); });
+}
+
 function maybe_apply_initial_colors() {
     if (graph_loaded && accessory_loaded && active_strategy) {
         apply_strategy_colors(active_strategy);
@@ -454,6 +484,7 @@ function update_info_bar() {
 
     chips.push(colored_edges ? 'Colored edges' : 'Plain edges');
     if (show_edge_weight) chips.push('Weighted width');
+    if (show_edge_arrows) chips.push('Arrows');
 
     var group_sel = el('group-select');
     var group_val = group_sel ? group_sel.value : '';
@@ -654,6 +685,8 @@ function get_data(data_dir) {
             graph.edges().length + ' connections';
 
         graph_loaded = true;
+        assign_edge_curvatures();
+        apply_edge_type();
         apply_edge_widths();
         maybe_apply_initial_colors();
     });
@@ -973,6 +1006,8 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
                 el('about_graph_stats').innerHTML =
                     graph.nodes().length + ' channels, ' + graph.edges().length + ' connections';
                 graph_loaded = true;
+                assign_edge_curvatures();
+                apply_edge_type();
                 apply_edge_widths();
                 maybe_apply_initial_colors();
             });
@@ -1248,6 +1283,12 @@ document.addEventListener('DOMContentLoaded', function() {
     el('edge-weight-toggle').addEventListener('change', function() {
         show_edge_weight = this.checked;
         apply_edge_widths();
+        update_info_bar();
+    });
+    el('edge-arrows-toggle').addEventListener('change', function() {
+        show_edge_arrows = this.checked;
+        apply_edge_type();
+        sigma_instance.refresh();
         update_info_bar();
     });
 
