@@ -7,18 +7,13 @@ export var STRATEGY_LABELS = {
     leiden_cpm:       'Leiden CPM',
     labelpropagation: 'Label propagation',
     kcore:            'K-core',
-    infomap:          'Infomap',
-    infomap_memory:   'Memory Infomap',
-    mcl:              'MCL',
-    walktrap:         'Walktrap',
-    strongcc:         'Strongly connected components',
 };
 
 // Base keys of the parameterised strategies (longest first), and their param kinds — used to strip a
 // parameter suffix back to the family and to reconstruct a readable annotation. Mirrors
 // network.community.canonical_strategy_key / strategy_display_label.
-var STRATEGY_BASE_KEYS = ['leiden_cpm', 'mcl'];
-var STRATEGY_PARAM_KINDS = { resolution: 'float', inflation: 'float' };
+var STRATEGY_BASE_KEYS = ['leiden_cpm'];
+var STRATEGY_PARAM_KINDS = { resolution: 'float' };
 
 export function canonical_strategy_key(key) {
     var k = String(key).toLowerCase();

@@ -200,10 +200,14 @@ def _scores_abc(
             scores["STRUCTURAL_EQUIV"] = round(0.5 * cos_in + 0.5 * cos_out, 3)
 
         if "BROKERAGE" in selected:
-            # Overlap (Jaccard) of the (source-org, amplifier-org) pairs the channel bridges:
-            # does the candidate mediate the same inter-organisation flows the vacancy did?
-            # Operationalises the *concept* of brokerage roles (Gould & Fernandez 1989), not
-            # their brokerage-census classifier — hence the label "Brokerage overlap".
+            # Overlap (Jaccard) of the (source-org, amplifier-org) pairs the channel spans — the
+            # cross-product of the orgs it directly forwards *from* and the orgs that directly
+            # amplify it. Both are one-degree citation facts about the channel, so this is a
+            # structural *position* (same source ecosystem on one side, same audience ecosystem on
+            # the other), NOT content flowing between those orgs through it: under one-degree
+            # attribution a forward records a direct citation, not a relay. Operationalises the
+            # *concept* of brokerage (Gould & Fernandez 1989) as positional org-pair overlap, not
+            # their flow-based census — hence the label "Brokerage overlap".
             cand_org_pairs = frozenset(
                 (s, a) for s in cand_src_org_pks.get(cid, set()) for a in cand_amp_org_pks.get(cid, set())
             )

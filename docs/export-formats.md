@@ -106,7 +106,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requi
 
 - **Search** — type a channel name to highlight and zoom to it
 - **Community filter** — colour nodes by any active community strategy; switch strategies via the options panel
-- **Node size** — resize nodes by any computed measure (PageRank, betweenness, amplification, etc.)
+- **Node size** — resize nodes by any computed measure (PageRank, amplification, etc.)
 - **Click a node** — opens a detail panel with subscriber count, all computed measures, and direct links to the channel and to its detail page in the web interface
 - **Year navigator** — appears when a timeline export was generated; step through annual snapshots with animated transitions (see [Workflow § Timeline export](workflow.md#timeline-export))
 
@@ -140,7 +140,7 @@ Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requir
 
 One row per channel. All computed measures appear as sortable columns. Generated with `--html`; the Excel version with `--xlsx`.
 
-Columns include: channel name and link, organization, all computed network measures (PageRank, betweenness, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
+Columns include: channel name and link, organization, all computed network measures (PageRank, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
 
 Click any column header to sort. Download the `.xlsx` for further analysis in a spreadsheet application.
 
@@ -184,7 +184,7 @@ See [Whole-network statistics § Structural equivalence matrix](whole-network-st
 
 Generated with `--behavioural-equivalence`.
 
-A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity of channels i and j's **behavioural-measure profiles**: amplification factor, content originality, diffusion lag, spreading efficiency, and audience/activity volume (followers, message count) — whichever were computed. Measures are min-max normalised per column; missing values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the column median rather than 0. Two channels score high when they behave alike, independent of their network position.
+A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity of channels i and j's **behavioural-measure profiles**: amplification factor, content originality, diffusion lag, and audience/activity volume (followers, message count) — whichever were computed. Measures are min-max normalised per column; missing values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the column median rather than 0. Two channels score high when they behave alike, independent of their network position.
 
 Color scale, sort controls, and rendering match the structural equivalence matrix. Pre-computed data is stored in `data/behavioural_equivalence.json`.
 
@@ -246,7 +246,7 @@ Generated with `--csv`. Two plain-text CSV files, the most portable format for d
 
 ### nodes.csv
 
-One row per channel, mirroring `channel_table.xlsx` — plus the five Gould-Fernandez brokerage role counts when `BROKERAGEROLES` was computed (these ride in the CSV and the graph-exchange exports rather than the on-screen channel table):
+One row per channel, mirroring `channel_table.xlsx`:
 
 | Column | Content |
 | :----- | :------ |
@@ -256,8 +256,7 @@ One row per channel, mirroring `channel_table.xlsx` — plus the five Gould-Fern
 | Messages | Total message count |
 | Inbound | In-degree (number of channels that forward or cite this channel) |
 | Outbound | Out-degree (number of channels this channel forwards or cites) |
-| *Measure columns* | One column per computed measure (PageRank, Betweenness, etc.) — only present when the measure was selected at export time |
-| *Brokerage census* | When `BROKERAGEROLES` was computed: a `Brokerage role` label plus five role-count columns (Coordinator, Gatekeeper, Representative, Consultant, Liaison) — in `nodes.csv` and GEXF/GraphML only, not the HTML/Excel channel table |
+| *Measure columns* | One column per computed measure (PageRank, Amplification, etc.) — only present when the measure was selected at export time |
 | *Community columns* | One column per active community strategy, containing the community label assigned to this channel |
 | Activity start | Earliest message date (`YYYY-MM`), empty if no messages |
 | Activity end | Most recent message date (`YYYY-MM`), empty if no messages |

@@ -89,15 +89,15 @@ def _compute_extra_layouts(
 def _pick_interest_community_strategy(strategies: "list[community.StrategyInstance]") -> str:
     """Pick the community-partition *key* used by interest-structural's C metric.
 
-    Prefer LEIDEN_DIRECTED (matches ``_BRIDGING_DEFAULT_STRATEGY``: directional brokerage makes more
-    sense for forwarding cascades than undirected modularity), then LEIDEN, then any non-ORGANIZATION
+    Prefer LEIDEN_DIRECTED (directional brokerage makes more sense for forwarding cascades than
+    undirected modularity), then LEIDEN, then any non-ORGANIZATION
     strategy, then ORGANIZATION as a last resort. Returns the chosen instance's node-attribute key
     (e.g. ``leiden_directed`` or ``leiden_cpm_resolution_0_05``); the first instance of a family wins.
     """
     by_name: dict[str, community.StrategyInstance] = {}
     for inst in strategies:
         by_name.setdefault(inst.name, inst)
-    for candidate in ("LEIDEN_DIRECTED", "LEIDEN", "INFOMAP", "LEIDEN_CPM"):
+    for candidate in ("LEIDEN_DIRECTED", "LEIDEN", "LEIDEN_CPM"):
         if candidate in by_name:
             return by_name[candidate].key
     for inst in strategies:
@@ -124,25 +124,16 @@ def _pick_interest_authority_key(present_measures: "set[str]") -> str:
 # Progress-line phrase per measure token (the "- … done" lines during computation).
 _MEASURE_PROGRESS: dict[str, str] = {
     "PAGERANK": "pagerank",
-    "BETWEENNESS": "betweenness centrality",
     "INDEGCENTRALITY": "in-degree centrality",
     "OUTDEGCENTRALITY": "out-degree centrality",
-    "HARMONICCENTRALITY": "harmonic centrality",
     "BURTCONSTRAINT": "Burt's constraint",
     "LOCALCLUSTERING": "local clustering",
-    "CORENESS": "k-core coreness",
-    "COLLECTIVEINFLUENCE": "collective influence",
-    "TROPHICLEVEL": "trophic level",
     "AMPLIFICATION": "amplification factor",
     "CONTENTORIGINALITY": "content originality",
     "DIFFUSIONLAG": "diffusion lag",
-    "SPREADING": "spreading efficiency (SIR)",
     "HITSHUB": "HITS hub",
     "HITSAUTH": "HITS authority",
-    "BRIDGINGCENTRALITY": "bridging centrality (Hwang et al. 2008)",
-    "BRIDGING": "community bridging",
     "MODULEROLE": "module role",
-    "BROKERAGEROLES": "brokerage roles (Gould–Fernandez)",
 }
 
 
@@ -154,7 +145,7 @@ def _rebind_measure_keys(
     """Move a parameterised instance's bare node keys to their parameter-suffixed form.
 
     The ``apply_*`` functions always write their canonical bare keys (e.g.
-    ``spreading_efficiency``, plus categorical companions like ``module_role``). For a
+    ``within_module_z``, plus categorical companions like ``module_role``). For a
     parameterised instance every numeric (returned) key *and* every categorical aux key
     declared on the measure spec is renamed to ``<base><suffix>`` on every node, so two
     instances of the same measure never overwrite each other's columns. Returns the
@@ -177,7 +168,6 @@ def _rebind_measure_keys(
 
 
 def _resolve_community_basis(
-    measure: str,
     instance: "measures.MeasureInstance",
     available_bases: "list[str]",
 ) -> str | None:
@@ -187,8 +177,7 @@ def _resolve_community_basis(
     An explicit ``basis`` is matched first as an exact instance key, then as a strategy *family* —
     resolving to the first selected instance of that family (e.g. ``basis=LEIDEN_CPM`` →
     ``leiden_cpm_resolution_0_01`` when that is the first CPM instance). An empty/auto basis falls
-    through a measure-specific family preference (ORGANIZATION first for brokerage roles, else
-    LEIDEN_DIRECTED), then any available partition. Returns None when none is available.
+    through to LEIDEN_DIRECTED, then any available partition. Returns None when none is available.
     """
 
     def _family_match(family: str) -> str | None:
@@ -199,11 +188,9 @@ def _resolve_community_basis(
     explicit = (instance.params_dict.get("basis") or "").lower()
     if explicit:
         return _family_match(explicit)
-    prefer = ("organization", "leiden_directed") if measure == "BROKERAGEROLES" else ("leiden_directed",)
-    for family in prefer:
-        match = _family_match(family)
-        if match:
-            return match
+    match = _family_match("leiden_directed")
+    if match:
+        return match
     return available_bases[0] if available_bases else None
 
 
@@ -287,15 +274,13 @@ class ResolvedOptions:
     strategies_lower: list[str]  # parameter-suffixed partition keys, one per instance, in order
     # Ordered, de-duplicated list of requested measures, each carrying its own resolved
     # parameters (a measure may appear more than once with different params — e.g. two
-    # SPREADING runs counts). Replaces the old set[str] + single bridging_token.
+    # DIFFUSIONLAG windows).
     measure_instances: list[measures.MeasureInstance]
     selected_network_groups: frozenset[str]
 
     # Tunable measure / strategy parameters
-    spreading_runs: int
     diffusion_window: int
     leiden_cpm_resolution: float
-    mcl_inflation: float
     community_distribution_threshold: int
 
     # Timeline
@@ -353,10 +338,8 @@ class ResolvedOptions:
             "include_lost": self.include_lost,
             "include_private": self.include_private,
             "timeline_step": self.timeline_step,
-            "spreading_runs": self.spreading_runs,
             "diffusion_window": self.diffusion_window,
             "leiden_cpm_resolution": self.leiden_cpm_resolution,
-            "mcl_inflation": self.mcl_inflation,
             "community_distribution_threshold": self.community_distribution_threshold,
             "vacancy_months_before": self.vacancy_months_before,
             "vacancy_months_after": self.vacancy_months_after,
@@ -510,18 +493,13 @@ class Command(BaseCommand):
             metavar="MEASURES",
             help=(
                 "Comma-separated list of centrality measures to compute. "
-                "Available: PAGERANK, HITSHUB, HITSAUTH, BETWEENNESS, INDEGCENTRALITY, OUTDEGCENTRALITY, "
-                "HARMONICCENTRALITY, BURTCONSTRAINT, LOCALCLUSTERING, CORENESS, COLLECTIVEINFLUENCE "
-                "(Morone-Makse 2015), TROPHICLEVEL, "
+                "Available: PAGERANK, HITSHUB, HITSAUTH, INDEGCENTRALITY, OUTDEGCENTRALITY, "
+                "BURTCONSTRAINT, LOCALCLUSTERING, "
                 "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
-                "BROKERAGEROLES (Gould-Fernandez brokerage census; needs a community strategy), SPREADING, "
-                "BRIDGINGCENTRALITY (Hwang et al. 2008), BRIDGING (community bridging), "
                 "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK. "
                 "Parameterised measures take keyword arguments in parentheses and may be listed more "
-                "than once with different parameters: SPREADING(runs=2000), DIFFUSIONLAG(window=60), "
-                "BRIDGING(basis=LEIDEN_DIRECTED), MODULEROLE(basis=LEIDEN), BROKERAGEROLES(basis=ORGANIZATION). "
-                "The legacy positional form BRIDGING(STRATEGY) is still accepted. A bare SPREADING / "
-                "DIFFUSIONLAG inherits --spreading-runs / --diffusion-window as its default; each parameter "
+                "than once with different parameters: DIFFUSIONLAG(window=60), MODULEROLE(basis=LEIDEN). "
+                "A bare DIFFUSIONLAG inherits --diffusion-window as its default; each parameter "
                 "combination produces its own parameter-suffixed output column."
             ),
         )
@@ -532,7 +510,8 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, KCORE, INFOMAP, ALL. "
+                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LABELPROPAGATION, KCORE, ALL. "
+                "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
                 "Default: ORGANIZATION."
             ),
         )
@@ -580,14 +559,6 @@ class Command(BaseCommand):
                 "PARTIAL_MESSAGES = count / total messages; "
                 "PARTIAL_REFERENCES = count / forwarded-or-citing messages (default)."
             ),
-        )
-        parser.add_argument(
-            "--spreading-runs",
-            dest="spreading_runs",
-            type=int,
-            default=None,
-            metavar="N",
-            help="Number of Monte Carlo SIR simulations per node for the SPREADING measure. Default: 200.",
         )
         parser.add_argument(
             "--diffusion-window",
@@ -673,17 +644,6 @@ class Command(BaseCommand):
             "--leiden-fine-resolution", dest="leiden_fine_resolution", type=float, default=None, help=argparse.SUPPRESS
         )
         parser.add_argument(
-            "--mcl-inflation",
-            dest="mcl_inflation",
-            type=float,
-            default=None,
-            metavar="r",
-            help=(
-                "Inflation parameter for Markov Clustering (MCL). "
-                "Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."
-            ),
-        )
-        parser.add_argument(
             "--consensus-matrix",
             dest="consensus_matrix",
             action=argparse.BooleanOptionalAction,
@@ -713,7 +673,7 @@ class Command(BaseCommand):
             help=(
                 "Generate a behavioural equivalence matrix page (behavioural_equivalence.html) showing "
                 "pairwise cosine similarity of channels' behavioural-measure profiles (amplification, "
-                "content originality, diffusion lag, spreading efficiency, followers, message count); "
+                "content originality, diffusion lag, followers, message count); "
                 "min-max normalised per measure, missing values imputed to the median."
             ),
         )
@@ -867,13 +827,10 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of attack strategies to run. Any of: "
-                "random, in_strength, out_strength, pagerank, harmonic, betweenness, "
-                "bridging[(<community-strategy>)], spreading, and the dynamic variants "
-                "in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn. "
+                "random, in_strength, out_strength, pagerank, and the dynamic variants "
+                "in_strength_dyn, out_strength_dyn, pagerank_dyn. "
                 "Use ALL for every strategy. "
-                "Default: random,in_strength,out_strength,pagerank,betweenness. "
-                "Bridging defaults to leiden_directed as the community basis (directional brokerage); "
-                "bridging(leiden) etc. picks a different one. "
+                "Default: random,in_strength,out_strength,pagerank. "
                 "At least one strategy must be selected."
             ),
         )
@@ -965,14 +922,7 @@ class Command(BaseCommand):
         # A measure basis names a strategy *family*; check it against the selected strategy names.
         strategy_names = {i.name for i in communities_strategy}
         for inst in measure_instances:
-            if inst.measure == "BRIDGING":
-                basis = inst.params_dict["basis"]
-                if basis not in strategy_names:
-                    raise CommandError(
-                        f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
-                        f"Add it or change the BRIDGING basis."
-                    )
-            elif inst.measure in ("MODULEROLE", "BROKERAGEROLES"):
+            if inst.measure == "MODULEROLE":
                 basis = inst.params_dict.get("basis") or ""
                 if basis and basis not in strategy_names:
                     raise CommandError(
@@ -984,11 +934,6 @@ class Command(BaseCommand):
             raise CommandError(
                 "MODULEROLE (Guimerà-Amaral role) needs a community partition: add at least one "
                 "strategy to --community-strategies (LEIDEN_DIRECTED is the preferred basis)."
-            )
-        if "BROKERAGEROLES" in measure_names and not communities_strategy:
-            raise CommandError(
-                "BROKERAGEROLES (Gould-Fernandez brokerage census) needs a group partition: add at "
-                "least one strategy to --community-strategies (ORGANIZATION is the preferred basis)."
             )
         invalid_stat_groups = [g for g in network_stat_groups if g not in measures.VALID_NETWORK_STAT_GROUPS]
         if invalid_stat_groups:
@@ -1038,7 +983,7 @@ class Command(BaseCommand):
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
             try:
-                # Parameterised strategies (LEIDEN_CPM γ, MCL inflation) read their tunable value
+                # The parameterised strategy (LEIDEN_CPM γ) reads its tunable value
                 # from the instance; the global flags only seed bare-token defaults at parse time.
                 community_map, community_palette = community.detect(
                     instance,
@@ -1172,9 +1117,8 @@ class Command(BaseCommand):
 
         Each instance is dispatched to its ``apply_*`` function with its own parameters; the bare
         node keys it writes are then rebound to parameter-suffixed keys (:func:`_rebind_measure_keys`)
-        so a measure requested more than once (e.g. two SPREADING runs counts) keeps distinct
-        columns. Betweenness is shared across the standalone betweenness, Hwang bridging centrality
-        and every community-bridging instance; HITS is computed at most once.
+        so a measure requested more than once (e.g. two DIFFUSIONLAG windows) keeps distinct
+        columns. HITS is computed at most once.
         """
         self.stdout.write("\nCalculations on the graph")
         self.stdout.write("- largest component … ", ending="")
@@ -1186,13 +1130,6 @@ class Command(BaseCommand):
         measures_labels = measures.apply_base_node_measures(
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
-
-        names = [inst.measure for inst in measure_instances]
-        # Pre-compute betweenness once and share it across every consumer (standalone betweenness,
-        # Hwang bridging centrality, each community-bridging instance). Only worth caching when ≥2
-        # consumers are active; a lone consumer computes its own.
-        betweenness_consumers = names.count("BETWEENNESS") + names.count("BRIDGINGCENTRALITY") + names.count("BRIDGING")
-        cached_betweenness: dict | None = measures.compute_betweenness(graph) if betweenness_consumers >= 2 else None
 
         # Ordered community-partition keys present on the nodes (selection order), for basis
         # resolution — order matters so a family basis resolves to the *first* selected instance.
@@ -1213,8 +1150,8 @@ class Command(BaseCommand):
             resolved = inst
             # Resolve the community basis up-front for partition-based measures so we can skip
             # cleanly (and label the progress line / output columns with the concrete basis).
-            if m in ("BRIDGING", "MODULEROLE", "BROKERAGEROLES"):
-                basis = _resolve_community_basis(m, inst, available_bases)
+            if m == "MODULEROLE":
+                basis = _resolve_community_basis(inst, available_bases)
                 if basis is None:
                     self.stdout.write(
                         self.style.WARNING(f"- {_MEASURE_PROGRESS[m]} … skipped (no community partition)")
@@ -1226,10 +1163,7 @@ class Command(BaseCommand):
             self.stdout.flush()
 
             if m in step_fn:
-                if m == "BETWEENNESS" and cached_betweenness is not None:
-                    labels = measures.apply_betweenness_centrality(graph_data, graph, betweenness=cached_betweenness)
-                else:
-                    labels = getattr(measures, step_fn[m])(graph_data, graph)
+                labels = getattr(measures, step_fn[m])(graph_data, graph)
             elif m == "AMPLIFICATION":
                 labels = measures.apply_amplification_factor(
                     graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
@@ -1247,23 +1181,13 @@ class Command(BaseCommand):
                     end_date=end_date,
                     window_days=resolved.params_dict["window"],
                 )
-            elif m == "SPREADING":
-                labels = measures.apply_spreading_efficiency(graph_data, graph, runs=resolved.params_dict["runs"])
             elif m in ("HITSHUB", "HITSAUTH"):
                 if not hits_computed:
                     measures.apply_hits(graph_data, graph)  # writes both hub and authority on every node
                     hits_computed = True
                 labels = [("hits_hub", "HITS Hub")] if m == "HITSHUB" else [("hits_authority", "HITS Authority")]
-            elif m == "BRIDGINGCENTRALITY":
-                labels = measures.apply_bridging_centrality(graph_data, graph, betweenness=cached_betweenness)
-            elif m == "BRIDGING":
-                labels = measures.apply_community_bridging(
-                    graph_data, graph, resolved.params_dict["basis"].lower(), betweenness=cached_betweenness
-                )
             elif m == "MODULEROLE":
                 labels = measures.apply_module_role(graph_data, graph, resolved.params_dict["basis"].lower())
-            elif m == "BROKERAGEROLES":
-                labels = measures.apply_gould_fernandez(graph_data, graph, resolved.params_dict["basis"].lower())
             else:  # defensive — parse_measures already rejected unknown tokens
                 self.stdout.write(self.style.WARNING("unknown measure, skipped"))
                 continue
@@ -1434,8 +1358,6 @@ class Command(BaseCommand):
                     cmap = strategy_results[inst.key][0]
                     if len(set(cmap.values())) > 1:
                         rob_partitions[inst.key] = cmap
-                        # Family alias so a bridging(<family>) attack resolves to the first instance.
-                        rob_partitions.setdefault(inst.name.lower(), cmap)
                 rob_payload = robustness.run_robustness(
                     graph,
                     partitions=rob_partitions or None,
@@ -1504,8 +1426,8 @@ class Command(BaseCommand):
         fallbacks — missing flags resolve to typed no-op literals (False
         for toggles, `[]` for lists, `""` for strings, `0` / `0.0` for
         numerics). Tuning constants whose feature is opted into elsewhere
-        (Leiden resolutions, MCL inflation, vacancy / robustness numerics,
-        spreading runs, diffusion window) keep their hardcoded sensible
+        (Leiden CPM resolution, vacancy / robustness numerics,
+        diffusion window) keep their hardcoded sensible
         defaults — they're parameters of features the user enables, not
         feature toggles themselves.
 
@@ -1526,28 +1448,25 @@ class Command(BaseCommand):
             leiden_cpm_resolution = options.get("leiden_coarse_resolution") or options.get("leiden_fine_resolution")
         if leiden_cpm_resolution is None:
             leiden_cpm_resolution = community.CPM_DEFAULT_RESOLUTION
-        mcl_inflation = _o("mcl_inflation", community.MCL_DEFAULT_INFLATION)
         # Parse into ordered StrategyInstance objects (handles ALL, keyword params, duplicate
-        # detection); a bare LEIDEN_CPM / MCL inherits the resolved global default above.
+        # detection); a bare LEIDEN_CPM inherits the resolved global default above.
         try:
             communities_strategy = community.parse_strategies(
                 raw_community_strategies,
                 defaults={
                     "LEIDEN_CPM": {"resolution": leiden_cpm_resolution},
-                    "MCL": {"inflation": mcl_inflation},
                 },
             )
         except ValueError as exc:
             raise CommandError(f"--community-strategies: {exc}") from exc
         raw_network_measures = _parse_csv(_o("measures", ""))
-        # Parse into ordered MeasureInstance objects (handles ALL, legacy BRIDGING(STRATEGY),
-        # keyword params, duplicate detection). Paren-less SPREADING / DIFFUSIONLAG inherit the
-        # global --spreading-runs / --diffusion-window as their default parameter value.
+        # Parse into ordered MeasureInstance objects (handles ALL, keyword params, duplicate
+        # detection). A paren-less DIFFUSIONLAG inherits the global --diffusion-window as its
+        # default parameter value.
         try:
             measure_instances = measures.parse_measures(
                 raw_network_measures,
                 defaults={
-                    "SPREADING": {"runs": _o("spreading_runs", 200)},
                     "DIFFUSIONLAG": {"window": _o("diffusion_window", 30)},
                 },
             )
@@ -1585,9 +1504,7 @@ class Command(BaseCommand):
             list(selected_vacancy_measures),
         )
 
-        # Robustness strategies — parse, validate, expand ALL.  Bridging tokens
-        # of the form ``bridging(LEIDEN)`` keep their parenthesised form so
-        # the runner can route them to the right community partition.
+        # Robustness strategies — parse, validate, expand ALL.
         _raw_rob = _o("robustness_strategies", "")
         _raw_rob_tokens = _parse_csv(_raw_rob) if _raw_rob else []
         if "ALL" in _raw_rob_tokens:
@@ -1599,16 +1516,6 @@ class Command(BaseCommand):
                 robustness.parse_strategy(token)
             except ValueError as exc:
                 raise CommandError(f"--robustness-strategies: {exc}") from exc
-        # Bridging tokens need their community basis to be in --community-strategies (by family name)
-        _robustness_basis_names = {i.name for i in communities_strategy}
-        for token in robustness_strategies:
-            canonical, bridging_key = robustness.parse_strategy(token)
-            if canonical == "bridging" and bridging_key.upper() not in _robustness_basis_names:
-                raise CommandError(
-                    f"--robustness-strategies includes {token!r} but the community basis "
-                    f"{bridging_key.upper()!r} is not in --community-strategies. "
-                    f"Add it or change the bridging basis."
-                )
         # Robustness defaults are filled in only when the user actually opts in
         # via --robustness; empty strategies are tolerated otherwise.
         do_robustness = _o("robustness", False)
@@ -1692,10 +1599,8 @@ class Command(BaseCommand):
             strategies_lower=[inst.key for inst in communities_strategy],
             measure_instances=measure_instances,
             selected_network_groups=frozenset(network_stat_groups),
-            spreading_runs=_o("spreading_runs", 200),
             diffusion_window=_o("diffusion_window", 30),
             leiden_cpm_resolution=leiden_cpm_resolution,
-            mcl_inflation=mcl_inflation,
             community_distribution_threshold=_o("community_distribution_threshold", 0),
             timeline_step=_o("timeline_step", "none"),
             selected_vacancy_measures=selected_vacancy_measures,
@@ -2078,8 +1983,6 @@ class Command(BaseCommand):
                 cmap = strategy_results[inst.key][0]
                 if len(set(cmap.values())) > 1:
                     partitions[inst.key] = cmap
-                    # Family alias so a bridging(<family>) attack resolves to the first instance.
-                    partitions.setdefault(inst.name.lower(), cmap)
             global_rob_payload = robustness.run_robustness(
                 graph,
                 partitions=partitions or None,

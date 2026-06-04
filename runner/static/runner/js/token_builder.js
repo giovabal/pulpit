@@ -1,7 +1,7 @@
 // Reusable drag-and-drop "token builder" for the Operations panel, used by both the Measures and
 // the Community-strategies selectors. A palette of draggable chips feeds an ordered drop-zone;
 // parameterised chips (data-multi="1") can be added repeatedly, each with inline parameter inputs
-// and its own hidden <input> whose value is the composed token (e.g. "SPREADING(runs=2000)" or
+// and its own hidden <input> whose value is the composed token (e.g. "DIFFUSIONLAG(window=60)" or
 // "LEIDEN_CPM(resolution=0.05)"). The form submits one hidden input per chip, in visual order, so
 // order and repeats survive to the server unchanged.
 //

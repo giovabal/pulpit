@@ -1,5 +1,3 @@
-import io
-import sys
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
@@ -22,15 +20,6 @@ from webapp.utils.colors import (
 import igraph as ig
 import leidenalg
 import networkx as nx
-import numpy as np
-from infomap import Infomap
-
-# markov_clustering writes to stderr at import time when matplotlib is absent
-_stderr, sys.stderr = sys.stderr, io.StringIO()
-import markov_clustering as mc  # noqa: E402
-
-sys.stderr = _stderr
-del _stderr
 
 # Canonical ordered list of community-strategy names. Mirrors measures.ALL_STRATEGIES (which feeds
 # the measure "basis" choices); a guard test keeps the two in sync. LEIDEN_CPM is a single
@@ -43,11 +32,6 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN_CPM",
     "LABELPROPAGATION",
     "KCORE",
-    "INFOMAP",
-    "INFOMAP_MEMORY",
-    "MCL",
-    "WALKTRAP",
-    "STRONGCC",
 ]
 COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES) - {"ORGANIZATION"}
 VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
@@ -56,13 +40,11 @@ VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
 # of the citation graph. Their reported modularity should use the undirected null
 # model (k_i·k_j / 2m), matching what they actually optimised — not the directed
 # null model (k_out_i·k_in_j / m). Keys are the lowercased community keys.
-# Everything else (leiden_directed, infomap, infomap_memory, mcl, strongcc,
-# organization) is reported with directed modularity, the form it was built against.
+# Everything else (leiden_directed, organization) is reported with directed
+# modularity, the form it was built against.
 # Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
 # canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
-UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
-    {"leiden", "leiden_cpm", "walktrap", "labelpropagation", "kcore"}
-)
+UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset({"leiden", "leiden_cpm", "labelpropagation", "kcore"})
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
@@ -74,28 +56,21 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN_CPM": "Leiden CPM",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
-    "INFOMAP": "Infomap",
-    "INFOMAP_MEMORY": "Memory Infomap",
-    "MCL": "MCL",
-    "WALKTRAP": "Walktrap",
-    "STRONGCC": "Strongly connected components",
 }
 
 # ── Parameterised community strategies & strategy instances ────────────────────
 #
-# Most strategies are parameter-free, but a couple take a tunable knob and may be requested more
+# Most strategies are parameter-free, but LEIDEN_CPM takes a tunable knob and may be requested more
 # than once with different settings — e.g. LEIDEN_CPM(resolution=0.01) alongside
-# LEIDEN_CPM(resolution=0.05), or MCL(inflation=2.0) alongside MCL(inflation=4.0). The shared token
-# machinery (network.tokens) turns the comma-separated --community-strategies value into an ordered
-# list of StrategyInstance objects; each instance maps to a distinct, parameter-suffixed partition
-# key (``StrategyInstance.key``) so two instances of one strategy never overwrite each other's
-# communities[...] entry. This mirrors the measures system one-for-one.
+# LEIDEN_CPM(resolution=0.05). The shared token machinery (network.tokens) turns the comma-separated
+# --community-strategies value into an ordered list of StrategyInstance objects; each instance maps to
+# a distinct, parameter-suffixed partition key (``StrategyInstance.key``) so two instances of one
+# strategy never overwrite each other's communities[...] entry. This mirrors the measures system.
 
 StrategyParam = TokenParam
 StrategySpec = TokenSpec
 
 CPM_DEFAULT_RESOLUTION = 0.05
-MCL_DEFAULT_INFLATION = 2.0
 
 PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
     "LEIDEN_CPM": StrategySpec(
@@ -114,21 +89,6 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             ),
         ),
         primary_keys=("leiden_cpm",),
-    ),
-    "MCL": StrategySpec(
-        "MCL",
-        "MCL",
-        params=(
-            StrategyParam(
-                "inflation",
-                "float",
-                MCL_DEFAULT_INFLATION,
-                minimum=1.0,
-                label="Inflation r",
-                help="Markov Clustering inflation: higher → more, smaller communities. Typical range 1.5–4.0.",
-            ),
-        ),
-        primary_keys=("mcl",),
     ),
 }
 
@@ -172,8 +132,8 @@ def parse_strategies(
 
     ``ALL`` expands to every strategy with default parameters. ``defaults`` supplies per-strategy
     parameter overrides for omitted values (the command passes the global ``--leiden-cpm-resolution``
-    / ``--mcl-inflation`` so a bare ``LEIDEN_CPM`` / ``MCL`` inherits them). Raises ``ValueError`` on
-    unknown strategies, bad/duplicate parameters — mirroring ``measures.parse_measures``.
+    so a bare ``LEIDEN_CPM`` inherits it). Raises ``ValueError`` on unknown strategies, bad/duplicate
+    parameters — mirroring ``measures.parse_measures``.
     """
     return parse_tokens(
         tokens,
@@ -188,7 +148,7 @@ def parse_strategies(
 
 def canonical_strategy_key(key: str) -> str:
     """Strip a parameter suffix back to the base strategy key (``leiden_cpm_resolution_0_05`` →
-    ``leiden_cpm``; ``mcl_inflation_2_0`` → ``mcl``). Parameter-free keys are returned unchanged."""
+    ``leiden_cpm``). Parameter-free keys are returned unchanged."""
     return canonical_key(key, _STRATEGY_BASE_KEYS)
 
 
@@ -339,7 +299,7 @@ def detect_label_propagation(
     them, so ``--edge-weight-strategy`` does not affect the partition.
     Citation direction is also discarded: the function rejects directed
     input, so Pulpit symmetrises the graph with ``to_undirected_sum``
-    (W+Wᵀ, the same projection used by ``LEIDEN``/``WALKTRAP``/``KCORE``
+    (W+Wᵀ, the same projection used by ``LEIDEN``/``KCORE``
     and the reported modularity). Because weights are ignored, this yields
     the identical partition to a plain ``to_undirected()``; the W+Wᵀ choice
     is for consistency across strategies, not for effect.
@@ -388,53 +348,6 @@ def detect_kcore(
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
     return community_map, build_community_palette(community_map, palette_name, reverse=reverse)
-
-
-def detect_infomap(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """First-order Infomap — Rosvall & Bergstrom (PNAS 2008); map equation Rosvall, Axelsson & Bergstrom (EPJ ST 2009).
-
-    Minimises the map equation L(M) for a flat (``--two-level``) partition of a
-    random walker on the directed citation graph. Edges keep Pulpit's as-built
-    amplifier→source orientation (``--directed``, no symmetrisation); edge
-    weights from ``--edge-weight-strategy`` are passed through ``addLink`` and
-    shape the partition. Truly isolated nodes — those Infomap leaves out of
-    every module — are folded into one fallback community so they still
-    receive a label (``merge_isolated=False`` skips the usual isolated-node
-    bundling because the fallback already covers them).
-    """
-    node_ids, node_id_map = _node_id_index(graph)
-    # seed=123 pins reproducibility for parity with the other seeded detectors
-    # (Leiden seed=0, Memory Infomap seed=123); it matches Infomap's own current
-    # default but makes the run independent of that default ever changing.
-    infomap = Infomap("--two-level --directed --silent", seed=123)
-    for source, target, edge_data in graph.edges(data=True):
-        infomap.addLink(node_id_map[source], node_id_map[target], edge_data.get("weight", 1.0))
-
-    infomap.run()
-    module_ids: dict[str, int] = {node_ids[node.node_id]: node.module_id for node in infomap.nodes}
-
-    community_map: CommunityMap = {}
-    if module_ids:
-        module_map = {module_id: index for index, module_id in enumerate(sorted(set(module_ids.values())), start=1)}
-        community_map = {node_id: module_map[module_id] for node_id, module_id in module_ids.items()}
-
-    next_community = max(community_map.values(), default=0) + 1
-    for node_id in node_ids:
-        if node_id not in community_map:
-            community_map[node_id] = next_community
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_strongcc(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    components = sorted(nx.strongly_connected_components(graph), key=len, reverse=True)
-    return _finalize_partition(
-        graph, _assign_from_node_sets(components), palette_name, reverse=reverse, merge_isolated=False
-    )
 
 
 def detect_leiden(
@@ -517,171 +430,6 @@ def detect_leiden_cpm(
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
-def detect_mcl(
-    graph: nx.DiGraph, palette_name: str, inflation: float, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """Markov Clustering (MCL) — van Dongen 2000 (thesis); 2008 *SIAM J. Matrix Anal. Appl.* 30(1) for the formal analysis.
-
-    Alternates matrix expansion (raise to power 2, the library default) and
-    inflation (raise each entry to ``inflation``, column-renormalise) until
-    the stochastic matrix becomes near-idempotent; the row supports of the
-    surviving diagonal entries are the clusters. ``inflation`` controls
-    granularity — higher → smaller, tighter communities. No null model, so
-    *not* subject to the Fortunato-Barthélemy resolution limit.
-
-    Pulpit feeds the directed citation graph directly: ``matrix[source, target]
-    = w(source → target)`` with the chosen ``--edge-weight-strategy``. The
-    ``markov_clustering`` library adds a unit self-loop to every row, then
-    column-normalises (column-stochastic convention) — so the implied random
-    walker traverses edges in *reverse* (content-cascade direction
-    source→amplifier), the same orientation Pulpit uses for SIR ``SPREADING``
-    and ``TROPHICLEVEL``. Both citation directions still shape the partition
-    through the asymmetric matrix; MCL clusters channels that share a
-    source's content flow, not channels that share citing behaviour. The
-    isolated-node self-loop below is belt-and-braces — ``run_mcl`` overwrites
-    the full diagonal anyway — but keeps the matrix well-defined before
-    normalisation. Overlap (a node landing in two attractors' row supports)
-    is resolved by "last attractor wins" in ``_assign_from_partition``; the
-    practical consequence is that hub-and-spoke amplification patterns get
-    fragmented (the hub goes to one peripheral cluster, the spokes scatter
-    into singletons) — prefer ``LEIDEN`` for that case. Fully deterministic
-    given the input matrix; no random seed.
-    """
-    node_ids, node_id_map = _node_id_index(graph)
-    n = len(node_ids)
-    matrix = np.zeros((n, n), dtype=float)
-    for source, target, edge_data in graph.edges(data=True):
-        matrix[node_id_map[source], node_id_map[target]] = edge_data.get("weight", 1.0)
-
-    # Give isolated nodes a self-loop so the stochastic matrix stays well-defined.
-    for i in range(n):
-        if matrix[i].sum() == 0 and matrix[:, i].sum() == 0:
-            matrix[i, i] = 1.0
-
-    clusters = mc.get_clusters(mc.run_mcl(matrix, inflation=inflation))
-    community_map = _assign_from_partition(clusters, node_ids)
-
-    # Nodes not placed in any cluster (edge cases in sparse graphs) → singletons.
-    assigned: set[int] = {idx for cluster in clusters for idx in cluster}
-    next_id = len(clusters) + 1
-    for i, node_id in enumerate(node_ids):
-        if i not in assigned:
-            community_map[node_id] = next_id
-            next_id += 1
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_infomap_memory(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """Second-order Infomap on a synthetic state network — Rosvall et al. (Nature Comms 2014); state-network API Edler, Bohlin & Rosvall (Algorithms 2017).
-
-    Builds a state network where every directed edge A→B becomes a state node
-    ``(A, B)`` representing the context "currently at B, came from A". Pulpit
-    has no observed trigram data, so the transition ``(A, B) → (B, C)`` carries
-    the first-order edge weight ``w(B, C)`` regardless of A — the *outgoing*
-    step is memoryless. The variant still differs from first-order Infomap
-    because state nodes are clustered individually, so a hub B can be
-    reassigned to a different module than first-order picks based on the
-    topology of which neighbours feed its state nodes; the state-level
-    assignments are then collapsed back to physical channels by plurality vote.
-    Source channels (no incoming edges) receive a virtual entry state so they
-    participate in the flow; ``--recorded-teleportation`` keeps teleportation
-    events inside the description length, the stricter formulation needed for
-    directed networks. Truly isolated nodes (no state nodes at all) become
-    singleton communities — unlike ``detect_infomap``, which bundles them into
-    one shared fallback.
-    """
-    community_map: CommunityMap = {}
-    node_ids, node_id_map = _node_id_index(graph)
-    n = len(node_ids)
-
-    infomap = Infomap("--two-level --directed --silent --recorded-teleportation", seed=123)
-
-    # State node for edge A→B: state_id = idx_A * n + idx_B, physical node = idx_B.
-    for src, tgt in graph.edges():
-        infomap.add_state_node(node_id_map[src] * n + node_id_map[tgt], node_id_map[tgt])
-
-    # Virtual entry state for source nodes (no incoming edges, would be unreachable).
-    _virtual_base = n * n
-    for node_id in node_ids:
-        node_idx = node_id_map[node_id]
-        if graph.in_degree(node_id) == 0 and graph.out_degree(node_id) > 0:
-            infomap.add_state_node(_virtual_base + node_idx, node_idx)
-
-    # Trigram links: state(A→B) → state(B→C) with weight w(B→C).
-    for mid in node_ids:
-        mid_idx = node_id_map[mid]
-        predecessors = list(graph.predecessors(mid))
-        successors = list(graph.successors(mid))
-        if not successors:
-            continue
-        # Incoming state IDs: edge-states plus virtual entry if source node.
-        if predecessors:
-            in_states = [node_id_map[src] * n + mid_idx for src in predecessors]
-        else:
-            in_states = [_virtual_base + mid_idx]
-        for tgt in successors:
-            tgt_idx = node_id_map[tgt]
-            weight = graph.edges[mid, tgt].get("weight", 1.0)
-            state_out = mid_idx * n + tgt_idx
-            for state_in in in_states:
-                infomap.add_link(state_in, state_out, weight)
-
-    infomap.run()
-
-    # Aggregate state-node module assignments to physical nodes (plurality vote).
-    physical_modules: dict[int, list[int]] = {}
-    for node in infomap.nodes:
-        physical_modules.setdefault(node.node_id, []).append(node.module_id)
-
-    for phys_idx, modules in physical_modules.items():
-        community_map[node_ids[phys_idx]] = Counter(modules).most_common(1)[0][0]
-
-    # Isolated nodes with no state nodes at all → singleton fallback.
-    next_id = max(community_map.values(), default=0) + 1
-    for node_id in node_ids:
-        if node_id not in community_map:
-            community_map[node_id] = next_id
-            next_id += 1
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_walktrap(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """Walktrap — Pons & Latapy (ISCIS 2005, *LNCS* 3733; extended in *JGAA* 2006).
-
-    For each node u, builds the probability distribution P_u over where a
-    random walker of length t=4 (the library default) ends up; two nodes are
-    similar when their distributions are close in a degree-weighted L²
-    distance. Ward's method merges nodes bottom-up by minimum distance into
-    a dendrogram, which ``.as_clustering()`` cuts at the modularity-
-    maximising level. The distinctive property is that two nodes with no
-    direct edge between them can still cluster together when their walk
-    distributions converge on the same neighbours — shared-neighbourhood
-    structure drives the partition, not just direct edge density.
-
-    Graph is symmetrised via ``to_undirected_sum`` (W+Wᵀ, same projection as
-    ``LEIDEN``/``LABELPROPAGATION``/``KCORE``), so citation direction is not
-    preserved. Edge weights are honoured —
-    ``community_walktrap`` accepts weighted walks. The modularity cut means
-    Walktrap inherits the Fortunato-Barthélemy resolution limit *at the
-    cut step* even though the random-walk distance itself has no such
-    limit. Pulpit consumes only the flat partition; the dendrogram is built
-    internally by igraph but is not exported or visualised. Fully
-    deterministic given the input weights; no random seed.
-    """
-    node_ids, node_id_map = _node_id_index(graph)
-    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
-    if weights:
-        ig_graph.es["weight"] = weights
-    partition = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4).as_clustering()
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
-
-
 def detect(
     instance: "StrategyInstance | str",
     palette_name: str,
@@ -693,9 +441,9 @@ def detect(
     """Run community detection for one strategy instance. Returns (community_map, community_palette).
 
     ``instance`` is a :class:`StrategyInstance`; a bare strategy-name string is also accepted (wrapped
-    as a parameter-free instance) for convenience. Parameterised strategies read their tunable value
-    from the instance — LEIDEN_CPM its ``resolution`` γ, MCL its ``inflation`` — each falling back to
-    the module default when omitted.
+    as a parameter-free instance) for convenience. The one parameterised strategy reads its tunable
+    value from the instance — LEIDEN_CPM its ``resolution`` γ — falling back to the module default when
+    omitted.
     """
     if isinstance(instance, str):
         instance = StrategyInstance(instance.upper())
@@ -705,10 +453,6 @@ def detect(
         return detect_label_propagation(graph, palette_name, reverse=reverse)
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
-    if strategy == "INFOMAP":
-        return detect_infomap(graph, palette_name, reverse=reverse)
-    if strategy == "INFOMAP_MEMORY":
-        return detect_infomap_memory(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":
         return detect_leiden(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_DIRECTED":
@@ -717,12 +461,6 @@ def detect(
         return detect_leiden_cpm(
             graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
         )
-    if strategy == "MCL":
-        return detect_mcl(graph, palette_name, float(params.get("inflation", MCL_DEFAULT_INFLATION)), reverse=reverse)
-    if strategy == "WALKTRAP":
-        return detect_walktrap(graph, palette_name, reverse=reverse)
-    if strategy == "STRONGCC":
-        return detect_strongcc(graph, palette_name, reverse=reverse)
     if strategy == "ORGANIZATION":
         # ORGANIZATION builds its palette from Organization.color directly, so the
         # palette_name / reverse flags don't apply.

@@ -92,7 +92,7 @@ Enable with `--interest-structural` on `structural_analysis`. Both options below
 
 *"How many distinct communities did this post's forwards reach?"*
 
-For each origin message, Pulpit walks the set of in-target channels that forwarded it (the `forwarded_from = origin.channel, fwd_from_channel_post = origin.telegram_id` join), looks up each forwarder's community label from the chosen partition (default `LEIDEN_DIRECTED`, matching the [community bridging measure](network-measures.md#community-bridging) default), and counts the distinct labels. A post that ricochets inside its origin community scores `C = 1`; a post picked up across the religious-conservative, economic-nationalist, *and* libertarian clusters scores `C = 3`.
+For each origin message, Pulpit walks the set of in-target channels that forwarded it (the `forwarded_from = origin.channel, fwd_from_channel_post = origin.telegram_id` join), looks up each forwarder's community label from the chosen partition (default `LEIDEN_DIRECTED`, matching the [within-module role measure](network-measures.md#within-module-role) default), and counts the distinct labels. A post that ricochets inside its origin community scores `C = 1`; a post picked up across the religious-conservative, economic-nationalist, *and* libertarian clusters scores `C = 3`.
 
 **Reference (adapted):** Goel, S., Anderson, A., Hofman, J. & Watts, D. J. (2016) "The structural virality of online diffusion." *Management Science* 62(1). [doi:10.1287/mnsc.2015.2158](https://doi.org/10.1287/mnsc.2015.2158)
 

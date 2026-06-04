@@ -90,9 +90,8 @@ def write_table_xlsx(
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    # Categorical role label (Module role / Brokerage role) rides alongside its numeric measure
-    # (within_module_z* / brokerage_total*) — one column per role-measure instance, carrying the
-    # instance's parameter annotation. The brokerage role *counts* stay in the CSV/GEXF, not here.
+    # Categorical role label (Module role) rides alongside its numeric measure (within_module_z*)
+    # — one column per role-measure instance, carrying the instance's parameter annotation.
     role_label_cols: list[tuple[str, str]] = []
     for key, label in measures_labels:
         comp = role_companions(key)

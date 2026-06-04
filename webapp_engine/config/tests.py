@@ -108,7 +108,7 @@ class BaselineRoundTripTests(TestCase):
                 "structural_analysis",
                 {
                     "outputs": {"graph": True, "html": True},
-                    "measures": {"selected": ["PAGERANK", "BETWEENNESS"]},
+                    "measures": {"selected": ["PAGERANK", "OUTDEGCENTRALITY"]},
                     "robustness": {"strategies": ["pagerank"]},
                 },
             )
@@ -117,7 +117,7 @@ class BaselineRoundTripTests(TestCase):
             self.assertEqual(ns.outputs.graph, True)
             self.assertEqual(ns.outputs.html, True)
             self.assertEqual(ns.outputs.xlsx, False)
-            self.assertEqual(ns.measures.selected, ["PAGERANK", "BETWEENNESS"])
+            self.assertEqual(ns.measures.selected, ["PAGERANK", "OUTDEGCENTRALITY"])
             self.assertEqual(ns.robustness.strategies, ["pagerank"])
             # `communities.strategies` defaults to [] (factory-empty no-op);
             # not provided in the write_baseline payload above, so still [].
@@ -259,36 +259,50 @@ class LegacyTopLevelHeaderTests(TestCase):
             self.assertEqual(ns.graph.community_palette, "ORGANIZATION")
 
 
-class LegacyBridgingBasisMigrationTests(TestCase):
-    """v0.24→v0.25: the shared measures.bridging_basis is folded into the BRIDGING token and
-    seeds the robustness panel's own basis; the old key is dropped."""
+class DroppedMeasuresMigrationTests(TestCase):
+    """v0.25→v0.26: removed measures/attack strategies are stripped on load, and the defunct
+    measures.bridging_basis / robustness.bridging_basis / computation.spreading_runs keys are dropped."""
 
-    def test_legacy_basis_folds_into_token_and_robustness(self) -> None:
+    def test_dropped_measure_tokens_and_basis_keys_removed(self) -> None:
         with _RedirectConfigPaths() as tmp:
             (tmp / ".operations-structural").write_text(
                 "[measures]\n"
-                'selected = ["PAGERANK", "BRIDGING"]\n'
+                'selected = ["PAGERANK", "BRIDGING(basis=LEIDEN)", "BETWEENNESS", "MODULEROLE"]\n'
                 'bridging_basis = "LEIDEN"\n'
                 "[robustness]\n"
-                'strategies = ["bridging"]\n'
+                'strategies = ["random", "betweenness", "bridging(leiden)", "pagerank"]\n'
+                'bridging_basis = "LEIDEN"\n'
+                "[computation]\n"
+                "spreading_runs = 200\n"
             )
             ns = load_structural_settings(hermetic=False)
-            self.assertEqual(ns.measures.selected, ["PAGERANK", "BRIDGING(basis=LEIDEN)"])
-            self.assertEqual(ns.robustness.bridging_basis, "LEIDEN")
+            self.assertEqual(ns.measures.selected, ["PAGERANK", "MODULEROLE"])
+            self.assertEqual(ns.robustness.strategies, ["random", "pagerank"])
             self.assertFalse(hasattr(ns.measures, "bridging_basis"))
+            self.assertFalse(hasattr(ns.robustness, "bridging_basis"))
+            self.assertFalse(hasattr(ns.computation, "spreading_runs"))
 
-    def test_new_file_with_per_instance_token_is_untouched(self) -> None:
+    def test_dropped_community_strategies_removed(self) -> None:
         with _RedirectConfigPaths() as tmp:
             (tmp / ".operations-structural").write_text(
-                '[measures]\nselected = ["BRIDGING(basis=LEIDEN_DIRECTED)", "SPREADING(runs=2000)"]\n'
+                '[communities]\nstrategies = ["LEIDEN", "INFOMAP", "MCL(inflation=3.0)", "KCORE"]\n'
             )
             ns = load_structural_settings(hermetic=False)
-            self.assertEqual(ns.measures.selected, ["BRIDGING(basis=LEIDEN_DIRECTED)", "SPREADING(runs=2000)"])
+            self.assertEqual(ns.communities.strategies, ["LEIDEN", "KCORE"])
+
+    def test_current_file_with_surviving_tokens_is_untouched(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[measures]\nselected = ["MODULEROLE(basis=LEIDEN_DIRECTED)", "DIFFUSIONLAG(window=60)"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.measures.selected, ["MODULEROLE(basis=LEIDEN_DIRECTED)", "DIFFUSIONLAG(window=60)"])
 
 
 class LegacyCommunityParamsMigrationTests(TestCase):
-    """v0.24→v0.25: the fixed LEIDEN_CPM_COARSE/FINE presets and the [computation] CPM/MCL keys fold
-    into per-instance LEIDEN_CPM(resolution=…) / MCL(inflation=…) tokens; the old keys are dropped."""
+    """v0.24→v0.25: the fixed LEIDEN_CPM_COARSE/FINE presets and the [computation] CPM key fold
+    into per-instance LEIDEN_CPM(resolution=…) tokens; the old keys (including the dropped
+    mcl_inflation) are discarded, and a bare MCL token is stripped as a removed strategy."""
 
     def test_legacy_presets_fold_into_tokens(self) -> None:
         with _RedirectConfigPaths() as tmp:
@@ -303,7 +317,7 @@ class LegacyCommunityParamsMigrationTests(TestCase):
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(
                 ns.communities.strategies,
-                ["ORGANIZATION", "LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)", "MCL(inflation=3.0)"],
+                ["ORGANIZATION", "LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"],
             )
             self.assertFalse(hasattr(ns.computation, "leiden_coarse_resolution"))
             self.assertFalse(hasattr(ns.computation, "mcl_inflation"))

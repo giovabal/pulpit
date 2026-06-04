@@ -152,7 +152,7 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 ## `[graph]` — palette and base options
 
-Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (citing→cited, citation convention). The previous `graph.reversed_edges` toggle has been removed; SIR spreading and trophic level reverse the graph internally to model content flow, every other measure uses the as-built citation orientation. A leftover `reversed_edges = …` line in an existing `.operations-structural` file is silently ignored.
+Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (citing→cited, citation convention). The previous `graph.reversed_edges` toggle has been removed; every measure uses the as-built citation orientation. A leftover `reversed_edges = …` line in an existing `.operations-structural` file is silently ignored.
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
@@ -195,7 +195,6 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | :--- | :---------- | ---------------: |
 | `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. Empty `""` disables FA2. | `""` |
 | `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables. `0` keeps every community. | `0` |
-| `computation.spreading_runs` | Monte Carlo SIR simulations per node for `SPREADING` | `200` |
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
 
 ## `[measures]`
@@ -203,7 +202,6 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `measures.selected` | Measures to compute. See [Network measures](network-measures.md) for the catalogue. Use `["ALL"]` to enable every measure. | `[]` |
-| `measures.bridging_basis` | Community partition driving the Community Bridging measure (`BRIDGING`; participation across neighbour communities) and the `bridging` robustness strategy. Does not affect Hwang's Bridging Centrality (`BRIDGINGCENTRALITY`), which is degree-based and partition-free. Empty → uses `LEIDEN_DIRECTED`. Must be in `communities.strategies` and cannot be `ORGANIZATION`; otherwise Save/Run is rejected with HTTP 400. | `""` |
 
 ## `[communities]`
 
@@ -236,7 +234,7 @@ For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` b
 | `PARTIAL_MESSAGES` | `n(X→Y) / total(X)` | share of X's whole output that cites Y — the right denominator for diffusion / share-of-attention questions | Opsahl, Agneessens & Skvoretz 2010 (ego-normalised tie strength) |
 | `PARTIAL_REFERENCES` (default) | `n(X→Y) / citing(X)` | share of X's *citing decisions* that pick Y — original-content posts don't dilute the denominator, matching Brin-Page's random-surfer reading (a surfer follows links, never just "stays on the page") | Closest published analogue: engagement-rate normalisation in Twitter influence studies (Cha et al. 2010, "The million follower fallacy" *ICWSM*; Bakshy et al. 2011, "Everyone's an influencer" *WSDM*) |
 
-**Practical note — PageRank is invariant across `TOTAL`, `PARTIAL_MESSAGES`, and `PARTIAL_REFERENCES`.** NetworkX's `pagerank` row-normalises edge weights internally (via `nx.stochastic_graph`), and those three strategies differ only by a per-row constant in the numerator — they collapse to the same stochastic transition matrix after normalisation. `NONE` is the only strategy that materially changes the PageRank ranking (it flattens each row to a uniform out-distribution). The choice *does* affect every other weight-sensitive measure (HITS, betweenness/harmonic through the `1/weight` proximity projection, Burt's constraint through the row-normalised mutual weight, Leiden modularity, SIR spreading, trophic level), so the strategy still matters end-to-end — just not for PageRank.
+**Practical note — PageRank is invariant across `TOTAL`, `PARTIAL_MESSAGES`, and `PARTIAL_REFERENCES`.** NetworkX's `pagerank` row-normalises edge weights internally (via `nx.stochastic_graph`), and those three strategies differ only by a per-row constant in the numerator — they collapse to the same stochastic transition matrix after normalisation. `NONE` is the only strategy that materially changes the PageRank ranking (it flattens each row to a uniform out-distribution). The choice *does* affect every other weight-sensitive measure (HITS, Burt's constraint through the row-normalised mutual weight, Leiden modularity), so the strategy still matters end-to-end — just not for PageRank.
 
 ## `[scope]`
 
@@ -265,7 +263,7 @@ There is no `robustness.enabled` knob — robustness analysis runs iff `robustne
 | `robustness.alpha` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
 | `robustness.runs` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
 | `robustness.null` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores) | `20` |
-| `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`, `harmonic`, `betweenness`, `bridging[(<community-strategy>)]`, `spreading`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`. Use `["ALL"]` for every strategy. Bridging defaults to `LEIDEN_DIRECTED` as the community basis (directional brokerage); override via `measures.bridging_basis`. | `[]` |
+| `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`. Use `["ALL"]` for every strategy. | `[]` |
 | `robustness.seed` | Single seed driving every stochastic component of the robustness analysis | `42` |
 | `robustness.sample` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
 

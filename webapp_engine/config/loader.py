@@ -99,39 +99,79 @@ def _migrate_legacy_keys(parsed: dict) -> dict:
     return parsed
 
 
-def _migrate_bridging_basis(parsed: dict) -> dict:
-    """v0.24→v0.25: the single shared ``measures.bridging_basis`` became per-instance.
+# Measure tokens and robustness attack strategies removed in v0.26 (the path/flow/brokerage
+# family). An old config may still name them in ``measures.selected`` / ``robustness.strategies``
+# or carry the now-defunct ``*.bridging_basis`` / ``computation.spreading_runs`` keys.
+_DROPPED_MEASURE_TOKENS: frozenset[str] = frozenset(
+    {
+        "BETWEENNESS",
+        "HARMONICCENTRALITY",
+        "CORENESS",
+        "COLLECTIVEINFLUENCE",
+        "TROPHICLEVEL",
+        "BROKERAGEROLES",
+        "SPREADING",
+        "BRIDGINGCENTRALITY",
+        "BRIDGING",
+    }
+)
+_DROPPED_ATTACK_STRATEGIES: frozenset[str] = frozenset(
+    {"harmonic", "betweenness", "betweenness_dyn", "bridging", "spreading"}
+)
+# Flow / random-walk community strategies removed in v0.26 (same one-degree rationale as the
+# measures). An old config may still name them in ``communities.strategies``.
+_DROPPED_COMMUNITY_STRATEGIES: frozenset[str] = frozenset({"INFOMAP", "INFOMAP_MEMORY", "MCL", "WALKTRAP", "STRONGCC"})
 
-    A measure's community basis now travels inside its token (``BRIDGING(basis=LEIDEN_DIRECTED)``),
-    and the robustness panel carries its own ``robustness.bridging_basis``. Fold a legacy basis into
-    any bare ``BRIDGING`` token in ``measures.selected`` (preserving the analyst's choice), seed the
-    new robustness basis from the same value (they used to share one field), then drop the old key.
+
+def _token_base(token: object) -> str:
+    """The token name with any ``(params)`` suffix stripped (e.g. ``SPREADING(runs=2000)`` → ``SPREADING``)."""
+    return str(token).strip().split("(", 1)[0].strip()
+
+
+def _migrate_dropped_measures(parsed: dict) -> dict:
+    """v0.25→v0.26: drop the removed path/flow/brokerage measures, attack strategies, and
+    flow/random-walk community strategies.
+
+    Strips the removed measure tokens from ``measures.selected``, the removed attack strategies
+    from ``robustness.strategies``, and the removed community strategies from
+    ``communities.strategies`` (all honouring an optional ``(params)`` suffix), and deletes the
+    now-defunct ``measures.bridging_basis`` / ``robustness.bridging_basis`` /
+    ``computation.spreading_runs`` keys. Idempotent: a current config has nothing to strip.
     """
     measures = parsed.get("measures")
-    if not isinstance(measures, dict) or "bridging_basis" not in measures:
-        return parsed
-    basis = str(measures.get("bridging_basis") or "").strip().upper()
-    if basis:
+    if isinstance(measures, dict):
+        measures.pop("bridging_basis", None)
         selected = measures.get("selected")
         if isinstance(selected, list):
-            measures["selected"] = [
-                (f"BRIDGING(basis={basis})" if str(token).strip().upper() == "BRIDGING" else token)
-                for token in selected
+            measures["selected"] = [t for t in selected if _token_base(t).upper() not in _DROPPED_MEASURE_TOKENS]
+    robustness = parsed.get("robustness")
+    if isinstance(robustness, dict):
+        robustness.pop("bridging_basis", None)
+        strategies = robustness.get("strategies")
+        if isinstance(strategies, list):
+            robustness["strategies"] = [
+                s for s in strategies if _token_base(s).lower() not in _DROPPED_ATTACK_STRATEGIES
             ]
-        robustness = parsed.setdefault("robustness", {})
-        if isinstance(robustness, dict):
-            robustness.setdefault("bridging_basis", basis)
-    del measures["bridging_basis"]
+    communities = parsed.get("communities")
+    if isinstance(communities, dict):
+        strategies = communities.get("strategies")
+        if isinstance(strategies, list):
+            communities["strategies"] = [
+                s for s in strategies if _token_base(s).upper() not in _DROPPED_COMMUNITY_STRATEGIES
+            ]
+    computation = parsed.get("computation")
+    if isinstance(computation, dict):
+        computation.pop("spreading_runs", None)
     return parsed
 
 
 def _migrate_community_params(parsed: dict) -> dict:
     """v0.24→v0.25: the fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets collapsed into one
-    parameterised LEIDEN_CPM, and CPM resolution / MCL inflation moved from ``[computation]`` into the
-    per-instance strategy tokens. Convert an old config in place: each preset becomes
-    ``LEIDEN_CPM(resolution=<its γ>)`` and a bare ``MCL`` picks up ``MCL(inflation=<computation γ>)``;
-    the now-defunct ``[computation]`` keys are dropped. Gated on the presence of those keys so a
-    current config is left untouched (idempotent).
+    parameterised LEIDEN_CPM, and CPM resolution moved from ``[computation]`` into the per-instance
+    strategy tokens. Convert an old config in place: each preset becomes ``LEIDEN_CPM(resolution=<its
+    γ>)``; the now-defunct ``[computation]`` keys are dropped (MCL was removed in v0.26, so its old
+    ``mcl_inflation`` key is just discarded). Gated on the presence of those keys so a current config
+    is left untouched (idempotent).
     """
     communities = parsed.get("communities")
     computation = parsed.get("computation")
@@ -151,8 +191,6 @@ def _migrate_community_params(parsed: dict) -> dict:
                 converted.append(f"LEIDEN_CPM(resolution={coarse})" if coarse is not None else "LEIDEN_CPM")
             elif name == "LEIDEN_CPM_FINE":
                 converted.append(f"LEIDEN_CPM(resolution={fine})" if fine is not None else "LEIDEN_CPM")
-            elif name == "MCL" and inflation is not None:
-                converted.append(f"MCL(inflation={inflation})")
             else:
                 converted.append(token)
         communities["strategies"] = converted
@@ -178,7 +216,7 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
         return _to_namespace(defaults)
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
-    _migrate_bridging_basis(parsed)
+    _migrate_dropped_measures(parsed)
     _migrate_community_params(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
@@ -194,7 +232,7 @@ def _load_payload(path: Path, defaults: dict) -> dict | None:
         return None
     _strip_header(parsed)
     _migrate_legacy_keys(parsed)
-    _migrate_bridging_basis(parsed)
+    _migrate_dropped_measures(parsed)
     _migrate_community_params(parsed)
     return _deep_merge(defaults, parsed)
 

@@ -173,7 +173,7 @@ You can select multiple strategies at once; the map lets you switch between them
 
 | Option | What it does |
 | :----- | :----------- |
-| **Measures** | Which influence scores to compute for each channel. The default selection is restricted to the measures that stay valid under Pulpit's one-degree amplification model; see [Network measures](network-measures.md), especially [Interpretation guardrails](network-measures.md#interpretation-guardrails-the-one-degree-assumption), for what each one means and which to avoid. |
+| **Measures** | Which influence scores to compute for each channel. See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
 | **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
@@ -199,7 +199,7 @@ Go to **Manage → Event types** to define categories like *Election* or *Policy
 
 ### Robustness: resistance to node removal
 
-Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; another seven strategies are available including harmonic, bridging, spreading efficiency, and dynamic (re-rank-after-removal) variants. For each selected strategy Pulpit:
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank`; dynamic (re-rank-after-removal) variants are also available. For each selected strategy Pulpit:
 
 - optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
 - records the residual-size curves `S(q)` for WCC, SCC, and directed reachability,
@@ -270,13 +270,12 @@ python manage.py structural_analysis --graph-2d --html --xlsx
 python manage.py structural_analysis --graph-2d --graph-3d --html --xlsx
 python manage.py structural_analysis --gexf --graphml
 python manage.py structural_analysis --csv
-python manage.py structural_analysis --measures PAGERANK,BETWEENNESS
+python manage.py structural_analysis --measures PAGERANK,AMPLIFICATION
 python manage.py structural_analysis --measures ALL
 # Parameterised measures take keyword args in parens and may repeat with different params
 # (each combination produces its own parameter-suffixed output column):
-python manage.py structural_analysis --measures "SPREADING(runs=2000),DIFFUSIONLAG(window=7)"
-python manage.py structural_analysis --measures "SPREADING(runs=200),SPREADING(runs=2000)"   # same measure twice
-python manage.py structural_analysis --measures "BRIDGING(basis=LEIDEN_DIRECTED)" --community-strategies LEIDEN_DIRECTED
+python manage.py structural_analysis --measures "DIFFUSIONLAG(window=7),DIFFUSIONLAG(window=30)"   # same measure twice
+python manage.py structural_analysis --measures "MODULEROLE(basis=LEIDEN_DIRECTED)" --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # bare token inherits the global default; 0 disables
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --community-strategies ALL
@@ -290,8 +289,7 @@ python manage.py structural_analysis --robustness --html --xlsx               # 
 python manage.py structural_analysis --robustness --robustness-alpha 0        # skip disparity filter, attack the full graph
 python manage.py structural_analysis --robustness --robustness-null 0         # observed R only, no null model (no z-scores)
 python manage.py structural_analysis --robustness --robustness-strategies ALL          # every available strategy (including dynamic)
-python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging,harmonic,spreading   # custom subset
-python manage.py structural_analysis --robustness --robustness-strategies pagerank,bridging\(leiden\)  # explicit bridging basis (escape parens in bash)
+python manage.py structural_analysis --robustness --robustness-strategies random,pagerank,in_strength   # custom subset
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 
 # Interesting messages — structural reach layer (hot per-channel z-scores are always on)

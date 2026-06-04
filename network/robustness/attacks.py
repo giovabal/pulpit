@@ -16,10 +16,6 @@ strategies whose low values flag the critical nodes.
 
 A single registry — :data:`STRATEGY_SPECS` — drives the available
 strategies, their human labels, score functions, and sort direction.
-``bridging`` is the one parameterised strategy: it accepts an optional
-community basis as ``bridging(<strategy>)`` (case-insensitive, defaults to
-``leiden_directed``); the named strategy must also be present in the
-runner's partitions dict.
 
 References:
     Albert, R., Jeong, H. & Barabási, A.-L. (2000). Error and attack
@@ -30,15 +26,9 @@ References:
         https://doi.org/10.1103/PhysRevE.65.056109
 """
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
-
-from network.measures import compute_betweenness
-from network.measures._base import compute_neighbour_community_participation
-from network.measures._centrality import proximity_distances
-from network.measures._spreading import _run_sir
 
 import networkx as nx
 import numpy as np
@@ -86,68 +76,6 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
         return _in_strength(g)
 
 
-def _harmonic(g: nx.DiGraph) -> dict[Any, float]:
-    # Weighted over distance = 1/weight (Opsahl 2010), matching the harmonic measure.
-    n = g.number_of_nodes()
-    norm = (n - 1) if n > 1 else 1
-    gd = proximity_distances(g)
-    return {nid: v / norm for nid, v in nx.harmonic_centrality(gd, distance="distance").items()}
-
-
-_BRIDGING_RE = re.compile(r"^bridging(?:\((\w+)\))?$", re.IGNORECASE)
-
-
-def _bridging_with_partition(g: nx.DiGraph, partition: dict[Any, Any]) -> dict[Any, float]:
-    """Community bridging = betweenness × participation coefficient of the
-    community distribution among the node's weighted neighbours.
-
-    This is the community-participation brokerage measure, *not* the Bridging
-    Centrality of Hwang et al. (2008).  Both pieces come from shared helpers —
-    ``compute_betweenness`` and ``compute_neighbour_community_participation`` — so
-    the formula stays in lock-step with
-    :func:`network.measures._centrality.apply_community_bridging`.
-    """
-    betweenness = compute_betweenness(g)
-    participation = compute_neighbour_community_participation(g, partition)
-    return {node: betweenness.get(node, 0.0) * participation.get(node, 0.0) for node in g.nodes()}
-
-
-def _spreading_scores(g: nx.DiGraph, *, runs: int = 200, rng: np.random.Generator | None = None) -> dict[Any, float]:
-    """Per-node SIR spreading efficiency — mean fraction infected when each
-    node seeds the cascade.  Reuses :func:`network.measures._spreading._run_sir`.
-
-    The input graph carries edges in the citation orientation (amplifier→source),
-    so the adjacency is built from the *reversed* graph: SIR propagates along
-    out-edges, and content diffusion flows source→amplifier (matching
-    :func:`network.measures._spreading.apply_spreading_efficiency`).
-
-    Cost: O(runs × N × mean outbreak size) per call.  Used as an attack
-    strategy, this runs once per ranking computation — heavy but feasible
-    on moderately-sized backbones.
-    """
-    if rng is None:
-        rng = np.random.default_rng(42)
-    n = g.number_of_nodes()
-    if n <= 1:
-        return dict.fromkeys(g.nodes(), 0.0)
-    # Reverse to content-flow direction (see docstring). Transmission probability
-    # = weight / max_weight (scale-independent; the raw weight is rescaled to max
-    # 10 by build_graph, which would saturate min(w, 1)).
-    flow_g = g.reverse(copy=False)
-    edge_weights = [d.get("weight", 1.0) for _, _, d in flow_g.edges(data=True)]
-    max_weight = max(edge_weights) if edge_weights else 1.0
-    adj: dict[Any, list[tuple[Any, float]]] = {
-        nid: [(s, min(d.get("weight", 1.0) / max_weight, 1.0)) for s, d in flow_g[nid].items()]
-        for nid in flow_g.nodes()
-    }
-    norm = n - 1
-    scores: dict[Any, float] = {}
-    for nid in flow_g.nodes():
-        total = sum(_run_sir(adj, nid, rng) for _ in range(runs))
-        scores[nid] = (total / runs - 1) / norm
-    return scores
-
-
 # ── Registry ────────────────────────────────────────────────────────────────
 
 
@@ -159,27 +87,13 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "out_strength": StrategySpec("Out-strength", _out_strength),
     # Prestige
     "pagerank": StrategySpec("PageRank", _safe_pagerank),
-    # Reach
-    "harmonic": StrategySpec("Harmonic centrality", _harmonic),
-    # Brokerage
-    "betweenness": StrategySpec("Betweenness", compute_betweenness),
-    # bridging is parameterised; the "bridging" key here is a placeholder for
-    # the registry (label / kind) — the score function is invoked separately
-    # via _bridging_with_partition because it needs the chosen partition.  This
-    # is community bridging (Guimerà-Amaral participation), not Hwang's Bridging
-    # Centrality, which has no robustness-attack counterpart.
-    "bridging": StrategySpec("Community bridging", None),
-    # Dynamical — score_fn is None: ``removal_order`` special-cases "spreading"
-    # so it can thread the shared rng into the (stochastic) SIR scorer.
-    "spreading": StrategySpec("Spreading efficiency (SIR)", None),
     # Dynamic variants
     "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
     "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
     "pagerank_dyn": StrategySpec("PageRank (dyn)", _safe_pagerank, kind="dynamic"),
-    "betweenness_dyn": StrategySpec("Betweenness (dyn)", compute_betweenness, kind="dynamic"),
 }
 
-DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank", "betweenness"]
+DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank"]
 
 # Derived sets so existing imports keep working.
 STATIC_STRATEGIES: frozenset[str] = frozenset(name for name, spec in STRATEGY_SPECS.items() if spec.kind != "dynamic")
@@ -190,37 +104,20 @@ ALL_STRATEGIES: list[str] = list(STRATEGY_SPECS.keys())
 # ── Strategy-name parsing / validation ──────────────────────────────────────
 
 
-def parse_strategy(name: str) -> tuple[str, str | None]:
-    """Normalise a strategy token to ``(canonical_name, bridging_partition_key)``.
+def parse_strategy(name: str) -> str:
+    """Normalise a strategy token to its canonical lowercase name.
 
-    Bare strategy names normalise to lowercase: ``"PageRank"`` → ``("pagerank", None)``.
-    Bridging accepts an optional partition: ``"bridging(LEIDEN)"`` →
-    ``("bridging", "leiden")``; bare ``"bridging"`` →
-    ``("bridging", "leiden_directed")`` (the default basis, since the directed
-    Leiden variant respects citation direction — closer to what a brokerage
-    attack on a directed citation network is asking).
-
-    Raises ``ValueError`` for unknown names.
+    ``"PageRank"`` → ``"pagerank"``.  Raises ``ValueError`` for unknown names.
     """
-    raw = name.strip()
-    m = _BRIDGING_RE.match(raw)
-    if m:
-        return ("bridging", (m.group(1) or "leiden_directed").lower())
-    canonical = raw.lower()
+    canonical = name.strip().lower()
     if canonical not in STRATEGY_SPECS:
-        raise ValueError(
-            f"unknown attack strategy {name!r}; choose from {sorted(STRATEGY_SPECS.keys())} "
-            f"or bridging(<community-strategy>)"
-        )
-    return (canonical, None)
+        raise ValueError(f"unknown attack strategy {name!r}; choose from {sorted(STRATEGY_SPECS.keys())}")
+    return canonical
 
 
-def strategy_label(name: str, partition_key: str | None = None) -> str:
-    """Human-readable label, including the partition basis for bridging."""
-    base = STRATEGY_SPECS[name].label
-    if name == "bridging" and partition_key:
-        return f"{base} ({partition_key})"
-    return base
+def strategy_label(name: str) -> str:
+    """Human-readable label for a strategy."""
+    return STRATEGY_SPECS[name].label
 
 
 # ── Removal order ───────────────────────────────────────────────────────────
@@ -231,24 +128,20 @@ def removal_order(
     strategy: str,
     *,
     rng: np.random.Generator | None = None,
-    partitions: dict[str, dict[Any, Any]] | None = None,
 ) -> list[Any]:
     """Compute the node-removal order for *G* under *strategy*.
 
     See :data:`STRATEGY_SPECS` for the available strategies.  Tie-breaking is
     deterministic (ascending by node ID).  Empty graph returns ``[]``.
 
-    ``rng`` is consulted for ``"random"`` and ``"spreading"`` (the stochastic
-    SIR scorer); all other strategies are deterministic.  ``partitions`` (a dict
-    ``{strategy_name: {node: community_id}}``) is required only for
-    ``"bridging"`` / ``"bridging(...)"``.
+    ``rng`` is consulted only for ``"random"``; all other strategies are
+    deterministic.
 
     Worst-case dynamic complexity (|V| = N, |E| = m):
         ``in_strength_dyn`` / ``out_strength_dyn``   O(N · (N + m))
-        ``pagerank_dyn`` / ``hits_*_dyn``                   O(N · power-iter)
-        ``betweenness_dyn``                                 O(N² · m)
+        ``pagerank_dyn``                             O(N · power-iter)
     """
-    canonical, bridging_key = parse_strategy(strategy)
+    canonical = parse_strategy(strategy)
 
     if G.number_of_nodes() == 0:
         return []
@@ -256,27 +149,11 @@ def removal_order(
     if canonical == "random":
         return _random_order(G, rng)
 
-    if canonical == "bridging":
-        if partitions is None or bridging_key not in partitions:
-            raise ValueError(
-                f"bridging strategy needs partition {bridging_key!r} in --community-strategies; "
-                f"available: {sorted((partitions or {}).keys())}"
-            )
-        scores = _bridging_with_partition(G, partitions[bridging_key])
-        return _sort_by_scores(G, scores, inverse=False)
-
     spec = STRATEGY_SPECS[canonical]
     if spec.kind == "dynamic":
         return _dynamic_order(G, spec)
-    if canonical == "spreading":
-        # The only static scorer that consumes randomness: thread the shared rng
-        # through so the ranking honours the run's seed. Every other static scorer
-        # is deterministic and ignores rng; without an rng the SIR scorer falls
-        # back to its own fixed seed.
-        scores = _spreading_scores(G, rng=rng)
-        return _sort_by_scores(G, scores, inverse=spec.inverse)
     if spec.score_fn is None:
-        raise ValueError(f"strategy {canonical!r} has no score function and isn't a recognised special case")
+        raise ValueError(f"strategy {canonical!r} has no score function")
     scores = spec.score_fn(G)
     return _sort_by_scores(G, scores, inverse=spec.inverse)
 

@@ -428,24 +428,25 @@ class WriteCliCommandViewTests(TestCase):
         self.assertIn("--extra-term 'hello world'", cmd)
         self.assertIn("--extra-term bearbeit", cmd)
 
-    def test_structural_validation_rejects_bad_bridging(self):
-        # The community basis now travels inside the BRIDGING token; ORGANIZATION is excluded.
+    def test_structural_validation_rejects_bad_module_role_basis(self):
+        # The community basis travels inside the MODULEROLE token; a basis that names a
+        # strategy not in community_strategies is rejected.
         resp = self.client.post(
             reverse("operations-write-cli-command", args=["structural_analysis"]),
             data={
-                "measures": ["BRIDGING(basis=ORGANIZATION)"],
-                "community_strategies": ["LEIDEN"],
+                "measures": ["MODULEROLE(basis=LEIDEN)"],
+                "community_strategies": ["LEIDEN_DIRECTED"],
             },
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("BRIDGING basis", resp.json()["error"])
+        self.assertIn("MODULEROLE basis", resp.json()["error"])
 
     def test_structural_accepts_parameterised_strategy_and_family_basis(self):
-        # A repeated parameterised strategy + a BRIDGING basis naming the family validates fine.
+        # A repeated parameterised strategy + a MODULEROLE basis naming the family validates fine.
         resp = self.client.post(
             reverse("operations-write-cli-command", args=["structural_analysis"]),
             data={
-                "measures": ["BRIDGING(basis=LEIDEN_CPM)"],
+                "measures": ["MODULEROLE(basis=LEIDEN_CPM)"],
                 "community_strategies": ["LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"],
             },
         )
@@ -798,11 +799,11 @@ class BuildArgsExportNetworkTests(TestCase):
                 self.assertIn(flag, args)
 
     def test_measures_csv(self):
-        post = FakePost({"measures": ["PAGERANK", "BETWEENNESS"]})
+        post = FakePost({"measures": ["PAGERANK", "OUTDEGCENTRALITY"]})
         args = _build_args("structural_analysis", post)
         idx = args.index("--measures")
         self.assertIn("PAGERANK", args[idx + 1])
-        self.assertIn("BETWEENNESS", args[idx + 1])
+        self.assertIn("OUTDEGCENTRALITY", args[idx + 1])
 
     def test_date_filters(self):
         post = FakePost({"startdate": "2024-01-01", "enddate": "2024-12-31"})
@@ -811,16 +812,16 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertIn("--enddate", args)
 
     def test_numeric_params(self):
-        post = FakePost({"fa2_iterations": "1000", "spreading_runs": "50"})
+        post = FakePost({"fa2_iterations": "1000"})
         args = _build_args("structural_analysis", post)
         self.assertIn("--fa2-iterations", args)
-        self.assertIn("--spreading-runs", args)
 
     def test_community_strategies_csv(self):
-        post = FakePost({"community_strategies": ["LEIDEN", "INFOMAP"]})
+        post = FakePost({"community_strategies": ["LEIDEN", "LEIDEN_DIRECTED"]})
         args = _build_args("structural_analysis", post)
         idx = args.index("--community-strategies")
         self.assertIn("LEIDEN", args[idx + 1])
+        self.assertIn("LEIDEN_DIRECTED", args[idx + 1])
 
     def test_community_strategies_parameterised_tokens_join_in_order(self):
         # The builder posts one token per chip (with its parameters); csv joins them in order,
@@ -830,13 +831,13 @@ class BuildArgsExportNetworkTests(TestCase):
                 "community_strategies": [
                     "LEIDEN_CPM(resolution=0.01)",
                     "LEIDEN_CPM(resolution=0.05)",
-                    "MCL(inflation=3.0)",
+                    "LEIDEN_DIRECTED",
                 ]
             }
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--community-strategies")
-        self.assertEqual(args[idx + 1], "LEIDEN_CPM(resolution=0.01),LEIDEN_CPM(resolution=0.05),MCL(inflation=3.0)")
+        self.assertEqual(args[idx + 1], "LEIDEN_CPM(resolution=0.01),LEIDEN_CPM(resolution=0.05),LEIDEN_DIRECTED")
 
     def test_timeline_step_year(self):
         args = _build_args("structural_analysis", FakePost({"timeline_step": "1"}))
@@ -907,43 +908,25 @@ class BuildArgsStructuralRobustnessTests(TestCase):
             self.assertNotIn(flag, args)
 
     def test_strategy_checkboxes_imply_robustness_and_emit_csv(self) -> None:
-        post = FakePost({"robustness_strategies": ["pagerank", "betweenness_dyn", "harmonic"]})
+        post = FakePost({"robustness_strategies": ["pagerank", "in_strength_dyn", "pagerank_dyn"]})
         args = _build_args("structural_analysis", post)
         self.assertIn("--robustness", args)
         self.assertNotIn("--no-robustness", args)
         self.assertIn("--robustness-strategies", args)
         idx = args.index("--robustness-strategies")
-        self.assertEqual(args[idx + 1], "pagerank,betweenness_dyn,harmonic")
-
-    def test_robustness_bridging_basis_rewrites_to_parenthesised_form(self) -> None:
-        # The robustness "bridging" attack has its own basis dropdown (robustness_bridging_basis).
-        post = FakePost(
-            {
-                "robustness_strategies": ["pagerank", "bridging"],
-                "robustness_bridging_basis": "KCORE",
-            }
-        )
-        args = _build_args("structural_analysis", post)
-        idx = args.index("--robustness-strategies")
-        self.assertEqual(args[idx + 1], "pagerank,bridging(kcore)")
-
-    def test_robustness_bridging_basis_blank_leaves_bare_bridging(self) -> None:
-        # Empty dropdown value means "use the backend default" — emit bare bridging
-        # so the runner picks leiden_directed.
-        post = FakePost({"robustness_strategies": ["bridging"], "robustness_bridging_basis": ""})
-        args = _build_args("structural_analysis", post)
-        idx = args.index("--robustness-strategies")
-        self.assertEqual(args[idx + 1], "bridging")
+        self.assertEqual(args[idx + 1], "pagerank,in_strength_dyn,pagerank_dyn")
 
     def test_measure_tokens_pass_through_verbatim(self) -> None:
         # Each chip already carries its parameters in the token; --measures is a plain CSV join,
         # preserving order and per-instance parameters (a measure may repeat with different params).
         post = FakePost(
-            {"measures": ["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=KCORE)", "SPREADING(runs=500)"]}
+            {"measures": ["PAGERANK", "DIFFUSIONLAG(window=30)", "MODULEROLE(basis=LEIDEN)", "DIFFUSIONLAG(window=60)"]}
         )
         args = _build_args("structural_analysis", post)
         idx = args.index("--measures")
-        self.assertEqual(args[idx + 1], "PAGERANK,SPREADING(runs=2000),BRIDGING(basis=KCORE),SPREADING(runs=500)")
+        self.assertEqual(
+            args[idx + 1], "PAGERANK,DIFFUSIONLAG(window=30),MODULEROLE(basis=LEIDEN),DIFFUSIONLAG(window=60)"
+        )
 
     def test_no_strategies_omits_robustness(self) -> None:
         # Without any strategy ticked, the analysis is explicitly turned off.
@@ -1076,7 +1059,7 @@ class DefaultsViewTests(TestCase):
                     "graph": "on",
                     "html": "on",
                     "fa2_iterations": "3000",
-                    "measures": ["PAGERANK", "SPREADING(runs=500)"],
+                    "measures": ["PAGERANK", "DIFFUSIONLAG(window=60)"],
                     "timeline_step": "on",
                     "robustness_strategies": ["pagerank", "random"],
                 },
@@ -1086,7 +1069,7 @@ class DefaultsViewTests(TestCase):
             self.assertIn("graph = true", content)
             self.assertIn("fa2_iterations = 3000", content)
             # Measure tokens are saved verbatim, including per-instance parameters.
-            self.assertIn('selected = ["PAGERANK", "SPREADING(runs=500)"]', content)
+            self.assertIn('selected = ["PAGERANK", "DIFFUSIONLAG(window=60)"]', content)
             self.assertIn('timeline_step = "year"', content)
             self.assertIn('strategies = ["pagerank", "random"]', content)
             self.assertNotIn("enabled", content.split("[robustness]", 1)[-1].split("[", 1)[0])
@@ -1177,70 +1160,41 @@ class DefaultsViewTests(TestCase):
             self.assertEqual(resp.status_code, 400)
             self.assertIn("Unknown palette", resp.json()["error"])
 
-    def test_save_rejects_bridging_basis_not_in_strategies(self) -> None:
-        # BRIDGING(basis=LEIDEN) is configured but community_strategies doesn't include LEIDEN —
-        # the BRIDGING measure would point at a partition that's never computed.
+    def test_save_rejects_module_role_basis_not_in_strategies(self) -> None:
+        # MODULEROLE(basis=LEIDEN) is configured but community_strategies doesn't include LEIDEN —
+        # the MODULEROLE measure would point at a partition that's never computed.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
-                    "title": "bad-bridging",
-                    "measures": ["BRIDGING(basis=LEIDEN)"],
-                    "community_strategies": ["INFOMAP"],
+                    "title": "bad-basis",
+                    "measures": ["MODULEROLE(basis=LEIDEN)"],
+                    "community_strategies": ["KCORE"],
                 },
             )
             self.assertEqual(resp.status_code, 400)
-            self.assertIn("BRIDGING basis", resp.json()["error"])
+            self.assertIn("MODULEROLE basis", resp.json()["error"])
 
-    def test_save_rejects_default_bridging_basis_without_leiden_directed(self) -> None:
-        # BRIDGING in measures with no explicit basis defaults to LEIDEN_DIRECTED —
-        # that strategy must still be in community_strategies.
+    def test_save_accepts_module_role_when_basis_in_strategies(self) -> None:
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
-                    "title": "implicit-bridging",
-                    "measures": ["BRIDGING"],
-                    "community_strategies": ["INFOMAP"],
-                },
-            )
-            self.assertEqual(resp.status_code, 400)
-            self.assertIn("LEIDEN_DIRECTED", resp.json()["error"])
-
-    def test_save_accepts_bridging_when_basis_in_strategies(self) -> None:
-        with _RedirectConfigPathsForRunner():
-            resp = self.client.post(
-                reverse("operations-defaults", args=["structural_analysis"]),
-                data={
-                    "title": "good-bridging",
-                    "measures": ["BRIDGING(basis=LEIDEN)"],
-                    "community_strategies": ["LEIDEN", "INFOMAP"],
+                    "title": "good-basis",
+                    "measures": ["MODULEROLE(basis=LEIDEN)"],
+                    "community_strategies": ["LEIDEN", "KCORE"],
                 },
             )
             self.assertEqual(resp.status_code, 200)
 
-    def test_save_rejects_bridging_basis_organization(self) -> None:
-        # ORGANIZATION is excluded from the bridging basis — direct POST shouldn't smuggle it in.
-        with _RedirectConfigPathsForRunner():
-            resp = self.client.post(
-                reverse("operations-defaults", args=["structural_analysis"]),
-                data={
-                    "title": "org-basis",
-                    "measures": ["BRIDGING(basis=ORGANIZATION)"],
-                    "community_strategies": ["ORGANIZATION", "LEIDEN"],
-                },
-            )
-            self.assertEqual(resp.status_code, 400)
-            self.assertIn("not a valid community-detection strategy", resp.json()["error"])
-
-    def test_save_rejects_bridging_basis_unknown_strategy(self) -> None:
+    def test_save_rejects_module_role_basis_unknown_strategy(self) -> None:
         # An unknown basis is rejected by the measure-token parser itself.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "bogus-basis",
-                    "measures": ["BRIDGING(basis=NOT_A_REAL_STRATEGY)"],
+                    "measures": ["MODULEROLE(basis=NOT_A_REAL_STRATEGY)"],
                     "community_strategies": ["LEIDEN"],
                 },
             )
@@ -1253,14 +1207,14 @@ class DefaultsViewTests(TestCase):
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
-                    "title": "two-spreads",
-                    "measures": ["SPREADING(runs=200)", "SPREADING(runs=2000)"],
+                    "title": "two-lags",
+                    "measures": ["DIFFUSIONLAG(window=30)", "DIFFUSIONLAG(window=60)"],
                     "community_strategies": ["LEIDEN"],
                 },
             )
             self.assertEqual(resp.status_code, 200)
             content = _saved_file_content(tmp, ".operations-structural")
-            self.assertIn('selected = ["SPREADING(runs=200)", "SPREADING(runs=2000)"]', content)
+            self.assertIn('selected = ["DIFFUSIONLAG(window=30)", "DIFFUSIONLAG(window=60)"]', content)
 
     def test_save_rejects_duplicate_drop_once_measure(self) -> None:
         with _RedirectConfigPathsForRunner():
@@ -1292,7 +1246,7 @@ class DefaultsViewTests(TestCase):
                 data={
                     "title": "ok-consensus",
                     "consensus_matrix": "on",
-                    "community_strategies": ["LEIDEN", "INFOMAP"],
+                    "community_strategies": ["LEIDEN", "LEIDEN_DIRECTED"],
                 },
             )
             self.assertEqual(resp.status_code, 200)

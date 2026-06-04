@@ -2,7 +2,7 @@
 
 Both subsystems let the user request an *ordered* list of items, some of which take tunable
 parameters and may therefore appear *more than once* with different settings — e.g.
-``SPREADING(runs=200)`` alongside ``SPREADING(runs=2000)`` for measures, or
+``DIFFUSIONLAG(window=30)`` alongside ``DIFFUSIONLAG(window=90)`` for measures, or
 ``LEIDEN_CPM(resolution=0.01)`` alongside ``LEIDEN_CPM(resolution=0.05)`` for community
 strategies. Each parameterised instance maps to a distinct, parameter-suffixed output key so two
 instances of the same item never overwrite each other's column / partition.
@@ -12,12 +12,12 @@ parser, and the key canonicaliser. Each subsystem supplies its own registry (``n
 and a thin ``TokenInstance`` subclass exposing a domain-friendly name accessor and a ``spec`` lookup.
 
 Token grammar (keyword args in parentheses; a historical positional form like
-``BRIDGING(LEIDEN_DIRECTED)`` is still accepted, mapping to the i-th declared parameter)::
+``MODULEROLE(LEIDEN_DIRECTED)`` is still accepted, mapping to the i-th declared parameter)::
 
     PAGERANK                       # parameter-free
-    SPREADING(runs=2000)           # keyword
+    DIFFUSIONLAG(window=90)        # keyword
     LEIDEN_CPM(resolution=0.05)    # keyword (float)
-    BRIDGING(LEIDEN)               # legacy positional → basis=LEIDEN
+    MODULEROLE(LEIDEN)             # legacy positional → basis=LEIDEN
 """
 
 import re
@@ -117,7 +117,7 @@ class TokenInstance:
         return [(k, v) for k, v in self.params if v not in (None, "")]
 
     def token(self) -> str:
-        """Round-trip the instance to a CLI/config token, e.g. ``SPREADING(runs=2000)``."""
+        """Round-trip the instance to a CLI/config token, e.g. ``DIFFUSIONLAG(window=90)``."""
         vis = self._visible_params()
         if not vis:
             return self.name
