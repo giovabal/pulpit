@@ -87,6 +87,7 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN_CPM",
     "LABELPROPAGATION",
     "KCORE",
+    "SBM",
 ]
 
 # Dispatch table: (settings key, progress label, apply function name)

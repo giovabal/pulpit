@@ -7,13 +7,14 @@ export var STRATEGY_LABELS = {
     leiden_cpm:       'Leiden CPM',
     labelpropagation: 'Label propagation',
     kcore:            'K-core',
+    sbm:              'Stochastic block model',
 };
 
 // Base keys of the parameterised strategies (longest first), and their param kinds — used to strip a
 // parameter suffix back to the family and to reconstruct a readable annotation. Mirrors
 // network.community.canonical_strategy_key / strategy_display_label.
-var STRATEGY_BASE_KEYS = ['leiden_cpm'];
-var STRATEGY_PARAM_KINDS = { resolution: 'float' };
+var STRATEGY_BASE_KEYS = ['leiden_cpm', 'sbm'];
+var STRATEGY_PARAM_KINDS = { resolution: 'float', mode: 'enum' };
 
 export function canonical_strategy_key(key) {
     var k = String(key).toLowerCase();

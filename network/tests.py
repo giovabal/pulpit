@@ -494,6 +494,70 @@ class StrategyParserTests(TestCase):
 
         self.assertEqual(set(measures.ALL_STRATEGIES), set(VALID_STRATEGIES))
 
+    def test_sbm_modes_and_keys(self) -> None:
+        # Bare SBM inherits the NESTED default; both modes round-trip to distinct suffixed keys.
+        insts = parse_strategies(["SBM", "SBM(mode=FLAT)"])
+        self.assertEqual([i.key for i in insts], ["sbm_mode_nested", "sbm_mode_flat"])
+        self.assertEqual([i.token() for i in insts], ["SBM(mode=NESTED)", "SBM(mode=FLAT)"])
+
+    def test_sbm_rejects_bad_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["SBM(mode=GIANT)"])
+
+    def test_sbm_canonical_and_label(self) -> None:
+        self.assertEqual(canonical_strategy_key("sbm_mode_nested"), "sbm")
+        self.assertEqual(strategy_display_label("sbm_mode_flat"), "Stochastic block model (mode=flat)")
+
+    def test_sbm_without_graph_tool_raises_value_error(self) -> None:
+        # When graph-tool is absent, detect() surfaces a clear ValueError (caught as CommandError upstream).
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is not None:
+            self.skipTest("graph-tool installed — error path not exercised")
+        from network.community import detect
+
+        import networkx as nx
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b")
+        graph.add_edge("c", "b")
+        with self.assertRaisesRegex(ValueError, "graph-tool"):
+            detect(parse_strategies(["SBM"])[0], "vaporwave", graph, {})
+
+
+class DetectSbmTests(TestCase):
+    """Live SBM detector tests — skipped unless graph-tool is installed (conda/apt, not pip)."""
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        import networkx as nx
+
+        # Two clear blocks {a,b,c} and {d,e,f}, densely citing within, sparsely across.
+        self.graph = nx.DiGraph()
+        within = [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d")]
+        for s, t in within:
+            self.graph.add_edge(s, t, weight=1.0)
+        self.graph.add_edge("c", "d", weight=1.0)  # single bridge
+
+    def test_returns_partition_over_all_nodes(self) -> None:
+        from network.community import detect_sbm
+
+        community_map, palette = detect_sbm(self.graph, "vaporwave", "FLAT")
+        self.assertEqual(set(community_map), set(self.graph.nodes()))
+        self.assertTrue(all(isinstance(v, int) for v in community_map.values()))
+        self.assertEqual(set(community_map.values()), set(palette))
+
+    def test_modes_are_deterministic(self) -> None:
+        from network.community import detect_sbm
+
+        for mode in ("FLAT", "NESTED"):
+            first, _ = detect_sbm(self.graph, "vaporwave", mode)
+            second, _ = detect_sbm(self.graph, "vaporwave", mode)
+            self.assertEqual(first, second, f"{mode} partition not reproducible under fixed seed")
+
 
 # ---------------------------------------------------------------------------
 # graph_builder.py — build_graph

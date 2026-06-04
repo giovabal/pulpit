@@ -695,6 +695,8 @@
             </div>
             {# Option list for the per-instance community-basis select, cloned by the builder JS. #}
             <template id="tpl-mbasis-role"><option value="">(auto)</option>{% for key, label in all_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</template>
+            {# Option list for the SBM "mode" select (nested vs flat), cloned by the strategy builder. #}
+            <template id="tpl-sbm-mode"><option value="NESTED">Nested (hierarchical)</option><option value="FLAT">Flat</option></template>
             {{ sa_measure_tokens|json_script:"sa-measure-tokens" }}
           </fieldset>
           </div>
@@ -719,6 +721,7 @@
                   <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective — a community is stable when its internal edge density exceeds the resolution γ. γ ≈ 0.01 = fewer, larger communities (the old 'coarse' preset); γ ≈ 0.05 = more, smaller (the old 'fine' preset). Add it more than once for a multi-resolution scan."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Bayesian degree-corrected SBM (Peixoto) via graph-tool — recovers arbitrary block structure (assortative, disassortative, core-periphery, bipartite source/amplifier), not just dense communities. Blocks are citation-role / structural-equivalence classes, not necessarily cohesive groups. Directed + degree-corrected + unweighted. NESTED = better model selection; FLAT = single level. Requires the graph-tool package (conda/apt, not pip)."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode (nested/flat). Can be added once per mode."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                 </div>
               </div>
               <div class="ops-measures-col">
@@ -1476,6 +1479,11 @@ function showToast(msg, type) {
     itemKey: 'strategy',
     actionSelector: '[data-strategy-action]',
     actionKey: 'strategyAction',
+    selectOptions: function (kind) {
+      // SBM (kind 'sbm-mode') is the only strategy with a per-instance enum select.
+      var tpl = kind === 'sbm-mode' ? document.getElementById('tpl-sbm-mode') : null;
+      return tpl ? tpl.innerHTML : '';
+    },
   });
   window.rebuildStrategyBuilder = strategyBuilder.rebuild;
 
