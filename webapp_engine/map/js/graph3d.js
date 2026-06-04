@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale } from './utils.js';
 
 // =============================================================================
 // Constants
@@ -12,6 +15,12 @@ var BG_COLOR           = 0x112233;
 var FADE_COLOR_HEX     = 0x1b2c3d;
 var EDGE_OPACITY       = 0.30;
 var EDGE_DARKEN        = 0.75;   // factor applied to averaged endpoint color
+// Fat-line thickness in CSS pixels for the weighted-edge view. EDGE_WEIGHT_BASE_PX
+// is the uniform width when weights are hidden (or a graph has no weight spread,
+// e.g. the unweighted edge-weight strategy) — kept thin to match the default look.
+var EDGE_WEIGHT_MIN_PX  = 0.6;
+var EDGE_WEIGHT_MAX_PX  = 5.0;
+var EDGE_WEIGHT_BASE_PX = 1.0;
 var CURVE_SEGMENTS     = 10;     // line segments per curved edge
 var CURVATURE          = 0.15;   // control-point offset as fraction of edge length
 var SELF_LOOP_ARM      = 1.0;    // self-loop arm spread as multiple of node radius
@@ -66,6 +75,7 @@ var layout_cache_3d = {};
 var layout_anim_id  = null;
 var _layout_bbox    = null;   // bounding box of the initial FA2 3D layout; used to rescale extra layouts
 var colored_edges   = true;
+var show_edge_weight = false;   // off by default; maps edge weight → line thickness
 var active_theme_3d = 'dark';
 
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
@@ -172,6 +182,8 @@ function on_resize() {
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
     label_renderer.setSize(container.clientWidth, container.clientHeight);
+    // Fat-line thickness is computed in the shader against the viewport size.
+    if (edge_segments) edge_segments.material.resolution.set(container.clientWidth, container.clientHeight);
 }
 
 // =============================================================================
@@ -298,7 +310,7 @@ function build_graph(pos_data, ch_data) {
             vert_cursor++;
         }
 
-        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight });
 
         if (adj_out[e.source]) adj_out[e.source].add(e.target);
         if (adj_in[e.target])  adj_in[e.target].add(e.source);
@@ -306,12 +318,89 @@ function build_graph(pos_data, ch_data) {
 
     // Trim to actual used size (some edges may have been skipped)
     var used = vert_cursor * 3;
-    var geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(positions.subarray(0, used), 3));
-    geom.setAttribute('color',    new THREE.BufferAttribute(colors.subarray(0, used), 3));
-    var mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: EDGE_OPACITY });
-    edge_segments = new THREE.LineSegments(geom, mat);
+    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vert_cursor / 2, EDGE_OPACITY);
     scene.add(edge_segments);
+    apply_edge_widths_3d();
+}
+
+// =============================================================================
+// Fat-line edges (variable thickness)
+// =============================================================================
+// WebGL ignores LineBasicMaterial.linewidth, so variable-width edges use the
+// "fat lines" addon (LineSegments2 + LineMaterial). LineSegmentsGeometry stores
+// positions/colors in interleaved instanced buffers whose flat layout matches
+// the per-vertex Float32Arrays this file already builds, so every in-place
+// color/position update elsewhere keeps the same indexing — it just targets
+// `instanceStart.data` / `instanceColorStart.data` instead of a plain attribute.
+// Per-edge width is carried by an extra `instanceWidth` instanced attribute that
+// a tiny onBeforeCompile patch multiplies into the line half-width.
+
+function _make_edge_material(opacity) {
+    var mat = new LineMaterial({
+        vertexColors: true,
+        transparent:  true,
+        opacity:      opacity,
+        linewidth:    1,        // base; per-instance instanceWidth carries the actual px width
+        worldUnits:   false,    // linewidth is in screen pixels (zoom-independent)
+    });
+    var container = el('canvas-container');
+    // Fat-line width divides by resolution in the shader; fall back to the window
+    // size if the container reports 0 (e.g. built while the tab is backgrounded),
+    // so edges never collapse to a zero-width / NaN line. on_resize keeps it current.
+    var rw = container.clientWidth || window.innerWidth || 1;
+    var rh = container.clientHeight || window.innerHeight || 1;
+    mat.resolution.set(rw, rh);
+    mat.onBeforeCompile = function(shader) {
+        shader.vertexShader = shader.vertexShader
+            .replace(
+                'attribute vec3 instanceStart;',
+                'attribute vec3 instanceStart;\nattribute float instanceWidth;')
+            .replace('offset *= linewidth;', 'offset *= linewidth * instanceWidth;')
+            .replace('float hw = linewidth * 0.5;', 'float hw = linewidth * instanceWidth * 0.5;');
+    };
+    // All edge materials share the identical patch, so they can share one program.
+    mat.customProgramCacheKey = function() { return 'pulpit-edge-width'; };
+    return mat;
+}
+
+// Build the single LineSegments2 carrying every edge. `positions`/`colors` are
+// the trimmed flat [x,y,z,…] / [r,g,b,…] arrays (2 vertices per segment);
+// `n_instances` is the segment count (vert count / 2).
+function _build_edge_object(positions, colors, n_instances, opacity) {
+    var geom = new LineSegmentsGeometry();
+    geom.setPositions(positions);
+    geom.setColors(colors);
+    // Per-segment width; filled by apply_edge_widths_3d() before first paint.
+    var widths = new Float32Array(n_instances);
+    widths.fill(EDGE_WEIGHT_BASE_PX);
+    geom.setAttribute('instanceWidth', new THREE.InstancedBufferAttribute(widths, 1));
+    var obj = new LineSegments2(geom, _make_edge_material(opacity));
+    // Positions are rewritten in place during layout/year animations without
+    // recomputing the bounding sphere; skip culling so edges never blink out.
+    obj.frustumCulled = false;
+    return obj;
+}
+
+// Set each edge's instanceWidth from its weight when the "show edge weight"
+// toggle is on; otherwise a uniform thin base width. One width value per segment
+// (CURVE_SEGMENTS segments per edge, contiguous from vert_start / 2).
+function apply_edge_widths_3d() {
+    if (!edge_segments) return;
+    var wattr = edge_segments.geometry.getAttribute('instanceWidth');
+    if (!wattr) return;
+    var arr = wattr.array;
+    if (!show_edge_weight) {
+        arr.fill(EDGE_WEIGHT_BASE_PX);
+    } else {
+        var weights = edge_list.map(function(e) { return e.weight || 0; });
+        var scale = makeEdgeWidthScale(weights, EDGE_WEIGHT_MIN_PX, EDGE_WEIGHT_MAX_PX, EDGE_WEIGHT_BASE_PX);
+        edge_list.forEach(function(e) {
+            var px = scale(e.weight || 0);
+            var seg0 = e.vert_start / 2;
+            for (var i = 0; i < CURVE_SEGMENTS; i++) arr[seg0 + i] = px;
+        });
+    }
+    wattr.needsUpdate = true;
 }
 
 // =============================================================================
@@ -321,7 +410,8 @@ function build_graph(pos_data, ch_data) {
 function rebuild_edge_colors() {
     if (!edge_segments || !edge_list.length) return;
     var gray = new THREE.Color(0.30, 0.30, 0.30);
-    var arr = edge_segments.geometry.getAttribute('color').array;
+    var colorBuf = edge_segments.geometry.attributes.instanceColorStart.data;
+    var arr = colorBuf.array;
     edge_list.forEach(function(e) {
         var src = nodes_index[e.source];
         var tgt = nodes_index[e.target];
@@ -334,12 +424,13 @@ function rebuild_edge_colors() {
             arr[base + i * 3 + 2] = c.b;
         }
     });
-    edge_segments.geometry.getAttribute('color').needsUpdate = true;
+    colorBuf.needsUpdate = true;
 }
 
 function _rebuild_edge_positions() {
     if (!edge_segments || !edge_list.length) return;
-    var arr = edge_segments.geometry.getAttribute('position').array;
+    var posBuf = edge_segments.geometry.attributes.instanceStart.data;
+    var arr = posBuf.array;
     edge_list.forEach(function(e) {
         var src = nodes_index[e.source], tgt = nodes_index[e.target];
         if (!src || !tgt) return;
@@ -361,7 +452,7 @@ function _rebuild_edge_positions() {
             arr[base+3] = pts[i+1].x; arr[base+4] = pts[i+1].y; arr[base+5] = pts[i+1].z;
         }
     });
-    edge_segments.geometry.getAttribute('position').needsUpdate = true;
+    posBuf.needsUpdate = true;
 }
 
 // =============================================================================
@@ -401,6 +492,7 @@ function update_info_bar() {
     chips.push(THEME_LABELS[active_theme_3d] || active_theme_3d);
     chips.push(LABELS_MODE_LABELS[labels_mode] || labels_mode);
     chips.push(colored_edges ? 'Colored edges' : 'Plain edges');
+    if (show_edge_weight) chips.push('Weighted width');
 
     var html = chips.map(function(t) { return '<span class="info-chip">' + t + '</span>'; }).join('');
     if (current_group) html += '<span class="info-chip info-chip--filter">' + current_group + '</span>';
@@ -584,7 +676,8 @@ function select_node(id) {
     });
     // Dim non-incident edges
     if (edge_segments) {
-        var arr = edge_segments.geometry.getAttribute('color').array;
+        var colorBuf = edge_segments.geometry.attributes.instanceColorStart.data;
+        var arr = colorBuf.array;
         edge_list.forEach(function(e) {
             var incident = ns.has(e.source) && ns.has(e.target);
             var src = nodes_index[e.source], tgt = nodes_index[e.target];
@@ -598,7 +691,7 @@ function select_node(id) {
                 arr[base + i * 3 + 2] = c.b;
             }
         });
-        edge_segments.geometry.getAttribute('color').needsUpdate = true;
+        colorBuf.needsUpdate = true;
     }
     show_node_info(id);
 }
@@ -1139,17 +1232,15 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
             positions[vc*3]=p1.x; positions[vc*3+1]=p1.y; positions[vc*3+2]=p1.z;
             colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
         }
-        edge_list.push({ source: e.source, target: e.target, vert_start: vs });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight });
         adj_out[e.source].add(e.target);
         adj_in[e.target].add(e.source);
     });
     var used = vc * 3;
-    var geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(positions.subarray(0, used), 3));
-    geom.setAttribute('color',    new THREE.BufferAttribute(colors.subarray(0, used), 3));
     var theme_opacity = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).edge_opacity;
-    edge_segments = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: theme_opacity }));
+    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vc / 2, theme_opacity);
     scene.add(edge_segments);
+    apply_edge_widths_3d();
 
     active_layout = 'fa2';
     if (el('layout-select')) el('layout-select').value = 'fa2';
@@ -1352,6 +1443,12 @@ document.addEventListener('DOMContentLoaded', function() {
     el('colored-edges-toggle').addEventListener('change', function() {
         colored_edges = this.checked;
         rebuild_edge_colors();
+        update_info_bar();
+    });
+
+    el('edge-weight-toggle').addEventListener('change', function() {
+        show_edge_weight = this.checked;
+        apply_edge_widths_3d();
         update_info_bar();
     });
 
