@@ -26,6 +26,10 @@ var CURVATURE          = 0.15;   // control-point offset as fraction of edge len
 var SELF_LOOP_ARM      = 1.0;    // self-loop arm spread as multiple of node radius
 var SELF_LOOP_HEIGHT   = 3.5;    // self-loop arc peak as multiple of node radius
 var ZOOM_STEP          = 0.75;
+// Cone arrowheads (one instance per edge), sized relative to the target node radius.
+var ARROW_LEN_FACTOR    = 2.0;   // arrowhead length ÷ target node radius
+var ARROW_RADIUS_FACTOR = 0.85;  // arrowhead base radius ÷ target node radius
+var ARROW_OPACITY       = 0.9;   // arrowheads sit slightly more opaque than edges so direction reads clearly
 var THEMES_3D = {
     dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30 },
     light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40 },
@@ -45,7 +49,8 @@ var BASE_MEASURE_KEYS = { in_deg: true, out_deg: true, fans: true, messages_coun
 var nodes_index      = {};   // id → node record (pos + metadata + mesh ref + orig_color)
 var node_meshes      = [];   // THREE.Mesh list for raycasting
 var edge_segments    = null; // single THREE.LineSegments for all edges
-var edge_list        = [];   // [{source, target, vert_offset}] for color rebuilds
+var arrow_mesh       = null; // single THREE.InstancedMesh of cone arrowheads (one instance per edge)
+var edge_list        = [];   // [{source, target, vert_start, weight, reciprocal}] for color/arrow rebuilds
 var label_objects    = {};   // id → CSS2DObject
 
 var adj_out          = {};   // id → Set of target ids
@@ -76,6 +81,7 @@ var layout_anim_id  = null;
 var _layout_bbox    = null;   // bounding box of the initial FA2 3D layout; used to rescale extra layouts
 var colored_edges   = true;
 var show_edge_weight = false;   // off by default; maps edge weight → line thickness
+var show_edge_arrows = false;   // off by default; draws a cone arrowhead at each edge's target
 var active_theme_3d = 'dark';
 
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
@@ -91,7 +97,20 @@ var scene, camera, renderer, label_renderer, controls;
 var raycaster   = new THREE.Raycaster();
 var pointer     = new THREE.Vector2();
 var sphere_geom = new THREE.SphereGeometry(1, 32, 20);
+// Unit cone pointing +Y (apex at +0.5, base at -0.5); scaled/oriented per edge.
+var cone_geom   = new THREE.ConeGeometry(1, 1, 10);
 var fade_color  = new THREE.Color(FADE_COLOR_HEX);
+
+// Reused scratch objects so per-edge arrow transforms don't allocate in hot loops.
+var _AR_UP   = new THREE.Vector3(0, 1, 0);
+var _ar_sp   = new THREE.Vector3();
+var _ar_tp   = new THREE.Vector3();
+var _ar_dir  = new THREE.Vector3();
+var _ar_pos  = new THREE.Vector3();
+var _ar_q    = new THREE.Quaternion();
+var _ar_scl  = new THREE.Vector3();
+var _ar_zero = new THREE.Matrix4().makeScale(0, 0, 0);
+var _GRAY3   = new THREE.Color(0.30, 0.30, 0.30);
 
 // =============================================================================
 // Helpers
@@ -122,6 +141,28 @@ function curve_control(src_pos, tgt_pos) {
     if (perp.length() < 1e-6) perp.crossVectors(dir, _alt);
     perp.normalize().multiplyScalar(len * CURVATURE);
     return mid.add(perp);
+}
+
+// Control point for an edge: a perpendicular offset (so two-way edges bow to
+// opposite sides and read as two distinct arcs) when reciprocal, else the plain
+// midpoint, which collapses the quadratic Bézier to a straight line for one-way edges.
+function _control_point(src_pos, tgt_pos, reciprocal) {
+    if (reciprocal) return curve_control(src_pos, tgt_pos);
+    return new THREE.Vector3().addVectors(src_pos, tgt_pos).multiplyScalar(0.5);
+}
+
+// Set of "source|target" keys that have a matching "target|source" — i.e. the
+// directed edges that form a two-way connection. Built once per edge array.
+function _reciprocal_set(edges) {
+    var keys = new Set();
+    edges.forEach(function(e) { keys.add(e.source + '|' + e.target); });
+    var recip = new Set();
+    edges.forEach(function(e) {
+        if (e.source !== e.target && keys.has(e.target + '|' + e.source)) {
+            recip.add(e.source + '|' + e.target);
+        }
+    });
+    return recip;
 }
 
 // =============================================================================
@@ -267,12 +308,14 @@ function build_graph(pos_data, ch_data) {
     var positions = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
     var colors    = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
     var vert_cursor = 0;
+    var recip = _reciprocal_set(pos_data.edges);
 
     pos_data.edges.forEach(function(e) {
         var src = nodes_index[e.source];
         var tgt = nodes_index[e.target];
         if (!src || !tgt) return;
 
+        var reciprocal = e.source !== e.target && recip.has(e.source + '|' + e.target);
         var sp, tp, cp;
         if (e.source === e.target) {
             var arm  = src.size * SELF_LOOP_ARM;
@@ -283,7 +326,7 @@ function build_graph(pos_data, ch_data) {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = curve_control(sp, tp);
+            cp = _control_point(sp, tp, reciprocal);
         }
         var curve = new THREE.QuadraticBezierCurve3(sp, cp, tp);
         var pts = curve.getPoints(CURVE_SEGMENTS);   // CURVE_SEGMENTS+1 points
@@ -310,7 +353,7 @@ function build_graph(pos_data, ch_data) {
             vert_cursor++;
         }
 
-        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight, reciprocal: reciprocal });
 
         if (adj_out[e.source]) adj_out[e.source].add(e.target);
         if (adj_in[e.target])  adj_in[e.target].add(e.source);
@@ -321,6 +364,7 @@ function build_graph(pos_data, ch_data) {
     edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vert_cursor / 2, EDGE_OPACITY);
     scene.add(edge_segments);
     apply_edge_widths_3d();
+    _build_arrow_mesh();
 }
 
 // =============================================================================
@@ -404,27 +448,105 @@ function apply_edge_widths_3d() {
 }
 
 // =============================================================================
+// Cone arrowheads (one InstancedMesh instance per edge)
+// =============================================================================
+
+// Compose the world matrix for an edge's arrowhead: a cone whose tip sits on the
+// target node's surface and points along the curve's tangent at the target.
+// Returns false for self-loops / degenerate edges (which get no arrow).
+function _edge_arrow_transform(e, outMatrix) {
+    var src = nodes_index[e.source], tgt = nodes_index[e.target];
+    if (!src || !tgt || e.source === e.target) return false;
+    _ar_sp.set(src.x, src.y, src.z || 0);
+    _ar_tp.set(tgt.x, tgt.y, tgt.z || 0);
+    var cp = _control_point(_ar_sp, _ar_tp, e.reciprocal);
+    _ar_dir.subVectors(_ar_tp, cp);                       // curve tangent at the target end
+    if (_ar_dir.lengthSq() < 1e-12) _ar_dir.subVectors(_ar_tp, _ar_sp);
+    if (_ar_dir.lengthSq() < 1e-12) return false;
+    _ar_dir.normalize();
+    var len = tgt.size * ARROW_LEN_FACTOR;
+    var rad = tgt.size * ARROW_RADIUS_FACTOR;
+    // Cone apex (local +len/2 after scaling) should land on the node surface, i.e.
+    // at tp - dir*radius; so the cone centre sits a further len/2 back along dir.
+    _ar_pos.copy(_ar_tp).addScaledVector(_ar_dir, -(tgt.size + len / 2));
+    _ar_q.setFromUnitVectors(_AR_UP, _ar_dir);
+    _ar_scl.set(rad, len, rad);
+    outMatrix.compose(_ar_pos, _ar_q, _ar_scl);
+    return true;
+}
+
+// (Re)create the arrowhead InstancedMesh for the current edge_list, disposing any
+// previous one. Colours are initialised to the edges' base colours; visibility
+// follows the toggle.
+function _build_arrow_mesh() {
+    if (arrow_mesh) {
+        scene.remove(arrow_mesh);
+        arrow_mesh.dispose();            // frees the per-instance matrix/color buffers
+        arrow_mesh.material.dispose();   // cone_geom is shared — never disposed here
+        arrow_mesh = null;
+    }
+    var n = edge_list.length;
+    if (!n) return;
+    var mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: ARROW_OPACITY });
+    arrow_mesh = new THREE.InstancedMesh(cone_geom, mat, n);
+    arrow_mesh.frustumCulled = false;
+    arrow_mesh.visible = show_edge_arrows;
+    var m = new THREE.Matrix4();
+    for (var i = 0; i < n; i++) {
+        arrow_mesh.setMatrixAt(i, _edge_arrow_transform(edge_list[i], m) ? m : _ar_zero);
+        arrow_mesh.setColorAt(i, _base_edge_color(edge_list[i]));
+    }
+    arrow_mesh.instanceMatrix.needsUpdate = true;
+    if (arrow_mesh.instanceColor) arrow_mesh.instanceColor.needsUpdate = true;
+    scene.add(arrow_mesh);
+}
+
+// Recompute every arrowhead's transform (after node positions move).
+function _update_arrow_matrices() {
+    if (!arrow_mesh) return;
+    var m = new THREE.Matrix4();
+    edge_list.forEach(function(e, i) {
+        arrow_mesh.setMatrixAt(i, _edge_arrow_transform(e, m) ? m : _ar_zero);
+    });
+    arrow_mesh.instanceMatrix.needsUpdate = true;
+}
+
+// =============================================================================
 // Edge color rebuild (called after node color changes)
 // =============================================================================
 
-function rebuild_edge_colors() {
-    if (!edge_segments || !edge_list.length) return;
-    var gray = new THREE.Color(0.30, 0.30, 0.30);
-    var colorBuf = edge_segments.geometry.attributes.instanceColorStart.data;
-    var arr = colorBuf.array;
-    edge_list.forEach(function(e) {
-        var src = nodes_index[e.source];
-        var tgt = nodes_index[e.target];
-        if (!src || !tgt) return;
-        var c = colored_edges ? avg_darken(src.orig_color, tgt.orig_color) : gray;
-        var base = e.vert_start * 3;
-        for (var i = 0; i < CURVE_SEGMENTS * 2; i++) {
-            arr[base + i * 3]     = c.r;
-            arr[base + i * 3 + 1] = c.g;
-            arr[base + i * 3 + 2] = c.b;
+// An edge's colour in the default (unselected) view.
+function _base_edge_color(e) {
+    var src = nodes_index[e.source], tgt = nodes_index[e.target];
+    if (!src || !tgt) return _GRAY3;
+    return colored_edges ? avg_darken(src.orig_color, tgt.orig_color) : _GRAY3;
+}
+
+// Paint every edge (and its arrowhead) with the colour returned by colorOf(e).
+// Centralises the edge colour-buffer write so the arrowheads always match.
+function _paint_edges(colorOf) {
+    var arr = (edge_segments && edge_segments.geometry.attributes.instanceColorStart)
+        ? edge_segments.geometry.attributes.instanceColorStart.data.array
+        : null;
+    edge_list.forEach(function(e, idx) {
+        var c = colorOf(e);
+        if (arr) {
+            var base = e.vert_start * 3;
+            for (var i = 0; i < CURVE_SEGMENTS * 2; i++) {
+                arr[base + i * 3]     = c.r;
+                arr[base + i * 3 + 1] = c.g;
+                arr[base + i * 3 + 2] = c.b;
+            }
         }
+        if (arrow_mesh) arrow_mesh.setColorAt(idx, c);
     });
-    colorBuf.needsUpdate = true;
+    if (arr) edge_segments.geometry.attributes.instanceColorStart.data.needsUpdate = true;
+    if (arrow_mesh && arrow_mesh.instanceColor) arrow_mesh.instanceColor.needsUpdate = true;
+}
+
+function rebuild_edge_colors() {
+    if (!edge_list.length) return;
+    _paint_edges(_base_edge_color);
 }
 
 function _rebuild_edge_positions() {
@@ -443,7 +565,7 @@ function _rebuild_edge_positions() {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = curve_control(sp, tp);
+            cp = _control_point(sp, tp, e.reciprocal);
         }
         var pts = new THREE.QuadraticBezierCurve3(sp, cp, tp).getPoints(CURVE_SEGMENTS);
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
@@ -453,6 +575,7 @@ function _rebuild_edge_positions() {
         }
     });
     posBuf.needsUpdate = true;
+    _update_arrow_matrices();
 }
 
 // =============================================================================
@@ -493,6 +616,7 @@ function update_info_bar() {
     chips.push(LABELS_MODE_LABELS[labels_mode] || labels_mode);
     chips.push(colored_edges ? 'Colored edges' : 'Plain edges');
     if (show_edge_weight) chips.push('Weighted width');
+    if (show_edge_arrows) chips.push('Arrows');
 
     var html = chips.map(function(t) { return '<span class="info-chip">' + t + '</span>'; }).join('');
     if (current_group) html += '<span class="info-chip info-chip--filter">' + current_group + '</span>';
@@ -674,25 +798,12 @@ function select_node(id) {
         var neighbor = ns.has(nid);
         node.mesh.material.color.copy(neighbor ? node.orig_color : fade_color);
     });
-    // Dim non-incident edges
-    if (edge_segments) {
-        var colorBuf = edge_segments.geometry.attributes.instanceColorStart.data;
-        var arr = colorBuf.array;
-        edge_list.forEach(function(e) {
-            var incident = ns.has(e.source) && ns.has(e.target);
-            var src = nodes_index[e.source], tgt = nodes_index[e.target];
-            var c = incident
-                ? avg_darken(src ? src.orig_color : fade_color, tgt ? tgt.orig_color : fade_color)
-                : fade_color;
-            var base = e.vert_start * 3;
-            for (var i = 0; i < CURVE_SEGMENTS * 2; i++) {
-                arr[base + i * 3]     = c.r;
-                arr[base + i * 3 + 1] = c.g;
-                arr[base + i * 3 + 2] = c.b;
-            }
-        });
-        colorBuf.needsUpdate = true;
-    }
+    // Dim non-incident edges (and their arrowheads)
+    _paint_edges(function(e) {
+        if (!ns.has(e.source) || !ns.has(e.target)) return fade_color;
+        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        return avg_darken(src ? src.orig_color : fade_color, tgt ? tgt.orig_color : fade_color);
+    });
     show_node_info(id);
 }
 
@@ -1019,6 +1130,7 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     }
 
     if (edge_segments) edge_segments.visible = false;
+    if (arrow_mesh) arrow_mesh.visible = false;
 
     var new_pos_map = {}, new_ch_map = {};
     new_pos_data.nodes.forEach(function(n) { new_pos_map[n.id] = n; });
@@ -1217,12 +1329,14 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
     var positions = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
     var colors    = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
     var vc = 0;
+    var recip = _reciprocal_set(new_pos_data.edges);
     new_pos_data.edges.forEach(function(e) {
         var src = nodes_index[e.source], tgt = nodes_index[e.target];
         if (!src || !tgt) return;
+        var reciprocal = e.source !== e.target && recip.has(e.source + '|' + e.target);
         var sp  = new THREE.Vector3(src.x, src.y, src.z || 0);
         var tp  = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
-        var pts = new THREE.QuadraticBezierCurve3(sp, curve_control(sp, tp), tp).getPoints(CURVE_SEGMENTS);
+        var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, reciprocal), tp).getPoints(CURVE_SEGMENTS);
         var c   = avg_darken(src.orig_color, tgt.orig_color);
         var vs  = vc;
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
@@ -1232,7 +1346,7 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
             positions[vc*3]=p1.x; positions[vc*3+1]=p1.y; positions[vc*3+2]=p1.z;
             colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
         }
-        edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight, reciprocal: reciprocal });
         adj_out[e.source].add(e.target);
         adj_in[e.target].add(e.source);
     });
@@ -1241,6 +1355,7 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
     edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vc / 2, theme_opacity);
     scene.add(edge_segments);
     apply_edge_widths_3d();
+    _build_arrow_mesh();
 
     active_layout = 'fa2';
     if (el('layout-select')) el('layout-select').value = 'fa2';
@@ -1449,6 +1564,12 @@ document.addEventListener('DOMContentLoaded', function() {
     el('edge-weight-toggle').addEventListener('change', function() {
         show_edge_weight = this.checked;
         apply_edge_widths_3d();
+        update_info_bar();
+    });
+
+    el('edge-arrows-toggle').addEventListener('change', function() {
+        show_edge_arrows = this.checked;
+        if (arrow_mesh) arrow_mesh.visible = show_edge_arrows;
         update_info_bar();
     });
 
