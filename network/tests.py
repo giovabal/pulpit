@@ -3438,10 +3438,11 @@ class ComputeInterestStructuralWindowTests(TestCase):
             community_strategy="LEIDEN_DIRECTED",
             window_days=0,
             window_filter={
-                # Timezone-aware datetimes: a naive date/datetime against the
-                # DateTimeField under USE_TZ=True raises a RuntimeWarning.
-                "date__gte": datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
-                "date__lte": datetime.datetime(2024, 12, 31, tzinfo=datetime.UTC),
+                # Production shape: the ``__date`` transform (see
+                # _date_window_filter). Compares calendar dates, so a bare date
+                # is warning-free under USE_TZ — unlike a plain ``date__gte``.
+                "date__date__gte": datetime.date(2024, 1, 1),
+                "date__date__lte": datetime.date(2024, 12, 31),
             },
         )
         self.assertIn("window 2024-01-01..2024-12-31", windowed["structural_scope"])
@@ -3475,6 +3476,39 @@ class ComputeInterestStructuralWindowTests(TestCase):
         # Override without window labels the hot layer as a custom override.
         self.assertEqual(payload["hot_layer_scope"], "overridden")
         self.assertEqual(payload["forwarder_window_policy"], "forwarder-date")
+
+
+class ScopeLabelTests(TestCase):
+    """_scope_label renders the export window from either ORM filter-key shape."""
+
+    def _label(self, window_filter: Any) -> str:
+        from network.interest_structural import _scope_label
+
+        return _scope_label(window_filter)
+
+    def test_none_and_empty_are_all_time(self) -> None:
+        self.assertEqual(self._label(None), "all-time")
+        self.assertEqual(self._label({}), "all-time")
+
+    def test_production_date_transform_keys(self) -> None:
+        # The shape _date_window_filter actually builds.
+        label = self._label(
+            {"date__date__gte": datetime.date(2024, 1, 1), "date__date__lte": datetime.date(2024, 12, 31)}
+        )
+        self.assertEqual(label, "window 2024-01-01..2024-12-31")
+
+    def test_plain_date_keys_fallback(self) -> None:
+        label = self._label(
+            {"date__gte": datetime.datetime(2024, 3, 1, tzinfo=datetime.UTC), "date__lt": datetime.date(2024, 4, 1)}
+        )
+        self.assertEqual(label, "window 2024-03-01..2024-04-01")
+
+    def test_open_ended_bounds(self) -> None:
+        self.assertEqual(self._label({"date__date__gte": datetime.date(2024, 1, 1)}), "window 2024-01-01..…")
+        self.assertEqual(self._label({"date__date__lte": datetime.date(2024, 12, 31)}), "window …..2024-12-31")
+
+    def test_filter_without_date_keys_is_generic_windowed(self) -> None:
+        self.assertEqual(self._label({"channel_id__in": [1, 2]}), "windowed")
 
 
 class ResolveWindowOrganizationTests(TestCase):
