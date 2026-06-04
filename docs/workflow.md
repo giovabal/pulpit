@@ -278,6 +278,7 @@ python manage.py structural_analysis --measures "DIFFUSIONLAG(window=7),DIFFUSIO
 python manage.py structural_analysis --measures "MODULEROLE(basis=LEIDEN_DIRECTED)" --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # bare token inherits the global default; 0 disables
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
+python manage.py structural_analysis --community-strategies "SBM(mode=NESTED),SBM(mode=FLAT)"   # role-based blocks; needs graph-tool (conda/apt, not pip)
 python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export

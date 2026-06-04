@@ -32,6 +32,7 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN_CPM",
     "LABELPROPAGATION",
     "KCORE",
+    "SBM",
 ]
 COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES) - {"ORGANIZATION"}
 VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
@@ -56,6 +57,7 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN_CPM": "Leiden CPM",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
+    "SBM": "Stochastic block model",
 }
 
 # ── Parameterised community strategies & strategy instances ────────────────────
@@ -71,6 +73,7 @@ StrategyParam = TokenParam
 StrategySpec = TokenSpec
 
 CPM_DEFAULT_RESOLUTION = 0.05
+SBM_DEFAULT_MODE = "NESTED"
 
 PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
     "LEIDEN_CPM": StrategySpec(
@@ -89,6 +92,22 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             ),
         ),
         primary_keys=("leiden_cpm",),
+    ),
+    "SBM": StrategySpec(
+        "SBM",
+        "Stochastic block model",
+        params=(
+            StrategyParam(
+                "mode",
+                "enum",
+                SBM_DEFAULT_MODE,
+                choices=("FLAT", "NESTED"),
+                label="Mode",
+                help="NESTED = nested SBM (Peixoto 2017), partition taken at the finest level — better "
+                "model selection on large graphs. FLAT = single-level SBM. May be added once per mode.",
+            ),
+        ),
+        primary_keys=("sbm",),
     ),
 }
 
@@ -430,6 +449,62 @@ def detect_leiden_cpm(
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
+def detect_sbm(
+    graph: nx.DiGraph, palette_name: str, mode: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
+    """Bayesian degree-corrected stochastic block model (Karrer & Newman 2011; Peixoto 2014, 2017) via graph-tool.
+
+    Fits a **directed, degree-corrected** SBM by minimum description length. Unlike the
+    modularity / CPM detectors — which only find *assortative* communities (dense-within,
+    sparse-between) — the SBM recovers arbitrary block structure: assortative,
+    disassortative, core-periphery and bipartite *source / amplifier* patterns alike.
+    A block is a set of channels that are *stochastically equivalent* — they cite, and are
+    cited by, the rest of the network the same way — i.e. a **citation-role / structural-
+    equivalence class** (Lorrain & White 1971), NOT necessarily a cohesive, mutually-citing
+    community. The block-affinity matrix entry is a one-step, group-to-group *direct citation
+    rate*, never a transmission / flow quantity, so the strategy is consistent with the
+    one-degree attribution model (see docs/community-detection.md).
+
+    Built on the **directed** citation graph (direction preserved → asymmetric block
+    affinities) and **degree-corrected**, so the partition reflects block structure *beyond*
+    the in-degree heterogeneity of the star topology rather than merely re-encoding it.
+    **Unweighted** (binary citation structure): edge weights are not passed, so the partition
+    is invariant to ``--edge-weight-strategy`` — like ``LABELPROPAGATION`` / ``KCORE``.
+
+    ``mode``: ``NESTED`` (default) fits the nested SBM (Peixoto 2017) and takes the partition
+    at the bottom (finest) hierarchy level — better model selection on large graphs, avoiding
+    the underfitting of the flat model; ``FLAT`` fits a single-level SBM.
+
+    graph-tool's inference is stochastic (agglomerative MCMC); the RNG is seeded for a
+    reproducible partition. Requires the ``graph-tool`` package (conda-forge / system packages —
+    it is *not* installable from pip; see docs/community-detection.md).
+    """
+    try:
+        import graph_tool.all as gt
+    except ImportError as exc:  # pragma: no cover - optional heavy dependency
+        raise ValueError(
+            "The SBM community strategy requires the 'graph-tool' package, which is not installed. "
+            "Install it via conda-forge ('conda install -c conda-forge graph-tool') or your system "
+            "package manager — it is not available from pip. See docs/community-detection.md."
+        ) from exc
+
+    gt.seed_rng(0)
+    node_ids, node_id_map = _node_id_index(graph)
+    gt_graph = gt.Graph(directed=True)
+    gt_graph.add_vertex(len(node_ids))
+    gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
+
+    if mode.upper() == "FLAT":
+        state = gt.minimize_blockmodel_dl(gt_graph)
+        blocks = state.get_blocks()
+    else:
+        state = gt.minimize_nested_blockmodel_dl(gt_graph)
+        blocks = state.get_levels()[0].get_blocks()
+
+    community_map: CommunityMap = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+    return _finalize_partition(graph, community_map, palette_name, reverse=reverse)
+
+
 def detect(
     instance: "StrategyInstance | str",
     palette_name: str,
@@ -461,6 +536,8 @@ def detect(
         return detect_leiden_cpm(
             graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
         )
+    if strategy == "SBM":
+        return detect_sbm(graph, palette_name, str(params.get("mode", SBM_DEFAULT_MODE)), reverse=reverse)
     if strategy == "ORGANIZATION":
         # ORGANIZATION builds its palette from Organization.color directly, so the
         # palette_name / reverse flags don't apply.

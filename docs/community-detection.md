@@ -24,6 +24,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
 | K-core | `KCORE` | Structural hierarchy | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
+| Stochastic block model | `SBM(mode=NESTED\|FLAT)` | Generative block model | Yes |
 
 ---
 
@@ -127,6 +128,34 @@ Each channel starts with a unique label. At each step every channel adopts the l
 
 ---
 
+## Stochastic block model
+
+*The SBM asks a different question from every other strategy here: not "where are the dense clusters?" but "which channels play the same role in the citation web?" — grouping channels that cite, and are cited by, the rest of the network in the same way.*
+
+Every other detector in this list looks for **assortative** structure: groups that are dense inside and sparse outside. The stochastic block model drops that assumption. It is a *generative* model — it asks which assignment of channels to blocks best explains the observed pattern of citations, where the probability of a citation depends only on the two channels' blocks. Because the block-to-block citation rates are free to take any values, the SBM recovers structure the modularity family is blind to: not just assortative communities, but **disassortative** groups (channels that avoid each other), **core-periphery** layers, and the **bipartite source / amplifier** pattern that dominates a forward-attribution network — a set of amplifiers that all cite the same sources but never cite each other is a perfectly good block, even though it has zero internal density.
+
+Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-tool.skewed.de/) (Peixoto). *Directed*: citation direction is preserved, so the block-affinity matrix is asymmetric — "block A cites block B" is distinct from the reverse, which is exactly the source-vs-amplifier signal. *Degree-corrected* (Karrer & Newman 2011): the model accounts for each channel's degree, so the blocks reflect citation structure **beyond** the raw in-degree heterogeneity of the star topology rather than simply lumping all the high-in-degree hubs together. The fit is **unweighted** (binary citation structure), so the partition is invariant to `--edge-weight-strategy`. Inference is by minimum description length, which is **self-regularising**: unlike modularity, the SBM will not invent blocks the data don't support, so it does not hallucinate community structure in a near-random graph.
+
+`mode` selects the inference variant and may be added once per mode:
+- **`NESTED`** (default) — the nested SBM (Peixoto 2017) fits a hierarchy of blocks and Pulpit reports the partition at the finest level. Better model selection on large graphs; avoids the underfitting the flat model suffers on big networks.
+- **`FLAT`** — a single-level SBM.
+
+> **Interpretation guardrail — blocks are roles, not cohesive groups.** An SBM block is a set of channels that are *stochastically equivalent* — they connect to the rest of the network the same way — i.e. a **citation-role / structural-equivalence class** (Lorrain & White 1971). It is **not** necessarily a community of mutually-citing channels: two channels can share a block while having no tie between them, simply because they cite the same sources and are cited by the same amplifiers. Read an SBM block as "these channels occupy the same structural position in the citation ecosystem", never as "these channels talk to each other". Likewise, a block-affinity entry is a one-step, group-to-group **direct citation rate** — not a claim that content flows from one block through to another. This keeps the SBM consistent with Pulpit's one-degree attribution model (see [Measures → interpretation guardrails](network-measures.md)), where multi-hop flow is not recoverable from the data.
+
+**Dependency.** The SBM requires the `graph-tool` package, which is **not installable from pip** (it is a compiled C++ library). Install it via conda-forge (`conda install -c conda-forge graph-tool`) or your system package manager (Debian/Ubuntu: `apt install python3-graph-tool` from the maintainer's repository; a virtualenv must then be created with `--system-site-packages` to see it). If `graph-tool` is missing, requesting `SBM` fails with a clear error and the other strategies are unaffected.
+
+**References:**
+- Karrer, B. & Newman, M.E.J. (2011) "Stochastic blockmodels and community structure in networks." *Physical Review E* 83(1), 016107. [doi:10.1103/PhysRevE.83.016107](https://doi.org/10.1103/PhysRevE.83.016107) — the degree-corrected SBM.
+- Peixoto, T.P. (2014) "Efficient Monte Carlo and greedy heuristic for the inference of stochastic block models." *Physical Review E* 89(1), 012804. [doi:10.1103/PhysRevE.89.012804](https://doi.org/10.1103/PhysRevE.89.012804) — the MDL inference Pulpit calls.
+- Peixoto, T.P. (2017) "Nonparametric Bayesian inference of the microcanonical stochastic block model." *Physical Review E* 95(1), 012317. [doi:10.1103/PhysRevE.95.012317](https://doi.org/10.1103/PhysRevE.95.012317) — the nested SBM.
+- Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1). [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the structural-equivalence notion that a block operationalises.
+
+**In practice:** reach for the SBM when modularity-based detection feels like it is fighting the data — when you suspect the network is hub-and-spoke or two-mode rather than a set of cohesive cliques. Because it separates *role* from *cohesion*, the SBM is the natural complement to Leiden: where Leiden tells you which channels cluster together, the SBM tells you which channels are interchangeable in the citation structure (e.g. "these forty amplifiers are structurally the same actor, pointed at the same three sources"). Compare it against `LEIDEN_DIRECTED` and `ORGANIZATION` in the consensus matrix — but remember the partitions answer different questions, so disagreement is expected and informative, not a failure.
+
+**Example.** A network of 500 channels yields six tidy Leiden communities. The SBM, on the same graph, returns a block of 120 channels with almost no internal edges — channels Leiden had scattered across all six communities. Inspection shows they are pure amplifiers: each forwards from the same handful of source channels and is never cited by anyone. Leiden, hunting for density, distributed them by which source-neighbourhood they sat nearest; the SBM, hunting for role, recognised them as a single structural class — the network's audience, distinct from its producers.
+
+---
+
 ## Cross-strategy analysis
 
 <figure>
@@ -176,6 +205,7 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | Fast parameter-free baseline for large graphs | `LABELPROPAGATION` |
 | Direction of citation matters | `LEIDEN_DIRECTED` |
 | Find the ideological core vs. periphery | `KCORE` |
+| Group channels by structural *role* (incl. source/amplifier, non-cohesive groups) | `SBM` |
 | Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
 | Compare algorithms for robustness | `ALL` + `--consensus-matrix` |
 
