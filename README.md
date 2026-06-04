@@ -86,7 +86,7 @@ Open [http://localhost:8000](http://localhost:8000). The entire workflow runs fr
 
 ## How it works
 
-A Pulpit research project runs in four steps, all accessible from the browser interface:
+A Pulpit research project runs in five steps, all accessible from the browser interface:
 
 <figure>
 
@@ -102,7 +102,7 @@ A Pulpit research project runs in four steps, all accessible from the browser in
 4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
 5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
-The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's total publishing volume.
+The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's overall citing activity.
 
 ---
 
@@ -117,9 +117,9 @@ After export, the output directory contains self-contained files that can be sha
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
 | **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organization × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
-| **Structural similarity matrix** (`structural_similarity.html`) | Pairwise cosine similarity between all channels across all computed measures, sortable by community or by measure [more](docs/export-formats.md) |
-| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across all detection strategies [more](docs/community-detection.md#consensus-matrix) |
-| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by six algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
+| **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
+| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (Organization and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
+| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
@@ -128,9 +128,9 @@ After export, the output directory contains self-contained files that can be sha
 
 ---
 
-## Network measures — 20 per channel
+## Network measures — 11 per channel
 
-Each channel receives a score for up to 20 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 11 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -162,21 +162,21 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 11 algorithms and one custom selection
+## Community detection — 6 algorithms and one custom selection
 
-Pulpit runs up to 11 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to six community detection algorithms at once, alongside your own Organization grouping as a baseline. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
 | [Organization](docs/community-detection.md#organization) | Your own domain-knowledge categories as a baseline | — |
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
-| [Leiden CPM coarse](docs/community-detection.md#leiden-cpm-coarse-and-fine) | Few, large communities — even weak citation ties bind | No |
-| [Leiden CPM fine](docs/community-detection.md#leiden-cpm-coarse-and-fine) | More, smaller communities — only dense mutual citation | No |
+| [Leiden CPM](docs/community-detection.md#leiden-cpm) | Resolution γ tunes granularity — low γ gives few large communities, high γ many small ones | No |
 | [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
+| [Stochastic block model](docs/community-detection.md#stochastic-block-model) | Citation-role blocks — channels grouped by structural position (source/amplifier, core/periphery), not just dense clusters | Yes |
 
-The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates all non-Organization strategies into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
+The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates the partition-based detection strategies — every algorithm except your manual Organization labels and the K-core shell decomposition — into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
 
 See [Community detection](docs/community-detection.md) for descriptions, references, and a strategy selection guide.
 
@@ -201,7 +201,7 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 ---
 
-## Robustness analysis — 8 attack strategies
+## Robustness analysis — 7 attack strategies
 
 How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment information flow across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
 
@@ -214,6 +214,7 @@ The analysis optionally extracts the [disparity-filter backbone](docs/robustness
 | Out-strength | Static | Take down everything that cites heavily — moderation aimed at aggregators |
 | PageRank | Static | Take down the highest-prestige nodes — moderation aware of inherited prestige |
 | In-strength (dyn) | Dynamic — re-rank after every removal | Strength-based attack with cascade awareness |
+| Out-strength (dyn) | Dynamic — re-rank after every removal | Aggregator-targeting attack with cascade awareness |
 | PageRank (dyn) | Dynamic — re-rank after every removal | PageRank attack with cascade awareness |
 
 For each (strategy, "size" metric) Pulpit reports the **Schneider et al. (2011) R-index** — the average residual size across the entire attack — plus a 5%-collapse threshold and a **z-score** against a weight-rewiring null model that preserves topology and the weight multiset but reshuffles weights among edges. R values lower than random failure mean the network has critical channels; |z| ≥ 2 means the deviation didn't happen by chance under the null. When community partitions are active, the analysis additionally tracks intra-community vs inter-community edge survival — a network where bridges go first behaves very differently from one that loses cohesive cliques first.
@@ -246,8 +247,8 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | :--- | :------- |
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
-| [Network measures](docs/network-measures.md) | All 18 per-channel measures with academic references and worked examples |
-| [Community detection](docs/community-detection.md) | 11 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Network measures](docs/network-measures.md) | All 11 per-channel measures with academic references and worked examples |
+| [Community detection](docs/community-detection.md) | 7 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |

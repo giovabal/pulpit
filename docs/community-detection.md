@@ -177,7 +177,7 @@ Columns are sorted so that each organization's dominant community falls as close
 
 ### Consensus matrix
 
-Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION strategies active).
+Generated with `--consensus-matrix` (requires at least two partition-based strategies — i.e. excluding ORGANIZATION and K-core — active).
 
 <figure>
 <img src="../webapp_engine/static/screenshot_14.jpg" alt="Community consensus matrix">
@@ -185,7 +185,7 @@ Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION stra
 </figure>
 <br>
 
-The consensus matrix answers: **across all non-ORGANIZATION strategies, how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
+The consensus matrix answers: **across the partition-based strategies (every detection strategy except ORGANIZATION and the K-core shell decomposition), how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
 
 - **Radius** grows with agreement count
 - **Colour** shifts from blue (low agreement) to red (full agreement)
