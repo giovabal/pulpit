@@ -17,8 +17,8 @@ file existing on disk.
 """
 
 import datetime as _dt
+import logging
 import re
-import sys
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,6 +33,8 @@ from .schema import (
     META_VERSION_KEY,
     PULPIT_VERSION_KEY,
 )
+
+logger = logging.getLogger(__name__)
 
 BASE_ID = "base"
 # UTC ISO-style timestamp with `:` replaced by `-` so the filename is safe on
@@ -204,7 +206,7 @@ def _parse_toml(path: Path) -> dict | None:
         with path.open("rb") as fh:
             return tomllib.load(fh)
     except (tomllib.TOMLDecodeError, OSError) as exc:
-        sys.stderr.write(f"[config] failed to parse {path}: {exc}\n")
+        logger.warning("failed to parse %s: %s", path, exc)
         return None
 
 

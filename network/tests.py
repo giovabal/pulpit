@@ -1,4 +1,5 @@
 import datetime
+import io
 import json
 import os
 import tempfile
@@ -1420,14 +1421,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("structural_analysis", startdate="not-a-date")
+            call_command("structural_analysis", startdate="not-a-date", stdout=io.StringIO(), stderr=io.StringIO())
 
     def test_raises_command_error_on_invalid_enddate(self) -> None:
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("structural_analysis", enddate="2023-13-01")
+            call_command("structural_analysis", enddate="2023-13-01", stdout=io.StringIO(), stderr=io.StringIO())
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1456,7 +1457,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_build.side_effect = ValueError("There are no relationships between channels.")
         with self.assertRaises(CommandError):
             # graph=True bypasses the bare-CLI early-exit so build_graph is reached.
-            call_command("structural_analysis", graph=True)
+            call_command("structural_analysis", graph=True, stdout=io.StringIO(), stderr=io.StringIO())
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1514,6 +1515,8 @@ class ExportNetworkCommandTests(TestCase):
             community_strategies="ORGANIZATION",
             measures="PAGERANK",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
 
         mock_build.assert_called_once()
@@ -1586,6 +1589,8 @@ class ExportNetworkCommandTests(TestCase):
             html=False,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_not_called()
@@ -1643,6 +1648,8 @@ class ExportNetworkCommandTests(TestCase):
             xlsx=True,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
@@ -1700,6 +1707,8 @@ class ExportNetworkCommandTests(TestCase):
             xlsx=True,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
@@ -3429,8 +3438,10 @@ class ComputeInterestStructuralWindowTests(TestCase):
             community_strategy="LEIDEN_DIRECTED",
             window_days=0,
             window_filter={
-                "date__gte": datetime.date(2024, 1, 1),
-                "date__lte": datetime.date(2024, 12, 31),
+                # Timezone-aware datetimes: a naive date/datetime against the
+                # DateTimeField under USE_TZ=True raises a RuntimeWarning.
+                "date__gte": datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
+                "date__lte": datetime.datetime(2024, 12, 31, tzinfo=datetime.UTC),
             },
         )
         self.assertIn("window 2024-01-01..2024-12-31", windowed["structural_scope"])

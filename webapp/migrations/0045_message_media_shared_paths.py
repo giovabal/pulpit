@@ -17,9 +17,10 @@ After this migration:
 Data step moves every existing file to its new path and rewrites the FileField
 value. The migration is idempotent (rows already at the new path are skipped),
 ``atomic=False`` so an interrupted run can be resumed without rolling back, and
-prints progress to stderr — the move is fast (atomic rename on the same
-filesystem) but the per-row UPDATE makes a full run take order ~minutes on a
-700k-row dataset.
+prints progress to stderr (silenced under the test runner, where the step
+re-runs on every DB build with nothing to migrate) — the move is fast (atomic
+rename on the same filesystem) but the per-row UPDATE makes a full run take
+order ~minutes on a 700k-row dataset.
 """
 
 from __future__ import annotations
@@ -40,6 +41,16 @@ _MODEL_PATHS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def _progress(message: str) -> None:
+    """Print migration progress to stderr, but stay silent under the test
+    runner: this data step re-runs on every test DB build with nothing to
+    migrate, so the output is pure noise there. ``settings.TESTING`` is set in
+    settings.py when running ``manage.py test``."""
+    if getattr(settings, "TESTING", False):
+        return
+    print(message, file=sys.stderr, flush=True)
+
+
 def _migrate_model(apps, model_name: str, file_field: str, prefix: str) -> None:
     Model = apps.get_model("webapp", model_name)
     media_root = str(settings.MEDIA_ROOT)
@@ -49,9 +60,9 @@ def _migrate_model(apps, model_name: str, file_field: str, prefix: str) -> None:
     qs = Model.objects.exclude(**{file_field: ""})
     total = qs.count()
     if total == 0:
-        print(f"  {model_name}: nothing to migrate", file=sys.stderr, flush=True)
+        _progress(f"  {model_name}: nothing to migrate")
         return
-    print(f"  {model_name}: {total} row(s) to consider", file=sys.stderr, flush=True)
+    _progress(f"  {model_name}: {total} row(s) to consider")
     migrated = 0
     already = 0
     missing = 0
@@ -81,20 +92,12 @@ def _migrate_model(apps, model_name: str, file_field: str, prefix: str) -> None:
         obj.save(update_fields=[file_field])
         migrated += 1
         if migrated % 10000 == 0:
-            print(
-                f"    {model_name}: {migrated}/{total} processed ({missing} files missing on disk)",
-                file=sys.stderr,
-                flush=True,
-            )
-    print(
-        f"  {model_name}: {migrated} migrated, {already} already at new path, {missing} missing source files",
-        file=sys.stderr,
-        flush=True,
-    )
+            _progress(f"    {model_name}: {migrated}/{total} processed ({missing} files missing on disk)")
+    _progress(f"  {model_name}: {migrated} migrated, {already} already at new path, {missing} missing source files")
 
 
 def move_files_to_shared_paths(apps, schema_editor) -> None:
-    print("Moving message media to telegram_id-keyed paths…", file=sys.stderr, flush=True)
+    _progress("Moving message media to telegram_id-keyed paths…")
     for model_name, file_field, prefix in _MODEL_PATHS:
         _migrate_model(apps, model_name, file_field, prefix)
 

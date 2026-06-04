@@ -5,7 +5,13 @@ import numpy as np
 from fa2 import ForceAtlas2
 
 try:
-    import umap as _umap_lib
+    # umap probes for Tensorflow (for the optional ParametricUMAP) at import and
+    # emits an ImportWarning when it is absent. We never use ParametricUMAP, and
+    # the warning is unfilterable from settings under the test runner (which
+    # resets warning filters), so suppress it at the import site.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ImportWarning)
+        import umap as _umap_lib
 
     HAS_UMAP = True
 except ImportError:

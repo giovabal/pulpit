@@ -1944,7 +1944,7 @@ class SearchChannelsCommandTests(TestCase):
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-        call_command("search_channels")
+        call_command("search_channels", stdout=io.StringIO(), stderr=io.StringIO())
 
         words_searched = {c.args[0] for c in mock_crawler.search_channel.call_args_list}
         self.assertIn("ukraine", words_searched)
@@ -1964,7 +1964,7 @@ class SearchChannelsCommandTests(TestCase):
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-        call_command("search_channels")
+        call_command("search_channels", stdout=io.StringIO(), stderr=io.StringIO())
 
         self.term1.refresh_from_db()
         self.term2.refresh_from_db()
@@ -1991,7 +1991,7 @@ class SearchChannelsCommandTests(TestCase):
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-        call_command("search_channels", amount=15)
+        call_command("search_channels", amount=15, stdout=io.StringIO(), stderr=io.StringIO())
 
         self.assertEqual(mock_crawler.search_channel.call_count, 15)
 
@@ -2012,7 +2012,7 @@ class SearchChannelsCommandTests(TestCase):
         # "ukraine" already exists as a DB term (setUp). Passing it as an extra term —
         # as the Operations panel does when "Save to database" is checked — must not
         # search it twice. Mixed case exercises the normalisation in the dedup.
-        call_command("search_channels", extra_terms=["Ukraine"])
+        call_command("search_channels", extra_terms=["Ukraine"], stdout=io.StringIO(), stderr=io.StringIO())
 
         searched = [c.args[0] for c in mock_crawler.search_channel.call_args_list]
         self.assertEqual(searched.count("ukraine"), 1)
@@ -2032,7 +2032,7 @@ class SearchChannelsCommandTests(TestCase):
         mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-        call_command("search_channels", extra_terms=["belarus"])
+        call_command("search_channels", extra_terms=["belarus"], stdout=io.StringIO(), stderr=io.StringIO())
 
         searched = [c.args[0] for c in mock_crawler.search_channel.call_args_list]
         self.assertIn("belarus", searched)
@@ -2073,7 +2073,13 @@ class GetChannelsCommandTests(TestCase):
 
             # `--channel-types` defaults to [] (factory empty) — pass an
             # explicit value so the in-target CHANNEL records survive the filter.
-            call_command("crawl_channels", get_new_messages=True, channel_types="CHANNEL")
+            call_command(
+                "crawl_channels",
+                get_new_messages=True,
+                channel_types="CHANNEL",
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
 
             telegram_ids_crawled = {c.args[0] for c in mock_crawler.get_channel.call_args_list}
             self.assertIn(self.ch1.telegram_id, telegram_ids_crawled)
@@ -2094,7 +2100,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("crawl_channels", retry_references=True)
+            call_command("crawl_channels", retry_references=True, stdout=io.StringIO(), stderr=io.StringIO())
 
             mock_crawler.get_missing_references.assert_called_once()
 
@@ -2113,7 +2119,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
             # Should not raise — FloodWaitError is caught and the channel is skipped
-            call_command("crawl_channels")
+            call_command("crawl_channels", stdout=io.StringIO(), stderr=io.StringIO())
 
     def test_clean_leftovers_called_after_crawl(self) -> None:
         from django.core.management import call_command
@@ -2127,7 +2133,7 @@ class GetChannelsCommandTests(TestCase):
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
 
-            call_command("crawl_channels", get_new_messages=True)
+            call_command("crawl_channels", get_new_messages=True, stdout=io.StringIO(), stderr=io.StringIO())
 
             mock_media.clean_leftovers.assert_called_once()
 
