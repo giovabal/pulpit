@@ -30,13 +30,14 @@ var ZOOM_STEP          = 0.75;
 var ARROW_LEN_FACTOR    = 2.0;   // arrowhead length ÷ target node radius
 var ARROW_RADIUS_FACTOR = 0.85;  // arrowhead base radius ÷ target node radius
 var ARROW_OPACITY       = 0.9;   // arrowheads sit slightly more opaque than edges so direction reads clearly
-// curve_one_way: bow one-way edges too (dark/light, all-curved look); when false
-// (minimal/print) only two-way pairs curve and one-way edges stay straight.
+// curve_edges: bow every edge (dark/light, all-curved look — two-way pairs then
+// separate); when false (minimal/print) every edge is straight and a two-way pair
+// superposes.
 var THEMES_3D = {
-    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30, curve_one_way: true },
-    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40, curve_one_way: true },
-    minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25, curve_one_way: false },
-    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80, curve_one_way: false },
+    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30, curve_edges: true },
+    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40, curve_edges: true },
+    minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25, curve_edges: false },
+    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80, curve_edges: false },
 };
 // Node radii as fractions of spatial network diameter
 var SIZE_MIN_FRAC      = 0.00225;
@@ -52,7 +53,7 @@ var nodes_index      = {};   // id → node record (pos + metadata + mesh ref + 
 var node_meshes      = [];   // THREE.Mesh list for raycasting
 var edge_segments    = null; // single THREE.LineSegments for all edges
 var arrow_mesh       = null; // single THREE.InstancedMesh of cone arrowheads (one instance per edge)
-var edge_list        = [];   // [{source, target, vert_start, weight, reciprocal}] for color/arrow rebuilds
+var edge_list        = [];   // [{source, target, vert_start, weight}] for color/arrow rebuilds
 var label_objects    = {};   // id → CSS2DObject
 
 var adj_out          = {};   // id → Set of target ids
@@ -84,6 +85,7 @@ var _layout_bbox    = null;   // bounding box of the initial FA2 3D layout; used
 var colored_edges   = true;
 var show_edge_weight = false;   // off by default; maps edge weight → line thickness
 var show_edge_arrows = false;   // off by default; draws a cone arrowhead at each edge's target
+var edge_opacity_3d = EDGE_OPACITY;   // live edge-line alpha; re-syncs to the style on style change, overridable by the opacity slider
 var active_theme_3d = 'dark';
 
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
@@ -145,11 +147,12 @@ function curve_control(src_pos, tgt_pos) {
     return mid.add(perp);
 }
 
-// Whether an edge is drawn curved: two-way (reciprocal) ties always curve so their
-// directions bow to opposite sides; one-way edges curve too in themes that ask for
-// it (dark/light), and stay straight otherwise (minimal/print).
-function _edge_curves(reciprocal) {
-    return reciprocal || (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_one_way;
+// Whether edges are drawn curved in the active style: the curved styles (dark/light)
+// bow every edge — a two-way tie's two directions then land on opposite arcs and
+// separate; the straight styles (minimal/print) draw every edge straight, so a
+// two-way tie's two edges superpose, by design.
+function _edge_curves() {
+    return (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_edges;
 }
 
 // Control point for an edge: a perpendicular offset (a curved arc) when curved,
@@ -157,20 +160,6 @@ function _edge_curves(reciprocal) {
 function _control_point(src_pos, tgt_pos, curved) {
     if (curved) return curve_control(src_pos, tgt_pos);
     return new THREE.Vector3().addVectors(src_pos, tgt_pos).multiplyScalar(0.5);
-}
-
-// Set of "source|target" keys that have a matching "target|source" — i.e. the
-// directed edges that form a two-way connection. Built once per edge array.
-function _reciprocal_set(edges) {
-    var keys = new Set();
-    edges.forEach(function(e) { keys.add(e.source + '|' + e.target); });
-    var recip = new Set();
-    edges.forEach(function(e) {
-        if (e.source !== e.target && keys.has(e.target + '|' + e.source)) {
-            recip.add(e.source + '|' + e.target);
-        }
-    });
-    return recip;
 }
 
 // =============================================================================
@@ -316,14 +305,12 @@ function build_graph(pos_data, ch_data) {
     var positions = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
     var colors    = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
     var vert_cursor = 0;
-    var recip = _reciprocal_set(pos_data.edges);
 
     pos_data.edges.forEach(function(e) {
         var src = nodes_index[e.source];
         var tgt = nodes_index[e.target];
         if (!src || !tgt) return;
 
-        var reciprocal = e.source !== e.target && recip.has(e.source + '|' + e.target);
         var sp, tp, cp;
         if (e.source === e.target) {
             var arm  = src.size * SELF_LOOP_ARM;
@@ -334,7 +321,7 @@ function build_graph(pos_data, ch_data) {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = _control_point(sp, tp, _edge_curves(reciprocal));
+            cp = _control_point(sp, tp, _edge_curves());
         }
         var curve = new THREE.QuadraticBezierCurve3(sp, cp, tp);
         var pts = curve.getPoints(CURVE_SEGMENTS);   // CURVE_SEGMENTS+1 points
@@ -361,7 +348,7 @@ function build_graph(pos_data, ch_data) {
             vert_cursor++;
         }
 
-        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight, reciprocal: reciprocal });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight });
 
         if (adj_out[e.source]) adj_out[e.source].add(e.target);
         if (adj_in[e.target])  adj_in[e.target].add(e.source);
@@ -369,7 +356,7 @@ function build_graph(pos_data, ch_data) {
 
     // Trim to actual used size (some edges may have been skipped)
     var used = vert_cursor * 3;
-    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vert_cursor / 2, EDGE_OPACITY);
+    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vert_cursor / 2, edge_opacity_3d);
     scene.add(edge_segments);
     apply_edge_widths_3d();
     _build_arrow_mesh();
@@ -467,7 +454,7 @@ function _edge_arrow_transform(e, outMatrix) {
     if (!src || !tgt || e.source === e.target) return false;
     _ar_sp.set(src.x, src.y, src.z || 0);
     _ar_tp.set(tgt.x, tgt.y, tgt.z || 0);
-    var cp = _control_point(_ar_sp, _ar_tp, _edge_curves(e.reciprocal));
+    var cp = _control_point(_ar_sp, _ar_tp, _edge_curves());
     _ar_dir.subVectors(_ar_tp, cp);                       // curve tangent at the target end
     if (_ar_dir.lengthSq() < 1e-12) _ar_dir.subVectors(_ar_tp, _ar_sp);
     if (_ar_dir.lengthSq() < 1e-12) return false;
@@ -573,7 +560,7 @@ function _rebuild_edge_positions() {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = _control_point(sp, tp, _edge_curves(e.reciprocal));
+            cp = _control_point(sp, tp, _edge_curves());
         }
         var pts = new THREE.QuadraticBezierCurve3(sp, cp, tp).getPoints(CURVE_SEGMENTS);
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
@@ -592,14 +579,18 @@ function _rebuild_edge_positions() {
 
 function apply_theme_3d(theme) {
     var t = THEMES_3D[theme] || THEMES_3D.dark;
-    var prev_curve_one_way = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_one_way;
+    var prev_curve_edges = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_edges;
     active_theme_3d = theme;
     if (scene) scene.background.setHex(t.bg);
     fade_color.setHex(t.fade);
-    if (edge_segments) edge_segments.material.opacity = t.edge_opacity;
-    // One-way edges curve in dark/light but stay straight in minimal/print; when
-    // that flips, rebuild the edge geometry (and arrowheads) to match.
-    if (t.curve_one_way !== prev_curve_one_way) _rebuild_edge_positions();
+    // Edge opacity re-syncs to the style's tuned value; the slider re-defaults to it.
+    edge_opacity_3d = t.edge_opacity;
+    var op_slider = el('edge-opacity-slider');
+    if (op_slider) op_slider.value = edge_opacity_3d;
+    if (edge_segments) edge_segments.material.opacity = edge_opacity_3d;
+    // Edges curve in dark/light but are straight in minimal/print; when that flips,
+    // rebuild the edge geometry (and arrowheads) to match.
+    if (t.curve_edges !== prev_curve_edges) _rebuild_edge_positions();
     document.body.setAttribute('data-theme3d', theme);
     var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
     document.documentElement.style.backgroundColor = bgHex;
@@ -1341,14 +1332,12 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
     var positions = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
     var colors    = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
     var vc = 0;
-    var recip = _reciprocal_set(new_pos_data.edges);
     new_pos_data.edges.forEach(function(e) {
         var src = nodes_index[e.source], tgt = nodes_index[e.target];
         if (!src || !tgt) return;
-        var reciprocal = e.source !== e.target && recip.has(e.source + '|' + e.target);
         var sp  = new THREE.Vector3(src.x, src.y, src.z || 0);
         var tp  = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
-        var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, _edge_curves(reciprocal)), tp).getPoints(CURVE_SEGMENTS);
+        var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, _edge_curves()), tp).getPoints(CURVE_SEGMENTS);
         var c   = avg_darken(src.orig_color, tgt.orig_color);
         var vs  = vc;
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
@@ -1358,13 +1347,12 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
             positions[vc*3]=p1.x; positions[vc*3+1]=p1.y; positions[vc*3+2]=p1.z;
             colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
         }
-        edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight, reciprocal: reciprocal });
+        edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight });
         adj_out[e.source].add(e.target);
         adj_in[e.target].add(e.source);
     });
     var used = vc * 3;
-    var theme_opacity = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).edge_opacity;
-    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vc / 2, theme_opacity);
+    edge_segments = _build_edge_object(positions.subarray(0, used), colors.subarray(0, used), vc / 2, edge_opacity_3d);
     scene.add(edge_segments);
     apply_edge_widths_3d();
     _build_arrow_mesh();
@@ -1583,6 +1571,11 @@ document.addEventListener('DOMContentLoaded', function() {
         show_edge_arrows = this.checked;
         if (arrow_mesh) arrow_mesh.visible = show_edge_arrows;
         update_info_bar();
+    });
+
+    el('edge-opacity-slider').addEventListener('input', function() {
+        edge_opacity_3d = parseFloat(this.value);
+        if (edge_segments) edge_segments.material.opacity = edge_opacity_3d;
     });
 
     el('community-strategy-select').addEventListener('change', function() {

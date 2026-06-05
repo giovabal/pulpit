@@ -41,6 +41,7 @@ var active_theme                = 'dark';
 var colored_edges               = true;
 var show_edge_weight            = false;   // off by default; maps edge weight → line thickness
 var show_edge_arrows            = false;   // off by default; draws an arrowhead at each edge's target
+var edge_opacity                = 0.25;    // live edge alpha; re-syncs to the style's value on style change, overridable by the opacity slider
 
 // Sigma edge `size` units for the weighted-edge view. Sigma floors rendered
 // thickness at its own minEdgeThickness, so the thinnest edges still read; the
@@ -51,12 +52,12 @@ var EDGE_WEIGHT_MIN_SIZE        = 0.5;
 var EDGE_WEIGHT_MAX_SIZE        = 7.0;
 var EDGE_WEIGHT_BASE_SIZE       = 2.5;
 
-// Curvature for curved edges (see apply_edge_styles). A two-way connection is two
-// directed edges (one per direction); bowing both by this value puts them on
-// opposite sides — the curve program offsets the control point perpendicular to
-// source→target, so the same value lands A→B and B→A on opposite arcs — so each
-// direction reads as its own edge.
-var RECIPROCAL_CURVATURE        = 0.25;
+// Curvature applied to every edge in the curved styles (see apply_edge_styles).
+// The curve program offsets the control point perpendicular to source→target, so
+// the same value lands a two-way tie's A→B and B→A on opposite arcs — they bow
+// apart and each direction reads as its own edge — while a one-way edge is a single
+// arc. The straight styles ignore this and superpose a two-way tie's two edges.
+var EDGE_CURVATURE              = 0.25;
 
 // =============================================================================
 // Sigma and graph instances
@@ -116,7 +117,7 @@ function make_node_hover_renderer(fillStyle) {
 var THEMES = {
     dark: {
         label: 'Dark', canvas: 'rgba(17, 34, 51, 1)', fade: 'rgba(27, 44, 61, .75)',
-        labelColor: '#ffffff', edgeOpacity: 0.25, curveOneWay: true,
+        labelColor: '#ffffff', edgeOpacity: 0.25, curveEdges: true,
         defaultEdgeColor: '#484848', nodeBorderSize: 0, nodeBorderColor: 'transparent',
         hoverFill: '#111111',
         cssVars: {
@@ -130,7 +131,7 @@ var THEMES = {
     },
     light: {
         label: 'Light', canvas: 'rgba(240, 244, 248, 1)', fade: 'rgba(180, 195, 210, .75)',
-        labelColor: '#1a2a3a', edgeOpacity: 0.30, curveOneWay: true,
+        labelColor: '#1a2a3a', edgeOpacity: 0.30, curveEdges: true,
         defaultEdgeColor: '#aaaaaa', nodeBorderSize: 0.08, nodeBorderColor: 'rgba(255,255,255,0.8)',
         hoverFill: '#cddaeb',
         cssVars: {
@@ -142,7 +143,7 @@ var THEMES = {
     },
     minimal: {
         label: 'Minimal', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(210, 210, 210, .75)',
-        labelColor: '#333333', edgeOpacity: 0.18, curveOneWay: false,
+        labelColor: '#333333', edgeOpacity: 0.18, curveEdges: false,
         defaultEdgeColor: '#cccccc', nodeBorderSize: 0.15, nodeBorderColor: '#ffffff',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -154,7 +155,7 @@ var THEMES = {
     },
     print: {
         label: 'Print', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(200, 200, 200, .75)',
-        labelColor: '#000000', edgeOpacity: 0.15, curveOneWay: false,
+        labelColor: '#000000', edgeOpacity: 0.15, curveEdges: false,
         defaultEdgeColor: '#999999', nodeBorderSize: 0.20, nodeBorderColor: '#222222',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -229,6 +230,11 @@ function apply_theme(themeKey) {
     sigma_instance.setSetting('defaultEdgeColor', theme.defaultEdgeColor);
     sigma_instance.setSetting('defaultDrawNodeHover', make_node_hover_renderer(theme.hoverFill));
 
+    // Edge opacity re-syncs to the style's tuned value; the slider re-defaults to it.
+    edge_opacity = theme.edgeOpacity;
+    var op_slider = el('edge-opacity-slider');
+    if (op_slider) op_slider.value = edge_opacity;
+
     // Live graph updates (only when data is loaded)
     if (graph_loaded) {
         graph.nodes().forEach(function(id) {
@@ -239,10 +245,10 @@ function apply_theme(themeKey) {
             var orig = graph.getEdgeAttribute(edgeId, 'originalColor');
             if (!orig) return;
             var parts = rgb_str_to_parts(orig);
-            var c = 'rgba(' + parts.join(',') + ',' + theme.edgeOpacity + ')';
+            var c = 'rgba(' + parts.join(',') + ',' + edge_opacity + ')';
             graph.setEdgeAttribute(edgeId, 'originalColor', c);
         });
-        apply_edge_styles();   // one-way edges curve in dark/light, stay straight in minimal/print
+        apply_edge_styles();   // all edges curve in dark/light, all straight in minimal/print
         refresh_edge_colors();
     }
 
@@ -380,12 +386,11 @@ function apply_strategy_colors(strategy) {
         graph.setNodeAttribute(id, 'color', color);
         graph.setNodeAttribute(id, 'originalColor', color);
     });
-    var _edgeOp = (THEMES[active_theme] || THEMES.dark).edgeOpacity;
     graph.edges().forEach(function(edgeId) {
         var src = graph.getNodeAttributes(graph.source(edgeId));
         var tgt = graph.getNodeAttributes(graph.target(edgeId));
         var avg   = avg_and_darken(rgb_str_to_parts(src.originalColor), rgb_str_to_parts(tgt.originalColor), 0.75);
-        var color = 'rgba(' + avg.join(',') + ',' + _edgeOp + ')';
+        var color = 'rgba(' + avg.join(',') + ',' + edge_opacity + ')';
         graph.setEdgeAttribute(edgeId, 'originalColor', color);
     });
     refresh_edge_colors();
@@ -402,7 +407,7 @@ function refresh_edge_colors() {
         });
     } else {
         var grayParts = hex_to_rgb_parts(theme.defaultEdgeColor);
-        var grayColor = 'rgba(' + grayParts.join(',') + ',' + theme.edgeOpacity + ')';
+        var grayColor = 'rgba(' + grayParts.join(',') + ',' + edge_opacity + ')';
         graph.edges().forEach(function(edgeId) {
             graph.setEdgeAttribute(edgeId, 'color', grayColor);
         });
@@ -435,24 +440,37 @@ function apply_edge_widths() {
     sigma_instance.refresh();
 }
 
-// Assign each edge its render program (and curvature) from its direction structure
-// and the active theme. A two-way (reciprocal) connection or self-loop always uses
-// the curve program with a fixed curvature, so its two directions bow to opposite
-// sides and read as separate arcs. A one-way edge curves too in themes that ask for
-// it (`curveOneWay` — dark/light, matching their all-curved look) and renders as a
-// straight line otherwise (minimal/print). Straight edges use a dedicated straight
-// program rather than curvature 0, which would collapse the curve program's Bézier
-// and leave the edge undrawn. The arrowed variants ('*Arrow') add a target
-// arrowhead. Edges carry an explicit `type`; sigma buckets edges into programs by
-// `data.type` and reprocesses on attribute change, so flipping the arrows toggle or
-// switching theme re-renders existing edges. Called after every (re)build and
-// whenever the arrows toggle or theme changes.
+// Re-derive every edge's `originalColor` alpha to the current edge_opacity (the
+// rgb is left as the active strategy / colored-edges state set it), then repaint.
+// Drives the opacity slider; the rest of the pipeline bakes edge_opacity in directly.
+function apply_edge_opacity() {
+    if (!graph_loaded) return;
+    graph.edges().forEach(function(edgeId) {
+        var orig = graph.getEdgeAttribute(edgeId, 'originalColor');
+        if (!orig) return;
+        var parts = rgb_str_to_parts(orig);
+        graph.setEdgeAttribute(edgeId, 'originalColor', 'rgba(' + parts.join(',') + ',' + edge_opacity + ')');
+    });
+    refresh_edge_colors();
+}
+
+// Assign each edge its render program from the active style. The curved styles
+// (dark/light) bow every edge with the curve program — a two-way tie's two
+// directions land on opposite arcs and separate, a one-way edge is a single arc.
+// The straight styles (minimal/print) draw every edge with the straight-line
+// program, so a two-way tie's two edges superpose, by design. Straight edges use a
+// dedicated straight program rather than curvature 0, which would collapse the
+// curve program's Bézier and leave the edge undrawn. The arrowed variants ('*Arrow')
+// add a target arrowhead. Edges carry an explicit `type`; sigma buckets edges into
+// programs by `data.type` and reprocesses on attribute change, so flipping the
+// arrows toggle or switching style re-renders existing edges. Called after every
+// (re)build and whenever the arrows toggle or style changes.
 function apply_edge_styles() {
     if (!graph_loaded) return;
-    var curve_one_way = (THEMES[active_theme] || THEMES.dark).curveOneWay;
-    graph.forEachEdge(function(edge, attrs, source, target) {
-        if (curve_one_way || source === target || graph.hasEdge(target, source)) {
-            graph.setEdgeAttribute(edge, 'curvature', RECIPROCAL_CURVATURE);
+    var curved = (THEMES[active_theme] || THEMES.dark).curveEdges;
+    graph.forEachEdge(function(edge) {
+        if (curved) {
+            graph.setEdgeAttribute(edge, 'curvature', EDGE_CURVATURE);
             graph.setEdgeAttribute(edge, 'type', show_edge_arrows ? 'curvedArrow' : 'curved');
         } else {
             graph.setEdgeAttribute(edge, 'type', show_edge_arrows ? 'straightArrow' : 'straight');
@@ -678,7 +696,7 @@ function get_data(data_dir) {
             }));
         });
 
-        var _op = _t.edgeOpacity;
+        var _op = edge_opacity;
         pos_data.edges.forEach(function(e) {
             var color = e.color ? 'rgba(' + e.color + ',' + _op + ')' : 'rgba(72,72,72,' + _op + ')';
             var attrs = Object.assign({}, e, { color: color, originalColor: color });
@@ -1003,7 +1021,7 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
                 // Add the new year's edges (old edges were cleared before animation started)
                 new_pos_data.edges.forEach(function(edge) {
                     if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) return;
-                    var col = edge.color ? 'rgba(' + edge.color + ',0.25)' : 'rgba(72,72,72,0.25)';
+                    var col = edge.color ? 'rgba(' + edge.color + ',' + edge_opacity + ')' : 'rgba(72,72,72,' + edge_opacity + ')';
                     var attrs = Object.assign({}, edge, { color: col, originalColor: col });
                     delete attrs.source; delete attrs.target; delete attrs.id;
                     try { graph.addEdge(edge.source, edge.target, attrs); }
@@ -1303,6 +1321,10 @@ document.addEventListener('DOMContentLoaded', function() {
         apply_edge_styles();
         apply_edge_widths();   // also refreshes; gives edges a visible width so arrowheads read
         update_info_bar();
+    });
+    el('edge-opacity-slider').addEventListener('input', function() {
+        edge_opacity = parseFloat(this.value);
+        apply_edge_opacity();
     });
 
     var extra_layouts = window.EXTRA_LAYOUTS || [];
