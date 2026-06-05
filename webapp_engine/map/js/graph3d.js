@@ -30,11 +30,13 @@ var ZOOM_STEP          = 0.75;
 var ARROW_LEN_FACTOR    = 2.0;   // arrowhead length ÷ target node radius
 var ARROW_RADIUS_FACTOR = 0.85;  // arrowhead base radius ÷ target node radius
 var ARROW_OPACITY       = 0.9;   // arrowheads sit slightly more opaque than edges so direction reads clearly
+// curve_one_way: bow one-way edges too (dark/light, all-curved look); when false
+// (minimal/print) only two-way pairs curve and one-way edges stay straight.
 var THEMES_3D = {
-    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30 },
-    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40 },
-    minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25 },
-    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80 },
+    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30, curve_one_way: true },
+    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40, curve_one_way: true },
+    minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25, curve_one_way: false },
+    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80, curve_one_way: false },
 };
 // Node radii as fractions of spatial network diameter
 var SIZE_MIN_FRAC      = 0.00225;
@@ -143,11 +145,17 @@ function curve_control(src_pos, tgt_pos) {
     return mid.add(perp);
 }
 
-// Control point for an edge: a perpendicular offset (so two-way edges bow to
-// opposite sides and read as two distinct arcs) when reciprocal, else the plain
-// midpoint, which collapses the quadratic Bézier to a straight line for one-way edges.
-function _control_point(src_pos, tgt_pos, reciprocal) {
-    if (reciprocal) return curve_control(src_pos, tgt_pos);
+// Whether an edge is drawn curved: two-way (reciprocal) ties always curve so their
+// directions bow to opposite sides; one-way edges curve too in themes that ask for
+// it (dark/light), and stay straight otherwise (minimal/print).
+function _edge_curves(reciprocal) {
+    return reciprocal || (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_one_way;
+}
+
+// Control point for an edge: a perpendicular offset (a curved arc) when curved,
+// else the plain midpoint, which collapses the quadratic Bézier to a straight line.
+function _control_point(src_pos, tgt_pos, curved) {
+    if (curved) return curve_control(src_pos, tgt_pos);
     return new THREE.Vector3().addVectors(src_pos, tgt_pos).multiplyScalar(0.5);
 }
 
@@ -326,7 +334,7 @@ function build_graph(pos_data, ch_data) {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = _control_point(sp, tp, reciprocal);
+            cp = _control_point(sp, tp, _edge_curves(reciprocal));
         }
         var curve = new THREE.QuadraticBezierCurve3(sp, cp, tp);
         var pts = curve.getPoints(CURVE_SEGMENTS);   // CURVE_SEGMENTS+1 points
@@ -459,7 +467,7 @@ function _edge_arrow_transform(e, outMatrix) {
     if (!src || !tgt || e.source === e.target) return false;
     _ar_sp.set(src.x, src.y, src.z || 0);
     _ar_tp.set(tgt.x, tgt.y, tgt.z || 0);
-    var cp = _control_point(_ar_sp, _ar_tp, e.reciprocal);
+    var cp = _control_point(_ar_sp, _ar_tp, _edge_curves(e.reciprocal));
     _ar_dir.subVectors(_ar_tp, cp);                       // curve tangent at the target end
     if (_ar_dir.lengthSq() < 1e-12) _ar_dir.subVectors(_ar_tp, _ar_sp);
     if (_ar_dir.lengthSq() < 1e-12) return false;
@@ -565,7 +573,7 @@ function _rebuild_edge_positions() {
         } else {
             sp = new THREE.Vector3(src.x, src.y, src.z);
             tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z);
-            cp = _control_point(sp, tp, e.reciprocal);
+            cp = _control_point(sp, tp, _edge_curves(e.reciprocal));
         }
         var pts = new THREE.QuadraticBezierCurve3(sp, cp, tp).getPoints(CURVE_SEGMENTS);
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
@@ -584,10 +592,14 @@ function _rebuild_edge_positions() {
 
 function apply_theme_3d(theme) {
     var t = THEMES_3D[theme] || THEMES_3D.dark;
+    var prev_curve_one_way = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_one_way;
     active_theme_3d = theme;
     if (scene) scene.background.setHex(t.bg);
     fade_color.setHex(t.fade);
     if (edge_segments) edge_segments.material.opacity = t.edge_opacity;
+    // One-way edges curve in dark/light but stay straight in minimal/print; when
+    // that flips, rebuild the edge geometry (and arrowheads) to match.
+    if (t.curve_one_way !== prev_curve_one_way) _rebuild_edge_positions();
     document.body.setAttribute('data-theme3d', theme);
     var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
     document.documentElement.style.backgroundColor = bgHex;
@@ -1336,7 +1348,7 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
         var reciprocal = e.source !== e.target && recip.has(e.source + '|' + e.target);
         var sp  = new THREE.Vector3(src.x, src.y, src.z || 0);
         var tp  = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
-        var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, reciprocal), tp).getPoints(CURVE_SEGMENTS);
+        var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, _edge_curves(reciprocal)), tp).getPoints(CURVE_SEGMENTS);
         var c   = avg_darken(src.orig_color, tgt.orig_color);
         var vs  = vc;
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
