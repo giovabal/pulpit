@@ -162,9 +162,9 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 6 algorithms and one custom selection
+## Community detection — 7 algorithms and one custom selection
 
-Pulpit runs up to six community detection algorithms at once, alongside your own Organization grouping as a baseline. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to seven community detection algorithms at once, alongside your own Organization grouping as a baseline. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
@@ -172,6 +172,7 @@ Pulpit runs up to six community detection algorithms at once, alongside your own
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
 | [Leiden CPM](docs/community-detection.md#leiden-cpm) | Resolution γ tunes granularity — low γ gives few large communities, high γ many small ones | No |
+| [Louvain](docs/community-detection.md#louvain) | Classic modularity baseline — kept for comparison with older studies; Leiden supersedes it | No |
 | [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
 | [Stochastic block model](docs/community-detection.md#stochastic-block-model) | Citation-role blocks — channels grouped by structural position (source/amplifier, core/periphery), not just dense clusters | Yes |
@@ -248,7 +249,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
 | [Network measures](docs/network-measures.md) | All 11 per-channel measures with academic references and worked examples |
-| [Community detection](docs/community-detection.md) | 7 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Community detection](docs/community-detection.md) | 8 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |

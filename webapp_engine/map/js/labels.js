@@ -5,6 +5,7 @@ export var STRATEGY_LABELS = {
     leiden:           'Leiden',
     leiden_directed:  'Leiden directed',
     leiden_cpm:       'Leiden CPM',
+    louvain:          'Louvain',
     labelpropagation: 'Label propagation',
     kcore:            'K-core',
     sbm:              'Stochastic block model',

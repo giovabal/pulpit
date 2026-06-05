@@ -85,6 +85,7 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
+    "LOUVAIN",
     "LABELPROPAGATION",
     "KCORE",
     "SBM",

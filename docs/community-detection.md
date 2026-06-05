@@ -22,6 +22,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
 | Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
+| Louvain | `LOUVAIN` | Modularity (classic baseline) | No |
 | K-core | `KCORE` | Structural hierarchy | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
 | Stochastic block model | `SBM(mode=NESTED\|FLAT)` | Generative block model | Yes |
@@ -93,6 +94,25 @@ A bare `LEIDEN_CPM` starts at γ = 0.05; override per instance, or change the de
 **In practice:** run Leiden, Leiden CPM coarse, and Leiden CPM fine side by side for a three-scale view of the same network. Communities that survive across all three are the most structurally robust. Communities appearing only at fine resolution are tight local cores embedded inside broader blocs — useful for identifying small coordinated nuclei within bigger ideological movements.
 
 **Example.** A 600-channel anti-vaccine network is partitioned by Leiden into six communities. Leiden CPM fine returns 14 — eight of them sitting *inside* a single Leiden community. Inspection reveals these eight are language- or country-specific cores of coordinated activity (one Italian, one French, one Brazilian Portuguese, etc.). The Leiden partition revealed the broad movement; the CPM-fine partition revealed the operational coordination cells that share content within their language before it crosses over.
+
+---
+
+## Louvain
+
+*Louvain groups channels that connect to each other more than chance would predict — the classic, field-standard community detector. Kept mainly for comparison with the large body of older studies that report Louvain results; for new analyses, [Leiden](#leiden) (or [Leiden (directed)](#leiden-directed)) is the better choice.*
+
+Louvain looks for partitions where the density of connections inside each group is much higher than what would be expected if edges were placed at random, and finds them with a fast greedy procedure that needs no prior guess at how many groups exist. Published in 2008, it became the de-facto baseline for community detection across network science, which is the one reason to keep it in Pulpit: when you are replicating or comparing against a study that reports Louvain communities, running the same algorithm removes "different method" as an explanation for any difference you see. Pulpit runs Louvain on the symmetrised view of the citation graph (forwards in both directions collapsed into one tie, so direction is dropped) with edge weights from `--edge-weight-strategy` honoured, and a fixed seed so the partition is reproducible.
+
+**Why prefer Leiden.** [Leiden](#leiden) optimises the *same* modularity objective on the *same* symmetrised graph, so it is a drop-in upgrade, and it fixes Louvain's two well-known weaknesses. First, Louvain can occasionally return a community that is **not internally connected** — a channel can be stranded in a group it has no real link to — whereas Leiden adds a refinement step that guarantees every community is internally well-connected (Traag et al. 2019). Second, both inherit the **resolution limit** (Fortunato & Barthélemy 2007) — the tendency to absorb small dense clusters into bigger ones — but Leiden's cleaner optimisation exposes it less sharply, and the [CPM variants](#leiden-cpm) escape it entirely. Unless you specifically need a Louvain partition for comparability, reach for Leiden; when citation direction carries the meaning, reach for [Leiden (directed)](#leiden-directed).
+
+**References:**
+- Blondel, V.D., Guillaume, J.-L., Lambiotte, R. & Lefebvre, E. (2008) "Fast unfolding of communities in large networks." *Journal of Statistical Mechanics* 2008(10), P10008. [doi:10.1088/1742-5468/2008/10/P10008](https://doi.org/10.1088/1742-5468/2008/10/P10008) — the original algorithm.
+- Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — the resolution-limit result.
+- Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — why Leiden supersedes Louvain.
+
+**In practice:** select Louvain when you are reproducing or benchmarking against external work that used it, or when a reviewer expects the familiar baseline. Read it next to Leiden in the consensus matrix: groupings that survive both are robust; a group Leiden splits that Louvain keeps whole is usually the resolution limit at work, and a Louvain community that turns out to be internally disconnected is exactly the failure mode Leiden was built to remove. For everything else, treat Leiden as the default and Louvain as the legacy cross-check.
+
+**Example.** A team is extending a published study that reported eight Louvain communities in a far-right Telegram ecosystem. Re-crawling the network and running Louvain in Pulpit reproduces eight comparable communities, confirming the earlier finding still holds on fresh data. Switching to Leiden on the same graph splits one of the eight into two tightly-knit halves that Louvain had merged — a substructure the original study missed. Reporting both keeps the result comparable to the literature *and* surfaces the finer split.
 
 ---
 
@@ -207,6 +227,7 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | Find the ideological core vs. periphery | `KCORE` |
 | Group channels by structural *role* (incl. source/amplifier, non-cohesive groups) | `SBM` |
 | Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
+| Reproduce / compare against an older study's classic modularity baseline | `LOUVAIN` (prefer `LEIDEN` for new work) |
 | Compare algorithms for robustness | `ALL` + `--consensus-matrix` |
 
 ---

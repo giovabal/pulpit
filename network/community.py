@@ -30,6 +30,7 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
+    "LOUVAIN",
     "LABELPROPAGATION",
     "KCORE",
     "SBM",
@@ -45,7 +46,9 @@ VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
 # modularity, the form it was built against.
 # Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
 # canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
-UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset({"leiden", "leiden_cpm", "labelpropagation", "kcore"})
+UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
+    {"leiden", "leiden_cpm", "louvain", "labelpropagation", "kcore"}
+)
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
@@ -55,6 +58,7 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN": "Leiden",
     "LEIDEN_DIRECTED": "Leiden directed",
     "LEIDEN_CPM": "Leiden CPM",
+    "LOUVAIN": "Louvain",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
     "SBM": "Stochastic block model",
@@ -449,6 +453,35 @@ def detect_leiden_cpm(
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
+def detect_louvain(
+    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+) -> tuple[CommunityMap, CommunityPalette]:
+    """Louvain modularity maximisation (Blondel et al. 2008) — the classic baseline, superseded by Leiden.
+
+    Greedy modularity optimisation on the undirected W+Wᵀ projection
+    (``to_undirected_sum``) — the same symmetrised graph and edge-weight handling
+    as ``detect_leiden``; only the optimiser differs (no Leiden refinement pass).
+    Louvain is the field-standard community detector that predates Leiden; it is
+    kept in Pulpit so a run can be compared against the large body of older
+    studies that report Louvain partitions. **For Pulpit's own analyses prefer**
+    ``LEIDEN`` — or ``LEIDEN_DIRECTED`` when citation direction matters — since
+    Leiden adds a refinement step that guarantees every community is internally
+    well-connected, fixing the two Louvain weaknesses: occasionally disconnected
+    communities, and a sharper exposure to the modularity resolution limit
+    (Fortunato & Barthélemy 2007).
+
+    Edge weights from ``--edge-weight-strategy`` shape the partition; citation
+    direction is dropped by the symmetrisation (so it shares
+    ``UNDIRECTED_BASIS_STRATEGIES`` modularity reporting with ``LEIDEN``).
+    ``seed=0`` pins reproducibility — NetworkX's Louvain randomises node-visit
+    order, unlike the deterministic ``leidenalg`` partitions.
+    """
+    communities = sorted(
+        nx.community.louvain_communities(to_undirected_sum(graph), weight="weight", seed=0), key=len, reverse=True
+    )
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
+
+
 def detect_sbm(
     graph: nx.DiGraph, palette_name: str, mode: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
@@ -536,6 +569,8 @@ def detect(
         return detect_leiden_cpm(
             graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
         )
+    if strategy == "LOUVAIN":
+        return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "SBM":
         return detect_sbm(graph, palette_name, str(params.get("mode", SBM_DEFAULT_MODE)), reverse=reverse)
     if strategy == "ORGANIZATION":
