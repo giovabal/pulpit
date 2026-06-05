@@ -2,7 +2,7 @@ import { Sigma } from 'sigma';
 import Graph from 'graphology';
 import EdgeCurveProgram, { EdgeCurvedArrowProgram } from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
-import { drawDiscNodeLabel } from 'sigma/rendering';
+import { drawDiscNodeLabel, EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale } from './utils.js';
 
@@ -55,7 +55,9 @@ var EDGE_WEIGHT_BASE_SIZE       = 2.5;
 // with its own weight. Bowing those two edges by this curvature puts them on
 // opposite sides — the curve program offsets the control point perpendicular to
 // source→target, so the same value lands A→B and B→A on opposite arcs — so each
-// direction reads as its own edge. One-way edges stay straight (curvature 0).
+// direction reads as its own edge. One-way edges use a straight-line program
+// instead of curvature 0 (which would collapse the curve program's Bézier control
+// points onto the edge and make its distance solve divide by zero → undrawn edge).
 var RECIPROCAL_CURVATURE        = 0.25;
 
 // =============================================================================
@@ -184,8 +186,13 @@ var sigma_instance = new Sigma(graph, el(app_settings.container), {
     hideEdgesOnMove:            true,
     minCameraRatio:             0.03125,
     maxCameraRatio:             20,
-    defaultEdgeType:            'curved',
-    edgeProgramClasses:         { curved: EdgeCurveProgram, curvedArrow: EdgeCurvedArrowProgram },
+    defaultEdgeType:            'straight',
+    edgeProgramClasses:         {
+        straight:     EdgeRectangleProgram,    // one-way edge
+        straightArrow: EdgeArrowProgram,       // one-way edge + arrowhead
+        curved:       EdgeCurveProgram,        // one of a reciprocal pair
+        curvedArrow:  EdgeCurvedArrowProgram,  // reciprocal pair member + arrowhead
+    },
     defaultNodeType:            'border',
     nodeProgramClasses:         { border: NodeBorderProgram },
     defaultDrawNodeHover:       make_node_hover_renderer('#111111'),
@@ -429,26 +436,24 @@ function apply_edge_widths() {
     sigma_instance.refresh();
 }
 
-// A two-way (reciprocal) connection arrives as two directed edges with their own
-// weights; curve them so each direction is a distinct arc. One-way edges stay
-// straight (curvature 0). Self-loops keep a curve so they render as a visible
-// arc. Called after every (re)build, before the first render.
-function assign_edge_curvatures() {
+// Assign each edge its render program (and curvature) from its direction
+// structure: a two-way (reciprocal) connection or self-loop uses the curve program
+// with a fixed curvature so its two directions bow to opposite sides and read as
+// separate arcs; a one-way edge uses the straight-line program. The arrowed
+// variants ('*Arrow') add a target arrowhead. Edges carry an explicit `type`, and
+// sigma buckets edges into programs by `data.type` and reprocesses on attribute
+// change, so flipping the arrows toggle re-renders existing edges. Called after
+// every (re)build and whenever the arrows toggle flips.
+function apply_edge_styles() {
     if (!graph_loaded) return;
     graph.forEachEdge(function(edge, attrs, source, target) {
-        var curved = source === target || graph.hasEdge(target, source);
-        graph.setEdgeAttribute(edge, 'curvature', curved ? RECIPROCAL_CURVATURE : 0);
+        if (source === target || graph.hasEdge(target, source)) {
+            graph.setEdgeAttribute(edge, 'curvature', RECIPROCAL_CURVATURE);
+            graph.setEdgeAttribute(edge, 'type', show_edge_arrows ? 'curvedArrow' : 'curved');
+        } else {
+            graph.setEdgeAttribute(edge, 'type', show_edge_arrows ? 'straightArrow' : 'straight');
+        }
     });
-}
-
-// Switch every edge between the plain curve program ('curved') and the
-// curve+arrowhead program ('curvedArrow') by setting each edge's `type`. Sigma
-// buckets edges into programs by `data.type` and reprocesses on attribute change,
-// so this (unlike flipping the global defaultEdgeType) re-renders existing edges.
-function apply_edge_type() {
-    if (!graph_loaded) return;
-    var t = show_edge_arrows ? 'curvedArrow' : 'curved';
-    graph.forEachEdge(function(edge) { graph.setEdgeAttribute(edge, 'type', t); });
 }
 
 function maybe_apply_initial_colors() {
@@ -691,8 +696,7 @@ function get_data(data_dir) {
             graph.edges().length + ' connections';
 
         graph_loaded = true;
-        assign_edge_curvatures();
-        apply_edge_type();
+        apply_edge_styles();
         apply_edge_widths();
         maybe_apply_initial_colors();
     });
@@ -1012,8 +1016,7 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
                 el('about_graph_stats').innerHTML =
                     graph.nodes().length + ' channels, ' + graph.edges().length + ' connections';
                 graph_loaded = true;
-                assign_edge_curvatures();
-                apply_edge_type();
+                apply_edge_styles();
                 apply_edge_widths();
                 maybe_apply_initial_colors();
             });
@@ -1293,7 +1296,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     el('edge-arrows-toggle').addEventListener('change', function() {
         show_edge_arrows = this.checked;
-        apply_edge_type();
+        apply_edge_styles();
         apply_edge_widths();   // also refreshes; gives edges a visible width so arrowheads read
         update_info_bar();
     });
