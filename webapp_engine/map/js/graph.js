@@ -51,13 +51,11 @@ var EDGE_WEIGHT_MIN_SIZE        = 0.5;
 var EDGE_WEIGHT_MAX_SIZE        = 7.0;
 var EDGE_WEIGHT_BASE_SIZE       = 2.5;
 
-// A two-way connection is stored as two directed edges (one per direction), each
-// with its own weight. Bowing those two edges by this curvature puts them on
+// Curvature for curved edges (see apply_edge_styles). A two-way connection is two
+// directed edges (one per direction); bowing both by this value puts them on
 // opposite sides — the curve program offsets the control point perpendicular to
 // source→target, so the same value lands A→B and B→A on opposite arcs — so each
-// direction reads as its own edge. One-way edges use a straight-line program
-// instead of curvature 0 (which would collapse the curve program's Bézier control
-// points onto the edge and make its distance solve divide by zero → undrawn edge).
+// direction reads as its own edge.
 var RECIPROCAL_CURVATURE        = 0.25;
 
 // =============================================================================
@@ -118,7 +116,7 @@ function make_node_hover_renderer(fillStyle) {
 var THEMES = {
     dark: {
         label: 'Dark', canvas: 'rgba(17, 34, 51, 1)', fade: 'rgba(27, 44, 61, .75)',
-        labelColor: '#ffffff', edgeOpacity: 0.25,
+        labelColor: '#ffffff', edgeOpacity: 0.25, curveOneWay: true,
         defaultEdgeColor: '#484848', nodeBorderSize: 0, nodeBorderColor: 'transparent',
         hoverFill: '#111111',
         cssVars: {
@@ -132,7 +130,7 @@ var THEMES = {
     },
     light: {
         label: 'Light', canvas: 'rgba(240, 244, 248, 1)', fade: 'rgba(180, 195, 210, .75)',
-        labelColor: '#1a2a3a', edgeOpacity: 0.30,
+        labelColor: '#1a2a3a', edgeOpacity: 0.30, curveOneWay: true,
         defaultEdgeColor: '#aaaaaa', nodeBorderSize: 0.08, nodeBorderColor: 'rgba(255,255,255,0.8)',
         hoverFill: '#cddaeb',
         cssVars: {
@@ -144,7 +142,7 @@ var THEMES = {
     },
     minimal: {
         label: 'Minimal', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(210, 210, 210, .75)',
-        labelColor: '#333333', edgeOpacity: 0.18,
+        labelColor: '#333333', edgeOpacity: 0.18, curveOneWay: false,
         defaultEdgeColor: '#cccccc', nodeBorderSize: 0.15, nodeBorderColor: '#ffffff',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -156,7 +154,7 @@ var THEMES = {
     },
     print: {
         label: 'Print', canvas: 'rgba(255, 255, 255, 1)', fade: 'rgba(200, 200, 200, .75)',
-        labelColor: '#000000', edgeOpacity: 0.15,
+        labelColor: '#000000', edgeOpacity: 0.15, curveOneWay: false,
         defaultEdgeColor: '#999999', nodeBorderSize: 0.20, nodeBorderColor: '#222222',
         hoverFill: '#eeeeee',
         cssVars: {
@@ -186,7 +184,7 @@ var sigma_instance = new Sigma(graph, el(app_settings.container), {
     hideEdgesOnMove:            true,
     minCameraRatio:             0.03125,
     maxCameraRatio:             20,
-    defaultEdgeType:            'straight',
+    defaultEdgeType:            'curved',
     edgeProgramClasses:         {
         straight:     EdgeRectangleProgram,    // one-way edge
         straightArrow: EdgeArrowProgram,       // one-way edge + arrowhead
@@ -244,6 +242,7 @@ function apply_theme(themeKey) {
             var c = 'rgba(' + parts.join(',') + ',' + theme.edgeOpacity + ')';
             graph.setEdgeAttribute(edgeId, 'originalColor', c);
         });
+        apply_edge_styles();   // one-way edges curve in dark/light, stay straight in minimal/print
         refresh_edge_colors();
     }
 
@@ -436,18 +435,23 @@ function apply_edge_widths() {
     sigma_instance.refresh();
 }
 
-// Assign each edge its render program (and curvature) from its direction
-// structure: a two-way (reciprocal) connection or self-loop uses the curve program
-// with a fixed curvature so its two directions bow to opposite sides and read as
-// separate arcs; a one-way edge uses the straight-line program. The arrowed
-// variants ('*Arrow') add a target arrowhead. Edges carry an explicit `type`, and
-// sigma buckets edges into programs by `data.type` and reprocesses on attribute
-// change, so flipping the arrows toggle re-renders existing edges. Called after
-// every (re)build and whenever the arrows toggle flips.
+// Assign each edge its render program (and curvature) from its direction structure
+// and the active theme. A two-way (reciprocal) connection or self-loop always uses
+// the curve program with a fixed curvature, so its two directions bow to opposite
+// sides and read as separate arcs. A one-way edge curves too in themes that ask for
+// it (`curveOneWay` — dark/light, matching their all-curved look) and renders as a
+// straight line otherwise (minimal/print). Straight edges use a dedicated straight
+// program rather than curvature 0, which would collapse the curve program's Bézier
+// and leave the edge undrawn. The arrowed variants ('*Arrow') add a target
+// arrowhead. Edges carry an explicit `type`; sigma buckets edges into programs by
+// `data.type` and reprocesses on attribute change, so flipping the arrows toggle or
+// switching theme re-renders existing edges. Called after every (re)build and
+// whenever the arrows toggle or theme changes.
 function apply_edge_styles() {
     if (!graph_loaded) return;
+    var curve_one_way = (THEMES[active_theme] || THEMES.dark).curveOneWay;
     graph.forEachEdge(function(edge, attrs, source, target) {
-        if (source === target || graph.hasEdge(target, source)) {
+        if (curve_one_way || source === target || graph.hasEdge(target, source)) {
             graph.setEdgeAttribute(edge, 'curvature', RECIPROCAL_CURVATURE);
             graph.setEdgeAttribute(edge, 'type', show_edge_arrows ? 'curvedArrow' : 'curved');
         } else {
