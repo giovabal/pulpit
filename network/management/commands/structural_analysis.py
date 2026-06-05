@@ -510,10 +510,12 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LABELPROPAGATION, KCORE, SBM, ALL. "
+                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, KCORE, SBM, ALL. "
                 "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
                 "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED and requires "
                 "graph-tool (conda/apt, not pip). "
+                "LOUVAIN is the classic modularity baseline kept for comparison with older studies; "
+                "prefer LEIDEN / LEIDEN_DIRECTED otherwise. "
                 "Default: ORGANIZATION."
             ),
         )

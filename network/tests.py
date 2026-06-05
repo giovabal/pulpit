@@ -20,6 +20,7 @@ from network.community import (
     detect_kcore,
     detect_label_propagation,
     detect_leiden,
+    detect_louvain,
     detect_organization,
     normalize_community_map,
     parse_strategies,
@@ -1228,6 +1229,42 @@ class DetectLeidenTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# community.py — detect_louvain
+# ---------------------------------------------------------------------------
+
+
+class DetectLouvainTests(TestCase):
+    def setUp(self) -> None:
+        # Two clear clusters connected by a weak bridge (same fixture as Leiden).
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_louvain(self.graph, "SomePalette")
+        self.assertIsInstance(community_map, dict)
+        self.assertIsInstance(palette, dict)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_louvain(self.graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_louvain(self.graph, "SomePalette")
+        for community_id in community_map.values():
+            self.assertIn(community_id, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_seed_makes_partition_reproducible(self, _mock: MagicMock) -> None:
+        first, _ = detect_louvain(self.graph, "SomePalette")
+        second, _ = detect_louvain(self.graph, "SomePalette")
+        self.assertEqual(first, second)
+
+
+# ---------------------------------------------------------------------------
 # community.py — detect() dispatcher
 # ---------------------------------------------------------------------------
 
@@ -1259,6 +1296,14 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("LEIDEN", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
+
+    @patch("network.community.detect_louvain")
+    def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+
+        mock_detect.return_value = ({}, {})
+        detect("LOUVAIN", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_organization")
