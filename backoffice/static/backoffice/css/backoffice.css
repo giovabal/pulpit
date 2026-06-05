@@ -191,6 +191,7 @@
 
 .bo-td--num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bo-td--center { text-align: center; }
+.bo-td--date { color: var(--muted); font-size: .8125rem; font-family: var(--font-mono); white-space: nowrap; }
 
 .bo-empty { text-align: center; color: var(--muted); padding: var(--space-6); }
 

@@ -90,7 +90,7 @@ class ChannelViewSet(
     serializer_class = ChannelSerializer
     http_method_names = ["get", "patch", "post", "head", "options"]
     filter_backends = [OrderingFilter]
-    ordering_fields = ["id", "title", "participants_count", "in_degree"]
+    ordering_fields = ["id", "title", "participants_count", "in_degree", "_created"]
     ordering = ["-id"]
 
     def get_queryset(self):
