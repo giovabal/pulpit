@@ -153,8 +153,8 @@
 .bo-pagination span { color: var(--muted); }
 
 /* Digg paginator: numbered page chips, ellipsis gaps, highlighted current page. */
-.bo-page { min-width: 1.75rem; text-align: center; font-variant-numeric: tabular-nums; }
-.bo-pagination button.bo-page--active:disabled {
+.bo-page-btn { min-width: 1.75rem; text-align: center; font-variant-numeric: tabular-nums; }
+.bo-pagination button.bo-page-btn--active:disabled {
   opacity: 1;
   background: var(--accent);
   border-color: var(--accent);
