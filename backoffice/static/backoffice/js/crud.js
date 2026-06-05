@@ -3,21 +3,85 @@
 
 const BACKOFFICE_PAGE_SIZE = 100;
 
+/* Digg-style page list: always the first and last page, a window of pages
+   around the current one, and single "…" gaps. A gap of exactly one page is
+   rendered as that page rather than an ellipsis, matching the server-side
+   DiggPaginator on the public site. */
+function _buildPageList(current, totalPages) {
+    var WINDOW = 2; /* pages shown on each side of the current page */
+    var show = {};
+    show[1] = true;
+    show[totalPages] = true;
+    for (var p = current - WINDOW; p <= current + WINDOW; p++) {
+        if (p >= 1 && p <= totalPages) show[p] = true;
+    }
+    var items = [];
+    var prev = 0;
+    for (var n = 1; n <= totalPages; n++) {
+        if (!show[n]) continue;
+        if (n - prev === 2) items.push(prev + 1);
+        else if (n - prev > 1) items.push("…");
+        items.push(n);
+        prev = n;
+    }
+    return items;
+}
+
 function renderPagination(container, offset, total, pageSize, onPageChange) {
     container.innerHTML = "";
     if (total <= pageSize) return;
-    var prevBtn = document.createElement("button"); prevBtn.textContent = "←";
-    prevBtn.disabled = offset === 0;
-    prevBtn.addEventListener("click", function () { onPageChange(Math.max(0, offset - pageSize)); });
-    var nextBtn = document.createElement("button"); nextBtn.textContent = "→";
-    nextBtn.disabled = offset + pageSize >= total;
-    nextBtn.addEventListener("click", function () { onPageChange(offset + pageSize); });
+
+    var totalPages = Math.ceil(total / pageSize);
+    var current = Math.min(totalPages, Math.floor(offset / pageSize) + 1);
+    container.setAttribute("role", "navigation");
+    container.setAttribute("aria-label", "Pagination");
+
+    function navTo(page) {
+        return function () { onPageChange((page - 1) * pageSize); };
+    }
+
     var info = document.createElement("span");
-    var from = total ? offset + 1 : 0;
+    info.className = "bo-pagination-info";
+    var from = offset + 1;
     var to = Math.min(offset + pageSize, total);
-    info.textContent = from + "–" + to + " of " + total;
-    container.appendChild(prevBtn);
+    info.textContent = from.toLocaleString() + "–" + to.toLocaleString() + " of " + total.toLocaleString();
     container.appendChild(info);
+
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button"; prevBtn.textContent = "←";
+    prevBtn.setAttribute("aria-label", "Previous page");
+    prevBtn.disabled = current === 1;
+    if (!prevBtn.disabled) prevBtn.addEventListener("click", navTo(current - 1));
+    container.appendChild(prevBtn);
+
+    _buildPageList(current, totalPages).forEach(function (item) {
+        if (item === "…") {
+            var gap = document.createElement("span");
+            gap.className = "bo-page-gap"; gap.textContent = "…";
+            gap.setAttribute("aria-hidden", "true");
+            container.appendChild(gap);
+            return;
+        }
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "bo-page";
+        b.textContent = item.toLocaleString();
+        if (item === current) {
+            b.classList.add("bo-page--active");
+            b.disabled = true;
+            b.setAttribute("aria-current", "page");
+            b.setAttribute("aria-label", "Page " + item + ", current");
+        } else {
+            b.setAttribute("aria-label", "Go to page " + item);
+            b.addEventListener("click", navTo(item));
+        }
+        container.appendChild(b);
+    });
+
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button"; nextBtn.textContent = "→";
+    nextBtn.setAttribute("aria-label", "Next page");
+    nextBtn.disabled = current === totalPages;
+    if (!nextBtn.disabled) nextBtn.addEventListener("click", navTo(current + 1));
     container.appendChild(nextBtn);
 }
 
