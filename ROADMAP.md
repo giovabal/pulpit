@@ -1,8 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
-## [0.25]
-
-
 ## [1.0]
+- An installer, or a package
 - Zenodo registration
 - Have a deep inspection of Python code for calculating channels measures, network measures, community strategies, consensus matrix, structural similarity, robustness, and vacancies. Do search for bugs, implementations that doesn't have a strong academic validation, and incoherence between different calculations. Produce a detailed todo list and let me approve each action before writing anything.
 - Have a deep inspection of Python code for calculating channels measures, network measures, community strategies, consensus matrix, structural similarity, robustness, and vacancies. Take care documentation is coherent with the code. Academic validation always has priority in choosing if adapting documentation to the code or the code to the documentation.
