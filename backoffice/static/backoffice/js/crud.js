@@ -63,10 +63,10 @@ function renderPagination(container, offset, total, pageSize, onPageChange) {
             return;
         }
         var b = document.createElement("button");
-        b.type = "button"; b.className = "bo-page";
+        b.type = "button"; b.className = "bo-page-btn";
         b.textContent = item.toLocaleString();
         if (item === current) {
-            b.classList.add("bo-page--active");
+            b.classList.add("bo-page-btn--active");
             b.disabled = true;
             b.setAttribute("aria-current", "page");
             b.setAttribute("aria-label", "Page " + item + ", current");
