@@ -1204,6 +1204,9 @@ class Command(BaseCommand):
             # finish unwinding before closing the loop. Without this drain,
             # those tasks would be GC'd later, sometimes mid-print, and emit
             # "Exception ignored in: <coroutine ...>" tracebacks on stderr.
+            # (Loops abandoned *during* the crawl are GC'd as bare coroutines
+            # before this drain runs; those are filtered by the sys.unraisablehook
+            # installed in settings.)
             pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
             for task in pending:
                 task.cancel()

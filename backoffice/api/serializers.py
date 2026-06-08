@@ -91,6 +91,7 @@ class ChannelSerializer(serializers.ModelSerializer):
     profile_picture_mime_type = serializers.SerializerMethodField()
     profile_picture_thumbnail_url = serializers.SerializerMethodField()
     detail_url = serializers.SerializerMethodField()
+    first_seen = serializers.DateTimeField(source="_created", read_only=True)
 
     def get_profile_picture_url(self, obj):
         pic = obj.profile_picture
@@ -146,6 +147,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "is_private",
             "to_inspect",
             "date",
+            "first_seen",
             "restriction_reason",
             "message_ttl",
             "noforwards",
