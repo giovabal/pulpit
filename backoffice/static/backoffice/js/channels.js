@@ -53,6 +53,7 @@
         "ch-th-name":        "title",
         "ch-th-subscribers": "participants_count",
         "ch-th-indegree":    "in_degree",
+        "ch-th-first-seen":  "_created",
     };
 
     function _updateSortHeaders() {
@@ -149,7 +150,7 @@
     function renderTable(channels) {
         $tbody.innerHTML = "";
         if (!channels.length) {
-            $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">No channels found.</td></tr>';
+            $tbody.innerHTML = '<tr><td colspan="10" class="bo-empty">No channels found.</td></tr>';
             return;
         }
         var frag = document.createDocumentFragment();
@@ -230,6 +231,12 @@
             /* in-degree */
             var tdIn = document.createElement("td"); tdIn.className = "bo-td--num";
             tdIn.textContent = fmtInt(ch.in_degree); tr.appendChild(tdIn);
+
+            /* first seen (DB registration timestamp; full datetime on hover) */
+            var tdSeen = document.createElement("td"); tdSeen.className = "bo-td--date";
+            tdSeen.textContent = fmtDate(ch.first_seen);
+            if (ch.first_seen) tdSeen.title = new Date(ch.first_seen).toLocaleString();
+            tr.appendChild(tdSeen);
 
             frag.appendChild(tr);
         });
@@ -409,7 +416,7 @@
     function loadChannels(updateUrl) {
         if (_loading) return;
         _loading = true;
-        $tbody.innerHTML = '<tr><td colspan="8" class="bo-empty">Loading…</td></tr>';
+        $tbody.innerHTML = '<tr><td colspan="10" class="bo-empty">Loading…</td></tr>';
         $selectAll.checked = false;
         $bulkBar.classList.add("d-none");
 
@@ -430,7 +437,7 @@
                 // innerHTML would turn that into an XSS via a crafted /manage/channels/ URL.
                 var tr = document.createElement("tr");
                 var td = document.createElement("td");
-                td.colSpan = 8;
+                td.colSpan = 10;
                 td.className = "bo-empty";
                 td.textContent = "Error loading channels: " + err.message;
                 tr.appendChild(td);

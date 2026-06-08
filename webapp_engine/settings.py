@@ -21,6 +21,35 @@ warnings.filterwarnings(
     category=DeprecationWarning,
 )
 
+
+# Telethon's auto-reconnect spawns a fresh Connection._recv_loop/_send_loop and
+# abandons the previous one. When a GC cycle later finalises one of those bare
+# coroutines mid-crawl, CPython throws GeneratorExit into it; the unwind crosses
+# an await that fails to re-raise it, so a benign "coroutine ignored
+# GeneratorExit" RuntimeError is routed through sys.unraisablehook and printed to
+# stderr — interrupting the captured crawl log. That channel is covered by
+# neither the asyncio loop exception handler nor the end-of-crawl task drain in
+# crawl_channels (both of which act on Tasks, not GC-finalised bare coroutines),
+# so filter exactly this case here: a coroutine defined inside the telethon
+# package raising RuntimeError/GeneratorExit. Everything else — including a
+# genuine GeneratorExit bug in our own code — falls through to the default hook.
+def _drop_telethon_coroutine_teardown(unraisable):
+    obj = unraisable.object
+    code = getattr(obj, "cr_code", None) or getattr(obj, "ag_code", None)
+    exc = unraisable.exc_value
+    if (
+        code is not None
+        and "/telethon/" in code.co_filename.replace("\\", "/")
+        and isinstance(exc, RuntimeError)
+        and "GeneratorExit" in str(exc)
+    ):
+        return
+    sys.__unraisablehook__(unraisable)
+
+
+sys.unraisablehook = _drop_telethon_coroutine_teardown
+
+
 # Under the test runner, silence logging: the suite deliberately exercises
 # flood-wait, failed-download, unresolved-reference and parse-failure paths
 # whose log records would otherwise flood the output. No test asserts on log

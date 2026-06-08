@@ -131,6 +131,7 @@
 
 .bo-pagination {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   align-items: center;
   font-size: .8125rem;
@@ -150,6 +151,18 @@
 .bo-pagination button:disabled { opacity: .4; cursor: default; }
 .bo-pagination button:not(:disabled):hover { background: var(--hover); }
 .bo-pagination span { color: var(--muted); }
+
+/* Digg paginator: numbered page chips, ellipsis gaps, highlighted current page. */
+.bo-page-btn { min-width: 1.75rem; text-align: center; font-variant-numeric: tabular-nums; }
+.bo-pagination button.bo-page-btn--active:disabled {
+  opacity: 1;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.bo-page-gap { color: var(--muted); padding: 0 .15rem; user-select: none; }
+.bo-pagination-info { margin-right: var(--space-1); }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 
@@ -191,6 +204,7 @@
 
 .bo-td--num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bo-td--center { text-align: center; }
+.bo-td--date { color: var(--muted); font-size: .8125rem; font-family: var(--font-mono); white-space: nowrap; }
 
 .bo-empty { text-align: center; color: var(--muted); padding: var(--space-6); }
 
