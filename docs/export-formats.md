@@ -111,8 +111,8 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requi
 - **Year navigator** — appears when a timeline export was generated; step through annual snapshots with animated transitions (see [Workflow § Timeline export](workflow.md#timeline-export))
 
 <figure>
-<img src="../webapp_engine/static/screenshot_06.jpg" alt="3D interactive graph">
-<figcaption><em>3D interactive graph (~800 nodes, ~5,000 edges): rotate, zoom, click nodes to inspect measures.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_16.jpg" alt="2D interactive graph">
+<figcaption><em>Details of 2D interactive graph (fully opaque edges, vaporwave palette).</em></figcaption>
 </figure>
 <br>
 
@@ -133,6 +133,10 @@ Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requir
 <figcaption><em>Node detail panel: subscriber count, all computed measures, direct channel link.</em></figcaption>
 </figure>
 <br>
+<figure>
+<img src="../webapp_engine/static/screenshot_06.jpg" alt="3D interactive graph">
+<figcaption><em>3D interactive graph (~800 nodes, ~5,000 edges): rotate, zoom, click nodes to inspect measures.</em></figcaption>
+</figure>
 
 ---
 
