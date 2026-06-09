@@ -1,9 +1,11 @@
 import asyncio
 import datetime
+import gc
 import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 from argparse import ArgumentParser, BooleanOptionalAction
 from collections import Counter
@@ -149,6 +151,43 @@ def per_channel_step(
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ABOUT_REF_RE = re.compile(r"t\.me/((?:[-\w.]|(?:%[\da-fA-F]{2}))+)")
+
+# Path fragment identifying coroutines whose code lives inside the Telethon
+# package — used by the unraisable-hook filter to scope what it silences.
+_TELETHON_PKG_PATH = f"{os.sep}telethon{os.sep}"
+
+
+def _make_telethon_unraisable_filter(previous_hook: Any) -> Any:
+    """Build a ``sys.unraisablehook`` that drops Telethon's reconnect noise.
+
+    Telethon's ``Connection._recv_loop`` / ``_send_loop`` ``await`` inside their
+    ``except``/``finally`` paths. When the auto-reconnect machinery supersedes a
+    connection, its still-suspended loop coroutine is eventually garbage
+    collected: CPython throws ``GeneratorExit`` into it, the coroutine re-enters
+    an ``await`` while unwinding, and the resulting "coroutine ignored
+    GeneratorExit" ``RuntimeError`` is reported through ``sys.unraisablehook``
+    straight to stderr — bypassing both ``logging`` and the asyncio exception
+    handler, so it lands mid-line in the crawl progress log. The coroutine was
+    abandoned on purpose, so the message carries no signal.
+
+    The returned hook swallows exactly that finalisation artefact for
+    Telethon-origin coroutines and forwards every other unraisable to
+    ``previous_hook`` untouched.
+    """
+
+    def _hook(unraisable: Any) -> None:
+        obj = unraisable.object
+        code = getattr(obj, "cr_code", None) or getattr(obj, "ag_code", None) or getattr(obj, "gi_code", None)
+        from_telethon = code is not None and _TELETHON_PKG_PATH in getattr(code, "co_filename", "")
+        exc = unraisable.exc_value
+        is_generator_exit_noise = isinstance(exc, GeneratorExit) or (
+            isinstance(exc, RuntimeError) and "GeneratorExit" in str(exc)
+        )
+        if from_telethon and is_generator_exit_noise:
+            return
+        previous_hook(unraisable)
+
+    return _hook
 
 
 class ProgressPrinter:
@@ -1171,19 +1210,30 @@ class Command(BaseCommand):
         asyncio.set_event_loop(loop)
 
         # Telethon's internal auto-reconnect spawns fresh Connection._send_loop /
-        # _recv_loop tasks and abandons the old ones. The abandoned tasks are
-        # logically replaced but stay pending until GC collects them — at which
-        # point asyncio invokes the loop's exception handler with "Task was
-        # destroyed but it is pending!". The warnings are pure noise (the tasks
-        # were superseded on purpose) but they interrupt the crawl progress log,
-        # so suppress that one message and forward everything else to the default
-        # handler.
+        # _recv_loop tasks and abandons the old ones. When GC later collects a
+        # superseded connection it surfaces as TWO independent artefacts, each
+        # pure noise (the loops were replaced on purpose) yet each able to land
+        # mid-line in the crawl progress log:
+        #
+        #   1. the abandoned *Task* is still pending → asyncio calls the loop's
+        #      exception handler with "Task was destroyed but it is pending!";
+        #   2. the loop *coroutine*, suspended inside an ``await`` in its
+        #      except/finally path, has GeneratorExit thrown into it and
+        #      re-yields while unwinding → CPython reports "coroutine ignored
+        #      GeneratorExit" through ``sys.unraisablehook`` straight to stderr.
+        #
+        # (1) is silenced by the exception handler below; (2) bypasses both
+        # logging and that handler, so it needs the unraisable-hook filter.
+        # Each forwards anything it does not recognise to its default.
         def _suppress_destroyed_pending(loop_arg: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
             if "was destroyed but it is pending" in context.get("message", ""):
                 return
             loop_arg.default_exception_handler(context)
 
         loop.set_exception_handler(_suppress_destroyed_pending)
+
+        previous_unraisable_hook = sys.unraisablehook
+        sys.unraisablehook = _make_telethon_unraisable_filter(previous_unraisable_hook)
 
         try:
             self.stdout.write("Connecting to Telegram…", ending="")
@@ -1201,9 +1251,9 @@ class Command(BaseCommand):
         finally:
             # Cancel any tasks still pending after disconnect — typically the
             # leftover send/recv loops from the last reconnect — and let them
-            # finish unwinding before closing the loop. Without this drain,
-            # those tasks would be GC'd later, sometimes mid-print, and emit
-            # "Exception ignored in: <coroutine ...>" tracebacks on stderr.
+            # finish unwinding before closing the loop. (The matching
+            # <coroutine ...> "ignored GeneratorExit" artefact is handled by the
+            # unraisable-hook filter installed above.)
             pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
             for task in pending:
                 task.cancel()
@@ -1214,6 +1264,12 @@ class Command(BaseCommand):
                     pass
             loop.close()
             asyncio.set_event_loop(None)
+            # Finalise any connection coroutines the reconnect logic abandoned
+            # now, while the filter is still installed, so their GeneratorExit
+            # unwinding is swallowed here rather than leaking to stderr at
+            # interpreter shutdown. Then restore the prior hook.
+            gc.collect()
+            sys.unraisablehook = previous_unraisable_hook
 
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
