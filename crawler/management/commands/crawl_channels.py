@@ -294,6 +294,28 @@ class ProgressPrinter:
         self._line_length = 0
 
 
+# Plain-language rewrites for the low-level Telethon warnings that routinely
+# surface during a long crawl. They report transient, auto-recovered network
+# events, but the raw text ("Server closed the connection: [Errno 104]
+# Connection reset by peer") reads as alarming to a non-technical operator, so
+# the crawl log shows the friendly equivalent instead. Telethon warnings that
+# match nothing here are shown unchanged.
+_TELETHON_FRIENDLY_WARNINGS: tuple[tuple[str, str], ...] = (
+    ("closed the connection", "Lost contact with Telegram for a moment — reconnecting automatically."),
+    ("connection reset", "Lost contact with Telegram for a moment — reconnecting automatically."),
+)
+
+
+def _friendly_telethon_warning(message: str) -> str | None:
+    """Return a plain-language rewrite for a known transient Telethon warning, or
+    ``None`` when the message has no friendly equivalent and should be shown as-is."""
+    lowered = message.lower()
+    for needle, friendly in _TELETHON_FRIENDLY_WARNINGS:
+        if needle in lowered:
+            return friendly
+    return None
+
+
 class _WarningLogHandler(logging.Handler):
     """Route WARNING+ log records to the terminal as coloured, newline-separated messages."""
 
@@ -305,6 +327,13 @@ class _WarningLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         self._printer.ensure_newline()
         msg = self.format(record)
+        # Telethon's own low-level warnings (logger namespace "telethon.*") are
+        # rewritten into operator-friendly language where we have an equivalent;
+        # first-party warnings are already phrased for the operator.
+        if record.name.startswith("telethon"):
+            friendly = _friendly_telethon_warning(record.getMessage())
+            if friendly is not None:
+                msg = friendly
         print(self._style.WARNING(msg) if record.levelno < logging.ERROR else self._style.ERROR(msg))
 
 
