@@ -3,8 +3,10 @@ import io
 import os
 import shutil
 import tempfile
+import types
 from dataclasses import fields
 from datetime import timedelta
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -12,7 +14,13 @@ from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.hole_fixer import fix_message_holes, iter_hole_ranges
-from crawler.management.commands.crawl_channels import Command, CrawlOptions, ProgressPrinter
+from crawler.management.commands.crawl_channels import (
+    _TELETHON_PKG_PATH,
+    Command,
+    CrawlOptions,
+    ProgressPrinter,
+    _make_telethon_unraisable_filter,
+)
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 from webapp.test_helpers import make_channel
@@ -2275,3 +2283,99 @@ class SkipOutOfTargetStorageTests(TestCase):
             attribution_end=datetime.date(2024, 3, 31),
         )
         self.assertFalse(self.crawler._skip_out_of_target(ch, types.SimpleNamespace(date=None)))
+
+
+class TelethonUnraisableFilterTests(TestCase):
+    """The ``sys.unraisablehook`` filter swallows the "coroutine ignored
+    GeneratorExit" noise Telethon emits when auto-reconnect abandons a
+    connection loop, while forwarding every other unraisable untouched."""
+
+    @staticmethod
+    def _coro_from(filename: str) -> Any:
+        """A stand-in coroutine object whose ``cr_code.co_filename`` is ``filename``."""
+        code = types.SimpleNamespace(co_filename=filename)
+        return types.SimpleNamespace(cr_code=code)
+
+    @staticmethod
+    def _unraisable(obj: Any, exc: BaseException) -> Any:
+        return types.SimpleNamespace(object=obj, exc_value=exc, exc_type=type(exc))
+
+    def setUp(self) -> None:
+        self.forwarded: list = []
+        self.hook = _make_telethon_unraisable_filter(self.forwarded.append)
+        self.telethon = self._coro_from(f"/x/site-packages{_TELETHON_PKG_PATH}network/connection/connection.py")
+        self.ours = self._coro_from("/home/jo/job/crawler/channel_crawler.py")
+
+    def test_telethon_ignored_generator_exit_is_swallowed(self) -> None:
+        self.hook(self._unraisable(self.telethon, RuntimeError("coroutine ignored GeneratorExit")))
+        self.assertEqual(self.forwarded, [])
+
+    def test_telethon_bare_generator_exit_is_swallowed(self) -> None:
+        self.hook(self._unraisable(self.telethon, GeneratorExit()))
+        self.assertEqual(self.forwarded, [])
+
+    def test_non_telethon_generator_exit_is_forwarded(self) -> None:
+        # A GeneratorExit artefact from our own coroutines is a real signal — keep it.
+        u = self._unraisable(self.ours, RuntimeError("coroutine ignored GeneratorExit"))
+        self.hook(u)
+        self.assertEqual(self.forwarded, [u])
+
+    def test_telethon_real_error_is_forwarded(self) -> None:
+        # Only the GeneratorExit finalisation noise is filtered; genuine Telethon
+        # errors surfaced through the hook must still be visible.
+        u = self._unraisable(self.telethon, ValueError("genuine bug"))
+        self.hook(u)
+        self.assertEqual(self.forwarded, [u])
+
+    def test_non_coroutine_object_is_forwarded(self) -> None:
+        u = self._unraisable(object(), OSError("disk gone"))
+        self.hook(u)
+        self.assertEqual(self.forwarded, [u])
+
+    def test_real_finalisation_is_swallowed_without_touching_stderr(self) -> None:
+        """End-to-end: a coroutine whose code physically lives under a
+        ``…/telethon/…`` path, GC-finalised while suspended inside an
+        ``await`` in its ``finally`` (Telethon's exact shape), is swallowed
+        with nothing written to stderr."""
+        import contextlib
+        import gc
+        import importlib.util
+        import sys
+
+        work_dir = tempfile.mkdtemp()
+        try:
+            pkg_dir = os.path.join(work_dir, "telethon")
+            os.makedirs(pkg_dir)
+            mod_path = os.path.join(pkg_dir, "connection.py")
+            with open(mod_path, "w") as handle:
+                handle.write(
+                    "class _suspend:\n"
+                    "    def __await__(self):\n"
+                    "        yield\n"
+                    "async def _recv_loop():\n"
+                    "    try:\n"
+                    "        await _suspend()\n"
+                    "    finally:\n"
+                    "        await _suspend()\n"
+                )
+            spec = importlib.util.spec_from_file_location("telethon._unraisable_probe", mod_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            seen: list = []
+            previous = sys.unraisablehook
+            sys.unraisablehook = _make_telethon_unraisable_filter(seen.append)
+            stderr_buffer = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(stderr_buffer):
+                    coro = module._recv_loop()
+                    coro.send(None)  # suspend inside the try
+                    del coro
+                    gc.collect()
+            finally:
+                sys.unraisablehook = previous
+
+            self.assertEqual(seen, [])
+            self.assertEqual(stderr_buffer.getvalue(), "")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
