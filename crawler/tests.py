@@ -2379,3 +2379,98 @@ class TelethonUnraisableFilterTests(TestCase):
             self.assertEqual(stderr_buffer.getvalue(), "")
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+
+class FriendlyMediaErrorTests(TestCase):
+    """``_friendly_media_error`` turns raw download exceptions into plain language
+    a non-technical operator can read, and never leaks the Telethon RPC wording."""
+
+    def test_file_reference_expired_is_plain_language(self) -> None:
+        from crawler.media_handler import _friendly_media_error
+
+        from telethon.errors.rpcerrorlist import FileReferenceExpiredError
+
+        msg = _friendly_media_error(FileReferenceExpiredError.__new__(FileReferenceExpiredError))
+        self.assertIn("Telegram no longer provides this file", msg)
+        self.assertNotIn("GetFileRequest", msg)
+
+    def test_file_reference_invalid_shares_wording(self) -> None:
+        from crawler.media_handler import _friendly_media_error
+
+        from telethon.errors.rpcerrorlist import FileReferenceInvalidError
+
+        msg = _friendly_media_error(FileReferenceInvalidError.__new__(FileReferenceInvalidError))
+        self.assertIn("Telegram no longer provides this file", msg)
+
+    def test_file_migrate_is_plain_language(self) -> None:
+        from crawler.media_handler import _friendly_media_error
+
+        from telethon.errors.rpcerrorlist import FileMigrateError
+
+        msg = _friendly_media_error(FileMigrateError.__new__(FileMigrateError))
+        self.assertIn("moved this file to another server", msg)
+
+    def test_message_does_not_exist_is_plain_language(self) -> None:
+        from crawler.media_handler import _friendly_media_error
+
+        self.assertIn("isn't stored in the database yet", _friendly_media_error(Message.DoesNotExist()))
+
+    def test_unknown_error_falls_back_to_str(self) -> None:
+        from crawler.media_handler import _friendly_media_error
+
+        # Unrecognised errors are not hidden — the original text is preserved.
+        self.assertEqual(_friendly_media_error(ValueError("raw low-level detail")), "raw low-level detail")
+
+
+class FriendlyTelethonWarningTests(TestCase):
+    """``_friendly_telethon_warning`` rewrites transient connection chatter and
+    leaves everything else untouched."""
+
+    def test_connection_reset_is_rewritten(self) -> None:
+        from crawler.management.commands.crawl_channels import _friendly_telethon_warning
+
+        out = _friendly_telethon_warning("Server closed the connection: [Errno 104] Connection reset by peer")
+        self.assertEqual(out, "Lost contact with Telegram for a moment — reconnecting automatically.")
+
+    def test_unrelated_warning_passes_through(self) -> None:
+        from crawler.management.commands.crawl_channels import _friendly_telethon_warning
+
+        self.assertIsNone(_friendly_telethon_warning("Gap detected in updates; some messages may be missing"))
+
+
+class MediaHandlerFriendlyLogIntegrationTests(TestCase):
+    """The friendly reason actually reaches the crawl log — the raw Telethon
+    "file reference has expired … GetFileRequest" text never appears."""
+
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler_dl = MediaHandler(self.api_client, download_images=True)
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.message = Message.objects.create(telegram_id=1, channel=self.channel)
+
+    def _tg_message(self) -> MagicMock:
+        tm = MagicMock()
+        tm.id = 1
+        tm.peer_id.channel_id = 10
+        tm.media.photo = MagicMock()
+        tm.media.photo.id = 42
+        tm.media.photo.date = None
+        return tm
+
+    def test_expired_reference_logs_friendly_text(self) -> None:
+        from telethon.errors.rpcerrorlist import FileReferenceExpiredError
+
+        tm = self._tg_message()
+        self.handler_dl._download_media = MagicMock(
+            side_effect=FileReferenceExpiredError.__new__(FileReferenceExpiredError)
+        )
+        with self.assertLogs("crawler.media_handler", level="WARNING") as captured:
+            result = self.handler_dl.download_message_picture(tm)
+        self.assertEqual(result, 0)
+        logged = "\n".join(captured.output)
+        self.assertIn("Couldn't download the picture in message 1", logged)
+        self.assertIn("Telegram no longer provides this file", logged)
+        self.assertNotIn("GetFileRequest", logged)

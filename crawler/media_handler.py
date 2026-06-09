@@ -34,6 +34,27 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_TIMEOUT_SECONDS = 120
 
 
+def _friendly_media_error(exc: Exception) -> str:
+    """Translate a media-download failure into a short, plain-language reason.
+
+    The crawl log is read by non-technical operators, so the raw Telethon text —
+    e.g. "The file reference has expired and is no longer valid or it belongs to
+    self-destructing media and cannot be resent (caused by GetFileRequest)" — is
+    replaced with everyday phrasing. Unrecognised errors fall back to ``str(exc)``
+    so nothing is silently hidden.
+    """
+    if isinstance(
+        exc,
+        (errors.rpcerrorlist.FileReferenceExpiredError, errors.rpcerrorlist.FileReferenceInvalidError),
+    ):
+        return "Telegram no longer provides this file (it may be self-destructing, expired, or deleted)"
+    if isinstance(exc, errors.rpcerrorlist.FileMigrateError):
+        return "Telegram moved this file to another server and it couldn't be fetched this time"
+    if isinstance(exc, Message.DoesNotExist):
+        return "the message it belongs to isn't stored in the database yet"
+    return str(exc)
+
+
 def _doc_attributes(document: Any) -> list[Any]:
     return getattr(document, "attributes", None) or []
 
@@ -185,8 +206,7 @@ class MediaHandler:
                     # row with an empty FieldFile would mask the failure as a
                     # "broken" record on every subsequent --get-channels-info run.
                     logger.warning(
-                        "Profile picture %s for channel %s: download returned no file",
-                        telegram_picture.id,
+                        "The profile picture for channel %s came back empty; skipping it.",
                         telegram_channel.id,
                     )
                     continue
@@ -207,10 +227,9 @@ class MediaHandler:
                         ValueError,
                     ) as thumb_err:
                         logger.warning(
-                            "Failed to download static thumbnail for profile picture %s of channel %s: %s",
-                            telegram_picture.id,
+                            "Couldn't make a still thumbnail for the video profile picture of channel %s: %s",
                             telegram_channel.id,
-                            thumb_err,
+                            _friendly_media_error(thumb_err),
                         )
                 ProfilePicture.from_telegram_object(
                     telegram_picture,
@@ -233,10 +252,9 @@ class MediaHandler:
                 ValueError,
             ) as e:
                 logger.warning(
-                    "Error downloading profile picture %s for channel %s: %s",
-                    telegram_picture.id,
+                    "Couldn't download the profile picture for channel %s: %s",
                     telegram_channel.id,
-                    e,
+                    _friendly_media_error(e),
                 )
         return pictures_downloaded
 
@@ -253,7 +271,7 @@ class MediaHandler:
                 # with picture=NULL — a "zombie" that messagepicture__isnull=True can no
                 # longer recover via --fix-missing-media.
                 logger.warning(
-                    "Empty download for message picture (msg_id=%s) — likely timeout or stripped media; skipping save",
+                    "The picture in message %s came back empty (it may have timed out); skipping it.",
                     telegram_message.id,
                 )
                 return 0
@@ -277,7 +295,9 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message picture (msg_id=%s): %s", telegram_message.id, e)
+            logger.warning(
+                "Couldn't download the picture in message %s: %s", telegram_message.id, _friendly_media_error(e)
+            )
         return 0
 
     def download_message_video(self, telegram_message: Any) -> int:
@@ -302,7 +322,7 @@ class MediaHandler:
             video_filename = self._download_media(telegram_message)
             if not video_filename:
                 logger.warning(
-                    "Empty download for message video (msg_id=%s) — likely timeout or stripped media; skipping save",
+                    "The video in message %s came back empty (it may have timed out); skipping it.",
                     telegram_message.id,
                 )
                 return 0
@@ -328,7 +348,9 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message video (msg_id=%s): %s", telegram_message.id, e)
+            logger.warning(
+                "Couldn't download the video in message %s: %s", telegram_message.id, _friendly_media_error(e)
+            )
         return 0
 
     def download_message_audio(self, telegram_message: Any) -> int:
@@ -375,7 +397,9 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message audio (msg_id=%s): %s", telegram_message.id, e)
+            logger.warning(
+                "Couldn't download the audio in message %s: %s", telegram_message.id, _friendly_media_error(e)
+            )
         return 0
 
     def download_message_sticker(self, telegram_message: Any) -> int:
@@ -416,7 +440,9 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message sticker (msg_id=%s): %s", telegram_message.id, e)
+            logger.warning(
+                "Couldn't download the sticker in message %s: %s", telegram_message.id, _friendly_media_error(e)
+            )
         return 0
 
     def download_message_other_media(self, telegram_message: Any) -> int:
@@ -465,7 +491,9 @@ class MediaHandler:
             ValueError,
             Message.DoesNotExist,
         ) as e:
-            logger.warning("Error downloading message other-media (msg_id=%s): %s", telegram_message.id, e)
+            logger.warning(
+                "Couldn't download the file in message %s: %s", telegram_message.id, _friendly_media_error(e)
+            )
         return 0
 
     def clean_leftovers(self) -> None:
