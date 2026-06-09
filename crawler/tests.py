@@ -531,6 +531,25 @@ class ResolveOneTests(TestCase):
         self.assertTrue(failed)
         self.api_client.client.get_entity.assert_not_called()
 
+    def test_recycled_username_prefers_live_channel_over_lost(self) -> None:
+        # The same handle is held by a now-lost old channel and the live channel that
+        # took it over: usernames are not unique identities, so prefer the live owner.
+        make_channel(telegram_id=1, username="recycled", organization=self.org, is_lost=True)
+        live = make_channel(telegram_id=2, username="recycled")
+        result, failed = self.resolver._resolve_one("recycled")
+        self.assertEqual(result, live)
+        self.assertFalse(failed)
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_lone_lost_channel_with_username_is_still_returned(self) -> None:
+        # No live owner stored → fall back to the lost row (edge to a lost channel is
+        # preserved; only collisions change behaviour).
+        lost = make_channel(telegram_id=1, username="onlylost", organization=self.org, is_lost=True)
+        result, failed = self.resolver._resolve_one("onlylost")
+        self.assertEqual(result, lost)
+        self.assertFalse(failed)
+        self.api_client.client.get_entity.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # ReferenceResolver.resolve_message_references
@@ -1595,6 +1614,61 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
         channel, tc = self.crawler.get_basic_channel(7)
         self.assertIsNone(channel)
         self.assertIsNone(tc)
+
+
+# ---------------------------------------------------------------------------
+# ChannelCrawler — resolve_channel_or_classify (recycled-handle guard)
+# ---------------------------------------------------------------------------
+
+
+class ChannelCrawlerResolveRecycledHandleTests(TestCase):
+    def setUp(self) -> None:
+        self.api_client = _make_api_client()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+
+    @staticmethod
+    def _channel_private_error() -> errors.rpcerrorlist.ChannelPrivateError:
+        return errors.rpcerrorlist.ChannelPrivateError.__new__(errors.rpcerrorlist.ChannelPrivateError)
+
+    def test_recycled_handle_marks_original_lost_and_acquires_new_channel(self) -> None:
+        # An in-target channel (telegram_id=100, @handle) is now gone; its numeric lookup
+        # fails, and @handle has since been taken over by a DIFFERENT channel (id=200).
+        make_channel(telegram_id=100, username="handle", organization=self.org)
+        squatter_tc = _make_telegram_channel(telegram_id=200, username="handle")
+
+        def fake_get_entity(seed):
+            if seed == "handle":
+                return squatter_tc
+            raise self._channel_private_error()
+
+        self.api_client.client.get_entity.side_effect = fake_get_entity
+        channel, tg_ch, status = self.crawler.resolve_channel_or_classify(100)
+
+        # The original is treated as lost — its identity is NOT grafted onto the squatter.
+        self.assertEqual(status, "lost")
+        self.assertIsNone(channel)
+        # …but the new owner is still acquired into the DB, left unattributed.
+        squatter = Channel.objects.get(telegram_id=200)
+        self.assertFalse(squatter.attributions.filter(organization__is_in_target=True).exists())
+
+    def test_username_fallback_resolving_same_id_is_ok(self) -> None:
+        # Numeric lookup fails (e.g. stale access_hash) but the username still maps to the
+        # SAME channel → genuine recovery, status "ok".
+        make_channel(telegram_id=300, username="stillmine", organization=self.org)
+        same_tc = _make_telegram_channel(telegram_id=300, username="stillmine")
+
+        def fake_get_entity(seed):
+            if seed == "stillmine":
+                return same_tc
+            raise self._channel_private_error()
+
+        self.api_client.client.get_entity.side_effect = fake_get_entity
+        channel, tg_ch, status = self.crawler.resolve_channel_or_classify(300)
+
+        self.assertEqual(status, "ok")
+        self.assertIsNotNone(channel)
+        self.assertEqual(channel.telegram_id, 300)
 
 
 # ---------------------------------------------------------------------------

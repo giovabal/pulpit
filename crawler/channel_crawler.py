@@ -253,7 +253,8 @@ class ChannelCrawler:
         Returns (channel, tg_channel, status) where status is one of:
           "ok"           — resolved successfully; channel and tg_channel are set
           "private"      — confirmed inaccessible on every resolution path
-          "lost"         — unresolvable / deleted
+          "lost"         — unresolvable / deleted, or the stored username has been
+                           recycled onto a different channel (see the username fallback)
           "user_account" — seed resolves to a user account, not a channel
 
         FloodWaitError is always propagated to the caller.
@@ -295,7 +296,27 @@ class ChannelCrawler:
                     try:
                         channel, tg_ch = self.get_basic_channel(db_ch.username)
                         if channel is not None:
-                            return channel, tg_ch, "ok"
+                            if channel.telegram_id == seed:
+                                return channel, tg_ch, "ok"
+                            # Recycled handle: ``seed``'s stored username now belongs to a
+                            # DIFFERENT Telegram channel. telegram_id is the real identity —
+                            # usernames are reassigned freely once a channel dies, so the same
+                            # handle can hop to an unrelated channel. get_basic_channel has just
+                            # acquired that new owner into the DB (which is what we want), but it
+                            # must NOT stand in for the channel we were resolving: returning it
+                            # would graft ``seed``'s metadata, messages and citation edges onto an
+                            # unrelated, never-in-target channel. Treat the original as lost and
+                            # leave the new row unattributed for later analyst review.
+                            logger.warning(
+                                "Username '%s' (stored for channel telegram_id=%s) now resolves to a "
+                                "different channel telegram_id=%s (%s); the original is treated as lost "
+                                "and the new channel is left unattributed.",
+                                db_ch.username,
+                                seed,
+                                channel.telegram_id,
+                                channel,
+                            )
+                            return None, None, "lost"
                         is_private = False
                     except errors.rpcerrorlist.ChannelPrivateError:
                         is_private = True
