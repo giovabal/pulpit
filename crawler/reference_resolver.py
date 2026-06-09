@@ -55,7 +55,12 @@ class ReferenceResolver:
           - (None, True)     — temporary failure (flood wait, RPC error, paused); retry later
           - (None, False)    — permanent failure (username invalid or not found); do not retry
         """
-        channel = Channel.objects.filter(username=reference).first()
+        # Username is NOT a unique identity: Telegram handles get recycled, so the same
+        # username can be held by several rows — a now-lost old channel and the live
+        # channel that took over the handle. Prefer a live (non-lost) row, i.e. the
+        # current owner, over a stale/lost one that merely used to hold it; fall back to
+        # a lost row only when the handle has no live owner stored.
+        channel = Channel.objects.filter(username=reference).order_by("is_lost", "pk").first()
         if channel:
             return channel, False
 
