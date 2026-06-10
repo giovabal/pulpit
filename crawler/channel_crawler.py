@@ -159,8 +159,11 @@ class ChannelCrawler:
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         if isinstance(telegram_channel, User):
-            logger.warning("set_more_channel_details: %s resolved to a User entity; skipping", channel)
-            Channel.objects.filter(pk=channel.pk).update(is_user_account=True, is_lost=False)
+            # ``channel`` was built from a real Channel entity (get_basic_channel keeps
+            # Users out), so a User here is a recycled-handle / entity-cache mix-up — not
+            # proof the row is a user account. Skip enrichment without mislabelling it
+            # (is_user_account=True would drop a real channel from channel-scope crawls).
+            logger.warning("set_more_channel_details: %s resolved to a User entity; skipping enrichment", channel)
             return
         try:
             channel_full_info = self.api_client.client(GetFullChannelRequest(channel=telegram_channel))
@@ -169,9 +172,10 @@ class ChannelCrawler:
             if "InputPeerUser" not in str(exc) or "InputChannel" not in str(exc):
                 raise
             logger.warning(
-                "set_more_channel_details: %s resolved to a user-type input peer; skipping (%s)", channel, exc
+                "set_more_channel_details: %s re-resolved to a user-type input peer; skipping enrichment (%s)",
+                channel,
+                exc,
             )
-            Channel.objects.filter(pk=channel.pk).update(is_user_account=True, is_lost=False)
             return
         channel.participants_count = channel_full_info.full_chat.participants_count
         channel.about = channel_full_info.full_chat.about
@@ -247,6 +251,23 @@ class ChannelCrawler:
             ]
         )
 
+    @staticmethod
+    def _channel_evidence_exists(seed: int | str) -> bool:
+        """True when a stored Channel under ``seed`` was provably a real channel.
+
+        ``megagroup``/``gigagroup`` are only ever copied from a Telegram *Channel*
+        entity, and any crawled message proves the row was fetched as a channel — so a
+        later "user account" verdict for the same seed is a recycled-handle / entity-
+        cache artefact, never a genuine user. Used to refuse stamping is_user_account
+        onto (and thereby dropping from crawls) a channel we already know is real.
+        """
+        seed_q = Q(telegram_id=seed) if isinstance(seed, int) else Q(username=seed)
+        return (
+            Channel.objects.filter(seed_q)
+            .filter(Q(megagroup=True) | Q(gigagroup=True) | Q(message_set__isnull=False))
+            .exists()
+        )
+
     def resolve_channel_or_classify(self, seed: int | str) -> tuple["Channel | None", Any, str]:
         """Resolve a channel, running all fallbacks before deciding its status.
 
@@ -254,8 +275,10 @@ class ChannelCrawler:
           "ok"           — resolved successfully; channel and tg_channel are set
           "private"      — confirmed inaccessible on every resolution path
           "lost"         — unresolvable / deleted, or the stored username has been
-                           recycled onto a different channel (see the username fallback)
-          "user_account" — seed resolves to a user account, not a channel
+                           recycled onto a different channel or a user account
+                           (see the username fallback)
+          "user_account" — seed itself resolves to a user account and no known channel
+                           exists under it
 
         FloodWaitError is always propagated to the caller.
         """
@@ -322,6 +345,20 @@ class ChannelCrawler:
                         is_private = True
                     except (ValueError, errors.rpcerrorlist.ChannelInvalidError):
                         is_private = False  # username also unresolvable → lost
+                    except _UserAccountSeed:
+                        # Recycled handle, USER variant: ``seed``'s stored username now
+                        # belongs to a user account, not the channel we were resolving.
+                        # Same reasoning as the different-channel branch above — the numeric
+                        # telegram_id is the real identity and is simply lost; stamping
+                        # is_user_account would graft an unrelated handle-squatter's nature
+                        # onto our channel and drop it from channel-scope crawls.
+                        logger.warning(
+                            "Username '%s' (stored for channel telegram_id=%s) now resolves to a "
+                            "user account; the original channel is treated as lost.",
+                            db_ch.username,
+                            seed,
+                        )
+                        return None, None, "lost"
 
             if is_private:
                 return None, None, "private"
@@ -333,7 +370,18 @@ class ChannelCrawler:
             # the _UserAccountSeed handler below.
             return None, None, "lost"
         except _UserAccountSeed:
-            # get_basic_channel — initial call or any fallback — saw a User entity.
+            # The initial get_basic_channel(seed) saw a User entity (the username fallback
+            # handles its own _UserAccountSeed above). Trust that verdict only when we hold
+            # no evidence the seed was ever a real channel — otherwise the id/handle has
+            # been recycled onto, or cache-confused with, a user and the real channel is
+            # merely lost. Stamping is_user_account there would drop it from crawls.
+            if self._channel_evidence_exists(seed):
+                logger.warning(
+                    "Seed %s resolved to a user account but a known channel exists under it; "
+                    "treating the original as lost rather than a user account.",
+                    seed,
+                )
+                return None, None, "lost"
             return None, None, "user_account"
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
@@ -349,7 +397,16 @@ class ChannelCrawler:
         if isinstance(telegram_channel, User):
             # Don't build a Channel row from User fields — signal to the caller instead.
             raise _UserAccountSeed
-        return Channel.from_telegram_object(telegram_channel, force_update=True), telegram_channel
+        channel = Channel.from_telegram_object(telegram_channel, force_update=True)
+        if channel.is_user_account or channel.is_lost:
+            # We just resolved a real Channel entity under this id, so any earlier "user
+            # account" / "lost" verdict was a recycled-handle / entity-cache artefact.
+            # Clear it so the row is no longer dropped from channel-scope crawls (self-heal
+            # for rows mislabelled before the guards above existed).
+            Channel.objects.filter(pk=channel.pk).update(is_user_account=False, is_lost=False)
+            channel.is_user_account = False
+            channel.is_lost = False
+        return channel, telegram_channel
 
     def refresh_channel_info(
         self,
