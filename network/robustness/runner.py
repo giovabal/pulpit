@@ -15,9 +15,8 @@
 
 The strategy set is fully user-driven via ``RobustnessConfig.strategies``:
 any subset of :data:`~network.robustness.attacks.STRATEGY_SPECS` keys is
-accepted (plus ``"bridging(<community-strategy>)"`` to override the
-default ``"leiden_directed"`` partition for community bridging).  Default is the
-list in :data:`~network.robustness.attacks.DEFAULT_STRATEGIES`.
+accepted.  Default is the list in
+:data:`~network.robustness.attacks.DEFAULT_STRATEGIES`.
 
 The output is a single JSON-serialisable dict whose shape is documented on
 :func:`run_robustness`; the runner is the only module that knows it.
@@ -64,9 +63,9 @@ class RobustnessConfig:
     ``alpha``           disparity-filter threshold; ``None`` or values outside
                         ``(0, 1)`` disable the filter and use the full graph
     ``strategies``      list of attack-strategy tokens (any of
-                        :data:`~network.robustness.attacks.STRATEGY_SPECS` keys
-                        plus ``"bridging(<community-strategy>)"``).  ``None``
-                        uses :data:`~network.robustness.attacks.DEFAULT_STRATEGIES`.
+                        :data:`~network.robustness.attacks.STRATEGY_SPECS` keys).
+                        ``None`` uses
+                        :data:`~network.robustness.attacks.DEFAULT_STRATEGIES`.
     ``n_random_runs``   independent random orders averaged into the
                         ``"random"`` strategy curve (≥ 1)
     ``n_null``          number of weight-rewiring null simulations per
@@ -113,9 +112,7 @@ def run_robustness(
 
     *partitions* maps a partition label (e.g. ``"leiden"``) to a
     ``{node_id: community_id}`` dict — usually a strategy result from
-    :mod:`network.community`.  Pass ``None`` to skip modular curves.  At
-    least one non-trivial partition is required when any
-    ``"bridging(...)"`` strategy is selected.
+    :mod:`network.community`.  Pass ``None`` to skip modular curves.
 
     *progress* receives a short status label before each major step
     (``"disparity"``, ``"baseline-efficiency"``, ``"pagerank"``,
@@ -154,10 +151,7 @@ def run_robustness(
           } | None,
         }
 
-    ``<strategy_key>`` is the canonical strategy token — bare names for
-    everything except bridging variants, which use ``"bridging(<basis>)"``
-    so multiple bridging strategies (e.g. one per community partition) can
-    coexist in the same payload.
+    ``<strategy_key>`` is the canonical strategy token (a bare lowercase name).
     """
     config = config or RobustnessConfig()
     progress = progress or (lambda _: None)
@@ -176,41 +170,27 @@ def run_robustness(
     progress("baseline-efficiency")
     baseline_eff = weighted_global_efficiency(backbone)
 
-    # 3. Resolve strategy list — apply defaults and parse each token to
-    # ``(canonical_key, bridging_partition_key)``.  The canonical key is the
-    # dict key used in the payload; ``"bridging(leiden)"`` collapses into a
-    # single payload key of the same form so multiple bridging variants
-    # remain distinguishable.
+    # 3. Resolve strategy list — apply defaults and parse each token to its
+    # canonical lowercase name, which is the dict key used in the payload.
     raw_strategies = list(config.strategies) if config.strategies else list(DEFAULT_STRATEGIES)
-    resolved: list[tuple[str, str, str | None]] = []  # (payload_key, canonical_name, bridging_key)
+    resolved: list[str] = []
     for token in raw_strategies:
-        canonical, bridging_key = parse_strategy(token)
-        payload_key = f"bridging({bridging_key})" if canonical == "bridging" else canonical
-        resolved.append((payload_key, canonical, bridging_key))
+        resolved.append(parse_strategy(token))
     # de-duplicate while preserving order
     seen: set[str] = set()
-    resolved = [(p, c, b) for (p, c, b) in resolved if not (p in seen or seen.add(p))]
-
-    # Validate bridging dependencies up front.
-    for _payload_key, canonical, bridging_key in resolved:
-        if canonical == "bridging":
-            if not partitions or bridging_key not in partitions:
-                raise ValueError(
-                    f"bridging strategy needs partition {bridging_key!r} in --community-strategies; "
-                    f"available partitions: {sorted((partitions or {}).keys())}"
-                )
+    resolved = [c for c in resolved if not (c in seen or seen.add(c))]
 
     # 4. Per-strategy curves on the (possibly filtered) backbone
     strategy_results: dict[str, dict[str, Any]] = {}
     cached_orders: dict[str, list[Any]] = {}
-    for payload_key, canonical, bridging_key in resolved:
-        progress(payload_key)
+    for canonical in resolved:
+        progress(canonical)
         first_order, mean_curves = _compute_strategy_curves(
-            backbone, payload_key, config.n_random_runs, config.reach_sample, rng, partitions
+            backbone, canonical, config.n_random_runs, config.reach_sample, rng
         )
-        cached_orders[payload_key] = first_order
-        strategy_results[payload_key] = {
-            "label": strategy_label(canonical, bridging_key),
+        cached_orders[canonical] = first_order
+        strategy_results[canonical] = {
+            "label": strategy_label(canonical),
             **{f"curve_{m}": mean_curves[m] for m in _METRICS},
             **{f"r_{m}": r_index(mean_curves[m]) for m in _METRICS},
             **{f"fc_{m}": critical_threshold(mean_curves[m]) for m in _METRICS},
@@ -219,35 +199,33 @@ def run_robustness(
 
     # 5. Null-model simulations
     if config.n_null > 0:
-        null_rs: dict[str, dict[str, list[float]]] = {
-            payload_key: {m: [] for m in _METRICS} for payload_key, _, _ in resolved
-        }
+        null_rs: dict[str, dict[str, list[float]]] = {canonical: {m: [] for m in _METRICS} for canonical in resolved}
         null_curves: dict[str, dict[str, list[list[float]]]] = {
-            payload_key: {m: [] for m in _METRICS} for payload_key, _, _ in resolved
+            canonical: {m: [] for m in _METRICS} for canonical in resolved
         }
         for k, null_g in enumerate(
             null_distribution(backbone, n_simulations=config.n_null, rng=rng, n_swaps=config.n_rewire_swaps),
             start=1,
         ):
-            for payload_key, _canonical, _bk in resolved:
-                progress(f"null/{payload_key}/{k}")
+            for canonical in resolved:
+                progress(f"null/{canonical}/{k}")
                 _, mean_curves_null = _compute_strategy_curves(
-                    null_g, payload_key, config.n_random_runs, config.reach_sample, rng, partitions
+                    null_g, canonical, config.n_random_runs, config.reach_sample, rng
                 )
                 for m in _METRICS:
                     curve = mean_curves_null[m]
-                    null_curves[payload_key][m].append(curve)
-                    null_rs[payload_key][m].append(r_index(curve))
-        for payload_key, _canonical, _bk in resolved:
+                    null_curves[canonical][m].append(curve)
+                    null_rs[canonical][m].append(r_index(curve))
+        for canonical in resolved:
             null_data: dict[str, Any] = {}
             for m in _METRICS:
-                observed = strategy_results[payload_key][f"r_{m}"]
-                z, mean, std = z_score(observed, null_rs[payload_key][m])
+                observed = strategy_results[canonical][f"r_{m}"]
+                z, mean, std = z_score(observed, null_rs[canonical][m])
                 null_data[f"r_{m}"] = {"mean": mean, "std": std, "z": z}
-                mean_curve, std_curve = _mean_and_std_curve(null_curves[payload_key][m])
+                mean_curve, std_curve = _mean_and_std_curve(null_curves[canonical][m])
                 null_data[f"curve_{m}_mean"] = mean_curve
                 null_data[f"curve_{m}_std"] = std_curve
-            strategy_results[payload_key]["null"] = null_data
+            strategy_results[canonical]["null"] = null_data
 
     # 6. Modular curves per partition × strategy
     modular_results: dict[str, dict[str, Any]] | None = None
@@ -256,14 +234,14 @@ def run_robustness(
         for partition_name, partition in partitions.items():
             progress(f"modular/{partition_name}")
             modular_results[partition_name] = {
-                payload_key: modular_robustness_curves(backbone, cached_orders[payload_key], partition)
-                for payload_key, _, _ in resolved
+                canonical: modular_robustness_curves(backbone, cached_orders[canonical], partition)
+                for canonical in resolved
             }
 
     return {
         "config": {
             "alpha": config.alpha,
-            "strategies": [pk for pk, _, _ in resolved],
+            "strategies": list(resolved),
             "n_random_runs": config.n_random_runs,
             "n_null": config.n_null,
             "seed": config.seed,
@@ -293,7 +271,6 @@ def _compute_strategy_curves(
     n_random_runs: int,
     reach_sample: int,
     rng: np.random.Generator,
-    partitions: dict[str, dict[Any, Any]] | None,
 ) -> tuple[list[Any], dict[str, list[float]]]:
     """Return ``(first_order, {metric: mean_curve})`` for *strategy_token* on *g*.
 
@@ -305,7 +282,7 @@ def _compute_strategy_curves(
     if strategy_token == "random":
         orders = [removal_order(g, "random", rng=rng) for _ in range(n_random_runs)]
     else:
-        orders = [removal_order(g, strategy_token, rng=rng, partitions=partitions)]
+        orders = [removal_order(g, strategy_token, rng=rng)]
 
     curves_per_metric: dict[str, list[list[float]]] = {m: [] for m in _METRICS}
     for order in orders:

@@ -116,4 +116,15 @@ export default [
         languageOptions: { ecmaVersion: 2022, sourceType: "script", globals: { ...globals.browser } },
         rules: RULES,
     },
+
+    // ── Operations panel — classic scripts; token_builder.js publishes initTokenBuilder ──
+    {
+        files: ["runner/static/runner/js/**/*.js"],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: "script",
+            globals: { ...globals.browser, initTokenBuilder: "readonly" },
+        },
+        rules: RULES,
+    },
 ];

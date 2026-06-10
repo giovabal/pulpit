@@ -364,7 +364,7 @@
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="behavioural_equivalence" {% if ad.SA_BEHAVIOURAL_EQUIVALENCE %}checked{% endif %}>Behavioural equivalence
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate a behavioural equivalence matrix page: pairwise cosine similarity of channels' behavioural-measure profiles (amplification, content originality, diffusion lag, spreading efficiency, followers, message count); min-max normalised, missing values imputed to the median."></i>
+                     title="Generate a behavioural equivalence matrix page: pairwise cosine similarity of channels' behavioural-measure profiles (amplification, content originality, diffusion lag, followers, message count); min-max normalised, missing values imputed to the median."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -626,36 +626,16 @@
             <fieldset class="ops-fieldset">
               <legend>Linked parameters
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Parameters for specific community strategies. Each input is enabled only when the matching strategy is selected. (Measure parameters now live on each measure chip in the Measures builder.)"></i>
+                   title="Parameters tied to other options. The Interest-window inputs apply only when Interesting messages is on."></i>
               </legend>
               {% comment %}
-                Spreading runs, Diffusion window and the Community-Bridging basis used to live here
-                as shared "Linked parameters"; since v0.25 they are per-instance controls inside the
-                drag-and-drop Measures builder below (a measure can be added more than once with
-                different parameters). The robustness bridging attack keeps its own basis dropdown.
+                Measure parameters (diffusion window, module-role basis) and the community
+                parameter (CPM resolution γ) used to live here as shared "Linked parameters".
+                Since v0.25 they are per-instance controls on each chip inside the drag-and-drop
+                Measures / Community-strategies builders below (an item can be added more than once
+                with different parameters). Only the Interesting-messages inputs remain here.
               {% endcomment %}
               <div class="ops-params">
-                <div class="ops-param">
-                  <label for="leiden_coarse_resolution">CPM coarse γ
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Resolution parameter for LEIDEN_CPM_COARSE. Communities form when internal edge density exceeds γ. Lower = fewer, larger communities. Default: 0.01."></i>
-                  </label>
-                  <input type="number" name="leiden_coarse_resolution" id="leiden_coarse_resolution" placeholder="{{ ad.SA_LEIDEN_COARSE_RESOLUTION }}" value="{{ ad.SA_LEIDEN_COARSE_RESOLUTION }}" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_COARSE">
-                </div>
-                <div class="ops-param">
-                  <label for="leiden_fine_resolution">CPM fine γ
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Resolution parameter for LEIDEN_CPM_FINE. Communities form when internal edge density exceeds γ. Higher = more, smaller communities. Default: 0.05."></i>
-                  </label>
-                  <input type="number" name="leiden_fine_resolution" id="leiden_fine_resolution" placeholder="{{ ad.SA_LEIDEN_FINE_RESOLUTION }}" value="{{ ad.SA_LEIDEN_FINE_RESOLUTION }}" min="0" max="1" step="0.001" data-requires-strategy="LEIDEN_CPM_FINE">
-                </div>
-                <div class="ops-param">
-                  <label for="mcl_inflation">MCL inflation r
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Inflation parameter for Markov Clustering. Higher values → more, smaller communities. Typical range 1.5–4.0. Default: 2.0."></i>
-                  </label>
-                  <input type="number" name="mcl_inflation" id="mcl_inflation" placeholder="{{ ad.SA_MCL_INFLATION }}" value="{{ ad.SA_MCL_INFLATION }}" min="1" max="10" step="0.1" data-requires-strategy="MCL">
-                </div>
                 {# data-requires-flag on the wrapper (not the <input>) so the input stays #}
                 {# DOM-enabled when Interesting messages is off — the visual disable is    #}
                 {# styling only, and we still want the value to ride along in FormData so  #}
@@ -696,20 +676,11 @@
                   <div class="ops-mchip" draggable="true" data-measure="PAGERANK" data-label="PageRank"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">PageRank</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank — channels cited by high-ranked channels rank higher. Standard measure of network influence."></i><button type="button" class="ops-mchip-add" aria-label="Add PageRank" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="HITSHUB" data-label="HITS Hub"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">HITS Hub</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS hub score — how well this channel links to authoritative channels; high hub = active amplifier."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Hub" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="HITSAUTH" data-label="HITS Authority"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">HITS Authority</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS authority score — how often this channel is cited by high-hub channels; high authority = trusted source."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Authority" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="BETWEENNESS" data-label="Betweenness"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Betweenness</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Betweenness centrality — fraction of shortest paths between all node pairs that pass through this channel; high = network broker."></i><button type="button" class="ops-mchip-add" aria-label="Add Betweenness" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="INDEGCENTRALITY" data-label="In-degree"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">In-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised in-degree centrality — fraction of all channels that forward or cite this channel."></i><button type="button" class="ops-mchip-add" aria-label="Add In-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="OUTDEGCENTRALITY" data-label="Out-degree"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Out-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised out-degree centrality — fraction of all channels this channel forwards or cites."></i><button type="button" class="ops-mchip-add" aria-label="Add Out-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="HARMONICCENTRALITY" data-label="Harmonic"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Harmonic</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Harmonic centrality (Boldi & Vigna 2014) — mean reciprocal incoming distance: how easily the rest of the network reaches this channel via short citation chains. A multi-hop generalisation of in-degree; handles disconnected graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Harmonic" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="SPREADING" data-label="Spreading" data-multi="1" data-params='[{"name":"runs","kind":"int","default":{{ ad.SA_SPREADING_RUNS }},"min":1,"label":"Runs"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Spreading</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="SIR spreading efficiency — Monte Carlo estimate of the fraction of the network infected when this channel seeds a cascade."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: Monte-Carlo runs. Can be added multiple times with different run counts."></i><button type="button" class="ops-mchip-add" aria-label="Add Spreading" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="BRIDGINGCENTRALITY" data-label="Bridging Centrality"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Bridging Centrality</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Bridging Centrality (Hwang et al. 2008) — betweenness × bridging coefficient [(1/d(v)) ÷ Σ 1/d(i) over neighbours]; high = a low-degree node wedged between high-degree regions, i.e. a topological bridge whose removal fragments the network. Purely degree-based, needs no community basis."></i><button type="button" class="ops-mchip-add" aria-label="Add Bridging Centrality" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="BRIDGING" data-label="Community Bridging" data-multi="1" data-params='[{"name":"basis","kind":"basis-bridging","default":"LEIDEN_DIRECTED","label":"Basis"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Community Bridging</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Community bridging — betweenness × neighbour-community participation coefficient (Guimerà & Amaral 2005); high = broker between detected communities. NOT Hwang's Bridging Centrality. Pick the community basis per instance; it must also be in Community strategies."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: community basis. Can be added multiple times with different bases."></i><button type="button" class="ops-mchip-add" aria-label="Add Community Bridging" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="BURTCONSTRAINT" data-label="Burt's Constraint"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Burt's Constraint</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Burt's structural constraint (Burt 1992, 2004) — how redundant a channel's ego-network is; low = structural-hole broker with diverse, non-overlapping ties. Typically in [0, 1] (theoretical max ≈ 1.125). nx.constraint symmetrises direction internally — only edge weights affect the ranking, not the citation direction."></i><button type="button" class="ops-mchip-add" aria-label="Add Burt's Constraint" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="LOCALCLUSTERING" data-label="Local Clustering"><i class="bi bi-arrows ops-dir" title="Undirectional — Fagiolo's formula is direction-invariant"></i><span class="ops-mchip-label">Local Clustering</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed local clustering coefficient (Fagiolo 2007) — count of directed triangles through this node (cycle / middleman / in / out patterns) divided by the maximum allowed by its degree configuration. In [0, 1]. High = the node's contacts also cite each other, forming tight mutual-amplification triangles. nx.clustering is called unweighted and the formula sums all 8 directed triangle orientations symmetrically, so direction and edge weights do not affect the ranking."></i><button type="button" class="ops-mchip-add" aria-label="Add Local Clustering" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="CORENESS" data-label="K-core Coreness"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">K-core Coreness</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core coreness (Kitsak et al. 2010) — the deepest k-core a channel survives in. High = embedded in the dense reinforcing nucleus; low = peripheral amplifier shed early. A robust spreading-influence predictor. Graph symmetrised; unweighted."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core Coreness" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="COLLECTIVEINFLUENCE" data-label="Collective Influence"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Collective Influence</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Collective Influence (Morone & Makse 2015, Nature) — (k−1) × Σ(k−1) summed over nodes exactly two hops away; the optimal-percolation key-spreader score. High = removing this channel most fragments the network. Graph symmetrised, unweighted; read ordinally."></i><button type="button" class="ops-mchip-add" aria-label="Add Collective Influence" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="TROPHICLEVEL" data-label="Trophic Level"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Trophic Level</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Hierarchical trophic level (MacKay, Johnson & Sansom 2020) — structural source→sink position. Low = original source, high = terminal amplifier. Complements Content Originality; well-defined on cyclic graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Trophic Level" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="MODULEROLE" data-label="Module Role" data-multi="1" data-params='[{"name":"basis","kind":"basis-role","default":"","label":"Basis"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Module Role</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Guimerà & Amaral (2005) within-module role — within-module degree z-score plus the 7-role label (provincial / connector / kinless hub, etc.). Needs a community strategy; pick the basis per instance, or leave (auto) to resolve from the computed partitions."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: community basis (or auto). Can be added multiple times with different bases."></i><button type="button" class="ops-mchip-add" aria-label="Add Module Role" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="BROKERAGEROLES" data-label="Brokerage Roles" data-multi="1" data-params='[{"name":"basis","kind":"basis-role","default":"","label":"Basis"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Brokerage Roles</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Gould & Fernandez (1989) brokerage census — classifies each directed citation 2-path the channel mediates (coordinator / gatekeeper / representative / consultant / liaison) by the groups of its endpoints; reports the total plus the dominant role. Needs a community strategy; pick the basis per instance, or leave (auto) (prefers Organization). The five role counts are exported to nodes.csv and GEXF/GraphML."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: community basis (or auto). Can be added multiple times with different bases."></i><button type="button" class="ops-mchip-add" aria-label="Add Brokerage Roles" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="AMPLIFICATION" data-label="Amplification"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Amplification</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Amplification factor — forwards received from in-target channels divided by the channel's own message count."></i><button type="button" class="ops-mchip-add" aria-label="Add Amplification" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="CONTENTORIGINALITY" data-label="Content Originality"><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i><span class="ops-mchip-label">Content Originality</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Content originality — share of messages that are not forwards; 1 = fully original, 0 = fully reposted."></i><button type="button" class="ops-mchip-add" aria-label="Add Content Originality" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="DIFFUSIONLAG" data-label="Diffusion Lag" data-multi="1" data-params='[{"name":"window","kind":"int","default":{{ ad.SA_DIFFUSION_WINDOW }},"min":0,"label":"Window (days)"}]'><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i><span class="ops-mchip-label">Diffusion Lag</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Diffusion lag — median hours between the original post date and when this channel forwarded it. Low = early adopter; high = late amplifier; null for channels with no dated forwards."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: reaction window (days). Can be added multiple times with different windows."></i><button type="button" class="ops-mchip-add" aria-label="Add Diffusion Lag" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
@@ -722,9 +693,10 @@
                 </div>
               </div>
             </div>
-            {# Option lists for the per-instance community-basis selects, cloned by the builder JS. #}
-            <template id="tpl-mbasis-bridging">{% for key, label in bridging_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</template>
+            {# Option list for the per-instance community-basis select, cloned by the builder JS. #}
             <template id="tpl-mbasis-role"><option value="">(auto)</option>{% for key, label in all_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</template>
+            {# Option list for the SBM "mode" select (nested vs flat), cloned by the strategy builder. #}
+            <template id="tpl-sbm-mode"><option value="NESTED">Nested (hierarchical)</option><option value="FLAT">Flat</option></template>
             {{ sa_measure_tokens|json_script:"sa-measure-tokens" }}
           </fieldset>
           </div>
@@ -733,26 +705,34 @@
           <fieldset class="ops-fieldset">
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Community detection algorithms to run. → icon = uses edge direction. ↔ icon = graph is symmetrised before computation."></i>
+                 title="Drag a strategy into the Selected area (or press +). → = uses edge direction; ↔ = graph symmetrised. The parameterised Leiden CPM (⚙) can be added more than once with different resolutions; each instance gets its own partition column."></i>
               <span class="ops-legend-actions">
-                <button type="button" class="ops-legend-btn" data-action="all" data-target-name="community_strategies">All</button>
-                <button type="button" class="ops-legend-btn" data-action="none" data-target-name="community_strategies">None</button>
+                <button type="button" class="ops-legend-btn" data-strategy-action="all">All</button>
+                <button type="button" class="ops-legend-btn" data-strategy-action="none">None</button>
               </span>
             </legend>
-            <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="ORGANIZATION" {% if "ORGANIZATION" in ad.sa_strategies %}checked{% endif %}>Organization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organization in the database — not a detection algorithm, reflects manual categorisation."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN" {% if "LEIDEN" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_DIRECTED" {% if "LEIDEN_DIRECTED" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Leiden directed<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_COARSE" {% if "LEIDEN_CPM_COARSE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden CPM coarse<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective at low resolution (γ ≈ 0.01) — fewer, larger communities. Resolution tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: CPM coarse γ (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LEIDEN_CPM_FINE" {% if "LEIDEN_CPM_FINE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Leiden CPM fine<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective at higher resolution (γ ≈ 0.05) — more, smaller communities. Resolution tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: CPM fine γ (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="LABELPROPAGATION" {% if "LABELPROPAGATION" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Label propagation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="KCORE" {% if "KCORE" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>K-core<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP" {% if "INFOMAP" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Infomap<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Infomap (Rosvall &amp; Bergstrom 2008) — minimises description length of a random walk on the directed graph; captures information-flow communities."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="INFOMAP_MEMORY" {% if "INFOMAP_MEMORY" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Infomap memory<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Second-order (memory) Infomap — models sequential forwarding paths as context-dependent states, capturing propagation patterns invisible to first-order methods."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="MCL" {% if "MCL" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>MCL<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Markov Clustering — alternates random-walk expansion and inflation steps until convergence. Works on the directed graph. Inflation tunable in Linked parameters."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: MCL inflation r (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="WALKTRAP" {% if "WALKTRAP" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i>Walktrap<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Walktrap (Pons &amp; Latapy 2006) — short random-walk distances clustered with Ward's method on the undirected graph."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="community_strategies" value="STRONGCC" {% if "STRONGCC" in ad.sa_strategies %}checked{% endif %}><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i>Strong CC<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Strongly connected components — groups channels that can reach each other following directed edges. Only large SCCs are meaningful in sparse networks."></i></label>
+            <div class="ops-measures">
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
+                <div class="ops-palette" id="strategy-palette">
+                  <div class="ops-mchip" draggable="true" data-strategy="ORGANIZATION" data-label="Organization"><span class="ops-mchip-label">Organization</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their assigned Organization in the database — not a detection algorithm, reflects manual categorisation."></i><button type="button" class="ops-mchip-add" aria-label="Add Organization" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN" data-label="Leiden"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_DIRECTED" data-label="Leiden directed"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Leiden directed</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden directed" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective — a community is stable when its internal edge density exceeds the resolution γ. γ ≈ 0.01 = fewer, larger communities (the old 'coarse' preset); γ ≈ 0.05 = more, smaller (the old 'fine' preset). Add it more than once for a multi-resolution scan."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LOUVAIN" data-label="Louvain"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Louvain</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Louvain modularity maximisation (Blondel et al. 2008) — the classic, field-standard community detector that predates Leiden. Kept for comparison with the large body of older studies that report Louvain partitions; for your own analyses prefer Leiden (or Leiden directed), which adds a refinement step guaranteeing every community is internally connected. Runs on the symmetrised graph; edge weights honoured."></i><button type="button" class="ops-mchip-add" aria-label="Add Louvain" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Bayesian degree-corrected SBM (Peixoto) via graph-tool — recovers arbitrary block structure (assortative, disassortative, core-periphery, bipartite source/amplifier), not just dense communities. Blocks are citation-role / structural-equivalence classes, not necessarily cohesive groups. Directed + degree-corrected + unweighted. NESTED = better model selection; FLAT = single level. Requires the graph-tool package (conda/apt, not pip)."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode (nested/flat). Can be added once per mode."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                </div>
+              </div>
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Selected <span class="ops-measures-hint" id="strategy-count"></span></p>
+                <div class="ops-dropzone" id="strategy-dropzone" aria-label="Selected community strategies — drop here">
+                  <p class="ops-dropzone-empty">Nothing selected. Drag a strategy here, or press + on one.</p>
+                </div>
+              </div>
             </div>
+            {{ sa_strategy_tokens|json_script:"sa-strategy-tokens" }}
           </fieldset>
           </div>
 
@@ -800,7 +780,7 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if "BROKERAGE" in ad.sa_vacancy_measures %}checked{% endif %}>Brokerage overlap
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Jaccard overlap of the (source-org × amplifier-org) pairs the candidate bridges vs. those the vacancy bridged — does it mediate the same inter-organisation flows? Operationalises the brokerage-role concept (Gould &amp; Fernandez 1989), not their brokerage census."></i>
+                   title="Jaccard overlap of the (source-org × amplifier-org) pairs the candidate spans vs. those the vacancy spanned — does it sit in the same organisational position, drawing on the same source orgs and amplified by the same audience orgs? Built from the channel's direct citations (one-degree), so it captures structural position, not content flowing between the orgs through it. Operationalises the brokerage concept (Gould &amp; Fernandez 1989), not their flow-based census."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
@@ -853,14 +833,9 @@
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength" {% if "IN_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted in-degree. Removes the most-cited channels first."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength" {% if "OUT_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted out-degree. Removes the most-active aggregators first."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank" {% if "PAGERANK" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing PageRank. Removes the highest-prestige channels first."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="harmonic" {% if "HARMONIC" in ad.sa_robustness_strategies %}checked{% endif %}>Harmonic<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing harmonic centrality. Removes channels the rest of the network reaches first through short citation chains — a multi-hop reach-style prestige attack."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness" {% if "BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted betweenness. Removes the brokers — channels on the bridges between sub-networks."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="bridging" {% if "BRIDGING" in ad.sa_robustness_strategies %}checked{% endif %}>Community bridging<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing community bridging (betweenness × neighbour-community participation coefficient, Guimerà & Amaral 2005). Targets brokers between genuinely distinct communities; not Hwang's Bridging Centrality. Needs a community basis — defaults to LEIDEN_DIRECTED; pick another via the dropdown below."></i><i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Bridging basis (Linked parameters)"></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="spreading" {% if "SPREADING" in ad.sa_robustness_strategies %}checked{% endif %}>Spreading (SIR)<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing SIR spreading efficiency — removes the dynamical superspreaders. Expensive: Monte Carlo per ranking, scales with Random runs."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="In-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Out-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank_dyn" {% if "PAGERANK_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank recomputed after every removal. Cost: O(N · pagerank-iteration)."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness_dyn" {% if "BETWEENNESS_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Betweenness recomputed after every removal — the most destructive attack class. Cost: O(N²·m). Keep off for large graphs."></i></label>
             </div>
 
             <div class="ops-params mt-2">
@@ -870,16 +845,6 @@
                      title="Serrano-Boguñá-Vespignani threshold applied before the attacks. Values in (0, 1) keep statistically significant edges only; 0 disables the filter and uses the full graph. Default: 0.05."></i>
                 </label>
                 <input type="number" name="robustness_alpha" id="robustness_alpha" placeholder="{{ ad.SA_ROBUSTNESS_ALPHA }}" value="{{ ad.SA_ROBUSTNESS_ALPHA }}" min="0" max="1" step="0.001">
-              </div>
-              <div class="ops-param">
-                <label for="robustness_bridging_basis">Bridging basis
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Community partition for the 'Community bridging' robustness attack (the participation coefficient). Must also be in Community strategies. Independent of the Community Bridging measure — that measure picks its basis per instance in the Measures builder. Default: Leiden directed."></i>
-                </label>
-                <select name="robustness_bridging_basis" id="robustness_bridging_basis" data-requires-bridging="1">
-                  <option value="" {% if not ad.SA_ROBUSTNESS_BRIDGING_BASIS %}selected{% endif %}>(Leiden directed — default)</option>
-                  {% for key, label in bridging_basis_choices %}<option value="{{ key }}" {% if key == ad.SA_ROBUSTNESS_BRIDGING_BASIS %}selected{% endif %}>{{ label }}</option>{% endfor %}
-                </select>
               </div>
               <div class="ops-param">
                 <label for="robustness_runs">Random runs
@@ -1087,6 +1052,7 @@
 {% endblock content %}
 
 {% block extra_scripts %}
+<script src="{% static 'runner/js/token_builder.js' %}"></script>
 <script>
 // Shared helpers used by multiple IIFEs in this file. They live at script-top-level
 // (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
@@ -1439,11 +1405,6 @@ function showToast(msg, type) {
       var on = cb ? cb.checked : false;
       _setDependentInputEnabled(input, on);
     });
-    document.querySelectorAll('[data-requires-strategy]').forEach(function (input) {
-      var cb = document.querySelector('input[name="community_strategies"][value="' + input.dataset.requiresStrategy + '"]');
-      var on = cb ? cb.checked : false;
-      _setDependentInputEnabled(input, on);
-    });
     document.querySelectorAll('[data-requires-flag]').forEach(function (input) {
       var form = input.closest('form');
       var cb = form ? form.querySelector('[name="' + input.dataset.requiresFlag + '"]') : null;
@@ -1462,12 +1423,6 @@ function showToast(msg, type) {
     document.querySelectorAll('[data-requires-vacancy]').forEach(function (input) {
       var cb = document.querySelector('input[name="vacancy_measures"][value="' + input.dataset.requiresVacancy + '"]');
       var on = cb ? cb.checked : false;
-      _setDependentInputEnabled(input, on);
-    });
-    // Robustness bridging-basis dropdown: enabled only when the "bridging" robustness attack is
-    // checked. (The Community Bridging *measure* picks its basis per instance in the builder.)
-    document.querySelectorAll('[data-requires-bridging]').forEach(function (input) {
-      var on = !!document.querySelector('input[name="robustness_strategies"][value="bridging"]:checked');
       _setDependentInputEnabled(input, on);
     });
   }
@@ -1492,262 +1447,46 @@ function showToast(msg, type) {
   })();
   // ── Drag-and-drop measure builder ────────────────────────────────────────
   // Palette chips (left) are dragged — or +-clicked — into the ordered drop zone (right).
-  // Parameterised measures (data-multi) can be added repeatedly, each with its own inline
-  // parameter inputs; drop-once measures grey out in the palette once placed. Each selected chip
-  // owns a hidden <input name="measures"> whose value is the composed token (e.g.
-  // "SPREADING(runs=2000)"); the form submits one per chip, in visual order.
-  (function () {
-    var palette = document.getElementById('measure-palette');
-    var dropzone = document.getElementById('measure-dropzone');
-    if (!palette || !dropzone) return;
-    var emptyMsg = dropzone.querySelector('.ops-dropzone-empty');
-    var countEl = document.getElementById('measure-count');
-
-    var META = {};
-    palette.querySelectorAll('.ops-mchip').forEach(function (chip) {
-      var dir = chip.querySelector('.ops-dir');
-      META[chip.dataset.measure] = {
-        label: chip.dataset.label || chip.dataset.measure,
-        dirIcon: dir ? dir.outerHTML : '',
-        multi: chip.dataset.multi === '1',
-        params: chip.dataset.params ? JSON.parse(chip.dataset.params) : [],
-      };
-    });
-
-    function basisOptionsHTML(kind) {
-      var tpl = document.getElementById(kind === 'basis-role' ? 'tpl-mbasis-role' : 'tpl-mbasis-bridging');
+  // Measure builder: instantiate the shared drag-and-drop token factory (token_builder.js) for the
+  // Measures palette/drop-zone. Each selected chip owns a hidden <input name="measures"> whose value
+  // is the composed token (e.g. "DIFFUSIONLAG(window=60)"); the form submits one per chip, in order.
+  // The Community-strategies builder below uses the same factory.
+  var measureBuilder = window.initTokenBuilder({
+    paletteId: 'measure-palette',
+    dropzoneId: 'measure-dropzone',
+    countId: 'measure-count',
+    seedId: 'sa-measure-tokens',
+    fieldName: 'measures',
+    itemKey: 'measure',
+    actionSelector: '[data-measure-action]',
+    actionKey: 'measureAction',
+    selectOptions: function (kind) {
+      // MODULEROLE (kind 'basis-role') is the only measure with a per-instance community-basis select.
+      var tpl = kind === 'basis-role' ? document.getElementById('tpl-mbasis-role') : null;
       return tpl ? tpl.innerHTML : '';
-    }
+    },
+  });
+  // Back-compat: the load-defaults handlers call window.rebuildMeasureBuilder.
+  window.rebuildMeasureBuilder = measureBuilder.rebuild;
 
-    function composeToken(chip) {
-      var parts = [];
-      chip.querySelectorAll('.ops-mparam-input').forEach(function (inp) {
-        var v = String(inp.value).trim();
-        if (v !== '') parts.push(inp.dataset.pname + '=' + v);
-      });
-      return parts.length ? chip.dataset.measure + '(' + parts.join(',') + ')' : chip.dataset.measure;
-    }
-    function updateToken(chip) {
-      var hidden = chip.querySelector('input[name="measures"]');
-      if (hidden) hidden.value = composeToken(chip);
-    }
-
-    function refreshState() {
-      var chips = dropzone.querySelectorAll('.ops-selchip');
-      if (emptyMsg) emptyMsg.style.display = chips.length ? 'none' : '';
-      if (countEl) countEl.textContent = chips.length ? (chips.length + ' selected') : '';
-      var present = {};
-      chips.forEach(function (c) { present[c.dataset.measure] = true; });
-      palette.querySelectorAll('.ops-mchip').forEach(function (pc) {
-        var used = pc.dataset.multi !== '1' && present[pc.dataset.measure];
-        pc.classList.toggle('ops-mchip--used', !!used);
-        pc.setAttribute('draggable', used ? 'false' : 'true');
-        var add = pc.querySelector('.ops-mchip-add');
-        if (add) add.disabled = !!used;
-      });
-    }
-
-    function makeParam(p, value) {
-      var wrap = document.createElement('label');
-      wrap.className = 'ops-mparam';
-      wrap.appendChild(document.createTextNode(p.label || p.name));
-      var input;
-      if (p.kind === 'int') {
-        input = document.createElement('input');
-        input.type = 'number';
-        if (p.min != null) input.min = p.min;
-        input.value = (value != null && value !== '') ? value : p.default;
-      } else {
-        input = document.createElement('select');
-        input.innerHTML = basisOptionsHTML(p.kind);
-        input.value = (value != null && value !== '') ? String(value).toUpperCase() : (p.default || '');
-      }
-      input.className = 'ops-mparam-input';
-      input.dataset.pname = p.name;
-      wrap.appendChild(input);
-      return wrap;
-    }
-
-    function addMeasure(key, params) {
-      var meta = META[key];
-      if (!meta) return null;
-      var existing = dropzone.querySelector('.ops-selchip[data-measure="' + key + '"]');
-      if (!meta.multi && existing) return existing;
-
-      var chip = document.createElement('div');
-      chip.className = 'ops-selchip';
-      chip.dataset.measure = key;
-      chip.setAttribute('draggable', 'true');
-
-      var head = document.createElement('span');
-      head.className = 'ops-selchip-head';
-      head.innerHTML = '<i class="bi bi-grip-vertical ops-selchip-grip" aria-hidden="true"></i>' + meta.dirIcon +
-        '<span class="ops-selchip-label"></span>';
-      head.querySelector('.ops-selchip-label').textContent = meta.label;
-      chip.appendChild(head);
-
-      if (meta.params.length) {
-        var pwrap = document.createElement('span');
-        pwrap.className = 'ops-selchip-params';
-        meta.params.forEach(function (p) { pwrap.appendChild(makeParam(p, params ? params[p.name] : undefined)); });
-        chip.appendChild(pwrap);
-      }
-
-      var ctrls = document.createElement('span');
-      ctrls.className = 'ops-selchip-ctrls';
-      ctrls.innerHTML =
-        '<button type="button" class="ops-selchip-btn" data-move="up" aria-label="Move up" title="Move up"><i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
-        '<button type="button" class="ops-selchip-btn" data-move="down" aria-label="Move down" title="Move down"><i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
-        '<button type="button" class="ops-selchip-btn ops-selchip-remove" data-remove="1" aria-label="Remove ' + meta.label + '" title="Remove"><i class="bi bi-x-lg" aria-hidden="true"></i></button>';
-      chip.appendChild(ctrls);
-
-      var hidden = document.createElement('input');
-      hidden.type = 'hidden';
-      hidden.name = 'measures';
-      chip.appendChild(hidden);
-
-      dropzone.appendChild(chip);
-      chip.querySelectorAll('.ops-mparam-input').forEach(function (inp) {
-        inp.addEventListener('change', function () { updateToken(chip); });
-        inp.addEventListener('input', function () { updateToken(chip); });
-      });
-      updateToken(chip);
-      refreshState();
-      return chip;
-    }
-
-    function parseToken(token) {
-      var m = String(token).match(/^\s*([A-Za-z_]+)\s*(?:\(\s*(.*?)\s*\))?\s*$/);
-      if (!m) return null;
-      var key = m[1].toUpperCase();
-      var params = {};
-      var meta = META[key];
-      (m[2] || '').split(',').forEach(function (piece, i) {
-        piece = piece.trim();
-        if (!piece) return;
-        var eq = piece.indexOf('=');
-        if (eq !== -1) params[piece.slice(0, eq).trim().toLowerCase()] = piece.slice(eq + 1).trim();
-        else if (meta && meta.params[i]) params[meta.params[i].name] = piece;  // legacy positional, e.g. BRIDGING(LEIDEN)
-      });
-      return { key: key, params: params };
-    }
-
-    // Rebuild the drop zone from an ordered list of tokens (used on first load and by both
-    // load-options paths). Exposed globally so those handlers can call it.
-    window.rebuildMeasureBuilder = function (tokens) {
-      dropzone.querySelectorAll('.ops-selchip').forEach(function (c) { c.remove(); });
-      (tokens || []).forEach(function (tok) {
-        var parsed = parseToken(tok);
-        if (parsed && META[parsed.key]) addMeasure(parsed.key, parsed.params);
-      });
-      refreshState();
-    };
-
-    function getDragAfter(y) {
-      var els = Array.prototype.slice.call(dropzone.querySelectorAll('.ops-selchip:not(.ops-selchip--dragging)'));
-      var closest = { offset: -Infinity, el: null };
-      els.forEach(function (el) {
-        var box = el.getBoundingClientRect();
-        var offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) closest = { offset: offset, el: el };
-      });
-      return closest.el;
-    }
-
-    palette.addEventListener('dragstart', function (e) {
-      var chip = e.target.closest('.ops-mchip');
-      if (!chip || chip.getAttribute('draggable') === 'false') return;
-      e.dataTransfer.setData('text/measure', chip.dataset.measure);
-      e.dataTransfer.effectAllowed = 'copy';
-      chip.classList.add('ops-mchip--dragging');
-    });
-    palette.addEventListener('dragend', function (e) {
-      var chip = e.target.closest('.ops-mchip');
-      if (chip) chip.classList.remove('ops-mchip--dragging');
-    });
-
-    var draggingChip = null;
-    dropzone.addEventListener('dragstart', function (e) {
-      var chip = e.target.closest('.ops-selchip');
-      if (!chip) return;
-      draggingChip = chip;
-      chip.classList.add('ops-selchip--dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/reorder', '1');
-    });
-    dropzone.addEventListener('dragend', function () {
-      if (draggingChip) draggingChip.classList.remove('ops-selchip--dragging');
-      draggingChip = null;
-      dropzone.classList.remove('ops-dropzone--over');
-    });
-    dropzone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      dropzone.classList.add('ops-dropzone--over');
-      if (draggingChip) {
-        var after = getDragAfter(e.clientY);
-        if (after == null) dropzone.appendChild(draggingChip);
-        else dropzone.insertBefore(draggingChip, after);
-      }
-    });
-    dropzone.addEventListener('dragleave', function (e) {
-      if (e.target === dropzone) dropzone.classList.remove('ops-dropzone--over');
-    });
-    dropzone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      dropzone.classList.remove('ops-dropzone--over');
-      var key = e.dataTransfer.getData('text/measure');
-      if (key) {
-        var chip = addMeasure(key);
-        if (chip) {
-          var after = getDragAfter(e.clientY);
-          if (after == null) dropzone.appendChild(chip);
-          else dropzone.insertBefore(chip, after);
-        }
-      }
-    });
-
-    palette.addEventListener('click', function (e) {
-      var add = e.target.closest('.ops-mchip-add');
-      if (!add || add.disabled) return;
-      var chip = add.closest('.ops-mchip');
-      if (chip) addMeasure(chip.dataset.measure);
-    });
-    dropzone.addEventListener('click', function (e) {
-      var btn = e.target.closest('.ops-selchip-btn');
-      if (!btn) return;
-      var chip = btn.closest('.ops-selchip');
-      if (!chip) return;
-      if (btn.dataset.remove) { chip.remove(); refreshState(); return; }
-      var sib;
-      if (btn.dataset.move === 'up') {
-        sib = chip.previousElementSibling;
-        if (sib && sib.classList.contains('ops-selchip')) dropzone.insertBefore(chip, sib);
-      } else if (btn.dataset.move === 'down') {
-        sib = chip.nextElementSibling;
-        if (sib && sib.classList.contains('ops-selchip')) dropzone.insertBefore(sib, chip);
-      }
-    });
-
-    document.querySelectorAll('[data-measure-action]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (btn.dataset.measureAction === 'none') {
-          dropzone.querySelectorAll('.ops-selchip').forEach(function (c) { c.remove(); });
-          refreshState();
-        } else {
-          palette.querySelectorAll('.ops-mchip').forEach(function (pc) {
-            if (!dropzone.querySelector('.ops-selchip[data-measure="' + pc.dataset.measure + '"]')) {
-              addMeasure(pc.dataset.measure);
-            }
-          });
-        }
-      });
-    });
-
-    var initEl = document.getElementById('sa-measure-tokens');
-    var initial = [];
-    if (initEl) { try { initial = JSON.parse(initEl.textContent) || []; } catch (err) { initial = []; } }
-    window.rebuildMeasureBuilder(initial);
-  })();
+  // Community-strategy builder: the same factory, fed by the strategy palette/drop-zone. Each chip's
+  // hidden <input name="community_strategies"> holds a token (e.g. "LEIDEN_CPM(resolution=0.05)").
+  var strategyBuilder = window.initTokenBuilder({
+    paletteId: 'strategy-palette',
+    dropzoneId: 'strategy-dropzone',
+    countId: 'strategy-count',
+    seedId: 'sa-strategy-tokens',
+    fieldName: 'community_strategies',
+    itemKey: 'strategy',
+    actionSelector: '[data-strategy-action]',
+    actionKey: 'strategyAction',
+    selectOptions: function (kind) {
+      // SBM (kind 'sbm-mode') is the only strategy with a per-instance enum select.
+      var tpl = kind === 'sbm-mode' ? document.getElementById('tpl-sbm-mode') : null;
+      return tpl ? tpl.innerHTML : '';
+    },
+  });
+  window.rebuildStrategyBuilder = strategyBuilder.rebuild;
 
   // All / None buttons in fieldset legends.
   document.addEventListener('click', function (e) {
@@ -2064,16 +1803,15 @@ function showToast(msg, type) {
         if (opts.dead_leaves_color) setVal('dead_leaves_color', opts.dead_leaves_color);
         setVal('fa2_iterations',                 opts.fa2_iterations);
         setVal('community_distribution_threshold', opts.community_distribution_threshold);
-        setVal('leiden_coarse_resolution',       opts.leiden_coarse_resolution);
-        setVal('leiden_fine_resolution',         opts.leiden_fine_resolution);
-        setVal('mcl_inflation',                  opts.mcl_inflation);
 
         // Measures: rebuild the drag-and-drop builder from the ordered token list (each token
-        // carries its own parameters, e.g. "SPREADING(runs=2000)").
+        // carries its own parameters, e.g. "DIFFUSIONLAG(window=60)").
         if (window.rebuildMeasureBuilder) {
             window.rebuildMeasureBuilder((opts.measures || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
         }
-        setMulti('community_strategies', opts.community_strategies);
+        if (window.rebuildStrategyBuilder) {
+            window.rebuildStrategyBuilder((opts.community_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+        }
         setMulti('network_stat_groups',  opts.network_stat_groups);
         setMulti('layouts_2d',           opts.layouts_2d || '');
         setMulti('layouts_3d',           opts.layouts_3d || '');
@@ -2097,19 +1835,11 @@ function showToast(msg, type) {
         setVal('vacancy_max_candidates',   opts.vacancy_max_candidates != null ? opts.vacancy_max_candidates : '');
 
         // Robustness analysis — the master switch is implicit (any strategy ⇒ on).
-        // Strategies: comma-separated, may include bridging(<basis>) — split the basis out into
-        // the robustness panel's own basis dropdown and feed the bare token to the checkbox setter.
-        var robustBasis = '';
         if (opts.robustness_strategies !== undefined) {
-            var raw = (opts.robustness_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-            var rTokens = raw.map(function (t) {
-                var m = t.match(/^bridging\((\w+)\)$/i);
-                if (m) { robustBasis = m[1].toUpperCase(); return 'bridging'; }
-                return t.toLowerCase();
-            });
+            var rTokens = (opts.robustness_strategies || '')
+                .split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
             setMulti('robustness_strategies', rTokens.join(','));
         }
-        setVal('robustness_bridging_basis', robustBasis);
         setVal('robustness_alpha',  opts.robustness_alpha  != null ? opts.robustness_alpha  : '');
         setVal('robustness_runs',   opts.robustness_runs   != null ? opts.robustness_runs   : '');
         setVal('robustness_null',   opts.robustness_null   != null ? opts.robustness_null   : '');
@@ -2135,10 +1865,17 @@ function showToast(msg, type) {
   function applyLoadedDefaults(form, values) {
     Object.keys(values).forEach(function (name) {
       var value = values[name];
-      // Measures are an ordered token list driving the drag-and-drop builder, not form controls.
+      // Measures and community strategies are ordered token lists driving their drag-and-drop
+      // builders, not plain form controls.
       if (name === 'measures') {
         if (window.rebuildMeasureBuilder) {
           window.rebuildMeasureBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+        }
+        return;
+      }
+      if (name === 'community_strategies') {
+        if (window.rebuildStrategyBuilder) {
+          window.rebuildStrategyBuilder(Array.isArray(value) ? value : String(value || '').split(','));
         }
         return;
       }

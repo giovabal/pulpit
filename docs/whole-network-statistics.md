@@ -40,7 +40,7 @@ The raw count of channels (nodes) and directed connections (edges) in the graph.
 
 The fraction of all possible directed edges that actually exist. For a directed graph with *n* nodes, the maximum number of edges is *n(n−1)*; density is the observed edge count divided by that maximum.
 
-**In practice:** density is low in almost all real-world networks. What matters is the comparative value across exports or sub-networks. A rising density over time suggests a network becoming more tightly integrated; a very low density combined with high betweenness scores for a few nodes indicates a sparse network held together by a small number of critical bridges.
+**In practice:** density is low in almost all real-world networks. What matters is the comparative value across exports or sub-networks. A rising density over time suggests a network becoming more tightly integrated; a very low density combined with low Burt's-constraint scores for a few nodes indicates a sparse network held together by a small number of critical brokers.
 
 ---
 
@@ -252,7 +252,7 @@ Each pair is computed on the **intersection** of channels assigned in both strat
 
 **Reference:** Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069); Fred, A.L.N. & Jain, A.K. (2003) "Robust data clustering." *CVPR* 2.
 
-**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organizational lines. A low NMI (< 0.3) means the structural communities cut across organizations: channels from the same organization are scattered across multiple structural clusters, or a single structural cluster spans several organizations. Comparing two algorithmic strategies (e.g. LEIDEN vs INFOMAP) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
+**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organizational lines. A low NMI (< 0.3) means the structural communities cut across organizations: channels from the same organization are scattered across multiple structural clusters, or a single structural cluster spans several organizations. Comparing two algorithmic strategies (e.g. LEIDEN vs LEIDEN_DIRECTED) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
 
 ## Structural equivalence matrix
 
@@ -275,7 +275,7 @@ The heatmap colours cells from white (low similarity) to steel-blue (high simila
 
 Generated with `--behavioural-equivalence`. Available as a standalone page `behavioural_equivalence.html` (see [Export formats](export-formats.md#behavioural_equivalencehtml--behavioural-equivalence-matrix)).
 
-Each cell (i, j) shows the cosine similarity between channels i and j's **behavioural-measure profiles** — built from the behavioural measures that were computed: amplification factor, content originality, diffusion lag, spreading efficiency, plus audience/activity volume (followers, message count).
+Each cell (i, j) shows the cosine similarity between channels i and j's **behavioural-measure profiles** — built from the behavioural measures that were computed: amplification factor, content originality, diffusion lag, plus audience/activity volume (followers, message count).
 
 > **What this measures.** Two channels score 1.0 when they *behave* alike — originate vs amplify, fast vs slow, narrow vs wide reach, similar audience size — regardless of their position in the citation network. It is the behavioural counterpart of structural equivalence: a channel can be structurally equivalent to another (same neighbours) yet behaviourally very different, or vice versa.
 

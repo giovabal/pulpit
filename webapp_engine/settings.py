@@ -22,6 +22,47 @@ warnings.filterwarnings(
 )
 
 
+# Telethon's auto-reconnect spawns a fresh Connection._recv_loop/_send_loop and
+# abandons the previous one. When a GC cycle later finalises one of those bare
+# coroutines mid-crawl, CPython throws GeneratorExit into it; the unwind crosses
+# an await that fails to re-raise it, so a benign "coroutine ignored
+# GeneratorExit" RuntimeError is routed through sys.unraisablehook and printed to
+# stderr — interrupting the captured crawl log. That channel is covered by
+# neither the asyncio loop exception handler nor the end-of-crawl task drain in
+# crawl_channels (both of which act on Tasks, not GC-finalised bare coroutines),
+# so filter exactly this case here: a coroutine defined inside the telethon
+# package raising RuntimeError/GeneratorExit. Everything else — including a
+# genuine GeneratorExit bug in our own code — falls through to the default hook.
+def _drop_telethon_coroutine_teardown(unraisable):
+    obj = unraisable.object
+    code = getattr(obj, "cr_code", None) or getattr(obj, "ag_code", None)
+    exc = unraisable.exc_value
+    if (
+        code is not None
+        and "/telethon/" in code.co_filename.replace("\\", "/")
+        and isinstance(exc, RuntimeError)
+        and "GeneratorExit" in str(exc)
+    ):
+        return
+    sys.__unraisablehook__(unraisable)
+
+
+sys.unraisablehook = _drop_telethon_coroutine_teardown
+
+
+# Under the test runner, silence logging: the suite deliberately exercises
+# flood-wait, failed-download, unresolved-reference and parse-failure paths
+# whose log records would otherwise flood the output. No test asserts on log
+# output (no assertLogs anywhere), so disabling it wholesale is safe. Match the
+# `test` subcommand precisely (argv[1]) so a stray "test" argument to another
+# command can't accidentally mute logging. Migration 0045 also reads this flag.
+TESTING = sys.argv[1:2] == ["test"]
+if TESTING:
+    import logging
+
+    logging.disable(logging.CRITICAL)
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -395,15 +436,12 @@ SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
 SA_INCLUDE_SELF_REFERENCES = _structural.edges.include_self_references
 SA_EDGE_WEIGHT_STRATEGY = _structural.edges.weight_strategy
-SA_SPREADING_RUNS = _structural.computation.spreading_runs
 SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
 SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
 SA_BEHAVIOURAL_EQUIVALENCE = _structural.outputs.behavioural_equivalence
 SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
-SA_LEIDEN_COARSE_RESOLUTION = _structural.computation.leiden_coarse_resolution
-SA_LEIDEN_FINE_RESOLUTION = _structural.computation.leiden_fine_resolution
-SA_MCL_INFLATION = _structural.computation.mcl_inflation
+# CPM resolution moved into the per-instance community-strategy tokens (v0.25).
 SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold
 SA_INCLUDE_LOST = _structural.scope.include_lost
 SA_INCLUDE_PRIVATE = _structural.scope.include_private
@@ -418,9 +456,6 @@ SA_VACANCY_MAX_CANDIDATES = _structural.vacancy.max_candidates
 SA_ROBUSTNESS = bool(_structural.robustness.strategies)
 SA_ROBUSTNESS_ALPHA = _structural.robustness.alpha
 SA_ROBUSTNESS_STRATEGIES = ",".join(_structural.robustness.strategies)
-# Community basis for the robustness "bridging" attack (its own knob since v0.25 — measure bases
-# now live per-instance inside the --measures tokens). Empty → backend default (LEIDEN_DIRECTED).
-SA_ROBUSTNESS_BRIDGING_BASIS = _structural.robustness.bridging_basis
 SA_ROBUSTNESS_RUNS = _structural.robustness.runs
 SA_ROBUSTNESS_NULL = _structural.robustness.null
 SA_ROBUSTNESS_SEED = _structural.robustness.seed

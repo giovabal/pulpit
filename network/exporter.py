@@ -12,6 +12,7 @@ from typing import Any
 from django.conf import settings
 from django.db.models import QuerySet
 
+from network.community import strategy_display_label
 from network.measures._registry import role_companions
 from network.utils import GraphData
 from webapp.models import Channel
@@ -271,8 +272,8 @@ def _label_param_annotation(label: str) -> str:
 
 
 def _role_companion_groups(measures_labels: list[tuple[str, str]]) -> list[tuple[dict, str]]:
-    """Categorical companion column groups (module / brokerage role + brokerage counts), one per
-    role-measure instance, derived from each ``within_module_z*`` / ``brokerage_total*`` column."""
+    """Categorical companion column groups (the module role), one per role-measure instance,
+    derived from each ``within_module_z*`` column."""
     groups: list[tuple[dict, str]] = []
     for key, label in measures_labels:
         comp = role_companions(key)
@@ -290,11 +291,8 @@ def write_csv(
 ) -> None:
     """Write nodes.csv and edges.csv to output_dir.
 
-    nodes.csv mirrors channel_table.xlsx, plus the five Gould-Fernandez brokerage role counts
-    (Coordinator … Liaison) when BROKERAGEROLES was computed — these ride in the CSV and the
-    graph-exchange formats rather than the on-screen channel table. A role measure requested with
-    several community bases contributes one companion column group per instance, each carrying its
-    parameter annotation.
+    nodes.csv mirrors channel_table.xlsx. A role measure requested with several community bases
+    contributes one companion column group per instance, each carrying its parameter annotation.
     edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions
     where weight_forwards and weight_mentions are the raw forward/mention counts.
     """
@@ -314,7 +312,7 @@ def write_csv(
     for comp, annot in role_groups:
         headers.append(comp["role_label"] + annot)
         headers += [cl + annot for cl in comp["count_labels"]]
-    headers += [s.capitalize() for s in strategies]
+    headers += [strategy_display_label(s) for s in strategies]
     headers += ["Activity start", "Activity end"]
 
     with open(os.path.join(output_dir, "nodes.csv"), "w", newline="", encoding="utf-8") as fh:
@@ -445,9 +443,9 @@ def write_graph_files(
 
     # channels.json — per-node metadata, computed measures, community assignments, measure labels.
     # The numeric measure keys come straight from measures_labels; each role measure's categorical
-    # companions (the parameter-suffixed module_role / brokerage_role label and the five brokerage
-    # role counts — kept in the payload / CSV / GEXF / GraphML, not surfaced as channel-table
-    # columns) are derived per instance from its within_module_z* / brokerage_total* column.
+    # companion (the parameter-suffixed module_role label, kept in the payload / CSV / GEXF /
+    # GraphML, not surfaced as a channel-table column) is derived per instance from its
+    # within_module_z* column.
     node_keys: set[str] = {
         "id",
         "label",
@@ -554,12 +552,9 @@ def write_summary_json(
         "fa2_iterations",
         "layouts_2d",
         "layouts_3d",
-        "spreading_runs",
         "diffusion_window",
         "community_distribution_threshold",
-        "leiden_coarse_resolution",
-        "leiden_fine_resolution",
-        "mcl_inflation",
+        "leiden_cpm_resolution",
         "measures",
         "community_strategies",
         "network_stat_groups",

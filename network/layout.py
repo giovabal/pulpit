@@ -5,7 +5,13 @@ import numpy as np
 from fa2 import ForceAtlas2
 
 try:
-    import umap as _umap_lib
+    # umap probes for Tensorflow (for the optional ParametricUMAP) at import and
+    # emits an ImportWarning when it is absent. We never use ParametricUMAP, and
+    # the warning is unfilterable from settings under the test runner (which
+    # resets warning filters), so suppress it at the import site.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ImportWarning)
+        import umap as _umap_lib
 
     HAS_UMAP = True
 except ImportError:
@@ -211,10 +217,10 @@ def community_shell_positions(
     community data is available.
 
     *strategy_results* has the shape returned by ``_compute_communities``:
-    ``{STRATEGY_NAME: (community_map, palette)}`` where *community_map* is
-    ``{node_id: community_label}``.
+    ``{strategy_key: (community_map, palette)}`` keyed by the parameter-suffixed partition key
+    (``StrategyInstance.key``) where *community_map* is ``{node_id: community_label}``.
     """
-    preferred = ["LEIDEN", "LEIDEN_DIRECTED", "LABELPROPAGATION"]
+    preferred = ["leiden", "leiden_directed", "labelpropagation"]
     community_map: dict | None = None
     for key in preferred:
         if key in strategy_results:

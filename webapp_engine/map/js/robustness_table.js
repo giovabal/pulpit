@@ -32,34 +32,23 @@ var _METRICS = ["wcc", "scc", "reach"];
 var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
 
 // Strategy ordering — matches network.robustness.attacks.ALL_STRATEGIES.
-// Bridging variants (bridging(LEIDEN), bridging(LEIDEN_DIRECTED), …) are slotted in
-// after bare "bridging" in alphabetical order at render time; see _orderedStrategies.
 var _STRATEGY_ORDER = [
     "random",
     "in_strength", "out_strength",
     "pagerank",
-    "harmonic",
-    "betweenness", "bridging",
-    "spreading",
     "in_strength_dyn", "out_strength_dyn",
     "pagerank_dyn",
-    "betweenness_dyn",
 ];
 
 // Compact short labels — kept terse so the legend stays readable when many
-// strategies overlap.  The full label (with bridging basis, etc.) comes from
-// the payload's per-strategy "label" field; this map is the fallback.
+// strategies overlap.  The full label comes from the payload's per-strategy
+// "label" field; this map is the fallback.
 var _STRATEGY_SHORT = {
     "random": "Random",
     "in_strength": "In-strength", "out_strength": "Out-strength",
     "pagerank": "PageRank",
-    "harmonic": "Harmonic",
-    "betweenness": "Betweenness",
-    "bridging": "Bridging",
-    "spreading": "Spreading (SIR)",
     "in_strength_dyn": "In-strength dyn", "out_strength_dyn": "Out-strength dyn",
     "pagerank_dyn": "PageRank dyn",
-    "betweenness_dyn": "Betweenness dyn",
 };
 
 // Accessible palette grouped by attack-family hue.
@@ -67,13 +56,8 @@ var _STRATEGY_COLOR = {
     "random": "#94a3b8",
     "in_strength": "#3b82f6", "out_strength": "#06b6d4",
     "pagerank": "#ef4444",
-    "harmonic": "#10b981",
-    "betweenness": "#f59e0b",
-    "bridging": "#ec4899",
-    "spreading": "#14b8a6",
     "in_strength_dyn": "#1d4ed8", "out_strength_dyn": "#0e7490",
     "pagerank_dyn": "#b91c1c",
-    "betweenness_dyn": "#b45309",
 };
 
 function _labelOf(payload, key) {
@@ -83,8 +67,6 @@ function _labelOf(payload, key) {
 }
 
 function _colorOf(key) {
-    // bridging(LEIDEN) and similar variants share the bridging base colour.
-    if (key.indexOf("bridging(") === 0) return _STRATEGY_COLOR["bridging"];
     return _STRATEGY_COLOR[key] || "#6b7280";
 }
 
@@ -109,13 +91,7 @@ function _orderedStrategies(payload) {
     var present = new Set(Object.keys(payload.strategies || {}));
     var ordered = [];
     _STRATEGY_ORDER.forEach(function (s) {
-        if (s === "bridging") {
-            // Sweep up bare bridging plus every bridging(<basis>) variant in alphabetical order.
-            var bridgings = Array.from(present)
-                .filter(function (k) { return k === "bridging" || k.indexOf("bridging(") === 0; })
-                .sort();
-            bridgings.forEach(function (b) { ordered.push(b); present.delete(b); });
-        } else if (present.has(s)) {
+        if (present.has(s)) {
             ordered.push(s);
             present.delete(s);
         }

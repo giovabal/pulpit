@@ -17,7 +17,7 @@ Telegram channels constantly reference each other — forwarding messages, linki
 
 Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive network map you can explore in a browser — zooming in on individual channels, filtering by detected community, comparing the reach of different actors, stepping through how the network evolved year by year.
 
-The analytical layer is built on established methods from network science: [PageRank](docs/network-measures.md#pagerank), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [Infomap echo-chamber detection](docs/community-detection.md#infomap), [SIR spreading simulation](docs/network-measures.md#spreading-efficiency), and more — applied to the specific dynamics of Telegram forwarding networks. See the [changelog](CHANGELOG.md) for recent additions.
+The analytical layer is built on established methods from network science: [PageRank](docs/network-measures.md#pagerank), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [k-core decomposition](docs/community-detection.md#k-core), and more — applied to the specific dynamics of Telegram forwarding networks. See the [changelog](CHANGELOG.md) for recent additions.
 
 ---
 
@@ -38,14 +38,13 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 - Which channels are the hidden agenda-setters — forwarded by all the key players, regardless of subscriber count? *([PageRank](docs/network-measures.md#pagerank))*
 - Which channels are pure distributors — aggregating and reposting from many sources without producing original content? *([HITS Hub](docs/network-measures.md#hits-hub-score), [Content Originality](docs/network-measures.md#content-originality))*
-- Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Betweenness](docs/network-measures.md#betweenness-centrality), [Burt's Constraint](docs/network-measures.md#burts-constraint), [Bridging Centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008), [Community Bridging](docs/network-measures.md#community-bridging))*
+- Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Burt's Constraint](docs/network-measures.md#burts-constraint))*
 - Whose content spreads farthest per post published, despite a modest following? *([Amplification Factor](docs/network-measures.md#amplification-factor))*
-- If a channel started spreading a piece of false information, what fraction of the network would eventually receive it? *([Spreading Efficiency](docs/network-measures.md#spreading-efficiency))*
 
 **About communities:**
 
-- How does the network cluster when the citation data decides the boundaries — not your own labels? *([Leiden](docs/community-detection.md#leiden), [Infomap](docs/community-detection.md#infomap), [MCL](docs/community-detection.md#mcl-markov-clustering), and more)*
-- Which channels form a genuine echo chamber — where content circulates in a closed loop and almost never escapes? *([Infomap](docs/community-detection.md#infomap), [Strongly Connected Components](docs/community-detection.md#strongly-connected-components-strongcc))*
+- How does the network cluster when the citation data decides the boundaries — not your own labels? *([Leiden](docs/community-detection.md#leiden), [Leiden (directed)](docs/community-detection.md#leiden-directed), [Leiden CPM](docs/community-detection.md#leiden-cpm), and more)*
+- Which channels form the tight, mutually-reinforcing nucleus of the network? *([K-core](docs/community-detection.md#k-core))*
 - Which community detection algorithms agree on a grouping, and which disagree? *([Consensus matrix](docs/community-detection.md#consensus-matrix))*
 - How cohesive or competitive are the communities? How much do they interact? *([E-I Index, Modularity](docs/whole-network-statistics.md))*
 
@@ -87,7 +86,7 @@ Open [http://localhost:8000](http://localhost:8000). The entire workflow runs fr
 
 ## How it works
 
-A Pulpit research project runs in four steps, all accessible from the browser interface:
+A Pulpit research project runs in five steps, all accessible from the browser interface:
 
 <figure>
 
@@ -103,7 +102,7 @@ A Pulpit research project runs in four steps, all accessible from the browser in
 4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
 5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
-The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's total publishing volume.
+The core data model is a **directed, weighted citation graph**: a directed edge from channel A to channel B means A regularly amplifies B's content. Edge weight reflects how much of A's output references B relative to A's overall citing activity.
 
 ---
 
@@ -118,20 +117,20 @@ After export, the output directory contains self-contained files that can be sha
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
 | **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organization × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
-| **Structural similarity matrix** (`structural_similarity.html`) | Pairwise cosine similarity between all channels across all computed measures, sortable by community or by measure [more](docs/export-formats.md) |
-| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across all detection strategies [more](docs/community-detection.md#consensus-matrix) |
-| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by six algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
+| **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
+| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (Organization and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
+| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
-| **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table (plus the five Gould-Fernandez brokerage role counts when computed). `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
+| **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
 | **GEXF and GraphML** | For Gephi, Cytoscape, R/igraph, and any graph-analysis tool [more](docs/export-formats.md#networkgexf--networkgraphml--network-exchange-formats) |
 
 ---
 
-## Network measures — 20 per channel
+## Network measures — 11 per channel
 
-Each channel receives a score for up to 20 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 11 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -148,50 +147,37 @@ Each channel receives a score for up to 20 measures. All can be used to size nod
 
 | Measure | What it surfaces |
 | :------ | :--------------- |
-| [Betweenness centrality](docs/network-measures.md#betweenness-centrality) | Channels sitting on the shortest paths between sub-networks — the brokers |
-| [Harmonic centrality](docs/network-measures.md#harmonic-centrality) | Channels the rest of the network reaches in the fewest hops — a multi-hop generalisation of in-degree |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel's immediate contacts also cite each other — a tight mutual-amplification neighbourhood vs. an open star of independent sources (Fagiolo 2007) |
-| [K-core coreness](docs/network-measures.md#k-core-coreness) | Whether a channel sits in the densely interconnected nucleus or is a peripheral amplifier (Kitsak et al. 2010) |
-| [Collective influence](docs/network-measures.md#collective-influence) | The optimal-percolation key spreaders whose removal most fragments the network (Morone & Makse 2015) |
 | [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — the Guimerà-Amaral role taxonomy |
-| [Bridging centrality](docs/network-measures.md#bridging-centrality-hwang-et-al-2008) | Topological bridges (Hwang et al. 2008) — low-degree channels wedged between high-degree regions, whose removal fragments the network |
-| [Community bridging](docs/network-measures.md#community-bridging) | Channels that are both structurally central AND bridge genuinely distinct communities |
-| [Brokerage roles](docs/network-measures.md#brokerage-roles-gould-fernandez-1989) | What kind of broker a channel is between groups — gatekeeper, representative, liaison (Gould & Fernandez 1989) |
 
 **Content and dynamics**
 
 | Measure | What it surfaces |
 | :------ | :--------------- |
 | [Content originality](docs/network-measures.md#content-originality) | Producers vs. redistributors — 1 minus the fraction of forwarded messages |
-| [Trophic level](docs/network-measures.md#trophic-level) | Structural source→sink position — original source vs. terminal amplifier (MacKay, Johnson & Sansom 2020) |
 | [Diffusion lag](docs/network-measures.md#diffusion-lag) | Median hours between a forwarded message's original publication and this channel forwarding it — early adopter vs. late amplifier |
-| [Spreading efficiency](docs/network-measures.md#spreading-efficiency) | Fraction of the network reached if this channel seeds a rumour (Monte Carlo SIR simulation) |
 
 See [Network measures](docs/network-measures.md) for academic references and worked examples for each measure.
 
 ---
 
-## Community detection — 11 algorithms and one custom selection
+## Community detection — 7 algorithms and one custom selection
 
-Pulpit runs up to 11 community detection algorithms simultaneously. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to seven community detection algorithms at once, alongside your own Organization grouping as a baseline. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
 | [Organization](docs/community-detection.md#organization) | Your own domain-knowledge categories as a baseline | — |
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
-| [Leiden CPM coarse](docs/community-detection.md#leiden-cpm-coarse-and-fine) | Few, large communities — even weak citation ties bind | No |
-| [Leiden CPM fine](docs/community-detection.md#leiden-cpm-coarse-and-fine) | More, smaller communities — only dense mutual citation | No |
+| [Leiden CPM](docs/community-detection.md#leiden-cpm) | Resolution γ tunes granularity — low γ gives few large communities, high γ many small ones | No |
+| [Louvain](docs/community-detection.md#louvain) | Classic modularity baseline — kept for comparison with older studies; Leiden supersedes it | No |
 | [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
-| [Infomap](docs/community-detection.md#infomap) | Echo chambers: communities where information circulates in closed loops | Yes |
-| [Memory Infomap](docs/community-detection.md#memory-infomap-second-order) | Second-order Infomap: path-dependent flow traps invisible to first-order methods | Yes |
-| [MCL](docs/community-detection.md#mcl-markov-clustering) | Flow-based communities: channels bound by shared circulation patterns | Yes |
-| [Walktrap](docs/community-detection.md#walktrap) | Proximity by shared neighbourhood — also produces a full dendrogram | No |
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
-| [Strongly connected](docs/community-detection.md#strongly-connected-components-strongcc) | Mutually reinforcing circular cores — coordinated circular amplification | Yes |
+| [Stochastic block model](docs/community-detection.md#stochastic-block-model) | Citation-role blocks — channels grouped by structural position (source/amplifier, core/periphery), not just dense clusters | Yes |
 
-The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates all non-Organization strategies into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
+The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates the partition-based detection strategies — every algorithm except your manual Organization labels and the K-core shell decomposition — into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
 
 See [Community detection](docs/community-detection.md) for descriptions, references, and a strategy selection guide.
 
@@ -207,7 +193,7 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 | :---- | :------- | :----- |
 | Amplifier Coverage | What fraction of orphaned amplifiers have started forwarding the candidate? | Coverage / recall (|A ∩ B| / |A|) |
 | Neighbour-set Equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
-| Brokerage overlap | Does the candidate bridge the same organizational communities? | Jaccard of bridged org-pairs; brokerage *concept* per Gould & Fernandez 1989 (not their census) |
+| Brokerage overlap | Does the candidate sit in the same organizational position — drawing on the same source orgs and amplified by the same audience orgs? | Jaccard of the (source-org, amplifier-org) pairs it spans; a one-degree structural-position overlap, not content flow. Brokerage *concept* per Gould & Fernandez 1989 (not their census) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage hyperbolically discounted by mean days-to-adoption (Mazur 1987) |
 
 A–C characterise structural position topologically; Temporal adoption adds the timing dimension. A channel scoring high on all four is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, all settled on quickly.
@@ -216,11 +202,11 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 ---
 
-## Robustness analysis — 8 attack strategies
+## Robustness analysis — 7 attack strategies
 
 How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment information flow across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
 
-The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#what-gets-attacked) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under eight attack strategies and tracks how the residual network shrinks:
+The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#what-gets-attacked) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under several attack strategies and tracks how the residual network shrinks:
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -228,10 +214,9 @@ The analysis optionally extracts the [disparity-filter backbone](docs/robustness
 | In-strength | Static | Take down everything that's heavily cited — moderation aimed at popular destinations |
 | Out-strength | Static | Take down everything that cites heavily — moderation aimed at aggregators |
 | PageRank | Static | Take down the highest-prestige nodes — moderation aware of inherited prestige |
-| Betweenness | Static | Take down the brokers — moderation aimed at fragmenting cross-community flow |
 | In-strength (dyn) | Dynamic — re-rank after every removal | Strength-based attack with cascade awareness |
+| Out-strength (dyn) | Dynamic — re-rank after every removal | Aggregator-targeting attack with cascade awareness |
 | PageRank (dyn) | Dynamic — re-rank after every removal | PageRank attack with cascade awareness |
-| Betweenness (dyn) | Dynamic — re-rank after every removal | The most destructive attack class; also the most expensive |
 
 For each (strategy, "size" metric) Pulpit reports the **Schneider et al. (2011) R-index** — the average residual size across the entire attack — plus a 5%-collapse threshold and a **z-score** against a weight-rewiring null model that preserves topology and the weight multiset but reshuffles weights among edges. R values lower than random failure mean the network has critical channels; |z| ≥ 2 means the deviation didn't happen by chance under the null. When community partitions are active, the analysis additionally tracks intra-community vs inter-community edge survival — a network where bridges go first behaves very differently from one that loses cohesive cliques first.
 
@@ -263,8 +248,8 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | :--- | :------- |
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
-| [Network measures](docs/network-measures.md) | All 18 per-channel measures with academic references and worked examples |
-| [Community detection](docs/community-detection.md) | 11 algorithms, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Network measures](docs/network-measures.md) | All 11 per-channel measures with academic references and worked examples |
+| [Community detection](docs/community-detection.md) | 8 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |

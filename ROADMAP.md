@@ -1,13 +1,6 @@
 # Roadmap for Pulpit: Activities for Next Versions
-## [0.24]
-generalize UI for measures depending on other measures or values
-
 ## [1.0]
-Have a review of all measurements available in Pulpit. Read documentation for having a good grasp of what is the Pulpit goal. Then:
-1. find measures that Pulpit offers and that aren't useful in this specific case;
-2. find measures that Pulpit doesn't offers yet and that can be useful in this specific case.
-Let me choose which to remove and which to accept, if any.
-
+- An installer, or a package
 - Zenodo registration
 - Have a deep inspection of Python code for calculating channels measures, network measures, community strategies, consensus matrix, structural similarity, robustness, and vacancies. Do search for bugs, implementations that doesn't have a strong academic validation, and incoherence between different calculations. Produce a detailed todo list and let me approve each action before writing anything.
 - Have a deep inspection of Python code for calculating channels measures, network measures, community strategies, consensus matrix, structural similarity, robustness, and vacancies. Take care documentation is coherent with the code. Academic validation always has priority in choosing if adapting documentation to the code or the code to the documentation.
@@ -24,5 +17,10 @@ Let me choose which to remove and which to accept, if any.
 
 
 ## [2.0]
-Coordination index, as a new measure. It needs a new graph
+New graphs:
+- coordination index, as a new measure
+- co-citation network
+- bibliographic coupling
+
+
 https://github.com/textgain/grasp

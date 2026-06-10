@@ -7,6 +7,7 @@ from typing import Any
 from django.conf import settings
 from django.template.loader import render_to_string
 
+from network.community import strategy_display_label
 from network.community_stats import network_summary_rows
 from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
@@ -89,9 +90,8 @@ def write_table_xlsx(
     extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    # Categorical role label (Module role / Brokerage role) rides alongside its numeric measure
-    # (within_module_z* / brokerage_total*) — one column per role-measure instance, carrying the
-    # instance's parameter annotation. The brokerage role *counts* stay in the CSV/GEXF, not here.
+    # Categorical role label (Module role) rides alongside its numeric measure (within_module_z*)
+    # — one column per role-measure instance, carrying the instance's parameter annotation.
     role_label_cols: list[tuple[str, str]] = []
     for key, label in measures_labels:
         comp = role_companions(key)
@@ -104,7 +104,7 @@ def write_table_xlsx(
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
     headers += [hdr for _, hdr in role_label_cols]
-    headers += [s.capitalize() for s in strategies]
+    headers += [strategy_display_label(s) for s in strategies]
     headers += ["Activity start", "Activity end"]
 
     def _fill(ws: Any, gd: GraphData) -> None:
@@ -238,7 +238,7 @@ def write_network_table_xlsx(
             cell.font = Font(bold=True)
         for strategy_key in strategies:
             entry = ctd["strategies"].get(strategy_key)
-            ws.append([strategy_key.capitalize(), entry["modularity"] if entry else None])
+            ws.append([strategy_display_label(strategy_key), entry["modularity"] if entry else None])
 
         nmi_data = ctd.get("nmi_matrix")
         if nmi_data and len(nmi_data.get("strategies", [])) >= 2:
@@ -248,11 +248,11 @@ def write_network_table_xlsx(
             ws.append(["Partition agreement (NMI)"])
             for cell in ws[ws.max_row]:
                 cell.font = Font(bold=True)
-            ws.append([""] + [s.capitalize() for s in nmi_strats])
+            ws.append([""] + [strategy_display_label(s) for s in nmi_strats])
             for cell in ws[ws.max_row]:
                 cell.font = Font(bold=True)
             for i, sk in enumerate(nmi_strats):
-                ws.append([sk.capitalize()] + [nmi_cells[i][j] for j in range(len(nmi_strats))])
+                ws.append([strategy_display_label(sk)] + [nmi_cells[i][j] for j in range(len(nmi_strats))])
 
     wb = openpyxl.Workbook()
     wb.properties.creator = "Pulpit"
@@ -398,7 +398,7 @@ def write_community_table_xlsx(
         if not first:
             ws.append([])  # blank separator between strategies
         heading_row = ws.max_row + 1
-        ws.append([strategy_key.capitalize()])
+        ws.append([strategy_display_label(strategy_key)])
         ws.cell(row=heading_row, column=1).font = Font(bold=True)
         ws.append(headers)
         for cell in ws[ws.max_row]:
@@ -448,7 +448,7 @@ def write_community_table_xlsx(
     else:
         # One sheet per strategy (original format)
         for strategy_key in strategies:
-            ws = wb.create_sheet(title=strategy_key.capitalize()[:31])
+            ws = wb.create_sheet(title=strategy_display_label(strategy_key)[:31])
             _fill_strategy(ws, strategy_key, community_table_data)
 
     wb.save(output_filename)
@@ -789,7 +789,7 @@ def write_index_html(
         "include_behavioural_equivalence": include_behavioural_equivalence,
         "include_compare_html": include_compare_html,
         "compare_files": compare_files or set(),
-        "strategies": [s.capitalize() for s in (strategies or [])],
+        "strategies": [strategy_display_label(s) for s in (strategies or [])],
         "timeline_entries": timeline_entries or [],
         "include_vacancy_analysis": include_vacancy_analysis,
         "include_robustness_html": include_robustness_html,
