@@ -105,7 +105,6 @@ class OperationsView(View):
             "SA_DEAD_LEAVES_COLOR": settings.DEAD_LEAVES_COLOR,
             "SA_COMMUNITY_PALETTE": settings.COMMUNITY_PALETTE,
             "SA_COMMUNITY_PALETTE_REVERSED": settings.COMMUNITY_PALETTE_REVERSED,
-            "SA_ROBUSTNESS_BRIDGING_BASIS": settings.SA_ROBUSTNESS_BRIDGING_BASIS,
             "SA_STRUCTURAL_SIMILARITY": settings.SA_STRUCTURAL_SIMILARITY,
             "SA_BEHAVIOURAL_EQUIVALENCE": settings.SA_BEHAVIOURAL_EQUIVALENCE,
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
@@ -117,11 +116,9 @@ class OperationsView(View):
             "SA_INCLUDE_PRIVATE": settings.SA_INCLUDE_PRIVATE,
             # SA numeric params
             "SA_FA2_ITERATIONS": settings.SA_FA2_ITERATIONS,
-            "SA_SPREADING_RUNS": settings.SA_SPREADING_RUNS,
             "SA_DIFFUSION_WINDOW": settings.SA_DIFFUSION_WINDOW,
-            "SA_LEIDEN_COARSE_RESOLUTION": settings.SA_LEIDEN_COARSE_RESOLUTION,
-            "SA_LEIDEN_FINE_RESOLUTION": settings.SA_LEIDEN_FINE_RESOLUTION,
-            "SA_MCL_INFLATION": settings.SA_MCL_INFLATION,
+            # Default value pre-filled on a freshly-dragged community-strategy chip (per-instance).
+            "SA_CPM_RESOLUTION": net_community.CPM_DEFAULT_RESOLUTION,
             "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
             "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
             "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
@@ -139,10 +136,8 @@ class OperationsView(View):
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
             # SA expanded sets for checkbox groups
-            # Ordered measure tokens (each may carry parameters, e.g. "SPREADING(runs=2000)") used to
-            # pre-fill the drag-and-drop measure builder. Replaces the old checkbox `_expand` set.
-            "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
-            "sa_strategies": _expand(settings.SA_COMMUNITY_STRATEGIES, set(net_community.VALID_STRATEGIES)),
+            # sa_measure_tokens / sa_strategy_tokens seed the drag-and-drop builders; passed at top
+            # level (below) so the templates' json_script tags can read them.
             "sa_stat_groups": _expand(settings.SA_NETWORK_STAT_GROUPS, set(net_measures.ALL_NETWORK_STAT_GROUPS)),
             "sa_layouts_2d": {s.strip().upper() for s in settings.SA_LAYOUTS_2D.split(",") if s.strip()},
             "sa_layouts_3d": {s.strip().upper() for s in settings.SA_LAYOUTS_3D.split(",") if s.strip()},
@@ -160,20 +155,7 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
                 "has_vacancies": has_vacancies,
-                # (key, label) pairs for the bridging-basis dropdown (Community Bridging measure +
-                # robustness bridging attack). ORGANIZATION is excluded because organisation
-                # membership isn't a community-detection result — entropy across pre-declared
-                # categories doesn't carry the same meaning.
-                "bridging_basis_choices": sorted(
-                    (
-                        (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
-                        for key in net_community.VALID_STRATEGIES
-                        if key != "ORGANIZATION"
-                    ),
-                    key=lambda kv: kv[1],
-                ),
-                # All partitions including ORGANIZATION — for the MODULEROLE / BROKERAGEROLES basis
-                # selects (brokerage roles are most interpretable against the organisation partition).
+                # All partitions including ORGANIZATION — for the MODULEROLE basis select.
                 "all_basis_choices": sorted(
                     (
                         (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
@@ -182,6 +164,11 @@ class OperationsView(View):
                     key=lambda kv: kv[1],
                 ),
                 "palette_names": palette_utils.list_palette_names(),
+                # Ordered token lists seeding the drag-and-drop builders (measures + community
+                # strategies); each token may carry parameters, e.g. "DIFFUSIONLAG(window=60)" /
+                # "LEIDEN_CPM(resolution=0.05)".
+                "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
+                "sa_strategy_tokens": [t.strip() for t in settings.SA_COMMUNITY_STRATEGIES.split(",") if t.strip()],
                 "ad": ad,
             },
         )
@@ -457,24 +444,12 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         if types:
             args += [flag, ",".join(types)]
     elif kind == "robustness_strategies":
-        # Multi-select checkboxes; the "bridging" entry gets its community basis appended in
-        # parenthesised form from the robustness panel's own basis dropdown (its own field since
-        # v0.25 — measure bases now travel inside the per-instance --measures tokens). Bare
-        # bridging falls through to the backend default (leiden_directed).
-        #
-        # The strategy list doubles as the master switch: at least one strategy
-        # checked ⇒ pass --robustness, none checked ⇒ pass --no-robustness
+        # Multi-select checkboxes. The strategy list doubles as the master switch: at least one
+        # strategy checked ⇒ pass --robustness, none checked ⇒ pass --no-robustness
         # (BooleanOptionalAction). The .operations-structural file has no separate
         # `enabled` key — SA_ROBUSTNESS is derived from bool(strategies) in settings.
         _, flag = spec
-        chosen = post.getlist("robustness_strategies")
-        bridging_basis = (post.get("robustness_bridging_basis") or "").strip().lower()
-        tokens: list[str] = []
-        for s in chosen:
-            if s == "bridging" and bridging_basis:
-                tokens.append(f"bridging({bridging_basis})")
-            else:
-                tokens.append(s)
+        tokens = post.getlist("robustness_strategies")
         if tokens:
             args += ["--robustness", flag, ",".join(tokens)]
         else:
@@ -578,14 +553,13 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
             "--no-community-palette-reversed",
         ),
         # One hidden <input name="measures"> per selected chip, in order; each value is a full
-        # token carrying its parameters (e.g. "SPREADING(runs=2000)"). csv joins them with commas.
+        # token carrying its parameters (e.g. "DIFFUSIONLAG(window=60)"). csv joins them with commas.
         ("csv", "measures", "--measures"),
         ("csv", "community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
         ("bool_explicit", "include_mentions", "--mentions", "--no-mentions"),
         ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
         ("value", "edge_weight_strategy", "--edge-weight-strategy"),
-        ("value", "spreading_runs", "--spreading-runs"),
         ("value", "diffusion_window", "--diffusion-window"),
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
@@ -599,9 +573,8 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
             "--no-interest-include-mentions",
         ),
         ("value", "community_distribution_threshold", "--community-distribution-threshold"),
-        ("value", "leiden_coarse_resolution", "--leiden-coarse-resolution"),
-        ("value", "leiden_fine_resolution", "--leiden-fine-resolution"),
-        ("value", "mcl_inflation", "--mcl-inflation"),
+        # CPM resolution now rides inside the community-strategy tokens
+        # (e.g. "LEIDEN_CPM(resolution=0.05)"), so it is not a separate CLI flag from the panel.
         ("channel_types", "--channel-types"),
         ("csv", "channel_groups", "--channel-groups"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
@@ -699,10 +672,6 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("include_private", "scope.include_private", "bool"),
         ("fa2_iterations", "computation.fa2_iterations", "fa2_iterations"),
         ("community_distribution_threshold", "computation.community_distribution_threshold", "int"),
-        ("leiden_coarse_resolution", "computation.leiden_coarse_resolution", "float"),
-        ("leiden_fine_resolution", "computation.leiden_fine_resolution", "float"),
-        ("mcl_inflation", "computation.mcl_inflation", "float"),
-        ("spreading_runs", "computation.spreading_runs", "int"),
         ("diffusion_window", "computation.diffusion_window", "int"),
         ("layouts_2d", "layouts.layouts_2d", "list"),
         ("layouts_3d", "layouts.layouts_3d", "list"),
@@ -715,7 +684,6 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("vacancy_max_candidates", "vacancy.max_candidates", "int"),
         ("robustness_alpha", "robustness.alpha", "float"),
         ("robustness_strategies", "robustness.strategies", "list"),
-        ("robustness_bridging_basis", "robustness.bridging_basis", "value"),
         ("robustness_runs", "robustness.runs", "int"),
         ("robustness_null", "robustness.null", "int"),
         ("robustness_seed", "robustness.seed", "int"),
@@ -744,9 +712,6 @@ def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
 _FORM_PAYLOAD_MISSING = object()
 
 
-_BRIDGING_VALID_BASES: frozenset[str] = frozenset(s for s in net_community.VALID_STRATEGIES if s != "ORGANIZATION")
-
-
 def _validate_post_constraints(task: str, post: Any) -> None:
     """Cross-field validation shared by Save and Run.
 
@@ -759,10 +724,8 @@ def _validate_post_constraints(task: str, post: Any) -> None:
     Per-task rules:
 
     * ``structural_analysis``:
-        - BRIDGING basis (explicit or default LEIDEN_DIRECTED) must be a
-          real strategy (ORGANIZATION excluded because organisation
-          membership isn't a community-detection result).
-        - BRIDGING basis must be among the selected community_strategies.
+        - A MODULEROLE basis, when set, must be among the selected
+          community_strategies.
         - consensus_matrix requires ≥2 non-ORGANIZATION strategies.
 
     * ``compare_analysis``: ``project_dir`` and ``compare_target`` are both
@@ -778,33 +741,25 @@ def _validate_post_constraints(task: str, post: Any) -> None:
 
     if task == "structural_analysis":
         measure_tokens = post.getlist("measures") or []
-        robust = post.getlist("robustness_strategies") or []
-        strategies = {s.upper() for s in (post.getlist("community_strategies") or [])}
+        strategy_tokens = post.getlist("community_strategies") or []
 
-        # Parse the measure tokens up-front for a friendly error (syntax / unknown param / range /
-        # duplicate) before the subprocess launches.
+        # Parse measure + strategy tokens up-front for a friendly error (syntax / unknown param /
+        # range / duplicate) before the subprocess launches.
         try:
             parsed_measures = net_measures.parse_measures(measure_tokens)
         except ValueError as exc:
             raise ValueError(f"Measures: {exc}") from exc
+        try:
+            parsed_strategies = net_community.parse_strategies(strategy_tokens)
+        except ValueError as exc:
+            raise ValueError(f"Community strategies: {exc}") from exc
+        # A measure basis names a strategy *family*; check it against the selected family names.
+        strategies = {inst.name for inst in parsed_strategies}
 
-        # Each partition-based measure's community basis must be among the selected community
-        # strategies (BRIDGING additionally excludes ORGANIZATION, matching the backend / dropdown).
+        # A MODULEROLE basis, when set, must be among the selected community strategies.
         present = ", ".join(sorted(strategies)) or "none selected"
         for inst in parsed_measures:
-            if inst.measure == "BRIDGING":
-                basis = inst.params_dict["basis"]
-                if basis not in _BRIDGING_VALID_BASES:
-                    raise ValueError(
-                        f"BRIDGING basis '{basis}' is not a valid community-detection strategy"
-                        " (ORGANIZATION is excluded because organisation membership is not a detection result)"
-                    )
-                if basis not in strategies:
-                    raise ValueError(
-                        f"BRIDGING basis '{basis}' must be one of the selected community strategies "
-                        f"(currently: {present})"
-                    )
-            elif inst.measure in ("MODULEROLE", "BROKERAGEROLES"):
+            if inst.measure == "MODULEROLE":
                 basis = inst.params_dict.get("basis") or ""
                 if basis and basis not in strategies:
                     raise ValueError(
@@ -812,26 +767,12 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                         f"(currently: {present}), or left blank to auto-resolve"
                     )
 
-        # Robustness "bridging" attack uses the robustness panel's own basis dropdown.
-        if "bridging" in {r.lower() for r in robust}:
-            rbasis = (post.get("robustness_bridging_basis") or "").strip().upper() or "LEIDEN_DIRECTED"
-            if rbasis not in _BRIDGING_VALID_BASES:
-                raise ValueError(
-                    f"Robustness bridging basis '{rbasis}' is not a valid community-detection strategy"
-                    " (ORGANIZATION is excluded because organisation membership is not a detection result)"
-                )
-            if rbasis not in strategies:
-                raise ValueError(
-                    f"Robustness bridging basis '{rbasis}' must be one of the selected community strategies "
-                    f"(currently: {present})"
-                )
-
         if post.get("consensus_matrix"):
-            non_org = strategies - {"ORGANIZATION"}
+            non_org = [inst for inst in parsed_strategies if inst.name != "ORGANIZATION"]
             if len(non_org) < 2:
                 raise ValueError(
                     "Consensus matrix requires at least two non-ORGANIZATION community strategies"
-                    f" (currently: {', '.join(sorted(non_org)) or 'none'})"
+                    f" (currently: {len(non_org)})"
                 )
         return
 

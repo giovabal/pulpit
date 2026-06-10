@@ -52,11 +52,19 @@ layouts_2d = ["FA2", "CIRCULAR", "KAMADA_KAWAI", "COMMUNITY_SHELL", "TSNE", "UMA
 layouts_3d = ["FA2", "SPECTRAL", "SPRING", "KAMADA_KAWAI", "TSNE", "UMAP"]
 
 [measures]
-selected = ["PAGERANK", "HITSHUB", "HITSAUTH", "BETWEENNESS", "INDEGCENTRALITY", "OUTDEGCENTRALITY", "HARMONICCENTRALITY", "SPREADING", "BRIDGING", "BURTCONSTRAINT", "LOCALCLUSTERING", "CORENESS", "TROPHICLEVEL", "MODULEROLE", "AMPLIFICATION", "CONTENTORIGINALITY", "DIFFUSIONLAG"]
+# Webapp form default: Tier 3 (structural-only) + Tier 4 (valid) measures under the one-degree
+# amplification model — see docs/network-measures.md → "Interpretation guardrails". Path/flow
+# measures (BETWEENNESS, SPREADING, TROPHICLEVEL, BROKERAGEROLES, BRIDGING*, HARMONICCENTRALITY,
+# COLLECTIVEINFLUENCE, CORENESS) are omitted by default but remain selectable.
+selected = ["PAGERANK", "HITSHUB", "HITSAUTH", "INDEGCENTRALITY", "OUTDEGCENTRALITY", "BURTCONSTRAINT", "LOCALCLUSTERING", "MODULEROLE", "AMPLIFICATION", "CONTENTORIGINALITY", "DIFFUSIONLAG"]
 bridging_basis = ""
 
 [communities]
-strategies = ["ORGANIZATION", "LEIDEN_DIRECTED", "INFOMAP", "INFOMAP_MEMORY", "MCL", "STRONGCC"]
+# Webapp form default: density / structural / domain strategies, which read one-degree co-citation
+# directly — see docs/community-detection.md → "Interpretation guardrails: density vs. flow". The
+# flow-based methods (INFOMAP, INFOMAP_MEMORY, MCL, WALKTRAP) and STRONGCC are off by default but
+# remain selectable; the other valid density methods (LEIDEN, LEIDEN_CPM, LABELPROPAGATION, KCORE) too.
+strategies = ["ORGANIZATION", "LEIDEN_DIRECTED"]
 
 [network_stats]
 groups = ["SIZE", "PATHS", "COHESION", "COMPONENTS", "DEGCORRELATION", "CENTRALIZATION", "CONTENT"]
@@ -69,7 +77,11 @@ max_candidates = 30
 
 [robustness]
 alpha = 0.05
-strategies = ["random", "pagerank", "betweenness"]
+# Webapp form default: sound attack orders under the one-degree model — random (baseline)
+# + in_strength (degree) + pagerank (prestige). The brokerage/reach/flow attacks (betweenness,
+# bridging, harmonic, spreading, *_dyn) are off by default but remain selectable.
+# See docs/robustness-analysis.md → "Interpretation guardrails: the one-degree assumption".
+strategies = ["random", "in_strength", "pagerank"]
 runs = 100
 null = 20
 seed = 42

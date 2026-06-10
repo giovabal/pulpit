@@ -87,7 +87,7 @@
   color: var(--text);
   font-family: var(--font-sans);
 }
-.bo-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,56,202,.12); }
+.bo-search:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
 
 .bo-select {
   padding: .375rem .625rem;
@@ -116,7 +116,7 @@
   align-items: center;
   gap: var(--space-2);
   background: var(--accent-bg);
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--accent-border);
   border-radius: var(--radius);
   padding: var(--space-2) var(--space-3);
   margin-bottom: var(--space-3);
@@ -131,6 +131,7 @@
 
 .bo-pagination {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   align-items: center;
   font-size: .8125rem;
@@ -150,6 +151,18 @@
 .bo-pagination button:disabled { opacity: .4; cursor: default; }
 .bo-pagination button:not(:disabled):hover { background: var(--hover); }
 .bo-pagination span { color: var(--muted); }
+
+/* Digg paginator: numbered page chips, ellipsis gaps, highlighted current page. */
+.bo-page-btn { min-width: 1.75rem; text-align: center; font-variant-numeric: tabular-nums; }
+.bo-pagination button.bo-page-btn--active:disabled {
+  opacity: 1;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.bo-page-gap { color: var(--muted); padding: 0 .15rem; user-select: none; }
+.bo-pagination-info { margin-right: var(--space-1); }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 
@@ -176,22 +189,9 @@
 .bo-th--sorted { color: var(--accent); }
 .bo-sort-icon { font-size: .75rem; opacity: .6; }
 .bo-th--sorted .bo-sort-icon { opacity: 1; }
-.bo-th-sort-btn {
-  background: none;
-  border: 0;
-  padding: .5rem .75rem;
-  font: inherit;
-  color: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-  text-align: inherit;
-  width: 100%;
-  display: block;
-}
+/* Reset shared with .vac-sort-btn (defined in webapp.css); only padding differs. */
+.bo-th-sort-btn { padding: .5rem .75rem; }
 .bo-th--num .bo-th-sort-btn { text-align: right; }
-.bo-th-sort-btn:focus { outline: none; }
-.bo-th-sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .bo-td--id { color: var(--muted); font-size: .8125rem; font-family: var(--font-mono); width: 4rem; }
 
 .bo-table td {
@@ -201,10 +201,10 @@
 }
 
 .bo-table tbody tr:hover { background: var(--hover); }
-.bo-table tbody tr.bo-row--selected { background: var(--accent-bg); }
 
 .bo-td--num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bo-td--center { text-align: center; }
+.bo-td--date { color: var(--muted); font-size: .8125rem; font-family: var(--font-mono); white-space: nowrap; }
 
 .bo-empty { text-align: center; color: var(--muted); padding: var(--space-6); }
 
@@ -248,17 +248,6 @@ tr:hover .bo-detail-btn { opacity: 1; }
 
 .bo-org-name { font-size: .875rem; }
 .bo-org-unassigned { color: var(--danger); font-size: .875rem; }
-
-.bo-org-select {
-  width: 100%;
-  padding: .25rem .5rem;
-  font-size: .875rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-sans);
-}
 
 /* ── Group chips ────────────────────────────────────────────────────────── */
 
@@ -347,7 +336,7 @@ tr:hover .bo-detail-btn { opacity: 1; }
   gap: var(--space-2);
   align-items: center;
   background: var(--accent-bg);
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--accent-border);
   border-radius: var(--radius);
   padding: var(--space-3);
   margin-bottom: var(--space-4);
@@ -363,7 +352,7 @@ tr:hover .bo-detail-btn { opacity: 1; }
   color: var(--text);
   font-family: var(--font-sans);
 }
-.bo-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,56,202,.12); }
+.bo-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
 .bo-input--wide { flex: 1 1 200px; }
 .bo-input--full { flex: 0 0 100%; width: 100%; }
 .bo-input--color { width: 2.5rem; height: 2.125rem; padding: .125rem .25rem; cursor: pointer; }

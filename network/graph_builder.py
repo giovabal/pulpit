@@ -364,10 +364,16 @@ def build_graph(
             weight_mentions=edge[4],
         )
 
-    # Remove dead leaves that ended up with no edges after date filtering.
-    # Their all-time DB degree earned them a slot, but the restricted window contains
-    # no citations for them — they would otherwise appear as isolated ghost nodes.
-    if draw_dead_leaves and (start_date or end_date):
+    # Remove dead leaves that ended up with no edges. Their slot was earned by the
+    # all-time, period-blind ``Channel.in_degree``, but edge construction is
+    # period-aware (``channel_cutoff_q``): a citation only counts while the citing
+    # channel is in an in-target period. So a dead leaf cited solely outside those
+    # periods — or inside a restricted analysis window with no citations — keeps no
+    # edge and would otherwise hang as an isolated ghost node. This holds with or
+    # without a date window (the period cutoff alone can orphan a dead leaf), so the
+    # sweep runs whenever dead leaves are drawn. In-target nodes (``resolved_org_id``
+    # set) are kept even when isolated — they are subjects of the analysis.
+    if draw_dead_leaves:
         orphaned = [
             cid
             for cid in list(channel_dict)

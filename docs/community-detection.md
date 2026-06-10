@@ -21,15 +21,11 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Organization | `ORGANIZATION` | Domain knowledge | — |
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
-| Leiden CPM coarse | `LEIDEN_CPM_COARSE` | Constant Potts Model | No |
-| Leiden CPM fine | `LEIDEN_CPM_FINE` | Constant Potts Model | No |
+| Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
+| Louvain | `LOUVAIN` | Modularity (classic baseline) | No |
 | K-core | `KCORE` | Structural hierarchy | No |
-| Infomap | `INFOMAP` | Information-theoretic | Yes |
-| Memory Infomap | `INFOMAP_MEMORY` | Information-theoretic (2nd order) | Yes |
-| MCL | `MCL` | Flow-based | Yes |
-| Walktrap | `WALKTRAP` | Random-walk distance | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
-| Strongly connected components | `STRONGCC` | Connectivity | Yes |
+| Stochastic block model | `SBM(mode=NESTED\|FLAT)` | Generative block model | Yes |
 
 ---
 
@@ -49,15 +45,15 @@ This is the only strategy in Pulpit that is not an algorithm: the communities ar
 
 *Leiden groups channels that connect to each other more than chance would predict, and guarantees every detected community is internally well-connected — no channel stranded in a group it doesn't really belong to.*
 
-Leiden looks for partitions where the density of connections inside each group is significantly higher than what would be expected if edges were placed at random. It runs a fast greedy search and then adds a refinement step that checks, after every merge, that every community is genuinely cohesive on the inside — so no channel ends up stranded in a group it isn't really connected to. The result is a clean, reliable partition that has become the standard modularity-based community detector across network science. Pulpit runs Leiden on the symmetrised view of the citation graph: direction is dropped but edge weights from `--edge-weight-strategy` shape the partition. When citation direction carries the meaning, use [Leiden (directed)](#leiden-directed) instead; when small dense clusters need to survive merging, see the [CPM variants](#leiden-cpm-coarse-and-fine).
+Leiden looks for partitions where the density of connections inside each group is significantly higher than what would be expected if edges were placed at random. It runs a fast greedy search and then adds a refinement step that checks, after every merge, that every community is genuinely cohesive on the inside — so no channel ends up stranded in a group it isn't really connected to. The result is a clean, reliable partition that has become the standard modularity-based community detector across network science. Pulpit runs Leiden on the symmetrised view of the citation graph: direction is dropped but edge weights from `--edge-weight-strategy` shape the partition. When citation direction carries the meaning, use [Leiden (directed)](#leiden-directed) instead; when small dense clusters need to survive merging, see [Leiden CPM](#leiden-cpm).
 
 **References:**
 - Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the algorithm and the connectivity guarantee.
 - Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — the resolution-limit result that the CPM variants escape.
 
-**In practice:** Leiden is the recommended default whenever you don't have a specific reason to honour citation direction. It is the reliable baseline against which the more specialised strategies (Infomap, MCL, the CPM variants) are read in the consensus matrix. When Leiden splits a category you treated as a single bloc, the network is telling you the bloc has internal substructure worth investigating.
+**In practice:** Leiden is the recommended default whenever you don't have a specific reason to honour citation direction. It is the reliable baseline against which the more specialised strategies (Leiden (directed), the CPM variants) are read in the consensus matrix. When Leiden splits a category you treated as a single bloc, the network is telling you the bloc has internal substructure worth investigating.
 
-**Example.** A researcher monitors 200 channels labelled as "national press". Leiden returns three communities of similar size, spread across the analyst's single "national press" label. Inspection reveals one community centred on a regional aggregator hub, another on foreign-correspondent outlets, and a third on opinion-style channels. The same split also appears under Infomap — strong evidence that "national press" is, at this snapshot, three distinguishable sub-networks operating under one banner.
+**Example.** A researcher monitors 200 channels labelled as "national press". Leiden returns three communities of similar size, spread across the analyst's single "national press" label. Inspection reveals one community centred on a regional aggregator hub, another on foreign-correspondent outlets, and a third on opinion-style channels. The same split also appears under Leiden (directed) — strong evidence that "national press" is, at this snapshot, three distinguishable sub-networks operating under one banner.
 
 ---
 
@@ -65,30 +61,32 @@ Leiden looks for partitions where the density of connections inside each group i
 
 *Leiden (directed) works like Leiden but treats "who cites" and "who gets cited" as different signals — for when the direction of forwards carries meaning.*
 
-Standard Leiden treats every forward the same regardless of direction, which can blur the picture when a network has a hub-and-spoke shape — many small channels forwarding from a single popular source without being forwarded back. The directed variant takes that asymmetry seriously: it expects A→B and B→A to mean different things, so a one-way forwarding pattern doesn't automatically force two channels into the same community. Pulpit runs this variant on the original directed citation graph, with edge weights from `--edge-weight-strategy`. It is also the default community basis for the [Community-bridging measure](network-measures.md#community-bridging) and the [bridging robustness attack](robustness-analysis.md) — both interpret communities through a directional brokerage lens.
+Standard Leiden treats every forward the same regardless of direction, which can blur the picture when a network has a hub-and-spoke shape — many small channels forwarding from a single popular source without being forwarded back. The directed variant takes that asymmetry seriously: it expects A→B and B→A to mean different things, so a one-way forwarding pattern doesn't automatically force two channels into the same community. Pulpit runs this variant on the original directed citation graph, with edge weights from `--edge-weight-strategy`. It is also the default community basis for the [within-module role measure](network-measures.md#within-module-role), which interprets communities through a directional lens.
 
 **References:**
 - Leicht, E.A. & Newman, M.E.J. (2008) "Community structure in directed networks." *Physical Review Letters* 100, 118703. [doi:10.1103/PhysRevLett.100.118703](https://doi.org/10.1103/PhysRevLett.100.118703) — the directed-modularity formulation.
 - Traag, V.A. et al. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the Leiden refinement, inherited from [`LEIDEN`](#leiden).
 
-**In practice:** use Leiden (directed) when the distinction between "who cites" and "who is cited" carries meaning — which on Telegram political networks it almost always does, since amplification flows asymmetrically from smaller amplifiers toward influential sources. Picking it also keeps Pulpit's downstream chain — community-bridging measure, within-module-role classification, brokerage robustness attack — consistent in their treatment of direction, since they all default to this basis.
+**In practice:** use Leiden (directed) when the distinction between "who cites" and "who is cited" carries meaning — which on Telegram political networks it almost always does, since amplification flows asymmetrically from smaller amplifiers toward influential sources. Picking it also keeps Pulpit's within-module-role classification consistent in its treatment of direction, since it defaults to this basis.
 
 **Example.** Seven regional nationalist channels all forward content from a single national aggregator but are never cited by it. Under undirected Leiden the seven plus the aggregator are merged into one community, because the undirected edge density is high. Under Leiden (directed), the seven form their own community while the aggregator joins a different group whose other members it actually cites both ways. The hub-and-spoke amplification pattern becomes visible at a glance — what looked like a single bloc is one broadcaster and seven amplifiers.
 
 ---
 
-## Leiden CPM (coarse and fine)
+## Leiden CPM
 
-*The CPM variants let you tune how granular the communities should be — useful for surfacing small, tight clusters that other strategies would merge into bigger ones.*
+*A tunable-granularity Leiden variant — useful for surfacing small, tight clusters that other strategies would merge into bigger ones. Set its resolution per instance, and add it more than once for a multi-scale view.*
 
-Standard Leiden compares each candidate group against what would be expected at random, which has the side effect of absorbing small dense clusters into bigger ones (the resolution limit). The Constant Potts Model replaces that comparison with a tunable threshold γ: a community is kept only if its internal connection density exceeds γ. Higher γ produces more, smaller communities; lower γ produces fewer, larger ones — and either choice escapes the modularity resolution limit. Pulpit ships two presets, chosen as sensible starting points for the default `PARTIAL_REFERENCES` edge-weight strategy:
+Standard Leiden compares each candidate group against what would be expected at random, which has the side effect of absorbing small dense clusters into bigger ones (the resolution limit). The Constant Potts Model replaces that comparison with a tunable threshold γ: a community is kept only if its internal connection density exceeds γ. Higher γ produces more, smaller communities; lower γ produces fewer, larger ones — and either choice escapes the modularity resolution limit. The internal machinery is the same as standard Leiden: same symmetrised projection, same connectivity guarantee, edge weights honoured.
 
-| Key | Default γ | Effect |
-|:----|:---------|:-------|
-| `LEIDEN_CPM_COARSE` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
-| `LEIDEN_CPM_FINE` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
+`LEIDEN_CPM` carries its resolution as a per-instance parameter, so you set it on the chip (Operations panel) or in the token (CLI) — and you can request it **more than once** at different resolutions for a multi-scale view, each producing its own partition column (e.g. `leiden_cpm_resolution_0_01`):
 
-Both can be tuned at export time with `--leiden-coarse-resolution` and `--leiden-fine-resolution`. The internal machinery is the same as standard Leiden: same symmetrised projection, same connectivity guarantee, edge weights honoured.
+| Token | γ | Effect |
+|:------|:--|:-------|
+| `LEIDEN_CPM(resolution=0.01)` | 0.01 | Few, large communities — groups channels that share even weak citation ties |
+| `LEIDEN_CPM(resolution=0.05)` | 0.05 | More, smaller communities — only groups channels with strong mutual citation density |
+
+A bare `LEIDEN_CPM` starts at γ = 0.05; override per instance, or change the default with `--leiden-cpm-resolution`. (Earlier releases shipped two fixed presets, `LEIDEN_CPM_COARSE` / `LEIDEN_CPM_FINE`; saved configs upgrade to the parameterised form automatically.)
 
 **References:**
 - Traag, V.A., Van Dooren, P. & Nesterov, Y. (2011) "Narrow scope for resolution-limit-free community detection." *Physical Review E* 84, 016114. [doi:10.1103/PhysRevE.84.016114](https://doi.org/10.1103/PhysRevE.84.016114) — the CPM quality function and its resolution-limit-free property.
@@ -96,6 +94,25 @@ Both can be tuned at export time with `--leiden-coarse-resolution` and `--leiden
 **In practice:** run Leiden, Leiden CPM coarse, and Leiden CPM fine side by side for a three-scale view of the same network. Communities that survive across all three are the most structurally robust. Communities appearing only at fine resolution are tight local cores embedded inside broader blocs — useful for identifying small coordinated nuclei within bigger ideological movements.
 
 **Example.** A 600-channel anti-vaccine network is partitioned by Leiden into six communities. Leiden CPM fine returns 14 — eight of them sitting *inside* a single Leiden community. Inspection reveals these eight are language- or country-specific cores of coordinated activity (one Italian, one French, one Brazilian Portuguese, etc.). The Leiden partition revealed the broad movement; the CPM-fine partition revealed the operational coordination cells that share content within their language before it crosses over.
+
+---
+
+## Louvain
+
+*Louvain groups channels that connect to each other more than chance would predict — the classic, field-standard community detector. Kept mainly for comparison with the large body of older studies that report Louvain results; for new analyses, [Leiden](#leiden) (or [Leiden (directed)](#leiden-directed)) is the better choice.*
+
+Louvain looks for partitions where the density of connections inside each group is much higher than what would be expected if edges were placed at random, and finds them with a fast greedy procedure that needs no prior guess at how many groups exist. Published in 2008, it became the de-facto baseline for community detection across network science, which is the one reason to keep it in Pulpit: when you are replicating or comparing against a study that reports Louvain communities, running the same algorithm removes "different method" as an explanation for any difference you see. Pulpit runs Louvain on the symmetrised view of the citation graph (forwards in both directions collapsed into one tie, so direction is dropped) with edge weights from `--edge-weight-strategy` honoured, and a fixed seed so the partition is reproducible.
+
+**Why prefer Leiden.** [Leiden](#leiden) optimises the *same* modularity objective on the *same* symmetrised graph, so it is a drop-in upgrade, and it fixes Louvain's two well-known weaknesses. First, Louvain can occasionally return a community that is **not internally connected** — a channel can be stranded in a group it has no real link to — whereas Leiden adds a refinement step that guarantees every community is internally well-connected (Traag et al. 2019). Second, both inherit the **resolution limit** (Fortunato & Barthélemy 2007) — the tendency to absorb small dense clusters into bigger ones — but Leiden's cleaner optimisation exposes it less sharply, and the [CPM variants](#leiden-cpm) escape it entirely. Unless you specifically need a Louvain partition for comparability, reach for Leiden; when citation direction carries the meaning, reach for [Leiden (directed)](#leiden-directed).
+
+**References:**
+- Blondel, V.D., Guillaume, J.-L., Lambiotte, R. & Lefebvre, E. (2008) "Fast unfolding of communities in large networks." *Journal of Statistical Mechanics* 2008(10), P10008. [doi:10.1088/1742-5468/2008/10/P10008](https://doi.org/10.1088/1742-5468/2008/10/P10008) — the original algorithm.
+- Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — the resolution-limit result.
+- Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — why Leiden supersedes Louvain.
+
+**In practice:** select Louvain when you are reproducing or benchmarking against external work that used it, or when a reviewer expects the familiar baseline. Read it next to Leiden in the consensus matrix: groupings that survive both are robust; a group Leiden splits that Louvain keeps whole is usually the resolution limit at work, and a Louvain community that turns out to be internally disconnected is exactly the failure mode Leiden was built to remove. For everything else, treat Leiden as the default and Louvain as the legacy cross-check.
+
+**Example.** A team is extending a published study that reported eight Louvain communities in a far-right Telegram ecosystem. Re-crawling the network and running Louvain in Pulpit reproduces eight comparable communities, confirming the earlier finding still holds on fresh data. Switching to Leiden on the same graph splits one of the eight into two tightly-knit halves that Louvain had merged — a substructure the original study missed. Reporting both keeps the result comparable to the literature *and* surfaces the finer split.
 
 ---
 
@@ -109,69 +126,9 @@ K-core decomposition repeatedly removes channels with too few internal connectio
 - Seidman, S.B. (1983) "Network structure and minimum degree." *Social Networks* 5(3). [doi:10.1016/0378-8733(83)90028-X](https://doi.org/10.1016/0378-8733(83)90028-X) — the k-core decomposition.
 - Kitsak, M. et al. (2010) "Identification of influential spreaders in complex networks." *Nature Physics* 6(11). [doi:10.1038/nphys1746](https://doi.org/10.1038/nphys1746) — empirical evidence that coreness identifies the most influential spreaders.
 
-**In practice:** K-core is uniquely useful for identifying the ideological engine of a network — the small group of channels that drive the conversation and are all in dialogue with each other — as opposed to the much larger periphery that amplifies without originating. Because the partition is unweighted, a grouping that survives k-core peeling *and* modularity-based detection is structurally cohesive on two independent grounds. The matching per-channel [`CORENESS`](network-measures.md#k-core-coreness) measure exposes the same shell index as a sortable column.
+**In practice:** K-core is uniquely useful for identifying the ideological engine of a network — the small group of channels that drive the conversation and are all in dialogue with each other — as opposed to the much larger periphery that amplifies without originating. Because the partition is unweighted, a grouping that survives k-core peeling *and* modularity-based detection is structurally cohesive on two independent grounds.
 
 **Example.** In a disinformation network of 300 channels, k-core decomposition reveals an innermost core of just eight channels. These eight regularly forward each other, share a consistent narrative frame, and publish the stories that the outer shells amplify hours later. They are the producers; the rest are distributors.
-
----
-
-## Infomap
-
-*Infomap finds groups where attention tends to circulate internally rather than leak out — the closest formal definition of an echo chamber.*
-
-Infomap imagines a random walker hopping from channel to channel along forwarding ties and looks for groups where the walker tends to get trapped. If a set of channels keep citing each other heavily, a walker dropped into one of them will rarely leave — those channels form a **flow module**. Unlike density-based methods like Leiden, Infomap is not affected by the resolution limit and can surface small flow traps that Leiden would merge into larger groups. Pulpit runs Infomap on the original directed citation graph — direction matters, and so do the edge weights from `--edge-weight-strategy`. The algorithm is configured for a flat partition (no nested hierarchy) so it can be compared like-for-like against the other detectors. It has its own characteristic biases — most notably a preference for tight reciprocal cores — so reading it next to [Leiden (directed)](#leiden-directed) and [STRONGCC](#strongly-connected-components-strongcc) tends to be the most informative cross-check.
-
-**References:**
-- Rosvall, M. & Bergstrom, C.T. (2008) "Maps of random walks on complex networks reveal community structure." *PNAS* 105(4). [doi:10.1073/pnas.0706851105](https://doi.org/10.1073/pnas.0706851105) — the original algorithm and the directed-random-walk framing Pulpit uses.
-
-**In practice:** Infomap is the right tool when you want to surface **information-flow communities** — sets of channels whose mutual citations trap the random walker, irrespective of your Organization labels. On a Telegram forwarding network this is the closest formal operationalisation of an echo chamber. Read Infomap against Leiden (directed) and STRONGCC in the consensus matrix: groupings present under all three are genuinely closed loops; groupings only in Infomap are flow traps that do not require strict reciprocity; groupings only in Leiden (directed) are density-cohesive but not flow-confined.
-
-**Example.** An NGO monitors 220 channels in an anti-vaccine ecosystem. Leiden (directed) returns six communities that align loosely with the analyst's regional groupings. Infomap returns nine: six overlap, but three are smaller and structurally tighter — 12 to 18 channels each. The same channels also form their own strongly connected component under STRONGCC. Infomap has surfaced the operational coordination cells inside the broader movement — the flow traps that Leiden's density-based grouping merged into bigger blocs.
-
----
-
-## Memory Infomap
-
-*Memory Infomap is a variant of Infomap that pays attention to which neighbours feed a hub — useful for surfacing brokers whose incoming and outgoing attention come from different places.*
-
-Standard Infomap places each channel into one community. Memory Infomap goes further: when a hub channel is reached from two different groups, the algorithm can place the *incoming flow* from each group into a different module. A hub still gets one final label (by plurality vote across its incoming flows), but the way that label is decided is sensitive to who feeds the hub. This makes Memory Infomap useful for identifying brokerage hubs — channels whose incoming attention pulls them into one community while their outgoing citations point elsewhere. Pulpit builds the input by treating each edge A→B as a "context" (currently at B, came from A); since Pulpit has no observed three-step sequences, the outgoing transitions from this context use the first-order weights. The variant therefore captures *structural context-sensitivity at hubs*, not a true higher-order random walk.
-
-**References:**
-- Rosvall, M., Esquivel, A.V., Lancichinetti, A., West, J.D. & Lambiotte, R. (2014) "Memory in network flows and its effects on spreading dynamics and community detection." *Nature Communications* 5, 4630. [doi:10.1038/ncomms5630](https://doi.org/10.1038/ncomms5630) — the higher-order framework Pulpit approximates with a synthetic state network.
-
-**In practice:** the realistic expectation is that Memory Infomap differs from first-order Infomap mainly at **brokerage hubs** — channels whose incoming citations come from communities the outgoing citations do not point back to. On purely cohesive blocs the two partitions usually agree. Run the two side by side and read the disagreement: a channel placed in different modules by the two strategies is a candidate context-dependent broker. Pair with the [`BRIDGINGCENTRALITY`](network-measures.md) and [`BURTCONSTRAINT`](network-measures.md) measures to triangulate the signal.
-
-**Example.** A press-monitoring project tracks 180 channels. Standard Infomap returns seven communities, with one large "mainstream press" community containing an aggregator routinely forwarded by both reformist and conservative outlets. Memory Infomap returns the same seven communities, except the aggregator is now placed in the conservative community — its incoming forwards are dominated by conservative outlets even though its own posts get cited across the spectrum. The disagreement is the actionable signal: editorially the aggregator looks neutral, but the audience driving its visibility is one-sided.
-
----
-
-## MCL (Markov Clustering)
-
-*MCL surfaces tight reciprocal cores — small groups of channels where everyone forwards everyone else's content.*
-
-MCL simulates a diffusion process on the citation network: information flow is concentrated along strong reciprocal ties and diluted along weak or one-way ones. After enough rounds, the channels condense into clearly separated attractor blocks — the communities. MCL has no resolution limit and no null model, so a four-channel reciprocal cell will survive intact even when Leiden would merge it into a larger community. The `--mcl-inflation` parameter (default 2.0, typical range 1.5–4.0) controls how sharply the contrast is enhanced; higher inflation produces smaller, tighter communities. Pulpit runs MCL on the original directed citation graph, with edge weights from `--edge-weight-strategy` shaping the partition. The flip side of MCL's strength: it **fragments hub-and-spoke** structures, where many amplifiers cite a common source without citing each other. For those patterns, Leiden is the right tool.
-
-**References:**
-- van Dongen, S. (2008) "Graph clustering via a discrete uncoupling process." *SIAM Journal on Matrix Analysis and Applications* 30(1), 121–141. [doi:10.1137/040608635](https://doi.org/10.1137/040608635) — the formal treatment of the expansion/inflation algorithm and the structural argument for why MCL concentrates on tight reciprocal cores.
-
-**In practice:** MCL is the right tool for surfacing **tight reciprocal cores** — small sets of channels (often three to ten) where every member regularly forwards every other member. These show up in coordinated amplification cells, in-group editorial networks, and aggregator pools. Read MCL alongside Leiden (directed) and Infomap in the consensus matrix: pairs co-clustered by MCL *and* one of the others are reciprocal structural cores; pairs only in Leiden are denser-but-not-reciprocal regions; pairs only in Infomap are flow traps that don't need strict reciprocity. Avoid MCL whenever the question is "which amplifiers share a common source" — use Leiden instead.
-
-**Example.** A monitoring project tracks 180 channels in a disinformation ecosystem. Leiden (directed) returns nine communities aligned roughly with the analyst's regional groupings. MCL returns thirteen — including three tight 4-to-6 channel clusters where every member mutually forwards every other member. Each of these three is also a strongly connected component under STRONGCC. Inspection confirms they correspond to known coordinated-amplification cells where members reciprocally repost each other to manufacture the appearance of organic consensus. The same cells could not have surfaced under Leiden (resolution limit absorbs them into larger groups) or label propagation (no weight sensitivity).
-
----
-
-## Walktrap
-
-*Walktrap groups channels with similar neighbourhoods, even when they don't cite each other directly — shared sources, not just direct ties, drive the grouping.*
-
-Walktrap is built on the intuition that short random walks on a graph tend to stay inside their starting community. For each channel it works out where a short walk is likely to land, then groups channels whose walks tend to converge on the same neighbours. The distinctive property — the reason to pick Walktrap over Leiden — is that two channels with **no direct edge** between them can still cluster together when they share the same set of forwarding targets. Pulpit runs Walktrap on the symmetrised view of the citation graph with the library default walk length of 4 steps. Direction is dropped but edge weights from `--edge-weight-strategy` shape both the walk distributions and the final grouping. The algorithm chooses the partition that maximises modularity at the end, so it inherits Leiden's resolution limit at the final cut.
-
-**References:**
-- Pons, P. & Latapy, M. (2006) "Computing communities in large networks using random walks." *Journal of Graph Algorithms and Applications* 10(2), 191–218. [doi:10.7155/jgaa.00124](https://doi.org/10.7155/jgaa.00124) — the algorithm with full formal analysis of the random-walk distance and the modularity cut.
-
-**In practice:** Walktrap is the right tool when you suspect channels in the same community are linked **transitively through shared sources** rather than by direct citations. A common Telegram pattern: many small amplifiers that all forward from the same set of larger sources without forwarding each other — Walktrap groups them by their shared targets, while density-based methods may scatter them because their pairwise edge density is low. Read Walktrap alongside Leiden in the consensus matrix: pairs co-clustered by Walktrap but not by Leiden are linked by shared-neighbourhood structure rather than mutual citation, and the disagreement itself is the signal.
-
-**Example.** A monitoring project tracks 220 channels in an anti-vaccine ecosystem. Leiden returns six communities largely aligned with the analyst's regional groupings. Walktrap returns five — one of which fuses two of Leiden's smaller regional groupings into a single cluster. Inspection shows the two fused groupings share the same handful of international "scientific authority" channels they all forward from, but rarely forward each other directly. Walktrap groups them because a short random walk from any member converges on the same external sources; Leiden splits them because their direct edge density is too low. The two regional groupings are operationally distinct amplifiers tapping a shared source pool.
 
 ---
 
@@ -185,25 +142,37 @@ Each channel starts with a unique label. At each step every channel adopts the l
 - Raghavan, U.N., Albert, R. & Kumara, S. (2007) "Near linear time algorithm to detect community structures in large-scale networks." *Physical Review E* 76(3), 036106. [doi:10.1103/PhysRevE.76.036106](https://doi.org/10.1103/PhysRevE.76.036106) — the foundational asynchronous algorithm.
 - Cordasco, G. & Gargano, L. (2010) "Community detection via semi-synchronous label propagation algorithms." [doi:10.1109/BASNA.2010.5730298](https://doi.org/10.1109/BASNA.2010.5730298) — the deterministic semi-synchronous variant Pulpit uses.
 
-**In practice:** label propagation is by far the cheapest community detector in Pulpit's suite, which makes it the right choice for very large networks where Infomap, MCL, or Walktrap would be too slow, or as a parameter-free baseline in the consensus matrix. Because it ignores weights and direction, a grouping that appears under both label propagation *and* Leiden is unlikely to be an artefact of weighting choices or directionality — it is robust on the bare topology. Watch for one well-known failure mode: on dense networks the consensus dynamic can run away and produce a single giant community absorbing most of the network. If that happens, switch to Leiden.
+**In practice:** label propagation is by far the cheapest community detector in Pulpit's suite, which makes it the right choice for very large networks where the modularity-based strategies would be too slow, or as a parameter-free baseline in the consensus matrix. Because it ignores weights and direction, a grouping that appears under both label propagation *and* Leiden is unlikely to be an artefact of weighting choices or directionality — it is robust on the bare topology. Watch for one well-known failure mode: on dense networks the consensus dynamic can run away and produce a single giant community absorbing most of the network. If that happens, switch to Leiden.
 
 **Example.** A monitoring project tracks 1,200 channels. Leiden (directed) takes several minutes and returns 14 communities; label propagation runs in well under a second and returns 8. Six of the eight label-propagation communities each absorb a pair of Leiden communities; the remaining two correspond one-to-one with Leiden. Inspection reveals the merged pairs are exactly the hub-and-spoke patterns — one aggregator and a constellation of amplifiers that don't cite each other. Leiden (directed) splits broadcaster from audience; label propagation, blind to direction, sees one densely connected blob. The disagreement is the actionable signal — it separates "shared neighbourhood" from "shared editorial role".
 
 ---
 
-## Strongly Connected Components (STRONGCC)
+## Stochastic block model
 
-*Two channels belong to the same strongly connected group only when each can reach the other along actual citation chains — strict mutual reachability.*
+*The SBM asks a different question from every other strategy here: not "where are the dense clusters?" but "which channels play the same role in the citation web?" — grouping channels that cite, and are cited by, the rest of the network in the same way.*
 
-A strongly connected component is the maximal set of channels in which every member can reach every other member by following actual forwarding directions — both A reaches B *and* B reaches A. On Pulpit's citation graph, a non-trivial SCC requires reciprocal citation chains: at minimum two channels each forwarding the other; more typically a closed loop A → B → C → … → A formed by transitive reciprocity. This is a structural decomposition, not a density-based community detector — there is no notion of "more connected than expected", only whether a closed citation cycle passes through the pair. Pulpit's STRONGCC is **unweighted** and **direction-aware** by construction; components are numbered by size, isolated channels become singletons. STRONGCC is excluded from the consensus matrix because its size distribution would distort comparisons with the genuine community detectors. The same SCC structure feeds the [`SCC count` and `Largest SCC fraction`](whole-network-statistics.md#components) headline statistics and the [`R_scc` robustness curve](robustness-analysis.md#r_scc--strongly-connected-component).
+Every other detector in this list looks for **assortative** structure: groups that are dense inside and sparse outside. The stochastic block model drops that assumption. It is a *generative* model — it asks which assignment of channels to blocks best explains the observed pattern of citations, where the probability of a citation depends only on the two channels' blocks. Because the block-to-block citation rates are free to take any values, the SBM recovers structure the modularity family is blind to: not just assortative communities, but **disassortative** groups (channels that avoid each other), **core-periphery** layers, and the **bipartite source / amplifier** pattern that dominates a forward-attribution network — a set of amplifiers that all cite the same sources but never cite each other is a perfectly good block, even though it has zero internal density.
+
+Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-tool.skewed.de/) (Peixoto). *Directed*: citation direction is preserved, so the block-affinity matrix is asymmetric — "block A cites block B" is distinct from the reverse, which is exactly the source-vs-amplifier signal. *Degree-corrected* (Karrer & Newman 2011): the model accounts for each channel's degree, so the blocks reflect citation structure **beyond** the raw in-degree heterogeneity of the star topology rather than simply lumping all the high-in-degree hubs together. The fit is **unweighted** (binary citation structure), so the partition is invariant to `--edge-weight-strategy`. Inference is by minimum description length, which is **self-regularising**: unlike modularity, the SBM will not invent blocks the data don't support, so it does not hallucinate community structure in a near-random graph.
+
+`mode` selects the inference variant and may be added once per mode:
+- **`NESTED`** (default) — the nested SBM (Peixoto 2017) fits a hierarchy of blocks and Pulpit reports the partition at the finest level. Better model selection on large graphs; avoids the underfitting the flat model suffers on big networks.
+- **`FLAT`** — a single-level SBM.
+
+> **Interpretation guardrail — blocks are roles, not cohesive groups.** An SBM block is a set of channels that are *stochastically equivalent* — they connect to the rest of the network the same way — i.e. a **citation-role / structural-equivalence class** (Lorrain & White 1971). It is **not** necessarily a community of mutually-citing channels: two channels can share a block while having no tie between them, simply because they cite the same sources and are cited by the same amplifiers. Read an SBM block as "these channels occupy the same structural position in the citation ecosystem", never as "these channels talk to each other". Likewise, a block-affinity entry is a one-step, group-to-group **direct citation rate** — not a claim that content flows from one block through to another. This keeps the SBM consistent with Pulpit's one-degree attribution model (see [Measures → interpretation guardrails](network-measures.md)), where multi-hop flow is not recoverable from the data.
+
+**Dependency.** The SBM requires the `graph-tool` package, which is **not installable from pip** (it is a compiled C++ library). Install it via conda-forge (`conda install -c conda-forge graph-tool`) or your system package manager (Debian/Ubuntu: `apt install python3-graph-tool` from the maintainer's repository; a virtualenv must then be created with `--system-site-packages` to see it). If `graph-tool` is missing, requesting `SBM` fails with a clear error and the other strategies are unaffected.
 
 **References:**
-- Tarjan, R. (1972) "Depth-first search and linear graph algorithms." *SIAM Journal on Computing* 1(2), 146–160. [doi:10.1137/0201010](https://doi.org/10.1137/0201010) — the linear-time SCC algorithm NetworkX implements.
-- Broder, A. et al. (2000) "Graph structure in the Web." *Computer Networks* 33(1–6), 309–320. [doi:10.1016/S1389-1286(00)00083-9](https://doi.org/10.1016/S1389-1286(00)00083-9) — the canonical bow-tie decomposition.
+- Karrer, B. & Newman, M.E.J. (2011) "Stochastic blockmodels and community structure in networks." *Physical Review E* 83(1), 016107. [doi:10.1103/PhysRevE.83.016107](https://doi.org/10.1103/PhysRevE.83.016107) — the degree-corrected SBM.
+- Peixoto, T.P. (2014) "Efficient Monte Carlo and greedy heuristic for the inference of stochastic block models." *Physical Review E* 89(1), 012804. [doi:10.1103/PhysRevE.89.012804](https://doi.org/10.1103/PhysRevE.89.012804) — the MDL inference Pulpit calls.
+- Peixoto, T.P. (2017) "Nonparametric Bayesian inference of the microcanonical stochastic block model." *Physical Review E* 95(1), 012317. [doi:10.1103/PhysRevE.95.012317](https://doi.org/10.1103/PhysRevE.95.012317) — the nested SBM.
+- Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1). [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the structural-equivalence notion that a block operationalises.
 
-**In practice:** treat STRONGCC as a **strict-reciprocity diagnostic**, not a general community label. On Pulpit's citation graph, a large non-trivial SCC is the strictest possible operationalisation of "coordinated nucleus" or "echo chamber" — channels that all mutually cite each other along closed cycles, not merely densely co-cited. Read it alongside Infomap (flow-confined modules, looser than strict reciprocity) and Leiden (directed) (dense directional groups, tolerating one-way ties): a grouping that is *also* an SCC is the strict mutual-citation core inside the flow trap. If every channel is a singleton, the network has no reciprocal cycles at all — a pure broadcast tree, a project at very early crawl stage, or a structurally tree-like ecosystem.
+**In practice:** reach for the SBM when modularity-based detection feels like it is fighting the data — when you suspect the network is hub-and-spoke or two-mode rather than a set of cohesive cliques. Because it separates *role* from *cohesion*, the SBM is the natural complement to Leiden: where Leiden tells you which channels cluster together, the SBM tells you which channels are interchangeable in the citation structure (e.g. "these forty amplifiers are structurally the same actor, pointed at the same three sources"). Compare it against `LEIDEN_DIRECTED` and `ORGANIZATION` in the consensus matrix — but remember the partitions answer different questions, so disagreement is expected and informative, not a failure.
 
-**Example.** A monitoring project tracks 320 channels in a coordinated disinformation operation. STRONGCC returns one component of size 12 plus 308 singletons. Inspection of the 12-node component reveals a tight coordination ring: each member forwards every other member's content within hours of publication, and at least one closed cycle can be traced through every pair — the textbook pattern for manufactured organic consensus. Infomap independently identifies the same 12 channels as a couple of flow modules; Leiden (directed) merges them into a larger 31-channel community that also pulls in the most active one-way amplifiers. The 12-channel intersection — present under all three lenses *and* a single SCC — is the actionable target.
+**Example.** A network of 500 channels yields six tidy Leiden communities. The SBM, on the same graph, returns a block of 120 channels with almost no internal edges — channels Leiden had scattered across all six communities. Inspection shows they are pure amplifiers: each forwards from the same handful of source channels and is never cited by anyone. Leiden, hunting for density, distributed them by which source-neighbourhood they sat nearest; the SBM, hunting for role, recognised them as a single structural class — the network's audience, distinct from its producers.
 
 ---
 
@@ -228,7 +197,7 @@ Columns are sorted so that each organization's dominant community falls as close
 
 ### Consensus matrix
 
-Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION strategies active).
+Generated with `--consensus-matrix` (requires at least two partition-based strategies — i.e. excluding ORGANIZATION and K-core — active).
 
 <figure>
 <img src="../webapp_engine/static/screenshot_14.jpg" alt="Community consensus matrix">
@@ -236,7 +205,7 @@ Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION stra
 </figure>
 <br>
 
-The consensus matrix answers: **across all non-ORGANIZATION strategies, how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
+The consensus matrix answers: **across the partition-based strategies (every detection strategy except ORGANIZATION and the K-core shell decomposition), how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
 
 - **Radius** grows with agreement count
 - **Colour** shifts from blue (low agreement) to red (full agreement)
@@ -254,14 +223,11 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 | Use your own domain knowledge as the baseline | `ORGANIZATION` |
 | Find all community structure, no prior knowledge | `LEIDEN` or `LEIDEN_DIRECTED` |
 | Fast parameter-free baseline for large graphs | `LABELPROPAGATION` |
-| Direction of citation matters | `LEIDEN_DIRECTED`, `MCL`, `INFOMAP` |
-| Identify echo chambers and information traps | `INFOMAP` |
-| Detect context-dependent brokers | `INFOMAP_MEMORY` |
+| Direction of citation matters | `LEIDEN_DIRECTED` |
 | Find the ideological core vs. periphery | `KCORE` |
-| Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM_COARSE` + `LEIDEN_CPM_FINE` |
-| Surface tight reciprocal amplification cores | `MCL` |
-| Group channels by shared sources (not direct ties) | `WALKTRAP` |
-| Detect coordinated circular amplification | `STRONGCC` |
+| Group channels by structural *role* (incl. source/amplifier, non-cohesive groups) | `SBM` |
+| Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
+| Reproduce / compare against an older study's classic modularity baseline | `LOUVAIN` (prefer `LEIDEN` for new work) |
 | Compare algorithms for robustness | `ALL` + `--consensus-matrix` |
 
 ---

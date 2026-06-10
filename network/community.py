@@ -1,11 +1,10 @@
-import io
-import sys
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
 from django.utils.text import slugify
 
+from network.tokens import TokenInstance, TokenParam, TokenSpec, base_keys_for, canonical_key, parse_tokens
 from network.utils import to_undirected_sum
 from webapp.models import Organization
 from webapp.utils.colors import (
@@ -21,39 +20,34 @@ from webapp.utils.colors import (
 import igraph as ig
 import leidenalg
 import networkx as nx
-import numpy as np
-from infomap import Infomap
 
-# markov_clustering writes to stderr at import time when matplotlib is absent
-_stderr, sys.stderr = sys.stderr, io.StringIO()
-import markov_clustering as mc  # noqa: E402
-
-sys.stderr = _stderr
-del _stderr
-
-COMMUNITY_ALGORITHMS = {
-    "LABELPROPAGATION",
-    "KCORE",
-    "INFOMAP",
-    "INFOMAP_MEMORY",
+# Canonical ordered list of community-strategy names. Mirrors measures.ALL_STRATEGIES (which feeds
+# the measure "basis" choices); a guard test keeps the two in sync. LEIDEN_CPM is a single
+# parameterised strategy (its resolution γ is per-instance and it may be requested more than once),
+# replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets.
+ALL_STRATEGIES: list[str] = [
+    "ORGANIZATION",
     "LEIDEN",
     "LEIDEN_DIRECTED",
-    "LEIDEN_CPM_COARSE",
-    "LEIDEN_CPM_FINE",
-    "MCL",
-    "WALKTRAP",
-    "STRONGCC",
-}
-VALID_STRATEGIES = COMMUNITY_ALGORITHMS | {"ORGANIZATION"}
+    "LEIDEN_CPM",
+    "LOUVAIN",
+    "LABELPROPAGATION",
+    "KCORE",
+    "SBM",
+]
+COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES) - {"ORGANIZATION"}
+VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
 
 # Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
 # of the citation graph. Their reported modularity should use the undirected null
 # model (k_i·k_j / 2m), matching what they actually optimised — not the directed
 # null model (k_out_i·k_in_j / m). Keys are the lowercased community keys.
-# Everything else (leiden_directed, infomap, infomap_memory, mcl, strongcc,
-# organization) is reported with directed modularity, the form it was built against.
+# Everything else (leiden_directed, organization) is reported with directed
+# modularity, the form it was built against.
+# Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
+# canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
 UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
-    {"leiden", "leiden_cpm_coarse", "leiden_cpm_fine", "walktrap", "labelpropagation", "kcore"}
+    {"leiden", "leiden_cpm", "louvain", "labelpropagation", "kcore"}
 )
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
@@ -63,16 +57,148 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "ORGANIZATION": "Organization",
     "LEIDEN": "Leiden",
     "LEIDEN_DIRECTED": "Leiden directed",
-    "LEIDEN_CPM_COARSE": "Leiden CPM coarse",
-    "LEIDEN_CPM_FINE": "Leiden CPM fine",
+    "LEIDEN_CPM": "Leiden CPM",
+    "LOUVAIN": "Louvain",
     "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
-    "INFOMAP": "Infomap",
-    "INFOMAP_MEMORY": "Memory Infomap",
-    "MCL": "MCL",
-    "WALKTRAP": "Walktrap",
-    "STRONGCC": "Strongly connected components",
+    "SBM": "Stochastic block model",
 }
+
+# ── Parameterised community strategies & strategy instances ────────────────────
+#
+# Most strategies are parameter-free, but LEIDEN_CPM takes a tunable knob and may be requested more
+# than once with different settings — e.g. LEIDEN_CPM(resolution=0.01) alongside
+# LEIDEN_CPM(resolution=0.05). The shared token machinery (network.tokens) turns the comma-separated
+# --community-strategies value into an ordered list of StrategyInstance objects; each instance maps to
+# a distinct, parameter-suffixed partition key (``StrategyInstance.key``) so two instances of one
+# strategy never overwrite each other's communities[...] entry. This mirrors the measures system.
+
+StrategyParam = TokenParam
+StrategySpec = TokenSpec
+
+CPM_DEFAULT_RESOLUTION = 0.05
+SBM_DEFAULT_MODE = "NESTED"
+
+PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
+    "LEIDEN_CPM": StrategySpec(
+        "LEIDEN_CPM",
+        "Leiden CPM",
+        params=(
+            StrategyParam(
+                "resolution",
+                "float",
+                CPM_DEFAULT_RESOLUTION,
+                minimum=0.0,
+                label="Resolution γ",
+                help="CPM resolution: a community is stable when its internal edge density exceeds γ. "
+                "Lower = fewer, larger communities (γ ≈ 0.01, the old 'coarse' preset); higher = more, "
+                "smaller communities (γ ≈ 0.05, the old 'fine' preset).",
+            ),
+        ),
+        primary_keys=("leiden_cpm",),
+    ),
+    "SBM": StrategySpec(
+        "SBM",
+        "Stochastic block model",
+        params=(
+            StrategyParam(
+                "mode",
+                "enum",
+                SBM_DEFAULT_MODE,
+                choices=("FLAT", "NESTED"),
+                label="Mode",
+                help="NESTED = nested SBM (Peixoto 2017), partition taken at the finest level — better "
+                "model selection on large graphs. FLAT = single-level SBM. May be added once per mode.",
+            ),
+        ),
+        primary_keys=("sbm",),
+    ),
+}
+
+# Base partition keys owned by a parameterised strategy, longest first — feeds canonical_strategy_key.
+_STRATEGY_BASE_KEYS: tuple[str, ...] = base_keys_for(PARAMETERISED_STRATEGIES)
+
+
+class StrategyInstance(TokenInstance):
+    """One requested community strategy with its resolved parameters.
+
+    Thin :class:`~network.tokens.TokenInstance` subclass exposing ``strategy`` (the name), its
+    ``spec`` from ``PARAMETERISED_STRATEGIES``, and ``key`` — the parameter-suffixed node-attribute
+    key under which this instance's partition lives in ``node['communities']`` (e.g.
+    ``leiden_cpm_resolution_0_05``; just ``leiden_directed`` for parameter-free strategies, identical
+    to the legacy lowercase name).
+    """
+
+    @property
+    def strategy(self) -> str:
+        return self.name
+
+    @property
+    def spec(self) -> "StrategySpec | None":
+        return PARAMETERISED_STRATEGIES.get(self.name)
+
+    @property
+    def key(self) -> str:
+        return self.name.lower() + self.suffix()
+
+    @property
+    def label(self) -> str:
+        return COMMUNITY_STRATEGY_LABELS.get(self.name, self.name.title()) + self.label_annotation()
+
+
+def parse_strategies(
+    tokens: list[str],
+    *,
+    defaults: dict[str, dict[str, object]] | None = None,
+) -> list["StrategyInstance"]:
+    """Parse ``--community-strategies`` tokens into ordered, de-duplicated StrategyInstance objects.
+
+    ``ALL`` expands to every strategy with default parameters. ``defaults`` supplies per-strategy
+    parameter overrides for omitted values (the command passes the global ``--leiden-cpm-resolution``
+    so a bare ``LEIDEN_CPM`` inherits it). Raises ``ValueError`` on unknown strategies, bad/duplicate
+    parameters — mirroring ``measures.parse_measures``.
+    """
+    return parse_tokens(
+        tokens,
+        registry=PARAMETERISED_STRATEGIES,
+        known_tokens=VALID_STRATEGIES,
+        all_tokens=ALL_STRATEGIES,
+        instance_cls=StrategyInstance,
+        defaults=defaults,
+        noun="strategy",
+    )
+
+
+def canonical_strategy_key(key: str) -> str:
+    """Strip a parameter suffix back to the base strategy key (``leiden_cpm_resolution_0_05`` →
+    ``leiden_cpm``). Parameter-free keys are returned unchanged."""
+    return canonical_key(key, _STRATEGY_BASE_KEYS)
+
+
+def strategy_display_label(key: str) -> str:
+    """Human label for a partition key, e.g. ``leiden_cpm_resolution_0_05`` → ``Leiden CPM (resolution=0.05)``.
+
+    Mirrors ``StrategyInstance.label`` but works from the bare node-attribute key (used by the static
+    table/CSV writers, which only have the key). The base maps through ``COMMUNITY_STRATEGY_LABELS``; the
+    parameter suffix is reconstructed from the spec's param names (the float value slug ``0_05`` reads
+    back as ``0.05``). The JS mirror is ``strategy_label`` in ``webapp_engine/map/js/labels.js``.
+    """
+    base = canonical_strategy_key(key)
+    label = COMMUNITY_STRATEGY_LABELS.get(base.upper(), base.replace("_", " ").title())
+    if key == base:
+        return label
+    spec = PARAMETERISED_STRATEGIES.get(base.upper())
+    rest = key[len(base) + 1 :]  # drop "base_" → e.g. "resolution_0_05"
+    parts: list[str] = []
+    for param in spec.params if spec else ():
+        prefix = f"{param.name}_"
+        if rest.startswith(prefix):
+            raw = rest[len(prefix) :]
+            value = raw.replace("_", ".") if param.kind == "float" else raw
+            parts.append(f"{param.name}={value}")
+            rest = ""
+    return f"{label} ({', '.join(parts)})" if parts else label
+
 
 type CommunityMap = dict[str, int]
 type CommunityPalette = dict[int, ColorTuple]
@@ -196,7 +322,7 @@ def detect_label_propagation(
     them, so ``--edge-weight-strategy`` does not affect the partition.
     Citation direction is also discarded: the function rejects directed
     input, so Pulpit symmetrises the graph with ``to_undirected_sum``
-    (W+Wᵀ, the same projection used by ``LEIDEN``/``WALKTRAP``/``KCORE``
+    (W+Wᵀ, the same projection used by ``LEIDEN``/``KCORE``
     and the reported modularity). Because weights are ignored, this yields
     the identical partition to a plain ``to_undirected()``; the W+Wᵀ choice
     is for consistency across strategies, not for effect.
@@ -245,53 +371,6 @@ def detect_kcore(
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
     return community_map, build_community_palette(community_map, palette_name, reverse=reverse)
-
-
-def detect_infomap(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """First-order Infomap — Rosvall & Bergstrom (PNAS 2008); map equation Rosvall, Axelsson & Bergstrom (EPJ ST 2009).
-
-    Minimises the map equation L(M) for a flat (``--two-level``) partition of a
-    random walker on the directed citation graph. Edges keep Pulpit's as-built
-    amplifier→source orientation (``--directed``, no symmetrisation); edge
-    weights from ``--edge-weight-strategy`` are passed through ``addLink`` and
-    shape the partition. Truly isolated nodes — those Infomap leaves out of
-    every module — are folded into one fallback community so they still
-    receive a label (``merge_isolated=False`` skips the usual isolated-node
-    bundling because the fallback already covers them).
-    """
-    node_ids, node_id_map = _node_id_index(graph)
-    # seed=123 pins reproducibility for parity with the other seeded detectors
-    # (Leiden seed=0, Memory Infomap seed=123); it matches Infomap's own current
-    # default but makes the run independent of that default ever changing.
-    infomap = Infomap("--two-level --directed --silent", seed=123)
-    for source, target, edge_data in graph.edges(data=True):
-        infomap.addLink(node_id_map[source], node_id_map[target], edge_data.get("weight", 1.0))
-
-    infomap.run()
-    module_ids: dict[str, int] = {node_ids[node.node_id]: node.module_id for node in infomap.nodes}
-
-    community_map: CommunityMap = {}
-    if module_ids:
-        module_map = {module_id: index for index, module_id in enumerate(sorted(set(module_ids.values())), start=1)}
-        community_map = {node_id: module_map[module_id] for node_id, module_id in module_ids.items()}
-
-    next_community = max(community_map.values(), default=0) + 1
-    for node_id in node_ids:
-        if node_id not in community_map:
-            community_map[node_id] = next_community
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_strongcc(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    components = sorted(nx.strongly_connected_components(graph), key=len, reverse=True)
-    return _finalize_partition(
-        graph, _assign_from_node_sets(components), palette_name, reverse=reverse, merge_isolated=False
-    )
 
 
 def detect_leiden(
@@ -374,205 +453,126 @@ def detect_leiden_cpm(
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
-def detect_mcl(
-    graph: nx.DiGraph, palette_name: str, inflation: float, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """Markov Clustering (MCL) — van Dongen 2000 (thesis); 2008 *SIAM J. Matrix Anal. Appl.* 30(1) for the formal analysis.
-
-    Alternates matrix expansion (raise to power 2, the library default) and
-    inflation (raise each entry to ``inflation``, column-renormalise) until
-    the stochastic matrix becomes near-idempotent; the row supports of the
-    surviving diagonal entries are the clusters. ``inflation`` controls
-    granularity — higher → smaller, tighter communities. No null model, so
-    *not* subject to the Fortunato-Barthélemy resolution limit.
-
-    Pulpit feeds the directed citation graph directly: ``matrix[source, target]
-    = w(source → target)`` with the chosen ``--edge-weight-strategy``. The
-    ``markov_clustering`` library adds a unit self-loop to every row, then
-    column-normalises (column-stochastic convention) — so the implied random
-    walker traverses edges in *reverse* (content-cascade direction
-    source→amplifier), the same orientation Pulpit uses for SIR ``SPREADING``
-    and ``TROPHICLEVEL``. Both citation directions still shape the partition
-    through the asymmetric matrix; MCL clusters channels that share a
-    source's content flow, not channels that share citing behaviour. The
-    isolated-node self-loop below is belt-and-braces — ``run_mcl`` overwrites
-    the full diagonal anyway — but keeps the matrix well-defined before
-    normalisation. Overlap (a node landing in two attractors' row supports)
-    is resolved by "last attractor wins" in ``_assign_from_partition``; the
-    practical consequence is that hub-and-spoke amplification patterns get
-    fragmented (the hub goes to one peripheral cluster, the spokes scatter
-    into singletons) — prefer ``LEIDEN`` for that case. Fully deterministic
-    given the input matrix; no random seed.
-    """
-    node_ids, node_id_map = _node_id_index(graph)
-    n = len(node_ids)
-    matrix = np.zeros((n, n), dtype=float)
-    for source, target, edge_data in graph.edges(data=True):
-        matrix[node_id_map[source], node_id_map[target]] = edge_data.get("weight", 1.0)
-
-    # Give isolated nodes a self-loop so the stochastic matrix stays well-defined.
-    for i in range(n):
-        if matrix[i].sum() == 0 and matrix[:, i].sum() == 0:
-            matrix[i, i] = 1.0
-
-    clusters = mc.get_clusters(mc.run_mcl(matrix, inflation=inflation))
-    community_map = _assign_from_partition(clusters, node_ids)
-
-    # Nodes not placed in any cluster (edge cases in sparse graphs) → singletons.
-    assigned: set[int] = {idx for cluster in clusters for idx in cluster}
-    next_id = len(clusters) + 1
-    for i, node_id in enumerate(node_ids):
-        if i not in assigned:
-            community_map[node_id] = next_id
-            next_id += 1
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
-
-
-def detect_infomap_memory(
+def detect_louvain(
     graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Second-order Infomap on a synthetic state network — Rosvall et al. (Nature Comms 2014); state-network API Edler, Bohlin & Rosvall (Algorithms 2017).
+    """Louvain modularity maximisation (Blondel et al. 2008) — the classic baseline, superseded by Leiden.
 
-    Builds a state network where every directed edge A→B becomes a state node
-    ``(A, B)`` representing the context "currently at B, came from A". Pulpit
-    has no observed trigram data, so the transition ``(A, B) → (B, C)`` carries
-    the first-order edge weight ``w(B, C)`` regardless of A — the *outgoing*
-    step is memoryless. The variant still differs from first-order Infomap
-    because state nodes are clustered individually, so a hub B can be
-    reassigned to a different module than first-order picks based on the
-    topology of which neighbours feed its state nodes; the state-level
-    assignments are then collapsed back to physical channels by plurality vote.
-    Source channels (no incoming edges) receive a virtual entry state so they
-    participate in the flow; ``--recorded-teleportation`` keeps teleportation
-    events inside the description length, the stricter formulation needed for
-    directed networks. Truly isolated nodes (no state nodes at all) become
-    singleton communities — unlike ``detect_infomap``, which bundles them into
-    one shared fallback.
+    Greedy modularity optimisation on the undirected W+Wᵀ projection
+    (``to_undirected_sum``) — the same symmetrised graph and edge-weight handling
+    as ``detect_leiden``; only the optimiser differs (no Leiden refinement pass).
+    Louvain is the field-standard community detector that predates Leiden; it is
+    kept in Pulpit so a run can be compared against the large body of older
+    studies that report Louvain partitions. **For Pulpit's own analyses prefer**
+    ``LEIDEN`` — or ``LEIDEN_DIRECTED`` when citation direction matters — since
+    Leiden adds a refinement step that guarantees every community is internally
+    well-connected, fixing the two Louvain weaknesses: occasionally disconnected
+    communities, and a sharper exposure to the modularity resolution limit
+    (Fortunato & Barthélemy 2007).
+
+    Edge weights from ``--edge-weight-strategy`` shape the partition; citation
+    direction is dropped by the symmetrisation (so it shares
+    ``UNDIRECTED_BASIS_STRATEGIES`` modularity reporting with ``LEIDEN``).
+    ``seed=0`` pins reproducibility — NetworkX's Louvain randomises node-visit
+    order, unlike the deterministic ``leidenalg`` partitions.
     """
-    community_map: CommunityMap = {}
-    node_ids, node_id_map = _node_id_index(graph)
-    n = len(node_ids)
-
-    infomap = Infomap("--two-level --directed --silent --recorded-teleportation", seed=123)
-
-    # State node for edge A→B: state_id = idx_A * n + idx_B, physical node = idx_B.
-    for src, tgt in graph.edges():
-        infomap.add_state_node(node_id_map[src] * n + node_id_map[tgt], node_id_map[tgt])
-
-    # Virtual entry state for source nodes (no incoming edges, would be unreachable).
-    _virtual_base = n * n
-    for node_id in node_ids:
-        node_idx = node_id_map[node_id]
-        if graph.in_degree(node_id) == 0 and graph.out_degree(node_id) > 0:
-            infomap.add_state_node(_virtual_base + node_idx, node_idx)
-
-    # Trigram links: state(A→B) → state(B→C) with weight w(B→C).
-    for mid in node_ids:
-        mid_idx = node_id_map[mid]
-        predecessors = list(graph.predecessors(mid))
-        successors = list(graph.successors(mid))
-        if not successors:
-            continue
-        # Incoming state IDs: edge-states plus virtual entry if source node.
-        if predecessors:
-            in_states = [node_id_map[src] * n + mid_idx for src in predecessors]
-        else:
-            in_states = [_virtual_base + mid_idx]
-        for tgt in successors:
-            tgt_idx = node_id_map[tgt]
-            weight = graph.edges[mid, tgt].get("weight", 1.0)
-            state_out = mid_idx * n + tgt_idx
-            for state_in in in_states:
-                infomap.add_link(state_in, state_out, weight)
-
-    infomap.run()
-
-    # Aggregate state-node module assignments to physical nodes (plurality vote).
-    physical_modules: dict[int, list[int]] = {}
-    for node in infomap.nodes:
-        physical_modules.setdefault(node.node_id, []).append(node.module_id)
-
-    for phys_idx, modules in physical_modules.items():
-        community_map[node_ids[phys_idx]] = Counter(modules).most_common(1)[0][0]
-
-    # Isolated nodes with no state nodes at all → singleton fallback.
-    next_id = max(community_map.values(), default=0) + 1
-    for node_id in node_ids:
-        if node_id not in community_map:
-            community_map[node_id] = next_id
-            next_id += 1
-
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse, merge_isolated=False)
+    communities = sorted(
+        nx.community.louvain_communities(to_undirected_sum(graph), weight="weight", seed=0), key=len, reverse=True
+    )
+    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
-def detect_walktrap(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+def detect_sbm(
+    graph: nx.DiGraph, palette_name: str, mode: str, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Walktrap — Pons & Latapy (ISCIS 2005, *LNCS* 3733; extended in *JGAA* 2006).
+    """Bayesian degree-corrected stochastic block model (Karrer & Newman 2011; Peixoto 2014, 2017) via graph-tool.
 
-    For each node u, builds the probability distribution P_u over where a
-    random walker of length t=4 (the library default) ends up; two nodes are
-    similar when their distributions are close in a degree-weighted L²
-    distance. Ward's method merges nodes bottom-up by minimum distance into
-    a dendrogram, which ``.as_clustering()`` cuts at the modularity-
-    maximising level. The distinctive property is that two nodes with no
-    direct edge between them can still cluster together when their walk
-    distributions converge on the same neighbours — shared-neighbourhood
-    structure drives the partition, not just direct edge density.
+    Fits a **directed, degree-corrected** SBM by minimum description length. Unlike the
+    modularity / CPM detectors — which only find *assortative* communities (dense-within,
+    sparse-between) — the SBM recovers arbitrary block structure: assortative,
+    disassortative, core-periphery and bipartite *source / amplifier* patterns alike.
+    A block is a set of channels that are *stochastically equivalent* — they cite, and are
+    cited by, the rest of the network the same way — i.e. a **citation-role / structural-
+    equivalence class** (Lorrain & White 1971), NOT necessarily a cohesive, mutually-citing
+    community. The block-affinity matrix entry is a one-step, group-to-group *direct citation
+    rate*, never a transmission / flow quantity, so the strategy is consistent with the
+    one-degree attribution model (see docs/community-detection.md).
 
-    Graph is symmetrised via ``to_undirected_sum`` (W+Wᵀ, same projection as
-    ``LEIDEN``/``LABELPROPAGATION``/``KCORE``), so citation direction is not
-    preserved. Edge weights are honoured —
-    ``community_walktrap`` accepts weighted walks. The modularity cut means
-    Walktrap inherits the Fortunato-Barthélemy resolution limit *at the
-    cut step* even though the random-walk distance itself has no such
-    limit. Pulpit consumes only the flat partition; the dendrogram is built
-    internally by igraph but is not exported or visualised. Fully
-    deterministic given the input weights; no random seed.
+    Built on the **directed** citation graph (direction preserved → asymmetric block
+    affinities) and **degree-corrected**, so the partition reflects block structure *beyond*
+    the in-degree heterogeneity of the star topology rather than merely re-encoding it.
+    **Unweighted** (binary citation structure): edge weights are not passed, so the partition
+    is invariant to ``--edge-weight-strategy`` — like ``LABELPROPAGATION`` / ``KCORE``.
+
+    ``mode``: ``NESTED`` (default) fits the nested SBM (Peixoto 2017) and takes the partition
+    at the bottom (finest) hierarchy level — better model selection on large graphs, avoiding
+    the underfitting of the flat model; ``FLAT`` fits a single-level SBM.
+
+    graph-tool's inference is stochastic (agglomerative MCMC); the RNG is seeded for a
+    reproducible partition. Requires the ``graph-tool`` package (conda-forge / system packages —
+    it is *not* installable from pip; see docs/community-detection.md).
     """
+    try:
+        import graph_tool.all as gt
+    except ImportError as exc:  # pragma: no cover - optional heavy dependency
+        raise ValueError(
+            "The SBM community strategy requires the 'graph-tool' package, which is not installed. "
+            "Install it via conda-forge ('conda install -c conda-forge graph-tool') or your system "
+            "package manager — it is not available from pip. See docs/community-detection.md."
+        ) from exc
+
+    gt.seed_rng(0)
     node_ids, node_id_map = _node_id_index(graph)
-    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
-    if weights:
-        ig_graph.es["weight"] = weights
-    partition = ig_graph.community_walktrap(weights="weight" if weights else None, steps=4).as_clustering()
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+    gt_graph = gt.Graph(directed=True)
+    gt_graph.add_vertex(len(node_ids))
+    gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
+
+    if mode.upper() == "FLAT":
+        state = gt.minimize_blockmodel_dl(gt_graph)
+        blocks = state.get_blocks()
+    else:
+        state = gt.minimize_nested_blockmodel_dl(gt_graph)
+        blocks = state.get_levels()[0].get_blocks()
+
+    community_map: CommunityMap = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+    return _finalize_partition(graph, community_map, palette_name, reverse=reverse)
 
 
 def detect(
-    strategy: str,
+    instance: "StrategyInstance | str",
     palette_name: str,
     graph: nx.DiGraph,
     channel_dict: dict[str, Any],
     *,
     reverse: bool = False,
-    leiden_coarse_resolution: float = 0.01,
-    leiden_fine_resolution: float = 0.05,
-    mcl_inflation: float = 2.0,
 ) -> tuple[CommunityMap, CommunityPalette]:
-    """Run community detection. Returns (community_map, community_palette)."""
+    """Run community detection for one strategy instance. Returns (community_map, community_palette).
+
+    ``instance`` is a :class:`StrategyInstance`; a bare strategy-name string is also accepted (wrapped
+    as a parameter-free instance) for convenience. The one parameterised strategy reads its tunable
+    value from the instance — LEIDEN_CPM its ``resolution`` γ — falling back to the module default when
+    omitted.
+    """
+    if isinstance(instance, str):
+        instance = StrategyInstance(instance.upper())
+    strategy = instance.name
+    params = instance.params_dict
     if strategy == "LABELPROPAGATION":
         return detect_label_propagation(graph, palette_name, reverse=reverse)
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
-    if strategy == "INFOMAP":
-        return detect_infomap(graph, palette_name, reverse=reverse)
-    if strategy == "INFOMAP_MEMORY":
-        return detect_infomap_memory(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":
         return detect_leiden(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_DIRECTED":
         return detect_leiden_directed(graph, palette_name, reverse=reverse)
-    if strategy == "LEIDEN_CPM_COARSE":
-        return detect_leiden_cpm(graph, palette_name, leiden_coarse_resolution, reverse=reverse)
-    if strategy == "LEIDEN_CPM_FINE":
-        return detect_leiden_cpm(graph, palette_name, leiden_fine_resolution, reverse=reverse)
-    if strategy == "MCL":
-        return detect_mcl(graph, palette_name, mcl_inflation, reverse=reverse)
-    if strategy == "WALKTRAP":
-        return detect_walktrap(graph, palette_name, reverse=reverse)
-    if strategy == "STRONGCC":
-        return detect_strongcc(graph, palette_name, reverse=reverse)
+    if strategy == "LEIDEN_CPM":
+        return detect_leiden_cpm(
+            graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
+        )
+    if strategy == "LOUVAIN":
+        return detect_louvain(graph, palette_name, reverse=reverse)
+    if strategy == "SBM":
+        return detect_sbm(graph, palette_name, str(params.get("mode", SBM_DEFAULT_MODE)), reverse=reverse)
     if strategy == "ORGANIZATION":
         # ORGANIZATION builds its palette from Organization.color directly, so the
         # palette_name / reverse flags don't apply.
@@ -585,11 +585,18 @@ def apply_to_graph(
     channel_dict: dict[str, Any],
     community_map: CommunityMap,
     community_palette: CommunityPalette,
-    strategy: str,
+    strategy: "StrategyInstance | str",
 ) -> None:
-    """Write community label for this strategy into the communities dict on each node, and update node colors."""
-    strategy_key = strategy.lower()
-    if strategy not in COMMUNITY_ALGORITHMS:
+    """Write this strategy instance's community label into each node's communities dict, plus colours.
+
+    ``strategy`` is a :class:`StrategyInstance` (a bare name string is also accepted); the partition is
+    stored under ``instance.key`` — the parameter-suffixed key for parameterised strategies, the plain
+    lowercase name otherwise.
+    """
+    instance = strategy if isinstance(strategy, StrategyInstance) else StrategyInstance(str(strategy).upper())
+    strategy_name = instance.name
+    strategy_key = instance.key
+    if strategy_name not in COMMUNITY_ALGORITHMS:
         org_ids = set(community_map.values())
         org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=org_ids)}
 
@@ -597,8 +604,8 @@ def apply_to_graph(
         community_id = community_map.get(node_id)
         if community_id is not None:
             detected_community = (
-                build_community_label(community_id, strategy)
-                if strategy in COMMUNITY_ALGORITHMS
+                build_community_label(community_id, strategy_name)
+                if strategy_name in COMMUNITY_ALGORITHMS
                 else org_names.get(community_id, str(community_id))
             )
             node_data.setdefault("communities", {})[strategy_key] = detected_community
@@ -622,14 +629,19 @@ def apply_edge_colors(graph: nx.DiGraph, edge_list: list[list[str | float]], cha
 
 
 def build_communities_payload(
-    strategies: list[str],
+    strategies: list["StrategyInstance"],
     results: dict[str, tuple[CommunityMap, CommunityPalette]],
 ) -> dict[str, Any]:
-    """Build the communities metadata dict for the accessory JSON file, covering all strategies."""
+    """Build the communities metadata dict for the accessory JSON file, covering all strategy instances.
+
+    ``results`` is keyed by ``StrategyInstance.key`` (the parameter-suffixed partition key); the
+    returned dict is keyed the same way.
+    """
     communities_data: dict[str, Any] = {}
-    for strategy in strategies:
-        community_map, community_palette = results[strategy]
-        strategy_key = strategy.lower()
+    for instance in strategies:
+        strategy = instance.name
+        strategy_key = instance.key
+        community_map, community_palette = results[strategy_key]
         if strategy in COMMUNITY_ALGORITHMS:
             community_counts = Counter(community_map.values())
             groups = []

@@ -1,4 +1,5 @@
 import datetime
+import io
 import json
 import os
 import tempfile
@@ -9,17 +10,21 @@ from django.test import TestCase, override_settings
 
 from network.community import (
     COMMUNITY_ALGORITHMS,
+    VALID_STRATEGIES,
     apply_edge_colors,
     apply_to_graph,
     build_communities_payload,
     build_community_label,
     build_community_palette,
-    detect_infomap,
+    canonical_strategy_key,
     detect_kcore,
     detect_label_propagation,
     detect_leiden,
+    detect_louvain,
     detect_organization,
     normalize_community_map,
+    parse_strategies,
+    strategy_display_label,
 )
 from network.community_stats import (
     _freeman_centralization,
@@ -38,26 +43,15 @@ from network.graph_builder import build_graph, resolve_window_organization
 from network.measures import (
     apply_amplification_factor,
     apply_base_node_measures,
-    apply_betweenness_centrality,
-    apply_bridging_centrality,
     apply_burt_constraint,
-    apply_collective_influence,
-    apply_community_bridging,
     apply_content_originality,
-    apply_coreness,
-    apply_gould_fernandez,
-    apply_harmonic_centrality,
     apply_hits,
     apply_in_degree_centrality,
     apply_local_clustering,
     apply_module_role,
     apply_out_degree_centrality,
     apply_pagerank,
-    apply_spreading_efficiency,
-    apply_trophic_level,
     canonical_measure_key,
-    compute_betweenness,
-    compute_bridging_coefficient,
     parse_measures,
     role_companions,
 )
@@ -391,7 +385,7 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_algorithm_strategy_builds_groups_from_community_map(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 2}
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["LEIDEN"]), {"leiden": (community_map, community_palette)})
         self.assertIn("leiden", result)
         self.assertIn("groups", result["leiden"])
         self.assertIn("main_groups", result["leiden"])
@@ -400,20 +394,22 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_groups_sorted_by_count_descending(self) -> None:
         community_map = {"a": 1, "b": 1, "c": 1, "d": 2}  # community 1: 3 nodes, 2: 1 node
         community_palette = {1: (255, 0, 0), 2: (0, 255, 0)}
-        result = build_communities_payload(["LEIDEN"], {"LEIDEN": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["LEIDEN"]), {"leiden": (community_map, community_palette)})
         counts = [g[1] for g in result["leiden"]["groups"]]
         self.assertEqual(counts, sorted(counts, reverse=True))
 
     def test_algorithm_main_groups_maps_id_to_label(self) -> None:
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
-        result = build_communities_payload(["KCORE"], {"KCORE": (community_map, community_palette)})
+        result = build_communities_payload(parse_strategies(["KCORE"]), {"kcore": (community_map, community_palette)})
         self.assertIn("1", result["kcore"]["main_groups"])
 
     def test_organization_strategy_uses_resolved_map(self) -> None:
         org = Organization.objects.create(name="My Org", is_in_target=True)
         cmap = {"n1": org.pk, "n2": org.pk}
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": (cmap, {org.pk: (1, 2, 3)})})
+        result = build_communities_payload(
+            parse_strategies(["ORGANIZATION"]), {"organization": (cmap, {org.pk: (1, 2, 3)})}
+        )
         groups = result["organization"]["groups"]
         self.assertIn("My Org", [g[2] for g in groups])
         # Count comes from the resolved community map (2 nodes), not a raw FK count.
@@ -422,24 +418,147 @@ class BuildCommunitiesPayloadTests(TestCase):
     def test_org_with_no_resolved_nodes_excluded(self) -> None:
         # An org that owns no node in the window does not appear in the ORGANIZATION groups.
         Organization.objects.create(name="Absent Org", is_in_target=True)
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({}, {})})
+        result = build_communities_payload(parse_strategies(["ORGANIZATION"]), {"organization": ({}, {})})
         self.assertNotIn("Absent Org", [g[2] for g in result["organization"]["groups"]])
 
     def test_organization_strategy_main_groups_uses_key_and_name(self) -> None:
         org = Organization.objects.create(name="My Org", is_in_target=True)
-        result = build_communities_payload(["ORGANIZATION"], {"ORGANIZATION": ({"n1": org.pk}, {org.pk: (1, 2, 3)})})
+        result = build_communities_payload(
+            parse_strategies(["ORGANIZATION"]), {"organization": ({"n1": org.pk}, {org.pk: (1, 2, 3)})}
+        )
         self.assertEqual(result["organization"]["main_groups"].get(org.key), org.name)
 
     def test_multiple_strategies_all_included(self) -> None:
         community_map = {"a": 1}
         community_palette = {1: (255, 0, 0)}
         results = {
-            "LEIDEN": (community_map, community_palette),
-            "KCORE": (community_map, community_palette),
+            "leiden": (community_map, community_palette),
+            "kcore": (community_map, community_palette),
         }
-        result = build_communities_payload(["LEIDEN", "KCORE"], results)
+        result = build_communities_payload(parse_strategies(["LEIDEN", "KCORE"]), results)
         self.assertIn("leiden", result)
         self.assertIn("kcore", result)
+
+
+# ---------------------------------------------------------------------------
+# community.py — parse_strategies / StrategyInstance / canonical / labels
+# ---------------------------------------------------------------------------
+
+
+class StrategyParserTests(TestCase):
+    def test_plain_and_parameterised_keys(self) -> None:
+        insts = parse_strategies(["LEIDEN_DIRECTED", "LEIDEN_CPM(resolution=0.01)"])
+        self.assertEqual([i.name for i in insts], ["LEIDEN_DIRECTED", "LEIDEN_CPM"])
+        self.assertEqual([i.key for i in insts], ["leiden_directed", "leiden_cpm_resolution_0_01"])
+        self.assertEqual(insts[1].token(), "LEIDEN_CPM(resolution=0.01)")
+
+    def test_same_strategy_twice_with_different_params(self) -> None:
+        insts = parse_strategies(["LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"])
+        self.assertEqual([i.key for i in insts], ["leiden_cpm_resolution_0_01", "leiden_cpm_resolution_0_05"])
+
+    def test_rejects_identical_parameterised(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN_CPM(resolution=0.05)", "LEIDEN_CPM(resolution=0.05)"])
+
+    def test_rejects_duplicate_plain(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN", "LEIDEN"])
+
+    def test_rejects_params_on_plain(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN(resolution=0.1)"])
+
+    def test_rejects_unknown(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["NOTASTRATEGY"])
+
+    def test_all_expands_to_every_strategy(self) -> None:
+        self.assertEqual({i.name for i in parse_strategies(["ALL"])}, set(VALID_STRATEGIES))
+
+    def test_bare_token_inherits_default(self) -> None:
+        (inst,) = parse_strategies(["LEIDEN_CPM"], defaults={"LEIDEN_CPM": {"resolution": 0.02}})
+        self.assertEqual(inst.params_dict["resolution"], 0.02)
+        self.assertEqual(inst.key, "leiden_cpm_resolution_0_02")
+
+    def test_canonical_strategy_key(self) -> None:
+        self.assertEqual(canonical_strategy_key("leiden_cpm_resolution_0_05"), "leiden_cpm")
+        self.assertEqual(canonical_strategy_key("leiden_cpm_resolution_0_01"), "leiden_cpm")
+        self.assertEqual(canonical_strategy_key("leiden_directed"), "leiden_directed")  # plain unchanged
+
+    def test_strategy_display_label(self) -> None:
+        self.assertEqual(strategy_display_label("leiden_cpm_resolution_0_05"), "Leiden CPM (resolution=0.05)")
+        self.assertEqual(strategy_display_label("leiden_cpm_resolution_0_01"), "Leiden CPM (resolution=0.01)")
+        self.assertEqual(strategy_display_label("leiden_directed"), "Leiden directed")
+
+    def test_strategy_name_sources_stay_in_sync(self) -> None:
+        # Guard: measures.ALL_STRATEGIES (the measure "basis" choices) must match the community list.
+        from network import measures
+
+        self.assertEqual(set(measures.ALL_STRATEGIES), set(VALID_STRATEGIES))
+
+    def test_sbm_modes_and_keys(self) -> None:
+        # Bare SBM inherits the NESTED default; both modes round-trip to distinct suffixed keys.
+        insts = parse_strategies(["SBM", "SBM(mode=FLAT)"])
+        self.assertEqual([i.key for i in insts], ["sbm_mode_nested", "sbm_mode_flat"])
+        self.assertEqual([i.token() for i in insts], ["SBM(mode=NESTED)", "SBM(mode=FLAT)"])
+
+    def test_sbm_rejects_bad_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["SBM(mode=GIANT)"])
+
+    def test_sbm_canonical_and_label(self) -> None:
+        self.assertEqual(canonical_strategy_key("sbm_mode_nested"), "sbm")
+        self.assertEqual(strategy_display_label("sbm_mode_flat"), "Stochastic block model (mode=flat)")
+
+    def test_sbm_without_graph_tool_raises_value_error(self) -> None:
+        # When graph-tool is absent, detect() surfaces a clear ValueError (caught as CommandError upstream).
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is not None:
+            self.skipTest("graph-tool installed — error path not exercised")
+        from network.community import detect
+
+        import networkx as nx
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b")
+        graph.add_edge("c", "b")
+        with self.assertRaisesRegex(ValueError, "graph-tool"):
+            detect(parse_strategies(["SBM"])[0], "vaporwave", graph, {})
+
+
+class DetectSbmTests(TestCase):
+    """Live SBM detector tests — skipped unless graph-tool is installed (conda/apt, not pip)."""
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        import networkx as nx
+
+        # Two clear blocks {a,b,c} and {d,e,f}, densely citing within, sparsely across.
+        self.graph = nx.DiGraph()
+        within = [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d")]
+        for s, t in within:
+            self.graph.add_edge(s, t, weight=1.0)
+        self.graph.add_edge("c", "d", weight=1.0)  # single bridge
+
+    def test_returns_partition_over_all_nodes(self) -> None:
+        from network.community import detect_sbm
+
+        community_map, palette = detect_sbm(self.graph, "vaporwave", "FLAT")
+        self.assertEqual(set(community_map), set(self.graph.nodes()))
+        self.assertTrue(all(isinstance(v, int) for v in community_map.values()))
+        self.assertEqual(set(community_map.values()), set(palette))
+
+    def test_modes_are_deterministic(self) -> None:
+        from network.community import detect_sbm
+
+        for mode in ("FLAT", "NESTED"):
+            first, _ = detect_sbm(self.graph, "vaporwave", mode)
+            second, _ = detect_sbm(self.graph, "vaporwave", mode)
+            self.assertEqual(first, second, f"{mode} partition not reproducible under fixed seed")
 
 
 # ---------------------------------------------------------------------------
@@ -1056,61 +1175,6 @@ class WriteGraphFilesTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# community.py — detect_infomap
-# ---------------------------------------------------------------------------
-
-
-class DetectInfomapTests(TestCase):
-    def setUp(self) -> None:
-        # Two clear clusters connected by a weak bridge
-        self.graph = nx.DiGraph()
-        self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
-        self.graph.add_edges_from(
-            [
-                ("a", "b"),
-                ("b", "c"),
-                ("c", "a"),  # cluster 1
-                ("d", "e"),
-                ("e", "f"),
-                ("f", "d"),  # cluster 2
-                ("c", "d"),  # bridge
-            ]
-        )
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_infomap(self.graph, "SomePalette")
-        self.assertIsInstance(community_map, dict)
-        self.assertIsInstance(palette, dict)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_infomap(self.graph, "SomePalette")
-        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_infomap(self.graph, "SomePalette")
-        self.assertGreaterEqual(min(community_map.values()), 1)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_infomap(self.graph, "SomePalette")
-        for community_id in community_map.values():
-            self.assertIn(community_id, palette)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_isolated_node_gets_own_community(self, _mock: MagicMock) -> None:
-        # Infomap requires at least one link; add an edge between two connected nodes
-        # plus an isolated node so the fallback assignment branch is exercised.
-        graph = nx.DiGraph()
-        graph.add_edge("a", "b")
-        graph.add_node("isolated")
-        community_map, _ = detect_infomap(graph, "SomePalette")
-        self.assertIn("isolated", community_map)
-
-
-# ---------------------------------------------------------------------------
 # community.py — detect_leiden
 # ---------------------------------------------------------------------------
 
@@ -1165,6 +1229,42 @@ class DetectLeidenTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# community.py — detect_louvain
+# ---------------------------------------------------------------------------
+
+
+class DetectLouvainTests(TestCase):
+    def setUp(self) -> None:
+        # Two clear clusters connected by a weak bridge (same fixture as Leiden).
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(["a", "b", "c", "d", "e", "f"])
+        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_louvain(self.graph, "SomePalette")
+        self.assertIsInstance(community_map, dict)
+        self.assertIsInstance(palette, dict)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
+        community_map, _ = detect_louvain(self.graph, "SomePalette")
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
+        community_map, palette = detect_louvain(self.graph, "SomePalette")
+        for community_id in community_map.values():
+            self.assertIn(community_id, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_seed_makes_partition_reproducible(self, _mock: MagicMock) -> None:
+        first, _ = detect_louvain(self.graph, "SomePalette")
+        second, _ = detect_louvain(self.graph, "SomePalette")
+        self.assertEqual(first, second)
+
+
+# ---------------------------------------------------------------------------
 # community.py — detect() dispatcher
 # ---------------------------------------------------------------------------
 
@@ -1190,20 +1290,20 @@ class DetectDispatcherTests(TestCase):
         detect("KCORE", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
-    @patch("network.community.detect_infomap")
-    def test_infomap_strategy_calls_detect_infomap(self, mock_detect: MagicMock) -> None:
-        from network.community import detect
-
-        mock_detect.return_value = ({}, {})
-        detect("INFOMAP", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
-
     @patch("network.community.detect_leiden")
     def test_leiden_strategy_calls_detect_leiden(self, mock_detect: MagicMock) -> None:
         from network.community import detect
 
         mock_detect.return_value = ({}, {})
         detect("LEIDEN", "palette", self.graph, self.channel_dict)
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
+
+    @patch("network.community.detect_louvain")
+    def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
+        from network.community import detect
+
+        mock_detect.return_value = ({}, {})
+        detect("LOUVAIN", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
     @patch("network.community.detect_organization")
@@ -1366,14 +1466,14 @@ class ExportNetworkCommandTests(TestCase):
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("structural_analysis", startdate="not-a-date")
+            call_command("structural_analysis", startdate="not-a-date", stdout=io.StringIO(), stderr=io.StringIO())
 
     def test_raises_command_error_on_invalid_enddate(self) -> None:
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
         with self.assertRaises(CommandError):
-            call_command("structural_analysis", enddate="2023-13-01")
+            call_command("structural_analysis", enddate="2023-13-01", stdout=io.StringIO(), stderr=io.StringIO())
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1402,7 +1502,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_build.side_effect = ValueError("There are no relationships between channels.")
         with self.assertRaises(CommandError):
             # graph=True bypasses the bare-CLI early-exit so build_graph is reached.
-            call_command("structural_analysis", graph=True)
+            call_command("structural_analysis", graph=True, stdout=io.StringIO(), stderr=io.StringIO())
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -1460,6 +1560,8 @@ class ExportNetworkCommandTests(TestCase):
             community_strategies="ORGANIZATION",
             measures="PAGERANK",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
 
         mock_build.assert_called_once()
@@ -1532,6 +1634,8 @@ class ExportNetworkCommandTests(TestCase):
             html=False,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_not_called()
@@ -1589,6 +1693,8 @@ class ExportNetworkCommandTests(TestCase):
             xlsx=True,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_not_called()
         mock_table_xls.assert_called_once()
@@ -1646,6 +1752,8 @@ class ExportNetworkCommandTests(TestCase):
             xlsx=True,
             community_strategies="ORGANIZATION",
             edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
         )
         mock_table_html.assert_called_once()
         mock_table_xls.assert_called_once()
@@ -1683,52 +1791,7 @@ class ApplyHitsTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# measures/_centrality.py — compute_betweenness / apply_betweenness_centrality
-# ---------------------------------------------------------------------------
-
-
-class ComputeBetweennessTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c")])
-
-    def test_returns_dict_of_floats(self) -> None:
-        result = compute_betweenness(self.graph)
-        self.assertIsInstance(result, dict)
-        for v in result.values():
-            self.assertIsInstance(v, float)
-
-    def test_intermediate_node_has_highest_betweenness(self) -> None:
-        # a→b→c: b lies on the only path a→c (alongside the direct edge)
-        graph = nx.DiGraph()
-        graph.add_edges_from([("a", "b"), ("b", "c")])
-        result = compute_betweenness(graph)
-        # b is the only possible intermediate node
-        self.assertGreater(result["b"], result["a"])
-        self.assertGreater(result["b"], result["c"])
-
-
-class ApplyBetweennessTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
-
-    def test_adds_betweenness_key(self) -> None:
-        apply_betweenness_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertIn("betweenness", node)
-
-    def test_precomputed_values_used_directly(self) -> None:
-        precomputed = {"1": 0.5, "2": 0.25, "3": 0.0}
-        apply_betweenness_centrality(self.graph_data, self.graph, betweenness=precomputed)
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertAlmostEqual(node_map["1"]["betweenness"], 0.5)
-        self.assertAlmostEqual(node_map["2"]["betweenness"], 0.25)
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — in/out degree, harmonic centralities
+# measures/_centrality.py — in/out degree centralities
 # ---------------------------------------------------------------------------
 
 
@@ -1764,85 +1827,6 @@ class ApplyOutDegreeCentralityTests(TestCase):
         apply_out_degree_centrality(self.graph_data, self.graph)
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
         self.assertGreater(node_map["1"]["out_degree_centrality"], node_map["2"]["out_degree_centrality"])
-
-
-class ApplyHarmonicCentralityTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from([("1", "2"), ("2", "3"), ("1", "3")])
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
-
-    def test_adds_harmonic_centrality_key(self) -> None:
-        apply_harmonic_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertIn("harmonic_centrality", node)
-
-    def test_values_in_unit_interval(self) -> None:
-        apply_harmonic_centrality(self.graph_data, self.graph)
-        for node in self.graph_data["nodes"]:
-            self.assertGreaterEqual(node["harmonic_centrality"], 0.0)
-            self.assertLessEqual(node["harmonic_centrality"], 1.0)
-
-
-class ApplyCorenessTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        # Triangle a-b-c (coreness 2) plus a pendant leaf d (coreness 1).
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("a", "d")])
-        self.graph_data: dict = {"nodes": [{"id": n} for n in ("a", "b", "c", "d")], "edges": []}
-
-    def test_adds_coreness_key_and_label(self) -> None:
-        labels = apply_coreness(self.graph_data, self.graph)
-        self.assertEqual(labels, [("coreness", "K-core Coreness")])
-        for node in self.graph_data["nodes"]:
-            self.assertIn("coreness", node)
-
-    def test_triangle_outranks_leaf(self) -> None:
-        apply_coreness(self.graph_data, self.graph)
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertEqual(node_map["a"]["coreness"], 2.0)
-        self.assertEqual(node_map["d"]["coreness"], 1.0)
-
-    def test_isolated_node_gets_zero(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_node("isolated")
-        graph_data: dict = {"nodes": [{"id": "isolated"}], "edges": []}
-        apply_coreness(graph_data, graph)
-        self.assertEqual(graph_data["nodes"][0]["coreness"], 0.0)
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_trophic_level
-# ---------------------------------------------------------------------------
-
-
-class ApplyTrophicLevelTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        # Linear chain in citation orientation (amplifier→source): c → b → a.
-        # 'a' is the pure source (no out-edges, w_in only); 'c' is the terminal
-        # amplifier (w_out only). Trophic level reverses internally to the
-        # content-flow direction, so 'a' anchors at 0 and 'c' is highest.
-        self.graph.add_edge("c", "b", weight=1.0)
-        self.graph.add_edge("b", "a", weight=1.0)
-        self.graph_data: dict = {"nodes": [{"id": n} for n in ("a", "b", "c")], "edges": []}
-
-    def test_adds_trophic_level_key_and_label(self) -> None:
-        labels = apply_trophic_level(self.graph_data, self.graph)
-        self.assertEqual(labels, [("trophic_level", "Trophic Level")])
-        for node in self.graph_data["nodes"]:
-            self.assertIn("trophic_level", node)
-
-    def test_source_is_zero_and_sink_is_highest(self) -> None:
-        apply_trophic_level(self.graph_data, self.graph)
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertAlmostEqual(node_map["a"]["trophic_level"], 0.0)
-        self.assertGreater(node_map["b"]["trophic_level"], node_map["a"]["trophic_level"])
-        self.assertGreater(node_map["c"]["trophic_level"], node_map["b"]["trophic_level"])
-
-    def test_empty_graph_returns_label(self) -> None:
-        labels = apply_trophic_level({"nodes": [], "edges": []}, nx.DiGraph())
-        self.assertEqual(labels, [("trophic_level", "Trophic Level")])
 
 
 # ---------------------------------------------------------------------------
@@ -1890,97 +1874,6 @@ class ApplyModuleRoleTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_collective_influence (Morone & Makse 2015)
-# ---------------------------------------------------------------------------
-
-
-class ApplyCollectiveInfluenceTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        # Two triangles (a-b-c) and (d-e-f) joined by the single bridge edge c–d.
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c"), ("c", "d"), ("d", "e"), ("e", "f"), ("d", "f")])
-        self.graph_data: dict = {"nodes": [{"id": n} for n in "abcdef"], "edges": []}
-
-    def test_adds_key_and_label(self) -> None:
-        labels = apply_collective_influence(self.graph_data, self.graph)
-        self.assertEqual(labels, [("collective_influence", "Collective Influence")])
-        for node in self.graph_data["nodes"]:
-            self.assertIn("collective_influence", node)
-
-    def test_bridge_nodes_outrank_periphery(self) -> None:
-        apply_collective_influence(self.graph_data, self.graph)
-        ci = {n["id"]: n["collective_influence"] for n in self.graph_data["nodes"]}
-        # CI_2(i) = (k_i−1)·Σ_{dist=2}(k_j−1). Bridge endpoints c,d (degree 3) reach the far
-        # triangle's two degree-2 nodes at distance 2 → 2·(1+1)=4; each peripheral node reaches
-        # only the opposite bridge endpoint at distance 2 → 1·2=2.
-        self.assertEqual(ci, {"a": 2.0, "b": 2.0, "c": 4.0, "d": 4.0, "e": 2.0, "f": 2.0})
-
-    def test_isolated_and_degree_one_nodes_get_zero(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_edge("hub", "leaf")  # both degree 1 → (k−1) factor vanishes
-        graph.add_node("isolated")  # degree 0
-        graph_data: dict = {"nodes": [{"id": n} for n in ("hub", "leaf", "isolated")], "edges": []}
-        apply_collective_influence(graph_data, graph)
-        for node in graph_data["nodes"]:
-            self.assertEqual(node["collective_influence"], 0.0)
-
-    def test_direction_invariant(self) -> None:
-        apply_collective_influence(self.graph_data, self.graph)
-        forward = {n["id"]: n["collective_influence"] for n in self.graph_data["nodes"]}
-        reversed_data: dict = {"nodes": [{"id": n} for n in "abcdef"], "edges": []}
-        apply_collective_influence(reversed_data, self.graph.reverse(copy=True))
-        self.assertEqual(forward, {n["id"]: n["collective_influence"] for n in reversed_data["nodes"]})
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_gould_fernandez (brokerage role census)
-# ---------------------------------------------------------------------------
-
-
-class ApplyGouldFernandezTests(TestCase):
-    def _graph(self):
-        graph = nx.DiGraph()
-        # Broker '2' (org A) sits on every directed citation 2-path i→2→j. Predecessors
-        # {1:A, 4:B, 6:C}, successors {3:A, 4:B, 5:B} exercise all five roles.
-        orgs = {"1": "A", "2": "A", "3": "A", "4": "B", "5": "B", "6": "C"}
-        for n, o in orgs.items():
-            graph.add_node(n, data={"communities": {"organization": o}})
-        graph.add_edges_from([("1", "2"), ("4", "2"), ("6", "2"), ("2", "3"), ("2", "4"), ("2", "5")])
-        graph_data: dict = {"nodes": [{"id": n} for n in orgs], "edges": []}
-        return graph, graph_data
-
-    def test_emits_total_measure_and_full_census(self) -> None:
-        graph, graph_data = self._graph()
-        labels = apply_gould_fernandez(graph_data, graph, "organization")
-        self.assertEqual(labels, [("brokerage_total", "Brokerage")])
-        node2 = next(n for n in graph_data["nodes"] if n["id"] == "2")
-        self.assertEqual(node2["brokerage_coordinator"], 1)  # 1A→2A→3A
-        self.assertEqual(node2["brokerage_gatekeeper"], 2)  # 4B→2A→3A, 6C→2A→3A
-        self.assertEqual(node2["brokerage_representative"], 2)  # 1A→2A→4B, 1A→2A→5B
-        self.assertEqual(node2["brokerage_consultant"], 1)  # 4B→2A→5B
-        self.assertEqual(node2["brokerage_liaison"], 2)  # 6C→2A→4B, 6C→2A→5B
-        self.assertEqual(node2["brokerage_total"], 8)
-        self.assertEqual(node2["brokerage_role"], "Gatekeeper")
-
-    def test_grouped_node_with_no_paths_has_zero_total_and_no_role(self) -> None:
-        graph, graph_data = self._graph()
-        apply_gould_fernandez(graph_data, graph, "organization")
-        node1 = next(n for n in graph_data["nodes"] if n["id"] == "1")  # has a group, no predecessors
-        self.assertEqual(node1["brokerage_total"], 0)
-        self.assertIsNone(node1["brokerage_role"])
-
-    def test_node_without_group_gets_none(self) -> None:
-        graph, graph_data = self._graph()
-        graph.add_node("loner", data={"communities": {}})
-        graph_data["nodes"].append({"id": "loner"})
-        apply_gould_fernandez(graph_data, graph, "organization")
-        loner = next(n for n in graph_data["nodes"] if n["id"] == "loner")
-        self.assertIsNone(loner["brokerage_total"])
-        self.assertIsNone(loner["brokerage_role"])
-        self.assertIsNone(loner["brokerage_coordinator"])
-
-
-# ---------------------------------------------------------------------------
 # measures/_centrality.py — apply_burt_constraint
 # ---------------------------------------------------------------------------
 
@@ -2010,124 +1903,6 @@ class ApplyBurtConstraintTests(TestCase):
         node_map = {n["id"]: n for n in self.graph_data["nodes"]}
         self.assertIsNotNone(node_map["1"]["burt_constraint"])
         self.assertIsInstance(node_map["1"]["burt_constraint"], float)
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_community_bridging (betweenness × community participation)
-# ---------------------------------------------------------------------------
-
-
-class ApplyCommunityBridgingTests(TestCase):
-    def setUp(self) -> None:
-        # Two triangles linked by a bridge node "bridge"
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from(
-            [
-                ("a", "b"),
-                ("b", "a"),
-                ("b", "bridge"),
-                ("bridge", "c"),
-                ("c", "d"),
-                ("d", "c"),
-            ]
-        )
-        for node_id, comm in [("a", "X"), ("b", "X"), ("bridge", "Y"), ("c", "Y"), ("d", "Y")]:
-            self.graph.nodes[node_id]["data"] = {"communities": {"leiden": comm}}
-        self.graph_data: dict = {
-            "nodes": [{"id": n} for n in ["a", "b", "bridge", "c", "d"]],
-            "edges": [],
-        }
-
-    def test_adds_community_bridging_key(self) -> None:
-        apply_community_bridging(self.graph_data, self.graph, "leiden")
-        for node in self.graph_data["nodes"]:
-            self.assertIn("community_bridging", node)
-
-    def test_bridge_node_scores_higher_than_within_community_node(self) -> None:
-        apply_community_bridging(self.graph_data, self.graph, "leiden")
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        # "bridge" connects both communities; "a" connects only within X
-        self.assertGreater(node_map["bridge"]["community_bridging"], node_map["a"]["community_bridging"])
-
-
-# ---------------------------------------------------------------------------
-# measures/_centrality.py — apply_bridging_centrality (Hwang et al. 2008)
-# ---------------------------------------------------------------------------
-
-
-class BridgingCoefficientTests(TestCase):
-    def _two_stars(self) -> nx.DiGraph:
-        # Two hubs, each with three leaves, joined by a single low-degree "bridge".
-        # Mutual edges → directed betweenness mirrors the undirected case.
-        g = nx.DiGraph()
-        pairs = [
-            ("hub1", "L1a"),
-            ("hub1", "L1b"),
-            ("hub1", "L1c"),
-            ("hub2", "L2a"),
-            ("hub2", "L2b"),
-            ("hub2", "L2c"),
-            ("hub1", "bridge"),
-            ("hub2", "bridge"),
-        ]
-        for u, v in pairs:
-            g.add_edge(u, v)
-            g.add_edge(v, u)
-        return g
-
-    def test_coefficient_matches_hwang_formula(self) -> None:
-        coeff = compute_bridging_coefficient(self._two_stars())
-        # bridge: (1/2) / (1/deg(hub1) + 1/deg(hub2)) = 0.5 / (1/4 + 1/4) = 1.0
-        self.assertAlmostEqual(coeff["bridge"], 1.0)
-        # a leaf: (1/1) / (1/deg(hub)) = 1 / (1/4) = 4.0 (high coefficient, but betweenness 0)
-        self.assertAlmostEqual(coeff["L1a"], 4.0)
-        # a hub: (1/4) / (3·(1/1) + 1/deg(bridge)) = 0.25 / 3.5 ≈ 0.0714
-        self.assertAlmostEqual(coeff["hub1"], 0.25 / 3.5)
-
-    def test_isolated_node_coefficient_is_zero(self) -> None:
-        g = nx.DiGraph()
-        g.add_node("lonely")
-        self.assertEqual(compute_bridging_coefficient(g)["lonely"], 0.0)
-
-
-class ApplyBridgingCentralityTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = BridgingCoefficientTests()._two_stars()
-        self.graph_data: dict = {"nodes": [{"id": n} for n in self.graph.nodes()], "edges": []}
-
-    def test_adds_bridging_centrality_key(self) -> None:
-        labels = apply_bridging_centrality(self.graph_data, self.graph)
-        self.assertEqual(labels, [("bridging_centrality", "Bridging Centrality")])
-        for node in self.graph_data["nodes"]:
-            self.assertIn("bridging_centrality", node)
-
-    def test_bridge_outranks_hub_despite_lower_betweenness(self) -> None:
-        # The whole point of Hwang's measure: a hub can have *higher* betweenness than the
-        # bridge, yet the bridge — the narrow waist between high-degree regions — must score
-        # higher on bridging centrality once the bridging coefficient is folded in.
-        betweenness = compute_betweenness(self.graph)
-        self.assertGreater(betweenness["hub1"], betweenness["bridge"])  # plain betweenness favours the hub
-        apply_bridging_centrality(self.graph_data, self.graph)
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertGreater(node_map["bridge"]["bridging_centrality"], node_map["hub1"]["bridging_centrality"])
-
-    def test_leaf_scores_zero(self) -> None:
-        # Leaves carry no shortest paths → betweenness 0 → bridging centrality 0,
-        # even though their bridging *coefficient* is the highest in the graph.
-        apply_bridging_centrality(self.graph_data, self.graph)
-        node_map = {n["id"]: n for n in self.graph_data["nodes"]}
-        self.assertEqual(node_map["L1a"]["bridging_centrality"], 0.0)
-
-    def test_shared_betweenness_matches_internal(self) -> None:
-        # Passing a precomputed betweenness must yield identical scores to letting the
-        # function compute its own (the orchestrator shares one betweenness across measures).
-        shared = compute_betweenness(self.graph)
-        gd_shared: dict = {"nodes": [{"id": n} for n in self.graph.nodes()], "edges": []}
-        apply_bridging_centrality(gd_shared, self.graph, betweenness=shared)
-        apply_bridging_centrality(self.graph_data, self.graph)
-        a = {n["id"]: n["bridging_centrality"] for n in gd_shared["nodes"]}
-        b = {n["id"]: n["bridging_centrality"] for n in self.graph_data["nodes"]}
-        self.assertEqual(a, b)
 
 
 # ---------------------------------------------------------------------------
@@ -2170,51 +1945,6 @@ class ApplyLocalClusteringTests(TestCase):
         labels = apply_local_clustering(self.graph_data, self.graph)
         keys = [k for k, _ in labels]
         self.assertIn("local_clustering", keys)
-
-
-# ---------------------------------------------------------------------------
-# measures/_spreading.py — apply_spreading_efficiency
-# ---------------------------------------------------------------------------
-
-
-class ApplySpreadingEfficiencyTests(TestCase):
-    def setUp(self) -> None:
-        self.graph = nx.DiGraph()
-        self.graph.add_edges_from(
-            [("1", "2", {"weight": 1.0}), ("2", "3", {"weight": 1.0}), ("1", "3", {"weight": 1.0})]
-        )
-        self.graph_data: dict = {"nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}], "edges": []}
-
-    def test_adds_spreading_efficiency_key(self) -> None:
-        apply_spreading_efficiency(self.graph_data, self.graph, runs=10)
-        for node in self.graph_data["nodes"]:
-            self.assertIn("spreading_efficiency", node)
-
-    def test_single_node_graph_gets_zero(self) -> None:
-        graph = nx.DiGraph()
-        graph.add_node("solo")
-        graph_data: dict = {"nodes": [{"id": "solo"}], "edges": []}
-        apply_spreading_efficiency(graph_data, graph, runs=5)
-        self.assertEqual(graph_data["nodes"][0]["spreading_efficiency"], 0.0)
-
-    def test_values_in_unit_interval(self) -> None:
-        apply_spreading_efficiency(self.graph_data, self.graph, runs=10)
-        for node in self.graph_data["nodes"]:
-            self.assertGreaterEqual(node["spreading_efficiency"], 0.0)
-            self.assertLessEqual(node["spreading_efficiency"], 1.0)
-
-    def test_seeds_propagate_along_content_flow_not_citation(self) -> None:
-        """The graph is in citation orientation (amplifier→source). SIR must
-        reverse internally so seeding a source infects its downstream amplifier,
-        and seeding the amplifier — which has no upstream sources here — does
-        not reach the source."""
-        graph = nx.DiGraph()
-        graph.add_edge("amp", "src", weight=1.0)  # amp forwards content from src
-        graph_data: dict = {"nodes": [{"id": "amp"}, {"id": "src"}], "edges": []}
-        apply_spreading_efficiency(graph_data, graph, runs=50)
-        node_map = {n["id"]: n for n in graph_data["nodes"]}
-        self.assertEqual(node_map["src"]["spreading_efficiency"], 1.0)
-        self.assertEqual(node_map["amp"]["spreading_efficiency"], 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -2826,13 +2556,12 @@ class RemovalOrderTests(TestCase):
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        # Static includes random + degree (2) + prestige (1) + reach (1) + brokerage (2) + spreading (1) = 8
-        self.assertEqual(len(STATIC_STRATEGIES), 8)
-        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 4)
-        self.assertEqual(len(ALL_STRATEGIES), 12)
-        # The default set is the original 5 (preserves backwards-compatible behaviour)
-        self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
+        # Static includes random + degree (2) + prestige (1) = 4
+        self.assertEqual(len(STATIC_STRATEGIES), 4)
+        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 3)
+        self.assertEqual(len(ALL_STRATEGIES), 7)
+        self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank"])
 
     def test_random_returns_permutation_of_nodes(self) -> None:
         from network.robustness import removal_order
@@ -2914,31 +2643,12 @@ class RemovalOrderTests(TestCase):
         order = removal_order(g, "pagerank_dyn")
         self.assertEqual(sorted(order), sorted(g.nodes()))
 
-    def test_betweenness_picks_center_first_on_bidirectional_star(self) -> None:
-        # Bidirectional star: every leaf-to-leaf shortest path passes through the centre.
-        from network.robustness import removal_order
-
-        g = nx.DiGraph()
-        for leaf in ("L1", "L2", "L3", "L4"):
-            g.add_edge("C", leaf, weight=1.0)
-            g.add_edge(leaf, "C", weight=1.0)
-        order = removal_order(g, "betweenness")
-        self.assertEqual(order[0], "C")
-
-    def test_betweenness_dyn_returns_permutation_of_nodes(self) -> None:
-        from network.robustness import removal_order
-
-        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
-        order = removal_order(g, "betweenness_dyn")
-        self.assertEqual(sorted(order), sorted(g.nodes()))
-
     def test_empty_graph_returns_empty_order(self) -> None:
         from network.robustness import removal_order
 
         self.assertEqual(removal_order(nx.DiGraph(), "in_strength"), [])
         self.assertEqual(removal_order(nx.DiGraph(), "random", rng=np.random.default_rng(0)), [])
         self.assertEqual(removal_order(nx.DiGraph(), "pagerank_dyn"), [])
-        self.assertEqual(removal_order(nx.DiGraph(), "betweenness_dyn"), [])
 
     def test_invalid_strategy_raises(self) -> None:
         from network.robustness import removal_order
@@ -2954,69 +2664,20 @@ class RemovalOrderTests(TestCase):
         g = nx.DiGraph()
         g.add_edges_from([("A", "B"), ("B", "C"), ("C", "A")])
         before_nodes, before_edges = set(g.nodes()), set(g.edges())
-        for strat in ("in_strength", "pagerank", "betweenness", "pagerank_dyn", "betweenness_dyn"):
+        for strat in ("in_strength", "pagerank", "pagerank_dyn"):
             removal_order(g, strat)
         self.assertEqual((set(g.nodes()), set(g.edges())), (before_nodes, before_edges))
 
-    def test_new_static_scorers_return_permutations(self) -> None:
-        # Every new graph-based static scorer should produce a permutation of the node set.
+    def test_dynamic_scorers_return_permutations(self) -> None:
         from network.robustness import removal_order
 
-        g = nx.gnp_random_graph(15, 0.25, seed=42, directed=True)
+        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
         for u, v in g.edges():
             g.edges[u, v]["weight"] = 1.0
-        for strat in (
-            "harmonic",
-            "spreading",
-        ):
+        for strat in ("in_strength_dyn", "out_strength_dyn", "pagerank_dyn"):
             with self.subTest(strategy=strat):
                 order = removal_order(g, strat)
                 self.assertEqual(sorted(order), sorted(g.nodes()))
-
-    def test_new_dynamic_scorers_return_permutations(self) -> None:
-        from network.robustness import removal_order
-
-        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
-        for u, v in g.edges():
-            g.edges[u, v]["weight"] = 1.0
-        for strat in ("out_strength_dyn",):
-            with self.subTest(strategy=strat):
-                order = removal_order(g, strat)
-                self.assertEqual(sorted(order), sorted(g.nodes()))
-
-    def test_bridging_with_explicit_partition_basis(self) -> None:
-        from network.robustness import removal_order
-
-        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
-        for u, v in g.edges():
-            g.edges[u, v]["weight"] = 1.0
-        partition = {n: (n % 2) for n in g.nodes()}
-        order = removal_order(g, "bridging(leiden)", partitions={"leiden": partition})
-        self.assertEqual(sorted(order), sorted(g.nodes()))
-
-    def test_bridging_bare_defaults_to_leiden_directed(self) -> None:
-        from network.robustness import removal_order
-
-        g = nx.gnp_random_graph(10, 0.3, seed=42, directed=True)
-        for u, v in g.edges():
-            g.edges[u, v]["weight"] = 1.0
-        partition = {n: (n % 3) for n in g.nodes()}
-        # Bare "bridging" must look up "leiden_directed" — not "leiden".
-        order = removal_order(g, "bridging", partitions={"leiden_directed": partition})
-        self.assertEqual(sorted(order), sorted(g.nodes()))
-        # Sanity: with only "leiden" available, bare "bridging" must error.
-        with self.assertRaises(ValueError):
-            removal_order(g, "bridging", partitions={"leiden": partition})
-
-    def test_bridging_missing_partition_raises(self) -> None:
-        from network.robustness import removal_order
-
-        g = nx.DiGraph()
-        g.add_edge("A", "B", weight=1.0)
-        with self.assertRaises(ValueError):
-            removal_order(g, "bridging")  # no partitions kwarg
-        with self.assertRaises(ValueError):
-            removal_order(g, "bridging(kcore)", partitions={"leiden": {"A": 0, "B": 0}})
 
     def test_strategy_names_are_case_insensitive(self) -> None:
         from network.robustness import removal_order
@@ -3024,7 +2685,7 @@ class RemovalOrderTests(TestCase):
         g = nx.DiGraph()
         g.add_edge("A", "B", weight=1.0)
         self.assertEqual(removal_order(g, "PageRank"), removal_order(g, "pagerank"))
-        self.assertEqual(removal_order(g, "BETWEENNESS"), removal_order(g, "betweenness"))
+        self.assertEqual(removal_order(g, "IN_STRENGTH"), removal_order(g, "in_strength"))
 
 
 class RewireStrengthPreservingTests(TestCase):
@@ -3364,11 +3025,10 @@ class RobustnessRunnerTests(TestCase):
         with self.assertRaises(ValueError):
             RobustnessConfig(strategies=["no-such-strategy"])
 
-    def test_config_accepts_bridging_with_partition(self) -> None:
+    def test_config_accepts_surviving_strategies(self) -> None:
         from network.robustness import RobustnessConfig
 
-        # parse_strategy treats bridging(LEIDEN) as a valid token
-        RobustnessConfig(strategies=["pagerank", "bridging(leiden)"])
+        RobustnessConfig(strategies=["pagerank", "in_strength_dyn"])
 
     # -- payload shape --------------------------------------------------------
 
@@ -3387,7 +3047,7 @@ class RobustnessRunnerTests(TestCase):
     def test_payload_strategy_keys_match_explicit_selection(self) -> None:
         from network.robustness import run_robustness
 
-        chosen = ["pagerank", "betweenness_dyn", "harmonic", "spreading"]
+        chosen = ["pagerank", "in_strength_dyn", "out_strength", "pagerank_dyn"]
         out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(strategies=chosen))
         self.assertEqual(set(out["strategies"].keys()), set(chosen))
 
@@ -3488,30 +3148,6 @@ class RobustnessRunnerTests(TestCase):
         # Each per-strategy entry is the modular_robustness_curves dict.
         for payload in out["modular"]["hand"].values():
             self.assertEqual(set(payload.keys()), {"intra", "inter", "ratio"})
-
-    def test_bridging_needs_named_partition(self) -> None:
-        from network.robustness import run_robustness
-
-        g = self._toy_graph(n=10)
-        # bridging(kcore) requires "kcore" in partitions; we only supply "leiden".
-        partition = {n: (n % 2) for n in g.nodes()}
-        with self.assertRaises(ValueError):
-            run_robustness(g, partitions={"leiden": partition}, config=self._fast_cfg(strategies=["bridging(kcore)"]))
-
-    def test_bridging_runs_with_matching_partition(self) -> None:
-        from network.robustness import run_robustness
-
-        g = self._toy_graph(n=10)
-        partition = {n: (n % 2) for n in g.nodes()}
-        # Bare "bridging" defaults to leiden_directed.
-        out = run_robustness(
-            g, partitions={"leiden_directed": partition}, config=self._fast_cfg(strategies=["bridging"])
-        )
-        self.assertIn("bridging(leiden_directed)", out["strategies"])
-        self.assertEqual(
-            out["strategies"]["bridging(leiden_directed)"]["label"],
-            "Community bridging (leiden_directed)",
-        )
 
     # -- reproducibility ------------------------------------------------------
 
@@ -3847,8 +3483,11 @@ class ComputeInterestStructuralWindowTests(TestCase):
             community_strategy="LEIDEN_DIRECTED",
             window_days=0,
             window_filter={
-                "date__gte": datetime.date(2024, 1, 1),
-                "date__lte": datetime.date(2024, 12, 31),
+                # Production shape: the ``__date`` transform (see
+                # _date_window_filter). Compares calendar dates, so a bare date
+                # is warning-free under USE_TZ — unlike a plain ``date__gte``.
+                "date__date__gte": datetime.date(2024, 1, 1),
+                "date__date__lte": datetime.date(2024, 12, 31),
             },
         )
         self.assertIn("window 2024-01-01..2024-12-31", windowed["structural_scope"])
@@ -3882,6 +3521,39 @@ class ComputeInterestStructuralWindowTests(TestCase):
         # Override without window labels the hot layer as a custom override.
         self.assertEqual(payload["hot_layer_scope"], "overridden")
         self.assertEqual(payload["forwarder_window_policy"], "forwarder-date")
+
+
+class ScopeLabelTests(TestCase):
+    """_scope_label renders the export window from either ORM filter-key shape."""
+
+    def _label(self, window_filter: Any) -> str:
+        from network.interest_structural import _scope_label
+
+        return _scope_label(window_filter)
+
+    def test_none_and_empty_are_all_time(self) -> None:
+        self.assertEqual(self._label(None), "all-time")
+        self.assertEqual(self._label({}), "all-time")
+
+    def test_production_date_transform_keys(self) -> None:
+        # The shape _date_window_filter actually builds.
+        label = self._label(
+            {"date__date__gte": datetime.date(2024, 1, 1), "date__date__lte": datetime.date(2024, 12, 31)}
+        )
+        self.assertEqual(label, "window 2024-01-01..2024-12-31")
+
+    def test_plain_date_keys_fallback(self) -> None:
+        label = self._label(
+            {"date__gte": datetime.datetime(2024, 3, 1, tzinfo=datetime.UTC), "date__lt": datetime.date(2024, 4, 1)}
+        )
+        self.assertEqual(label, "window 2024-03-01..2024-04-01")
+
+    def test_open_ended_bounds(self) -> None:
+        self.assertEqual(self._label({"date__date__gte": datetime.date(2024, 1, 1)}), "window 2024-01-01..…")
+        self.assertEqual(self._label({"date__date__lte": datetime.date(2024, 12, 31)}), "window …..2024-12-31")
+
+    def test_filter_without_date_keys_is_generic_windowed(self) -> None:
+        self.assertEqual(self._label({"channel_id__in": [1, 2]}), "windowed")
 
 
 class ResolveWindowOrganizationTests(TestCase):
@@ -3958,27 +3630,25 @@ class ChannelCutoffQBoundaryTests(TestCase):
 
 class MeasureParserTests(TestCase):
     def test_plain_and_parameterised_tokens(self) -> None:
-        insts = parse_measures(["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=leiden)"])
-        self.assertEqual([i.token() for i in insts], ["PAGERANK", "SPREADING(runs=2000)", "BRIDGING(basis=LEIDEN)"])
-        self.assertEqual([i.suffix() for i in insts], ["", "_runs_2000", "_basis_leiden"])
+        insts = parse_measures(["PAGERANK", "DIFFUSIONLAG(window=60)", "MODULEROLE(basis=leiden)"])
+        self.assertEqual(
+            [i.token() for i in insts], ["PAGERANK", "DIFFUSIONLAG(window=60)", "MODULEROLE(basis=LEIDEN)"]
+        )
+        self.assertEqual([i.suffix() for i in insts], ["", "_window_60", "_basis_leiden"])
 
     def test_all_expands_with_defaults(self) -> None:
         tokens = {i.measure for i in parse_measures(["ALL"])}
         self.assertIn("PAGERANK", tokens)
-        self.assertIn("BRIDGING", tokens)
-        self.assertIn("BROKERAGEROLES", tokens)
+        self.assertIn("MODULEROLE", tokens)
+        self.assertIn("DIFFUSIONLAG", tokens)
 
     def test_same_measure_twice_with_different_params(self) -> None:
-        insts = parse_measures(["SPREADING(runs=200)", "SPREADING(runs=2000)"])
-        self.assertEqual([i.suffix() for i in insts], ["_runs_200", "_runs_2000"])
+        insts = parse_measures(["DIFFUSIONLAG(window=30)", "DIFFUSIONLAG(window=60)"])
+        self.assertEqual([i.suffix() for i in insts], ["_window_30", "_window_60"])
 
     def test_default_override_fills_bare_token(self) -> None:
-        (inst,) = parse_measures(["SPREADING"], defaults={"SPREADING": {"runs": 500}})
-        self.assertEqual(inst.token(), "SPREADING(runs=500)")
-
-    def test_legacy_positional_bridging(self) -> None:
-        (inst,) = parse_measures(["BRIDGING(LEIDEN_DIRECTED)"])
-        self.assertEqual(inst.token(), "BRIDGING(basis=LEIDEN_DIRECTED)")
+        (inst,) = parse_measures(["DIFFUSIONLAG"], defaults={"DIFFUSIONLAG": {"window": 45}})
+        self.assertEqual(inst.token(), "DIFFUSIONLAG(window=45)")
 
     def test_rejects_duplicate_drop_once(self) -> None:
         with self.assertRaisesRegex(ValueError, "more than once"):
@@ -3986,38 +3656,33 @@ class MeasureParserTests(TestCase):
 
     def test_rejects_identical_parameterised(self) -> None:
         with self.assertRaisesRegex(ValueError, "identical parameters"):
-            parse_measures(["SPREADING(runs=200)", "SPREADING(runs=200)"])
+            parse_measures(["DIFFUSIONLAG(window=30)", "DIFFUSIONLAG(window=30)"])
 
     def test_rejects_params_on_drop_once(self) -> None:
         with self.assertRaisesRegex(ValueError, "takes no parameters"):
-            parse_measures(["PAGERANK(runs=5)"])
+            parse_measures(["PAGERANK(window=5)"])
 
     def test_rejects_out_of_range_and_unknown_param(self) -> None:
         with self.assertRaisesRegex(ValueError, "below the minimum"):
-            parse_measures(["SPREADING(runs=0)"])
+            parse_measures(["DIFFUSIONLAG(window=-1)"])
         with self.assertRaisesRegex(ValueError, "has no parameter"):
-            parse_measures(["SPREADING(foo=1)"])
+            parse_measures(["DIFFUSIONLAG(foo=1)"])
 
     def test_rejects_unknown_measure_and_bad_enum(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown measure"):
             parse_measures(["NOTAMEASURE"])
-        with self.assertRaisesRegex(ValueError, "not a valid community strategy"):
-            parse_measures(["BRIDGING(basis=NOPE)"])
+        with self.assertRaisesRegex(ValueError, "not a valid choice"):
+            parse_measures(["MODULEROLE(basis=NOPE)"])
 
     def test_canonical_measure_key(self) -> None:
-        self.assertEqual(canonical_measure_key("spreading_efficiency_runs_2000"), "spreading_efficiency")
-        self.assertEqual(canonical_measure_key("community_bridging_basis_leiden_directed"), "community_bridging")
-        self.assertEqual(canonical_measure_key("brokerage_total_basis_organization"), "brokerage_total")
+        self.assertEqual(canonical_measure_key("within_module_z_basis_leiden_directed"), "within_module_z")
+        self.assertEqual(canonical_measure_key("diffusion_lag_window_60"), "diffusion_lag")
         self.assertEqual(canonical_measure_key("pagerank"), "pagerank")  # non-parameterised unchanged
 
     def test_role_companions(self) -> None:
         mod = role_companions("within_module_z_basis_leiden")
         self.assertEqual(mod["role_key"], "module_role_basis_leiden")
         self.assertEqual(mod["count_keys"], [])
-        brk = role_companions("brokerage_total_basis_organization")
-        self.assertEqual(brk["role_key"], "brokerage_role_basis_organization")
-        self.assertIn("brokerage_coordinator_basis_organization", brk["count_keys"])
-        self.assertEqual(len(brk["count_keys"]), 5)
         self.assertIsNone(role_companions("pagerank"))
 
 
@@ -4056,15 +3721,9 @@ class MeasureComputeHelpersTests(TestCase):
         from network.management.commands.structural_analysis import _resolve_community_basis
 
         (explicit,) = parse_measures(["MODULEROLE(basis=LEIDEN)"])
-        self.assertEqual(_resolve_community_basis("MODULEROLE", explicit, {"leiden", "organization"}), "leiden")
+        self.assertEqual(_resolve_community_basis(explicit, ["leiden", "organization"]), "leiden")
         # Explicit basis that was not computed → None (skip).
-        self.assertIsNone(_resolve_community_basis("MODULEROLE", explicit, {"organization"}))
-        # Auto (blank) brokerage prefers organization; module role prefers leiden_directed.
-        (auto_brk,) = parse_measures(["BROKERAGEROLES"])
-        self.assertEqual(
-            _resolve_community_basis("BROKERAGEROLES", auto_brk, {"organization", "leiden"}), "organization"
-        )
+        self.assertIsNone(_resolve_community_basis(explicit, ["organization"]))
+        # Auto (blank) module role prefers leiden_directed.
         (auto_mod,) = parse_measures(["MODULEROLE"])
-        self.assertEqual(
-            _resolve_community_basis("MODULEROLE", auto_mod, {"leiden_directed", "leiden"}), "leiden_directed"
-        )
+        self.assertEqual(_resolve_community_basis(auto_mod, ["leiden_directed", "leiden"]), "leiden_directed")
