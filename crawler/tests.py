@@ -1623,6 +1623,21 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
         self.assertIsNone(channel)
         self.assertIsNone(tc)
 
+    def test_resolving_real_channel_clears_stale_user_account_flag(self) -> None:
+        # A row mislabelled is_user_account/is_lost is self-healed the moment its id
+        # resolves to a real Channel entity again.
+        make_channel(telegram_id=8, username="healme", is_user_account=True, is_lost=True)
+        self.api_client.client.get_entity.return_value = _make_telegram_channel(telegram_id=8, username="healme")
+
+        channel, tc = self.crawler.get_basic_channel(8)
+
+        self.assertIsNotNone(channel)
+        self.assertFalse(channel.is_user_account)
+        self.assertFalse(channel.is_lost)
+        refreshed = Channel.objects.get(telegram_id=8)
+        self.assertFalse(refreshed.is_user_account)
+        self.assertFalse(refreshed.is_lost)
+
 
 # ---------------------------------------------------------------------------
 # ChannelCrawler — resolve_channel_or_classify (recycled-handle guard)
@@ -1677,6 +1692,49 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
         self.assertEqual(status, "ok")
         self.assertIsNotNone(channel)
         self.assertEqual(channel.telegram_id, 300)
+
+    def test_recycled_handle_resolving_to_user_marks_original_lost(self) -> None:
+        # An in-target channel (telegram_id=400, @handle) is gone; its numeric lookup
+        # fails and @handle has since been taken over by a USER account. The original is
+        # the real identity and is simply lost — it must NOT be stamped is_user_account.
+        from telethon.tl.types import User
+
+        original = make_channel(telegram_id=400, username="handle", organization=self.org, megagroup=True)
+        user_entity = User(id=999)
+
+        def fake_get_entity(seed):
+            if seed == "handle":
+                return user_entity
+            raise ValueError("no cached entity")
+
+        self.api_client.client.get_entity.side_effect = fake_get_entity
+        channel, tg_ch, status = self.crawler.resolve_channel_or_classify(400)
+
+        self.assertEqual(status, "lost")
+        self.assertIsNone(channel)
+        original.refresh_from_db()
+        self.assertFalse(original.is_user_account)
+
+    def test_user_verdict_with_channel_evidence_is_treated_as_lost(self) -> None:
+        # The seed itself resolves to a User, but a known megagroup exists under that id
+        # (recycled id / entity-cache confusion). Keep the real channel: status "lost".
+        from telethon.tl.types import User
+
+        make_channel(telegram_id=600, organization=self.org, megagroup=True)
+        self.api_client.client.get_entity.return_value = User(id=600)
+
+        channel, tg_ch, status = self.crawler.resolve_channel_or_classify(600)
+        self.assertEqual(status, "lost")
+        self.assertIsNone(channel)
+
+    def test_user_seed_without_channel_evidence_is_user_account(self) -> None:
+        # No channel was ever known under this id → a genuine user account.
+        from telethon.tl.types import User
+
+        self.api_client.client.get_entity.return_value = User(id=700)
+        channel, tg_ch, status = self.crawler.resolve_channel_or_classify(700)
+        self.assertEqual(status, "user_account")
+        self.assertIsNone(channel)
 
 
 # ---------------------------------------------------------------------------
@@ -1755,6 +1813,15 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.channel.telegram_location = "existing location"
         self.crawler.set_more_channel_details(self.channel, tc)
         self.assertEqual(self.channel.telegram_location, "New Street, 1")
+
+    def test_user_entity_does_not_flag_account(self) -> None:
+        # channel was built from a real Channel entity; a User here is a recycled-handle
+        # mix-up and must not mislabel the row (which would drop it from crawls).
+        from telethon.tl.types import User
+
+        self.crawler.set_more_channel_details(self.channel, User(id=123))
+        self.channel.refresh_from_db()
+        self.assertFalse(self.channel.is_user_account)
 
 
 # ---------------------------------------------------------------------------
