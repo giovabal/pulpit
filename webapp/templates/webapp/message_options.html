@@ -74,6 +74,16 @@
       <div class="msg-options-divider"></div>
 
       <div class="msg-options-section">
+        <div class="msg-options-label">Pinned</div>
+        <label class="msg-options-item">
+          <input type="checkbox" name="pinned" value="1" class="msg-opt-input"
+                 {% if pinned %}checked{% endif %}> Pinned only (current or past)
+        </label>
+      </div>
+
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
         <div class="msg-options-label">Lost messages</div>
         <label class="msg-options-item">
           <input type="radio" name="lost" value="exclude" class="msg-opt-input"

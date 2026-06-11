@@ -998,6 +998,88 @@ class MessageAlbumTests(TestCase):
         self.assertFalse(hasattr(self.standalone, "_album_cache"))
 
 
+class PinnedMessageFilterTests(TestCase):
+    """``?pinned=1`` keeps only messages that are or have been pinned."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, organization=self.org)
+        self.pinned = Message.objects.create(telegram_id=1, channel=self.channel, pinned=True)
+        self.was_pinned = Message.objects.create(
+            telegram_id=2, channel=self.channel, pinned=False, has_been_pinned=True
+        )
+        self.plain = Message.objects.create(telegram_id=3, channel=self.channel)
+
+    def _visible(self, query: str) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        return set(_apply_message_options(qs, QueryDict(query)).values_list("id", flat=True))
+
+    def test_pinned_only_keeps_current_and_past_pins(self) -> None:
+        self.assertEqual(self._visible("pinned=1"), {self.pinned.id, self.was_pinned.id})
+
+    def test_no_param_keeps_everything(self) -> None:
+        self.assertEqual(self._visible(""), {self.pinned.id, self.was_pinned.id, self.plain.id})
+
+    def test_pinned_marks_options_active_and_survives_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict("pinned=1"))
+        self.assertTrue(ctx["pinned"])
+        self.assertTrue(ctx["options_active"])
+        # original_query feeds the pagination links — the filter must persist.
+        self.assertIn("pinned=1", ctx["original_query"])
+        self.assertFalse(_message_options_context(QueryDict(""))["options_active"])
+
+
+class ChannelListViewTests(TestCase):
+    def test_renders_type_filter_and_row_types(self) -> None:
+        org = Organization.objects.create(name="Org", is_in_target=True)
+        make_channel(telegram_id=1, organization=org, title="Broadcast")
+        # A megagroup is outside DEFAULT_CHANNEL_TYPES, so it renders in the
+        # "Excluded from analysis" section — with its data-type all the same.
+        make_channel(telegram_id=2, organization=org, title="Super", megagroup=True)
+        response = self.client.get(reverse("channel-list"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('class="channel-type-box"', content)
+        self.assertIn('data-type="CHANNEL"', content)
+        self.assertIn('data-type="GROUP"', content)
+
+
+class ChannelTypeKeyTests(TestCase):
+    """``channel_type_key`` buckets exactly like ``channel_type_filter``."""
+
+    def test_buckets(self) -> None:
+        cases = [
+            (Channel(telegram_id=1), "CHANNEL"),  # broadcast default
+            (Channel(telegram_id=2, broadcast=False), "CHANNEL"),  # unknown counts as CHANNEL
+            (Channel(telegram_id=3, megagroup=True), "GROUP"),
+            (Channel(telegram_id=4, gigagroup=True), "GROUP"),
+            (Channel(telegram_id=5, is_user_account=True), "USER"),
+        ]
+        for channel, expected in cases:
+            self.assertEqual(channel.channel_type_key, expected)
+
+    def test_agrees_with_channel_type_filter(self) -> None:
+        from webapp.utils.channel_types import channel_type_filter
+
+        make_channel(telegram_id=1)
+        make_channel(telegram_id=2, broadcast=False)
+        make_channel(telegram_id=3, megagroup=True)
+        make_channel(telegram_id=4, gigagroup=True)
+        make_channel(telegram_id=5, is_user_account=True)
+        for key in ("CHANNEL", "GROUP", "USER"):
+            by_filter = set(Channel.objects.filter(channel_type_filter([key])).values_list("pk", flat=True))
+            by_property = {c.pk for c in Channel.objects.all() if c.channel_type_key == key}
+            self.assertEqual(by_filter, by_property, key)
+
+
 class AlbumMissingMediaTests(TestCase):
     """The gallery must show a placeholder per sibling whose media never
     downloaded — otherwise an album of 1 photo + 2 undownloaded videos

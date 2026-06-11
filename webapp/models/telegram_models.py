@@ -126,6 +126,18 @@ class Channel(TelegramBaseModel):
         return "unknown"
 
     @property
+    def channel_type_key(self) -> str:
+        """Coarse CHANNEL/GROUP/USER bucket — the analysis taxonomy of
+        ``webapp.utils.channel_types.channel_type_filter`` (``--channel-types``);
+        keep the two mappings in sync. Unknowns (all flags false) count as
+        CHANNEL, matching the filter."""
+        if self.is_user_account:
+            return "USER"
+        if self.megagroup or self.gigagroup:
+            return "GROUP"
+        return "CHANNEL"
+
+    @property
     def profile_picture(self) -> "ProfilePicture | None":
         if hasattr(self, "_prefetched_profile_pics"):
             pics = self._prefetched_profile_pics
