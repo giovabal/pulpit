@@ -1,6 +1,11 @@
 import { build_year_nav } from './year_nav.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
-import { strategy_label as _strat_label } from './labels.js';
+import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
+
+// Mirrors network.community.UNDIRECTED_BASIS_STRATEGIES — strategies optimised on the undirected
+// W+Wᵀ projection, whose modularity (and per-community contributions) community_stats.py computes
+// with the undirected null model rather than the directed Leicht & Newman one.
+var UNDIRECTED_BASIS_STRATEGIES = ['leiden', 'leiden_cpm', 'louvain', 'labelpropagation', 'kcore'];
 
 // ── Hungarian matching (column ordering for cross-tabs) ─────────────────────────
 function _hungarianMaxAssign(mat) {
@@ -139,9 +144,12 @@ function _render(d) {
             {key: "diameter",             label: "Diameter",                cls: "number", fmt: "int",   tip: "Longest shortest path in the largest weakly connected component (undirected)"},
         ];
         if (hasMod) {
+            var modTip = UNDIRECTED_BASIS_STRATEGIES.indexOf(canonical_strategy_key(strategyKey)) !== -1
+                ? "Community's contribution to network modularity (undirected Newman formula, computed on the symmetrised graph this strategy optimised)"
+                : "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)";
             COL_DEFS.push({
                 key: "modularity_contribution", label: "Mod. Contribution", cls: "number", fmt: "sig3",
-                tip: "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)",
+                tip: modTip,
             });
         }
 

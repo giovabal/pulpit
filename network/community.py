@@ -91,8 +91,8 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 minimum=0.0,
                 label="Resolution γ",
                 help="CPM resolution: a community is stable when its internal edge density exceeds γ. "
-                "Lower = fewer, larger communities (γ ≈ 0.01, the old 'coarse' preset); higher = more, "
-                "smaller communities (γ ≈ 0.05, the old 'fine' preset).",
+                "Lower = fewer, larger communities (γ ≈ 0.01); higher = more, "
+                "smaller communities (γ ≈ 0.05).",
             ),
         ),
         primary_keys=("leiden_cpm",),
