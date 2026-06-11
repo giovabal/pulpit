@@ -633,8 +633,8 @@ class Command(BaseCommand):
             metavar="γ",
             help=(
                 "Default CPM resolution γ for a bare LEIDEN_CPM token. Communities form when their "
-                "internal edge density exceeds γ. Reference points: γ ≈ 0.01 = fewer, larger communities "
-                "(the old 'coarse' preset); γ ≈ 0.05 = more, smaller communities (the old 'fine' preset). "
+                "internal edge density exceeds γ. Reference points: γ ≈ 0.01 = fewer, larger communities; "
+                "γ ≈ 0.05 = more, smaller communities. "
                 "Default: 0.05. Override per instance with LEIDEN_CPM(resolution=…) and list it more than "
                 "once for a multi-resolution scan."
             ),
