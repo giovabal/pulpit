@@ -99,7 +99,7 @@ The options panel is organized into three independent groups — each is its own
 
 | Option | When to use it |
 | :----- | :------------- |
-| **Get channels info** | On by default. Updates profile pictures, subscriber counts, about text, and other channel details. |
+| **Get channels info** | On by default. Updates profile pictures, subscriber counts, about text, and other channel details. A linked chat seen for the first time — a channel's discussion group, or a group's broadcast channel — is added to the database and inherits the parent's current attribution (same organization and period), so it enters analysis scope right away; its timeline can then be edited like any other channel's. |
 | **Mine about texts** | Scan channel descriptions for links to other Telegram channels and add any new ones to your database. |
 | **Fetch recommended channels** | Ask Telegram for its own channel suggestions and add them to the database. New channels are saved but not automatically crawled. |
 | **Retry lost & private** | Re-attempt channels previously marked as inaccessible. If a channel is now reachable its flag is cleared. |

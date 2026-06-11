@@ -15,6 +15,7 @@ from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import (
     Channel,
+    ChannelAttribution,
     Message,
     MessageReaction,
     MessageReply,
@@ -204,11 +205,11 @@ class ChannelCrawler:
             )
             if linked_tg is not None:
                 try:
-                    # Attribution is analyst-managed (time-bounded periods); a discovered linked
-                    # chat starts unattributed.
-                    Channel.from_telegram_object(linked_tg, force_update=False)
+                    linked_channel = Channel.from_telegram_object(linked_tg, force_update=False)
                 except DatabaseError as exc:
                     logger.warning("Could not create linked channel %s: %s", linked_chat_id, exc)
+                else:
+                    self._inherit_parent_attribution(channel, linked_channel)
         channel.available_min_id = getattr(full, "available_min_id", None) or None
         channel.slowmode_seconds = getattr(full, "slowmode_seconds", None) or None
         channel.admins_count = getattr(full, "admins_count", None) or None
@@ -250,6 +251,39 @@ class ChannelCrawler:
                 "migrated_from_chat_id",
             ]
         )
+
+    @staticmethod
+    def _inherit_parent_attribution(parent: Channel, linked_channel: Channel) -> None:
+        """Copy ``parent``'s current attribution onto its just-discovered linked chat.
+
+        A channel and its linked discussion group (or a group and its linked
+        broadcast channel) belong to the same owner, so the new row starts with
+        the parent's current organization over the same period instead of
+        unattributed. Runs only on first discovery (the caller guards on the
+        row not existing yet); afterwards the timeline is analyst-managed in
+        the /manage/ channel editor, like any other channel. Note an in-target
+        inherited attribution puts the linked chat into the crawl scope of
+        subsequent runs whose --channel-types cover it.
+        """
+        attribution = parent.current_attribution
+        if attribution is None:
+            return
+        try:
+            ChannelAttribution.objects.create(
+                channel=linked_channel,
+                organization=attribution.organization,
+                start=attribution.start,
+                end=attribution.end,
+            )
+        except DatabaseError as exc:
+            logger.warning("Could not copy the attribution to linked chat %s: %s", linked_channel, exc)
+        else:
+            logger.info(
+                "Linked chat %s inherited the attribution to %s from %s",
+                linked_channel,
+                attribution.organization,
+                parent,
+            )
 
     @staticmethod
     def _channel_evidence_exists(seed: int | str) -> bool:
