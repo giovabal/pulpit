@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import Any
 
-from django.db.models import Count, Max, Min, Q
+from django.db.models import Count, F, Max, Min, Q
 
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
@@ -112,8 +112,11 @@ def per_channel_forwards_received(
     end_date: datetime.date | None,
 ) -> dict[int, int]:
     """Return ``{channel_id: count_of_messages_in_other_in_target_channels_forwarding_from_it}``."""
+    # ~Q(channel=forwarded_from): re-forwarding one's own posts is not amplification
+    # by others — the graph drops self-citation edges for the same reason.
     fwd_q = (
         Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
+        & ~Q(channel_id=F("forwarded_from_id"))
         & make_date_q(start_date, end_date)
         & channel_cutoff_q()
     )
@@ -169,8 +172,11 @@ def apply_base_node_measures(
         if channel_entry is None:
             continue
         channel = channel_entry["channel"]
-        node["in_deg"] = graph.in_degree(node["id"], weight="weight_raw")
-        node["out_deg"] = graph.out_degree(node["id"], weight="weight_raw")
+        # float(): networkx returns int 0 for a node with no edges on that side and
+        # float otherwise; a mixed int/float column corrupts GEXF typing (declared
+        # from the first node serialized) and duplicates GraphML keys.
+        node["in_deg"] = float(graph.in_degree(node["id"], weight="weight_raw"))
+        node["out_deg"] = float(graph.out_degree(node["id"], weight="weight_raw"))
         node["fans"] = channel.participants_count
         node["messages_count"] = message_counts.get(channel.pk, 0)
         node["label"] = channel.title

@@ -185,6 +185,11 @@ class MediaHandler:
         for pp in ProfilePicture.objects.filter(channel=channel):
             if not pp.picture or not os.path.exists(pp.picture.path):
                 continue
+            if not os.path.basename(pp.picture.name).startswith(f"{channel.telegram_id}_{pp.telegram_id}."):
+                # Legacy channel-keyed path: every row shared one file, so the bytes on
+                # disk are the wrong photo for all but one row. Treat as stale so this
+                # pass re-downloads it into the per-photo path.
+                continue
             if not pp.mime_type:
                 continue
             if pp.mime_type.startswith("video/"):

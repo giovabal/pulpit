@@ -27,11 +27,16 @@ class ProfilePicture(TelegramBasePictureModel):
     def get_media_path(self, filename: str) -> str:
         extension = filename.split(".")[-1]
         channel_dir = self.channel.username or str(self.channel.telegram_id)
+        # The photo's own telegram_id keys the filename: a channel has *many*
+        # historical profile photos, and a channel-only key would make every row
+        # share one file (OverwriteStorage deletes on collision, so the photo
+        # downloaded last — the oldest, with Telegram's newest-first iteration —
+        # would silently win them all).
         return os.path.join(
             "channels",
             channel_dir,
             "profile",
-            f"{self.channel.telegram_id}.{extension}",
+            f"{self.channel.telegram_id}_{self.telegram_id}.{extension}",
         )
 
     @property

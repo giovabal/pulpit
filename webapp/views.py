@@ -8,8 +8,10 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
@@ -38,6 +40,29 @@ from .version_check import version_status
 def _in_target_attr_exists() -> Exists:
     """Exists(): the channel has at least one in-target attribution period (any time)."""
     return Exists(ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True))
+
+
+def _channel_message_stats() -> dict[str, Any]:
+    """Annotations for per-channel message count and date range on channel lists.
+
+    Matches what the channel detail page reports: alive messages only, restricted
+    to the channel's in-target periods when it has any (an unattributed or
+    to_inspect-only channel shows its full alive span). Counting the raw
+    ``message_set`` instead would include lost and out-of-period messages and
+    disagree with the detail page.
+    """
+    no_period = ~Exists(ChannelAttribution.objects.filter(channel=OuterRef("channel"), organization__is_in_target=True))
+    base = (
+        Message.objects.filter(channel=OuterRef("pk"), is_lost=False)
+        .filter(channel_cutoff_q() | no_period)
+        .order_by()
+        .values("channel")
+    )
+    return {
+        "messages_count": Coalesce(Subquery(base.annotate(c=Count("id")).values("c")[:1]), 0),
+        "first_message_date": Subquery(base.annotate(d=Min("date")).values("d")[:1]),
+        "last_message_date": Subquery(base.annotate(d=Max("date")).values("d")[:1]),
+    }
 
 
 # ---- message list options ------------------------------------------------
@@ -116,8 +141,15 @@ def _exclude_album_tails(qs: QuerySet) -> QuerySet:
     multi-item albums into a single visible card; the head's
     ``album_pictures`` / ``album_videos`` / etc. then expose the union of media
     across siblings.
+
+    The head is elected among the *visible* siblings — the sibling subquery
+    reuses ``qs`` itself, with the page's filters already applied. Electing over
+    all messages instead would hide the entire album whenever the absolute head
+    is filtered out (a lost head under the default ``lost=exclude``, a text
+    search matching only a non-head sibling's caption, a type filter matching
+    only the tails of a mixed photo+video album).
     """
-    has_earlier_sibling = Message.objects.filter(
+    has_earlier_sibling = qs.order_by().filter(
         channel_id=OuterRef("channel_id"),
         grouped_id=OuterRef("grouped_id"),
         telegram_id__lt=OuterRef("telegram_id"),
@@ -294,11 +326,7 @@ class ChannelListView(ListView):
         return (
             Channel.objects.in_target()
             .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
-            .annotate(
-                messages_count=Count("message_set"),
-                first_message_date=Min("message_set__date"),
-                last_message_date=Max("message_set__date"),
-            )
+            .annotate(**_channel_message_stats())
             .order_by("title")
         )
 
@@ -307,11 +335,7 @@ class ChannelListView(ListView):
         _status_qs = (
             Channel.objects.filter(_in_target_attr_exists())
             .prefetch_related(self._pic_prefetch, "attributions__organization")
-            .annotate(
-                messages_count=Count("message_set"),
-                first_message_date=Min("message_set__date"),
-                last_message_date=Max("message_set__date"),
-            )
+            .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["excluded_list"] = (
@@ -320,22 +344,14 @@ class ChannelListView(ListView):
             .exclude(is_lost=True)
             .exclude(is_private=True)
             .prefetch_related(self._pic_prefetch, "attributions__organization")
-            .annotate(
-                messages_count=Count("message_set"),
-                first_message_date=Min("message_set__date"),
-                last_message_date=Max("message_set__date"),
-            )
+            .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["to_inspect_list"] = (
             Channel.objects.filter(to_inspect=True)
             .exclude(_in_target_attr_exists())
             .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
-            .annotate(
-                messages_count=Count("message_set"),
-                first_message_date=Min("message_set__date"),
-                last_message_date=Max("message_set__date"),
-            )
+            .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
@@ -595,7 +611,12 @@ class ChannelDetailView(ListView):
         refs_through = Message.references.through.objects
         mentions_in_target_q = Q(channel__in=in_target_pks) & ~Q(channel=ch)
         mentions_out_of_target_q = ~Q(channel__in=in_target_pks) & ~Q(channel=ch)
-        mentions_sent_agg = refs_through.filter(message__channel=ch, message__is_lost=False).aggregate(
+        # Period-scoped like every other stat on this card (msg_qs above, mentions
+        # received below): a mention only counts while ch was in an in-target period.
+        mentions_sent_qs = refs_through.filter(message__channel=ch, message__is_lost=False)
+        if ch.in_target_periods.exists():
+            mentions_sent_qs = mentions_sent_qs.filter(channel_period_date_q(ch, "message__date"))
+        mentions_sent_agg = mentions_sent_qs.aggregate(
             in_target=Count("id", filter=mentions_in_target_q),
             in_target_channels=Count("channel", filter=mentions_in_target_q, distinct=True),
             out_of_target=Count("id", filter=mentions_out_of_target_q),
@@ -696,8 +717,10 @@ class ChannelDetailView(ListView):
                 "note": channels_phrase("by", mentions_received_channels, "other in-target"),
             },
         ]
+        # message__in=msg_qs: count reactions only on alive, period-scoped messages,
+        # so the totals reconcile with the message stats above.
         top_reactions_qs = (
-            MessageReaction.objects.filter(message__channel=ch)
+            MessageReaction.objects.filter(message__in=msg_qs)
             .values("emoji")
             .annotate(total=Sum("count"))
             .order_by("-total")[:10]
@@ -911,7 +934,9 @@ class VacancyAnalysisView(View):
             s = score_map.get(cid, {})
             score_a = s.get("AMPLIFIER_JACCARD", 0.0)  # amplifier coverage (recall): |A ∩ B| / |A|
             score_b = s.get("STRUCTURAL_EQUIV", 0.0)  # neighbour-set equiv. (binary Ochiai): 0.5·cos_in + 0.5·cos_out
-            score_c: float | None = s.get("BROKERAGE")  # brokerage overlap: Jaccard of spanned (src-org, amp-org) pairs (structural position, one-degree)
+            score_c: float | None = s.get(
+                "BROKERAGE"
+            )  # brokerage overlap: Jaccard of spanned (src-org, amp-org) pairs (structural position, one-degree)
 
             candidates.append(
                 {
@@ -1003,7 +1028,9 @@ class MessageJumpView(View):
         if target.date is None:
             return HttpResponseRedirect(channel_url)
         in_target_periods = list(channel.in_target_periods.values_list("start", "end"))
-        target_date = target.date.date()
+        # localdate(): must agree with channel_period_date_q's __date lookup below,
+        # which buckets days in TIME_ZONE — a UTC .date() can disagree near midnight.
+        target_date = timezone.localdate(target.date)
         if in_target_periods and not any(
             (s is None or s <= target_date) and (e is None or e >= target_date) for s, e in in_target_periods
         ):

@@ -191,9 +191,16 @@ def purge(*, dry_run: bool = False) -> PurgeReport:
 
     with transaction.atomic():
         deleted_total, deleted_by_type = qs.delete()
-    deleted_media_rows = sum(
-        count for label, count in deleted_by_type.items() if label.startswith("webapp.Message") and "Media" in label
-    )
+    # Explicit labels: of the five media models only "MessageOtherMedia" contains
+    # the substring "Media", so a substring match would omit the other four.
+    media_labels = {
+        "webapp.MessagePicture",
+        "webapp.MessageVideo",
+        "webapp.MessageAudio",
+        "webapp.MessageSticker",
+        "webapp.MessageOtherMedia",
+    }
+    deleted_media_rows = sum(count for label, count in deleted_by_type.items() if label in media_labels)
 
     removed, failed = remove_files(files)
     return PurgeReport(

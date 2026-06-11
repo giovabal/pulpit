@@ -122,7 +122,7 @@ def compute_interest_structural(
     if progress:
         progress("collecting in-target forwarder rows")
     forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
-    out_of_target_count: dict[tuple[int, int], int] = defaultdict(int)
+    out_forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
 
     in_target_qs = Message.objects.alive().filter(
         channel_id__in=in_target_pks,
@@ -145,11 +145,15 @@ def compute_interest_structural(
     )
     if window_filter:
         out_target_qs = out_target_qs.filter(**window_filter)
+    # Collected with the same shape as the in-target side (forwarder channel + date)
+    # so the consumer can apply the identical reaction window and per-channel dedup —
+    # the two columns are rendered as a comparable pair, and counting raw forward
+    # *messages* with no window here would systematically inflate the out side.
     out_target_q = out_target_qs.exclude(channel_id__in=in_target_pks).values_list(
-        "channel_id", "forwarded_from_id", "fwd_from_channel_post"
+        "channel_id", "forwarded_from_id", "fwd_from_channel_post", "date"
     )
-    for _fwd_ch, origin_ch, origin_tg_id in out_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
-        out_of_target_count[(origin_ch, origin_tg_id)] += 1
+    for fwd_ch, origin_ch, origin_tg_id, fwd_date in out_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
+        out_forwarders_by_origin[(origin_ch, origin_tg_id)].append((fwd_ch, fwd_date))
 
     if interest_score_override is None:
         hot_layer_scope = "all-time"
@@ -191,20 +195,28 @@ def compute_interest_structural(
     if progress:
         progress("scoring origins")
     by_message: list[dict[str, Any]] = []
+
+    def _within_window(
+        rows: list[tuple[int, datetime.datetime | None]], origin_date: datetime.datetime | None
+    ) -> list[tuple[int, datetime.datetime | None]]:
+        if window_days > 0 and origin_date is not None:
+            cutoff = origin_date + datetime.timedelta(days=window_days)
+            return [(fid, fd) for fid, fd in rows if fd is not None and fd <= cutoff]
+        return list(rows)
+
     for key, forwarders in forwarders_by_origin.items():
         origin_ch, origin_tg_id = key
         meta = origin_meta.get(key) or {}
         origin_date: datetime.datetime | None = meta.get("date")
         grouped_id = meta.get("grouped_id")
         interest_score = meta.get("interest_score")
-        if window_days > 0 and origin_date is not None:
-            cutoff = origin_date + datetime.timedelta(days=window_days)
-            filtered = [(fid, fd) for fid, fd in forwarders if fd is not None and fd <= cutoff]
-        else:
-            filtered = list(forwarders)
+        filtered = _within_window(forwarders, origin_date)
         if not filtered:
             continue
         forwarder_pks = {pk for pk, _ in filtered}
+        # Same window + distinct-channel dedup as the in-target side, so the two
+        # columns count the same thing.
+        out_forwarder_pks = {pk for pk, _ in _within_window(out_forwarders_by_origin.get(key, []), origin_date)}
         c_value = len({comm_by_pk[pk] for pk in forwarder_pks if pk in comm_by_pk})
         d_value = sum(auth_by_pk.get(pk, 0.0) for pk in forwarder_pks)
         by_message.append(
@@ -217,7 +229,7 @@ def compute_interest_structural(
                 "d_authority_reach": d_value,
                 "interest_score": interest_score,
                 "forwarder_count_in_target": len(forwarder_pks),
-                "forwarder_count_out_of_target": out_of_target_count.get(key, 0),
+                "forwarder_count_out_of_target": len(out_forwarder_pks),
             }
         )
 

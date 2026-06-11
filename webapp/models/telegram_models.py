@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from django.db import models
 from django.db.models import Max, Min, Q
 from django.urls import reverse
+from django.utils import timezone
 
 from webapp.managers import ChannelManager, MessageManager
 from webapp.models.base import TelegramBaseModel
@@ -145,7 +146,9 @@ class Channel(TelegramBaseModel):
         otherwise the earliest known period. ``None`` when the channel has no
         attribution at all.
         """
-        today = datetime.date.today()
+        # localdate(): "today" in the TIME_ZONE the DB-side __date period lookups use,
+        # not the host OS clock — they can disagree for ~2h around midnight.
+        today = timezone.localdate()
         attrs = list(self.attributions.all())  # prefetch-friendly; callers iterating many channels prefetch
         if not attrs:
             return None
@@ -234,12 +237,15 @@ class Channel(TelegramBaseModel):
             .distinct()
             .count()
         )
+        # Self-citations are excluded per *target* (forwarding or mentioning oneself is
+        # not an edge), without dropping a message that also cites another channel —
+        # matching the pair-level exclusion of the crawl_channels bulk degrees writer.
+        others = Channel.objects.in_target().exclude(pk=self.pk)
         cites = (
             Message.objects.alive()
             .filter(channel=self)
-            .filter(Q(forwarded_from__in=Channel.objects.in_target()) | Q(references__in=Channel.objects.in_target()))
+            .filter(Q(forwarded_from__in=others) | Q(references__in=others))
             .filter(channel_cutoff_q())
-            .exclude(forwarded_from=self)
             .distinct()
             .count()
         )
@@ -317,7 +323,9 @@ class Message(TelegramBaseModel):
     post_author = models.CharField(max_length=255, blank=True)
     pinned = models.BooleanField(null=True, default=False)
     has_been_pinned = models.BooleanField(default=False)
-    webpage_url = models.URLField(max_length=255, default="", blank=True)
+    # 2048: webpage-preview URLs routinely exceed 255 chars (tracking params); PostgreSQL
+    # raises DataError instead of truncating. The crawler slices to this length too.
+    webpage_url = models.URLField(max_length=2048, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
     media_type = models.CharField(
         max_length=32, default="", blank=True
@@ -377,7 +385,10 @@ class Message(TelegramBaseModel):
         return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
 
     def get_telegram_references(self) -> list[str]:
-        return [url[5:] for url in re.findall(r"t\.me/(?:[-\w.]|(?:%[\da-fA-F]{2}))+", str(self.message))]
+        # \w only: Telegram usernames are [A-Za-z0-9_], so accepting "." or "-" would
+        # swallow trailing sentence punctuation ("t.me/canale." → reference "canale.")
+        # and the resolver would classify the mangled handle as a permanent failure.
+        return [url[5:] for url in re.findall(r"t\.me/(?:\w|(?:%[\da-fA-F]{2}))+", str(self.message))]
 
     @property
     def message_picture(self) -> "MessagePicture | None":

@@ -1,5 +1,6 @@
 import datetime
 import io
+import logging
 import os
 import shutil
 import tempfile
@@ -911,15 +912,41 @@ class MediaHandlerProfilePictureTests(TestCase):
         tc = self._make_tg_channel(telegram_id=1)
         pic = self._make_tg_picture(pic_id=200)
         self.api_client.client.get_profile_photos.return_value = [pic]
-        # A row is "fresh" only when the file is on disk AND mime_type is recorded.
+        # A row is "fresh" only when the file is on disk, mime_type is recorded, AND
+        # the filename follows the per-photo "<channel>_<photo>.<ext>" scheme.
         ProfilePicture.objects.create(
-            telegram_id=200, channel=self.channel, picture="profile.jpg", mime_type="image/jpeg", date=None
+            telegram_id=200, channel=self.channel, picture="1_200.jpg", mime_type="image/jpeg", date=None
         )
 
         result = self.handler.download_profile_picture(tc)
 
         self.assertEqual(result, 0)
         mock_from_tg.assert_not_called()
+
+    @patch("crawler.media_handler.os.path.exists", return_value=True)
+    @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
+    def test_redownloads_picture_with_legacy_shared_filename(
+        self, mock_from_tg: MagicMock, _mock_exists: MagicMock
+    ) -> None:
+        """Rows still pointing at the pre-per-photo shared path ("<channel>.jpg") are
+        treated as stale — every historical photo of a channel used to overwrite the
+        same file, so the bytes on disk are the wrong photo for all but one row; the
+        next pass must re-download into the per-photo path."""
+        from webapp.models import ProfilePicture
+
+        tc = self._make_tg_channel(telegram_id=1)
+        pic = self._make_tg_picture(pic_id=200)
+        self.api_client.client.get_profile_photos.return_value = [pic]
+        ProfilePicture.objects.create(
+            telegram_id=200, channel=self.channel, picture="1.jpg", mime_type="image/jpeg", date=None
+        )
+        self.handler._download_media = MagicMock(return_value="/tmp/fake.jpg")
+        self.handler._cleanup_downloaded_file = MagicMock()
+
+        result = self.handler.download_profile_picture(tc)
+
+        self.assertEqual(result, 1)
+        mock_from_tg.assert_called_once()
 
     @patch("crawler.media_handler.os.path.exists", return_value=False)
     @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
@@ -2517,6 +2544,12 @@ class MediaHandlerFriendlyLogIntegrationTests(TestCase):
 
     def setUp(self) -> None:
         from crawler.media_handler import MediaHandler
+
+        # The TESTING block in webapp_engine/settings.py silences all logging via
+        # logging.disable, which assertLogs cannot bypass — lift it for this class
+        # (it asserts on log output) and restore it afterwards.
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
 
         self.api_client = _make_api_client()
         self.handler_dl = MediaHandler(self.api_client, download_images=True)

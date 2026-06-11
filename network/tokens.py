@@ -199,7 +199,28 @@ def parse_tokens(
     """
     defaults = defaults or {}
     if any(t.strip().upper() == "ALL" for t in tokens):
-        tokens = list(all_tokens)
+        # Expand ALL in place into default-parameter instances of every token family
+        # not explicitly listed. Replacing the whole list (the old behaviour) would
+        # silently drop explicit parameterised instances — "DIFFUSIONLAG(window=90),ALL"
+        # must keep window=90 (and not also add the default-window instance).
+        explicit_names: set[str] = set()
+        for t in tokens:
+            stripped = t.strip()
+            if not stripped or stripped.upper() == "ALL":
+                continue
+            m = TOKEN_RE.match(stripped)
+            if m:
+                explicit_names.add(m.group(1).upper())
+        expanded: list[str] = []
+        all_seen = False
+        for t in tokens:
+            if t.strip().upper() == "ALL":
+                if not all_seen:
+                    expanded.extend(a for a in all_tokens if a.strip().upper() not in explicit_names)
+                    all_seen = True
+                continue
+            expanded.append(t)
+        tokens = expanded
 
     instances: list[TokenInstance] = []
     seen: set[TokenInstance] = set()

@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Any, Callable
 
 from django.db.models import Count, Max, Min
+from django.utils import timezone
 
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
@@ -124,7 +125,9 @@ def _scores_abc(
         ):
             vacancy_out_pks.add(fwd_id)
             if fwd_date is not None:
-                vacancy_out_rows.append((fwd_id, fwd_date.date()))
+                # localdate(): org_at must see the same TIME_ZONE calendar day the
+                # period filter (channel_cutoff_q) used to admit this forward.
+                vacancy_out_rows.append((fwd_id, timezone.localdate(fwd_date)))
 
     # Forwarded-from edges out of each candidate in the AFTER window.
     cand_out_pks: dict[int, set[int]] = defaultdict(set)
@@ -138,7 +141,7 @@ def _scores_abc(
         ):
             cand_out_pks[ch_id].add(fwd_id)
             if fwd_date is not None:
-                cand_out_rows.append((ch_id, fwd_id, fwd_date.date()))
+                cand_out_rows.append((ch_id, fwd_id, timezone.localdate(fwd_date)))
 
     orphaned_org_map: dict[int, int] = {}
     vacancy_org_pairs: frozenset[tuple[int, int]] = frozenset()
@@ -147,7 +150,7 @@ def _scores_abc(
     if "BROKERAGE" in selected:
         # Attribution is time-bounded: resolve each channel's org as of the relevant date — the
         # forward's date for source edges, the closure date for the orphaned amplifiers themselves.
-        closure_date = closure_dt.date()
+        closure_date = timezone.localdate(closure_dt)
         attr_cache = ChannelAttribution.build_cache(
             vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_rows} | set(orphaned_pks)
         )

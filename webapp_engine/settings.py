@@ -52,10 +52,12 @@ sys.unraisablehook = _drop_telethon_coroutine_teardown
 
 # Under the test runner, silence logging: the suite deliberately exercises
 # flood-wait, failed-download, unresolved-reference and parse-failure paths
-# whose log records would otherwise flood the output. No test asserts on log
-# output (no assertLogs anywhere), so disabling it wholesale is safe. Match the
-# `test` subcommand precisely (argv[1]) so a stray "test" argument to another
-# command can't accidentally mute logging. Migration 0045 also reads this flag.
+# whose log records would otherwise flood the output. assertLogs cannot bypass
+# logging.disable, so any test that asserts on log output must lift it first —
+# logging.disable(logging.NOTSET) in setUp with an addCleanup restoring
+# logging.disable(logging.CRITICAL) (see MediaHandlerFriendlyLogIntegrationTests).
+# Match the `test` subcommand precisely (argv[1]) so a stray "test" argument to
+# another command can't accidentally mute logging. Migration 0045 also reads this flag.
 TESTING = sys.argv[1:2] == ["test"]
 if TESTING:
     import logging

@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from django.db.models import Max
+from django.utils import timezone
 
 from webapp.models import Channel
 
@@ -20,13 +21,29 @@ def iter_hole_ranges(
     let callers tell whether the gap could contain in-target messages.
     """
     qs = channel.message_set.order_by("telegram_id")
-    if min_telegram_id is not None:
-        qs = qs.filter(telegram_id__gte=min_telegram_id)
     prev_id: int | None = None
     prev_date: datetime.datetime | None = None
+    if min_telegram_id is not None:
+        # Seed with the newest stored message at or below the resume point. The
+        # checkpoint saved by fix_message_holes is the last *attempted* id, which is
+        # usually a deleted message and therefore not stored: pairing only stored ids
+        # above it would make the first stored row the gap's upper bound with no lower
+        # bound, silently and permanently skipping the rest of an interrupted gap.
+        seed = (
+            channel.message_set.filter(telegram_id__lte=min_telegram_id)
+            .order_by("-telegram_id")
+            .values_list("telegram_id", "date")
+            .first()
+        )
+        if seed:
+            prev_id, prev_date = seed
+        qs = qs.filter(telegram_id__gt=min_telegram_id)
     for current_id, current_date in qs.values_list("telegram_id", "date").iterator():
         if prev_id is not None and current_id - prev_id > 1:
-            yield (prev_id + 1, current_id - 1, prev_date, current_date)
+            # Clamp below the resume point: ids up to min_telegram_id were already
+            # attempted in the interrupted run.
+            start = prev_id + 1 if min_telegram_id is None else max(prev_id + 1, min_telegram_id + 1)
+            yield (start, current_id - 1, prev_date, current_date)
         prev_id, prev_date = current_id, current_date
 
 
@@ -41,8 +58,10 @@ def _gap_could_be_in_target(
     """
     if prev_date is None or current_date is None:
         return True
-    lo = min(prev_date, current_date).date()
-    hi = max(prev_date, current_date).date()
+    # localdate(): bucket into the TIME_ZONE calendar day the period filters use,
+    # so boundary gaps aren't misclassified by the UTC offset.
+    lo = timezone.localdate(min(prev_date, current_date))
+    hi = timezone.localdate(max(prev_date, current_date))
     return any((s is None or s <= hi) and (e is None or e >= lo) for s, e in intervals)
 
 

@@ -150,7 +150,10 @@ def per_channel_step(
 
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_ABOUT_REF_RE = re.compile(r"t\.me/((?:[-\w.]|(?:%[\da-fA-F]{2}))+)")
+# \w only — Telegram usernames are [A-Za-z0-9_]; "." / "-" would swallow trailing
+# sentence punctuation and produce permanently-unresolvable references (see
+# Message.get_telegram_references, which uses the same character class).
+_ABOUT_REF_RE = re.compile(r"t\.me/((?:\w|(?:%[\da-fA-F]{2}))+)")
 
 # Path fragment identifying coroutines whose code lives inside the Telethon
 # package — used by the unraisable-hook filter to scope what it silences.
@@ -624,12 +627,27 @@ class Command(BaseCommand):
                 return None
             try:
                 crawler.api_client.wait()
-                return crawler.api_client.client.get_entity(channel.username)
+                entity = crawler.api_client.client.get_entity(channel.username)
             except Exception as error:  # noqa: BLE001 - logged for the operator
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
                 logger.exception("%s username lookup failed for channel %s", action, channel.telegram_id)
                 return None
+            # Telegram handles get recycled: the stored username may now belong to a
+            # different channel. Acting on it would write the other channel's stats
+            # onto this row and mass-mark our messages lost (same guard as
+            # resolve_channel_or_classify).
+            if getattr(entity, "id", None) != channel.telegram_id:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {action} for channel {channel.telegram_id}: "
+                        f"@{channel.username} now belongs to a different entity "
+                        f"(id {getattr(entity, 'id', 'unknown')})"
+                    )
+                )
+                return None
+            return entity
         except errors.FloodWaitError as error:
             printer.newline()
             self.stdout.write(
@@ -1415,7 +1433,18 @@ class Command(BaseCommand):
                                             is_user_account=True, is_lost=False
                                         )
                                         continue
-                                    crawler.media_handler.download_profile_picture(tg_ch)
+                                    try:
+                                        crawler.media_handler.download_profile_picture(tg_ch)
+                                    except errors.FloodWaitError as pic_err:
+                                        logger.warning(
+                                            "Flood wait downloading the profile picture for %s: %s", meta_ch, pic_err
+                                        )
+                                        if not settings.IGNORE_FLOODWAIT:
+                                            sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                                    except Exception as pic_err:
+                                        logger.warning(
+                                            "Could not download the profile picture for %s: %s", meta_ch, pic_err
+                                        )
                                     try:
                                         crawler.set_more_channel_details(ch_obj, tg_ch)
                                     except Exception as detail_err:
@@ -1531,6 +1560,13 @@ class Command(BaseCommand):
                                         if not settings.IGNORE_FLOODWAIT:
                                             sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
                                         continue
+                                    except Exception as error:  # noqa: BLE001 — one bad channel must not abort the run
+                                        printer.newline()
+                                        self.stdout.write(
+                                            self.style.WARNING(f"Error crawling channel {channel.telegram_id}: {error}")
+                                        )
+                                        logger.exception("get-new-messages failed for channel %s", channel.telegram_id)
+                                        continue
                                     finally:
                                         crawler._resolve_pending_forwards(
                                             lambda message, idx=index: printer.status(message, idx)
@@ -1556,9 +1592,18 @@ class Command(BaseCommand):
                                         pre_crawl_max_id,
                                         printer,
                                     )
-                                    if fetch_replies:
+                                    # Replies for the refreshed (pre-existing) posts. With
+                                    # --get-new-messages in the same run the new-message branch
+                                    # above covered ids > pre_crawl_max_id, so cap at that id;
+                                    # in a refresh-only run pre_crawl_max_id is still 0 and no
+                                    # cap applies (passing 0 would match no parent at all).
+                                    if fetch_replies and not (get_new_messages and pre_crawl_max_id == 0):
                                         self._fetch_replies_for_channel(
-                                            channel, crawler, index, printer, max_telegram_id=pre_crawl_max_id
+                                            channel,
+                                            crawler,
+                                            index,
+                                            printer,
+                                            max_telegram_id=pre_crawl_max_id or None,
                                         )
 
                                 # Standalone reply fetch: when --fetch-replies is requested on its
@@ -1640,18 +1685,26 @@ class Command(BaseCommand):
         if in_degrees or out_degrees:
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
-            in_target_pks = set(crawl_qs.filter(_ever_in_target()).values_list("pk", flat=True))
+            # Global, not crawl-scoped: degrees are network-wide quantities, and an
+            # ever-in-target channel outside --channel-groups/--channel-types scope must
+            # never fall into cited_pks — the out-degrees pass would overwrite it with
+            # out_degree=0. Lost messages are excluded throughout to match
+            # Channel.refresh_degrees() and the graph builder.
+            in_target_pks = set(Channel.objects.filter(_ever_in_target()).values_list("pk", flat=True))
 
             cited_pks = (
                 set(
-                    Message.objects.filter(
+                    Message.objects.alive()
+                    .filter(
                         channel_cutoff_q(),
                         forwarded_from__isnull=False,
-                    ).values_list("forwarded_from_id", flat=True)
+                    )
+                    .values_list("forwarded_from_id", flat=True)
                 )
                 | set(
                     Message.references.through.objects.filter(
                         channel_cutoff_q("message__channel", "message__date"),
+                        message__is_lost=False,
                     ).values_list("channel_id", flat=True)
                 )
             ) - in_target_pks
@@ -1660,7 +1713,8 @@ class Command(BaseCommand):
                 self.stdout.write("Refreshing degrees: computing citation counts…")
                 self.stdout.flush()
                 fwd_cited_by = set(
-                    Message.objects.filter(
+                    Message.objects.alive()
+                    .filter(
                         channel_cutoff_q(),
                         forwarded_from_id__in=in_target_pks,
                     )
@@ -1671,6 +1725,7 @@ class Command(BaseCommand):
                     Message.references.through.objects.filter(
                         channel_cutoff_q("message__channel", "message__date"),
                         channel_id__in=in_target_pks,
+                        message__is_lost=False,
                     )
                     .exclude(message__channel_id=F("channel_id"))
                     .values_list("message_id", "channel_id")
@@ -1678,7 +1733,8 @@ class Command(BaseCommand):
                 cited_by_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited_by | ref_cited_by)
 
                 fwd_cites = set(
-                    Message.objects.filter(
+                    Message.objects.alive()
+                    .filter(
                         channel_cutoff_q(),
                         channel_id__in=in_target_pks,
                         forwarded_from_id__in=in_target_pks,
@@ -1691,6 +1747,7 @@ class Command(BaseCommand):
                         channel_cutoff_q("message__channel", "message__date"),
                         message__channel_id__in=in_target_pks,
                         channel_id__in=in_target_pks,
+                        message__is_lost=False,
                     )
                     .exclude(message__channel_id=F("channel_id"))
                     .values_list("message__channel_id", "message_id")
@@ -1711,7 +1768,8 @@ class Command(BaseCommand):
 
             if out_degrees and cited_pks:
                 fwd_cited = set(
-                    Message.objects.filter(
+                    Message.objects.alive()
+                    .filter(
                         channel_cutoff_q(),
                         forwarded_from_id__in=cited_pks,
                     )
@@ -1722,6 +1780,7 @@ class Command(BaseCommand):
                     Message.references.through.objects.filter(
                         channel_cutoff_q("message__channel", "message__date"),
                         channel_id__in=cited_pks,
+                        message__is_lost=False,
                     )
                     .exclude(message__channel_id=F("channel_id"))
                     .values_list("message_id", "channel_id")

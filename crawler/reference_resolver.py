@@ -60,7 +60,12 @@ class ReferenceResolver:
         # channel that took over the handle. Prefer a live (non-lost) row, i.e. the
         # current owner, over a stale/lost one that merely used to hold it; fall back to
         # a lost row only when the handle has no live owner stored.
-        channel = Channel.objects.filter(username=reference).order_by("is_lost", "pk").first()
+        # iexact: references are lowercased upstream, but Channel.username stores
+        # Telegram's display casing ("ANPI_Roma"), and `=` is case-sensitive on both
+        # SQLite and PostgreSQL — an exact match would always miss mixed-case handles
+        # and fall through to a (flood-wait-prone, and for dead channels permanently
+        # failing) get_entity call.
+        channel = Channel.objects.filter(username__iexact=reference).order_by("is_lost", "pk").first()
         if channel:
             return channel, False
 

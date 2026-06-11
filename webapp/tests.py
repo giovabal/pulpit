@@ -604,8 +604,14 @@ class MessageGetTelegramReferencesTests(TestCase):
         self.assertIn("chan2", refs)
         self.assertEqual(len(refs), 2)
 
-    def test_handles_hyphenated_username(self) -> None:
-        self.assertIn("some-channel", Message(message="t.me/some-channel").get_telegram_references())
+    def test_hyphen_terminates_username(self) -> None:
+        # Telegram usernames are [A-Za-z0-9_]: a hyphen is prose punctuation, not part
+        # of the handle. Capturing it would produce a permanently-unresolvable
+        # reference and lose the citation edge.
+        self.assertEqual(Message(message="t.me/some-channel").get_telegram_references(), ["some"])
+
+    def test_trailing_punctuation_not_captured(self) -> None:
+        self.assertEqual(Message(message="Seguici su t.me/canale.").get_telegram_references(), ["canale"])
 
     def test_handles_underscored_username(self) -> None:
         self.assertIn("my_channel", Message(message="t.me/my_channel").get_telegram_references())

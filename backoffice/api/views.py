@@ -206,6 +206,11 @@ class ChannelViewSet(
                 )
 
         channels = Channel.objects.filter(pk__in=ids)
+        # Materialised once: the M2M add/remove below must only see ids that still
+        # match a Channel row — a stale selection (channel deleted between page load
+        # and submit) would otherwise violate the FK constraint and 500 the whole
+        # request, rolling back the attribution changes too.
+        valid_ids = list(channels.values_list("pk", flat=True))
 
         with transaction.atomic():
             if assign_org:
@@ -219,17 +224,17 @@ class ChannelViewSet(
                             for ch in channels
                         ]
                     )
-            # Pass raw ids to ``add()``/``remove()`` so the M2M operation runs once
-            # per group, rather than re-evaluating the ``channels`` queryset for each
-            # ``*channels`` unpack (which would hit the DB N extra times).
+            # Pass validated ids to ``add()``/``remove()`` so the M2M operation runs
+            # once per group, rather than re-evaluating the ``channels`` queryset for
+            # each ``*channels`` unpack (which would hit the DB N extra times).
             if add_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
-                    grp.channels.add(*ids)
+                    grp.channels.add(*valid_ids)
             if remove_group_ids:
                 for grp in ChannelGroup.objects.filter(pk__in=remove_group_ids):
-                    grp.channels.remove(*ids)
+                    grp.channels.remove(*valid_ids)
 
-        return Response({"updated": channels.count()})
+        return Response({"updated": len(valid_ids)})
 
 
 class ChannelAttributionViewSet(viewsets.ModelViewSet):
@@ -239,6 +244,10 @@ class ChannelAttributionViewSet(viewsets.ModelViewSet):
         qs = ChannelAttribution.objects.select_related("organization", "channel").order_by("channel_id", "start")
         channel_id = self.request.query_params.get("channel", "").strip()
         if channel_id:
+            if not channel_id.isdigit():
+                # 400 like the other id filters in this module — filter() would raise
+                # ValueError at evaluation, which DRF surfaces as a 500.
+                raise ValidationError({"channel": "must be an integer"})
             qs = qs.filter(channel_id=channel_id)
         return qs
 

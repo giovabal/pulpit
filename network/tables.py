@@ -397,9 +397,11 @@ def write_community_table_xlsx(
             return
         if not first:
             ws.append([])  # blank separator between strategies
-        heading_row = ws.max_row + 1
+        # Bold after appending: openpyxl reports max_row == 1 for an *empty* sheet,
+        # so pre-computing max_row + 1 would bold the wrong row for the first
+        # strategy on each sheet.
         ws.append([strategy_display_label(strategy_key)])
-        ws.cell(row=heading_row, column=1).font = Font(bold=True)
+        ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
         ws.append(headers)
         for cell in ws[ws.max_row]:
             cell.font = Font(bold=True)

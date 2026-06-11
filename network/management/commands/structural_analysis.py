@@ -12,6 +12,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Max, Min
+from django.utils import timezone
 
 from network import (
     community,
@@ -496,7 +497,8 @@ class Command(BaseCommand):
                 "Available: PAGERANK, HITSHUB, HITSAUTH, INDEGCENTRALITY, OUTDEGCENTRALITY, "
                 "BURTCONSTRAINT, LOCALCLUSTERING, "
                 "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
-                "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. Default: PAGERANK. "
+                "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. "
+                "Default: the configuration/.operations-structural value, else no measures. "
                 "Parameterised measures take keyword arguments in parentheses and may be listed more "
                 "than once with different parameters: DIFFUSIONLAG(window=60), MODULEROLE(basis=LEIDEN). "
                 "A bare DIFFUSIONLAG inherits --diffusion-window as its default; each parameter "
@@ -516,7 +518,7 @@ class Command(BaseCommand):
                 "graph-tool (conda/apt, not pip). "
                 "LOUVAIN is the classic modularity baseline kept for comparison with older studies; "
                 "prefer LEIDEN / LEIDEN_DIRECTED otherwise. "
-                "Default: ORGANIZATION."
+                "Default: the configuration/.operations-structural value, else no community detection."
             ),
         )
         parser.add_argument(
@@ -527,7 +529,8 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
                 "--consensus-matrix). Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, "
-                "CENTRALIZATION, CONTENT, ALL. Default: ALL."
+                "CENTRALIZATION, CONTENT, ALL. "
+                "Default: the configuration/.operations-structural value, else none — pass ALL explicitly."
             ),
         )
         parser.add_argument(
@@ -536,8 +539,9 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Include t.me/ mention references as edges alongside forwards (default: on). "
-                "Use --no-mentions to build the graph from forwards only."
+                "Include t.me/ mention references as edges alongside forwards "
+                "(default: the configuration/.operations-structural value, else off). "
+                "Use --no-mentions to force forwards only."
             ),
         )
         parser.add_argument(
@@ -690,7 +694,8 @@ class Command(BaseCommand):
             help=(
                 "Minimum percentage (0–100) a community must reach in at least one organisation row "
                 "to be shown in the Organisation × Community distribution cross-tab. "
-                "Columns below this threshold in every row are hidden. Default: 10."
+                "Columns below this threshold in every row are hidden. "
+                "Default: the configuration/.operations-structural value, else 0 (show all)."
             ),
         )
         parser.add_argument(
@@ -790,7 +795,8 @@ class Command(BaseCommand):
                 "the (optionally disparity-filtered) backbone, with z-score against a "
                 "weight-rewiring null model and intra/inter community edge-survival curves. "
                 "Writes data/robustness.json and (with --html) robustness_table.html. "
-                "Use --no-robustness to disable explicitly (overrides SA_ROBUSTNESS)."
+                "Passing --robustness-strategies implies this flag; "
+                "use --no-robustness to disable explicitly (wins over the config file and the implication)."
             ),
         )
         parser.add_argument(
@@ -910,6 +916,7 @@ class Command(BaseCommand):
         channel_types: list[str],
         edge_weight_strategy: str,
         vacancy_measures: list[str],
+        do_interest_structural: bool = False,
     ) -> None:
         """Validate all settings. Raises CommandError on failure.
 
@@ -922,6 +929,13 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --community-strategies value(s): {invalid_strategies!r}. "
                 f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
+            )
+        # Fail before the (hours-long) pipeline runs, not in the export phase where
+        # _pick_interest_community_strategy would otherwise raise this after all the
+        # layout/measure work has been discarded.
+        if do_interest_structural and not communities_strategy:
+            raise CommandError(
+                "--interest-structural requires at least one community strategy in --community-strategies."
             )
         # A measure basis names a strategy *family*; check it against the selected strategy names.
         strategy_names = {i.name for i in communities_strategy}
@@ -1116,6 +1130,7 @@ class Command(BaseCommand):
         end_date: datetime.date | None,
         do_graph: bool,
         do_3dgraph: bool,
+        strategy_instances: "list[community.StrategyInstance] | None" = None,
     ) -> list[tuple[str, str]]:
         """Compute every requested measure instance in order, returning suffixed (key, label) pairs.
 
@@ -1135,19 +1150,23 @@ class Command(BaseCommand):
             graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
         )
 
-        # Ordered community-partition keys present on the nodes (selection order), for basis
-        # resolution — order matters so a family basis resolves to the *first* selected instance.
-        available_bases: list[str] = []
-        seen_bases: set[str] = set()
+        # Ordered community-partition keys present on the nodes, in *selection order* —
+        # a family basis must resolve to the first selected instance. Per-node
+        # accretion would instead depend on which node iterates first (ORGANIZATION
+        # is absent from unassigned nodes, so a dead leaf at the front of the dict
+        # would demote it behind the algorithmic partitions).
+        present_keys: set[str] = set()
         for _nid, node_data in graph.nodes(data="data"):
             if node_data and node_data.get("communities"):
-                for base_key in node_data["communities"]:
-                    if base_key not in seen_bases:
-                        seen_bases.add(base_key)
-                        available_bases.append(base_key)
+                present_keys.update(node_data["communities"])
+        available_bases = [si.key for si in (strategy_instances or []) if si.key in present_keys]
+        # Defensive: node keys outside the selection (shouldn't happen) go last, sorted.
+        available_bases += sorted(present_keys - set(available_bases))
 
         step_fn = {key: fn for key, _label, fn in measures.MEASURE_STEPS}
         hits_computed = False
+        hits_labels: list[tuple[str, str]] = []
+        resolved_seen: set[str] = set()
 
         for inst in measure_instances:
             m = inst.measure
@@ -1162,6 +1181,19 @@ class Command(BaseCommand):
                     )
                     continue
                 resolved = inst.resolved_with(basis=basis.upper())
+                # A bare MODULEROLE auto-resolves to the same basis an explicit
+                # instance may already name; the two would emit identical suffixed
+                # columns twice. Parse-time dedup can't see this (it runs before
+                # basis resolution), so it is enforced here.
+                if resolved.token() in resolved_seen:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"- {_MEASURE_PROGRESS[m]}{resolved.label_annotation()} … "
+                            "skipped (duplicate after basis resolution)"
+                        )
+                    )
+                    continue
+                resolved_seen.add(resolved.token())
 
             self.stdout.write(f"- {_MEASURE_PROGRESS.get(m, m.lower())}{resolved.label_annotation()} … ", ending="")
             self.stdout.flush()
@@ -1187,9 +1219,15 @@ class Command(BaseCommand):
                 )
             elif m in ("HITSHUB", "HITSAUTH"):
                 if not hits_computed:
-                    measures.apply_hits(graph_data, graph)  # writes both hub and authority on every node
+                    # Writes both hub and authority on every node; returns [] when the
+                    # computation failed (degenerate graph) and no keys were written.
+                    hits_labels = measures.apply_hits(graph_data, graph)
                     hits_computed = True
-                labels = [("hits_hub", "HITS Hub")] if m == "HITSHUB" else [("hits_authority", "HITS Authority")]
+                wanted = "hits_hub" if m == "HITSHUB" else "hits_authority"
+                labels = [(key, label) for key, label in hits_labels if key == wanted]
+                if not labels:
+                    self.stdout.write(self.style.WARNING("skipped (HITS could not be computed)"))
+                    continue
             elif m == "MODULEROLE":
                 labels = measures.apply_module_role(graph_data, graph, resolved.params_dict["basis"].lower())
             else:  # defensive — parse_measures already rejected unknown tokens
@@ -1312,6 +1350,7 @@ class Command(BaseCommand):
             end_date,
             do_graph,
             do_3dgraph,
+            strategy_instances=communities_strategy,
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
@@ -1488,7 +1527,10 @@ class Command(BaseCommand):
             _parse_csv(channel_types_raw) if channel_types_raw is not None else list(settings.DEFAULT_CHANNEL_TYPES)
         )
         channel_groups_raw = options["channel_groups"]
-        channel_groups = _parse_csv(channel_groups_raw) if channel_groups_raw else []
+        # Case-preserving (NOT _parse_csv): ChannelGroup.key is a lowercase slug and
+        # groups__key__in matches case-sensitively — upper-casing would select zero
+        # channels for every group. crawl_channels parses this flag the same way.
+        channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
         # Fall back to the config-derived strategy (settings.SA_EDGE_WEIGHT_STRATEGY) when
         # no --edge-weight-strategy is passed, then to the documented default. An empty
         # value would otherwise reach build_graph and silently zero every edge weight
@@ -1506,6 +1548,7 @@ class Command(BaseCommand):
             channel_types,
             edge_weight_strategy,
             list(selected_vacancy_measures),
+            do_interest_structural=_o("interest_structural", False),
         )
 
         # Robustness strategies — parse, validate, expand ALL.
@@ -1520,21 +1563,38 @@ class Command(BaseCommand):
                 robustness.parse_strategy(token)
             except ValueError as exc:
                 raise CommandError(f"--robustness-strategies: {exc}") from exc
-        # Robustness defaults are filled in only when the user actually opts in
-        # via --robustness; empty strategies are tolerated otherwise.
-        do_robustness = _o("robustness", False)
+        # Selecting strategies selects the analysis (the Operations panel emits
+        # --robustness alongside the list for the same reason): validating a strategy
+        # list and then silently discarding it would look like the analysis ran.
+        # An explicit --robustness/--no-robustness still wins over the implication.
+        if options["robustness"] is not None:
+            do_robustness = options["robustness"]
+        else:
+            do_robustness = _o("robustness", False) or bool(robustness_strategies)
         if do_robustness and not robustness_strategies:
             robustness_strategies = list(robustness.DEFAULT_STRATEGIES)
 
         extra_layout_names = _parse_csv(_o("layouts_2d", ""))
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
-        extra_layout_names = [n for n in extra_layout_names if n in layout.EXTRA_LAYOUT_CHOICES_2D]
+        # Reject unknown tokens like every other token flag — silently filtering a
+        # misspelled layout would just drop it from the export's layout switcher.
+        _unknown_2d = [n for n in extra_layout_names if n not in layout.EXTRA_LAYOUT_CHOICES_2D]
+        if _unknown_2d:
+            raise CommandError(
+                f"--layouts-2d: unknown layout(s) {', '.join(_unknown_2d)}. "
+                f"Choose from {sorted(layout.EXTRA_LAYOUT_CHOICES_2D)} or ALL."
+            )
 
         extra_layout_names_3d = _parse_csv(_o("layouts_3d", ""))
         if "ALL" in extra_layout_names_3d:
             extra_layout_names_3d = sorted(layout.EXTRA_LAYOUT_CHOICES_3D)
-        extra_layout_names_3d = [n for n in extra_layout_names_3d if n in layout.EXTRA_LAYOUT_CHOICES_3D]
+        _unknown_3d = [n for n in extra_layout_names_3d if n not in layout.EXTRA_LAYOUT_CHOICES_3D]
+        if _unknown_3d:
+            raise CommandError(
+                f"--layouts-3d: unknown layout(s) {', '.join(_unknown_3d)}. "
+                f"Choose from {sorted(layout.EXTRA_LAYOUT_CHOICES_3D)} or ALL."
+            )
 
         vertical = _o("vertical_layout", False)
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
@@ -1723,14 +1783,22 @@ class Command(BaseCommand):
             opts.end_date,
             opts.do_graph,
             opts.do_3dgraph,
+            strategy_instances=opts.communities_strategy,
         )
 
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
         # All writes go to the staging directory; it is renamed to _final_target only after
         # write_summary_json completes, making every live export atomically consistent.
         root_target = _final_target + ".tmp"
+        _old_target = _final_target + ".old"
+        # Crash-window recovery: a run killed between _atomic_publish's two renames
+        # leaves no live directory while the previous good export survives as .old.
+        # Restore it before any cleanup — deleting it here (and then failing later,
+        # e.g. on an empty graph) would permanently lose the only published copy.
+        if not os.path.isdir(_final_target) and os.path.isdir(_old_target):
+            os.rename(_old_target, _final_target)
         shutil.rmtree(root_target, ignore_errors=True)  # clean up any interrupted previous run
-        shutil.rmtree(_final_target + ".old", ignore_errors=True)  # clean up any orphaned backup
+        shutil.rmtree(_old_target, ignore_errors=True)  # clean up any orphaned backup
         project_title: str = Project.load().title
         self.stdout.write("Build communities data … ", ending="")
         self.stdout.flush()
@@ -1750,6 +1818,9 @@ class Command(BaseCommand):
             or opts.do_behavioural_equivalence
             or opts.do_vacancy
             or opts.do_robustness
+            # interest_structural.html imports ./js/utils.js and css/tables.css from
+            # the copied map assets, like the vacancy/robustness pages above.
+            or opts.do_interest_structural
         )
         if need_static_assets:
             exporter.ensure_graph_root(root_target)
@@ -2022,8 +2093,13 @@ class Command(BaseCommand):
             if min_date is None:
                 self.stdout.write(self.style.WARNING("\nTimeline: no messages found, skipping."))
             else:
-                first_year = max(min_date.year, opts.start_date.year) if opts.start_date else min_date.year
-                last_year = min(max_date.year, opts.end_date.year) if opts.end_date else max_date.year
+                # localdate(): the per-year exports filter messages by TIME_ZONE
+                # calendar days (date__date__gte/lte), so the loop bounds must use the
+                # same convention — a newest message in the next *local* year past the
+                # UTC max would otherwise appear in no year export at all.
+                min_local, max_local = timezone.localdate(min_date), timezone.localdate(max_date)
+                first_year = max(min_local.year, opts.start_date.year) if opts.start_date else min_local.year
+                last_year = min(max_local.year, opts.end_date.year) if opts.end_date else max_local.year
                 self.stdout.write(f"\nTimeline export ({first_year}–{last_year})")
                 for yr in range(first_year, last_year + 1):
                     entry = self._run_year_export(
