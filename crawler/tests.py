@@ -2563,13 +2563,13 @@ class FriendlyTelethonWarningTests(TestCase):
     leaves everything else untouched."""
 
     def test_connection_reset_is_rewritten(self) -> None:
-        from crawler.management.commands.crawl_channels import _friendly_telethon_warning
+        from webapp_engine.command_logging import _friendly_telethon_warning
 
         out = _friendly_telethon_warning("Server closed the connection: [Errno 104] Connection reset by peer")
         self.assertEqual(out, "Lost contact with Telegram for a moment — reconnecting automatically.")
 
     def test_unrelated_warning_passes_through(self) -> None:
-        from crawler.management.commands.crawl_channels import _friendly_telethon_warning
+        from webapp_engine.command_logging import _friendly_telethon_warning
 
         self.assertIsNone(_friendly_telethon_warning("Gap detected in updates; some messages may be missing"))
 

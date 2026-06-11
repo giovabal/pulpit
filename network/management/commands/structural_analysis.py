@@ -32,6 +32,7 @@ from webapp import scoring
 from webapp.models import Message, Project
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 from webapp.utils.colors import is_known_palette
+from webapp_engine.command_logging import styled_warning_logs
 
 import networkx as nx
 
@@ -1685,6 +1686,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
+        # Route logger.warning/error lines (exporter, interest_structural, …)
+        # through self.style so they carry severity colour in the Operations panel.
+        with styled_warning_logs(self.style):
+            self._handle(*args, **options)
+
+    def _handle(self, *args: Any, **options: Any) -> None:
         opts = self._resolve_options(options)
         # Patch options dict so _run_year_export and _compute_communities (which still
         # take a plain dict) see the resolved values.

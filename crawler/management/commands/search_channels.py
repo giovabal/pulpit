@@ -12,6 +12,7 @@ from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import SearchTerm
+from webapp_engine.command_logging import styled_warning_logs
 
 from telethon import errors
 from telethon.sync import TelegramClient
@@ -44,6 +45,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
+        # Route logger.warning/error lines (own modules, telethon) through
+        # self.style so they carry severity colour in the Operations panel.
+        with styled_warning_logs(self.style):
+            self._handle(*args, **options)
+
+    def _handle(self, *args: Any, **options: Any) -> None:
         qs = SearchTerm.objects.all().order_by(F("last_check").asc(nulls_first=True))
         if options["amount"] is not None:
             qs = qs[: options["amount"]]

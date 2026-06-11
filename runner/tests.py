@@ -122,12 +122,17 @@ class GetLogLinesTests(_TmpMixin, TestCase):
         self.assertEqual(lines, [])
         self.assertEqual(offset, 0)
 
+    @staticmethod
+    def _texts(lines: list[dict]) -> list[str]:
+        return [line["text"] for line in lines]
+
     def test_plain_lines_returned(self):
         from runner.tasks import get_log_lines
 
         self._write_log("structural_analysis", b"line one\nline two\nline three\n")
         lines, offset = get_log_lines("structural_analysis")
-        self.assertEqual(lines, ["line one", "line two", "line three"])
+        self.assertEqual(self._texts(lines), ["line one", "line two", "line three"])
+        self.assertEqual([line["cls"] for line in lines], ["", "", ""])
         self.assertGreater(offset, 0)
 
     def test_ansi_escapes_stripped(self):
@@ -135,7 +140,42 @@ class GetLogLinesTests(_TmpMixin, TestCase):
 
         self._write_log("structural_analysis", b"\x1b[32mGreen text\x1b[0m\n")
         lines, _ = get_log_lines("structural_analysis")
-        self.assertEqual(lines, ["Green text"])
+        self.assertEqual(self._texts(lines), ["Green text"])
+
+    def test_ansi_colour_classifies_severity(self):
+        from runner.tasks import get_log_lines
+
+        # Django style markup (DJANGO_COLORS=dark + --force-color): the SGR
+        # colour decides the class even when the wording matches no keyword.
+        self._write_log(
+            "structural_analysis",
+            b"\x1b[33;1mCould not resolve entity for X\x1b[0m\n"
+            b"\x1b[31;1mfatal: cannot continue\x1b[0m\n"
+            b"\x1b[32;1mCrawl finished.\x1b[0m\n",
+        )
+        lines, _ = get_log_lines("structural_analysis")
+        self.assertEqual([line["cls"] for line in lines], ["line-warning", "line-error", "line-success"])
+
+    def test_ansi_colour_beats_keyword_fallback(self):
+        from runner.tasks import get_log_lines
+
+        # A handled, WARNING-styled line mentioning "Error" must stay yellow.
+        self._write_log("structural_analysis", b"\x1b[33;1mError fetching messages for X: timeout\x1b[0m\n")
+        lines, _ = get_log_lines("structural_analysis")
+        self.assertEqual(lines[0]["cls"], "line-warning")
+
+    def test_keyword_fallback_for_unstyled_lines(self):
+        from runner.tasks import get_log_lines
+
+        self._write_log(
+            "structural_analysis",
+            b"Traceback (most recent call last):\nplain progress\ndone\nSkipping channel 1\n",
+        )
+        lines, _ = get_log_lines("structural_analysis")
+        self.assertEqual(
+            [line["cls"] for line in lines],
+            ["line-error", "", "line-success", "line-warning"],
+        )
 
     def test_carriage_return_keeps_last_segment(self):
         from runner.tasks import get_log_lines
@@ -143,7 +183,15 @@ class GetLogLinesTests(_TmpMixin, TestCase):
         # Progress-bar style: earlier content overwritten by CR; only final segment shown.
         self._write_log("structural_analysis", b"loading\rprogress 50%\rprogress 100%\n")
         lines, _ = get_log_lines("structural_analysis")
-        self.assertEqual(lines, ["progress 100%"])
+        self.assertEqual(self._texts(lines), ["progress 100%"])
+
+    def test_carriage_return_classifies_visible_segment_only(self):
+        from runner.tasks import get_log_lines
+
+        # The styled segment was overwritten by an unstyled one: no colour.
+        self._write_log("structural_analysis", b"\x1b[31;1mbad\x1b[0m\rall good now\n")
+        lines, _ = get_log_lines("structural_analysis")
+        self.assertEqual(lines, [{"text": "all good now", "cls": ""}])
 
     def test_python_warning_lines_dropped(self):
         from runner.tasks import get_log_lines
@@ -151,7 +199,7 @@ class GetLogLinesTests(_TmpMixin, TestCase):
         content = b"/home/user/app.py:42: DeprecationWarning: old api\n  old_function()\nnormal output\n"
         self._write_log("structural_analysis", content)
         lines, _ = get_log_lines("structural_analysis")
-        self.assertEqual(lines, ["normal output"])
+        self.assertEqual(self._texts(lines), ["normal output"])
 
     def test_offset_resumes_from_byte_position(self):
         from runner.tasks import get_log_lines
@@ -160,7 +208,7 @@ class GetLogLinesTests(_TmpMixin, TestCase):
         _, offset = get_log_lines("structural_analysis")
         self._write_log("structural_analysis", b"first\nsecond\nthird\n")
         lines, _ = get_log_lines("structural_analysis", offset)
-        self.assertEqual(lines, ["third"])
+        self.assertEqual(self._texts(lines), ["third"])
 
     def test_empty_file_returns_empty_list(self):
         from runner.tasks import get_log_lines
@@ -202,6 +250,22 @@ class LaunchGuardsTests(_TmpMixin, TestCase):
         self.assertEqual(meta["pid"], 12345)
         self.assertEqual(meta["args"], ["--amount", "5"])
         self.assertIsNone(meta["exit_code"])
+
+    def test_launch_forces_color_without_recording_it(self):
+        from runner.tasks import launch
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        with patch("runner.tasks.subprocess.Popen", return_value=mock_proc) as mock_popen:
+            launch("search_channels", ["--amount", "5"])
+        # --force-color makes Django emit the self.style.* ANSI codes into the
+        # pipe (severity classification reads them); it is an implementation
+        # detail of the runner, so it must not leak into the user-visible args.
+        wrapper_cmd = mock_popen.call_args.args[0]
+        self.assertIn("--force-color", wrapper_cmd)
+        self.assertEqual(mock_popen.call_args.kwargs["env"]["DJANGO_COLORS"], "dark")
+        meta = json.loads((self.tmp_dir / "runner_search_channels.meta.json").read_text())
+        self.assertNotIn("--force-color", meta["args"])
 
 
 class AbortGuardsTests(_TmpMixin, TestCase):
@@ -506,11 +570,11 @@ class TaskStatusViewTests(TestCase):
                     "pid": None,
                 },
             ),
-            patch("runner.views.tasks.get_log_lines", return_value=(["hello"], 5)),
+            patch("runner.views.tasks.get_log_lines", return_value=([{"text": "hello", "cls": ""}], 5)),
         ):
             resp = self.client.get(reverse("operations-status", args=["structural_analysis"]))
         data = resp.json()
-        self.assertEqual(data["lines"], ["hello"])
+        self.assertEqual(data["lines"], [{"text": "hello", "cls": ""}])
         self.assertEqual(data["next_offset"], 5)
         self.assertEqual(data["status"], "idle")
 

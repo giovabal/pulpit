@@ -20,7 +20,39 @@ _TMP_DIR = settings.BASE_DIR / "tmp"
 _LAUNCH_LOCKS: dict[str, threading.Lock] = {name: threading.Lock() for name in TASK_NAMES}
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
+_SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
 _WARNING_RE = re.compile(r"^/.+\.py:\d+: \w+Warning:")
+
+# Django's color_style() palette under DJANGO_COLORS=dark (pinned in launch()):
+# ERROR → 31 (red, bold), WARNING → 33 (yellow, bold), SUCCESS → 32 (green,
+# bold). Checked in this order so a line mixing styles keeps the most severe
+# colour. launch() passes --force-color so the styles survive the pipe.
+_SGR_CLASSES = (("31", "line-error"), ("33", "line-warning"), ("32", "line-success"))
+
+
+def _classify_line(raw: str, text: str) -> str:
+    """CSS class for one log line.
+
+    The authoritative signal is the ANSI SGR colour the command itself put on
+    the line (self.style.ERROR/WARNING/SUCCESS, the styled WARNING+ log
+    handler). Lines with no colour — plain progress writes, tracebacks,
+    third-party output — fall back to keyword heuristics.
+    """
+    codes: set[str] = set()
+    for match in _SGR_RE.finditer(raw):
+        codes.update(c for c in match.group(1).split(";") if c)
+    for code, cls in _SGR_CLASSES:
+        if code in codes:
+            return cls
+
+    lowered = text.lower()
+    if "error" in lowered or lowered.startswith("traceback") or lowered.startswith("exception"):
+        return "line-error"
+    if "warning" in lowered or "skipping" in lowered:
+        return "line-warning"
+    if "complete" in lowered or "done" in lowered or "success" in lowered:
+        return "line-success"
+    return ""
 
 
 def _tmp(task: str, suffix: str) -> Path:
@@ -94,8 +126,13 @@ def get_status(task: str) -> dict:
     }
 
 
-def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
-    """Return (new_lines, new_offset) for the log since *offset* bytes."""
+def get_log_lines(task: str, offset: int = 0) -> tuple[list[dict[str, str]], int]:
+    """Return (new_lines, new_offset) for the log since *offset* bytes.
+
+    Each line is a ``{"text": <ANSI-stripped text>, "cls": <css class or "">}``
+    dict — severity is classified server-side (from the line's ANSI colour,
+    with keyword fallback) so the panel JS just applies the class.
+    """
     log_path = _log_path(task)
     if not log_path.exists():
         return [], 0
@@ -125,16 +162,17 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
     new_offset = offset + last_nl + 1
 
     text = complete_data.decode("utf-8", errors="replace")
-    text = _ANSI_RE.sub("", text)
 
     # Simulate terminal CR behaviour: split on \n, within each segment the last
-    # \r-separated piece is what would be visible on screen.
+    # \r-separated piece is what would be visible on screen. Classify severity
+    # from that visible segment's ANSI codes before stripping them for display.
     # Also drop Python warning lines (header + indented code snippet).
     lines = []
     skip_next = False
     for raw_line in text.split("\n"):
         segments = raw_line.split("\r")
-        final = segments[-1].rstrip()
+        raw_final = segments[-1]
+        final = _ANSI_RE.sub("", raw_final).rstrip()
         if _WARNING_RE.match(final):
             skip_next = True
             continue
@@ -142,7 +180,7 @@ def get_log_lines(task: str, offset: int = 0) -> tuple[list[str], int]:
             skip_next = False
             continue
         if final:
-            lines.append(final)
+            lines.append({"text": final, "cls": _classify_line(raw_final, final)})
 
     return lines, new_offset
 
@@ -179,7 +217,9 @@ try:
     m["end_time"] = datetime.now(timezone.utc).isoformat()
     meta_path.write_text(json.dumps(m))
 except Exception as e:
-    print(f"runner wrapper: failed to write metadata: {e}", file=sys.stderr)
+    # Hardcoded red SGR: output goes to the task log, where the panel maps
+    # ANSI colour to line severity (runner.tasks._classify_line).
+    print(f"\\x1b[31;1mrunner wrapper: failed to write metadata: {e}\\x1b[0m", file=sys.stderr)
 sys.exit(exit_code)
 """
 
@@ -221,8 +261,14 @@ def launch(task: str, args: list[str]) -> None:
             "PYTHONUNBUFFERED": "1",
             "PYTHONWARNINGS": "ignore::DeprecationWarning",
             "MPLBACKEND": "Agg",
+            # Pin Django's palette so the SGR→severity mapping in
+            # _classify_line is stable regardless of the server's environment.
+            "DJANGO_COLORS": "dark",
         }
-        cmd = [sys.executable, _MANAGE_PY, task, *args]
+        # --force-color: stdout is a pipe, so Django would otherwise emit the
+        # self.style.* markup as plain text and get_log_lines() could not
+        # classify line severity from the ANSI codes.
+        cmd = [sys.executable, _MANAGE_PY, task, "--force-color", *args]
         # Open log file, pass the fd to the subprocess, then close our copy immediately
         # (the subprocess keeps the fd alive via inheritance).
         with open(log_path, "wb") as log_file:
