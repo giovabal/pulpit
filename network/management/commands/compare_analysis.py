@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from network import tables
 from webapp.models import Project
+from webapp_engine.command_logging import styled_warning_logs
 
 
 class Command(BaseCommand):
@@ -42,6 +43,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
+        # Route logger.warning/error lines (e.g. exporter HTML patching) through
+        # self.style so they carry severity colour in the Operations panel.
+        with styled_warning_logs(self.style):
+            self._handle(*args, **options)
+
+    def _handle(self, *args: Any, **options: Any) -> None:
         compare_dir = os.path.abspath(options["project_dir"])
         if not os.path.isdir(compare_dir):
             raise CommandError(f"Not a directory: {compare_dir!r}")

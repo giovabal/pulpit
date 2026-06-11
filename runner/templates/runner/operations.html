@@ -1093,14 +1093,6 @@ function showToast(msg, type) {
     return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
   }
 
-  function classifyLine(text) {
-    const l = text.toLowerCase();
-    if (l.includes('error') || l.startsWith('traceback') || l.startsWith('exception')) return 'line-error';
-    if (l.includes('warning') || l.includes('skipping')) return 'line-warning';
-    if (l.includes('complete') || l.includes('done') || l.includes('success')) return 'line-success';
-    return '';
-  }
-
   class TaskMonitor {
     constructor(name) {
       this.name = name;
@@ -1163,14 +1155,18 @@ function showToast(msg, type) {
         return /\| messages processed: \d/.test(text) ||
                /\| replies for post #\d/.test(text);
       }
+      // Each entry is {text, cls}: severity is classified server-side from the
+      // line's ANSI colour (keyword fallback for unstyled lines) — see
+      // runner.tasks._classify_line.
       for (const line of lines) {
+        const text = line.text;
         const last = this.logEl.lastElementChild;
-        const chanM   = line.match(/^\[(\d+\/\d+)\]/);
-        const indentM = line.match(/^(\s+)\S/);
+        const chanM   = text.match(/^\[(\d+\/\d+)\]/);
+        const indentM = text.match(/^(\s+)\S/);
         const sameChannelCounter = (
           chanM && last
           && last.textContent.match(/^\[(\d+\/\d+)\]/)?.[1] === chanM[1]
-          && isCounter(line)
+          && isCounter(text)
           && isCounter(last.textContent)
         );
         const sameIndent = (
@@ -1178,14 +1174,12 @@ function showToast(msg, type) {
         );
         const updateInPlace = sameChannelCounter || sameIndent;
         if (updateInPlace) {
-          last.textContent = line;
-          const cls = classifyLine(line);
-          last.className = cls || '';
+          last.textContent = text;
+          last.className = line.cls || '';
         } else {
           const div = document.createElement('div');
-          div.textContent = line;
-          const cls = classifyLine(line);
-          if (cls) div.className = cls;
+          div.textContent = text;
+          if (line.cls) div.className = line.cls;
           this.logEl.appendChild(div);
         }
       }
