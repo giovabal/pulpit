@@ -424,6 +424,42 @@ class FixMissingMediaGoneTests(TestCase):
         self.api_client.client.get_messages.assert_called_once()
 
 
+class FixMissingMediaPrivateChannelTests(TestCase):
+    """A private/banned channel is a routine condition: ``_fix_missing_media``
+    must skip it with the plain-language line used by the other subcommands —
+    not the raw Telethon RPC text followed by a logged traceback."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.api_client = _make_api_client()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.out = io.StringIO()
+        self.cmd = Command(stdout=self.out)
+
+    def test_private_channel_skipped_with_friendly_message(self) -> None:
+        ch = make_channel(telegram_id=506, organization=self.org)
+        msg = Message.objects.create(channel=ch, telegram_id=10, grouped_id=777)
+        err = errors.rpcerrorlist.ChannelPrivateError.__new__(errors.rpcerrorlist.ChannelPrivateError)
+        self.api_client.client.get_entity.side_effect = err
+        printer = ProgressPrinter(self.cmd.stdout, total=1)
+        with self.assertNoLogs("crawler.management.commands.crawl_channels", level="ERROR"):
+            self.cmd._fix_missing_media(
+                Channel.objects.filter(pk=ch.pk),
+                self.api_client,
+                self.tmp,
+                printer,
+                _crawl_opts(fix_missing_media=True, download_images=True),
+            )
+        out = self.out.getvalue()
+        self.assertIn("channel is private or inaccessible", out)
+        self.assertNotIn("Could not get entity", out)
+        self.api_client.client.get_messages.assert_not_called()
+        # The message is skipped, not retired — access may be restored later.
+        msg.refresh_from_db()
+        self.assertEqual(msg.media_type, "")
+
+
 # ---------------------------------------------------------------------------
 # ReferenceResolver._is_paused / _pause
 # ---------------------------------------------------------------------------

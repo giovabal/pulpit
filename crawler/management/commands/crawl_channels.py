@@ -628,6 +628,14 @@ class Command(BaseCommand):
             try:
                 crawler.api_client.wait()
                 entity = crawler.api_client.client.get_entity(channel.username)
+            except errors.rpcerrorlist.ChannelPrivateError:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {action} for channel {channel.telegram_id}: channel is private or inaccessible"
+                    )
+                )
+                return None
             except Exception as error:  # noqa: BLE001 - logged for the operator
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
@@ -655,6 +663,14 @@ class Command(BaseCommand):
             )
             if not settings.IGNORE_FLOODWAIT:
                 sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return None
+        except errors.rpcerrorlist.ChannelPrivateError:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Skipping {action} for channel {channel.telegram_id}: channel is private or inaccessible"
+                )
+            )
             return None
         except Exception as error:  # noqa: BLE001 - other RPC errors must not crash the whole run
             printer.newline()
@@ -705,6 +721,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Flood wait resolving entity for {channel}: {exc}"))
             if not settings.IGNORE_FLOODWAIT:
                 sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+            return
+        except errors.rpcerrorlist.ChannelPrivateError:
+            printer.newline()
+            self.stdout.write(
+                self.style.WARNING(f"Skipping fix-holes for {channel}: channel is private or inaccessible")
+            )
             return
         except Exception as exc:
             printer.newline()
@@ -1077,6 +1099,13 @@ class Command(BaseCommand):
                 skipped += n
                 if not settings.IGNORE_FLOODWAIT:
                     sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                continue
+            except errors.rpcerrorlist.ChannelPrivateError:
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(f"Skipping missing-media fix for {channel}: channel is private or inaccessible")
+                )
+                skipped += n
                 continue
             except Exception as exc:
                 printer.newline()
