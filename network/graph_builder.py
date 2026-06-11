@@ -4,6 +4,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet
+from django.utils import timezone
 
 from network.utils import channel_cutoff_q, make_date_q
 from webapp.models import Channel, ChannelAttribution, Message, ProfilePicture
@@ -72,7 +73,13 @@ def _channel_activity_bounds(
     )
     for row in rows:
         mn, mx = row["min_date"], row["max_date"]
-        bounds[row["channel_id"]] = (mn.date() if mn else None, mx.date() if mx else None)
+        # localdate(): bucket into the TIME_ZONE calendar days the message filters
+        # (make_date_q / channel_cutoff_q) use, so the clamps fed into
+        # resolve_window_organization agree with message-level period containment.
+        bounds[row["channel_id"]] = (
+            timezone.localdate(mn) if mn else None,
+            timezone.localdate(mx) if mx else None,
+        )
     return bounds
 
 
@@ -107,7 +114,7 @@ def resolve_window_organization(
     analysis window to the channel's data range. Returns ``(org_id, org_name,
     org_color)`` or ``None`` when no in-target period overlaps the window.
     """
-    today = datetime.date.today()
+    today = timezone.localdate()
     floor = channel_created or data_min or window_start or datetime.date.min
     w_lo = window_start or floor
     w_hi = window_end or data_max or today
@@ -268,7 +275,7 @@ def build_graph(
             _in_target_period_tuples(channel),
             start_date,
             end_date,
-            channel.date.date() if channel.date else None,
+            timezone.localdate(channel.date) if channel.date else None,
             data_min,
             data_max,
         )
@@ -364,24 +371,28 @@ def build_graph(
             weight_mentions=edge[4],
         )
 
-    # Remove dead leaves that ended up with no edges. Their slot was earned by the
-    # all-time, period-blind ``Channel.in_degree``, but edge construction is
-    # period-aware (``channel_cutoff_q``): a citation only counts while the citing
-    # channel is in an in-target period. So a dead leaf cited solely outside those
-    # periods — or inside a restricted analysis window with no citations — keeps no
-    # edge and would otherwise hang as an isolated ghost node. This holds with or
-    # without a date window (the period cutoff alone can orphan a dead leaf), so the
-    # sweep runs whenever dead leaves are drawn. In-target nodes (``resolved_org_id``
-    # set) are kept even when isolated — they are subjects of the analysis.
-    if draw_dead_leaves:
-        orphaned = [
-            cid
-            for cid in list(channel_dict)
-            if graph.degree(cid) == 0 and channel_dict[cid]["data"].get("resolved_org_id") is None
-        ]
-        for cid in orphaned:
-            graph.remove_node(cid)
-            del channel_dict[cid]
-        channel_qs = channel_qs.filter(pk__in=[int(cid) for cid in channel_dict])
+    # Remove org-less nodes that ended up with no edges. Two ways they arise:
+    # dead leaves earned their slot via the all-time, period-blind
+    # ``Channel.in_degree`` but edge construction is period-aware
+    # (``channel_cutoff_q``), so a leaf cited solely outside those periods — or
+    # inside a restricted analysis window with no citations — keeps no edge; and an
+    # in-target channel whose open-start attribution matches any window can still
+    # resolve to no organization when it was created after the window end
+    # (``resolve_window_organization`` clamps the open start to the creation date).
+    # ``_filter_inactive_channels`` deliberately exempts org-less nodes on the
+    # promise that this sweep decides their fate, so it must run regardless of
+    # ``draw_dead_leaves`` — gating it on the flag left the second kind hanging as
+    # isolated grey ghosts precisely when dead leaves were *off*. In-target nodes
+    # (``resolved_org_id`` set) are kept even when isolated — they are subjects of
+    # the analysis.
+    orphaned = [
+        cid
+        for cid in list(channel_dict)
+        if graph.degree(cid) == 0 and channel_dict[cid]["data"].get("resolved_org_id") is None
+    ]
+    for cid in orphaned:
+        graph.remove_node(cid)
+        del channel_dict[cid]
+    channel_qs = channel_qs.filter(pk__in=[int(cid) for cid in channel_dict])
 
     return graph, channel_dict, edge_list, channel_qs

@@ -89,6 +89,12 @@ class ChannelAttribution(BaseModel):
     def clean(self) -> None:
         if self.start and self.end and self.start > self.end:
             raise ValidationError({"end": "End date must not be before start date."})
+        if getattr(self, "_overlap_checked_by_formset", False):
+            # The admin inline formset validates the channel's *submitted* timeline as
+            # a whole (pairwise, in its clean()). Checking each row against the stale
+            # DB siblings here would spuriously reject valid multi-row edits — e.g.
+            # closing the open period and adding its successor in one save.
+            return
         if self.channel_id is None:
             return
         siblings = ChannelAttribution.objects.filter(channel_id=self.channel_id)

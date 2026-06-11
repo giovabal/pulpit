@@ -568,7 +568,10 @@ class ChannelCrawler:
         """
         if channel.to_inspect or not telegram_message.date:
             return False
-        d = telegram_message.date.date()
+        # localdate(): bucket the UTC timestamp into the same TIME_ZONE calendar day the
+        # analysis chokepoint uses (channel_cutoff_q's __date lookup), so the crawler never
+        # refuses a boundary message the graph pipeline would count.
+        d = timezone.localdate(telegram_message.date)
         return not any((s is None or s <= d) and (e is None or e >= d) for s, e in self._in_target_intervals(channel))
 
     def _in_target_period_q(self, channel: Channel) -> Q | None:
@@ -650,9 +653,11 @@ class ChannelCrawler:
             elif hasattr(telegram_message.media, "poll"):
                 message.media_type = "poll"
             if hasattr(telegram_message.media, "webpage"):
+                # Sliced to the model's max_length: preview URLs with tracking params can
+                # exceed it, and PostgreSQL raises DataError instead of truncating.
                 message.webpage_url = (
                     telegram_message.media.webpage.url if hasattr(telegram_message.media.webpage, "url") else ""
-                )
+                )[:2048]
                 message.webpage_type = (
                     telegram_message.media.webpage.type if hasattr(telegram_message.media.webpage, "type") else ""
                 )
@@ -1004,22 +1009,26 @@ class ChannelCrawler:
         """Fetch and upsert reply messages for posts in *channel* with replies > 0.
 
         ``min_telegram_id`` / ``max_telegram_id`` restrict which parent messages are processed.
-        Replies live in the linked discussion group (channel.linked_chat_id). Returns the
-        number of MessageReply records created or updated.
+        Replies live in the linked discussion group, but they are requested through the
+        *broadcast channel* with the channel post id — Telegram resolves the linked thread
+        server-side. (Message ids are per-peer: asking the linked group for
+        ``reply_to=<channel post id>`` would address an unrelated group message.)
+        ``linked_chat_id`` stays as the cheap precondition for "comments enabled".
+        Returns the number of MessageReply records created or updated.
         """
         if not channel.linked_chat_id:
             return 0
 
         self.api_client.wait()
         try:
-            linked_entity = self.api_client.client.get_entity(channel.linked_chat_id)
+            channel_entity = self.api_client.client.get_entity(PeerChannel(channel.telegram_id))
         except errors.rpcerrorlist.ChannelPrivateError:
-            logger.warning("Linked group %s for %s is private; skipping replies.", channel.linked_chat_id, channel)
+            logger.warning("Channel %s is private; skipping replies.", channel)
             return 0
         except errors.FloodWaitError:
             raise
         except Exception as exc:
-            logger.warning("Could not resolve linked group %s for %s: %s", channel.linked_chat_id, channel, exc)
+            logger.warning("Could not resolve channel %s for reply fetching: %s", channel, exc)
             return 0
 
         parent_qs = Message.objects.filter(channel=channel, replies__gt=0, replies_unavailable=False)
@@ -1041,7 +1050,7 @@ class ChannelCrawler:
             self.api_client.wait()
             try:
                 to_upsert: list[MessageReply] = []
-                for tg_reply in self.api_client.client.iter_messages(linked_entity, reply_to=msg_telegram_id):
+                for tg_reply in self.api_client.client.iter_messages(channel_entity, reply_to=msg_telegram_id):
                     if isinstance(tg_reply, MessageService):
                         continue
                     sender_name = ""

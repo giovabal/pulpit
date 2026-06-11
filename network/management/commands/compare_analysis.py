@@ -86,6 +86,13 @@ class Command(BaseCommand):
             include_consensus_matrix_html=exists("consensus_matrix.html"),
             include_structural_similarity=exists("structural_similarity.html"),
             include_behavioural_equivalence=exists("behavioural_equivalence.html"),
+            # Probed like the flags above: this command rewrites a live export's
+            # index, and write_index_html defaults every include_* to False — omitting
+            # these would silently drop the cards for analyses that are still on disk.
+            include_vacancy_analysis=exists("vacancy_analysis.html"),
+            include_robustness_html=exists("robustness_table.html"),
+            include_robustness_xlsx=exists("robustness_table.xlsx"),
+            include_interest_structural=exists("interest_structural.html"),
             include_compare_html=True,
             compare_files=compare_files,
         )

@@ -95,6 +95,19 @@ def _run(name: str) -> None:
         sql = _SQLITE_SQL[name]
         with connection.cursor() as cur:
             cur.execute(sql)
+            if name == "checkpoint":
+                # PRAGMA wal_checkpoint never raises on contention — it returns a
+                # (busy, log, checkpointed) row, busy=1 meaning the WAL could not be
+                # checkpointed/truncated (e.g. a concurrent reader holds a snapshot).
+                # Reporting that as "ok" would tell the operator space was reclaimed
+                # when nothing happened.
+                row = cur.fetchone()
+                if row and row[0]:
+                    raise RuntimeError(
+                        "WAL checkpoint could not complete: the database is busy "
+                        "(another connection holds a read snapshot). Retry when the "
+                        "crawler/analysis is idle."
+                    )
         return
     if connection.vendor == "postgresql":
         sql = _POSTGRES_SQL[name]

@@ -21,6 +21,14 @@ from .models import (
 
 
 class ChannelAttributionInlineFormSet(forms.BaseInlineFormSet):
+    def add_fields(self, form: forms.Form, index: int | None) -> None:
+        super().add_fields(form, index)
+        # This formset checks overlap on the submitted timeline as a whole (clean()
+        # below); flag each instance so ChannelAttribution.clean() skips its
+        # per-row DB-sibling check, which sees pre-save state and would reject
+        # valid combined edits.
+        form.instance._overlap_checked_by_formset = True
+
     def clean(self) -> None:
         super().clean()
         periods: list[tuple] = []
@@ -124,8 +132,10 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Link")
     def telegram_url(self, obj: Message) -> str:
+        # Message.telegram_url is already a full https:// URL — prefixing another
+        # scheme would produce the unreachable href "https://https://t.me/…".
         return format_html(
-            "<a href='https://{}' target='_blank'>{}</a>",
+            "<a href='{}' target='_blank'>{}</a>",
             obj.telegram_url,
             obj.telegram_url,
         )

@@ -213,7 +213,10 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     symmetrically, so the score is also direction-invariant (same value on ``G`` and
     ``G.reverse()``).
     """
-    return apply_measure(graph_data, nx.clustering(graph), "local_clustering", "Local Clustering")
+    # float(): nx.clustering yields int 0 for nodes with degree < 2 and float
+    # elsewhere; mixed types corrupt GEXF/GraphML attribute typing on export.
+    values = {node: float(value) for node, value in nx.clustering(graph).items()}
+    return apply_measure(graph_data, values, "local_clustering", "Local Clustering")
 
 
 # Guimerà & Amaral (2005) within-module-degree-z / participation-coefficient role thresholds.

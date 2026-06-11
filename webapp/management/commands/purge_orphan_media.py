@@ -112,11 +112,13 @@ def iter_orphan_files() -> Iterator[Path]:
 def _remove_empty_dirs(root: Path) -> int:
     """Bottom-up rmdir of every empty subdirectory under ``root`` (keeps ``root`` itself)."""
     removed = 0
-    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+    for dirpath, _dirnames, _filenames in os.walk(root, topdown=False):
         if Path(dirpath) == root:
             continue
-        if dirnames or filenames:
-            continue
+        # No dirnames/filenames pre-check: with topdown=False those lists were
+        # scanned *before* this walk removed any child directories, so a parent
+        # that just became empty would be skipped. rmdir itself is the emptiness
+        # test — it fails (and is ignored) on anything still occupied.
         try:
             os.rmdir(dirpath)
             removed += 1

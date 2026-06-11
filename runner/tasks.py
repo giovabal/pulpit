@@ -6,7 +6,7 @@ import signal
 import subprocess
 import sys
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -67,6 +67,19 @@ def get_status(task: str) -> dict:
         status = "done" if exit_code == 0 else "failed"
     elif pid and _is_running(pid):
         status = "running"
+    elif meta.get("launching"):
+        # launch() writes the meta before Popen and the pid after it: in that window
+        # there is neither pid nor exit code, and without this marker a concurrent
+        # poll would paint the task "failed" (stopping the UI polling) and another
+        # worker's launch() would see not-running and double-start the command. The
+        # staleness bound keeps a launcher that died mid-spawn from wedging the task
+        # as forever-"running".
+        started = meta.get("start_time")
+        try:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(started)
+        except (TypeError, ValueError):
+            age = timedelta.max
+        status = "running" if age < timedelta(seconds=60) else "failed"
     else:
         # Process ended without writing an exit code (e.g. SIGKILL).
         status = "failed"
@@ -197,6 +210,9 @@ def launch(task: str, args: list[str]) -> None:
             "args": args,
             "pid": None,
             "exit_code": None,
+            # Tells get_status() the pid is intentionally absent for a moment;
+            # cleared right after Popen below.
+            "launching": True,
         }
         meta_path.write_text(json.dumps(meta))
 
@@ -228,6 +244,7 @@ def launch(task: str, args: list[str]) -> None:
         except (ValueError, OSError):
             persisted = meta
         persisted["pid"] = proc.pid
+        persisted.pop("launching", None)
         meta_path.write_text(json.dumps(persisted))
 
 

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from webapp.models import Channel, Message
 
@@ -14,10 +15,14 @@ def _month_spine(q: models.Q) -> list[str]:
     )
     if not agg["earliest"] or not agg["latest"]:
         return []
+    # localtime(): the chart buckets come from TruncMonth, which truncates in the
+    # active TIME_ZONE; labelling the spine ends with the UTC month instead would
+    # make reindex_to_spine silently drop a bucket at either end whenever the
+    # earliest/latest message straddles local vs UTC midnight at a month boundary.
     return (
         pd.period_range(
-            start=agg["earliest"].strftime("%Y-%m"),
-            end=agg["latest"].strftime("%Y-%m"),
+            start=timezone.localtime(agg["earliest"]).strftime("%Y-%m"),
+            end=timezone.localtime(agg["latest"]).strftime("%Y-%m"),
             freq="M",
         )
         .strftime("%Y-%m")

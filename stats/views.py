@@ -3,10 +3,11 @@ from collections import Counter
 from typing import Any, ClassVar
 
 from django.db import models
-from django.db.models import Avg, Count, Sum
+from django.db.models import Avg, Count, Max, Min, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views import View
 
 from stats.queries import channel_month_spine, global_month_spine, reindex_to_spine
@@ -131,6 +132,12 @@ class _ChannelTimeSeriesBase(View):
         """Post-process each monthly value before serialising. Default: identity."""
         return value
 
+    def get_spine(self, channel: Channel) -> list[str]:
+        """Month spine the data are reindexed to. Default: the channel's own posting
+        span. Views whose data come from *other* channels' messages must override
+        this — ``reindex_to_spine`` drops any bucket outside the spine."""
+        return channel_month_spine(channel)
+
     def _get_monthly_data(self, channel: Channel) -> list[dict]:
         qs = (
             self.get_queryset(channel)
@@ -149,7 +156,7 @@ class _ChannelTimeSeriesBase(View):
 
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
         channel = get_object_or_404(Channel, pk=pk)
-        spine = channel_month_spine(channel)
+        spine = self.get_spine(channel)
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
         rows = self._get_monthly_data(channel)
@@ -208,6 +215,24 @@ class ChannelForwardsReceivedHistoryView(_ChannelTimeSeriesBase):
             .filter(channel_cutoff_q())
         )
 
+    def get_spine(self, channel: Channel) -> list[str]:
+        """Span the union of the channel's own months and the forwards' months.
+
+        The data here are *other* channels' forwards, which can occur after the
+        subject's last own post (post-closure amplification — exactly what the
+        vacancy analysis studies) or when the subject has no alive posts at all;
+        the default own-months spine would silently drop those buckets.
+        """
+        own = channel_month_spine(channel)
+        agg = self.get_queryset(channel).aggregate(earliest=Min("date"), latest=Max("date"))
+        if not agg["earliest"]:
+            return own
+        fwd_first = timezone.localtime(agg["earliest"]).strftime("%Y-%m")
+        fwd_last = timezone.localtime(agg["latest"]).strftime("%Y-%m")
+        start = min(own[0], fwd_first) if own else fwd_first
+        end = max(own[-1], fwd_last) if own else fwd_last
+        return pd.period_range(start=start, end=end, freq="M").strftime("%Y-%m").tolist()
+
     def get_annotation(self) -> Count:
         return Count("id")
 
@@ -246,6 +271,8 @@ class ChannelCrossRefsView(_ChannelTimeSeriesBase):
             Message.objects.alive()
             .filter(channel__in=in_target_pks, forwarded_from=channel)
             .filter(channel_cutoff_q())
+            # Like the other three legs: the subject must not list itself.
+            .exclude(channel=channel)
             .values_list("channel", flat=True)
         )
         ref_in = Counter(

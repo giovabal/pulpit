@@ -28,18 +28,23 @@ def register_normalize() -> None:
 class UnaccentLower(Func):
     """SQL expression: UNACCENT_LOWER(col) — accent-stripped, lowercased text.
 
-    Only SQLite has the registered ``UNACCENT_LOWER`` UDF. PostgreSQL has no portable
-    equivalent (it would need the ``unaccent`` extension), so there it falls back to
-    ``LOWER`` — channel search stays case-insensitive (accent-sensitive) instead of
-    raising ``function unaccent_lower(...) does not exist``. Pair with
+    Only SQLite has the registered ``UNACCENT_LOWER`` UDF. The other engines
+    settings.py supports (PostgreSQL, MySQL/MariaDB, Oracle) have no portable
+    equivalent (PostgreSQL would need the ``unaccent`` extension), so they all fall
+    back to ``LOWER`` — channel search stays case-insensitive (accent-sensitive)
+    instead of raising ``function unaccent_lower(...) does not exist``. Pair with
     :func:`normalize_for_search` so the query term matches the column transform.
     """
 
     function = "UNACCENT_LOWER"
     output_field = TextField()
 
-    def as_postgresql(self, compiler, connection, **extra_context):
+    def _as_lower(self, compiler, connection, **extra_context):
         return super().as_sql(compiler, connection, function="LOWER", **extra_context)
+
+    as_postgresql = _as_lower
+    as_mysql = _as_lower  # MariaDB uses the mysql vendor too
+    as_oracle = _as_lower
 
 
 def normalize_for_search(text: str) -> str:

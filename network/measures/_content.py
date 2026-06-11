@@ -2,7 +2,7 @@ import datetime
 import statistics
 from typing import Any
 
-from django.db.models import Q
+from django.db.models import F, Q
 
 from network.measures._base import (
     channel_pks_from_graph_data,
@@ -83,9 +83,12 @@ def apply_diffusion_lag(
     """
     key = "diffusion_lag"
     channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
+    # ~Q(channel=forwarded_from): archival re-shares of one's *own* posts measure
+    # nothing about reaction speed to external content and would skew the median.
     fwd_q = (
         Q(channel_id__in=channel_pks)
         & Q(forwarded_from__isnull=False)
+        & ~Q(channel_id=F("forwarded_from_id"))
         & Q(fwd_from_date__isnull=False)
         & Q(date__isnull=False)
         & make_date_q(start_date, end_date)

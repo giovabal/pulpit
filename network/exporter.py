@@ -215,9 +215,17 @@ _EXPORT_SKIP = frozenset({"id", "x", "y", "color", "pic", "activity_period"})
 
 
 def _prepare_export_graph(graph: nx.DiGraph, graph_data: GraphData) -> nx.DiGraph:
-    """Return an annotated copy of *graph* with node attributes from *graph_data*."""
+    """Return an annotated copy of *graph* with node attributes from *graph_data*.
+
+    Numeric attributes are type-harmonised per key: the GEXF writer declares each
+    attribute's type from the first node serialized and ``write_graphml`` emits one
+    ``<key>`` per (name, type) pair, so a column holding int on some nodes and float
+    on others (e.g. a measure that yields exact 0 for isolated nodes) would produce
+    schema-invalid GEXF or duplicate GraphML keys depending on DB row order.
+    """
     g = graph.copy()
     node_by_id = {n["id"]: n for n in graph_data["nodes"]}
+    float_keys: set[str] = set()
     for node_id in g.nodes():
         node = node_by_id.get(node_id)
         if node is None:
@@ -233,6 +241,13 @@ def _prepare_export_graph(graph: nx.DiGraph, graph_data: GraphData) -> nx.DiGrap
                         attrs[f"community_{strategy}"] = str(label)
             elif value is not None:
                 attrs[key] = value
+                if isinstance(value, float):
+                    float_keys.add(key)
+    for _node_id, attrs in g.nodes(data=True):
+        for key in float_keys:
+            value = attrs.get(key)
+            if type(value) is int:  # bool is an int subclass — leave it alone
+                attrs[key] = float(value)
     return g
 
 
@@ -540,6 +555,7 @@ def write_summary_json(
         "xlsx",
         "gexf",
         "graphml",
+        "csv",
         "seo",
         "vertical_layout",
         "consensus_matrix",

@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, F, Q, QuerySet
 
 from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
@@ -338,8 +338,11 @@ def _network_content_metrics(
     if total == 0:
         return {"network_originality": None, "network_amplification": None}
     forwarded_out = agg["forwarded_out"]
+    # ~Q(channel=forwarded_from): self-reposts are not network amplification (the
+    # per-channel AMPLIFICATION measure and the graph exclude them the same way).
     fwd_in_q = (
         Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
+        & ~Q(channel_id=F("forwarded_from_id"))
         & make_date_q(start_date, end_date)
         & channel_cutoff_q()
     )

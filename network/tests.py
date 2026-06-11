@@ -3591,8 +3591,16 @@ class ResolveWindowOrganizationTests(TestCase):
         self.assertIsNone(self._resolve([], datetime.date(2024, 1, 1), datetime.date(2024, 12, 31)))
 
 
+@override_settings(TIME_ZONE="UTC")
 class ChannelCutoffQBoundaryTests(TestCase):
-    """channel_cutoff_q inclusive day boundaries via the Exists subquery (SQLite-safe)."""
+    """channel_cutoff_q inclusive day boundaries via the Exists subquery (SQLite-safe).
+
+    TIME_ZONE is pinned: the ``__date`` lookups bucket message datetimes into
+    *active-timezone* calendar days, so these UTC-midnight boundary fixtures only
+    express "inclusive bounds" under a UTC clock — under the deployed Europe/Rome
+    zone the same instants belong to the neighbouring local day, and the test
+    would depend on the machine's configuration.
+    """
 
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="O", is_in_target=True)

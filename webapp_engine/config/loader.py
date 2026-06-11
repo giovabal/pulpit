@@ -273,10 +273,17 @@ def _format_human(iso_str: str | None) -> str | None:
     callers degrade to displaying just the title."""
     if not iso_str:
         return None
-    try:
-        dt = _dt.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    if isinstance(iso_str, _dt.datetime):
+        # tomllib parses an unquoted TOML datetime (a legal hand-edit of the
+        # snapshot file) natively — there is no string to parse.
+        dt = iso_str
+    elif isinstance(iso_str, _dt.date):
+        dt = _dt.datetime.combine(iso_str, _dt.time.min)
+    else:
+        try:
+            dt = _dt.datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        except ValueError:
+            return None
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
