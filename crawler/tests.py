@@ -1886,6 +1886,63 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.channel.refresh_from_db()
         self.assertFalse(self.channel.is_user_account)
 
+    def _make_linked_response(self, linked_id: int, *, megagroup: bool = True) -> MagicMock:
+        """Full-channel response declaring ``linked_id`` as the linked chat, with its entity in chats."""
+        resp = self._make_full_channel_response()
+        resp.full_chat.linked_chat_id = linked_id
+        resp.chats = [
+            types.SimpleNamespace(
+                id=linked_id,
+                title="Linked chat",
+                broadcast=not megagroup,
+                megagroup=megagroup,
+                gigagroup=False,
+                username="linked_chat",
+            )
+        ]
+        return resp
+
+    def test_discovered_linked_group_inherits_parent_current_attribution(self) -> None:
+        self.api_client.client.return_value = self._make_linked_response(222)
+        self.crawler.set_more_channel_details(self.channel, self._make_tc())
+        linked = Channel.objects.get(telegram_id=222)
+        attributions = list(linked.attributions.all())
+        self.assertEqual(len(attributions), 1)
+        self.assertEqual(attributions[0].organization, self.org)
+        self.assertIsNone(attributions[0].start)
+        self.assertIsNone(attributions[0].end)
+
+    def test_discovered_linked_channel_inherits_from_group_parent(self) -> None:
+        group = make_channel(telegram_id=2, organization=self.org, broadcast=False, megagroup=True)
+        self.api_client.client.return_value = self._make_linked_response(444, megagroup=False)
+        self.crawler.set_more_channel_details(group, self._make_tc())
+        linked = Channel.objects.get(telegram_id=444)
+        self.assertTrue(linked.broadcast)
+        self.assertEqual([a.organization for a in linked.attributions.all()], [self.org])
+
+    def test_discovered_linked_chat_copies_period_bounds(self) -> None:
+        start, end = datetime.date(2024, 1, 1), datetime.date(2024, 12, 31)
+        parent = make_channel(telegram_id=3, organization=self.org, attribution_start=start, attribution_end=end)
+        self.api_client.client.return_value = self._make_linked_response(555)
+        self.crawler.set_more_channel_details(parent, self._make_tc())
+        attribution = Channel.objects.get(telegram_id=555).attributions.get()
+        self.assertEqual((attribution.start, attribution.end), (start, end))
+
+    def test_discovered_linked_chat_unattributed_when_parent_unattributed(self) -> None:
+        parent = make_channel(telegram_id=4, to_inspect=True)
+        self.api_client.client.return_value = self._make_linked_response(666)
+        self.crawler.set_more_channel_details(parent, self._make_tc())
+        self.assertEqual(Channel.objects.get(telegram_id=666).attributions.count(), 0)
+
+    def test_existing_linked_chat_is_not_attributed_again(self) -> None:
+        # Discovery (and the attribution copy with it) happens only when the linked
+        # row is new — an existing row's analyst-managed timeline must stay untouched.
+        existing = make_channel(telegram_id=777, broadcast=False, megagroup=True)
+        self.api_client.client.return_value = self._make_linked_response(777)
+        self.crawler.set_more_channel_details(self.channel, self._make_tc())
+        self.assertEqual(existing.attributions.count(), 0)
+        self.assertEqual(Channel.objects.filter(telegram_id=777).count(), 1)
+
 
 # ---------------------------------------------------------------------------
 # ChannelCrawler — search_channel

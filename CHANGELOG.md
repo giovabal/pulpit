@@ -1,6 +1,9 @@
 # Changelog
 ## [0.26] - To be announced
 
+### New features
+- **A newly discovered linked chat inherits its parent's attribution.** A channel's linked discussion group (or a group's linked broadcast channel), when first registered by *Get channels info*, copies the parent's current attribution — same organization and period — instead of starting unattributed. Existing rows are never touched.
+
 ## [0.25] - 2026-06-11
 *Measures and community strategies gain per-instance parameters and a shared drag-and-drop builder. The path-, flow-, and brokerage-based measures, attacks, and community detectors are removed. SBM new community strategy.*
 
