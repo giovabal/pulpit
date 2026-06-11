@@ -269,10 +269,23 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / config("DB_NAME", default="db.sqlite3", cast=str),
             "OPTIONS": {
-                # Busy-wait up to 30 s before raising OperationalError: database is locked.
-                # WAL journal mode is activated via the connection_created signal in webapp/apps.py
-                # so concurrent reads (runserver) don't block crawler writes.
+                # Busy-wait up to 30 s for a concurrent writer to release the write
+                # lock before raising OperationalError: database is locked.
                 "timeout": 30,
+                # Open transaction.atomic() blocks with BEGIN IMMEDIATE, taking the
+                # write lock up front (subject to the busy-wait above). The default
+                # DEFERRED mode upgrades read → write mid-transaction, and SQLite
+                # refuses that upgrade *instantly* — bypassing the busy timeout —
+                # whenever another process committed after the transaction's first
+                # read (SQLITE_BUSY_SNAPSHOT), so a read-then-write atomic such as
+                # update_or_create failed on the spot under concurrent writes.
+                "transaction_mode": "IMMEDIATE",
+                # WAL journal mode lets readers (runserver) coexist with the
+                # crawler's writes; synchronous=NORMAL is the standard WAL pairing
+                # (fsync at checkpoints instead of every commit, same corruption
+                # guarantees). Runs on every new connection: journal_mode persists
+                # in the DB file, the synchronous level is per-connection.
+                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
             },
         }
     }

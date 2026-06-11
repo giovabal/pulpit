@@ -16,6 +16,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db import OperationalError, connection
 from django.db.models import Exists, F, OuterRef, Q
 
 from crawler.channel_crawler import ChannelCrawler
@@ -114,6 +115,33 @@ class CrawlOptions:
         )
 
 
+def _db_locked(exc: BaseException) -> bool:
+    """True for SQLite lock-contention errors ("database is locked" / "database table is locked")."""
+    return isinstance(exc, OperationalError) and "locked" in str(exc).lower()
+
+
+def _recover_db_lock(stdout: Any, style: Any, *, action: str, channel: Any) -> None:
+    """Report a database-lock skip in plain language and shed the DB connection.
+
+    The lock is held by *another* process (a second management command, a DB
+    browser left mid-edit, a backup tool…) — nothing is wrong with the channel
+    itself, so a per-channel traceback would only bury the actionable message.
+    Closing our handle discards any stale transaction state so the next
+    operation reconnects fresh, with a full busy-wait window, instead of
+    dragging the failure across the rest of the run.
+    """
+    stdout.write(
+        style.WARNING(
+            f"Database locked by another program while {action} for {channel}: skipped. "
+            "Close other processes writing to the database (another command, a DB browser, "
+            "a backup tool) — the channel will be picked up again on the next run."
+        )
+    )
+    logger.warning("%s skipped for %s: database locked by a concurrent writer", action, channel)
+    if not connection.in_atomic_block:
+        connection.close()
+
+
 @contextmanager
 def per_channel_step(
     stdout: Any,
@@ -126,9 +154,12 @@ def per_channel_step(
 ) -> Iterator[None]:
     """Wrap a per-channel Telegram operation with the standard error scaffolding.
 
-    Catches the two recurring failure modes:
+    Catches the recurring failure modes:
       * ``FloodWaitError`` → prints a WARNING line and sleeps when
         ``settings.IGNORE_FLOODWAIT`` is false. The wrapped block is skipped.
+      * "database is locked" → plain-language skip line and connection reset
+        (see ``_recover_db_lock``); the lock-holder is another process, so no
+        traceback is logged.
       * any other ``Exception`` → prints a WARNING line and logs the traceback.
 
     On success, optionally ensures the progress-printer terminates the current
@@ -143,8 +174,11 @@ def per_channel_step(
             sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
     except Exception as exc:
         printer.newline()
-        stdout.write(style.WARNING(f"Error {action} for {channel}: {exc}"))
-        logger.exception("%s failed for %s", action, channel)
+        if _db_locked(exc):
+            _recover_db_lock(stdout, style, action=action, channel=channel)
+        else:
+            stdout.write(style.WARNING(f"Error {action} for {channel}: {exc}"))
+            logger.exception("%s failed for %s", action, channel)
     else:
         if ensure_newline_on_success:
             printer.ensure_newline()
@@ -1549,10 +1583,19 @@ class Command(BaseCommand):
                                         continue
                                     except Exception as error:  # noqa: BLE001 — one bad channel must not abort the run
                                         printer.newline()
-                                        self.stdout.write(
-                                            self.style.WARNING(f"Error crawling channel {channel.telegram_id}: {error}")
-                                        )
-                                        logger.exception("get-new-messages failed for channel %s", channel.telegram_id)
+                                        if _db_locked(error):
+                                            _recover_db_lock(
+                                                self.stdout, self.style, action="crawling messages", channel=channel
+                                            )
+                                        else:
+                                            self.stdout.write(
+                                                self.style.WARNING(
+                                                    f"Error crawling channel {channel.telegram_id}: {error}"
+                                                )
+                                            )
+                                            logger.exception(
+                                                "get-new-messages failed for channel %s", channel.telegram_id
+                                            )
                                         continue
                                     finally:
                                         crawler._resolve_pending_forwards(
