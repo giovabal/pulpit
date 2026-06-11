@@ -1,5 +1,7 @@
 # Changelog
-## [0.25] - To be announced
+## [0.26] - To be announced
+
+## [0.25] - 2026-06-11
 *Measures and community strategies gain per-instance parameters and a shared drag-and-drop builder. The path-, flow-, and brokerage-based measures, attacks, and community detectors are removed. SBM new community strategy.*
 
 ### New features
