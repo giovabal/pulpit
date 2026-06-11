@@ -14,31 +14,6 @@ Rather than just detecting topics, track which narrative frames appear in messag
 
 ---
 
-## 3 — Group/supergroup reply crawling
-
-Supergroups (`megagroup=True`) store discussion replies. Currently, these are crawled as channels but their replies (comments) are not fetched. Fetching replies would reveal which channels' posts generate discussion and who participates. New `Message.reply_to` field and `--crawl-replies` option.
-
----
-
-## 4 — Message filters: minimum views and minimum forwards
-
-The message options dropdown supports sort order and content-type filter but has no quantitative threshold. Add two optional number inputs — "Min views" and "Min forwards" — applied in `_apply_message_options()` in `webapp/views.py`. Useful for surfacing viral posts on high-volume channels without scrolling past thousands of low-reach messages.
-
----
-
-## 5 — Message filter: pinned status
-
-Pinned and previously-pinned messages are visually distinguished with CSS classes (`is-pinned`, `was-pinned`) but there is no filter to show only pinned posts. Add a "Pinned only" checkbox to the message options dropdown. Pinned posts represent editorial choices and are analytically interesting in their own right.
-
----
-
-## 6 — Channel list: filter by channel type
-
-The `structural_analysis` CLI already accepts `--channel-types` (Channel, Group, User), and the operations panel has a Channel Types fieldset, but the public channel list page (`/channels/`) has no type filter. Adding Channel / Group / User checkboxes above the channel table would let analysts isolate, for instance, only supergroups in a mixed dataset.
-
-
----
-
 ← [README](README.md)
 
 <img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">

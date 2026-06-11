@@ -181,6 +181,11 @@ def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
         qs = qs.filter(is_lost=False)
     elif lost == "only":
         qs = qs.filter(is_lost=True)
+    # has_been_pinned covers currently-pinned messages too (Message.save()
+    # stamps it whenever pinned is true), so the filter keeps a post visible
+    # after Telegram unpins it — pinning is the editorial signal of interest.
+    if params.get("pinned"):
+        qs = qs.filter(has_been_pinned=True)
     return _exclude_album_tails(qs)
 
 
@@ -194,12 +199,14 @@ def _message_options_context(params: Any) -> dict[str, Any]:
     lost = params.get("lost", "exclude")
     if lost not in _LOST_MODES:
         lost = "exclude"
+    pinned = bool(params.get("pinned"))
     options_active = (
         sort != _DEFAULT_SORT
         or date_from is not None
         or date_to is not None
         or set(selected) != set(_CONTENT_TYPES)
         or lost != "exclude"
+        or pinned
     )
 
     extra: dict[str, Any] = {}
@@ -215,6 +222,8 @@ def _message_options_context(params: Any) -> dict[str, Any]:
         extra["type"] = selected
     if lost != "exclude":
         extra["lost"] = lost
+    if pinned:
+        extra["pinned"] = "1"
     original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
 
     return {
@@ -224,6 +233,7 @@ def _message_options_context(params: Any) -> dict[str, Any]:
         "selected_types": selected,
         "all_types": _CONTENT_TYPES,
         "lost": lost,
+        "pinned": pinned,
         "options_active": options_active,
         "original_query": original_query,
     }
