@@ -6,17 +6,7 @@ class WebappConfig(AppConfig):
     name = "webapp"
     verbose_name = "Data"
 
-    def ready(self) -> None:
-        from django.db.backends.signals import connection_created
-
-        def _activate_wal_mode(sender, connection, **kwargs):
-            # WAL mode allows concurrent reads alongside the crawler's writes,
-            # dramatically reducing "database is locked" errors under SQLite.
-            # journal_mode is a per-file setting; it only takes effect the first
-            # time it is set on a connection and persists in the DB file.
-            if connection.vendor == "sqlite":
-                with connection.cursor() as cursor:
-                    cursor.execute("PRAGMA journal_mode=WAL;")
-                    cursor.execute("PRAGMA synchronous=NORMAL;")
-
-        connection_created.connect(_activate_wal_mode)
+    # The WAL / synchronous pragmas formerly applied here via the
+    # connection_created signal now live in DATABASES["default"]["OPTIONS"]
+    # ["init_command"] (webapp_engine/settings.py), which Django runs on every
+    # new connection before its first query.
