@@ -2,6 +2,7 @@
 ## [0.26] - To be announced
 
 ### New features
+- **Channels can be added directly by link, username, or ID.** The Search Channels card gains an **Add channels** box: paste one identifier per line — a `t.me` link, an `@username`, a bare username, or a numeric Telegram ID — and each is resolved on Telegram and added to the database, no keyword search needed. Identifiers that cannot be resolved (deleted, private, mistyped, or an ID the account has never seen) are flagged as warnings in the log without stopping the run. Also available on the CLI as a repeatable `search_channels --add-channel` flag; see [docs/workflow.md](docs/workflow.md).
 - **A newly discovered linked chat inherits its parent's attribution.** A channel's linked discussion group (or a group's linked broadcast channel), when first registered by *Get channels info*, copies the parent's current attribution — same organization and period — instead of starting unattributed. Existing rows are never touched.
 
 ## [0.25] - 2026-06-11

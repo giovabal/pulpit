@@ -795,6 +795,27 @@ class BuildArgsSearchChannelsTests(TestCase):
         post = FakePost({"extra_terms": "\n\n"})
         self.assertEqual(_build_args("search_channels", post), [])
 
+    def test_add_channels_repeated_verbatim(self):
+        # Identifiers must not be lowercased or space-collapsed: the command
+        # normalises them itself (and usernames are case-insensitive anyway).
+        post = FakePost({"add_channels": "https://t.me/SomeChannel\n  @Name  \n12345\n\n"})
+        args = _build_args("search_channels", post)
+        self.assertEqual(
+            args,
+            [
+                "--add-channel",
+                "https://t.me/SomeChannel",
+                "--add-channel",
+                "@Name",
+                "--add-channel",
+                "12345",
+            ],
+        )
+
+    def test_blank_add_channel_lines_skipped(self):
+        post = FakePost({"add_channels": "\n  \n"})
+        self.assertEqual(_build_args("search_channels", post), [])
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — _build_args: structural_analysis

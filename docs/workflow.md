@@ -46,6 +46,17 @@ The first time Pulpit connects to Telegram, it will send a verification code to 
 
 > **Nothing found?** Try broader or different keywords. Telegram's search only matches channel names and descriptions, not message content.
 
+### Adding specific channels directly
+
+If you already know which channels you want, you don't have to rely on keyword search. Open **Options** on the Search Channels card and fill the **Add channels** box — one channel per line, in any of these forms:
+
+- a `t.me` link (`https://t.me/channelname`, message links and `t.me/c/…` links work too)
+- an `@username`
+- a bare username
+- a numeric Telegram ID
+
+Each line is resolved on Telegram and the channel is added to the database. Channels that cannot be resolved (deleted, private, mistyped, or — for numeric IDs — never seen by your Telegram account before) are reported as **warnings** in the log; the rest of the run continues. To *only* add channels, set **Max search terms** to `0` and leave the search-term boxes empty.
+
 ---
 
 ## Step 3 — Organize your channels
@@ -239,6 +250,9 @@ python manage.py runserver
 python manage.py search_channels
 python manage.py search_channels --amount 15
 python manage.py search_channels --extra-term "keyword"
+
+# Add specific channels by identifier (repeatable; unresolvable ones are logged as warnings)
+python manage.py search_channels --amount 0 --add-channel "https://t.me/channelname" --add-channel "@channelname" --add-channel 1234567890
 
 # Collect messages — the three independent groups
 python manage.py crawl_channels --get-channels-info --channel-types CHANNEL          # 1. update channel metadata only
