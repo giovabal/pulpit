@@ -115,17 +115,18 @@ Configuration is split across four files:
 | File | Content | Gitignored | Example | Format |
 |:-----|:--------|:----------:|:-------:|:-------|
 | `configuration/.env` | Credentials + deployment (Telegram creds, DB, secret key, web access, locale) | ✓ | `configuration/env.example` | KEY=value |
-| `configuration/.operations-crawl` | Crawler behaviour and per-channel defaults for `crawl_channels` | ✓ | — | TOML |
-| `configuration/.operations-structural` | Outputs, layouts, measures, communities, vacancy, and robustness defaults for `structural_analysis` | ✓ | — | TOML |
+| `configuration/.operations-crawl` | Committed "Pulpit defaults" baseline for the Crawl Channels form | ✗ | — | TOML |
+| `configuration/.operations-structural` | Committed "Pulpit defaults" baseline for the Structural Analysis form | ✗ | — | TOML |
+| `configuration/.operations-{crawl,structural}-<timestamp>` | Named snapshots written by **Save as defaults** | ✓ | — | TOML |
 | `.system` (repo root) | `APP_VERSION`, `REPOSITORY_URL` — managed by the project, do not edit | ✗ | — | KEY=value |
 
 Required (in `configuration/.env`): `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE_NUMBER`.
 
-Both `.operations-*` files are optional: built-in defaults live in `webapp_engine/config/defaults.py` and apply when a file is missing or omits a key. Each file starts with a `pulpit_version = "X.Y"` field so future Django data migrations can detect the writing release and rewrite the file when key names change. Click **Save as defaults** in the Operations panel under either form to persist the current selections — `tomlkit` writes the file with comments preserved and a refreshed `generated_at` header.
+The bare `.operations-*` baselines are committed in git and never written by the app: **Save as defaults** in the Operations panel writes a *new* gitignored `.operations-{crawl,structural}-<timestamp>` snapshot (via `tomlkit`, titled through a modal), and **Load defaults** applies the baseline or any snapshot back onto the form client-side (`webapp_engine/config/writer.py:write_baseline` can rewrite a baseline but is reserved for tests and future data migrations — no production caller). Factory-empty defaults in `webapp_engine/config/defaults.py` fill in when a file is missing or omits a key. Each file carries a `[meta]` block (`title`, `pulpit_version`, `generated_at`) so future Django data migrations can detect the writing release and rewrite the file when key names change. The files mostly just pre-populate the panel forms — the keys that also reach runtime are `[scope].channel_types` (→ `DEFAULT_CHANNEL_TYPES`: the web app's in-target scope and both commands' `--channel-types` default), `[edges].weight_strategy` (→ `--edge-weight-strategy` default), and the `[graph]` cosmetics (palette, dead-leaves colour, output dir).
 
 Key options:
 - `[graph]` in `.operations-structural` — `community_palette` (default `ORGANIZATION`; non-organisation strategies fall back to `vaporwave` *reversed* — so the most-vivid colours land on the largest communities; an explicit `community_palette = "vaporwave"` is kept in canonical order), `dead_leaves_color` (default `#596a64`), `output_dir` (default `graph`).
-- `[scope].channel_types` in `.operations-crawl` (default `["CHANNEL"]`) — channel types in scope; matches `DEFAULT_CHANNEL_TYPES`.
+- `[scope].channel_types` in `.operations-crawl` (default `["CHANNEL"]`) — channel types in scope; becomes the `DEFAULT_CHANNEL_TYPES` setting.
 - `[downloads]` in `.operations-crawl` — `images` / `video` / `audio` / `stickers` / `other_media` (each default `false`). Each can be overridden per run with the matching `--download-X` / `--no-download-X` CLI flag, or via the **Media types** sidebar fieldset on the Operations panel (applies to `--get-new-messages`, `--fixholes`, and `--fix-missing-media` — the three operations that fetch messages from Telegram).
 
 Media is dispatched into five disjoint models: `MessagePicture`, `MessageVideo` (with `is_animated` and `is_round` flags for GIFs/animations and round videos), `MessageAudio` (with `is_voice` flag), `MessageSticker` (with `is_animated` flag), and `MessageOtherMedia`. Analysis options (measures, community strategies, etc.) are command-line flags on `crawl_channels` and `structural_analysis`; see [docs/workflow.md](docs/workflow.md).

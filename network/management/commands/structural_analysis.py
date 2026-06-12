@@ -227,10 +227,13 @@ def _atomic_publish(staging: str, final_target: str) -> None:
 
 @dataclass(frozen=True)
 class ResolvedOptions:
-    """All options the command needs, with configuration/.operations-structural applied.
+    """All options the command needs, resolved from CLI flags.
 
     Built once at the top of ``handle`` so downstream helpers can take a single
-    object rather than 30 individual kwargs.
+    object rather than 30 individual kwargs. Missing flags resolve to typed
+    no-op literals; the few config-derived fallbacks (channel types, edge-weight
+    strategy, community palette, dead-leaves colour) are noted in
+    ``_resolve_options``.
     """
 
     # Output toggles
@@ -499,7 +502,7 @@ class Command(BaseCommand):
                 "BURTCONSTRAINT, LOCALCLUSTERING, "
                 "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
                 "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. "
-                "Default: the configuration/.operations-structural value, else no measures. "
+                "Default: no measures. "
                 "Parameterised measures take keyword arguments in parentheses and may be listed more "
                 "than once with different parameters: DIFFUSIONLAG(window=60), MODULEROLE(basis=LEIDEN). "
                 "A bare DIFFUSIONLAG inherits --diffusion-window as its default; each parameter "
@@ -519,7 +522,7 @@ class Command(BaseCommand):
                 "graph-tool (conda/apt, not pip). "
                 "LOUVAIN is the classic modularity baseline kept for comparison with older studies; "
                 "prefer LEIDEN / LEIDEN_DIRECTED otherwise. "
-                "Default: the configuration/.operations-structural value, else no community detection."
+                "Default: no community detection."
             ),
         )
         parser.add_argument(
@@ -531,7 +534,7 @@ class Command(BaseCommand):
                 "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
                 "--consensus-matrix). Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, "
                 "CENTRALIZATION, CONTENT, ALL. "
-                "Default: the configuration/.operations-structural value, else none — pass ALL explicitly."
+                "Default: none — pass ALL explicitly."
             ),
         )
         parser.add_argument(
@@ -541,8 +544,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Include t.me/ mention references as edges alongside forwards "
-                "(default: the configuration/.operations-structural value, else off). "
-                "Use --no-mentions to force forwards only."
+                "(default: off). Use --no-mentions to force forwards only."
             ),
         )
         parser.add_argument(
@@ -566,7 +568,9 @@ class Command(BaseCommand):
                 "How edge weights are computed from forward and citation counts. "
                 "NONE = all edges equal weight; TOTAL = raw count; "
                 "PARTIAL_MESSAGES = count / total messages; "
-                "PARTIAL_REFERENCES = count / forwarded-or-citing messages (default)."
+                "PARTIAL_REFERENCES = count / forwarded-or-citing messages. "
+                "Defaults to the [edges].weight_strategy entry in "
+                "configuration/.operations-structural, else PARTIAL_REFERENCES."
             ),
         )
         parser.add_argument(
@@ -696,7 +700,7 @@ class Command(BaseCommand):
                 "Minimum percentage (0–100) a community must reach in at least one organisation row "
                 "to be shown in the Organisation × Community distribution cross-tab. "
                 "Columns below this threshold in every row are hidden. "
-                "Default: the configuration/.operations-structural value, else 0 (show all)."
+                "Default: 0 (show all)."
             ),
         )
         parser.add_argument(
@@ -707,7 +711,8 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of Telegram entity types to include in the graph. "
                 "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
-                "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting."
+                "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting "
+                "([scope].channel_types in configuration/.operations-crawl)."
             ),
         )
         parser.add_argument(

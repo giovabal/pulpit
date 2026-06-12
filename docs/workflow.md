@@ -259,8 +259,8 @@ python manage.py crawl_channels --get-channels-info --channel-types CHANNEL     
 python manage.py crawl_channels --get-new-messages --channel-types CHANNEL           # 2. fetch new messages only
 python manage.py crawl_channels --in-degrees --out-degrees                            # 3. refresh degrees only (no Telegram connection)
 
-# Combine as needed (--channel-types omitted below for brevity — pass it on every crawl that
-# touches Telegram, or the in-target queryset filters down to nothing)
+# Combine as needed (--channel-types omitted below for brevity — it falls back to the
+# DEFAULT_CHANNEL_TYPES setting, i.e. [scope].channel_types in configuration/.operations-crawl)
 python manage.py crawl_channels --get-channels-info --get-new-messages
 python manage.py crawl_channels --get-new-messages --fix-holes
 python manage.py crawl_channels --get-new-messages --retry-references

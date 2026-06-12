@@ -2,7 +2,7 @@
 
 This page describes how the Operations panel, the CLI, and the saved snapshot files relate, and what the **Save as defaults**, **Load defaults**, and **Write CLI command** buttons actually do.
 
-The short version: every analyst-tunable option flows through one of three layers — `.env`, the `.operations-*` snapshot files, or the live form — and each layer has a single responsibility. The Operations panel reads the snapshot files to pre-populate the form; the CLI reads only the explicit flags you pass. There is no longer a silent settings-fallback chain.
+The short version: every analyst-tunable option flows through one of three layers — `.env`, the `.operations-*` snapshot files, or the live form — and each layer has a single responsibility. The Operations panel reads the snapshot files to pre-populate the form; the CLI reads the explicit flags you pass — feature toggles never fall back to the files, only a few scope and cosmetic defaults do (listed below). There is no longer a silent settings-fallback chain for what the commands *do*.
 
 For the exhaustive per-setting tables (every key, type, and built-in default) see the [Configuration reference](configuration.md).
 
@@ -11,7 +11,7 @@ For the exhaustive per-setting tables (every key, type, and built-in default) se
 ## The three layers
 
 1. **`configuration/.env`** — credentials and deployment infrastructure: Telegram API keys + client tuning, database, secret key, `WEB_ACCESS`, locale, project identity. Read once at startup by `python-decouple`; restart the server after editing. Comments must live on their own line — `python-decouple` does not strip inline `#` comments.
-2. **`configuration/.operations-{crawl,structural}`** — bundled "Pulpit defaults" TOML baselines that pre-populate the Operations-panel forms. Each opens with a `[meta]` block (`title`, `pulpit_version`, `generated_at`) and is committed in git so a fresh checkout already has working form defaults. Only the Operations panel reads these — the CLI does not consult them. When a file is missing or omits a key, the loader fills in from the factory-empty defaults in `webapp_engine/config/defaults.py` (everything off, every list empty).
+2. **`configuration/.operations-{crawl,structural}`** — bundled "Pulpit defaults" TOML baselines that pre-populate the Operations-panel forms. Each opens with a `[meta]` block (`title`, `pulpit_version`, `generated_at`) and is committed in git so a fresh checkout already has working form defaults. Primarily the Operations panel reads these; a few keys also serve as runtime defaults beyond the panel — `[scope].channel_types` becomes the `DEFAULT_CHANNEL_TYPES` setting (the web app's in-target scope and both commands' `--channel-types` default), `[edges].weight_strategy` is the `--edge-weight-strategy` fallback, and the `[graph]` keys (community palette, dead-leaves colour, output dir) back the matching flags. Feature toggles (phases, outputs, measures, strategies) are never read from these files by the CLI. When a file is missing or omits a key, the loader fills in from the factory-empty defaults in `webapp_engine/config/defaults.py` (everything off, every list empty).
 3. **`configuration/.operations-{stem}-{timestamp}`** — gitignored timestamped snapshots written by **Save as defaults**. They never overwrite the baseline and never affect startup pre-population; they're loaded on demand when the user picks one from the **Load defaults** picker. Each snapshot's `[meta]` block records the title (max 120 chars; required), the Pulpit version, and the UTC timestamp.
 
 For the per-key reference of each TOML section, see [Configuration reference](configuration.md).
@@ -56,6 +56,8 @@ python manage.py structural_analysis    # exits with "Nothing to do — …"
 ```
 
 If you want the CLI to do work, pass the flags explicitly. The Operations panel does this automatically for every checkbox (using `--flag` / `--no-flag` pairs), so panel-driven runs are unaffected. The "Write CLI command" button is the easiest way to discover the right flag combination — copy what it generates and paste into a script.
+
+The no-op rule covers feature toggles. Scope and cosmetic options keep config-derived defaults so an explicitly requested phase behaves sensibly when they're omitted: `--channel-types` falls back to `DEFAULT_CHANNEL_TYPES` (`[scope].channel_types`), `--edge-weight-strategy` to `[edges].weight_strategy`, and `--community-palette` / `--dead-leaves-color` to the `[graph]` entries.
 
 Backward-compat aliases are kept for the renamed flags, so existing scripts still work:
 

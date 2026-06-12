@@ -55,12 +55,14 @@ from dataclasses import dataclass  # noqa: E402
 
 @dataclass(frozen=True)
 class CrawlOptions:
-    """All crawl_channels options resolved from CLI flags and configuration/.operations-crawl.
+    """All crawl_channels options resolved from CLI flags.
 
-    Built once at the top of ``handle`` so subsequent code doesn't have to keep
-    repeating ``options["x"] or settings.CRAWL_X`` (which silently demotes
-    explicit ``False`` to the default), and the option surface is
-    self-documenting in one place.
+    Built once at the top of ``handle`` so the option surface is
+    self-documenting in one place. Missing toggles resolve to False — a bare
+    ``python manage.py crawl_channels`` does nothing; the Operations panel
+    emits explicit ``--flag`` / ``--no-flag`` for every checkbox. The one
+    config-derived fallback is ``--channel-types`` → ``DEFAULT_CHANNEL_TYPES``
+    (from ``[scope].channel_types`` in configuration/.operations-crawl).
     """
 
     # Channels phase
@@ -458,9 +460,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download photo files attached to messages. Applies to --get-new-messages, "
-                "--fix-holes, and --fix-missing-media. Defaults to "
-                "TELEGRAM_CRAWLER_DOWNLOAD_IMAGES; pass --no-download-images to disable for "
-                "this run."
+                "--fix-holes, and --fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -469,9 +469,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download video files attached to messages. Applies to --get-new-messages, "
-                "--fix-holes, and --fix-missing-media. Defaults to "
-                "TELEGRAM_CRAWLER_DOWNLOAD_VIDEO; pass --no-download-video to disable for "
-                "this run."
+                "--fix-holes, and --fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -481,8 +479,7 @@ class Command(BaseCommand):
             help=(
                 "Download audio files attached to messages — both voice notes and uploaded "
                 "audio documents. Applies to --get-new-messages, --fix-holes, and "
-                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_AUDIO; pass "
-                "--no-download-audio to disable for this run."
+                "--fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -492,8 +489,7 @@ class Command(BaseCommand):
             help=(
                 "Download stickers attached to messages — static webp, animated TGS, and "
                 "video webm stickers. Applies to --get-new-messages, --fix-holes, and "
-                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_STICKERS; pass "
-                "--no-download-stickers to disable for this run."
+                "--fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -503,8 +499,7 @@ class Command(BaseCommand):
             help=(
                 "Download non-photo, non-video, non-audio, non-sticker documents (PDFs, "
                 "archives, etc.). Applies to --get-new-messages, --fix-holes, and "
-                "--fix-missing-media. Defaults to TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA; "
-                "pass --no-download-other-media to disable for this run."
+                "--fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -561,7 +556,8 @@ class Command(BaseCommand):
             metavar="TYPES",
             help=(
                 "Comma-separated list of Telegram entity types. "
-                "Available: CHANNEL, GROUP, USER. Defaults to the DEFAULT_CHANNEL_TYPES setting."
+                "Available: CHANNEL, GROUP, USER. Defaults to the DEFAULT_CHANNEL_TYPES setting "
+                "([scope].channel_types in configuration/.operations-crawl)."
             ),
         )
         parser.add_argument(
@@ -1209,10 +1205,14 @@ class Command(BaseCommand):
             return datetime.date.fromisoformat(raw)
 
         channel_types_raw = options["channel_types"]
+        # No --channel-types resolves to the built-in default rather than an empty list,
+        # which channel_type_filter([]) would match against nothing — an explicitly
+        # requested phase (e.g. --get-new-messages) would silently select zero channels.
+        # structural_analysis resolves this flag the same way.
         channel_types = (
             [s.strip().upper() for s in channel_types_raw.split(",") if s.strip()]
             if channel_types_raw is not None
-            else []
+            else list(settings.DEFAULT_CHANNEL_TYPES)
         )
         invalid_channel_types = [t for t in channel_types if t not in VALID_CHANNEL_TYPES]
         if invalid_channel_types:
@@ -1226,8 +1226,9 @@ class Command(BaseCommand):
         # `python manage.py crawl_channels` (no flags) must do nothing —
         # the panel-driven Operations runs are unaffected because the panel
         # emits explicit --<flag> / --no-<flag> for every checkbox. The CLI
-        # therefore no longer consults settings.* for fallbacks: missing
-        # flags resolve to False.
+        # therefore no longer consults settings.* for toggle fallbacks: missing
+        # flags resolve to False (--channel-types is scope, not a toggle — it
+        # falls back to DEFAULT_CHANNEL_TYPES above).
         def _resolve_optional_bool(option_value: bool | None, default: bool = False) -> bool:
             return option_value if option_value is not None else default
 
