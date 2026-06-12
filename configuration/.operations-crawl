@@ -16,7 +16,7 @@ stickers = true
 other_media = false
 
 [scope]
-channel_types = ["CHANNEL", "USER"]
+channel_types = ["CHANNEL"]
 
 [channels]
 get_channels_info = true

@@ -90,7 +90,7 @@ environment variable. It now lives in the database alongside a free-text
 
 # `configuration/.operations-crawl` — crawler form defaults
 
-TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:CRAWL_DEFAULTS`; the committed baseline at `configuration/.operations-crawl` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Crawl Channels** form only — the CLI does not consult it. Click **Save as defaults** below the form (with a title) to write a new timestamped snapshot alongside this baseline; **Load defaults** lets you pick any saved snapshot back.
+TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:CRAWL_DEFAULTS`; the committed baseline at `configuration/.operations-crawl` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Crawl Channels** form; the one key with reach beyond the form is `[scope].channel_types`, which becomes the `DEFAULT_CHANNEL_TYPES` setting — the web app's in-target scope and the `--channel-types` default of both `crawl_channels` and `structural_analysis`. Click **Save as defaults** below the form (with a title) to write a new timestamped snapshot alongside this baseline; **Load defaults** lets you pick any saved snapshot back.
 
 ## `[downloads]` — media type toggles
 
@@ -148,7 +148,7 @@ Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI fla
 
 # `configuration/.operations-structural` — structural-analysis form defaults
 
-TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:STRUCTURAL_DEFAULTS`; the committed baseline at `configuration/.operations-structural` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Structural Analysis** form only — the CLI does not consult it.
+TOML file. Built-in factory-empty defaults live in `webapp_engine/config/defaults.py:STRUCTURAL_DEFAULTS`; the committed baseline at `configuration/.operations-structural` overrides them with the curated "Pulpit defaults" set. The file pre-populates the **Structural Analysis** form; the keys with reach beyond the form are `[edges].weight_strategy` (the `--edge-weight-strategy` default) and the `[graph]` entries — community palette, dead-leaves colour, output dir — which back the matching flags.
 
 ## `[graph]` — palette and base options
 
