@@ -61,50 +61,52 @@
           {% csrf_token %}
 
           {% if task.name == "search_channels" %}
-          <fieldset class="ops-fieldset">
-            <legend>Scope</legend>
-            <div class="ops-params">
-              <div class="ops-param">
-                <label for="amount_sc">Max search terms
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Limit how many database search terms are processed in this run. Leave blank to process all terms in order of last check date. Set to 0 to skip database terms and search only the extra terms below."></i>
-                </label>
-                <input type="number" name="amount" id="amount_sc" placeholder="–" min="0">
+          <div class="ops-fieldset-row">
+            <fieldset class="ops-fieldset">
+              <legend>Scope</legend>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="amount_sc">Max search terms
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Limit how many database search terms are processed in this run. Leave blank to process all terms in order of last check date. Set to 0 to skip database terms and search only the extra terms below."></i>
+                  </label>
+                  <input type="number" name="amount" id="amount_sc" placeholder="–" min="0">
+                </div>
               </div>
-            </div>
-            <div class="ops-params mt-2">
-              <div class="ops-param ops-param--full">
-                <label for="extra_terms_sc">Extra search terms
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="One term per line. Searched in addition to any terms stored in the database. Terms are temporary unless 'Save to database' is checked."></i>
-                </label>
-                <textarea name="extra_terms" id="extra_terms_sc" rows="3"
-                          placeholder="One term per line…"></textarea>
+              <div class="ops-params mt-2">
+                <div class="ops-param ops-param--full">
+                  <label for="extra_terms_sc">Extra search terms
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="One term per line. Searched in addition to any terms stored in the database. Terms are temporary unless 'Save to database' is checked."></i>
+                  </label>
+                  <textarea name="extra_terms" id="extra_terms_sc" rows="3"
+                            placeholder="One term per line…"></textarea>
+                </div>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="save_terms" id="save_terms_sc" disabled>
+                    Save to database
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="If checked, each term above is added as a new SearchTerm in the database (lowercased, deduplicated). Only available when extra terms are present."></i>
+                  </label>
+                </div>
               </div>
-              <div class="ops-flags">
-                <label class="ops-flag">
-                  <input type="checkbox" name="save_terms" id="save_terms_sc" disabled>
-                  Save to database
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="If checked, each term above is added as a new SearchTerm in the database (lowercased, deduplicated). Only available when extra terms are present."></i>
-                </label>
-              </div>
-            </div>
-          </fieldset>
+            </fieldset>
 
-          <fieldset class="ops-fieldset">
-            <legend>Add channels</legend>
-            <div class="ops-params">
-              <div class="ops-param ops-param--full">
-                <label for="add_channels_sc">Channel identifiers
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="One channel per line: a t.me link, an @username, a bare username, or a numeric Telegram ID. Each is resolved on Telegram and added to the database; identifiers that cannot be resolved are reported as warnings in the log. To only add channels, set Max search terms to 0 and leave the extra terms empty."></i>
-                </label>
-                <textarea name="add_channels" id="add_channels_sc" rows="3"
-                          placeholder="t.me link, @username, username, or numeric ID — one per line…"></textarea>
+            <fieldset class="ops-fieldset">
+              <legend>Add channels</legend>
+              <div class="ops-params">
+                <div class="ops-param ops-param--full">
+                  <label for="add_channels_sc">Channel identifiers
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="One channel per line: a t.me link, an @username, a bare username, or a numeric Telegram ID. Each is resolved on Telegram and added to the database; identifiers that cannot be resolved are reported as warnings in the log. To only add channels, set Max search terms to 0 and leave the extra terms empty."></i>
+                  </label>
+                  <textarea name="add_channels" id="add_channels_sc" rows="3"
+                            placeholder="t.me link, @username, username, or numeric ID — one per line…"></textarea>
+                </div>
               </div>
-            </div>
-          </fieldset>
+            </fieldset>
+          </div>
 
           {% elif task.name == "crawl_channels" %}
           <div class="ops-fieldset-row">
