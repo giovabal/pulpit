@@ -10,7 +10,7 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
@@ -22,6 +22,7 @@ from crawler.management.commands.crawl_channels import (
     ProgressPrinter,
     _make_telethon_unraisable_filter,
 )
+from crawler.management.commands.search_channels import parse_channel_identifier
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import Channel, Message, Organization
 from webapp.test_helpers import make_channel
@@ -2305,6 +2306,213 @@ class SearchChannelsCommandTests(TestCase):
 
         searched = [c.args[0] for c in mock_crawler.search_channel.call_args_list]
         self.assertIn("belarus", searched)
+
+
+# ---------------------------------------------------------------------------
+# search_channels --add-channel: identifier parsing
+# ---------------------------------------------------------------------------
+
+
+class ParseChannelIdentifierTests(SimpleTestCase):
+    def test_username_forms(self) -> None:
+        for raw in ("SomeChan", "@SomeChan", "  @SomeChan  "):
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_channel_identifier(raw), "SomeChan")
+
+    def test_tme_link_forms(self) -> None:
+        for raw in (
+            "https://t.me/SomeChan",
+            "http://t.me/SomeChan",
+            "t.me/SomeChan",
+            "www.t.me/SomeChan",
+            "telegram.me/SomeChan",
+            "HTTPS://T.ME/SomeChan",
+            "https://t.me/s/SomeChan",  # web-preview link
+            "https://t.me/SomeChan/1234",  # message link
+            "https://t.me/SomeChan?single",
+            "https://t.me/SomeChan#anchor",
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_channel_identifier(raw), "SomeChan")
+
+    def test_numeric_forms(self) -> None:
+        self.assertEqual(parse_channel_identifier("1234567890"), 1234567890)
+        # Bot-API marked form for channels/supergroups
+        self.assertEqual(parse_channel_identifier("-1001234567890"), 1234567890)
+        # t.me/c/<id>/<msg> internal links carry the bare channel id
+        self.assertEqual(parse_channel_identifier("https://t.me/c/1234567890/55"), 1234567890)
+
+    def test_invite_links_rejected(self) -> None:
+        for raw in ("t.me/joinchat/AbCdEf", "https://t.me/+AbCdEf"):
+            with self.subTest(raw=raw):
+                with self.assertRaises(ValueError):
+                    parse_channel_identifier(raw)
+
+    def test_garbage_rejected(self) -> None:
+        for raw in ("", "   ", "@", "https://example.com/foo", "t.me/"):
+            with self.subTest(raw=raw):
+                with self.assertRaises(ValueError):
+                    parse_channel_identifier(raw)
+
+
+# ---------------------------------------------------------------------------
+# search_channels --add-channel: command behaviour
+# ---------------------------------------------------------------------------
+
+
+class SearchChannelsAddChannelTests(TestCase):
+    """--add-channel resolution paths. No SearchTerm rows exist, so the term-search
+    phase is a no-op and only the direct-add phase exercises the mocked crawler."""
+
+    def _run(
+        self, mock_crawler_cls: MagicMock, mock_tc_cls: MagicMock, identifiers: list[str]
+    ) -> tuple[MagicMock, str]:
+        from django.core.management import call_command
+
+        mock_crawler = mock_crawler_cls.return_value
+        mock_tc_cls.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tc_cls.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+        out = io.StringIO()
+        call_command("search_channels", add_channels=identifiers, stdout=out, stderr=io.StringIO())
+        return mock_crawler, out.getvalue()
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_new_channel_added(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        def _resolve(seed):
+            return make_channel(telegram_id=42, username="newchan", title="New Chan"), MagicMock(), "ok"
+
+        mock_crawler_cls.return_value.resolve_channel_or_classify.side_effect = _resolve
+        mock_crawler, output = self._run(mock_crawler_cls, mock_tc_cls, ["https://t.me/NewChan/123"])
+
+        # The t.me message link is normalised down to its username segment.
+        mock_crawler.resolve_channel_or_classify.assert_called_once_with("NewChan")
+        self.assertIn("added: New Chan", output)
+        self.assertIn("1 added, 0 already in database, 0 not added", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_numeric_identifier_resolved_as_int(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        mock_crawler_cls.return_value.resolve_channel_or_classify.return_value = (None, None, "lost")
+        mock_crawler, _ = self._run(mock_crawler_cls, mock_tc_cls, ["-1001234567890"])
+
+        mock_crawler.resolve_channel_or_classify.assert_called_once_with(1234567890)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_channel_already_in_db_by_username_skips_api(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        make_channel(telegram_id=7, username="Existing", title="Existing Chan")
+
+        # Mixed case + @ prefix: the DB lookup is case-insensitive.
+        mock_crawler, output = self._run(mock_crawler_cls, mock_tc_cls, ["@existing"])
+
+        mock_crawler.resolve_channel_or_classify.assert_not_called()
+        self.assertIn("already in database: Existing Chan", output)
+        self.assertIn("0 added, 1 already in database, 0 not added", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_channel_already_in_db_by_telegram_id_skips_api(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        make_channel(telegram_id=555, title="By Id")
+
+        mock_crawler, output = self._run(mock_crawler_cls, mock_tc_cls, ["555"])
+
+        mock_crawler.resolve_channel_or_classify.assert_not_called()
+        self.assertIn("already in database: By Id", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_resolved_id_already_stored_under_changed_username(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        # The handle the analyst typed is new, but resolution lands on a telegram_id
+        # already stored (the channel renamed itself): no new row is created.
+        existing = make_channel(telegram_id=99, username="oldname", title="Renamed")
+        mock_crawler_cls.return_value.resolve_channel_or_classify.return_value = (existing, MagicMock(), "ok")
+
+        _, output = self._run(mock_crawler_cls, mock_tc_cls, ["@newname"])
+
+        self.assertIn("already in database: Renamed", output)
+        self.assertIn("(metadata refreshed)", output)
+        self.assertIn("0 added, 1 already in database, 0 not added", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_unresolvable_identifiers_warn_and_run_continues(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        def _resolve(seed):
+            # Lazy creation: the row must not exist when the DB pre-check runs.
+            statuses = {"ghost": "lost", "hidden": "private", "someuser": "user_account"}
+            if seed in statuses:
+                return None, None, statuses[seed]
+            return make_channel(telegram_id=1, username="ok", title="Ok"), MagicMock(), "ok"
+
+        mock_crawler_cls.return_value.resolve_channel_or_classify.side_effect = _resolve
+
+        _, output = self._run(mock_crawler_cls, mock_tc_cls, ["ghost", "hidden", "someuser", "ok", "t.me/joinchat/XYZ"])
+
+        self.assertIn("not added (not found on Telegram)", output)
+        self.assertIn("not added (channel is private)", output)
+        self.assertIn("not added (resolves to a user account, not a channel)", output)
+        self.assertIn("not added (invite links cannot be resolved to a channel)", output)
+        self.assertIn("added: Ok", output)
+        self.assertIn("1 added, 0 already in database, 4 not added", output)
+
+    @override_settings(IGNORE_FLOODWAIT=True)
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_flood_wait_skips_identifier_and_continues(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        def _resolve(seed):
+            if seed == "first":
+                raise _flood_error()
+            # Lazy creation: the row must not exist when the DB pre-check runs.
+            return make_channel(telegram_id=2, username="after", title="After"), MagicMock(), "ok"
+
+        mock_crawler_cls.return_value.resolve_channel_or_classify.side_effect = _resolve
+
+        _, output = self._run(mock_crawler_cls, mock_tc_cls, ["first", "after"])
+
+        self.assertIn("flood wait, skipping", output)
+        self.assertIn("added: After", output)
+        self.assertIn("1 added, 0 already in database, 1 not added", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_adds_and_term_search_run_in_same_invocation(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        from webapp.models import SearchTerm
+
+        SearchTerm.objects.create(word="ukraine")
+        mock_crawler = mock_crawler_cls.return_value
+        mock_crawler.search_channel.return_value = (0, 0)
+        mock_crawler.resolve_channel_or_classify.return_value = (None, None, "lost")
+
+        mock_crawler, output = self._run(mock_crawler_cls, mock_tc_cls, ["somechan"])
+
+        mock_crawler.resolve_channel_or_classify.assert_called_once_with("somechan")
+        self.assertEqual([c.args[0] for c in mock_crawler.search_channel.call_args_list], ["ukraine"])
+        self.assertIn("Channel add complete.", output)
+        self.assertIn("Search complete.", output)
 
 
 # ---------------------------------------------------------------------------

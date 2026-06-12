@@ -92,6 +92,20 @@
             </div>
           </fieldset>
 
+          <fieldset class="ops-fieldset">
+            <legend>Add channels</legend>
+            <div class="ops-params">
+              <div class="ops-param ops-param--full">
+                <label for="add_channels_sc">Channel identifiers
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="One channel per line: a t.me link, an @username, a bare username, or a numeric Telegram ID. Each is resolved on Telegram and added to the database; identifiers that cannot be resolved are reported as warnings in the log. To only add channels, set Max search terms to 0 and leave the extra terms empty."></i>
+                </label>
+                <textarea name="add_channels" id="add_channels_sc" rows="3"
+                          placeholder="t.me link, @username, username, or numeric ID — one per line…"></textarea>
+              </div>
+            </div>
+          </fieldset>
+
           {% elif task.name == "crawl_channels" %}
           <div class="ops-fieldset-row">
             <div class="ops-fieldset-col">

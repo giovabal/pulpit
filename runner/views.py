@@ -30,7 +30,10 @@ from webapp_engine.config import (
 TASK_DEFINITIONS: dict[str, dict[str, str]] = {
     "search_channels": {
         "title": "Search Channels",
-        "description": "Search Telegram for channels matching each SearchTerm in the database.",
+        "description": (
+            "Search Telegram for channels matching each SearchTerm in the database, "
+            "and add specific channels by link, username, or ID."
+        ),
         "icon": "bi-search",
     },
     "crawl_channels": {
@@ -405,6 +408,7 @@ class ExportDetailView(View):
 #   ("bool_explicit", post_key, on_flag, off_flag)     "always emit on/off form (tri-state CLI)"
 #   ("channel_types", cli_flag)                        "CHANNEL/GROUP/USER triplet → csv"
 #   ("extra_terms",   post_key)                        "one --extra-term per non-blank line"
+#   ("lines",         post_key, cli_flag)              "one '<cli_flag> <line>' per non-blank line"
 #   ("positional",    post_key)                        "a bare argument (no flag) when set"
 
 _CHANNEL_TYPE_KEYS = ("CHANNEL", "GROUP", "USER")
@@ -460,6 +464,14 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
             word = " ".join(line.split()).lower()
             if word:
                 args += ["--extra-term", word]
+    elif kind == "lines":
+        # Unlike extra_terms, lines are passed verbatim (no lowercasing/space
+        # collapsing): the management command normalises identifiers itself.
+        _, key, flag = spec
+        for line in post.get(key, "").splitlines():
+            item = line.strip()
+            if item:
+                args += [flag, item]
     elif kind == "positional":
         _, key = spec
         val = post.get(key, "").strip()
@@ -523,6 +535,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
     "search_channels": [
         ("value", "amount", "--amount"),
         ("extra_terms", "extra_terms"),
+        ("lines", "add_channels", "--add-channel"),
     ],
     "structural_analysis": [
         ("value", "export_name", "--name"),
