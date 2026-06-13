@@ -5,7 +5,10 @@
 - **Channels can be added directly by link, username, or ID.** The Search Channels card gains an **Add channels** box: paste one identifier per line — a `t.me` link, an `@username`, a bare username, or a numeric Telegram ID — and each is resolved on Telegram and added to the database, no keyword search needed. Identifiers that cannot be resolved (deleted, private, mistyped, or an ID the account has never seen) are flagged as warnings in the log without stopping the run. Also available on the CLI as a repeatable `search_channels --add-channel` flag; see [docs/workflow.md](docs/workflow.md).
 - **A newly discovered linked chat inherits its parent's attribution.** A channel's linked discussion group (or a group's linked broadcast channel), when first registered by *Get channels info*, copies the parent's current attribution — same organization and period — instead of starting unattributed. Existing rows are never touched.
 
-### Changes
+### Improvements
+- **Onboarding docs lead with the stable-release download.** The README quick start and `docs/getting-started.md` now point new users at the latest release zip from the GitHub releases page (no Git required), with `git clone` demoted to a labelled alternative that tracks the development code. See [docs/getting-started.md](docs/getting-started.md).
+
+### Fixes
 - **`crawl_channels` without `--channel-types` now crawls the default scope instead of nothing.** The flag falls back to the `DEFAULT_CHANNEL_TYPES` setting (`[scope].channel_types` in `configuration/.operations-crawl`), matching `structural_analysis`; previously an explicitly requested phase silently selected zero channels. The bundled baseline's scope is narrowed from `["CHANNEL", "USER"]` to `["CHANNEL"]`, and stale CLI help texts and docs that still described the pre-0.21 config model (app-written `.operations-*` files, settings fallbacks for feature toggles) are corrected.
 
 ## [0.25] - 2026-06-11
