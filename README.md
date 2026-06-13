@@ -60,27 +60,28 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 ## Quick start
 
-> **Prerequisites:** Python 3.12, 3.13, or 3.14 (all fully supported) and Git.
+> **Prerequisites:** Python 3.12, 3.13, or 3.14 (all fully supported). No Git required for the download below.
+
+1. **Download the latest stable release:** open the **[releases page](https://github.com/giovabal/pulpit/releases/latest)**, download **Source code (zip)** under *Assets*, and unzip it. You'll get a folder such as `pulpit-0.25`.
+2. **Open a terminal in that folder** and run the setup for your platform:
 
 **macOS / Linux**
 ```sh
-git clone https://github.com/giovabal/pulpit
-cd pulpit
 sh setup.sh
-# Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
+# Edit configuration/.env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
 python manage.py runserver
 ```
 
 **Windows**
 ```cmd
-git clone https://github.com/giovabal/pulpit
-cd pulpit
 setup.bat
-rem Edit .env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
+rem Edit configuration/.env: set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER
 python manage.py runserver
 ```
 
 Open [http://localhost:8000](http://localhost:8000). The entire workflow runs from the browser from here. See [Getting started](docs/getting-started.md) for setup details, Telegram credential registration, and database configuration.
+
+> **Prefer Git?** Run `git clone https://github.com/giovabal/pulpit`, then `cd pulpit`, then setup as above — this gives you the latest *development* code instead of the stable release. The [Getting started](docs/getting-started.md#alternative-install-with-git) guide covers this path.
 
 ---
 

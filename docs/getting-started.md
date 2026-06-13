@@ -6,23 +6,50 @@ This guide walks you through installing Pulpit, connecting it to your Telegram a
 
 ## Before you begin
 
-You will need three things:
+You will need two things:
 
 **1. Python** — the programming language Pulpit runs on. Download the installer from [python.org/downloads](https://www.python.org/downloads/) and run it. Choose version 3.12, 3.13, or 3.14 — Pulpit fully supports all three. On the download page, click the button for your operating system (Windows, Mac, or Linux).
 
 > **Windows users:** During the Python installer, tick the box that says **"Add Python to PATH"** before clicking Install. If you miss this step, the terminal commands below will not work.
 
-**2. Git** — a tool for downloading code. Download it from [git-scm.com/downloads](https://git-scm.com/downloads) and run the installer with the default options. On Mac, if prompted to install the Xcode Command Line Tools, accept.
+**2. A Telegram account** — Pulpit connects to Telegram using your account credentials. You will need the phone number linked to your Telegram account.
 
-**3. A Telegram account** — Pulpit connects to Telegram using your account credentials. You will need the phone number linked to your Telegram account.
+> **Git is optional.** The recommended install below is a plain download — no Git needed. Git is only required for the [alternative install](#alternative-install-with-git), which makes updating Pulpit easier later on. If you want it, download it from [git-scm.com/downloads](https://git-scm.com/downloads), run the installer with the default options, and — on Mac, if prompted — accept the Xcode Command Line Tools.
 
 ---
 
 ## Step 1 — Download Pulpit
 
-Open a terminal (on Windows: search for **Command Prompt** or **PowerShell**; on Mac: search for **Terminal**; on Linux: you know what to do).
+The recommended way to install Pulpit is to download the latest **stable release** — a tested, fixed snapshot of the project.
 
-Run these commands one at a time, pressing Enter after each:
+1. Open the **[releases page](https://github.com/giovabal/pulpit/releases/latest)** in your browser.
+2. Under **Assets**, click **Source code (zip)** to download it.
+3. Unzip the downloaded file. This gives you a folder named something like `pulpit-0.25` (the number is the version). Move it wherever you'd like to keep it — your Documents folder is fine.
+
+Now open a terminal (on Windows: search for **Command Prompt** or **PowerShell**; on Mac: search for **Terminal**; on Linux: you know what to do), move into that folder, and run the setup script:
+
+**macOS / Linux**
+```sh
+cd path/to/pulpit-0.25
+sh setup.sh
+```
+
+**Windows**
+```cmd
+cd path\to\pulpit-0.25
+setup.bat
+```
+
+- `cd …` moves you into the folder you just unzipped. *(Tip: type `cd` followed by a space, then drag the folder onto the terminal window to fill in its path automatically.)*
+- `sh setup.sh` (or `setup.bat` on Windows) checks your Python version, installs dependencies, creates a `.env` configuration file, and prepares the database. This may take a minute or two.
+
+> **Updating later:** to move to a newer release, download the latest zip again and re-run the setup script in the new folder. Pulpit will show an "update available" hint in the interface when a newer version is published.
+
+### Alternative: install with Git
+
+If you already use [Git](https://git-scm.com/downloads), you can clone the repository instead of downloading the zip. This makes updating as simple as `git pull` later, but it gives you the **latest development code** rather than the stable release — newer features, with the occasional rough edge.
+
+Open a terminal and run these commands one at a time, pressing Enter after each:
 
 ```sh
 git clone https://github.com/giovabal/pulpit
@@ -30,11 +57,11 @@ cd pulpit
 sh setup.sh
 ```
 
-- `git clone` downloads a copy of Pulpit to a new folder called `pulpit` on your computer.
+- `git clone` downloads a copy of Pulpit into a new folder called `pulpit`.
 - `cd pulpit` moves you into that folder.
-- `sh setup.sh` checks your Python version, installs dependencies, creates a `.env` configuration file, and prepares the database. This may take a minute or two.
+- `sh setup.sh` runs the same setup as the download method above.
 
-> **Windows users:** run `setup.bat` instead of `sh setup.sh`. Open **Command Prompt** or **PowerShell**, navigate to the `pulpit` folder, and type `setup.bat`.
+> **Windows users:** run `setup.bat` instead of `sh setup.sh`.
 
 ---
 
@@ -86,7 +113,7 @@ You should see a message ending with `Starting development server at http://127.
 
 You are now looking at the Pulpit interface. Proceed to [Workflow](workflow.md) for a guided walkthrough of the four-step pipeline.
 
-> **Leaving Pulpit running:** the server keeps running until you stop it. To stop it, press **Ctrl + C** in the terminal. To start it again later, run `python manage.py runserver` from inside the `pulpit` folder.
+> **Leaving Pulpit running:** the server keeps running until you stop it. To stop it, press **Ctrl + C** in the terminal. To start it again later, run `python manage.py runserver` from inside your Pulpit folder (the one you unzipped or cloned).
 
 ---
 
@@ -117,8 +144,8 @@ Follow the prompts to set a username and password. This account can log in to al
 **"python: command not found" or "python is not recognised"**
 Python is not installed or not on your PATH. Re-install Python and make sure to tick "Add Python to PATH" during setup (Windows), or use `python3` instead of `python` (Mac/Linux).
 
-**"git: command not found"**
-Git is not installed. Download it from [git-scm.com/downloads](https://git-scm.com/downloads).
+**"git: command not found"** *(only if you chose the Git install)*
+Git is not installed. Either install it from [git-scm.com/downloads](https://git-scm.com/downloads), or use the recommended [stable-release download](#step-1--download-pulpit) instead — it doesn't need Git.
 
 **"No module named …"**
 The setup script may not have run completely. Try: `pip install -r requirements.txt`.
