@@ -25,19 +25,18 @@ type CommunityTableData = dict[str, Any]
 def channel_cutoff_q(channel_field: str = "channel", date_field: str = "date") -> Q:
     """Q matching messages whose date falls inside one of their channel's in-target periods.
 
-    A message is in-target iff its channel has a ``ChannelAttribution`` to an
-    in-target organization whose inclusive ``[start, end]`` interval (null
-    bounds = open) contains the message date. Pass ``channel_field`` /
-    ``date_field`` to adjust the ORM path when the Message is reached through a
-    related model (e.g. ``message__channel`` / ``message__date`` for the
-    references through-table).
+    A message is in-target iff its channel holds an in-target ``Label`` whose
+    inclusive ``[start, end]`` membership interval (null bounds = open) contains
+    the message date. Pass ``channel_field`` / ``date_field`` to adjust the ORM
+    path when the Message is reached through a related model (e.g.
+    ``message__channel`` / ``message__date`` for the references through-table).
     """
-    from webapp.models import ChannelAttribution
+    from webapp.models import ChannelLabel
 
     subquery = (
-        ChannelAttribution.objects.filter(
+        ChannelLabel.objects.filter(
             channel=OuterRef(channel_field),
-            organization__is_in_target=True,
+            label__is_in_target=True,
         )
         .filter(Q(start__isnull=True) | Q(start__lte=OuterRef(f"{date_field}__date")))
         .filter(Q(end__isnull=True) | Q(end__gte=OuterRef(f"{date_field}__date")))

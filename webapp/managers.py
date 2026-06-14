@@ -9,10 +9,10 @@ from webapp.utils.channel_types import channel_type_filter
 
 class ChannelQuerySet(models.QuerySet["Channel"]):
     def in_target(self) -> ChannelQuerySet:
-        """Channels with at least one in-target attribution period (any time)."""
-        from webapp.models import ChannelAttribution
+        """Channels holding at least one in-target label (any period)."""
+        from webapp.models import ChannelLabel
 
-        has_in_target = ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
+        has_in_target = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)
         return (
             self.filter(Exists(has_in_target))
             .filter(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))

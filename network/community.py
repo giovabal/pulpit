@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
@@ -6,7 +7,7 @@ from django.utils.text import slugify
 
 from network.tokens import TokenInstance, TokenParam, TokenSpec, base_keys_for, canonical_key, parse_tokens
 from network.utils import to_undirected_sum
-from webapp.models import Organization
+from webapp.models import Label, LabelGroup
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
     ColorTuple,
@@ -26,7 +27,6 @@ import networkx as nx
 # parameterised strategy (its resolution γ is per-instance and it may be requested more than once),
 # replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets.
 ALL_STRATEGIES: list[str] = [
-    "ORGANIZATION",
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
@@ -35,8 +35,30 @@ ALL_STRATEGIES: list[str] = [
     "KCORE",
     "SBM",
 ]
-COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES) - {"ORGANIZATION"}
+# Every static strategy is an algorithm; the only *metadata* partitions are the dynamic, DB-keyed
+# ``LABELGROUP<id>`` strategies (one per partition LabelGroup), which replaced the old single
+# ``ORGANIZATION`` strategy. ``is_metadata_strategy`` distinguishes them.
+COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES)
 VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
+
+_LABELGROUP_RE = re.compile(r"^LABELGROUP(\d+)$")
+
+
+def labelgroup_id(strategy_name: str) -> int | None:
+    """The LabelGroup pk a ``LABELGROUP<id>`` strategy token selects, or ``None`` for algorithms."""
+    match = _LABELGROUP_RE.match(strategy_name.upper())
+    return int(match.group(1)) if match else None
+
+
+def is_metadata_strategy(strategy_name: str) -> bool:
+    """Whether a strategy is a manual ``LABELGROUP<id>`` partition rather than an algorithm."""
+    return labelgroup_id(strategy_name) is not None
+
+
+def labelgroup_strategy_tokens() -> list[str]:
+    """``LABELGROUP<id>`` tokens for every partition LabelGroup, in pk order (DB lookup)."""
+    return [f"LABELGROUP{pk}" for pk in LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True)]
+
 
 # Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
 # of the citation graph. Their reported modularity should use the undirected null
@@ -54,7 +76,6 @@ UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
 # pages and in the server-side Operations panel.
 COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
-    "ORGANIZATION": "Organization",
     "LEIDEN": "Leiden",
     "LEIDEN_DIRECTED": "Leiden directed",
     "LEIDEN_CPM": "Leiden CPM",
@@ -143,7 +164,13 @@ class StrategyInstance(TokenInstance):
 
     @property
     def label(self) -> str:
-        return COMMUNITY_STRATEGY_LABELS.get(self.name, self.name.title()) + self.label_annotation()
+        gid = labelgroup_id(self.name)
+        if gid is not None:
+            group = LabelGroup.objects.filter(pk=gid).first()
+            base = group.name if group else self.name
+        else:
+            base = COMMUNITY_STRATEGY_LABELS.get(self.name, self.name.title())
+        return base + self.label_annotation()
 
 
 def parse_strategies(
@@ -153,16 +180,19 @@ def parse_strategies(
 ) -> list["StrategyInstance"]:
     """Parse ``--community-strategies`` tokens into ordered, de-duplicated StrategyInstance objects.
 
-    ``ALL`` expands to every strategy with default parameters. ``defaults`` supplies per-strategy
-    parameter overrides for omitted values (the command passes the global ``--leiden-cpm-resolution``
-    so a bare ``LEIDEN_CPM`` inherits it). Raises ``ValueError`` on unknown strategies, bad/duplicate
-    parameters — mirroring ``measures.parse_measures``.
+    ``ALL`` expands to every strategy with default parameters — including one ``LABELGROUP<id>`` per
+    partition LabelGroup (queried fresh each call, so newly-added groups appear). ``defaults`` supplies
+    per-strategy parameter overrides for omitted values (the command passes the global
+    ``--leiden-cpm-resolution`` so a bare ``LEIDEN_CPM`` inherits it). Raises ``ValueError`` on unknown
+    strategies, bad/duplicate parameters — mirroring ``measures.parse_measures``.
     """
+    labelgroup_tokens = labelgroup_strategy_tokens()
     return parse_tokens(
         tokens,
         registry=PARAMETERISED_STRATEGIES,
-        known_tokens=VALID_STRATEGIES,
-        all_tokens=ALL_STRATEGIES,
+        known_tokens=VALID_STRATEGIES | set(labelgroup_tokens),
+        # ALL expands to the metadata partitions first (the old ORGANIZATION-first order), then algorithms.
+        all_tokens=labelgroup_tokens + ALL_STRATEGIES,
         instance_cls=StrategyInstance,
         defaults=defaults,
         noun="strategy",
@@ -183,6 +213,10 @@ def strategy_display_label(key: str) -> str:
     parameter suffix is reconstructed from the spec's param names (the float value slug ``0_05`` reads
     back as ``0.05``). The JS mirror is ``strategy_label`` in ``webapp_engine/map/js/labels.js``.
     """
+    gid = labelgroup_id(key)
+    if gid is not None:
+        group = LabelGroup.objects.filter(pk=gid).first()
+        return group.name if group else key
     base = canonical_strategy_key(key)
     label = COMMUNITY_STRATEGY_LABELS.get(base.upper(), base.replace("_", " ").title())
     if key == base:
@@ -331,18 +365,24 @@ def detect_label_propagation(
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
-def detect_organization(channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
+def detect_labelgroup(group_id: int, channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
+    """Partition nodes by their resolved in-target label in LabelGroup ``group_id`` for the window.
+
+    Reads the per-group window resolution ``graph_builder`` stored in ``node['group_partitions']``;
+    nodes with no in-target label in the group (dead leaves, or simply unlabelled in this group) are
+    left ungrouped. Community ids are ``Label`` pks and the palette is built from each label's own
+    colour, so the ``palette_name`` / ``reverse`` flags don't apply (as the old ORGANIZATION strategy).
+    """
     community_map: CommunityMap = {}
     community_palette: CommunityPalette = {}
     for channel_id, item in channel_dict.items():
-        data = item["data"]
-        organization_id = data.get("resolved_org_id")
-        if organization_id is None:
-            # Dead-leaf, or no in-target organisation in the analysis window — not grouped by organisation.
+        entry = (item["data"].get("group_partitions") or {}).get(group_id)
+        if entry is None:
             continue
-        community_map[channel_id] = organization_id
-        if organization_id not in community_palette:
-            community_palette[organization_id] = parse_color(data["resolved_org_color"])
+        label_id, label_color = entry
+        community_map[channel_id] = label_id
+        if label_id not in community_palette:
+            community_palette[label_id] = parse_color(label_color)
     return community_map, community_palette
 
 
@@ -573,10 +613,11 @@ def detect(
         return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "SBM":
         return detect_sbm(graph, palette_name, str(params.get("mode", SBM_DEFAULT_MODE)), reverse=reverse)
-    if strategy == "ORGANIZATION":
-        # ORGANIZATION builds its palette from Organization.color directly, so the
+    gid = labelgroup_id(strategy)
+    if gid is not None:
+        # LABELGROUP<id> builds its palette from each Label's own colour directly, so the
         # palette_name / reverse flags don't apply.
-        return detect_organization(channel_dict)
+        return detect_labelgroup(gid, channel_dict)
     raise ValueError(f"Unknown community strategy: {strategy!r}. Choose from {sorted(VALID_STRATEGIES)}.")
 
 
@@ -596,17 +637,18 @@ def apply_to_graph(
     instance = strategy if isinstance(strategy, StrategyInstance) else StrategyInstance(str(strategy).upper())
     strategy_name = instance.name
     strategy_key = instance.key
-    if strategy_name not in COMMUNITY_ALGORITHMS:
-        org_ids = set(community_map.values())
-        org_names = {org.pk: org.name for org in Organization.objects.filter(pk__in=org_ids)}
+    metadata = is_metadata_strategy(strategy_name)
+    if metadata:
+        label_ids = set(community_map.values())
+        label_names = {lbl.pk: lbl.name for lbl in Label.objects.filter(pk__in=label_ids)}
 
     for node_id, node_data in graph.nodes(data="data"):
         community_id = community_map.get(node_id)
         if community_id is not None:
             detected_community = (
-                build_community_label(community_id, strategy_name)
-                if strategy_name in COMMUNITY_ALGORITHMS
-                else org_names.get(community_id, str(community_id))
+                label_names.get(community_id, str(community_id))
+                if metadata
+                else build_community_label(community_id, strategy_name)
             )
             node_data.setdefault("communities", {})[strategy_key] = detected_community
             channel_dict[node_id]["data"].setdefault("communities", {})[strategy_key] = detected_community
@@ -653,17 +695,19 @@ def build_communities_payload(
                 str(community_id): build_community_label(community_id, strategy) for community_id in community_counts
             }
         else:
-            # ORGANIZATION: counts come from the resolved per-window community map (consistent with
-            # node colouring), not a raw FK channel count — only orgs that actually own a node appear.
+            # LABELGROUP<id>: counts come from the resolved per-window community map (consistent with
+            # node colouring), not a raw membership count — only labels that actually own a node appear.
             community_counts = Counter(community_map.values())
-            org_objs = {o.pk: o for o in Organization.objects.filter(pk__in=list(community_counts))}
+            label_objs = {lbl.pk: lbl for lbl in Label.objects.filter(pk__in=list(community_counts))}
             groups = [
-                (org_id, count, org_objs[org_id].name, org_objs[org_id].color)
-                for org_id, count in community_counts.items()
-                if org_id in org_objs
+                (label_id, count, label_objs[label_id].name, label_objs[label_id].color)
+                for label_id, count in community_counts.items()
+                if label_id in label_objs
             ]
             main_groups = {
-                org_objs[org_id].key: org_objs[org_id].name for org_id in community_counts if org_id in org_objs
+                label_objs[label_id].key: label_objs[label_id].name
+                for label_id in community_counts
+                if label_id in label_objs
             }
         if strategy == "KCORE":
             groups = sorted(groups, key=lambda x: int(x[0]))

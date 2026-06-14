@@ -2,6 +2,7 @@
 ## [0.26] - To be announced
 
 ### New features
+- **Organizations are generalised into label groups.** A new `LabelGroup`/`Label` system replaces the single `Organization` axis: a group can be a *partition* (at most one of its labels per channel at a time), each label carries its own in-target flag (a channel is in-target when it holds any in-target label), and every partition group is selectable as a `LABELGROUP<id>` community strategy and `MODULEROLE` basis. Label membership stays time-bounded, like the old attribution periods.
 - **Channels can be added directly by link, username, or ID.** The Search Channels card gains an **Add channels** box: paste one identifier per line — a `t.me` link, an `@username`, a bare username, or a numeric Telegram ID — and each is resolved on Telegram and added to the database, no keyword search needed. Identifiers that cannot be resolved (deleted, private, mistyped, or an ID the account has never seen) are flagged as warnings in the log without stopping the run. Also available on the CLI as a repeatable `search_channels --add-channel` flag; see [docs/workflow.md](docs/workflow.md).
 - **A newly discovered linked chat inherits its parent's attribution.** A channel's linked discussion group (or a group's linked broadcast channel), when first registered by *Get channels info*, copies the parent's current attribution — same organization and period — instead of starting unattributed. Existing rows are never touched.
 
