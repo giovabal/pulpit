@@ -7,7 +7,7 @@ from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, 
 from django.utils import timezone
 
 from network.utils import channel_cutoff_q, make_date_q
-from webapp.models import Channel, ChannelAttribution, Message, ProfilePicture
+from webapp.models import Channel, ChannelLabel, LabelGroup, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
 
@@ -21,29 +21,36 @@ def channel_network_data(
     default: dict | None = None,
     skip: frozenset[str] | set[str] = frozenset(),
     dead_leaves_color: str | None = None,
-    resolved_org: "tuple[int, str, str] | None" = None,
+    resolved_label: "tuple[int, str, str] | None" = None,
+    group_partitions: "dict[int, tuple[int, str]] | None" = None,
 ) -> dict:
     """Build the graph-node dict for a channel.
 
-    Node colour comes from the channel's *resolved* in-target organisation for
-    the analysis window (``resolved_org`` = ``(id, name, color)``); channels
-    with no in-target organisation in the window — *dead-leaf* nodes, i.e.
-    out-of-target channels an in-target channel forwarded from or mentioned via
-    a ``t.me/`` link — fall back to ``dead_leaves_color`` (or, when ``None``,
-    ``settings.DEAD_LEAVES_COLOR``).
+    Node colour comes from the channel's *resolved* in-target label in the
+    **primary** group for the analysis window (``resolved_label`` =
+    ``(label_id, name, color)``); channels with no in-target label in the
+    primary group for the window — *dead-leaf* nodes, i.e. out-of-target
+    channels an in-target channel forwarded from or mentioned via a ``t.me/``
+    link — fall back to ``dead_leaves_color`` (or, when ``None``,
+    ``settings.DEAD_LEAVES_COLOR``). ``group_partitions`` maps every *partition*
+    group's pk → ``(label_id, label_color)`` resolved for the window, feeding the
+    ``LABELGROUP<id>`` community strategies. The node keys ``organization`` /
+    ``resolved_org_*`` keep their names for export back-compat but now hold the
+    primary group's label.
     """
     default = default or {}
     leaf_color = dead_leaves_color or settings.DEAD_LEAVES_COLOR
-    org_color = resolved_org[2] if resolved_org else None
+    label_color = resolved_label[2] if resolved_label else None
     data: dict = {
         "pk": str(channel.pk),
         "id": channel.telegram_id,
         "label": channel.title,
         "communities": {},
-        "color": ",".join(map(str, hex_to_rgb(org_color or leaf_color))),
-        "organization": resolved_org[1] if resolved_org else "",
-        "resolved_org_id": resolved_org[0] if resolved_org else None,
-        "resolved_org_color": org_color,
+        "color": ",".join(map(str, hex_to_rgb(label_color or leaf_color))),
+        "organization": resolved_label[1] if resolved_label else "",
+        "resolved_org_id": resolved_label[0] if resolved_label else None,
+        "resolved_org_color": label_color,
+        "group_partitions": group_partitions or {},
         "pic": channel.profile_picture.picture.url[1:]
         if channel.profile_picture and channel.profile_picture.picture
         else "",
@@ -85,20 +92,21 @@ def _channel_activity_bounds(
 
 def _in_target_period_tuples(
     channel: Channel,
+    group_id: int,
 ) -> list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]]:
-    """(org_id, org_name, org_color, start, end) for the channel's in-target periods.
+    """(label_id, label_name, label_color, start, end) for the channel's in-target periods in ``group_id``.
 
-    Reads from prefetched ``attributions__organization`` so it issues no query.
+    Reads from prefetched ``channel_labels__label`` so it issues no query.
     """
     periods = []
-    for attribution in channel.attributions.all():
-        org = attribution.organization
-        if org and org.is_in_target:
-            periods.append((org.id, org.name, org.color, attribution.start, attribution.end))
+    for channel_label in channel.channel_labels.all():
+        label = channel_label.label
+        if label.is_in_target and label.group_id == group_id:
+            periods.append((label.id, label.name, label.color, channel_label.start, channel_label.end))
     return periods
 
 
-def resolve_window_organization(
+def resolve_window_label(
     in_target_periods: list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]],
     window_start: datetime.date | None,
     window_end: datetime.date | None,
@@ -106,13 +114,13 @@ def resolve_window_organization(
     data_min: datetime.date | None,
     data_max: datetime.date | None,
 ) -> tuple[int, str, str] | None:
-    """Pick the in-target org whose period covers the most days inside the window.
+    """Pick the in-target label whose period covers the most days inside the window.
 
     Tiebreak: the period that starts earliest. ``None`` bounds are clamped — a
     period start falls back to channel creation / earliest activity / window
     start; a period end to the window end / latest activity / today; an open
-    analysis window to the channel's data range. Returns ``(org_id, org_name,
-    org_color)`` or ``None`` when no in-target period overlaps the window.
+    analysis window to the channel's data range. Returns ``(label_id, label_name,
+    label_color)`` or ``None`` when no in-target period overlaps the window.
     """
     today = timezone.localdate()
     floor = channel_created or data_min or window_start or datetime.date.min
@@ -121,8 +129,8 @@ def resolve_window_organization(
     if w_hi < w_lo:
         w_hi = w_lo
     best_key: tuple[int, int] | None = None
-    best_org: tuple[int, str, str] | None = None
-    for org_id, org_name, org_color, p_start, p_end in in_target_periods:
+    best_label: tuple[int, str, str] | None = None
+    for label_id, label_name, label_color, p_start, p_end in in_target_periods:
         s = p_start or floor
         e = p_end or w_hi
         lo, hi = max(s, w_lo), min(e, w_hi)
@@ -131,8 +139,8 @@ def resolve_window_organization(
             continue
         key = (days, -s.toordinal())  # most days; tie -> earliest start
         if best_key is None or key > best_key:
-            best_key, best_org = key, (org_id, org_name, org_color)
-    return best_org
+            best_key, best_label = key, (label_id, label_name, label_color)
+    return best_label
 
 
 VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
@@ -237,7 +245,7 @@ def build_graph(
     """
     # Node set: channels with an in-target period overlapping [start_date, end_date]
     # (the whole timeline when the window is open), plus dead leaves when requested.
-    in_target_sub = ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
+    in_target_sub = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)
     if end_date is not None:
         in_target_sub = in_target_sub.filter(Q(start__isnull=True) | Q(start__lte=end_date))
     if start_date is not None:
@@ -254,7 +262,7 @@ def build_graph(
     if not include_lost:
         channel_qs = channel_qs.exclude(is_lost=True)
     channel_qs = channel_qs.prefetch_related(
-        "attributions__organization",
+        "channel_labels__label",
         Prefetch(
             "profilepicture_set",
             queryset=ProfilePicture.objects.order_by("-date")[:1],
@@ -264,6 +272,11 @@ def build_graph(
     if channel_groups:
         channel_qs = channel_qs.filter(groups__key__in=channel_groups).distinct()
 
+    # Resolve every partition group's window-label per node (feeds LABELGROUP<id> strategies); the
+    # primary group additionally drives node colour and the "organization" export column.
+    primary_group_id = LabelGroup.objects.filter(is_primary=True).values_list("pk", flat=True).first()
+    partition_group_ids = list(LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True))
+
     _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
@@ -271,16 +284,23 @@ def build_graph(
     activity_bounds = _channel_activity_bounds([channel.pk for channel in channels])
     for channel in channels:
         data_min, data_max = activity_bounds.get(channel.pk, (None, None))
-        resolved_org = resolve_window_organization(
-            _in_target_period_tuples(channel),
-            start_date,
-            end_date,
-            timezone.localdate(channel.date) if channel.date else None,
-            data_min,
-            data_max,
-        )
+        created = timezone.localdate(channel.date) if channel.date else None
+        group_partitions: dict[int, tuple[int, str]] = {}
+        resolved_label: tuple[int, str, str] | None = None
+        for group_id in partition_group_ids:
+            resolved = resolve_window_label(
+                _in_target_period_tuples(channel, group_id), start_date, end_date, created, data_min, data_max
+            )
+            if resolved is not None:
+                group_partitions[group_id] = (resolved[0], resolved[2])  # (label_id, label_color)
+                if group_id == primary_group_id:
+                    resolved_label = resolved
         node_data = channel_network_data(
-            channel, skip=_skip, dead_leaves_color=dead_leaves_color, resolved_org=resolved_org
+            channel,
+            skip=_skip,
+            dead_leaves_color=dead_leaves_color,
+            resolved_label=resolved_label,
+            group_partitions=group_partitions,
         )
         channel_dict[str(channel.pk)] = {"channel": channel, "data": node_data}
         graph.add_node(str(channel.pk), data=node_data)
@@ -378,7 +398,7 @@ def build_graph(
     # inside a restricted analysis window with no citations — keeps no edge; and an
     # in-target channel whose open-start attribution matches any window can still
     # resolve to no organization when it was created after the window end
-    # (``resolve_window_organization`` clamps the open start to the creation date).
+    # (``resolve_window_label`` clamps the open start to the creation date).
     # ``_filter_inactive_channels`` deliberately exempts org-less nodes on the
     # promise that this sweep decides their fate, so it must run regardless of
     # ``draw_dead_leaves`` — gating it on the flag left the second kind hanging as

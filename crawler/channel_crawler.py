@@ -15,7 +15,7 @@ from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
 from webapp.models import (
     Channel,
-    ChannelAttribution,
+    ChannelLabel,
     Message,
     MessageReaction,
     MessageReply,
@@ -209,7 +209,7 @@ class ChannelCrawler:
                 except DatabaseError as exc:
                     logger.warning("Could not create linked channel %s: %s", linked_chat_id, exc)
                 else:
-                    self._inherit_parent_attribution(channel, linked_channel)
+                    self._inherit_parent_label(channel, linked_channel)
         channel.available_min_id = getattr(full, "available_min_id", None) or None
         channel.slowmode_seconds = getattr(full, "slowmode_seconds", None) or None
         channel.admins_count = getattr(full, "admins_count", None) or None
@@ -253,35 +253,60 @@ class ChannelCrawler:
         )
 
     @staticmethod
-    def _inherit_parent_attribution(parent: Channel, linked_channel: Channel) -> None:
-        """Copy ``parent``'s current attribution onto its just-discovered linked chat.
+    def _representative_channel_label(channel: Channel) -> "ChannelLabel | None":
+        """The primary-group ``ChannelLabel`` row representing ``channel`` now (label + bounds).
+
+        Mirrors ``Channel.representative_label``'s period selection — period active
+        today wins, else most-recent-past, else earliest — but returns the whole
+        membership row so the caller can copy its label *and* its date bounds.
+        """
+        from webapp.models import LabelGroup
+
+        group = LabelGroup.objects.filter(is_primary=True).first()
+        if group is None:
+            return None
+        today = timezone.localdate()
+        rows = [cl for cl in channel.channel_labels.all() if cl.label.group_id == group.pk]
+        if not rows:
+            return None
+        active = [r for r in rows if (r.start is None or r.start <= today) and (r.end is None or r.end >= today)]
+        if active:
+            return max(active, key=lambda r: r.start or datetime.date.min)
+        past = [r for r in rows if r.end is not None and r.end < today]
+        if past:
+            return max(past, key=lambda r: (r.end, r.start or datetime.date.min))
+        return min(rows, key=lambda r: r.start or datetime.date.min)
+
+    @classmethod
+    def _inherit_parent_label(cls, parent: Channel, linked_channel: Channel) -> None:
+        """Copy ``parent``'s representative label onto its just-discovered linked chat.
 
         A channel and its linked discussion group (or a group and its linked
         broadcast channel) belong to the same owner, so the new row starts with
-        the parent's current organization over the same period instead of
-        unattributed. Runs only on first discovery (the caller guards on the
-        row not existing yet); afterwards the timeline is analyst-managed in
-        the /manage/ channel editor, like any other channel. Note an in-target
-        inherited attribution puts the linked chat into the crawl scope of
-        subsequent runs whose --channel-types cover it.
+        the parent's current label over the same period instead of unlabelled.
+        Runs only on first discovery (the caller guards on the row not existing
+        yet); afterwards the timeline is analyst-managed in the /manage/ channel
+        editor, like any other channel. Note an in-target inherited label puts the
+        linked chat into the crawl scope of subsequent runs whose --channel-types
+        cover it.
         """
-        attribution = parent.current_attribution
-        if attribution is None:
+        channel_label = cls._representative_channel_label(parent)
+        if channel_label is None:
             return
         try:
-            ChannelAttribution.objects.create(
+            ChannelLabel.objects.create(
                 channel=linked_channel,
-                organization=attribution.organization,
-                start=attribution.start,
-                end=attribution.end,
+                label=channel_label.label,
+                start=channel_label.start,
+                end=channel_label.end,
             )
         except DatabaseError as exc:
-            logger.warning("Could not copy the attribution to linked chat %s: %s", linked_channel, exc)
+            logger.warning("Could not copy the label to linked chat %s: %s", linked_channel, exc)
         else:
             logger.info(
-                "Linked chat %s inherited the attribution to %s from %s",
+                "Linked chat %s inherited the label %s from %s",
                 linked_channel,
-                attribution.organization,
+                channel_label.label,
                 parent,
             )
 

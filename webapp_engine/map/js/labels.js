@@ -1,7 +1,9 @@
 // Mirrors COMMUNITY_STRATEGY_LABELS in network/community.py (keys lower-cased). LEIDEN_CPM is one
 // parameterised strategy now — per-instance partitions arrive as suffixed keys (leiden_cpm_resolution_0_05).
+// The dynamic metadata partitions arrive as `labelgroup<id>` keys; their human label is the
+// LabelGroup name, injected at runtime via window.STRATEGY_LABELS (export/UI pass) — falling back to a
+// title-cased key here.
 export var STRATEGY_LABELS = {
-    organization:     'Organization',
     leiden:           'Leiden',
     leiden_directed:  'Leiden directed',
     leiden_cpm:       'Leiden CPM',

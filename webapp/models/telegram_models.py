@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
+    from webapp.models.label_models import ChannelLabel, Label, LabelGroup
     from webapp.models.media_models import (
         MessageAudio,
         MessageOtherMedia,
@@ -12,7 +13,6 @@ if TYPE_CHECKING:
         MessageVideo,
         ProfilePicture,
     )
-    from webapp.models.organization_models import ChannelAttribution, Organization
 
 from django.db import models
 from django.db.models import Max, Min, Q
@@ -145,37 +145,49 @@ class Channel(TelegramBaseModel):
         return self.profilepicture_set.order_by("-date").first()
 
     @property
-    def in_target_periods(self) -> "models.QuerySet[ChannelAttribution]":
-        """Attribution periods whose organization is currently in target."""
-        return self.attributions.filter(organization__is_in_target=True)
+    def in_target_periods(self) -> "models.QuerySet[ChannelLabel]":
+        """Label-membership periods whose label is in target."""
+        return self.channel_labels.filter(label__is_in_target=True)
 
     @property
-    def current_attribution(self) -> "ChannelAttribution | None":
-        """The attribution that best represents the channel *now*.
+    def is_in_target(self) -> bool:
+        """Whether the channel holds at least one in-target label (over any period)."""
+        return self.channel_labels.filter(label__is_in_target=True).exists()
 
-        The period active today wins (null bounds count as open); otherwise the
-        most recent past period (largest ``end``, tie → latest ``start``);
-        otherwise the earliest known period. ``None`` when the channel has no
-        attribution at all.
+    def representative_label(self, group: "LabelGroup | int | None" = None) -> "Label | None":
+        """The label of ``group`` that best represents the channel *now*.
+
+        ``group`` defaults to the primary group (the migrated "Organization"). The
+        period active today wins (null bounds count as open); otherwise the most
+        recent past period (largest ``end``, tie → latest ``start``); otherwise the
+        earliest known period. ``None`` when the channel holds no label in the
+        group. Prefetch ``channel_labels__label`` when iterating many channels.
         """
+        from webapp.models import LabelGroup
+
+        if group is None:
+            group = LabelGroup.objects.filter(is_primary=True).first()
+            if group is None:
+                return None
+        group_id = group.pk if isinstance(group, LabelGroup) else group
         # localdate(): "today" in the TIME_ZONE the DB-side __date period lookups use,
         # not the host OS clock — they can disagree for ~2h around midnight.
         today = timezone.localdate()
-        attrs = list(self.attributions.all())  # prefetch-friendly; callers iterating many channels prefetch
-        if not attrs:
+        rows = [cl for cl in self.channel_labels.all() if cl.label.group_id == group_id]
+        if not rows:
             return None
-        active = [a for a in attrs if (a.start is None or a.start <= today) and (a.end is None or a.end >= today)]
+        active = [r for r in rows if (r.start is None or r.start <= today) and (r.end is None or r.end >= today)]
         if active:
-            return max(active, key=lambda a: a.start or datetime.date.min)
-        past = [a for a in attrs if a.end is not None and a.end < today]
+            return max(active, key=lambda r: r.start or datetime.date.min).label
+        past = [r for r in rows if r.end is not None and r.end < today]
         if past:
-            return max(past, key=lambda a: (a.end, a.start or datetime.date.min))
-        return min(attrs, key=lambda a: a.start or datetime.date.min)
+            return max(past, key=lambda r: (r.end, r.start or datetime.date.min)).label
+        return min(rows, key=lambda r: r.start or datetime.date.min).label
 
     @property
-    def current_organization(self) -> "Organization | None":
-        attribution = self.current_attribution
-        return attribution.organization if attribution else None
+    def current_label(self) -> "Label | None":
+        """The primary group's representative label for the channel now (was ``current_organization``)."""
+        return self.representative_label()
 
     def _get_activity_bounds(
         self,

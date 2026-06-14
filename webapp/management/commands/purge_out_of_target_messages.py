@@ -2,7 +2,7 @@
 
 A message survives the purge iff its channel is either:
 
-* explicitly marked for crawling (``organization.is_in_target=True`` or
+* explicitly marked for crawling (holds an in-target ``Label`` or
   ``to_inspect=True``) — **regardless** of whether the channel is currently
   flagged ``is_lost`` / ``is_private`` or has a type excluded by the current
   ``DEFAULT_CHANNEL_TYPES`` filter. The marker is the analyst's declaration
@@ -38,7 +38,7 @@ from django.db.models.query import QuerySet
 from network.utils import channel_cutoff_q
 from webapp.models import (
     Channel,
-    ChannelAttribution,
+    ChannelLabel,
     Message,
     MessageAudio,
     MessageOtherMedia,
@@ -72,16 +72,14 @@ class PurgeReport:
 def marked_in_target_channels() -> QuerySet[Channel]:
     """Channels the analyst has declared in scope for crawling, regardless of transient flags.
 
-    Includes channels under an in-target organization and those flagged
+    Includes channels holding an in-target label and those flagged
     ``to_inspect=True`` (crawled for discovery even when not in target).
     Distinct from ``Channel.objects.in_target()``, which *also* filters by
     ``DEFAULT_CHANNEL_TYPES`` and drops ``is_lost`` / ``is_private`` — using
     that for keep-set computation silently nukes history of channels that
     just happen to be lost or of a type outside the current view.
     """
-    has_in_target_period = Exists(
-        ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
-    )
+    has_in_target_period = Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True))
     return Channel.objects.filter(Q(has_in_target_period) | Q(to_inspect=True))
 
 
@@ -91,7 +89,7 @@ def find_purgeable_messages() -> QuerySet[Message]:
     Two kinds of messages are purgeable:
 
     * every message of a channel that is not in the keep-set (no in-target
-      attribution period, not ``to_inspect``, and not a forward source);
+      label period, not ``to_inspect``, and not a forward source);
     * the *out-of-period* messages of a kept in-target channel that is not
       ``to_inspect`` — messages dated outside all its in-target periods, e.g.
       left behind after an analyst narrows a period. ``to_inspect`` channels
@@ -175,7 +173,7 @@ def purge(*, dry_run: bool = False) -> PurgeReport:
     if not marked_in_target_channels().exists():
         raise CommandError(
             "No channels are marked in-target — refusing to proceed (would delete every message). "
-            "Mark at least one channel or organisation as in-target before running this command."
+            "Mark at least one channel with an in-target label before running this command."
         )
 
     qs = find_purgeable_messages()

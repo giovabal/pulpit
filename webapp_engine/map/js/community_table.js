@@ -258,9 +258,10 @@ function _render(d) {
         });
         container.appendChild(details);
 
-        // Organisation × community cross-tab
+        // Organisation × community cross-tab (skip the metadata LABELGROUP<id> partitions —
+        // cross-tabbing a label partition against the primary-group labels is uninformative).
         var orgCross = stratData.org_cross_tab;
-        if (strategyKey !== "ORGANIZATION" && orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
+        if (!/^labelgroup\d+$/.test(String(strategyKey).toLowerCase()) && orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
             var crossDetails = document.createElement("details");
             crossDetails.className = "community-channels mt-2 mb-4";
             var crossSummary = document.createElement("summary");

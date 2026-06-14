@@ -92,8 +92,8 @@ def _pick_interest_community_strategy(strategies: "list[community.StrategyInstan
     """Pick the community-partition *key* used by interest-structural's C metric.
 
     Prefer LEIDEN_DIRECTED (directional brokerage makes more sense for forwarding cascades than
-    undirected modularity), then LEIDEN, then any non-ORGANIZATION
-    strategy, then ORGANIZATION as a last resort. Returns the chosen instance's node-attribute key
+    undirected modularity), then LEIDEN, then any non-metadata (algorithmic) strategy, then a manual
+    ``LABELGROUP<id>`` partition as a last resort. Returns the chosen instance's node-attribute key
     (e.g. ``leiden_directed`` or ``leiden_cpm_resolution_0_05``); the first instance of a family wins.
     """
     by_name: dict[str, community.StrategyInstance] = {}
@@ -103,10 +103,10 @@ def _pick_interest_community_strategy(strategies: "list[community.StrategyInstan
         if candidate in by_name:
             return by_name[candidate].key
     for inst in strategies:
-        if inst.name != "ORGANIZATION":
+        if not community.is_metadata_strategy(inst.name):
             return inst.key
-    if "ORGANIZATION" in by_name:
-        return by_name["ORGANIZATION"].key
+    if strategies:
+        return strategies[0].key  # only manual LABELGROUP partitions available
     raise CommandError("--interest-structural requires at least one community strategy in --community-strategies.")
 
 
@@ -516,7 +516,8 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: ORGANIZATION, LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, KCORE, SBM, ALL. "
+                "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, KCORE, SBM, "
+                "LABELGROUP<id> (the manual partition induced by partition LabelGroup <id>), ALL. "
                 "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
                 "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED and requires "
                 "graph-tool (conda/apt, not pip). "
@@ -613,8 +614,8 @@ class Command(BaseCommand):
             default=None,
             metavar="NAME",
             help=(
-                "pypalettes palette name used to colour communities for every non-ORGANIZATION "
-                "strategy. Falls back to the community_palette entry in "
+                "pypalettes palette name used to colour communities for every algorithmic "
+                "(non-LABELGROUP) strategy. Falls back to the community_palette entry in "
                 "configuration/.operations-structural. Default: vaporwave."
             ),
         )
@@ -663,8 +664,8 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Generate a consensus matrix page (consensus_matrix.html) showing how consistently "
-                "each channel pair is co-clustered across all non-ORGANIZATION community detection strategies. "
-                "Requires at least two non-ORGANIZATION strategies."
+                "each channel pair is co-clustered across all algorithmic (non-LABELGROUP) community "
+                "detection strategies. Requires at least two algorithmic strategies."
             ),
         )
         parser.add_argument(
@@ -1158,9 +1159,9 @@ class Command(BaseCommand):
 
         # Ordered community-partition keys present on the nodes, in *selection order* —
         # a family basis must resolve to the first selected instance. Per-node
-        # accretion would instead depend on which node iterates first (ORGANIZATION
-        # is absent from unassigned nodes, so a dead leaf at the front of the dict
-        # would demote it behind the algorithmic partitions).
+        # accretion would instead depend on which node iterates first (a LABELGROUP
+        # partition is absent from unassigned nodes, so a dead leaf at the front of the
+        # dict would demote it behind the algorithmic partitions).
         present_keys: set[str] = set()
         for _nid, node_data in graph.nodes(data="data"):
             if node_data and node_data.get("communities"):

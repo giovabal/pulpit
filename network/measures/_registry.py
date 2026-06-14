@@ -77,11 +77,13 @@ VALID_NETWORK_STAT_GROUPS: frozenset[str] = frozenset(
 )
 ALL_NETWORK_STAT_GROUPS: list[str] = sorted(VALID_NETWORK_STAT_GROUPS)
 
-# Community-strategy names offered as a measure "basis" (MODULEROLE). Must mirror
+# Static community-strategy names offered as a measure "basis" (MODULEROLE). Must mirror
 # community.VALID_STRATEGIES — a guard test enforces it. Kept here (rather than imported
 # from network.community) so importing measures stays free of the heavy igraph/leidenalg deps.
+# The dynamic ``LABELGROUP<id>`` metadata partitions are also valid bases but, being DB-keyed,
+# are not enumerated here — the ``basis`` param is free-form (``str``) and validated against the
+# actually-selected --community-strategies at compute time.
 ALL_STRATEGIES: list[str] = [
-    "ORGANIZATION",
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
@@ -120,11 +122,12 @@ def is_valid_measure(token: str) -> bool:
 def _basis_param(default: str) -> MeasureParam:
     return MeasureParam(
         "basis",
-        "enum",
+        "str",
         default,
-        choices=tuple(ALL_STRATEGIES),
+        choices=tuple(ALL_STRATEGIES),  # UI hint only (str is not enum-validated); LABELGROUP<id> also valid
         label="Community basis",
-        help="Community partition the measure is read against; must also be in --community-strategies.",
+        help="Community partition the measure is read against (a strategy name or LABELGROUP<id>); "
+        "must also be in --community-strategies.",
     )
 
 

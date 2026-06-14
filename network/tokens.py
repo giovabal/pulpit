@@ -25,8 +25,10 @@ from dataclasses import dataclass
 
 # NAME or NAME(args). Case-insensitive: the CLI/config path upper-cases whole tokens, so a keyword
 # like ``runs=2000`` may arrive as ``RUNS=2000``; the name and parameter names are normalised
-# (upper / lower) after the match so either spelling round-trips.
-TOKEN_RE = re.compile(r"^\s*([A-Za-z][A-Za-z_]*)\s*(?:\(\s*(.*?)\s*\))?\s*$")
+# (upper / lower) after the match so either spelling round-trips. Digits are allowed in the name so
+# DB-keyed dynamic tokens like ``LABELGROUP5`` (a community strategy / MODULEROLE basis selecting
+# the partition induced by LabelGroup pk 5) parse.
+TOKEN_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\(\s*(.*?)\s*\))?\s*$")
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,12 @@ class TokenSpec:
 def coerce_value(param: TokenParam, raw: str) -> object:
     """Validate and convert a raw token value for ``param``. Raises ``ValueError`` on bad input."""
     raw = raw.strip()
+    if param.kind == "str":
+        # Free-form token (upper-cased to match the token convention). Validation against the
+        # *available* values happens later at the call site — used for the MODULEROLE ``basis``,
+        # whose valid values include DB-dynamic ``LABELGROUP<id>`` tokens that no static
+        # ``choices`` tuple can enumerate. ``choices`` may still be set for UI hinting.
+        return raw.upper()
     if param.kind == "enum":
         val = raw.upper()
         if val not in param.choices:
