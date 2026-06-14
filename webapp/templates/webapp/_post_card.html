@@ -31,7 +31,7 @@ sharing the same (channel_id, grouped_id).
   {% if show_channel_chip %}
   <div class="search-result-channel">
     <a href="{{ post.channel.get_absolute_url }}">
-      <span class="org-dot" style="background: {{ post.channel.current_organization.color }};" aria-hidden="true"></span>
+      <span class="org-dot" style="background: {{ post.channel.current_label.color }};" aria-hidden="true"></span>
       {{ post.channel.title }}
     </a>
   </div>

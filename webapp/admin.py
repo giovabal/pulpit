@@ -7,11 +7,12 @@ from django.utils.html import format_html
 
 from .models import (
     Channel,
-    ChannelAttribution,
     ChannelGroup,
+    ChannelLabel,
+    Label,
+    LabelGroup,
     Message,
     MessagePicture,
-    Organization,
     Poll,
     PollAnswer,
     ProfilePicture,
@@ -20,43 +21,50 @@ from .models import (
 )
 
 
-class ChannelAttributionInlineFormSet(forms.BaseInlineFormSet):
+class ChannelLabelInlineFormSet(forms.BaseInlineFormSet):
     def add_fields(self, form: forms.Form, index: int | None) -> None:
         super().add_fields(form, index)
         # This formset checks overlap on the submitted timeline as a whole (clean()
-        # below); flag each instance so ChannelAttribution.clean() skips its
-        # per-row DB-sibling check, which sees pre-save state and would reject
-        # valid combined edits.
+        # below); flag each instance so ChannelLabel.clean() skips its per-row
+        # DB-sibling check, which sees pre-save state and would reject valid
+        # combined edits.
         form.instance._overlap_checked_by_formset = True
 
     def clean(self) -> None:
         super().clean()
-        periods: list[tuple] = []
+        # Overlap is constrained only *within a partition group* — there a channel holds at
+        # most one of the group's labels at a time. Collect the submitted periods per
+        # partition group and check pairwise; non-partition groups are left unconstrained.
+        per_group: dict[int, list[tuple]] = {}
         for form in self.forms:
             if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
                 continue
             cd = form.cleaned_data
-            if not cd.get("organization"):
+            label = cd.get("label")
+            if not label:
                 continue
             start, end = cd.get("start"), cd.get("end")
             if start and end and start > end:
                 raise ValidationError("A period's end date must not be before its start date.")
+            if not label.group.is_partition:
+                continue
+            periods = per_group.setdefault(label.group_id, [])
             for prev_start, prev_end in periods:
-                if ChannelAttribution._overlaps(start, end, prev_start, prev_end):
-                    raise ValidationError("Attribution periods for a channel must not overlap.")
+                if ChannelLabel._overlaps(start, end, prev_start, prev_end):
+                    raise ValidationError("Label periods within a partition group must not overlap.")
             periods.append((start, end))
 
 
-class ChannelAttributionInline(admin.TabularInline):
-    model = ChannelAttribution
-    formset = ChannelAttributionInlineFormSet
+class ChannelLabelInline(admin.TabularInline):
+    model = ChannelLabel
+    formset = ChannelLabelInlineFormSet
     extra = 0
 
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
-    inlines = [ChannelAttributionInline]
+    inlines = [ChannelLabelInline]
     list_display = (
         "__str__",
         "thumb",
@@ -68,7 +76,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "telegram_url",
         "current_org",
     )
-    list_filter = ("attributions__organization__is_in_target", "broadcast", "attributions__organization", "groups")
+    list_filter = ("channel_labels__label__is_in_target", "broadcast", "channel_labels__label", "groups")
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
@@ -77,14 +85,14 @@ class ChannelAdmin(admin.ModelAdmin):
             .get_queryset(request)
             .annotate(_messages_count=Count("message_set", distinct=True))
             .prefetch_related(
-                "attributions__organization",
+                "channel_labels__label",
                 Prefetch("profilepicture_set", queryset=ProfilePicture.objects.order_by("-date")),
             )
         )
 
     @admin.display(description="Org (now)")
     def current_org(self, obj: Channel) -> str:
-        org = obj.current_organization
+        org = obj.current_label
         return org.name if org else "—"
 
     @admin.display(description="Msg")
@@ -169,10 +177,31 @@ class ChannelGroupAdmin(admin.ModelAdmin):
         return obj._channel_count  # type: ignore[attr-defined]
 
 
-@admin.register(Organization)
-class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("name", "color", "is_in_target")
+class LabelInline(admin.TabularInline):
+    model = Label
+    extra = 0
+
+
+@admin.register(LabelGroup)
+class LabelGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "color", "is_partition", "is_primary", "label_count")
+    list_editable = ["color", "is_partition"]
+    inlines = [LabelInline]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[LabelGroup]:
+        return super().get_queryset(request).annotate(_label_count=Count("labels"))
+
+    @admin.display(description="Labels")
+    def label_count(self, obj: LabelGroup) -> int:
+        return obj._label_count  # type: ignore[attr-defined]
+
+
+@admin.register(Label)
+class LabelAdmin(admin.ModelAdmin):
+    list_display = ("name", "group", "color", "is_in_target")
     list_editable = ["color", "is_in_target"]
+    list_filter = ("group", "is_in_target")
+    search_fields = ("name",)
 
 
 @admin.register(Project)

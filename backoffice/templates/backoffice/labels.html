@@ -1,0 +1,39 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-section-header">
+  <h2 class="bo-section-title">Labels</h2>
+  <button class="bo-btn" id="lblgrp-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add group</button>
+</div>
+
+<p class="text-muted small bo-labels-intro">
+  Labels live in groups. A <strong>partition</strong> group holds at most one label per channel at any moment
+  (like the former Organization), so its periods can't overlap; non-partition groups allow concurrent labels.
+  The single <strong>primary</strong> group supplies node colour, the “Organization” export column, the
+  vacancy actor identity, and the default community / role basis.
+</p>
+
+<form class="bo-add-form d-none" id="lblgrp-add-form" autocomplete="off">
+  <input class="bo-input" name="name" placeholder="Group name" required aria-label="Label group name">
+  <input class="bo-input bo-input--color" type="color" name="color" value="#4338ca" aria-label="Label group color">
+  <label class="bo-check-label"><input type="checkbox" name="is_partition" checked> Partition</label>
+  <label class="bo-check-label"><input type="checkbox" name="is_primary"> Primary</label>
+  <button type="submit" class="bo-btn">Save</button>
+  <button type="button" class="bo-btn bo-btn--ghost" id="lblgrp-add-cancel">Cancel</button>
+</form>
+
+<div class="bo-toolbar">
+  <span class="bo-count" id="lbl-count"></span>
+</div>
+
+<div id="lbl-groups">
+  <p class="bo-empty">Loading…</p>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/labels.js' %}"></script>
+{% endblock extra_scripts %}

@@ -189,6 +189,19 @@ class Channel(TelegramBaseModel):
         """The primary group's representative label for the channel now (was ``current_organization``)."""
         return self.representative_label()
 
+    @property
+    def current_labels(self) -> "list[Label]":
+        """The representative label for *every* group the channel holds labels in, right now.
+
+        One label per group — the same active-today (else most-recent-past, else earliest)
+        resolution as :attr:`current_label`, applied to each group the channel participates
+        in. Ordered primary group first, then by group name. Prefetch
+        ``channel_labels__label__group`` when iterating many channels (no query per call then).
+        """
+        group_ids = {cl.label.group_id for cl in self.channel_labels.all()}
+        labels = [label for gid in group_ids if (label := self.representative_label(gid)) is not None]
+        return sorted(labels, key=lambda label: (not label.group.is_primary, label.group.name))
+
     def _get_activity_bounds(
         self,
     ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:

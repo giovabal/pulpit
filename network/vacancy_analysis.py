@@ -12,7 +12,7 @@ from django.db.models import Count, Max, Min
 from django.utils import timezone
 
 from network.utils import channel_cutoff_q
-from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message
+from webapp.models import Channel, ChannelLabel, ChannelVacancy, LabelGroup, Message
 
 VALID_VACANCY_MEASURES: frozenset[str] = frozenset({"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "TEMPORAL"})
 
@@ -125,7 +125,7 @@ def _scores_abc(
         ):
             vacancy_out_pks.add(fwd_id)
             if fwd_date is not None:
-                # localdate(): org_at must see the same TIME_ZONE calendar day the
+                # localdate(): label_at must see the same TIME_ZONE calendar day the
                 # period filter (channel_cutoff_q) used to admit this forward.
                 vacancy_out_rows.append((fwd_id, timezone.localdate(fwd_date)))
 
@@ -148,22 +148,25 @@ def _scores_abc(
     cand_src_org_pks: dict[int, set[int]] = defaultdict(set)
     cand_amp_org_pks: dict[int, set[int]] = defaultdict(set)
     if "BROKERAGE" in selected:
-        # Attribution is time-bounded: resolve each channel's org as of the relevant date — the
-        # forward's date for source edges, the closure date for the orphaned amplifiers themselves.
+        # The brokerage "org" identity is a channel's primary-group label, resolved as of the
+        # relevant date (the forward's date for source edges, the closure date for the orphaned
+        # amplifiers). Scope the cache to the primary group so its periods can't overlap.
         closure_date = timezone.localdate(closure_dt)
-        attr_cache = ChannelAttribution.build_cache(
-            vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_rows} | set(orphaned_pks)
+        primary_group_id = LabelGroup.objects.filter(is_primary=True).values_list("id", flat=True).first()
+        attr_cache = ChannelLabel.build_cache(
+            vacancy_out_pks | {fwd_id for _, fwd_id, _ in cand_out_rows} | set(orphaned_pks),
+            group_id=primary_group_id,
         )
         vacancy_src_org_pks = {
-            org for fwd_id, when in vacancy_out_rows if (org := ChannelAttribution.org_at(attr_cache, fwd_id, when))
+            org for fwd_id, when in vacancy_out_rows if (org := ChannelLabel.label_at(attr_cache, fwd_id, when))
         }
         orphaned_org_map = {
-            pk: org for pk in orphaned_pks if (org := ChannelAttribution.org_at(attr_cache, pk, closure_date))
+            pk: org for pk in orphaned_pks if (org := ChannelLabel.label_at(attr_cache, pk, closure_date))
         }
         vacancy_amp_org_pks = set(orphaned_org_map.values())
         vacancy_org_pairs = frozenset((s, a) for s in vacancy_src_org_pks for a in vacancy_amp_org_pks)
         for ch_id, fwd_id, when in cand_out_rows:
-            org = ChannelAttribution.org_at(attr_cache, fwd_id, when)
+            org = ChannelLabel.label_at(attr_cache, fwd_id, when)
             if org is not None:
                 cand_src_org_pks[ch_id].add(org)
         for r in (
@@ -363,7 +366,7 @@ def _analyze_vacancy(
             "pk": c.pk,
             "title": c.title,
             "url": c.get_absolute_url(),
-            "org_color": c.current_organization.color if c.current_organization else None,
+            "org_color": c.current_label.color if c.current_label else None,
             "amplifier_count": cand_meta[cid]["amplifier_count"],
             "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
             "last_forwarded_iso": lf.date().isoformat() if lf else None,

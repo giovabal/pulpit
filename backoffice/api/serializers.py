@@ -3,10 +3,11 @@ from django.contrib.auth.models import User
 from events.models import Event, EventType
 from webapp.models import (
     Channel,
-    ChannelAttribution,
     ChannelGroup,
+    ChannelLabel,
     ChannelVacancy,
-    Organization,
+    Label,
+    LabelGroup,
     Project,
     SearchTerm,
 )
@@ -14,12 +15,52 @@ from webapp.models import (
 from rest_framework import serializers
 
 
-class OrganizationSerializer(serializers.ModelSerializer):
+class LabelGroupSerializer(serializers.ModelSerializer):
+    label_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = LabelGroup
+        fields = ["id", "name", "color", "description", "is_partition", "is_primary", "label_count"]
+
+    def _enforce_single_primary(self, instance):
+        # Exactly one group is the primary ("Organization" replacement): node colour, the
+        # Organization export column, vacancy actor identity, and the default MODULEROLE
+        # basis all read ``filter(is_primary=True).first()``. Demote any other primary so
+        # promoting a group here can't leave two.
+        if instance.is_primary:
+            LabelGroup.objects.exclude(pk=instance.pk).filter(is_primary=True).update(is_primary=False)
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        self._enforce_single_primary(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        self._enforce_single_primary(instance)
+        return instance
+
+
+class LabelSerializer(serializers.ModelSerializer):
+    group_id = serializers.PrimaryKeyRelatedField(source="group", queryset=LabelGroup.objects.all())
+    group_name = serializers.CharField(source="group.name", read_only=True)
+    group_is_partition = serializers.BooleanField(source="group.is_partition", read_only=True)
+    group_is_primary = serializers.BooleanField(source="group.is_primary", read_only=True)
     channel_count = serializers.IntegerField(read_only=True)
 
     class Meta:
-        model = Organization
-        fields = ["id", "name", "color", "is_in_target", "channel_count"]
+        model = Label
+        fields = [
+            "id",
+            "group_id",
+            "group_name",
+            "group_is_partition",
+            "group_is_primary",
+            "name",
+            "color",
+            "is_in_target",
+            "channel_count",
+        ]
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -46,31 +87,51 @@ class ChannelGroupSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "key", "description", "note", "channel_count"]
 
 
-class ChannelAttributionSerializer(serializers.ModelSerializer):
+class ChannelLabelSerializer(serializers.ModelSerializer):
     channel_id = serializers.PrimaryKeyRelatedField(source="channel", queryset=Channel.objects.all())
-    organization_id = serializers.PrimaryKeyRelatedField(source="organization", queryset=Organization.objects.all())
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
-    organization_color = serializers.CharField(source="organization.color", read_only=True)
+    label_id = serializers.PrimaryKeyRelatedField(source="label", queryset=Label.objects.all())
+    label_name = serializers.CharField(source="label.name", read_only=True)
+    label_color = serializers.CharField(source="label.color", read_only=True)
+    group_id = serializers.IntegerField(source="label.group_id", read_only=True)
+    group_name = serializers.CharField(source="label.group.name", read_only=True)
+    group_is_partition = serializers.BooleanField(source="label.group.is_partition", read_only=True)
 
     class Meta:
-        model = ChannelAttribution
-        fields = ["id", "channel_id", "organization_id", "organization_name", "organization_color", "start", "end"]
+        model = ChannelLabel
+        fields = [
+            "id",
+            "channel_id",
+            "label_id",
+            "label_name",
+            "label_color",
+            "group_id",
+            "group_name",
+            "group_is_partition",
+            "start",
+            "end",
+        ]
 
     def validate(self, attrs):
         channel = attrs.get("channel") or getattr(self.instance, "channel", None)
+        label = attrs.get("label") or getattr(self.instance, "label", None)
         start = attrs.get("start", getattr(self.instance, "start", None))
         end = attrs.get("end", getattr(self.instance, "end", None))
         if start and end and start > end:
             raise serializers.ValidationError({"end": "End date must not be before start date."})
-        if channel is not None:
-            siblings = ChannelAttribution.objects.filter(channel=channel)
+        # Overlap is constrained only within a partition group — there a channel holds at
+        # most one of the group's labels at a time. Non-partition groups allow concurrent
+        # (overlapping) memberships, so they're never rejected here.
+        if channel is not None and label is not None and label.group.is_partition:
+            siblings = ChannelLabel.objects.filter(channel=channel, label__group_id=label.group_id).select_related(
+                "label", "label__group"
+            )
             if self.instance is not None:
                 siblings = siblings.exclude(pk=self.instance.pk)
-            for other in siblings.select_related("organization"):
-                if ChannelAttribution._overlaps(start, end, other.start, other.end):
+            for other in siblings:
+                if ChannelLabel._overlaps(start, end, other.start, other.end):
                     raise serializers.ValidationError(
-                        "Attribution periods for a channel must not overlap "
-                        f"(conflicts with {other.organization} [{other.start or '…'}, {other.end or '…'}])."
+                        "Label periods within a partition group must not overlap "
+                        f"(conflicts with {other.label} [{other.start or '…'}, {other.end or '…'}])."
                     )
         return attrs
 
@@ -79,7 +140,8 @@ class ChannelSerializer(serializers.ModelSerializer):
     current_organization_id = serializers.SerializerMethodField()
     current_organization_name = serializers.SerializerMethodField()
     current_organization_color = serializers.SerializerMethodField()
-    attributions = ChannelAttributionSerializer(many=True, read_only=True)
+    current_labels = serializers.SerializerMethodField()
+    labels = ChannelLabelSerializer(many=True, read_only=True, source="channel_labels")
     group_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         source="groups",
@@ -113,16 +175,31 @@ class ChannelSerializer(serializers.ModelSerializer):
         return obj.get_absolute_url()
 
     def get_current_organization_id(self, obj):
-        org = obj.current_organization
+        org = obj.current_label
         return org.id if org else None
 
     def get_current_organization_name(self, obj):
-        org = obj.current_organization
+        org = obj.current_label
         return org.name if org else None
 
     def get_current_organization_color(self, obj):
-        org = obj.current_organization
+        org = obj.current_label
         return org.color if org else None
+
+    def get_current_labels(self, obj):
+        # The channel's representative label in every group it participates in (active now),
+        # for the multi-label "Labels" column. Primary group first (see Channel.current_labels).
+        return [
+            {
+                "id": label.id,
+                "name": label.name,
+                "color": label.color,
+                "group_id": label.group_id,
+                "group_name": label.group.name,
+                "group_is_primary": label.group.is_primary,
+            }
+            for label in obj.current_labels
+        ]
 
     class Meta:
         model = Channel
@@ -138,7 +215,8 @@ class ChannelSerializer(serializers.ModelSerializer):
             "current_organization_id",
             "current_organization_name",
             "current_organization_color",
-            "attributions",
+            "current_labels",
+            "labels",
             "group_ids",
             "participants_count",
             "in_degree",

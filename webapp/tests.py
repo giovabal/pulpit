@@ -14,9 +14,9 @@ from django.urls import reverse
 from network.graph_builder import channel_network_data
 from webapp import version_check
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, ChannelAttribution, ChannelVacancy, Message, Organization, Project
+from webapp.models import Channel, ChannelLabel, ChannelVacancy, Label, Message, Project
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
-from webapp.test_helpers import attribute, make_channel
+from webapp.test_helpers import attribute, make_channel, make_label
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
     expand_colors,
@@ -302,10 +302,10 @@ class ExpandColorsTests(TestCase):
 
 class ChannelManagerTests(TestCase):
     def setUp(self) -> None:
-        self.in_target_org = Organization.objects.create(name="In target", is_in_target=True)
-        self.boring_org = Organization.objects.create(name="Boring", is_in_target=False)
-        self.ch_in_target = make_channel(telegram_id=1, title="Channel A", organization=self.in_target_org)
-        self.ch_boring = make_channel(telegram_id=2, title="Channel B", organization=self.boring_org)
+        self.in_target_org = make_label(name="In target", is_in_target=True)
+        self.boring_org = make_label(name="Boring", is_in_target=False)
+        self.ch_in_target = make_channel(telegram_id=1, title="Channel A", label=self.in_target_org)
+        self.ch_boring = make_channel(telegram_id=2, title="Channel B", label=self.boring_org)
         self.ch_orphan = make_channel(telegram_id=3, title="Channel C")
 
     def test_in_target_includes_in_target_org_channel(self) -> None:
@@ -336,8 +336,8 @@ class ChannelManagerTests(TestCase):
 
 class MessageManagerTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="In target", is_in_target=True)
-        self.ch = make_channel(telegram_id=1, title="Ch", organization=org)
+        org = make_label(name="In target", is_in_target=True)
+        self.ch = make_channel(telegram_id=1, title="Ch", label=org)
         self.alive_msg = Message.objects.create(telegram_id=10, channel=self.ch, is_lost=False)
         self.lost_msg = Message.objects.create(telegram_id=11, channel=self.ch, is_lost=True)
 
@@ -383,9 +383,9 @@ class ChannelGetAbsoluteUrlTests(TestCase):
 
 class ChannelSaveTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.ch1 = make_channel(telegram_id=1, title="Source", organization=self.org)
-        self.ch2 = make_channel(telegram_id=2, title="Target", organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.ch1 = make_channel(telegram_id=1, title="Source", label=self.org)
+        self.ch2 = make_channel(telegram_id=2, title="Target", label=self.org)
 
     def test_none_username_converted_to_empty_string(self) -> None:
         ch = Channel(telegram_id=99, title="X", username=None)
@@ -409,8 +409,8 @@ class ChannelSaveTests(TestCase):
         self.assertEqual(self.ch1.in_degree, 0)
 
     def test_in_degree_excludes_out_of_target_org(self) -> None:
-        boring = Organization.objects.create(name="Boring", is_in_target=False)
-        boring_ch = make_channel(telegram_id=50, organization=boring)
+        boring = make_label(name="Boring", is_in_target=False)
+        boring_ch = make_channel(telegram_id=50, label=boring)
         Message.objects.create(telegram_id=10, channel=boring_ch, forwarded_from=self.ch1)
         self.ch1.refresh_degrees()
         self.ch1.refresh_from_db()
@@ -505,8 +505,8 @@ class ChannelActivityPeriodTests(TestCase):
 
 class ChannelNetworkDataTests(TestCase):
     def test_with_organization_sets_label(self) -> None:
-        org = Organization.objects.create(name="Test Org", color="#ff0000")
-        ch = make_channel(telegram_id=1, title="Chan", organization=org)
+        org = make_label(name="Test Org", color="#ff0000")
+        ch = make_channel(telegram_id=1, title="Chan", label=org)
         data = channel_network_data(ch)
         self.assertEqual(data["label"], "Chan")
 
@@ -693,24 +693,25 @@ class FromTelegramObjectTests(TestCase):
         self.assertTrue(obj.to_inspect)
 
 
-# ─── Organization model ────────────────────────────────────────────────────────
+# ─── Label model ───────────────────────────────────────────────────────────────
 
 
-class OrganizationModelTests(TestCase):
-    def test_str_returns_name(self) -> None:
-        self.assertEqual(str(Organization(name="Test")), "Test")
+class LabelModelTests(TestCase):
+    def test_str_includes_group_and_name(self) -> None:
+        # Label.__str__ surfaces the name prefixed by its group ("<group>: <name>").
+        self.assertEqual(str(make_label(name="Test")), "Organization: Test")
 
     def test_key_is_slugified(self) -> None:
-        self.assertEqual(Organization(name="My Cool Org").key, "my-cool-org")
+        self.assertEqual(Label(name="My Cool Org").key, "my-cool-org")
 
     def test_key_only_alphanumeric_and_hyphens(self) -> None:
-        self.assertRegex(Organization(name="Org, Inc.").key, r"^[a-z0-9-]+$")
+        self.assertRegex(Label(name="Org, Inc.").key, r"^[a-z0-9-]+$")
 
     def test_is_color_dark_for_black(self) -> None:
-        self.assertTrue(Organization(color="#000000").is_color_dark)
+        self.assertTrue(Label(color="#000000").is_color_dark)
 
     def test_is_color_dark_for_white(self) -> None:
-        self.assertFalse(Organization(color="#ffffff").is_color_dark)
+        self.assertFalse(Label(color="#ffffff").is_color_dark)
 
 
 # ─── HomeView ──────────────────────────────────────────────────────────────────
@@ -733,7 +734,7 @@ class ProjectTitleInChromeTests(TestCase):
         p.save()
         html = self.client.get(reverse("home")).content.decode()
         self.assertIn("<title>Operation Nightfall</title>", html)
-        self.assertIn(">Operation Nightfall</p>", html)  # the About-modal line
+        self.assertIn(">Operation Nightfall</h5>", html)  # the About-modal title line
 
     def test_blank_title_falls_back_to_pulpit(self) -> None:
         p = Project.load()
@@ -811,10 +812,10 @@ class VacanciesViewTests(TestCase):
     return one arbitrary amplifier's message count (GROUP BY pk + LIMIT 1)."""
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.vacancy_ch = make_channel(telegram_id=1, organization=self.org, title="Vacancy")
-        self.amp1 = make_channel(telegram_id=2, organization=self.org, title="Amp1")
-        self.amp2 = make_channel(telegram_id=3, organization=self.org, title="Amp2")
+        self.org = make_label(name="Org", is_in_target=True)
+        self.vacancy_ch = make_channel(telegram_id=1, label=self.org, title="Vacancy")
+        self.amp1 = make_channel(telegram_id=2, label=self.org, title="Amp1")
+        self.amp2 = make_channel(telegram_id=3, label=self.org, title="Amp2")
         self.outsider = make_channel(telegram_id=4, title="Outsider")  # not in-target
         # amp1 forwards from the vacancy 3 times, amp2 once → 2 distinct amplifiers.
         for tid in (1, 2, 3):
@@ -905,8 +906,8 @@ class MessageAlbumTests(TestCase):
     def setUp(self) -> None:
         from webapp.models import MessagePicture
 
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         # Album of three messages sharing grouped_id=999
         self.head = Message.objects.create(telegram_id=100, channel=self.channel, grouped_id=999, message="caption")
         self.tail1 = Message.objects.create(telegram_id=101, channel=self.channel, grouped_id=999)
@@ -1002,8 +1003,8 @@ class PinnedMessageFilterTests(TestCase):
     """``?pinned=1`` keeps only messages that are or have been pinned."""
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=11, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, label=self.org)
         self.pinned = Message.objects.create(telegram_id=1, channel=self.channel, pinned=True)
         self.was_pinned = Message.objects.create(
             telegram_id=2, channel=self.channel, pinned=False, has_been_pinned=True
@@ -1039,11 +1040,11 @@ class PinnedMessageFilterTests(TestCase):
 
 class ChannelListViewTests(TestCase):
     def test_renders_type_filter_and_row_types(self) -> None:
-        org = Organization.objects.create(name="Org", is_in_target=True)
-        make_channel(telegram_id=1, organization=org, title="Broadcast")
+        org = make_label(name="Org", is_in_target=True)
+        make_channel(telegram_id=1, label=org, title="Broadcast")
         # A megagroup is outside DEFAULT_CHANNEL_TYPES, so it renders in the
         # "Excluded from analysis" section — with its data-type all the same.
-        make_channel(telegram_id=2, organization=org, title="Super", megagroup=True)
+        make_channel(telegram_id=2, label=org, title="Super", megagroup=True)
         response = self.client.get(reverse("channel-list"))
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
@@ -1088,8 +1089,8 @@ class AlbumMissingMediaTests(TestCase):
     def setUp(self) -> None:
         from webapp.models import MessagePicture, MessageVideo
 
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=20, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=20, label=self.org)
         # Album of 3 siblings: 1 photo (downloaded) + 2 videos (NOT downloaded).
         self.head = Message.objects.create(telegram_id=300, channel=self.channel, grouped_id=777, media_type="photo")
         self.video1 = Message.objects.create(telegram_id=301, channel=self.channel, grouped_id=777, media_type="video")
@@ -1165,24 +1166,22 @@ class PurgeOutOfTargetTests(TestCase):
         self.addCleanup(self._media_override.disable)
 
         # An in-target organisation; channels under it survive the purge.
-        self.in_target_org = Organization.objects.create(name="Org-A", is_in_target=True)
+        self.in_target_org = make_label(name="Org-A", is_in_target=True)
         # Plain in-target channel — survives.
-        self.healthy = make_channel(telegram_id=1, title="healthy", organization=self.in_target_org)
+        self.healthy = make_channel(telegram_id=1, title="healthy", label=self.in_target_org)
         # Marked in-target but currently lost — MUST survive (Bug 1).
-        self.lost = make_channel(telegram_id=2, title="lost-chan", organization=self.in_target_org, is_lost=True)
+        self.lost = make_channel(telegram_id=2, title="lost-chan", label=self.in_target_org, is_lost=True)
         # Marked in-target but currently private — MUST survive (Bug 1).
-        self.private = make_channel(
-            telegram_id=3, title="private-chan", organization=self.in_target_org, is_private=True
-        )
+        self.private = make_channel(telegram_id=3, title="private-chan", label=self.in_target_org, is_private=True)
         # Marked in-target but a gigagroup (excluded by DEFAULT_CHANNEL_TYPES=CHANNEL) — MUST survive (Bug 1).
-        self.giga = make_channel(telegram_id=4, title="giga-chan", organization=self.in_target_org, gigagroup=True)
+        self.giga = make_channel(telegram_id=4, title="giga-chan", label=self.in_target_org, gigagroup=True)
         # Out-of-target organisation; channels under it get purged unless they're forward sources.
-        self.out_org = Organization.objects.create(name="Org-B", is_in_target=False)
-        self.purgeable = make_channel(telegram_id=5, title="purge-me", organization=self.out_org)
+        self.out_org = make_label(name="Org-B", is_in_target=False)
+        self.purgeable = make_channel(telegram_id=5, title="purge-me", label=self.out_org)
         # Forward source — out-of-target but referenced by an in-target message (Bug 2 fix).
-        self.fwd_source = make_channel(telegram_id=6, title="fwd-source", organization=self.out_org)
+        self.fwd_source = make_channel(telegram_id=6, title="fwd-source", label=self.out_org)
         # Mention target — out-of-target, linked only via the references M2M.
-        self.mention_target = make_channel(telegram_id=7, title="mention-target", organization=self.out_org)
+        self.mention_target = make_channel(telegram_id=7, title="mention-target", label=self.out_org)
 
         # Messages: each surviving channel gets one, plus the purgeable + fwd_source ones.
         Message.objects.create(telegram_id=100, channel=self.healthy)
@@ -1301,7 +1300,7 @@ class PurgeOutOfTargetTests(TestCase):
 
     def test_to_inspect_protects_channel(self) -> None:
         """A channel under a non-in-target org but with to_inspect=True keeps its crawled messages."""
-        ch = make_channel(telegram_id=999, title="inspect-protected", organization=self.out_org, to_inspect=True)
+        ch = make_channel(telegram_id=999, title="inspect-protected", label=self.out_org, to_inspect=True)
         msg = Message.objects.create(telegram_id=900, channel=ch)
         self._run_purge()
         self.assertTrue(Message.objects.filter(pk=msg.pk).exists())
@@ -1322,8 +1321,8 @@ class PurgeOrphanMediaTests(TestCase):
 
         from webapp.models import MessagePicture
 
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=1, organization=self.org, username="ch")
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, label=self.org, username="ch")
         msg = Message.objects.create(telegram_id=1, channel=self.channel)
         pic = MessagePicture.objects.create(message=msg, telegram_id=1)
         pic.picture.save("kept.jpg", ContentFile(b"referenced bytes"), save=True)
@@ -1477,8 +1476,8 @@ class ScoreMessagesTests(TestCase):
         score_messages call it now delegates to — guards the refactor."""
         from webapp.scoring import recompute_channel, score_messages
 
-        org = Organization.objects.create(name="In target", is_in_target=True)
-        ch = make_channel(telegram_id=2001, title="ScoringCh", organization=org)
+        org = make_label(name="In target", is_in_target=True)
+        ch = make_channel(telegram_id=2001, title="ScoringCh", label=org)
         base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1509,9 +1508,9 @@ class ScoreMessagesForWindowTests(TestCase):
     def test_keys_are_channel_telegram_pairs(self) -> None:
         from webapp.scoring import score_messages_for_window
 
-        org = Organization.objects.create(name="In target", is_in_target=True)
-        ch1 = make_channel(telegram_id=3001, title="A", organization=org)
-        ch2 = make_channel(telegram_id=3002, title="B", organization=org)
+        org = make_label(name="In target", is_in_target=True)
+        ch1 = make_channel(telegram_id=3001, title="A", label=org)
+        ch2 = make_channel(telegram_id=3002, title="B", label=org)
         base = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1544,8 +1543,8 @@ class ScoreMessagesForWindowTests(TestCase):
         which messages get scored — narrow windows produce smaller maps."""
         from webapp.scoring import score_messages_for_window
 
-        org = Organization.objects.create(name="In target", is_in_target=True)
-        ch = make_channel(telegram_id=3003, title="C", organization=org)
+        org = make_label(name="In target", is_in_target=True)
+        ch = make_channel(telegram_id=3003, title="C", label=org)
         base = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
         for i in range(40):
             Message.objects.create(
@@ -1563,72 +1562,74 @@ class ScoreMessagesForWindowTests(TestCase):
         self.assertLess(len(narrow), len(full))
 
 
-class ChannelAttributionModelTests(TestCase):
+class ChannelLabelModelTests(TestCase):
+    """Overlap validation within a partition group (make_label uses the primary one)."""
+
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="O", is_in_target=True)
+        self.org = make_label(name="O", is_in_target=True)
         self.ch = make_channel(telegram_id=1)
 
     def test_overlap_rejected(self) -> None:
         attribute(self.ch, self.org, datetime.date(2024, 1, 1), datetime.date(2024, 6, 30))
         # end=X and a sibling start=X overlap (inclusive bounds).
-        dup = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2024, 6, 30), end=None)
+        dup = ChannelLabel(channel=self.ch, label=self.org, start=datetime.date(2024, 6, 30), end=None)
         with self.assertRaises(ValidationError):
             dup.clean()
 
     def test_open_periods_overlap_rejected(self) -> None:
         attribute(self.ch, self.org, None, None)
-        dup = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2030, 1, 1), end=None)
+        dup = ChannelLabel(channel=self.ch, label=self.org, start=datetime.date(2030, 1, 1), end=None)
         with self.assertRaises(ValidationError):
             dup.clean()
 
     def test_adjacent_periods_allowed(self) -> None:
         attribute(self.ch, self.org, datetime.date(2024, 1, 1), datetime.date(2024, 6, 30))
-        nxt = ChannelAttribution(channel=self.ch, organization=self.org, start=datetime.date(2024, 7, 1), end=None)
+        nxt = ChannelLabel(channel=self.ch, label=self.org, start=datetime.date(2024, 7, 1), end=None)
         nxt.clean()  # adjacent (start = end + 1 day) does not overlap
 
     def test_end_before_start_rejected(self) -> None:
-        bad = ChannelAttribution(
-            channel=self.ch, organization=self.org, start=datetime.date(2024, 6, 1), end=datetime.date(2024, 1, 1)
+        bad = ChannelLabel(
+            channel=self.ch, label=self.org, start=datetime.date(2024, 6, 1), end=datetime.date(2024, 1, 1)
         )
         with self.assertRaises(ValidationError):
             bad.clean()
 
 
-class CurrentOrganizationTests(TestCase):
+class CurrentLabelTests(TestCase):
     def setUp(self) -> None:
-        self.org_a = Organization.objects.create(name="A", is_in_target=True)
-        self.org_b = Organization.objects.create(name="B", is_in_target=True)
+        self.org_a = make_label(name="A", is_in_target=True)
+        self.org_b = make_label(name="B", is_in_target=True)
 
     def test_active_today_wins_over_past(self) -> None:
         ch = make_channel(telegram_id=1)
         attribute(ch, self.org_a, datetime.date(2020, 1, 1), datetime.date(2021, 1, 1))
         attribute(ch, self.org_b, datetime.date(2024, 1, 1), None)
-        self.assertEqual(ch.current_organization, self.org_b)
+        self.assertEqual(ch.current_label, self.org_b)
 
     def test_most_recent_past_when_none_active(self) -> None:
         ch = make_channel(telegram_id=2)
         attribute(ch, self.org_a, datetime.date(2018, 1, 1), datetime.date(2019, 1, 1))
         attribute(ch, self.org_b, datetime.date(2020, 1, 1), datetime.date(2021, 1, 1))
-        self.assertEqual(ch.current_organization, self.org_b)
+        self.assertEqual(ch.current_label, self.org_b)
 
     def test_none_when_unattributed(self) -> None:
-        self.assertIsNone(make_channel(telegram_id=3).current_organization)
+        self.assertIsNone(make_channel(telegram_id=3).current_label)
 
 
 class InTargetPeriodQuerysetTests(TestCase):
     def test_past_in_target_period_qualifies(self) -> None:
-        org = Organization.objects.create(name="O", is_in_target=True)
+        org = make_label(name="O", is_in_target=True)
         ch = make_channel(
             telegram_id=1,
-            organization=org,
+            label=org,
             attribution_start=datetime.date(2020, 1, 1),
             attribution_end=datetime.date(2020, 6, 1),
         )
         self.assertIn(ch, Channel.objects.in_target())
 
     def test_out_of_target_org_excluded(self) -> None:
-        org = Organization.objects.create(name="O", is_in_target=False)
-        ch = make_channel(telegram_id=2, organization=org)
+        org = make_label(name="O", is_in_target=False)
+        ch = make_channel(telegram_id=2, label=org)
         self.assertNotIn(ch, Channel.objects.in_target())
 
     def test_unattributed_excluded(self) -> None:
@@ -1649,10 +1650,10 @@ class PurgeOutOfPeriodTests(TestCase):
         )
 
     def test_out_of_period_pruned_for_kept_channel(self) -> None:
-        org = Organization.objects.create(name="O", is_in_target=True)
+        org = make_label(name="O", is_in_target=True)
         ch = make_channel(
             telegram_id=1,
-            organization=org,
+            label=org,
             attribution_start=datetime.date(2024, 1, 1),
             attribution_end=datetime.date(2024, 3, 31),
         )

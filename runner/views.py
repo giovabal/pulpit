@@ -158,7 +158,7 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_groups": channel_groups,
                 "has_vacancies": has_vacancies,
-                # All partitions including ORGANIZATION — for the MODULEROLE basis select.
+                # All partitions including LABELGROUP metadata — for the MODULEROLE basis select.
                 "all_basis_choices": sorted(
                     (
                         (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
@@ -739,7 +739,7 @@ def _validate_post_constraints(task: str, post: Any) -> None:
     * ``structural_analysis``:
         - A MODULEROLE basis, when set, must be among the selected
           community_strategies.
-        - consensus_matrix requires ≥2 non-ORGANIZATION strategies.
+        - consensus_matrix requires ≥2 non-metadata (non-LABELGROUP) strategies.
 
     * ``compare_analysis``: ``project_dir`` and ``compare_target`` are both
       required (the management command would otherwise reject them with a
@@ -781,11 +781,13 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                     )
 
         if post.get("consensus_matrix"):
-            non_org = [inst for inst in parsed_strategies if inst.name != "ORGANIZATION"]
-            if len(non_org) < 2:
+            # Metadata (LABELGROUP) partitions are excluded from the consensus matrix — they
+            # replaced the old single ORGANIZATION strategy. Need ≥2 algorithm strategies.
+            non_meta = [inst for inst in parsed_strategies if not net_community.is_metadata_strategy(inst.name)]
+            if len(non_meta) < 2:
                 raise ValueError(
-                    "Consensus matrix requires at least two non-ORGANIZATION community strategies"
-                    f" (currently: {len(non_org)})"
+                    "Consensus matrix requires at least two non-metadata community strategies"
+                    f" (currently: {len(non_meta)})"
                 )
         return
 

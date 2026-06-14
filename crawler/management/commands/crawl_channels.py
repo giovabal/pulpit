@@ -27,7 +27,7 @@ from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, Refere
 from network.utils import channel_cutoff_q
 from webapp.models import (
     Channel,
-    ChannelAttribution,
+    ChannelLabel,
     Message,
     MessageAudio,
     MessageOtherMedia,
@@ -46,8 +46,8 @@ logger = logging.getLogger(__name__)
 
 
 def _ever_in_target() -> Q:
-    """Q matching channels with at least one in-target attribution period (any time)."""
-    return Q(Exists(ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)))
+    """Q matching channels that hold at least one in-target label period (any time)."""
+    return Q(Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)))
 
 
 from dataclasses import dataclass  # noqa: E402

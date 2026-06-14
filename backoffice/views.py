@@ -32,8 +32,8 @@ class ChannelUpdateView(StaffRequiredMixin, TemplateView):
         return ctx
 
 
-class OrganizationsView(StaffRequiredMixin, TemplateView):
-    template_name = "backoffice/organizations.html"
+class LabelsView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/labels.html"
 
 
 class GroupsView(StaffRequiredMixin, TemplateView):

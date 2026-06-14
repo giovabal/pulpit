@@ -24,8 +24,8 @@ from crawler.management.commands.crawl_channels import (
 )
 from crawler.management.commands.search_channels import parse_channel_identifier
 from crawler.reference_resolver import ReferenceResolver
-from webapp.models import Channel, Message, Organization
-from webapp.test_helpers import make_channel
+from webapp.models import Channel, Message
+from webapp.test_helpers import make_channel, make_label
 
 from telethon import errors
 
@@ -110,8 +110,8 @@ def _username_invalid_error() -> errors.rpcerrorlist.UsernameInvalidError:
 
 class IterHoleRangesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=50, organization=org)
+        org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=50, label=org)
 
     def _create_messages(self, telegram_ids: list[int]) -> None:
         for tid in telegram_ids:
@@ -174,8 +174,8 @@ class IterHoleRangesTests(TestCase):
 
 class FixMessageHolesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=60, organization=org)
+        org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=60, label=org)
         self.api_client = _make_api_client()
         self.telegram_channel = MagicMock()
         self.status_messages: list[str] = []
@@ -327,14 +327,14 @@ class FixMissingMediaGoneTests(TestCase):
     """
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
         self.api_client = _make_api_client()
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.cmd = Command(stdout=io.StringIO())
 
     def _channel(self, telegram_id: int, available_min_id: int | None = None) -> Channel:
-        return make_channel(telegram_id=telegram_id, organization=self.org, available_min_id=available_min_id)
+        return make_channel(telegram_id=telegram_id, label=self.org, available_min_id=available_min_id)
 
     def _album_sibling(self, channel: Channel, telegram_id: int) -> Message:
         # grouped_id set + empty media_type → enrolled via the album-sibling Q.
@@ -431,7 +431,7 @@ class FixMissingMediaPrivateChannelTests(TestCase):
     not the raw Telethon RPC text followed by a logged traceback."""
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
         self.api_client = _make_api_client()
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
@@ -439,7 +439,7 @@ class FixMissingMediaPrivateChannelTests(TestCase):
         self.cmd = Command(stdout=self.out)
 
     def test_private_channel_skipped_with_friendly_message(self) -> None:
-        ch = make_channel(telegram_id=506, organization=self.org)
+        ch = make_channel(telegram_id=506, label=self.org)
         msg = Message.objects.create(channel=ch, telegram_id=10, grouped_id=777)
         err = errors.rpcerrorlist.ChannelPrivateError.__new__(errors.rpcerrorlist.ChannelPrivateError)
         self.api_client.client.get_entity.side_effect = err
@@ -523,10 +523,10 @@ class ResolveOneTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
 
     def test_returns_existing_db_channel_without_api_call(self) -> None:
-        channel = make_channel(telegram_id=1, username="existingchan", organization=self.org)
+        channel = make_channel(telegram_id=1, username="existingchan", label=self.org)
         result, failed = self.resolver._resolve_one("existingchan")
         self.assertEqual(result, channel)
         self.assertFalse(failed)
@@ -580,7 +580,7 @@ class ResolveOneTests(TestCase):
     def test_recycled_username_prefers_live_channel_over_lost(self) -> None:
         # The same handle is held by a now-lost old channel and the live channel that
         # took it over: usernames are not unique identities, so prefer the live owner.
-        make_channel(telegram_id=1, username="recycled", organization=self.org, is_lost=True)
+        make_channel(telegram_id=1, username="recycled", label=self.org, is_lost=True)
         live = make_channel(telegram_id=2, username="recycled")
         result, failed = self.resolver._resolve_one("recycled")
         self.assertEqual(result, live)
@@ -590,7 +590,7 @@ class ResolveOneTests(TestCase):
     def test_lone_lost_channel_with_username_is_still_returned(self) -> None:
         # No live owner stored → fall back to the lost row (edge to a lost channel is
         # preserved; only collisions change behaviour).
-        lost = make_channel(telegram_id=1, username="onlylost", organization=self.org, is_lost=True)
+        lost = make_channel(telegram_id=1, username="onlylost", label=self.org, is_lost=True)
         result, failed = self.resolver._resolve_one("onlylost")
         self.assertEqual(result, lost)
         self.assertFalse(failed)
@@ -606,8 +606,8 @@ class ResolveMessageReferencesTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=1, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, label=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_telegram_message(self, entities: list | None = None) -> MagicMock:
@@ -622,7 +622,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertEqual(missing, [])
 
     def test_resolvable_reference_added_to_message_references(self) -> None:
-        target_channel = make_channel(telegram_id=2, username="targetchan", organization=self.org)
+        target_channel = make_channel(telegram_id=2, username="targetchan", label=self.org)
         self.message.message = "Check out t.me/targetchan for more info."
         tm = self._make_telegram_message()
         self.resolver.resolve_message_references(self.message, tm)
@@ -644,7 +644,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertIn("unknownchan", missing)
 
     def test_entity_url_reference_processed(self) -> None:
-        target_channel = make_channel(telegram_id=3, username="urlchan", organization=self.org)
+        target_channel = make_channel(telegram_id=3, username="urlchan", label=self.org)
         entity = MagicMock()
         entity.url = "https://t.me/urlchan"
         tm = self._make_telegram_message(entities=[entity])
@@ -652,7 +652,7 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertIn(target_channel, self.message.references.all())
 
     def test_entity_url_subpath_is_stripped(self) -> None:
-        target_channel = make_channel(telegram_id=4, username="pathchan", organization=self.org)
+        target_channel = make_channel(telegram_id=4, username="pathchan", label=self.org)
         entity = MagicMock()
         entity.url = "https://t.me/pathchan/12345"
         tm = self._make_telegram_message(entities=[entity])
@@ -684,8 +684,8 @@ class GetMissingReferencesTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.resolver = ReferenceResolver(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=1, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, label=self.org)
 
     def test_message_with_empty_missing_references_is_skipped(self) -> None:
         Message.objects.create(telegram_id=1, channel=self.channel, missing_references="")
@@ -693,7 +693,7 @@ class GetMissingReferencesTests(TestCase):
         self.api_client.client.get_entity.assert_not_called()
 
     def test_missing_reference_found_in_db_added_without_api_call(self) -> None:
-        target = make_channel(telegram_id=2, username="dbchan", organization=self.org)
+        target = make_channel(telegram_id=2, username="dbchan", label=self.org)
         msg = Message.objects.create(telegram_id=2, channel=self.channel, missing_references="|dbchan")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
@@ -701,7 +701,7 @@ class GetMissingReferencesTests(TestCase):
         self.api_client.client.get_entity.assert_not_called()
 
     def test_missing_reference_cleared_after_successful_resolution(self) -> None:
-        make_channel(telegram_id=3, username="resolvable", organization=self.org)
+        make_channel(telegram_id=3, username="resolvable", label=self.org)
         msg = Message.objects.create(telegram_id=3, channel=self.channel, missing_references="|resolvable")
         self.resolver.get_missing_references()
         msg.refresh_from_db()
@@ -739,7 +739,7 @@ class GetMissingReferencesTests(TestCase):
         self.assertEqual(msg.missing_references, "")
 
     def test_multiple_references_processed_in_one_message(self) -> None:
-        ch_a = make_channel(telegram_id=10, username="chana", organization=self.org)
+        ch_a = make_channel(telegram_id=10, username="chana", label=self.org)
         mock_tc = _make_telegram_channel(telegram_id=20, username="chanb")
         self.api_client.client.get_entity.return_value = mock_tc
         msg = Message.objects.create(telegram_id=7, channel=self.channel, missing_references="|chana|chanb")
@@ -904,8 +904,8 @@ class MediaHandlerProfilePictureTests(TestCase):
 
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=1, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, label=self.org)
 
     def _make_tg_channel(self, telegram_id: int = 1) -> MagicMock:
         tc = MagicMock()
@@ -1162,8 +1162,8 @@ class MediaHandlerMessagePictureTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_images=False by default
         self.handler_dl = MediaHandler(self.api_client, download_images=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, has_photo: bool = True) -> MagicMock:
@@ -1276,8 +1276,8 @@ class MediaHandlerMessageVideoTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_video=False by default
         self.handler_dl = MediaHandler(self.api_client, download_video=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, mime_type: str = "video/mp4", has_document: bool = True) -> MagicMock:
@@ -1351,8 +1351,8 @@ class MediaHandlerMessageAudioTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_audio=False by default
         self.handler_dl = MediaHandler(self.api_client, download_audio=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(
@@ -1435,8 +1435,8 @@ class MediaHandlerMessageStickerTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_stickers=False by default
         self.handler_dl = MediaHandler(self.api_client, download_stickers=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(
@@ -1510,8 +1510,8 @@ class MediaHandlerMessageOtherMediaTests(TestCase):
         self.api_client = _make_api_client()
         self.handler = MediaHandler(self.api_client)  # download_other_media=False by default
         self.handler_dl = MediaHandler(self.api_client, download_other_media=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _make_tg_message(self, mime_type: str = "application/pdf", has_document: bool = True) -> MagicMock:
@@ -1657,7 +1657,7 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
 
     def test_returns_channel_and_telegram_object_on_success(self) -> None:
         mock_tc = _make_telegram_channel(telegram_id=5, username="testchan")
@@ -1712,7 +1712,7 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
 
     @staticmethod
     def _channel_private_error() -> errors.rpcerrorlist.ChannelPrivateError:
@@ -1721,7 +1721,7 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
     def test_recycled_handle_marks_original_lost_and_acquires_new_channel(self) -> None:
         # An in-target channel (telegram_id=100, @handle) is now gone; its numeric lookup
         # fails, and @handle has since been taken over by a DIFFERENT channel (id=200).
-        make_channel(telegram_id=100, username="handle", organization=self.org)
+        make_channel(telegram_id=100, username="handle", label=self.org)
         squatter_tc = _make_telegram_channel(telegram_id=200, username="handle")
 
         def fake_get_entity(seed):
@@ -1737,12 +1737,12 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
         self.assertIsNone(channel)
         # …but the new owner is still acquired into the DB, left unattributed.
         squatter = Channel.objects.get(telegram_id=200)
-        self.assertFalse(squatter.attributions.filter(organization__is_in_target=True).exists())
+        self.assertFalse(squatter.channel_labels.filter(label__is_in_target=True).exists())
 
     def test_username_fallback_resolving_same_id_is_ok(self) -> None:
         # Numeric lookup fails (e.g. stale access_hash) but the username still maps to the
         # SAME channel → genuine recovery, status "ok".
-        make_channel(telegram_id=300, username="stillmine", organization=self.org)
+        make_channel(telegram_id=300, username="stillmine", label=self.org)
         same_tc = _make_telegram_channel(telegram_id=300, username="stillmine")
 
         def fake_get_entity(seed):
@@ -1763,7 +1763,7 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
         # the real identity and is simply lost — it must NOT be stamped is_user_account.
         from telethon.tl.types import User
 
-        original = make_channel(telegram_id=400, username="handle", organization=self.org, megagroup=True)
+        original = make_channel(telegram_id=400, username="handle", label=self.org, megagroup=True)
         user_entity = User(id=999)
 
         def fake_get_entity(seed):
@@ -1784,7 +1784,7 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
         # (recycled id / entity-cache confusion). Keep the real channel: status "lost".
         from telethon.tl.types import User
 
-        make_channel(telegram_id=600, organization=self.org, megagroup=True)
+        make_channel(telegram_id=600, label=self.org, megagroup=True)
         self.api_client.client.get_entity.return_value = User(id=600)
 
         channel, tg_ch, status = self.crawler.resolve_channel_or_classify(600)
@@ -1810,8 +1810,8 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=1, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, label=self.org)
 
     def _make_tc(self) -> MagicMock:
         """Minimal telegram channel mock safe for set_more_channel_details."""
@@ -1907,33 +1907,33 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.api_client.client.return_value = self._make_linked_response(222)
         self.crawler.set_more_channel_details(self.channel, self._make_tc())
         linked = Channel.objects.get(telegram_id=222)
-        attributions = list(linked.attributions.all())
-        self.assertEqual(len(attributions), 1)
-        self.assertEqual(attributions[0].organization, self.org)
-        self.assertIsNone(attributions[0].start)
-        self.assertIsNone(attributions[0].end)
+        channel_labels = list(linked.channel_labels.all())
+        self.assertEqual(len(channel_labels), 1)
+        self.assertEqual(channel_labels[0].label, self.org)
+        self.assertIsNone(channel_labels[0].start)
+        self.assertIsNone(channel_labels[0].end)
 
     def test_discovered_linked_channel_inherits_from_group_parent(self) -> None:
-        group = make_channel(telegram_id=2, organization=self.org, broadcast=False, megagroup=True)
+        group = make_channel(telegram_id=2, label=self.org, broadcast=False, megagroup=True)
         self.api_client.client.return_value = self._make_linked_response(444, megagroup=False)
         self.crawler.set_more_channel_details(group, self._make_tc())
         linked = Channel.objects.get(telegram_id=444)
         self.assertTrue(linked.broadcast)
-        self.assertEqual([a.organization for a in linked.attributions.all()], [self.org])
+        self.assertEqual([a.label for a in linked.channel_labels.all()], [self.org])
 
     def test_discovered_linked_chat_copies_period_bounds(self) -> None:
         start, end = datetime.date(2024, 1, 1), datetime.date(2024, 12, 31)
-        parent = make_channel(telegram_id=3, organization=self.org, attribution_start=start, attribution_end=end)
+        parent = make_channel(telegram_id=3, label=self.org, attribution_start=start, attribution_end=end)
         self.api_client.client.return_value = self._make_linked_response(555)
         self.crawler.set_more_channel_details(parent, self._make_tc())
-        attribution = Channel.objects.get(telegram_id=555).attributions.get()
+        attribution = Channel.objects.get(telegram_id=555).channel_labels.get()
         self.assertEqual((attribution.start, attribution.end), (start, end))
 
     def test_discovered_linked_chat_unattributed_when_parent_unattributed(self) -> None:
         parent = make_channel(telegram_id=4, to_inspect=True)
         self.api_client.client.return_value = self._make_linked_response(666)
         self.crawler.set_more_channel_details(parent, self._make_tc())
-        self.assertEqual(Channel.objects.get(telegram_id=666).attributions.count(), 0)
+        self.assertEqual(Channel.objects.get(telegram_id=666).channel_labels.count(), 0)
 
     def test_existing_linked_chat_is_not_attributed_again(self) -> None:
         # Discovery (and the attribution copy with it) happens only when the linked
@@ -1941,7 +1941,7 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         existing = make_channel(telegram_id=777, broadcast=False, megagroup=True)
         self.api_client.client.return_value = self._make_linked_response(777)
         self.crawler.set_more_channel_details(self.channel, self._make_tc())
-        self.assertEqual(existing.attributions.count(), 0)
+        self.assertEqual(existing.channel_labels.count(), 0)
         self.assertEqual(Channel.objects.filter(telegram_id=777).count(), 1)
 
 
@@ -1954,7 +1954,7 @@ class ChannelCrawlerSearchChannelTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.org = make_label(name="Org", is_in_target=True)
 
     def _make_search_result(self, channels: list) -> MagicMock:
         result = MagicMock()
@@ -1975,7 +1975,7 @@ class ChannelCrawlerSearchChannelTests(TestCase):
         self.assertTrue(Channel.objects.filter(telegram_id=100).exists())
 
     def test_skips_channel_already_in_db(self) -> None:
-        make_channel(telegram_id=200, organization=self.org)
+        make_channel(telegram_id=200, label=self.org)
         mock_tc = _make_telegram_channel(telegram_id=200, username="existing")
         self.api_client.client.return_value = self._make_search_result([mock_tc])
         initial_count = Channel.objects.count()
@@ -2007,8 +2007,8 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
     def setUp(self) -> None:
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.source_channel = make_channel(telegram_id=1, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.source_channel = make_channel(telegram_id=1, label=self.org)
         self.msg = Message.objects.create(telegram_id=1, channel=self.source_channel)
 
     def _set_pending(self, channel_id: int) -> None:
@@ -2062,7 +2062,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
 
     def test_get_message_does_not_set_pending_when_channel_already_in_db(self) -> None:
         """Known forwarded-from channel sets forwarded_from directly, no pending field."""
-        fwd_channel = make_channel(telegram_id=7777, organization=self.org)
+        fwd_channel = make_channel(telegram_id=7777, label=self.org)
         tm = self._make_tg_message(msg_id=100, fwd_channel_id=fwd_channel.telegram_id)
 
         self.crawler.get_message(self.source_channel, tm)
@@ -2074,7 +2074,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
     def test_get_message_clears_stale_pending_when_channel_now_in_db(self) -> None:
         """If a previous run left pending_forward_telegram_id set and the channel is
         now in the DB, a fresh get_message() call clears the stale flag."""
-        fwd_channel = make_channel(telegram_id=8888, organization=self.org)
+        fwd_channel = make_channel(telegram_id=8888, label=self.org)
         self._set_pending(8888)  # stale flag from a previous crashed run
 
         tm = self._make_tg_message(msg_id=self.msg.telegram_id, fwd_channel_id=fwd_channel.telegram_id)
@@ -2524,9 +2524,9 @@ _GET_CMD = "crawler.management.commands.crawl_channels"
 
 class GetChannelsCommandTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.ch1 = make_channel(telegram_id=1, organization=self.org, title="Ch1")
-        self.ch2 = make_channel(telegram_id=2, organization=self.org, title="Ch2")
+        self.org = make_label(name="Org", is_in_target=True)
+        self.ch1 = make_channel(telegram_id=1, label=self.org, title="Ch1")
+        self.ch2 = make_channel(telegram_id=2, label=self.org, title="Ch2")
 
     def _patch_command(self) -> tuple:
         tc_patch = patch(f"{_GET_CMD}.TelegramClient")
@@ -2644,7 +2644,7 @@ class SkipOutOfTargetStorageTests(TestCase):
     """ChannelCrawler._skip_out_of_target gates message storage by in-target period (to_inspect = store all)."""
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="O", is_in_target=True)
+        self.org = make_label(name="O", is_in_target=True)
         self.crawler = ChannelCrawler.__new__(ChannelCrawler)  # methods only; no client needed
 
     def _msg(self, year, month):
@@ -2655,7 +2655,7 @@ class SkipOutOfTargetStorageTests(TestCase):
     def test_in_period_stored(self) -> None:
         ch = make_channel(
             telegram_id=1,
-            organization=self.org,
+            label=self.org,
             attribution_start=datetime.date(2024, 1, 1),
             attribution_end=datetime.date(2024, 3, 31),
         )
@@ -2664,7 +2664,7 @@ class SkipOutOfTargetStorageTests(TestCase):
     def test_out_of_period_skipped(self) -> None:
         ch = make_channel(
             telegram_id=2,
-            organization=self.org,
+            label=self.org,
             attribution_start=datetime.date(2024, 1, 1),
             attribution_end=datetime.date(2024, 3, 31),
         )
@@ -2679,7 +2679,7 @@ class SkipOutOfTargetStorageTests(TestCase):
 
         ch = make_channel(
             telegram_id=4,
-            organization=self.org,
+            label=self.org,
             attribution_start=datetime.date(2024, 1, 1),
             attribution_end=datetime.date(2024, 3, 31),
         )
@@ -2854,8 +2854,8 @@ class MediaHandlerFriendlyLogIntegrationTests(TestCase):
 
         self.api_client = _make_api_client()
         self.handler_dl = MediaHandler(self.api_client, download_images=True)
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.channel = make_channel(telegram_id=10, organization=self.org)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=10, label=self.org)
         self.message = Message.objects.create(telegram_id=1, channel=self.channel)
 
     def _tg_message(self) -> MagicMock:

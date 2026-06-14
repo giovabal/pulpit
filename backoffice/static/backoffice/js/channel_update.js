@@ -3,7 +3,8 @@
 
     var $root   = document.getElementById("bo-ch-update");
     var API_CH  = "/manage/api/channels/" + $root.dataset.channelPk + "/";
-    var API_ORG = "/manage/api/organizations/?limit=500";
+    var API_LABELS = "/manage/api/labels/?limit=500";
+    var API_LABELGROUPS = "/manage/api/label-groups/?limit=500";
     var API_GRP = "/manage/api/groups/?limit=500";
     var _picUrls  = [];
     var _picIndex = 0;
@@ -96,7 +97,7 @@
         if (typeof bootstrap !== "undefined") _picModal = new bootstrap.Modal($picModalEl);
     }
 
-    function render(ch, orgs, groups) {
+    function render(ch, labels, labelGroups, channelGroups) {
         $root.innerHTML = "";
 
         /* ── Back link + title ────────────────────────────────────── */
@@ -169,55 +170,78 @@
 
         /* ── Edit form ────────────────────────────────────────────── */
         var form = document.createElement("form"); form.className = "bo-ch-update-form";
-        form.addEventListener("submit", function (e) { e.preventDefault(); saveChannel(ch, form, orgs, groups); });
+        form.addEventListener("submit", function (e) { e.preventDefault(); saveChannel(ch, form); });
 
-        /* Attribution periods (time-bounded organization membership) */
-        var fgPeriods = makeFieldGroup("Attribution periods");
-        var periodsHelp = document.createElement("div");
-        periodsHelp.className = "bo-field-help text-muted small mb-2";
-        periodsHelp.textContent =
-            "Each period attributes the channel to an organization over an optional date range " +
-            "(empty start = from creation, empty end = to present). Periods must not overlap.";
-        fgPeriods.appendChild(periodsHelp);
-        var periodsWrap = document.createElement("div"); periodsWrap.className = "bo-ch-periods";
-        fgPeriods.appendChild(periodsWrap);
+        /* Label periods — one section per label group (partition groups: one label at a time) */
+        var fgLabels = makeFieldGroup("Labels");
+        var labelsHelp = document.createElement("div");
+        labelsHelp.className = "bo-field-help text-muted small mb-2";
+        labelsHelp.textContent =
+            "Attribute the channel to labels over optional date ranges (empty start = from creation, " +
+            "empty end = to present). In a partition group a channel holds one label at a time, so its " +
+            "periods there must not overlap; other groups allow concurrent labels.";
+        fgLabels.appendChild(labelsHelp);
 
-        function addPeriodRow(period) {
+        /* group id → its labels (for the per-section <select>) */
+        var labelsByGroup = {};
+        labels.forEach(function (l) {
+            (labelsByGroup[l.group_id] = labelsByGroup[l.group_id] || []).push(l);
+        });
+
+        function addLabelRow(rowsWrap, group, channelLabel) {
             var row = document.createElement("div");
             row.className = "bo-period-row d-flex gap-2 align-items-center mb-2";
-            var sel = document.createElement("select"); sel.className = "bo-select bo-period-org";
-            orgs.forEach(function (o) {
-                var opt = new Option(o.name, o.id);
-                if (period && o.id === period.organization_id) opt.selected = true;
+            row.dataset.groupId = group.id;
+            row.dataset.partition = group.is_partition ? "1" : "";
+            var sel = document.createElement("select"); sel.className = "bo-select bo-period-label";
+            (labelsByGroup[group.id] || []).forEach(function (l) {
+                var opt = new Option(l.name, l.id);
+                if (channelLabel && l.id === channelLabel.label_id) opt.selected = true;
                 sel.appendChild(opt);
             });
             var start = document.createElement("input");
             start.type = "date"; start.className = "bo-input bo-period-start";
-            if (period && period.start) start.value = period.start;
+            if (channelLabel && channelLabel.start) start.value = channelLabel.start;
             var sep = document.createElement("span"); sep.textContent = "→"; sep.className = "text-muted";
             var end = document.createElement("input");
             end.type = "date"; end.className = "bo-input bo-period-end";
-            if (period && period.end) end.value = period.end;
+            if (channelLabel && channelLabel.end) end.value = channelLabel.end;
             var rm = document.createElement("button");
             rm.type = "button"; rm.className = "bo-btn bo-btn--ghost bo-btn--sm";
             rm.innerHTML = '<i class="bi bi-trash"></i>';
-            rm.addEventListener("click", function () { periodsWrap.removeChild(row); });
+            rm.addEventListener("click", function () { rowsWrap.removeChild(row); });
             row.appendChild(sel); row.appendChild(start); row.appendChild(sep); row.appendChild(end); row.appendChild(rm);
-            periodsWrap.appendChild(row);
+            rowsWrap.appendChild(row);
         }
-        (ch.attributions || []).forEach(addPeriodRow);
 
-        var addBtn = document.createElement("button");
-        addBtn.type = "button"; addBtn.className = "bo-btn bo-btn--ghost bo-btn--sm";
-        addBtn.innerHTML = '<i class="bi bi-plus me-1"></i>Add period';
-        addBtn.addEventListener("click", function () { addPeriodRow(null); });
-        fgPeriods.appendChild(addBtn);
-        form.appendChild(fgPeriods);
+        /* Groups already ordered by the API (primary first, then alphabetical). */
+        labelGroups.forEach(function (group) {
+            if (!(labelsByGroup[group.id] || []).length) return;  /* no labels to assign in this group */
+            var section = document.createElement("div"); section.className = "bo-label-group-section mb-3";
+            var head = document.createElement("div");
+            head.className = "bo-label-group-head d-flex align-items-center gap-2 mb-1";
+            var nameEl = document.createElement("span"); nameEl.className = "fw-semibold"; nameEl.textContent = group.name;
+            var kindEl = document.createElement("span"); kindEl.className = "text-muted small";
+            kindEl.textContent = group.is_partition ? "(one at a time)" : "(multiple allowed)";
+            head.appendChild(nameEl); head.appendChild(kindEl); section.appendChild(head);
+            var rowsWrap = document.createElement("div"); rowsWrap.className = "bo-label-group-rows";
+            section.appendChild(rowsWrap);
+            (ch.labels || []).filter(function (cl) { return cl.group_id === group.id; }).forEach(function (cl) {
+                addLabelRow(rowsWrap, group, cl);
+            });
+            var addBtn = document.createElement("button");
+            addBtn.type = "button"; addBtn.className = "bo-btn bo-btn--ghost bo-btn--sm";
+            addBtn.innerHTML = '<i class="bi bi-plus me-1"></i>Add period';
+            addBtn.addEventListener("click", function () { addLabelRow(rowsWrap, group, null); });
+            section.appendChild(addBtn);
+            fgLabels.appendChild(section);
+        });
+        form.appendChild(fgLabels);
 
         /* Groups */
         var fgGrp = makeFieldGroup("Groups");
         var grpWrap = document.createElement("div"); grpWrap.className = "bo-ch-update-groups";
-        groups.forEach(function (g) {
+        channelGroups.forEach(function (g) {
             var lbl = document.createElement("label"); lbl.className = "bo-check-label";
             var chk = document.createElement("input"); chk.type = "checkbox"; chk.value = g.id;
             chk.name = "group_ids";
@@ -246,7 +270,7 @@
         chkInspect.type = "checkbox"; chkInspect.name = "to_inspect";
         if (ch.to_inspect) chkInspect.checked = true;
         inspectWrap.appendChild(chkInspect);
-        inspectWrap.appendChild(document.createTextNode(" Crawl this channel even when its organization isn't in target (for discovery; excluded from analysis)"));
+        inspectWrap.appendChild(document.createTextNode(" Crawl this channel even when it isn't in target (for discovery; excluded from analysis)"));
         fgInspect.appendChild(inspectWrap); form.appendChild(fgInspect);
 
         /* Buttons */
@@ -276,54 +300,60 @@
         return fg;
     }
 
-    function collectPeriods(form) {
+    function collectLabels(form) {
         return Array.from(form.querySelectorAll(".bo-period-row")).map(function (row) {
             return {
-                organization_id: parseInt(row.querySelector(".bo-period-org").value, 10),
+                label_id: parseInt(row.querySelector(".bo-period-label").value, 10),
                 start: row.querySelector(".bo-period-start").value || null,
                 end: row.querySelector(".bo-period-end").value || null,
+                group_id: parseInt(row.dataset.groupId, 10),
+                partition: row.dataset.partition === "1",
             };
         });
     }
 
-    function validatePeriods(periods) {
+    function validateLabels(rows) {
         var LO = "0000-01-01", HI = "9999-12-31";
-        for (var i = 0; i < periods.length; i++) {
-            if (periods[i].start && periods[i].end && periods[i].start > periods[i].end) {
+        for (var i = 0; i < rows.length; i++) {
+            if (!rows[i].label_id) return "Pick a label for every period row.";
+            if (rows[i].start && rows[i].end && rows[i].start > rows[i].end) {
                 return "A period's end date is before its start date.";
             }
         }
-        for (var a = 0; a < periods.length; a++) {
-            for (var b = a + 1; b < periods.length; b++) {
-                var s1 = periods[a].start || LO, e1 = periods[a].end || HI;
-                var s2 = periods[b].start || LO, e2 = periods[b].end || HI;
-                if (s1 <= e2 && s2 <= e1) return "Attribution periods must not overlap.";
+        /* Overlap is constrained only within a partition group. */
+        for (var a = 0; a < rows.length; a++) {
+            if (!rows[a].partition) continue;
+            for (var b = a + 1; b < rows.length; b++) {
+                if (rows[b].group_id !== rows[a].group_id) continue;
+                var s1 = rows[a].start || LO, e1 = rows[a].end || HI;
+                var s2 = rows[b].start || LO, e2 = rows[b].end || HI;
+                if (s1 <= e2 && s2 <= e1) return "Label periods within a partition group must not overlap.";
             }
         }
         return null;
     }
 
-    function replacePeriods(ch, periods) {
-        var API_ATTR = "/manage/api/channel-attributions/";
-        var dels = (ch.attributions || []).map(function (a) {
-            return apiFetch(API_ATTR + a.id + "/", { method: "DELETE" });
+    function replaceLabels(ch, rows) {
+        var API_CL = "/manage/api/channel-labels/";
+        var dels = (ch.labels || []).map(function (cl) {
+            return apiFetch(API_CL + cl.id + "/", { method: "DELETE" });
         });
         return Promise.all(dels).then(function () {
-            ch.attributions = [];
-            return Promise.all(periods.map(function (p) {
-                return apiFetch(API_ATTR, {
+            ch.labels = [];
+            return Promise.all(rows.map(function (r) {
+                return apiFetch(API_CL, {
                     method: "POST",
-                    body: { channel_id: ch.id, organization_id: p.organization_id, start: p.start, end: p.end },
-                }).then(function (created) { ch.attributions.push(created); });
+                    body: { channel_id: ch.id, label_id: r.label_id, start: r.start, end: r.end },
+                }).then(function (created) { ch.labels.push(created); });
             }));
         });
     }
 
-    function saveChannel(ch, form, _orgs, _groups) {
+    function saveChannel(ch, form) {
         var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
-        var periods = collectPeriods(form);
-        var perr = validatePeriods(periods);
-        if (perr) { showToast(perr, "error"); return; }
+        var rows = collectLabels(form);
+        var lerr = validateLabels(rows);
+        if (lerr) { showToast(lerr, "error"); return; }
         var body = {
             group_ids: groupIds,
             is_lost: form.querySelector("input[name=is_lost]").checked,
@@ -331,7 +361,7 @@
             to_inspect: form.querySelector("input[name=to_inspect]").checked,
         };
         apiFetch(API_CH, { method: "PATCH", body: body })
-            .then(function () { return replacePeriods(ch, periods); })
+            .then(function () { return replaceLabels(ch, rows); })
             .then(function () { showToast("Saved."); })
             .catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
@@ -340,14 +370,15 @@
 
     Promise.all([
         apiFetch(API_CH),
-        apiFetch(API_ORG),
+        apiFetch(API_LABELS),
+        apiFetch(API_LABELGROUPS),
         apiFetch(API_GRP),
     ]).then(function (res) {
         var ch = res[0];
         /* set modal title */
         var titleEl = document.getElementById("cu-pic-title");
         if (titleEl) titleEl.textContent = ch.title || ("Channel #" + ch.id);
-        render(ch, res[1].results, res[2].results);
+        render(ch, res[1].results, res[2].results, res[3].results);
     }).catch(function (e) {
         var p = document.createElement('p');
         p.className = 'bo-empty';

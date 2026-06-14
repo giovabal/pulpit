@@ -5,7 +5,7 @@
     var PAGE_SIZE = BACKOFFICE_PAGE_SIZE;
 
     /* ── State ──────────────────────────────────────────────────────────── */
-    var _orgs = [];
+    var _labels = [];
     var _groups = [];
     var _channels = [];
     var _total = 0;
@@ -39,8 +39,8 @@
         if (s) params.set("search", s);
         var st = $status.value;
         if (st) params.set("status", st);
-        var org = $orgFilter.value;
-        if (org) params.set("organization", org);
+        var label = $orgFilter.value;
+        if (label) params.set("label", label);
         var grp = $groupFilter.value;
         if (grp) params.set("group", grp);
         params.set("ordering", (_sortDir === "desc" ? "-" : "") + _sortField);
@@ -98,7 +98,7 @@
         var p = new URLSearchParams();
         var s = $search.value.trim(); if (s) p.set("search", s);
         var st = $status.value; if (st) p.set("status", st);
-        var org = $orgFilter.value; if (org) p.set("org", org);
+        var label = $orgFilter.value; if (label) p.set("label", label);
         var grp = $groupFilter.value; if (grp) p.set("group", grp);
         if (_sortField !== "id") p.set("sort", _sortField);
         if (_sortDir !== "desc") p.set("dir", _sortDir);
@@ -111,7 +111,7 @@
         var p = new URLSearchParams(window.location.search);
         $search.value = p.get("search") || "";
         $status.value = p.get("status") || "";
-        $orgFilter.value = p.get("org") || "";
+        $orgFilter.value = p.get("label") || "";
         $groupFilter.value = p.get("group") || "";
         _sortField = p.get("sort") || "id";
         _sortDir = p.get("dir") || "desc";
@@ -127,15 +127,18 @@
 
     /* ── Render ─────────────────────────────────────────────────────────── */
     function renderFilters() {
-        /* organizations */
+        /* labels (grouped into <optgroup> by label group) */
         [$orgFilter, $bulkOrg].forEach(function (sel) {
-            while (sel.options.length > (sel === $orgFilter ? 1 : 0)) sel.remove(sel.options.length - 1);
-            if (sel === $bulkOrg) {
-                var optUnassign = new Option("— Unassign —", "null");
-                sel.appendChild(optUnassign);
-            }
-            _orgs.forEach(function (o) {
-                sel.appendChild(new Option(o.name, o.id));
+            sel.innerHTML = "";
+            sel.appendChild(sel === $orgFilter ? new Option("All labels", "") : new Option("— Unassign —", "null"));
+            var currentGroup = null, og = null;
+            _labels.forEach(function (l) {
+                if (l.group_name !== currentGroup) {
+                    currentGroup = l.group_name;
+                    og = document.createElement("optgroup"); og.label = currentGroup;
+                    sel.appendChild(og);
+                }
+                og.appendChild(new Option(l.name, l.id));
             });
         });
         /* groups */
@@ -208,11 +211,11 @@
             badge.textContent = ch.channel_type || "—";
             tdType.appendChild(badge); tr.appendChild(tdType);
 
-            /* org (read-only current organization; edit time-bounded periods on the channel page) */
-            var tdOrg = document.createElement("td");
-            tdOrg.className = "bo-org-cell";
-            renderOrgCell(tdOrg, ch);
-            tr.appendChild(tdOrg);
+            /* labels (read-only current label per group; edit time-bounded periods on the channel page) */
+            var tdLabels = document.createElement("td");
+            tdLabels.className = "bo-org-cell";
+            renderLabelsCell(tdLabels, ch);
+            tr.appendChild(tdLabels);
 
             /* to-inspect */
             var tdInspect = document.createElement("td");
@@ -243,19 +246,27 @@
         $tbody.appendChild(frag);
     }
 
-    function renderOrgCell(td, ch) {
+    function renderLabelsCell(td, ch) {
         td.innerHTML = "";
-        if (ch.current_organization_id) {
-            var dot = document.createElement("span"); dot.className = "bo-org-dot";
-            dot.style.background = ch.current_organization_color || "#ccc";
-            var name = document.createElement("span"); name.className = "bo-org-name";
-            name.textContent = ch.current_organization_name;
-            td.appendChild(dot); td.appendChild(name);
-        } else {
+        var labels = ch.current_labels || [];
+        if (!labels.length) {
             var un = document.createElement("span"); un.className = "bo-org-unassigned";
             un.textContent = "— unassigned";
             td.appendChild(un);
+            return;
         }
+        var wrap = document.createElement("div"); wrap.className = "bo-labels-cell";
+        labels.forEach(function (l) {
+            var chip = document.createElement("span"); chip.className = "bo-label-chip";
+            chip.title = l.group_name;   /* which group this label belongs to */
+            var dot = document.createElement("span"); dot.className = "bo-org-dot";
+            dot.style.background = l.color || "#ccc";
+            var name = document.createElement("span"); name.className = "bo-org-name";
+            name.textContent = l.name;
+            chip.appendChild(dot); chip.appendChild(name);
+            wrap.appendChild(chip);
+        });
+        td.appendChild(wrap);
     }
 
     function renderInspectCell(td, ch) {
@@ -374,15 +385,15 @@
         }
     }
 
-    function bulkApplyOrg() {
+    function bulkApplyLabel() {
         var ids = selectedIds();
         if (!ids.length) return;
-        var orgVal = $bulkOrg.value;
-        var orgId = orgVal === "null" ? null : (orgVal ? parseInt(orgVal, 10) : undefined);
-        if (orgId === undefined) { showToast("Select an organization first.", "error"); return; }
+        var val = $bulkOrg.value;
+        var labelId = val === "null" ? null : (val ? parseInt(val, 10) : undefined);
+        if (labelId === undefined) { showToast("Select a label first.", "error"); return; }
         apiFetch(API_BASE + "channels/bulk-assign/", {
             method: "POST",
-            body: { ids: ids, organization_id: orgId },
+            body: { ids: ids, label_id: labelId },
         }).then(function (data) {
             showToast("Updated " + data.updated + " channels.");
             loadChannels(null);
@@ -448,10 +459,10 @@
 
     /* ── Init ───────────────────────────────────────────────────────────── */
     Promise.all([
-        apiFetch(API_BASE + "organizations/?limit=500"),
+        apiFetch(API_BASE + "labels/?limit=500"),
         apiFetch(API_BASE + "groups/?limit=500"),
     ]).then(function (results) {
-        _orgs = results[0].results;
+        _labels = results[0].results;
         _groups = results[1].results;
         renderFilters();
         _syncFormFromUrl();
@@ -474,7 +485,7 @@
         $tbody.querySelectorAll("input[type=checkbox]").forEach(function (cb) { cb.checked = $selectAll.checked; });
         updateBulkBar();
     });
-    document.getElementById("ch-bulk-org-apply").addEventListener("click", bulkApplyOrg);
+    document.getElementById("ch-bulk-org-apply").addEventListener("click", bulkApplyLabel);
     document.getElementById("ch-bulk-add-group-apply").addEventListener("click", function () { bulkApplyGroup("add"); });
     document.getElementById("ch-bulk-rm-group-apply").addEventListener("click", function () { bulkApplyGroup("remove"); });
     Object.keys(_SORT_COLS).forEach(function (id) {

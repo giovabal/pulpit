@@ -22,13 +22,13 @@ from webapp.paginator import DiggPaginator
 
 from .models import (
     Channel,
-    ChannelAttribution,
     ChannelGroup,
+    ChannelLabel,
     ChannelVacancy,
+    Label,
     Message,
     MessageReaction,
     MessageReply,
-    Organization,
     ProfilePicture,
 )
 from .utils.channel_types import channel_type_filter
@@ -38,8 +38,8 @@ from .version_check import version_status
 
 
 def _in_target_attr_exists() -> Exists:
-    """Exists(): the channel has at least one in-target attribution period (any time)."""
-    return Exists(ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True))
+    """Exists(): the channel holds at least one in-target label period (any time)."""
+    return Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True))
 
 
 def _channel_message_stats() -> dict[str, Any]:
@@ -51,7 +51,7 @@ def _channel_message_stats() -> dict[str, Any]:
     ``message_set`` instead would include lost and out-of-period messages and
     disagree with the detail page.
     """
-    no_period = ~Exists(ChannelAttribution.objects.filter(channel=OuterRef("channel"), organization__is_in_target=True))
+    no_period = ~Exists(ChannelLabel.objects.filter(channel=OuterRef("channel"), label__is_in_target=True))
     base = (
         Message.objects.filter(channel=OuterRef("pk"), is_lost=False)
         .filter(channel_cutoff_q() | no_period)
@@ -78,7 +78,7 @@ _MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
     "messagesticker_set",
     "messageothermedia_set",
     "reactions",
-    "channel__attributions__organization",
+    "channel__channel_labels__label",
 )
 
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
@@ -335,7 +335,7 @@ class ChannelListView(ListView):
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.in_target()
-            .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
+            .prefetch_related(self._pic_prefetch, "groups", "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -344,7 +344,7 @@ class ChannelListView(ListView):
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
             Channel.objects.filter(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "attributions__organization")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -353,20 +353,20 @@ class ChannelListView(ListView):
             .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_lost=True)
             .exclude(is_private=True)
-            .prefetch_related(self._pic_prefetch, "attributions__organization")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["to_inspect_list"] = (
             Channel.objects.filter(to_inspect=True)
             .exclude(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "groups", "attributions__organization")
+            .prefetch_related(self._pic_prefetch, "groups", "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
-        ctx["organizations"] = Organization.objects.filter(is_in_target=True).order_by("name")
+        ctx["labels"] = Label.objects.filter(group__is_primary=True, is_in_target=True).order_by("name")
         ctx["groups"] = (
             ChannelGroup.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )
@@ -394,7 +394,7 @@ class VacanciesView(TemplateView):
         rows = [
             {"vacancy": vac, "channel": vac.channel, "orphaned_amplifier_count": vac.orphaned_amplifier_count or 0}
             for vac in ChannelVacancy.objects.select_related("channel")
-            .prefetch_related("channel__attributions__organization")
+            .prefetch_related("channel__channel_labels__label")
             .annotate(orphaned_amplifier_count=orphaned_sub)
             .order_by("-closure_date")
         ]
@@ -910,7 +910,7 @@ class VacancyAnalysisView(View):
         cand_map = {r["forwarded_from"]: r for r in raw}
         cand_qs = (
             Channel.objects.filter(pk__in=cand_ids)
-            .prefetch_related("attributions__organization")
+            .prefetch_related("channel_labels__label")
             .annotate(first_msg=Min("message_set__date"))
         )
         if only_after_vacancy:
@@ -953,7 +953,7 @@ class VacancyAnalysisView(View):
                     "pk": c.pk,
                     "title": c.title,
                     "url": c.get_absolute_url(),
-                    "org_color": c.current_organization.color if c.current_organization else None,
+                    "org_color": c.current_label.color if c.current_label else None,
                     "amplifier_count": amp_count,
                     "score_a": score_a,
                     "score_b": score_b,

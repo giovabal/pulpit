@@ -10,8 +10,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, Message, Organization, SearchTerm
-from webapp.test_helpers import make_channel
+from webapp.models import Channel, ChannelGroup, LabelGroup, Message, SearchTerm
+from webapp.test_helpers import label_group, make_channel, make_label
 
 # ---------------------------------------------------------------------------
 # backoffice/api/utils.py — _normalize
@@ -130,12 +130,12 @@ class BackofficePageTests(TestCase):
         self._check("channels")
 
     def test_channel_update_page(self):
-        org = Organization.objects.create(name="Org", color="#ff0000")
-        ch = make_channel(telegram_id=1, title="T", organization=org)
+        label = make_label("Org", color="#ff0000")
+        ch = make_channel(telegram_id=1, title="T", label=label)
         self._check("channel-update", kwargs={"pk": ch.pk})
 
-    def test_organizations_page(self):
-        self._check("organizations")
+    def test_labels_page(self):
+        self._check("labels")
 
     def test_groups_page(self):
         self._check("groups")
@@ -177,40 +177,99 @@ class _ApiTestCase(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# backoffice/api — OrganizationViewSet
+# backoffice/api — LabelViewSet  (replaces the old OrganizationViewSet)
 # ---------------------------------------------------------------------------
 
 
-class OrganizationViewSetTests(_ApiTestCase):
+class LabelViewSetTests(_ApiTestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Alpha", color="#ff0000", is_in_target=True)
+        from webapp.models import Label
 
-    def test_list_returns_organizations(self):
-        resp = self.jget(_api("organizations/"))
+        self.Label = Label
+        self.group = label_group()  # primary 'Organization' partition group
+        self.label = make_label("Alpha", color="#ff0000", is_in_target=True, group=self.group)
+
+    def test_list_returns_labels(self):
+        resp = self.jget(_api("labels/"))
         names = [o["name"] for o in resp.json()["results"]]
         self.assertIn("Alpha", names)
 
     def test_list_includes_channel_count(self):
-        make_channel(telegram_id=1, title="T", organization=self.org)
-        resp = self.jget(_api("organizations/"))
-        org = next(o for o in resp.json()["results"] if o["name"] == "Alpha")
-        self.assertEqual(org["channel_count"], 1)
+        make_channel(telegram_id=1, title="T", label=self.label)
+        resp = self.jget(_api("labels/"))
+        label = next(o for o in resp.json()["results"] if o["name"] == "Alpha")
+        self.assertEqual(label["channel_count"], 1)
 
-    def test_create_organization(self):
-        resp = self.jpost(_api("organizations/"), {"name": "Beta", "color": "#00ff00", "is_in_target": False})
+    def test_create_label(self):
+        resp = self.jpost(
+            _api("labels/"),
+            {"name": "Beta", "color": "#00ff00", "is_in_target": False, "group_id": self.group.pk},
+        )
         self.assertEqual(resp.status_code, 201)
-        self.assertTrue(Organization.objects.filter(name="Beta").exists())
+        self.assertTrue(self.Label.objects.filter(name="Beta").exists())
 
-    def test_update_organization(self):
-        resp = self.jpatch(_api(f"organizations/{self.org.pk}/"), {"is_in_target": False})
+    def test_update_label(self):
+        resp = self.jpatch(_api(f"labels/{self.label.pk}/"), {"is_in_target": False})
         self.assertEqual(resp.status_code, 200)
-        self.org.refresh_from_db()
-        self.assertFalse(self.org.is_in_target)
+        self.label.refresh_from_db()
+        self.assertFalse(self.label.is_in_target)
 
-    def test_delete_organization(self):
-        resp = self.jdelete(_api(f"organizations/{self.org.pk}/"))
+    def test_delete_label(self):
+        resp = self.jdelete(_api(f"labels/{self.label.pk}/"))
         self.assertEqual(resp.status_code, 204)
-        self.assertFalse(Organization.objects.filter(pk=self.org.pk).exists())
+        self.assertFalse(self.Label.objects.filter(pk=self.label.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# backoffice/api — LabelGroupViewSet  (replaces the old OrganizationViewSet)
+# ---------------------------------------------------------------------------
+
+
+class LabelGroupViewSetTests(_ApiTestCase):
+    def setUp(self):
+        self.group = label_group()  # primary 'Organization' partition group
+
+    def test_list_returns_groups(self):
+        resp = self.jget(_api("label-groups/"))
+        names = [g["name"] for g in resp.json()["results"]]
+        self.assertIn("Organization", names)
+
+    def test_list_includes_label_count(self):
+        make_label("Alpha", group=self.group)
+        make_label("Beta", group=self.group)
+        resp = self.jget(_api("label-groups/"))
+        grp = next(g for g in resp.json()["results"] if g["name"] == "Organization")
+        self.assertEqual(grp["label_count"], 2)
+
+    def test_create_group(self):
+        resp = self.jpost(
+            _api("label-groups/"),
+            {"name": "Topic", "color": "#00ff00", "is_partition": False, "is_primary": False},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(LabelGroup.objects.filter(name="Topic").exists())
+
+    def test_update_group(self):
+        resp = self.jpatch(_api(f"label-groups/{self.group.pk}/"), {"description": "edited"})
+        self.assertEqual(resp.status_code, 200)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.description, "edited")
+
+    def test_setting_primary_demotes_others(self):
+        # Promoting another group to primary must demote the existing primary group.
+        other = LabelGroup.objects.create(name="Topic", is_partition=False, is_primary=False)
+        resp = self.jpatch(_api(f"label-groups/{other.pk}/"), {"is_primary": True})
+        self.assertEqual(resp.status_code, 200)
+        other.refresh_from_db()
+        self.group.refresh_from_db()
+        self.assertTrue(other.is_primary)
+        self.assertFalse(self.group.is_primary)
+
+    def test_delete_group(self):
+        other = LabelGroup.objects.create(name="Topic", is_partition=False, is_primary=False)
+        resp = self.jdelete(_api(f"label-groups/{other.pk}/"))
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(LabelGroup.objects.filter(pk=other.pk).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -221,9 +280,9 @@ class OrganizationViewSetTests(_ApiTestCase):
 class ChannelGroupViewSetTests(_ApiTestCase):
     def setUp(self):
         self.group = ChannelGroup.objects.create(name="GroupA")
-        self.org = Organization.objects.create(name="O", color="#000000")
-        self.ch1 = make_channel(telegram_id=10, title="C1", organization=self.org)
-        self.ch2 = make_channel(telegram_id=11, title="C2", organization=self.org)
+        self.label = make_label("O", color="#000000")
+        self.ch1 = make_channel(telegram_id=10, title="C1", label=self.label)
+        self.ch2 = make_channel(telegram_id=11, title="C2", label=self.label)
 
     def test_list_returns_groups(self):
         resp = self.jget(_api("groups/"))
@@ -252,10 +311,10 @@ class ChannelGroupViewSetTests(_ApiTestCase):
 
 class ChannelViewSetTests(_ApiTestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="OrgA", color="#ff0000", is_in_target=True)
-        self.org2 = Organization.objects.create(name="OrgB", color="#0000ff")
+        self.label = make_label("OrgA", color="#ff0000", is_in_target=True)
+        self.label2 = make_label("OrgB", color="#0000ff")
         self.group = ChannelGroup.objects.create(name="G1")
-        self.ch = make_channel(telegram_id=1, title="Alpha Channel", username="alpha", organization=self.org)
+        self.ch = make_channel(telegram_id=1, title="Alpha Channel", username="alpha", label=self.label)
         self.ch_lost = make_channel(telegram_id=2, title="Lost", is_lost=True)
         self.ch_private = make_channel(telegram_id=3, title="Private", is_private=True)
 
@@ -269,23 +328,24 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["title"], "Alpha Channel")
 
-    def test_create_attribution_assigns_organization(self):
+    def test_create_label_assigns_current_label(self):
         ch = make_channel(telegram_id=50, title="Fresh")
-        resp = self.jpost(_api("channel-attributions/"), {"channel_id": ch.pk, "organization_id": self.org2.pk})
+        resp = self.jpost(_api("channel-labels/"), {"channel_id": ch.pk, "label_id": self.label2.pk})
         self.assertEqual(resp.status_code, 201)
         ch.refresh_from_db()
-        self.assertEqual(ch.current_organization, self.org2)
+        self.assertEqual(ch.current_label, self.label2)
 
-    def test_delete_attribution_clears_organization(self):
-        attr = self.ch.attributions.first()
-        resp = self.jdelete(_api(f"channel-attributions/{attr.pk}/"))
+    def test_delete_label_clears_current_label(self):
+        cl = self.ch.channel_labels.first()
+        resp = self.jdelete(_api(f"channel-labels/{cl.pk}/"))
         self.assertEqual(resp.status_code, 204)
         self.ch.refresh_from_db()
-        self.assertIsNone(self.ch.current_organization)
+        self.assertIsNone(self.ch.current_label)
 
-    def test_create_overlapping_attribution_rejected(self):
-        # self.ch already has an open-ended period under self.org; a second open period overlaps.
-        resp = self.jpost(_api("channel-attributions/"), {"channel_id": self.ch.pk, "organization_id": self.org2.pk})
+    def test_create_overlapping_label_rejected(self):
+        # self.ch already has an open-ended period under self.label (a partition group); a
+        # second open period in the same partition group overlaps.
+        resp = self.jpost(_api("channel-labels/"), {"channel_id": self.ch.pk, "label_id": self.label2.pk})
         self.assertEqual(resp.status_code, 400)
 
     def test_patch_assigns_groups(self):
@@ -323,19 +383,19 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertIn(unassigned.pk, ids)
         self.assertNotIn(self.ch.pk, ids)
 
-    def test_organization_filter(self):
-        resp = self.jget(_api(f"channels/?organization={self.org.pk}"))
+    def test_label_filter(self):
+        resp = self.jget(_api(f"channels/?label={self.label.pk}"))
         ids = [c["id"] for c in resp.json()["results"]]
         self.assertIn(self.ch.pk, ids)
 
-    def test_bulk_assign_organization(self):
+    def test_bulk_assign_label(self):
         ch2 = make_channel(telegram_id=20, title="C2")
-        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk, ch2.pk], "organization_id": self.org2.pk})
+        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk, ch2.pk], "label_id": self.label2.pk})
         self.assertEqual(resp.status_code, 200)
         self.ch.refresh_from_db()
         ch2.refresh_from_db()
-        self.assertEqual(self.ch.current_organization, self.org2)
-        self.assertEqual(ch2.current_organization, self.org2)
+        self.assertEqual(self.ch.current_label, self.label2)
+        self.assertEqual(ch2.current_label, self.label2)
 
     def test_bulk_assign_no_ids_returns_400(self):
         resp = self.jpost(_api("channels/bulk-assign/"), {"ids": []})
@@ -523,10 +583,10 @@ class MaintenancePurgeApiTests(_ApiTestCase):
     """Endpoints powering the "Purge out-of-target messages" panel."""
 
     def setUp(self):
-        in_target = Organization.objects.create(name="In", is_in_target=True)
-        out = Organization.objects.create(name="Out", is_in_target=False)
-        self.kept = make_channel(telegram_id=1, title="kept", organization=in_target)
-        self.purgeable = make_channel(telegram_id=2, title="purge", organization=out)
+        in_target = make_label("In", is_in_target=True)
+        out = make_label("Out", is_in_target=False)
+        self.kept = make_channel(telegram_id=1, title="kept", label=in_target)
+        self.purgeable = make_channel(telegram_id=2, title="purge", label=out)
         Message.objects.create(telegram_id=10, channel=self.kept)
         Message.objects.create(telegram_id=20, channel=self.purgeable)
         Message.objects.create(telegram_id=21, channel=self.purgeable)
@@ -545,8 +605,10 @@ class MaintenancePurgeApiTests(_ApiTestCase):
 
     @override_settings(WEB_ACCESS="ALL")
     def test_preview_reports_unsupported_when_no_in_target(self):
-        # Flip every organization out of target → no channel has an in-target attribution period.
-        Organization.objects.filter(is_in_target=True).update(is_in_target=False)
+        # Flip every label out of target → no channel has an in-target attribution period.
+        from webapp.models import Label
+
+        Label.objects.filter(is_in_target=True).update(is_in_target=False)
         resp = self.jget(_api("maintenance/purge-preview/"))
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
@@ -565,7 +627,9 @@ class MaintenancePurgeApiTests(_ApiTestCase):
 
     @override_settings(WEB_ACCESS="ALL")
     def test_run_refuses_when_no_in_target(self):
-        Organization.objects.filter(is_in_target=True).update(is_in_target=False)
+        from webapp.models import Label
+
+        Label.objects.filter(is_in_target=True).update(is_in_target=False)
         Channel.objects.update(to_inspect=False)
         resp = self.jpost(_api("maintenance/purge/"), {})
         self.assertEqual(resp.status_code, 400)

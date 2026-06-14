@@ -19,9 +19,9 @@ from network.community import (
     canonical_strategy_key,
     detect_kcore,
     detect_label_propagation,
+    detect_labelgroup,
     detect_leiden,
     detect_louvain,
-    detect_organization,
     normalize_community_map,
     parse_strategies,
     strategy_display_label,
@@ -39,7 +39,7 @@ from network.exporter import (
     reposition_isolated_nodes,
     write_graph_files,
 )
-from network.graph_builder import build_graph, resolve_window_organization
+from network.graph_builder import build_graph, resolve_window_label
 from network.measures import (
     apply_amplification_factor,
     apply_base_node_measures,
@@ -56,8 +56,8 @@ from network.measures import (
     role_companions,
 )
 from network.utils import channel_cutoff_q
-from webapp.models import Channel, Message, Organization
-from webapp.test_helpers import make_channel
+from webapp.models import Channel, Message
+from webapp.test_helpers import label_group, make_channel, make_label
 from webapp.utils.colors import parse_color
 
 import networkx as nx
@@ -108,8 +108,8 @@ class BuildCommunityLabelTests(TestCase):
     def test_integer_id_with_algorithm_strategy(self) -> None:
         self.assertEqual(build_community_label(1, "LEIDEN"), "1-leiden")
 
-    def test_string_id_with_organization_strategy(self) -> None:
-        self.assertEqual(build_community_label("my-org", "ORGANIZATION"), "my-org-organization")
+    def test_string_id_with_metadata_strategy(self) -> None:
+        self.assertEqual(build_community_label("my-org", "LABELGROUP1"), "my-org-labelgroup1")
 
     def test_spaces_become_hyphens_via_slugify(self) -> None:
         self.assertEqual(build_community_label("Foo Bar", "TEST"), "foo-bar-test")
@@ -174,48 +174,50 @@ class BuildCommunityPaletteTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# community.py — detect_organization
+# community.py — detect_labelgroup
 # ---------------------------------------------------------------------------
 
 
-class DetectOrganizationTests(TestCase):
+class DetectLabelGroupTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Test Org", is_in_target=True, color="#FF0000")
-        self.ch1 = make_channel(telegram_id=1, organization=self.org)
-        self.ch2 = make_channel(telegram_id=2, organization=self.org)
+        self.group = label_group()
+        self.label = make_label("Test Org", color="#FF0000")
+        self.ch1 = make_channel(telegram_id=1, label=self.label)
+        self.ch2 = make_channel(telegram_id=2, label=self.label)
 
-    def _node(self, channel, org):
-        return {"channel": channel, "data": {"resolved_org_id": org.pk, "resolved_org_color": org.color}}
+    def _node(self, channel, label):
+        # The window resolution graph_builder writes: group_partitions[gid] = (label_id, label_color).
+        return {"channel": channel, "data": {"group_partitions": {self.group.pk: (label.pk, label.color)}}}
 
-    def test_maps_channels_to_org_id(self) -> None:
+    def test_maps_channels_to_label_id(self) -> None:
         channel_dict = {
-            str(self.ch1.pk): self._node(self.ch1, self.org),
-            str(self.ch2.pk): self._node(self.ch2, self.org),
+            str(self.ch1.pk): self._node(self.ch1, self.label),
+            str(self.ch2.pk): self._node(self.ch2, self.label),
         }
-        community_map, _ = detect_organization(channel_dict)
-        self.assertEqual(community_map[str(self.ch1.pk)], self.org.pk)
-        self.assertEqual(community_map[str(self.ch2.pk)], self.org.pk)
+        community_map, _ = detect_labelgroup(self.group.pk, channel_dict)
+        self.assertEqual(community_map[str(self.ch1.pk)], self.label.pk)
+        self.assertEqual(community_map[str(self.ch2.pk)], self.label.pk)
 
-    def test_channel_without_org_excluded_from_map(self) -> None:
-        ch3 = make_channel(telegram_id=3, organization=None)
-        channel_dict = {str(ch3.pk): {"channel": ch3, "data": {}}}
-        community_map, _ = detect_organization(channel_dict)
+    def test_channel_without_label_excluded_from_map(self) -> None:
+        ch3 = make_channel(telegram_id=3, label=None)
+        channel_dict = {str(ch3.pk): {"channel": ch3, "data": {"group_partitions": {}}}}
+        community_map, _ = detect_labelgroup(self.group.pk, channel_dict)
         self.assertNotIn(str(ch3.pk), community_map)
 
-    def test_palette_uses_org_color(self) -> None:
-        channel_dict = {str(self.ch1.pk): self._node(self.ch1, self.org)}
-        _, palette = detect_organization(channel_dict)
-        expected = parse_color(self.org.color)
-        self.assertEqual(palette[self.org.pk], expected)
+    def test_palette_uses_label_color(self) -> None:
+        channel_dict = {str(self.ch1.pk): self._node(self.ch1, self.label)}
+        _, palette = detect_labelgroup(self.group.pk, channel_dict)
+        expected = parse_color(self.label.color)
+        self.assertEqual(palette[self.label.pk], expected)
 
-    def test_palette_has_one_entry_per_unique_org(self) -> None:
-        org2 = Organization.objects.create(name="Org2", is_in_target=True, color="#0000FF")
-        ch4 = make_channel(telegram_id=4, organization=org2)
+    def test_palette_has_one_entry_per_unique_label(self) -> None:
+        label2 = make_label("Org2", color="#0000FF")
+        ch4 = make_channel(telegram_id=4, label=label2)
         channel_dict = {
-            str(self.ch1.pk): self._node(self.ch1, self.org),
-            str(ch4.pk): self._node(ch4, org2),
+            str(self.ch1.pk): self._node(self.ch1, self.label),
+            str(ch4.pk): self._node(ch4, label2),
         }
-        _, palette = detect_organization(channel_dict)
+        _, palette = detect_labelgroup(self.group.pk, channel_dict)
         self.assertEqual(len(palette), 2)
 
 
@@ -404,29 +406,32 @@ class BuildCommunitiesPayloadTests(TestCase):
         result = build_communities_payload(parse_strategies(["KCORE"]), {"kcore": (community_map, community_palette)})
         self.assertIn("1", result["kcore"]["main_groups"])
 
-    def test_organization_strategy_uses_resolved_map(self) -> None:
-        org = Organization.objects.create(name="My Org", is_in_target=True)
-        cmap = {"n1": org.pk, "n2": org.pk}
-        result = build_communities_payload(
-            parse_strategies(["ORGANIZATION"]), {"organization": (cmap, {org.pk: (1, 2, 3)})}
-        )
-        groups = result["organization"]["groups"]
+    def test_labelgroup_strategy_uses_resolved_map(self) -> None:
+        group = label_group()
+        label = make_label("My Org")
+        token = group.token  # "LABELGROUP<pk>"
+        (inst,) = parse_strategies([token])
+        cmap = {"n1": label.pk, "n2": label.pk}
+        result = build_communities_payload([inst], {inst.key: (cmap, {label.pk: (1, 2, 3)})})
+        groups = result[inst.key]["groups"]
         self.assertIn("My Org", [g[2] for g in groups])
         # Count comes from the resolved community map (2 nodes), not a raw FK count.
         self.assertEqual([g[1] for g in groups if g[2] == "My Org"][0], 2)
 
-    def test_org_with_no_resolved_nodes_excluded(self) -> None:
-        # An org that owns no node in the window does not appear in the ORGANIZATION groups.
-        Organization.objects.create(name="Absent Org", is_in_target=True)
-        result = build_communities_payload(parse_strategies(["ORGANIZATION"]), {"organization": ({}, {})})
-        self.assertNotIn("Absent Org", [g[2] for g in result["organization"]["groups"]])
+    def test_labelgroup_with_no_resolved_nodes_excluded(self) -> None:
+        # A label that owns no node in the window does not appear in the LABELGROUP groups.
+        group = label_group()
+        make_label("Absent Org")
+        (inst,) = parse_strategies([group.token])
+        result = build_communities_payload([inst], {inst.key: ({}, {})})
+        self.assertNotIn("Absent Org", [g[2] for g in result[inst.key]["groups"]])
 
-    def test_organization_strategy_main_groups_uses_key_and_name(self) -> None:
-        org = Organization.objects.create(name="My Org", is_in_target=True)
-        result = build_communities_payload(
-            parse_strategies(["ORGANIZATION"]), {"organization": ({"n1": org.pk}, {org.pk: (1, 2, 3)})}
-        )
-        self.assertEqual(result["organization"]["main_groups"].get(org.key), org.name)
+    def test_labelgroup_strategy_main_groups_uses_key_and_name(self) -> None:
+        group = label_group()
+        label = make_label("My Org")
+        (inst,) = parse_strategies([group.token])
+        result = build_communities_payload([inst], {inst.key: ({"n1": label.pk}, {label.pk: (1, 2, 3)})})
+        self.assertEqual(result[inst.key]["main_groups"].get(label.key), label.name)
 
     def test_multiple_strategies_all_included(self) -> None:
         community_map = {"a": 1}
@@ -473,7 +478,16 @@ class StrategyParserTests(TestCase):
             parse_strategies(["NOTASTRATEGY"])
 
     def test_all_expands_to_every_strategy(self) -> None:
-        self.assertEqual({i.name for i in parse_strategies(["ALL"])}, set(VALID_STRATEGIES))
+        # ALL expands to every algorithm strategy plus one LABELGROUP<id> per partition group
+        # (the seed migration creates the primary "Organization" partition group). The metadata
+        # LABELGROUP tokens are DB-derived, so build the expected set from the current partitions.
+        from webapp.models import LabelGroup
+
+        names = {i.name for i in parse_strategies(["ALL"])}
+        expected = set(VALID_STRATEGIES) | {
+            f"LABELGROUP{pk}" for pk in LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True)
+        }
+        self.assertEqual(names, expected)
 
     def test_bare_token_inherits_default(self) -> None:
         (inst,) = parse_strategies(["LEIDEN_CPM"], defaults={"LEIDEN_CPM": {"resolution": 0.02}})
@@ -568,9 +582,9 @@ class DetectSbmTests(TestCase):
 
 class BuildGraphTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
-        self.ch1 = make_channel(telegram_id=1, organization=self.org, title="Channel 1")
-        self.ch2 = make_channel(telegram_id=2, organization=self.org, title="Channel 2")
+        self.label = make_label("Org1", color="#FF0000")
+        self.ch1 = make_channel(telegram_id=1, label=self.label, title="Channel 1")
+        self.ch2 = make_channel(telegram_id=2, label=self.label, title="Channel 2")
 
     def _create_forward(self) -> Message:
         """Create a message in ch2 forwarded from ch1 and refresh degrees."""
@@ -615,7 +629,7 @@ class BuildGraphTests(TestCase):
         self.assertGreater(len(edge_list), 0)
 
     def test_draw_dead_leaves_includes_channels_with_in_degree(self) -> None:
-        ch3 = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        ch3 = make_channel(telegram_id=3, label=None, title="Dead Leaf")
         # ch2 (in target) forwards from ch3 → ch3 gets in_degree > 0
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=ch3)
         ch3.refresh_degrees()
@@ -627,7 +641,7 @@ class BuildGraphTests(TestCase):
         self.assertIn(str(ch3.pk), channel_dict_dl)
 
     def test_draw_dead_leaves_false_excludes_out_of_target(self) -> None:
-        ch3 = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        ch3 = make_channel(telegram_id=3, label=None, title="Dead Leaf")
         self._create_forward()
         _, channel_dict, _, _ = build_graph(draw_dead_leaves=False)
         self.assertNotIn(str(ch3.pk), channel_dict)
@@ -636,7 +650,7 @@ class BuildGraphTests(TestCase):
         """Regression: a dead leaf cited inside the window must survive a windowed
         (e.g. per-year timeline) build, not be dropped by the inactive-channel filter
         — which keys off own-message counts that out-of-target channels never have."""
-        leaf = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        leaf = make_channel(telegram_id=3, label=None, title="Dead Leaf")
         # In-target ch2 forwards from the leaf within the 2023 window.
         Message.objects.create(
             telegram_id=10,
@@ -656,7 +670,7 @@ class BuildGraphTests(TestCase):
     def test_dead_leaf_cited_only_outside_window_is_dropped(self) -> None:
         """A dead leaf whose only citation falls outside the window must not appear:
         the degree-0 orphan sweep still prunes it once windowed edges are known."""
-        leaf = make_channel(telegram_id=3, organization=None, title="Dead Leaf")
+        leaf = make_channel(telegram_id=3, label=None, title="Dead Leaf")
         # Sole citation of the leaf is in 2022, outside the 2023 window.
         Message.objects.create(
             telegram_id=10,
@@ -721,7 +735,7 @@ class BuildGraphTests(TestCase):
     def test_date_filter_removes_channels_with_no_messages_in_range(self) -> None:
         self._create_forward_on_date(datetime.datetime(2022, 1, 1, tzinfo=datetime.timezone.utc))
         # Add a third channel with a message in range to ensure the graph has edges
-        ch3 = make_channel(telegram_id=3, organization=self.org, title="Channel 3")
+        ch3 = make_channel(telegram_id=3, label=self.label, title="Channel 3")
         Message.objects.create(
             telegram_id=100,
             channel=ch3,
@@ -760,18 +774,18 @@ class BuildGraphReferenceCutoffTests(TestCase):
     query in graph_builder used to skip channel_cutoff_q)."""
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True, color="#FF0000")
+        self.label = make_label("Org", color="#FF0000")
         # ch1 is in-target only during 2023.
         self.ch1 = make_channel(
             telegram_id=1,
-            organization=self.org,
+            label=self.label,
             attribution_start=datetime.date(2023, 1, 1),
             attribution_end=datetime.date(2023, 12, 31),
             title="Bounded",
         )
         # ch2 / ch3 are in-target for all time (open period).
-        self.ch2 = make_channel(telegram_id=2, organization=self.org, title="Cited A")
-        self.ch3 = make_channel(telegram_id=3, organization=self.org, title="Cited B")
+        self.ch2 = make_channel(telegram_id=2, label=self.label, title="Cited A")
+        self.ch3 = make_channel(telegram_id=3, label=self.label, title="Cited B")
 
     @staticmethod
     def _connected(graph: nx.DiGraph, a: object, b: object) -> bool:
@@ -918,9 +932,9 @@ class BuildGraphDataTests(TestCase):
 
 class ApplyBaseNodeMeasuresTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
-        self.ch1 = make_channel(telegram_id=1, organization=org, title="Chan1", participants_count=500)
-        self.ch2 = make_channel(telegram_id=2, organization=org, title="Chan2", participants_count=300)
+        label = make_label("Org1", color="#FF0000")
+        self.ch1 = make_channel(telegram_id=1, label=label, title="Chan1", participants_count=500)
+        self.ch2 = make_channel(telegram_id=2, label=label, title="Chan2", participants_count=300)
         # ch1 has a message forwarded from ch2
         Message.objects.create(telegram_id=1, channel=self.ch1, forwarded_from=self.ch2)
         self.ch1.save()
@@ -1132,8 +1146,8 @@ class EnsureGraphRootTests(TestCase):
 
 class WriteGraphFilesTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org1", is_in_target=True, color="#FF0000")
-        self.ch = make_channel(telegram_id=1, organization=org, title="Chan1")
+        label = make_label("Org1", color="#FF0000")
+        self.ch = make_channel(telegram_id=1, label=label, title="Chan1")
         self.channel_qs = Channel.objects.filter(pk=self.ch.pk)
         self.graph_data = {"nodes": [{"id": "1", "x": 0.0, "y": 0.0}], "edges": []}
         self.communities_data = {
@@ -1274,9 +1288,10 @@ class DetectDispatcherTests(TestCase):
         self.graph = nx.DiGraph()
         self.graph.add_nodes_from(["a", "b"])
         self.graph.add_edge("a", "b")
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
-        self.ch1 = make_channel(telegram_id=1, organization=self.org)
-        self.ch2 = make_channel(telegram_id=2, organization=self.org)
+        self.group = label_group()
+        self.label = make_label("Org")
+        self.ch1 = make_channel(telegram_id=1, label=self.label)
+        self.ch2 = make_channel(telegram_id=2, label=self.label)
         self.channel_dict = {
             str(self.ch1.pk): {"channel": self.ch1, "data": {}},
             str(self.ch2.pk): {"channel": self.ch2, "data": {}},
@@ -1306,13 +1321,15 @@ class DetectDispatcherTests(TestCase):
         detect("LOUVAIN", "palette", self.graph, self.channel_dict)
         mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
 
-    @patch("network.community.detect_organization")
-    def test_unknown_strategy_falls_back_to_detect_organization(self, mock_detect: MagicMock) -> None:
+    @patch("network.community.detect_labelgroup")
+    def test_labelgroup_strategy_dispatches_to_detect_labelgroup(self, mock_detect: MagicMock) -> None:
         from network.community import detect
 
         mock_detect.return_value = ({}, {})
-        detect("ORGANIZATION", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.channel_dict)
+        detect(self.group.token, "palette", self.graph, self.channel_dict)
+        # LABELGROUP<id> resolves the group pk and reads the partition from channel_dict;
+        # the palette_name / reverse flags do not apply (palette comes from label colours).
+        mock_detect.assert_called_once_with(self.group.pk, self.channel_dict)
 
     def test_unknown_strategy_raises_value_error(self) -> None:
         from network.community import detect
@@ -1328,10 +1345,10 @@ class DetectDispatcherTests(TestCase):
 
 class CopyChannelMediaTests(TestCase):
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="Org", is_in_target=True)
+        self.label = make_label("Org")
 
     def test_channel_without_username_is_skipped(self) -> None:
-        ch = make_channel(telegram_id=1, organization=self.org, username="")
+        ch = make_channel(telegram_id=1, label=self.label, username="")
         with tempfile.TemporaryDirectory() as tmpdir:
             from network.exporter import copy_channel_media
 
@@ -1340,7 +1357,7 @@ class CopyChannelMediaTests(TestCase):
             self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels")))
 
     def test_missing_source_dir_is_silently_ignored(self) -> None:
-        ch = make_channel(telegram_id=2, organization=self.org, username="testchan")
+        ch = make_channel(telegram_id=2, label=self.label, username="testchan")
         with tempfile.TemporaryDirectory() as tmpdir:
             from network.exporter import copy_channel_media
 
@@ -1349,7 +1366,7 @@ class CopyChannelMediaTests(TestCase):
             self.assertFalse(os.path.exists(os.path.join(tmpdir, "channels", "testchan")))
 
     def test_existing_source_dir_is_copied(self) -> None:
-        ch = make_channel(telegram_id=3, organization=self.org, username="copychan")
+        ch = make_channel(telegram_id=3, label=self.label, username="copychan")
         with tempfile.TemporaryDirectory() as media_root, tempfile.TemporaryDirectory() as output_root:
             src = os.path.join(media_root, "channels", "copychan", "profile")
             os.makedirs(src)
@@ -1366,7 +1383,7 @@ class CopyChannelMediaTests(TestCase):
             self.assertTrue(os.path.exists(dst))
 
     def test_oserror_on_copy_is_logged_not_raised(self) -> None:
-        ch = make_channel(telegram_id=4, organization=self.org, username="errchan")
+        ch = make_channel(telegram_id=4, label=self.label, username="errchan")
         with tempfile.TemporaryDirectory() as media_root, tempfile.TemporaryDirectory() as output_root:
             src = os.path.join(media_root, "channels", "errchan", "profile")
             os.makedirs(src)
@@ -1416,6 +1433,12 @@ def _patch_export_pipeline() -> list:
 
 class ExportNetworkCommandTests(TestCase):
     def setUp(self) -> None:
+        # The community pipeline (detect / apply_to_graph / build_communities_payload) is mocked,
+        # so any valid --community-strategies token exercises it. LABELGROUP<id> partitions are
+        # rejected by the command's own _validate_settings (it only accepts the algorithm strategies
+        # in VALID_STRATEGIES), so an algorithm token is used here — LEIDEN, replacing the old
+        # ORGANIZATION metadata token.
+        self.strategy_token = "LEIDEN"
         _b = _EXPORT_CMD
         for target in [
             f"{_b}.exporter.write_meta_json",
@@ -1459,7 +1482,7 @@ class ExportNetworkCommandTests(TestCase):
         mock_main_comp.return_value = {"1"}
         mock_measures.return_value = [("in_deg", "Inbound")]
         mock_pagerank.return_value = [("pagerank", "PageRank")]
-        mock_communities_payload.return_value = {"organization": {"groups": [], "main_groups": {}}}
+        mock_communities_payload.return_value = {"leiden": {"groups": [], "main_groups": {}}}
 
     def test_raises_command_error_on_invalid_startdate(self) -> None:
         from django.core.management import call_command
@@ -1557,7 +1580,7 @@ class ExportNetworkCommandTests(TestCase):
             "structural_analysis",
             graph=True,
             html=True,
-            community_strategies="ORGANIZATION",
+            community_strategies=self.strategy_token,
             measures="PAGERANK",
             edge_weight_strategy="PARTIAL_REFERENCES",
             stdout=io.StringIO(),
@@ -1632,7 +1655,7 @@ class ExportNetworkCommandTests(TestCase):
             "structural_analysis",
             graph=True,
             html=False,
-            community_strategies="ORGANIZATION",
+            community_strategies=self.strategy_token,
             edge_weight_strategy="PARTIAL_REFERENCES",
             stdout=io.StringIO(),
             stderr=io.StringIO(),
@@ -1691,7 +1714,7 @@ class ExportNetworkCommandTests(TestCase):
             "structural_analysis",
             html=False,
             xlsx=True,
-            community_strategies="ORGANIZATION",
+            community_strategies=self.strategy_token,
             edge_weight_strategy="PARTIAL_REFERENCES",
             stdout=io.StringIO(),
             stderr=io.StringIO(),
@@ -1750,7 +1773,7 @@ class ExportNetworkCommandTests(TestCase):
             "structural_analysis",
             html=True,
             xlsx=True,
-            community_strategies="ORGANIZATION",
+            community_strategies=self.strategy_token,
             edge_weight_strategy="PARTIAL_REFERENCES",
             stdout=io.StringIO(),
             stderr=io.StringIO(),
@@ -1954,9 +1977,9 @@ class ApplyLocalClusteringTests(TestCase):
 
 class ApplyAmplificationFactorTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org", is_in_target=True, color="#FF0000")
-        self.ch1 = make_channel(telegram_id=10, organization=org, title="Source")
-        self.ch2 = make_channel(telegram_id=11, organization=org, title="Amplifier")
+        label = make_label("Org", color="#FF0000")
+        self.ch1 = make_channel(telegram_id=10, label=label, title="Source")
+        self.ch2 = make_channel(telegram_id=11, label=label, title="Amplifier")
         # ch1 has 4 own messages; ch2 forwards 2 of ch1's messages into ch2's channel
         # → ch1's content is "amplified" 2 times; ch1 has 4 messages → factor = 2/4 = 0.5
         Message.objects.create(telegram_id=1, channel=self.ch1)
@@ -1996,9 +2019,9 @@ class ApplyAmplificationFactorTests(TestCase):
 
 class ApplyContentOriginalityTests(TestCase):
     def setUp(self) -> None:
-        org = Organization.objects.create(name="Org2", is_in_target=True, color="#00FF00")
-        self.ch1 = make_channel(telegram_id=20, organization=org, title="Original")
-        self.ch2 = make_channel(telegram_id=21, organization=org, title="Forwarder")
+        label = make_label("Org2", color="#00FF00")
+        self.ch1 = make_channel(telegram_id=20, label=label, title="Original")
+        self.ch2 = make_channel(telegram_id=21, label=label, title="Forwarder")
         # ch1: 4 messages, 0 forwarded → originality 1.0
         for i in range(4):
             Message.objects.create(telegram_id=100 + i, channel=self.ch1)
@@ -2029,8 +2052,8 @@ class ApplyContentOriginalityTests(TestCase):
         self.assertAlmostEqual(node_map[str(self.ch2.pk)]["content_originality"], 0.5)
 
     def test_channel_with_no_messages_gets_none(self) -> None:
-        org = Organization.objects.create(name="OrgEmpty", is_in_target=True, color="#0000FF")
-        empty_ch = make_channel(telegram_id=99, organization=org, title="Empty")
+        label = make_label("OrgEmpty", color="#0000FF")
+        empty_ch = make_channel(telegram_id=99, label=label, title="Empty")
         channel_dict = {str(empty_ch.pk): {"channel": empty_ch}}
         graph_data: dict = {"nodes": [{"id": str(empty_ch.pk)}], "edges": []}
         apply_content_originality(graph_data, nx.DiGraph(), channel_dict)
@@ -3403,11 +3426,11 @@ class ComputeInterestStructuralWindowTests(TestCase):
     """
 
     def _build(self) -> tuple[Any, Any, Any, Any]:
-        org = Organization.objects.create(name="In target", is_in_target=True)
-        a = make_channel(telegram_id=9001, title="A", organization=org)
-        b = make_channel(telegram_id=9002, title="B", organization=org)
-        c = make_channel(telegram_id=9003, title="C", organization=org)
-        return org, a, b, c
+        label = make_label("In target")
+        a = make_channel(telegram_id=9001, title="A", label=label)
+        b = make_channel(telegram_id=9002, title="B", label=label)
+        c = make_channel(telegram_id=9003, title="C", label=label)
+        return label, a, b, c
 
     def _origin_and_forwards(self, a: Any, b: Any, c: Any) -> Any:
         # Origin post on A.
@@ -3556,12 +3579,12 @@ class ScopeLabelTests(TestCase):
         self.assertEqual(self._label({"channel_id__in": [1, 2]}), "windowed")
 
 
-class ResolveWindowOrganizationTests(TestCase):
-    """Representative org = longest in-window duration; tiebreak = earliest start; None bounds clamp."""
+class ResolveWindowLabelTests(TestCase):
+    """Representative label = longest in-window duration; tiebreak = earliest start; None bounds clamp."""
 
     @staticmethod
     def _resolve(periods, window_start, window_end, created=None, data_min=None, data_max=None):
-        return resolve_window_organization(periods, window_start, window_end, created, data_min, data_max)
+        return resolve_window_label(periods, window_start, window_end, created, data_min, data_max)
 
     def test_longest_duration_wins(self) -> None:
         d = datetime.date
@@ -3573,7 +3596,7 @@ class ResolveWindowOrganizationTests(TestCase):
 
     def test_tiebreak_earliest_start(self) -> None:
         d = datetime.date
-        periods = [  # equal 10-day in-window spans → earliest start (org 1) wins
+        periods = [  # equal 10-day in-window spans → earliest start (label 1) wins
             (1, "A", "#aaaaaa", d(2024, 1, 1), d(2024, 1, 10)),
             (2, "B", "#bbbbbb", d(2024, 2, 1), d(2024, 2, 10)),
         ]
@@ -3603,10 +3626,10 @@ class ChannelCutoffQBoundaryTests(TestCase):
     """
 
     def setUp(self) -> None:
-        self.org = Organization.objects.create(name="O", is_in_target=True)
+        self.label = make_label("O")
         self.ch = make_channel(
             telegram_id=1,
-            organization=self.org,
+            label=self.label,
             attribution_start=datetime.date(2024, 1, 1),
             attribution_end=datetime.date(2024, 3, 31),
         )
@@ -3624,7 +3647,7 @@ class ChannelCutoffQBoundaryTests(TestCase):
         self.assertEqual(kept, {2, 3})
 
     def test_open_period_includes_everything(self) -> None:
-        ch2 = make_channel(telegram_id=2, organization=self.org)  # open (None, None) period
+        ch2 = make_channel(telegram_id=2, label=self.label)  # open (None, None) period
         Message.objects.create(
             telegram_id=99, channel=ch2, date=datetime.datetime(2010, 1, 1, tzinfo=datetime.timezone.utc)
         )
@@ -3676,11 +3699,16 @@ class MeasureParserTests(TestCase):
         with self.assertRaisesRegex(ValueError, "has no parameter"):
             parse_measures(["DIFFUSIONLAG(foo=1)"])
 
-    def test_rejects_unknown_measure_and_bad_enum(self) -> None:
+    def test_rejects_unknown_measure(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown measure"):
             parse_measures(["NOTAMEASURE"])
-        with self.assertRaisesRegex(ValueError, "not a valid choice"):
-            parse_measures(["MODULEROLE(basis=NOPE)"])
+
+    def test_module_role_basis_is_free_form(self) -> None:
+        # MODULEROLE's basis is a free-form str (a strategy name *or* a LABELGROUP<id> token),
+        # not an enum, so the parser accepts any value; an unknown basis is caught later by the
+        # command's _validate_settings cross-check against --community-strategies.
+        (inst,) = parse_measures(["MODULEROLE(basis=NOPE)"])
+        self.assertEqual(inst.params_dict["basis"], "NOPE")
 
     def test_canonical_measure_key(self) -> None:
         self.assertEqual(canonical_measure_key("within_module_z_basis_leiden_directed"), "within_module_z")
@@ -3729,9 +3757,9 @@ class MeasureComputeHelpersTests(TestCase):
         from network.management.commands.structural_analysis import _resolve_community_basis
 
         (explicit,) = parse_measures(["MODULEROLE(basis=LEIDEN)"])
-        self.assertEqual(_resolve_community_basis(explicit, ["leiden", "organization"]), "leiden")
+        self.assertEqual(_resolve_community_basis(explicit, ["leiden", "labelgroup_1"]), "leiden")
         # Explicit basis that was not computed → None (skip).
-        self.assertIsNone(_resolve_community_basis(explicit, ["organization"]))
+        self.assertIsNone(_resolve_community_basis(explicit, ["labelgroup_1"]))
         # Auto (blank) module role prefers leiden_directed.
         (auto_mod,) = parse_measures(["MODULEROLE"])
         self.assertEqual(_resolve_community_basis(auto_mod, ["leiden_directed", "leiden"]), "leiden_directed")
