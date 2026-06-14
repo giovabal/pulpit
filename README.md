@@ -1,6 +1,6 @@
 # Pulpit
 
-### Political undercurrents: linkage, propagation, influence on Telegram
+### **P**olitical **U**ndercurrents: **L**inkage, **P**ropagation, **I**nfluence on **T**elegram
 
 **Map influence, information flow, and community structure in Telegram networks.**
 
