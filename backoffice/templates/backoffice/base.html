@@ -12,9 +12,9 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'channels' %} active{% endif %}">
       <i class="bi bi-broadcast me-1" aria-hidden="true"></i>Channels
     </a>
-    <a href="{% url 'backoffice:organizations' %}"
-       class="bo-subnav-link{% if request.resolver_match.url_name == 'organizations' %} active{% endif %}">
-      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Organizations
+    <a href="{% url 'backoffice:labels' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'labels' %} active{% endif %}">
+      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Labels
     </a>
     <a href="{% url 'backoffice:groups' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'groups' %} active{% endif %}">

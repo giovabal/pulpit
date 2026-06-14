@@ -10,13 +10,14 @@ from .maintenance import (
     purge_run,
 )
 from .views import (
-    ChannelAttributionViewSet,
     ChannelGroupViewSet,
+    ChannelLabelViewSet,
     ChannelVacancyViewSet,
     ChannelViewSet,
     EventTypeViewSet,
     EventViewSet,
-    OrganizationViewSet,
+    LabelGroupViewSet,
+    LabelViewSet,
     ProjectView,
     SearchTermViewSet,
     UserViewSet,
@@ -26,8 +27,9 @@ from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter(trailing_slash=True)
 router.register("channels", ChannelViewSet, basename="api-channels")
-router.register("channel-attributions", ChannelAttributionViewSet, basename="api-channel-attributions")
-router.register("organizations", OrganizationViewSet, basename="api-organizations")
+router.register("channel-labels", ChannelLabelViewSet, basename="api-channel-labels")
+router.register("label-groups", LabelGroupViewSet, basename="api-label-groups")
+router.register("labels", LabelViewSet, basename="api-labels")
 router.register("groups", ChannelGroupViewSet, basename="api-groups")
 router.register("search-terms", SearchTermViewSet, basename="api-search-terms")
 router.register("event-types", EventTypeViewSet, basename="api-event-types")

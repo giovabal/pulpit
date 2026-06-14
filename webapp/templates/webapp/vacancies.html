@@ -30,8 +30,8 @@
       {% for row in vacancies %}
       <tr>
         <td>
-          {% if row.channel.current_organization %}
-          <span class="org-dot" style="background: {{ row.channel.current_organization.color }};" aria-hidden="true"></span>
+          {% if row.channel.current_label %}
+          <span class="org-dot" style="background: {{ row.channel.current_label.color }};" aria-hidden="true"></span>
           {% endif %}
           <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
           {% if row.channel.is_lost %}<span class="ch-badge ch-badge--danger ms-1"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}

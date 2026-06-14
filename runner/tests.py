@@ -1273,7 +1273,8 @@ class DefaultsViewTests(TestCase):
             self.assertEqual(resp.status_code, 200)
 
     def test_save_rejects_module_role_basis_unknown_strategy(self) -> None:
-        # An unknown basis is rejected by the measure-token parser itself.
+        # MODULEROLE basis is free-form (it may name a LABELGROUP), so an unknown basis is
+        # caught by settings validation: it must be one of the selected community strategies.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
@@ -1284,7 +1285,7 @@ class DefaultsViewTests(TestCase):
                 },
             )
             self.assertEqual(resp.status_code, 400)
-            self.assertIn("not a valid choice", resp.json()["error"])
+            self.assertIn("must be one of the selected community strategies", resp.json()["error"])
 
     def test_save_accepts_repeated_parameterised_measure(self) -> None:
         # The same measure may be saved more than once with different parameters.
@@ -1311,14 +1312,15 @@ class DefaultsViewTests(TestCase):
             self.assertIn("more than once", resp.json()["error"])
 
     def test_save_rejects_consensus_matrix_with_few_strategies(self) -> None:
-        # Consensus matrix needs ≥2 non-ORGANIZATION strategies; ORGANIZATION-only is empty output.
+        # Consensus matrix needs ≥2 non-metadata strategies; a LABELGROUP metadata partition
+        # (the ORGANIZATION successor) doesn't count, so LABELGROUP1 + LEIDEN is too thin.
         with _RedirectConfigPathsForRunner():
             resp = self.client.post(
                 reverse("operations-defaults", args=["structural_analysis"]),
                 data={
                     "title": "thin-consensus",
                     "consensus_matrix": "on",
-                    "community_strategies": ["ORGANIZATION", "LEIDEN"],  # only 1 non-org
+                    "community_strategies": ["LABELGROUP1", "LEIDEN"],  # only 1 non-metadata
                 },
             )
             self.assertEqual(resp.status_code, 400)

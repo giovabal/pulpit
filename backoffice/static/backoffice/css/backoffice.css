@@ -595,3 +595,63 @@ tr:hover .bo-detail-btn { opacity: 1; }
   margin-top: var(--space-3);
 }
 .bo-maint-row--error { color: var(--danger); }
+
+/* ── Labels: badges, group cards, per-channel label sections ────────────── */
+
+.bo-badge {
+  display: inline-block;
+  padding: .0625rem .375rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--hover);
+  color: var(--muted);
+  font-size: .6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.bo-badge--primary {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.bo-labels-intro { max-width: 72ch; }
+
+.bo-label-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.bo-label-group-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-5);
+}
+.bo-label-group-card > .bo-label-group-head {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.bo-label-group-name { font-size: 1rem; }
+.bo-label-group-actions { display: flex; gap: var(--space-2); }
+.bo-label-table { margin-bottom: 0; }
+
+/* Per-channel editor: one label section per group */
+.bo-label-group-section {
+  border-left: 2px solid var(--border);
+  padding-left: var(--space-3);
+}
+
+/* Channels list "Labels" column: one chip per group's current label */
+.bo-labels-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bo-label-chip {
+  display: inline-flex;
+  align-items: center;
+}

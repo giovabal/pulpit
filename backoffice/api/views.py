@@ -7,23 +7,25 @@ from django.db.models import Count, Exists, OuterRef, Prefetch, ProtectedError, 
 from events.models import Event, EventType
 from webapp.models import (
     Channel,
-    ChannelAttribution,
     ChannelGroup,
+    ChannelLabel,
     ChannelVacancy,
-    Organization,
+    Label,
+    LabelGroup,
     ProfilePicture,
     Project,
     SearchTerm,
 )
 
 from .serializers import (
-    ChannelAttributionSerializer,
     ChannelGroupSerializer,
+    ChannelLabelSerializer,
     ChannelSerializer,
     ChannelVacancySerializer,
     EventSerializer,
     EventTypeSerializer,
-    OrganizationSerializer,
+    LabelGroupSerializer,
+    LabelSerializer,
     ProjectSerializer,
     SearchTermSerializer,
     UserSerializer,
@@ -65,13 +67,29 @@ class ChannelVacancyViewSet(viewsets.ModelViewSet):
         return ChannelVacancy.objects.select_related("channel").order_by("-closure_date")
 
 
-class OrganizationViewSet(viewsets.ModelViewSet):
-    serializer_class = OrganizationSerializer
+class LabelGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = LabelGroupSerializer
 
     def get_queryset(self):
-        return Organization.objects.annotate(channel_count=Count("attributions__channel", distinct=True)).order_by(
-            "name"
+        # Primary group first (it is the "Organization" replacement), then alphabetical.
+        return LabelGroup.objects.annotate(label_count=Count("labels", distinct=True)).order_by("-is_primary", "name")
+
+
+class LabelViewSet(viewsets.ModelViewSet):
+    serializer_class = LabelSerializer
+
+    def get_queryset(self):
+        qs = (
+            Label.objects.select_related("group")
+            .annotate(channel_count=Count("channel_labels__channel", distinct=True))
+            .order_by("group__name", "name")
         )
+        group_id = self.request.query_params.get("group", "").strip()
+        if group_id:
+            if not group_id.isdigit():
+                raise ValidationError({"group": "must be an integer"})
+            qs = qs.filter(group_id=int(group_id))
+        return qs
 
 
 class ChannelGroupViewSet(viewsets.ModelViewSet):
@@ -95,7 +113,7 @@ class ChannelViewSet(
 
     def get_queryset(self):
         qs = Channel.objects.prefetch_related(
-            "attributions__organization",
+            "channel_labels__label__group",
             "groups",
             Prefetch(
                 "profilepicture_set",
@@ -112,14 +130,14 @@ class ChannelViewSet(
                 _username_norm=UnaccentLower("username"),
             ).filter(Q(_title_norm__contains=norm) | Q(_username_norm__contains=norm))
 
-        org_id = self.request.query_params.get("organization", "").strip()
-        if org_id:
+        label_id = self.request.query_params.get("label", "").strip()
+        if label_id:
             # Postgres raises InvalidTextRepresentation on a non-integer FK
             # value (500); SQLite silently returns nothing. Reject explicitly
             # so the contract is the same across backends.
-            if not org_id.isdigit():
-                raise ValidationError({"organization": "must be an integer"})
-            qs = qs.filter(attributions__organization_id=int(org_id)).distinct()
+            if not label_id.isdigit():
+                raise ValidationError({"label": "must be an integer"})
+            qs = qs.filter(channel_labels__label_id=int(label_id)).distinct()
 
         group_id = self.request.query_params.get("group", "").strip()
         if group_id:
@@ -129,10 +147,10 @@ class ChannelViewSet(
 
         status_filter = self.request.query_params.get("status", "").strip()
         if status_filter == "unassigned":
-            qs = qs.filter(attributions__isnull=True)
+            qs = qs.filter(channel_labels__isnull=True)
         elif status_filter == "in_target":
-            in_target_attr = ChannelAttribution.objects.filter(channel=OuterRef("pk"), organization__is_in_target=True)
-            qs = qs.filter(Exists(in_target_attr)).exclude(is_lost=True).exclude(is_private=True)
+            in_target_label = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)
+            qs = qs.filter(Exists(in_target_label)).exclude(is_lost=True).exclude(is_private=True)
         elif status_filter == "lost":
             qs = qs.filter(is_lost=True)
         elif status_filter == "private":
@@ -165,7 +183,7 @@ class ChannelViewSet(
             return Response({"error": "'ids' must be a list of integers."}, status=status.HTTP_400_BAD_REQUEST)
         if not ids:
             return Response({"error": "No channel ids provided."}, status=status.HTTP_400_BAD_REQUEST)
-        organization_id = request.data.get("organization_id")
+        label_id = request.data.get("label_id")
         add_group_ids = _validate_id_list(request.data.get("add_group_ids", []))
         remove_group_ids = _validate_id_list(request.data.get("remove_group_ids", []))
         if add_group_ids is None or remove_group_ids is None:
@@ -185,23 +203,23 @@ class ChannelViewSet(
         if start_date and end_date and start_date > end_date:
             return Response({"error": "'end' must not be before 'start'."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Resolve/validate the organization before touching the DB so a bad id can never
-        # silently wipe attributions. Absent key = leave attributions alone; null/"" =
-        # intentional unassign; a non-existent or non-integer id is a 400.
-        assign_org = "organization_id" in request.data
-        org = None
-        if assign_org and organization_id not in (None, ""):
+        # Resolve/validate the label before touching the DB so a bad id can never silently
+        # wipe a channel's labels. Absent key = leave labels alone; null/"" = intentional
+        # unassign (clear every label); a non-existent or non-integer id is a 400.
+        assign_label = "label_id" in request.data
+        label = None
+        if assign_label and label_id not in (None, ""):
             try:
-                org_pk = int(organization_id)
+                label_pk = int(label_id)
             except (TypeError, ValueError):
                 return Response(
-                    {"error": "'organization_id' must be an integer or null."},
+                    {"error": "'label_id' must be an integer or null."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            org = Organization.objects.filter(pk=org_pk).first()
-            if org is None:
+            label = Label.objects.select_related("group").filter(pk=label_pk).first()
+            if label is None:
                 return Response(
-                    {"error": "'organization_id' does not match an existing organization."},
+                    {"error": "'label_id' does not match an existing label."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -213,17 +231,18 @@ class ChannelViewSet(
         valid_ids = list(channels.values_list("pk", flat=True))
 
         with transaction.atomic():
-            if assign_org:
-                # Replace each selected channel's attribution timeline with one period (whole lifetime
-                # when start/end are omitted). org=null leaves the channel unassigned. Never overlaps.
-                ChannelAttribution.objects.filter(channel__in=channels).delete()
-                if org is not None:
-                    ChannelAttribution.objects.bulk_create(
-                        [
-                            ChannelAttribution(channel=ch, organization=org, start=start_date, end=end_date)
-                            for ch in channels
-                        ]
+            if assign_label:
+                if label is not None:
+                    # Replace each channel's periods *within the label's group* with one period
+                    # (whole lifetime when start/end are omitted). Scoping the delete to the group
+                    # leaves the channel's labels in other groups intact. Never overlaps.
+                    ChannelLabel.objects.filter(channel__in=channels, label__group_id=label.group_id).delete()
+                    ChannelLabel.objects.bulk_create(
+                        [ChannelLabel(channel=ch, label=label, start=start_date, end=end_date) for ch in channels]
                     )
+                else:
+                    # Explicit unassign: clear every label on the selected channels.
+                    ChannelLabel.objects.filter(channel__in=channels).delete()
             # Pass validated ids to ``add()``/``remove()`` so the M2M operation runs
             # once per group, rather than re-evaluating the ``channels`` queryset for
             # each ``*channels`` unpack (which would hit the DB N extra times).
@@ -237,11 +256,11 @@ class ChannelViewSet(
         return Response({"updated": len(valid_ids)})
 
 
-class ChannelAttributionViewSet(viewsets.ModelViewSet):
-    serializer_class = ChannelAttributionSerializer
+class ChannelLabelViewSet(viewsets.ModelViewSet):
+    serializer_class = ChannelLabelSerializer
 
     def get_queryset(self):
-        qs = ChannelAttribution.objects.select_related("organization", "channel").order_by("channel_id", "start")
+        qs = ChannelLabel.objects.select_related("label", "label__group", "channel").order_by("channel_id", "start")
         channel_id = self.request.query_params.get("channel", "").strip()
         if channel_id:
             if not channel_id.isdigit():
