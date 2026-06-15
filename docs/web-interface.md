@@ -34,7 +34,7 @@ A paginated list of all channels in the database. Filters and controls:
 
 - **Search** — filter by channel name or username
 - **Organization filter** — show only channels assigned to a specific organization
-- **Group filter** — show channels belonging to a specific ChannelGroup
+- **Source filter** — show channels belonging to a specific ChannelSource
 - **Sort** — by name, subscriber count, message count, in-degree, or out-degree
 - **Channel chips** — each card shows the channel's current organization colour, subscriber count, message count, and group chips
 
@@ -141,7 +141,7 @@ Staff-only management interface for corpus administration. Accessible only to us
 Bulk management of the channel database:
 
 - **Assign organization** — select multiple channels and replace their attribution timeline with a single period under one organization in one action
-- **Group chips** — add or remove ChannelGroup memberships inline
+- **Source chips** — add or remove ChannelSource memberships inline
 - **Edit individual** — click through to edit a channel's details, its **attribution periods** (organization + optional start/end, non-overlapping), `to_inspect` flag, and vacancy record
 - **Filter** — by organization, group, in-target status, entity type
 
@@ -153,9 +153,9 @@ Create and edit organizations. Key fields:
 - **Color** — hex color used in the graph when `COMMUNITY_PALETTE=ORGANIZATION`
 - **In target** — when checked, all channels in this organization are included in crawls and exports
 
-### Groups — `/manage/channel-groups/`
+### Sources — `/manage/sources/`
 
-ChannelGroups are labels you apply to channels for flexible filtering. They are independent of organizations — a channel can be in any number of groups and belong to one organization. Use groups to define subsets for targeted analysis (e.g. run an export with `--channel-groups activist,media` to analyse only those channels).
+ChannelSources are labels you apply to channels for flexible filtering. They are independent of organizations — a channel can be in any number of sources and belong to one organization. Use sources to define subsets for targeted analysis (e.g. run an export with `--channel-sources activist,media` to analyse only those channels).
 
 ### Search terms — `/manage/search-terms/`
 
