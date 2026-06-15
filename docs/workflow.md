@@ -84,9 +84,9 @@ Repeat for all the channels you want in your analysis. Channels without an organ
 
 Set it from the **Inspect** column in the Channels list (inline checkbox) or from the channel edit page. Use this to try out a channel for a while before deciding whether to attach it to an in-target organization.
 
-**Channel groups (optional):** channel groups let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organization. A channel can belong to any number of groups.
+**Channel sources (optional):** channel sources let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organization. A channel can belong to any number of sources.
 
-To create groups go to **Manage → Channel groups** and click **Add**. To assign a channel to a group, open its edit page and pick from the **Groups** field.
+To create sources go to **Manage → Sources** and click **Add**. To assign a channel to a source, open its edit page and pick from the **Sources** field.
 
 Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all in-target channels are included, as usual.
 
@@ -137,7 +137,7 @@ The options panel is organized into three independent groups — each is its own
 **Limiting the scope:** you can restrict the crawl to a subset of channels in two ways:
 
 - **DB id filter** — enter specific channel IDs (e.g. `5, 10-20, 50`). Find a channel's ID in the Manage → Channels list.
-- **Channel groups** — tick one or more groups in the **Channel groups** fieldset. Only channels belonging to at least one selected group are crawled. Leave all unchecked to crawl all in-target channels.
+- **Channel sources** — tick one or more sources in the **Channel sources** fieldset. Only channels belonging to at least one selected source are crawled. Leave all unchecked to crawl all in-target channels.
 
 **Media types:** the right-hand **Media types** fieldset controls which message attachments are downloaded. The five checkboxes apply to every operation that fetches messages from Telegram — *Get new messages*, *Fix message holes*, and *Fix missing media* — and are disabled when none of those is selected. Operations that touch media show a small sliders icon next to their label as a reminder.
 
@@ -186,7 +186,7 @@ You can select multiple strategies at once; the map lets you switch between them
 | :----- | :----------- |
 | **Measures** | Which influence scores to compute for each channel. See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
-| **Channel groups** | Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels. |
+| **Channel sources** | Restrict the graph to channels belonging to at least one selected source. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
 | **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned via a `t.me/` link. Useful for seeing what outside content your corpus amplifies. |
 
@@ -271,7 +271,7 @@ python manage.py crawl_channels --refresh-messages-stats
 python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-01 --refresh-to 2024-06-30
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
-python manage.py crawl_channels --get-new-messages --channel-groups media,activists
+python manage.py crawl_channels --get-new-messages --channel-sources media,activists
 
 # Media downloads (tri-state: --download-X enables, --no-download-X disables for the run only)
 python manage.py crawl_channels --get-new-messages --no-download-video --no-download-audio --no-download-stickers --no-download-other-media  # text-only
@@ -298,7 +298,7 @@ python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --graph-2d --timeline-step year
-python manage.py structural_analysis --graph-2d --html --channel-groups media,activists
+python manage.py structural_analysis --graph-2d --html --channel-sources media,activists
 
 # Robustness analysis (resistance to node removal)
 python manage.py structural_analysis --robustness --html --xlsx               # default: α=0.05, N_runs=100, K_null=20, static strategies only

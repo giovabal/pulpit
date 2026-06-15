@@ -97,7 +97,7 @@ When you add an option that the analyst should be able to tweak:
 7. **CLI argparse** — add the flag in the management command, with `default=None` and the appropriate type/action; resolve via `_o(key, NO_OP_LITERAL)` or the equivalent helper.
 8. **Bundled baseline** — if you want the option non-empty by default, add it under the matching section in the committed `.operations-{crawl,structural}` file.
 
-The `TASK_DEFAULT_SPECS` walker (`_form_to_toml_payload` and `_toml_to_form_payload` in `runner/views.py`) drives both Save and Load. Anything in the spec round-trips automatically; anything outside the spec (export name, start/end dates, channel groups, etc.) is per-run only.
+The `TASK_DEFAULT_SPECS` walker (`_form_to_toml_payload` and `_toml_to_form_payload` in `runner/views.py`) drives both Save and Load. Anything in the spec round-trips automatically; anything outside the spec (export name, start/end dates, channel sources, etc.) is per-run only.
 
 ---
 

@@ -8,6 +8,7 @@
 - **A newly discovered linked chat inherits its parent's attribution.** A channel's linked discussion group (or a group's linked broadcast channel), when first registered by *Get channels info*, copies the parent's current attribution — same organization and period — instead of starting unattributed. Existing rows are never touched.
 
 ### Improvements
+- **Channel Groups are renamed to Sources.** The `ChannelGroup` model becomes `ChannelSource`, and the channel-grouping feature is now "Sources" everywhere: the Manage › Sources section, the Channels filter and inline chips, the channel-detail page, and the `--channel-sources` flag on `crawl_channels`/`structural_analysis` (was `--channel-groups`). A migration renames the table, so existing memberships are preserved. Unrelated concepts that also use the word *group* — label groups, detected communities, Telegram supergroups — are unaffected. See [docs/workflow.md](docs/workflow.md).
 - **Onboarding docs lead with the stable-release download.** The README quick start and `docs/getting-started.md` now point new users at the latest release zip from the GitHub releases page (no Git required), with `git clone` demoted to a labelled alternative that tracks the development code. See [docs/getting-started.md](docs/getting-started.md).
 
 ### Fixes
