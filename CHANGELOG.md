@@ -1,5 +1,6 @@
 # Changelog
 ## [0.26] - To be announced
+*Organizations are generalised into label groups.*
 
 ### New features
 - **Organizations are generalised into label groups.** A new `LabelGroup`/`Label` system replaces the single `Organization` axis: a group can be a *partition* (at most one of its labels per channel at a time), each label carries its own in-target flag (a channel is in-target when it holds any in-target label), and every partition group is selectable as a `LABELGROUP<id>` community strategy and `MODULEROLE` basis. Label membership stays time-bounded, like the old attribution periods.

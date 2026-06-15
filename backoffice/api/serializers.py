@@ -24,7 +24,7 @@ class LabelGroupSerializer(serializers.ModelSerializer):
 
     def _enforce_single_primary(self, instance):
         # Exactly one group is the primary ("Organization" replacement): node colour, the
-        # Organization export column, vacancy actor identity, and the default MODULEROLE
+        # Label export column, vacancy actor identity, and the default MODULEROLE
         # basis all read ``filter(is_primary=True).first()``. Demote any other primary so
         # promoting a group here can't leave two.
         if instance.is_primary:
@@ -137,9 +137,6 @@ class ChannelLabelSerializer(serializers.ModelSerializer):
 
 
 class ChannelSerializer(serializers.ModelSerializer):
-    current_organization_id = serializers.SerializerMethodField()
-    current_organization_name = serializers.SerializerMethodField()
-    current_organization_color = serializers.SerializerMethodField()
     current_labels = serializers.SerializerMethodField()
     labels = ChannelLabelSerializer(many=True, read_only=True, source="channel_labels")
     group_ids = serializers.PrimaryKeyRelatedField(
@@ -174,18 +171,6 @@ class ChannelSerializer(serializers.ModelSerializer):
     def get_detail_url(self, obj):
         return obj.get_absolute_url()
 
-    def get_current_organization_id(self, obj):
-        org = obj.current_label
-        return org.id if org else None
-
-    def get_current_organization_name(self, obj):
-        org = obj.current_label
-        return org.name if org else None
-
-    def get_current_organization_color(self, obj):
-        org = obj.current_label
-        return org.color if org else None
-
     def get_current_labels(self, obj):
         # The channel's representative label in every group it participates in (active now),
         # for the multi-label "Labels" column. Primary group first (see Channel.current_labels).
@@ -212,9 +197,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "profile_picture_mime_type",
             "profile_picture_thumbnail_url",
             "detail_url",
-            "current_organization_id",
-            "current_organization_name",
-            "current_organization_color",
             "current_labels",
             "labels",
             "group_ids",

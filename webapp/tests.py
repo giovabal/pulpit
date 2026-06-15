@@ -504,7 +504,7 @@ class ChannelActivityPeriodTests(TestCase):
 
 
 class ChannelNetworkDataTests(TestCase):
-    def test_with_organization_sets_label(self) -> None:
+    def test_with_label_sets_node_label(self) -> None:
         org = make_label(name="Test Org", color="#ff0000")
         ch = make_channel(telegram_id=1, title="Chan", label=org)
         data = channel_network_data(ch)

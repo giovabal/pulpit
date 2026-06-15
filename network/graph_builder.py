@@ -82,7 +82,7 @@ def _channel_activity_bounds(
         mn, mx = row["min_date"], row["max_date"]
         # localdate(): bucket into the TIME_ZONE calendar days the message filters
         # (make_date_q / channel_cutoff_q) use, so the clamps fed into
-        # resolve_window_organization agree with message-level period containment.
+        # resolve_window_label agree with message-level period containment.
         bounds[row["channel_id"]] = (
             timezone.localdate(mn) if mn else None,
             timezone.localdate(mx) if mx else None,
@@ -273,7 +273,7 @@ def build_graph(
         channel_qs = channel_qs.filter(groups__key__in=channel_groups).distinct()
 
     # Resolve every partition group's window-label per node (feeds LABELGROUP<id> strategies); the
-    # primary group additionally drives node colour and the "organization" export column.
+    # primary group additionally drives node colour and the "Label" export column (node attribute "organization").
     primary_group_id = LabelGroup.objects.filter(is_primary=True).values_list("pk", flat=True).first()
     partition_group_ids = list(LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True))
 
@@ -397,7 +397,7 @@ def build_graph(
     # (``channel_cutoff_q``), so a leaf cited solely outside those periods — or
     # inside a restricted analysis window with no citations — keeps no edge; and an
     # in-target channel whose open-start attribution matches any window can still
-    # resolve to no organization when it was created after the window end
+    # resolve to no label when it was created after the window end
     # (``resolve_window_label`` clamps the open start to the creation date).
     # ``_filter_inactive_channels`` deliberately exempts org-less nodes on the
     # promise that this sweep decides their fate, so it must run regardless of
