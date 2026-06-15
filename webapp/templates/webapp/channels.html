@@ -21,11 +21,11 @@
           {% endfor %}
         </select>
         {% endif %}
-        {% if groups %}
-        <select id="group-filter" class="channel-org-select" aria-label="Filter by group">
-          <option value="">All groups</option>
-          {% for grp in groups %}
-          <option value="{{ grp.pk }}">{{ grp.name }}</option>
+        {% if sources %}
+        <select id="source-filter" class="channel-org-select" aria-label="Filter by source">
+          <option value="">All sources</option>
+          {% for src in sources %}
+          <option value="{{ src.pk }}">{{ src.name }}</option>
           {% endfor %}
         </select>
         {% endif %}
@@ -66,7 +66,7 @@
 
   <ul class="channels-list list-unstyled" id="channels-list">
     {% for channel in channel_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk }}" data-sources="{% for s in channel.sources.all %}{{ s.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -178,7 +178,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="excluded-list">
     {% for channel in excluded_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk }}" data-sources="{% for s in channel.sources.all %}{{ s.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -214,7 +214,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="to-inspect-list">
     {% for channel in to_inspect_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-groups="{% for g in channel.groups.all %}{{ g.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-sources="{% for s in channel.sources.all %}{{ s.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -251,7 +251,7 @@
   (function () {
     var input = document.getElementById("channel-filter");
     var orgSelect = document.getElementById("org-filter");
-    var groupSelect = document.getElementById("group-filter");
+    var sourceSelect = document.getElementById("source-filter");
     var dateFrom = document.getElementById("date-from");
     var dateTo = document.getElementById("date-to");
     var typeBoxes = Array.from(document.querySelectorAll(".channel-type-box"));
@@ -301,12 +301,12 @@
     function matchesFilters(row) {
       var q = norm(input.value.toLowerCase());
       var org = orgSelect ? orgSelect.value : "";
-      var grp = groupSelect ? groupSelect.value : "";
+      var src = sourceSelect ? sourceSelect.value : "";
       var from = dateFrom.value;
       var to = dateTo.value;
       if (!norm(row.dataset.title).includes(q)) return false;
       if (org && row.dataset.org !== org) return false;
-      if (grp && !(row.dataset.groups || "").split(" ").includes(grp)) return false;
+      if (src && !(row.dataset.sources || "").split(" ").includes(src)) return false;
       var checkedTypes = typeBoxes.filter(function (b) { return b.checked; });
       // A proper subset filters; all checked (the default) or none checked
       // means "any type" — mirroring the message-options content-type filter.
@@ -414,7 +414,7 @@
 
     input.addEventListener("input", applyFilters);
     if (orgSelect) orgSelect.addEventListener("change", applyFilters);
-    if (groupSelect) groupSelect.addEventListener("change", applyFilters);
+    if (sourceSelect) sourceSelect.addEventListener("change", applyFilters);
     dateFrom.addEventListener("change", applyFilters);
     dateTo.addEventListener("change", applyFilters);
     typeBoxes.forEach(function (box) { box.addEventListener("change", applyFilters); });

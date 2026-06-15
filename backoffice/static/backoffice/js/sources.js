@@ -1,71 +1,71 @@
 (function () {
     "use strict";
-    var API = "/manage/api/groups/";
+    var API = "/manage/api/sources/";
     var _offset = 0;
     var _total  = 0;
 
-    var $tbody       = document.getElementById("grp-tbody");
-    var $count       = document.getElementById("grp-count");
-    var $paginTop    = document.getElementById("grp-pagination-top");
-    var $paginBottom = document.getElementById("grp-pagination-bottom");
-    var $addBtn      = document.getElementById("grp-add-btn");
-    var $addForm     = document.getElementById("grp-add-form");
-    var $addCancel   = document.getElementById("grp-add-cancel");
+    var $tbody       = document.getElementById("src-tbody");
+    var $count       = document.getElementById("src-count");
+    var $paginTop    = document.getElementById("src-pagination-top");
+    var $paginBottom = document.getElementById("src-pagination-bottom");
+    var $addBtn      = document.getElementById("src-add-btn");
+    var $addForm     = document.getElementById("src-add-form");
+    var $addCancel   = document.getElementById("src-add-cancel");
 
-    function _goToPage(offset) { _offset = offset; loadGroups(); }
+    function _goToPage(offset) { _offset = offset; loadSources(); }
 
     function _renderPagination() {
         renderPagination($paginTop, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
         renderPagination($paginBottom, _offset, _total, BACKOFFICE_PAGE_SIZE, _goToPage);
-        $count.textContent = _total + " group" + (_total !== 1 ? "s" : "");
+        $count.textContent = _total + " source" + (_total !== 1 ? "s" : "");
     }
 
-    function renderRow(grp, editing) {
+    function renderRow(src, editing) {
         var tr = document.createElement("tr");
-        tr.dataset.id = grp.id;
+        tr.dataset.id = src.id;
 
         if (editing) {
             var tdN = document.createElement("td");
-            var nameInput = document.createElement("input"); nameInput.className = "bo-input"; nameInput.value = grp.name;
+            var nameInput = document.createElement("input"); nameInput.className = "bo-input"; nameInput.value = src.name;
             tdN.appendChild(nameInput); tr.appendChild(tdN);
 
             var tdD = document.createElement("td");
-            var descInput = document.createElement("textarea"); descInput.className = "bo-input bo-input--wide bo-input--full"; descInput.rows = 4; descInput.value = grp.description || "";
+            var descInput = document.createElement("textarea"); descInput.className = "bo-input bo-input--wide bo-input--full"; descInput.rows = 4; descInput.value = src.description || "";
             tdD.appendChild(descInput); tr.appendChild(tdD);
 
             var tdNo = document.createElement("td");
-            var noteInput = document.createElement("textarea"); noteInput.className = "bo-input bo-input--wide bo-input--full"; noteInput.rows = 4; noteInput.value = grp.note || "";
+            var noteInput = document.createElement("textarea"); noteInput.className = "bo-input bo-input--wide bo-input--full"; noteInput.rows = 4; noteInput.value = src.note || "";
             tdNo.appendChild(noteInput); tr.appendChild(tdNo);
 
-            var tdCnt = document.createElement("td"); tdCnt.className = "bo-td--num"; tdCnt.textContent = fmtInt(grp.channel_count); tr.appendChild(tdCnt);
+            var tdCnt = document.createElement("td"); tdCnt.className = "bo-td--num"; tdCnt.textContent = fmtInt(src.channel_count); tr.appendChild(tdCnt);
 
             var tdA = document.createElement("td");
             var saveBtn = document.createElement("button"); saveBtn.className = "bo-btn bo-btn--sm"; saveBtn.textContent = "Save";
             var cancelBtn = document.createElement("button"); cancelBtn.className = "bo-btn bo-btn--sm bo-btn--ghost"; cancelBtn.textContent = "Cancel";
             saveBtn.addEventListener("click", function () {
-                apiFetch(API + grp.id + "/", { method: "PATCH", body: { name: nameInput.value.trim(), description: descInput.value.trim(), note: noteInput.value.trim() } })
+                apiFetch(API + src.id + "/", { method: "PATCH", body: { name: nameInput.value.trim(), description: descInput.value.trim(), note: noteInput.value.trim() } })
                     .then(function (updated) {
-                        Object.assign(grp, updated);
-                        $tbody.replaceChild(renderRow(grp, false), tr);
+                        Object.assign(src, updated);
+                        $tbody.replaceChild(renderRow(src, false), tr);
                         showToast("Saved.");
                     }).catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
-            cancelBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(grp, false), tr); });
+            cancelBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(src, false), tr); });
             tdA.appendChild(saveBtn); tdA.appendChild(cancelBtn); tr.appendChild(tdA);
         } else {
-            var tdNd = document.createElement("td"); tdNd.textContent = grp.name; tr.appendChild(tdNd);
-            var tdDd = document.createElement("td"); tdDd.className = "text-muted"; tdDd.style.fontSize = ".875rem"; tdDd.textContent = grp.description || ""; tr.appendChild(tdDd);
-            var tdNod = document.createElement("td"); tdNod.className = "text-muted"; tdNod.style.fontSize = ".875rem"; tdNod.textContent = grp.note || ""; tr.appendChild(tdNod);
-            var tdCd = document.createElement("td"); tdCd.className = "bo-td--num"; tdCd.textContent = fmtInt(grp.channel_count); tr.appendChild(tdCd);
+            var tdNd = document.createElement("td"); tdNd.textContent = src.name; tr.appendChild(tdNd);
+            var tdDd = document.createElement("td"); tdDd.className = "text-muted"; tdDd.style.fontSize = ".875rem"; tdDd.textContent = src.description || ""; tr.appendChild(tdDd);
+            var tdNod = document.createElement("td"); tdNod.className = "text-muted"; tdNod.style.fontSize = ".875rem"; tdNod.textContent = src.note || ""; tr.appendChild(tdNod);
+            var tdCd = document.createElement("td"); tdCd.className = "bo-td--num"; tdCd.textContent = fmtInt(src.channel_count); tr.appendChild(tdCd);
 
             var tdAd = document.createElement("td");
             var editBtn = makeEditBtn();
-            editBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(grp, true), tr); });
-            var delBtn = makeDeleteBtn(grp.name);
+            editBtn.addEventListener("click", function () { $tbody.replaceChild(renderRow(src, true), tr); });
+            var delBtn = makeDeleteBtn(src.name);
             delBtn.addEventListener("click", function () {
-                confirmDelete(grp.name).then(function (ok) {
+                confirmDelete(src.name).then(function (ok) {
                     if (!ok) return;
-                    apiFetch(API + grp.id + "/", { method: "DELETE" })
+                    apiFetch(API + src.id + "/", { method: "DELETE" })
                         .then(function () { tr.remove(); _total--; _renderPagination(); showToast("Deleted."); })
                         .catch(function (e) { showToast("Error: " + e.message, "error"); });
                 });
@@ -75,13 +75,13 @@
         return tr;
     }
 
-    function loadGroups() {
+    function loadSources() {
         apiFetch(API + "?limit=" + BACKOFFICE_PAGE_SIZE + "&offset=" + _offset)
             .then(function (data) {
                 _total = data.count;
                 $tbody.innerHTML = "";
-                if (!data.results.length) { $tbody.innerHTML = '<tr><td colspan="5" class="bo-empty">No groups yet.</td></tr>'; }
-                else { data.results.forEach(function (g) { $tbody.appendChild(renderRow(g, false)); }); }
+                if (!data.results.length) { $tbody.innerHTML = '<tr><td colspan="5" class="bo-empty">No sources yet.</td></tr>'; }
+                else { data.results.forEach(function (s) { $tbody.appendChild(renderRow(s, false)); }); }
                 _renderPagination();
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
@@ -92,17 +92,17 @@
         e.preventDefault();
         var fd = new FormData($addForm);
         apiFetch(API, { method: "POST", body: { name: fd.get("name").trim(), description: fd.get("description").trim(), note: fd.get("note").trim() } })
-            .then(function (grp) {
-                grp.channel_count = 0;
+            .then(function (src) {
+                src.channel_count = 0;
                 var empty = $tbody.querySelector(".bo-empty");
                 if (empty) empty.parentNode.remove();
-                $tbody.appendChild(renderRow(grp, false));
+                $tbody.appendChild(renderRow(src, false));
                 _total++;
                 _renderPagination();
                 $addForm.reset(); $addForm.classList.add("d-none"); $addBtn.classList.remove("d-none");
-                showToast("Group created.");
+                showToast("Source created.");
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     });
 
-    loadGroups();
+    loadSources();
 })();

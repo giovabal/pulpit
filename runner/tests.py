@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from runner.views import _build_args
-from webapp.models import ChannelGroup, SearchTerm
+from webapp.models import ChannelSource, SearchTerm
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -328,10 +328,10 @@ class OperationsViewTests(TestCase):
         self.assertLess(names.index("crawl_channels"), names.index("structural_analysis"))
         self.assertLess(names.index("structural_analysis"), names.index("compare_analysis"))
 
-    def test_context_contains_channel_groups(self):
-        ChannelGroup.objects.create(name="Alpha")
+    def test_context_contains_channel_sources(self):
+        ChannelSource.objects.create(name="Alpha")
         resp = self.client.get(reverse("operations"))
-        keys = [g["key"] for g in resp.context["channel_groups"]]
+        keys = [s["key"] for s in resp.context["channel_sources"]]
         self.assertIn("alpha", keys)
 
 
@@ -762,13 +762,13 @@ class BuildArgsGetChannelsTests(TestCase):
         self.assertIn("CHANNEL", args[idx + 1])
         self.assertIn("GROUP", args[idx + 1])
 
-    def test_channel_groups_comma_joined(self):
-        post = FakePost({"channel_groups": ["GroupA", "GroupB"]})
+    def test_channel_sources_comma_joined(self):
+        post = FakePost({"channel_sources": ["SourceA", "SourceB"]})
         args = _build_args("crawl_channels", post)
-        self.assertIn("--channel-groups", args)
-        val = args[args.index("--channel-groups") + 1]
-        self.assertIn("GroupA", val)
-        self.assertIn("GroupB", val)
+        self.assertIn("--channel-sources", args)
+        val = args[args.index("--channel-sources") + 1]
+        self.assertIn("SourceA", val)
+        self.assertIn("SourceB", val)
 
 
 # ---------------------------------------------------------------------------

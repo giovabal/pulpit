@@ -578,7 +578,7 @@ def write_summary_json(
         "include_mentions",
         "include_self_references",
         "channel_types",
-        "channel_groups",
+        "channel_sources",
         "vacancy_measures",
         "vacancy_months_before",
         "vacancy_months_after",

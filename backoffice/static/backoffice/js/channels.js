@@ -6,7 +6,7 @@
 
     /* ── State ──────────────────────────────────────────────────────────── */
     var _labels = [];
-    var _groups = [];
+    var _sources = [];
     var _channels = [];
     var _total = 0;
     var _offset = 0;
@@ -19,7 +19,7 @@
     var $search     = document.getElementById("ch-search");
     var $status     = document.getElementById("ch-status");
     var $orgFilter  = document.getElementById("ch-org-filter");
-    var $groupFilter= document.getElementById("ch-group-filter");
+    var $sourceFilter = document.getElementById("ch-source-filter");
     var $count      = document.getElementById("ch-count");
     var $pagination       = document.getElementById("ch-pagination");
     var $paginationBottom = document.getElementById("ch-pagination-bottom");
@@ -28,8 +28,8 @@
     var $bulkBar    = document.getElementById("ch-bulk-bar");
     var $bulkCount  = document.getElementById("ch-bulk-count");
     var $bulkOrg    = document.getElementById("ch-bulk-org");
-    var $bulkAddGrp = document.getElementById("ch-bulk-add-group");
-    var $bulkRmGrp  = document.getElementById("ch-bulk-rm-group");
+    var $bulkAddSrc = document.getElementById("ch-bulk-add-source");
+    var $bulkRmSrc  = document.getElementById("ch-bulk-rm-source");
 
     /* ── Query helpers ──────────────────────────────────────────────────── */
     function buildUrl(extraOffset) {
@@ -41,8 +41,8 @@
         if (st) params.set("status", st);
         var label = $orgFilter.value;
         if (label) params.set("label", label);
-        var grp = $groupFilter.value;
-        if (grp) params.set("group", grp);
+        var src = $sourceFilter.value;
+        if (src) params.set("source", src);
         params.set("ordering", (_sortDir === "desc" ? "-" : "") + _sortField);
         return API_BASE + "channels/?" + params.toString();
     }
@@ -99,7 +99,7 @@
         var s = $search.value.trim(); if (s) p.set("search", s);
         var st = $status.value; if (st) p.set("status", st);
         var label = $orgFilter.value; if (label) p.set("label", label);
-        var grp = $groupFilter.value; if (grp) p.set("group", grp);
+        var src = $sourceFilter.value; if (src) p.set("source", src);
         if (_sortField !== "id") p.set("sort", _sortField);
         if (_sortDir !== "desc") p.set("dir", _sortDir);
         var page = Math.floor(_offset / PAGE_SIZE) + 1; if (page > 1) p.set("page", page);
@@ -112,7 +112,7 @@
         $search.value = p.get("search") || "";
         $status.value = p.get("status") || "";
         $orgFilter.value = p.get("label") || "";
-        $groupFilter.value = p.get("group") || "";
+        $sourceFilter.value = p.get("source") || "";
         _sortField = p.get("sort") || "id";
         _sortDir = p.get("dir") || "desc";
         var page = parseInt(p.get("page") || "1", 10);
@@ -141,11 +141,11 @@
                 og.appendChild(new Option(l.name, l.id));
             });
         });
-        /* groups */
-        [$groupFilter, $bulkAddGrp, $bulkRmGrp].forEach(function (sel) {
-            while (sel.options.length > (sel === $groupFilter ? 1 : 0)) sel.remove(sel.options.length - 1);
-            _groups.forEach(function (g) {
-                sel.appendChild(new Option(g.name, g.id));
+        /* sources */
+        [$sourceFilter, $bulkAddSrc, $bulkRmSrc].forEach(function (sel) {
+            while (sel.options.length > (sel === $sourceFilter ? 1 : 0)) sel.remove(sel.options.length - 1);
+            _sources.forEach(function (s) {
+                sel.appendChild(new Option(s.name, s.id));
             });
         });
     }
@@ -222,10 +222,10 @@
             renderInspectCell(tdInspect, ch);
             tr.appendChild(tdInspect);
 
-            /* groups */
-            var tdGrp = document.createElement("td");
-            renderGroupChips(tdGrp, ch);
-            tr.appendChild(tdGrp);
+            /* sources */
+            var tdSrc = document.createElement("td");
+            renderSourceChips(tdSrc, ch);
+            tr.appendChild(tdSrc);
 
             /* subscribers */
             var tdSub = document.createElement("td"); tdSub.className = "bo-td--num";
@@ -294,49 +294,49 @@
         td.appendChild(chk);
     }
 
-    function renderGroupChips(td, ch) {
+    function renderSourceChips(td, ch) {
         td.innerHTML = "";
         var wrap = document.createElement("div"); wrap.className = "bo-chips";
-        (ch.group_ids || []).forEach(function (gid) {
-            var grp = _groups.find(function (g) { return g.id === gid; });
-            if (!grp) return;
+        (ch.source_ids || []).forEach(function (sid) {
+            var src = _sources.find(function (s) { return s.id === sid; });
+            if (!src) return;
             var chip = document.createElement("span");
             chip.className = "bo-chip";
-            chip.style.background = "#6366f1"; /* default group color */
-            chip.textContent = grp.name;
+            chip.style.background = "#6366f1"; /* default source color */
+            chip.textContent = src.name;
 
             var rmBtn = document.createElement("button"); rmBtn.className = "bo-chip-remove";
-            rmBtn.innerHTML = "&times;"; rmBtn.title = "Remove from group";
+            rmBtn.innerHTML = "&times;"; rmBtn.title = "Remove from source";
             rmBtn.addEventListener("click", function (e) {
                 e.stopPropagation();
-                removeGroup(ch, gid, td);
+                removeSource(ch, sid, td);
             });
             chip.appendChild(rmBtn);
             wrap.appendChild(chip);
         });
 
         /* + button */
-        var available = _groups.filter(function (g) { return !(ch.group_ids || []).includes(g.id); });
+        var available = _sources.filter(function (s) { return !(ch.source_ids || []).includes(s.id); });
         if (available.length) {
             var addBtn = document.createElement("button"); addBtn.className = "bo-chip-add";
-            addBtn.innerHTML = "+"; addBtn.title = "Add to group";
+            addBtn.innerHTML = "+"; addBtn.title = "Add to source";
             addBtn.addEventListener("click", function (e) {
                 e.stopPropagation();
-                openGroupDropdown(addBtn, ch, td, available);
+                openSourceDropdown(addBtn, ch, td, available);
             });
             wrap.appendChild(addBtn);
         }
         td.appendChild(wrap);
     }
 
-    function openGroupDropdown(anchor, ch, td, available) {
+    function openSourceDropdown(anchor, ch, td, available) {
         document.querySelectorAll(".bo-chip-dropdown").forEach(function (el) { el.remove(); });
         var dropdown = document.createElement("div"); dropdown.className = "bo-chip-dropdown";
-        available.forEach(function (g) {
-            var btn = document.createElement("button"); btn.textContent = g.name;
+        available.forEach(function (s) {
+            var btn = document.createElement("button"); btn.textContent = s.name;
             btn.addEventListener("click", function () {
                 dropdown.remove();
-                addGroup(ch, g.id, td);
+                addSource(ch, s.id, td);
             });
             dropdown.appendChild(btn);
         });
@@ -347,27 +347,27 @@
         });
     }
 
-    function addGroup(ch, groupId, td) {
-        var newIds = (ch.group_ids || []).concat([groupId]);
+    function addSource(ch, sourceId, td) {
+        var newIds = (ch.source_ids || []).concat([sourceId]);
         apiFetch(API_BASE + "channels/" + ch.id + "/", {
             method: "PATCH",
-            body: { group_ids: newIds },
+            body: { source_ids: newIds },
         }).then(function (data) {
-            ch.group_ids = data.group_ids;
-            renderGroupChips(td, ch);
-            showToast("Group added.");
+            ch.source_ids = data.source_ids;
+            renderSourceChips(td, ch);
+            showToast("Source added.");
         }).catch(function (err) { showToast("Error: " + err.message, "error"); });
     }
 
-    function removeGroup(ch, groupId, td) {
-        var newIds = (ch.group_ids || []).filter(function (id) { return id !== groupId; });
+    function removeSource(ch, sourceId, td) {
+        var newIds = (ch.source_ids || []).filter(function (id) { return id !== sourceId; });
         apiFetch(API_BASE + "channels/" + ch.id + "/", {
             method: "PATCH",
-            body: { group_ids: newIds },
+            body: { source_ids: newIds },
         }).then(function (data) {
-            ch.group_ids = data.group_ids;
-            renderGroupChips(td, ch);
-            showToast("Group removed.");
+            ch.source_ids = data.source_ids;
+            renderSourceChips(td, ch);
+            showToast("Source removed.");
         }).catch(function (err) { showToast("Error: " + err.message, "error"); });
     }
 
@@ -400,15 +400,15 @@
         }).catch(function (err) { showToast("Error: " + err.message, "error"); });
     }
 
-    function bulkApplyGroup(action) {
+    function bulkApplySource(action) {
         var ids = selectedIds();
         if (!ids.length) return;
-        var sel = action === "add" ? $bulkAddGrp : $bulkRmGrp;
-        var groupId = parseInt(sel.value, 10);
-        if (!groupId) { showToast("Select a group first.", "error"); return; }
-        var key = action === "add" ? "add_group_ids" : "remove_group_ids";
+        var sel = action === "add" ? $bulkAddSrc : $bulkRmSrc;
+        var sourceId = parseInt(sel.value, 10);
+        if (!sourceId) { showToast("Select a source first.", "error"); return; }
+        var key = action === "add" ? "add_source_ids" : "remove_source_ids";
         var body = { ids: ids };
-        body[key] = [groupId];
+        body[key] = [sourceId];
         apiFetch(API_BASE + "channels/bulk-assign/", { method: "POST", body: body })
             .then(function (data) {
                 showToast("Updated " + data.updated + " channels.");
@@ -460,10 +460,10 @@
     /* ── Init ───────────────────────────────────────────────────────────── */
     Promise.all([
         apiFetch(API_BASE + "labels/?limit=500"),
-        apiFetch(API_BASE + "groups/?limit=500"),
+        apiFetch(API_BASE + "sources/?limit=500"),
     ]).then(function (results) {
         _labels = results[0].results;
-        _groups = results[1].results;
+        _sources = results[1].results;
         renderFilters();
         _syncFormFromUrl();
         loadChannels("replace");
@@ -474,7 +474,7 @@
         clearTimeout(_searchTimer);
         _searchTimer = setTimeout(function () { _offset = 0; loadChannels("push"); }, 300);
     });
-    [$status, $orgFilter, $groupFilter].forEach(function (el) {
+    [$status, $orgFilter, $sourceFilter].forEach(function (el) {
         el.addEventListener("change", function () { _offset = 0; loadChannels("push"); });
     });
     window.addEventListener("popstate", function () {
@@ -486,8 +486,8 @@
         updateBulkBar();
     });
     document.getElementById("ch-bulk-org-apply").addEventListener("click", bulkApplyLabel);
-    document.getElementById("ch-bulk-add-group-apply").addEventListener("click", function () { bulkApplyGroup("add"); });
-    document.getElementById("ch-bulk-rm-group-apply").addEventListener("click", function () { bulkApplyGroup("remove"); });
+    document.getElementById("ch-bulk-add-source-apply").addEventListener("click", function () { bulkApplySource("add"); });
+    document.getElementById("ch-bulk-rm-source-apply").addEventListener("click", function () { bulkApplySource("remove"); });
     Object.keys(_SORT_COLS).forEach(function (id) {
         var th = document.getElementById(id);
         if (th) th.addEventListener("click", function () { _onSortClick(_SORT_COLS[id]); });

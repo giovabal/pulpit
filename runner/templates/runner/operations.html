@@ -295,15 +295,15 @@
                 </div>
               </fieldset>
 
-              {% if channel_groups %}
+              {% if channel_sources %}
               <fieldset class="ops-fieldset">
-                <legend>Channel groups
+                <legend>Channel sources
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Restrict to channels belonging to at least one of the selected groups. Leave all unchecked for all channels."></i>
+                     title="Restrict to channels belonging to at least one of the selected sources. Leave all unchecked for all channels."></i>
                 </legend>
                 <div class="ops-flags">
-                  {% for group in channel_groups %}
-                  <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group.key }}">{{ group.name }}</label>
+                  {% for source in channel_sources %}
+                  <label class="ops-flag"><input type="checkbox" name="channel_sources" value="{{ source.key }}">{{ source.name }}</label>
                   {% endfor %}
                 </div>
               </fieldset>
@@ -495,15 +495,15 @@
                 <label class="ops-flag"><input type="checkbox" name="channel_type_user" value="1" {% if "USER" in default_channel_types %}checked{% endif %}>User</label>
               </div>
             </fieldset>
-            {% if channel_groups %}
+            {% if channel_sources %}
             <fieldset class="ops-fieldset">
-              <legend>Channel groups
+              <legend>Channel sources
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Restrict the graph to channels belonging to at least one selected group. Leave all unchecked to include all in-target channels."></i>
+                   title="Restrict the graph to channels belonging to at least one selected source. Leave all unchecked to include all in-target channels."></i>
               </legend>
               <div class="ops-flags">
-                {% for group in channel_groups %}
-                <label class="ops-flag"><input type="checkbox" name="channel_groups" value="{{ group.key }}">{{ group.name }}</label>
+                {% for source in channel_sources %}
+                <label class="ops-flag"><input type="checkbox" name="channel_sources" value="{{ source.key }}">{{ source.name }}</label>
                 {% endfor %}
               </div>
             </fieldset>

@@ -1,0 +1,46 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+
+{% block bo_content %}
+<div class="bo-section-header">
+  <h2 class="bo-section-title">Channel Sources</h2>
+  <button class="bo-btn" id="src-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add source</button>
+</div>
+
+<form class="bo-add-form d-none" id="src-add-form" autocomplete="off">
+  <input class="bo-input" name="name" placeholder="Name" required aria-label="Source name">
+  <textarea class="bo-input bo-input--wide bo-input--full" name="description" rows="4" placeholder="Description (optional)" aria-label="Source description"></textarea>
+  <textarea class="bo-input bo-input--wide bo-input--full" name="note" rows="4" placeholder="Note (optional)" aria-label="Source note"></textarea>
+  <button type="submit" class="bo-btn">Save</button>
+  <button type="button" class="bo-btn bo-btn--ghost" id="src-add-cancel">Cancel</button>
+</form>
+
+<div class="bo-toolbar">
+  <span class="bo-count" id="src-count"></span>
+  <div class="bo-pagination" id="src-pagination-top"></div>
+</div>
+<div class="table-responsive">
+  <table class="bo-table" id="src-table">
+    <caption class="sr-only">Channel sources</caption>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Description</th>
+        <th scope="col">Note</th>
+        <th class="bo-th--num" scope="col">Channels</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody id="src-tbody">
+      <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="bo-pagination bo-pagination--bottom" id="src-pagination-bottom"></div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'backoffice/js/crud.js' %}"></script>
+<script src="{% static 'backoffice/js/sources.js' %}"></script>
+{% endblock extra_scripts %}
