@@ -1,6 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.26]
-- Changing a label group from not being a partition to being one should raise an error if it is not possible, saying the problems to be corrected.
 - A button to set a palette for a label group, by example with colorcet
 - Using any label group that's a partition as community strategy
 

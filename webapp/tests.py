@@ -14,7 +14,7 @@ from django.urls import reverse
 from network.graph_builder import channel_network_data
 from webapp import version_check
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, ChannelLabel, ChannelVacancy, Label, Message, Project
+from webapp.models import Channel, ChannelLabel, ChannelVacancy, Label, LabelGroup, Message, Project
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.test_helpers import attribute, make_channel, make_label
 from webapp.utils.colors import (
@@ -712,6 +712,45 @@ class LabelModelTests(TestCase):
 
     def test_is_color_dark_for_white(self) -> None:
         self.assertFalse(Label(color="#ffffff").is_color_dark)
+
+
+class LabelGroupPartitionTests(TestCase):
+    """A group can only become a partition once its per-channel periods stop overlapping."""
+
+    def _overlapping_group(self) -> LabelGroup:
+        grp = LabelGroup.objects.create(name="Topics", is_partition=False, color="#123456")
+        a = make_label(name="A", group=grp)
+        b = make_label(name="B", group=grp)
+        ch = make_channel(telegram_id=1, title="Chan")
+        attribute(ch, a, start=datetime.date(2020, 1, 1), end=datetime.date(2021, 1, 1))
+        attribute(ch, b, start=datetime.date(2020, 6, 1), end=None)  # overlaps A
+        return grp
+
+    def test_partition_conflicts_lists_overlaps(self) -> None:
+        self.assertEqual(len(self._overlapping_group().partition_conflicts()), 1)
+
+    def test_switch_to_partition_with_overlap_raises(self) -> None:
+        grp = self._overlapping_group()
+        grp.is_partition = True
+        with self.assertRaises(ValidationError) as cm:
+            grp.full_clean()
+        msg = cm.exception.message_dict["is_partition"][0]
+        self.assertIn("Chan", msg)
+        self.assertIn("must be resolved", msg)
+
+    def test_non_partition_group_tolerates_overlap(self) -> None:
+        self._overlapping_group().full_clean()  # is_partition=False → no partition check
+
+    def test_switch_to_partition_without_overlap_ok(self) -> None:
+        grp = LabelGroup.objects.create(name="Topics", is_partition=False, color="#123456")
+        a = make_label(name="A", group=grp)
+        b = make_label(name="B", group=grp)
+        ch = make_channel(telegram_id=1, title="Chan")
+        attribute(ch, a, start=datetime.date(2020, 1, 1), end=datetime.date(2020, 6, 1))
+        attribute(ch, b, start=datetime.date(2020, 6, 2), end=None)  # adjacent, no overlap
+        grp.is_partition = True
+        grp.full_clean()  # must not raise
+        self.assertEqual(grp.partition_conflicts(), [])
 
 
 # ─── HomeView ──────────────────────────────────────────────────────────────────
