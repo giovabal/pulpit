@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from unittest import mock
 
@@ -11,7 +12,7 @@ from django.urls import reverse
 
 from events.models import Event, EventType
 from webapp.models import Channel, ChannelGroup, LabelGroup, Message, SearchTerm
-from webapp.test_helpers import label_group, make_channel, make_label
+from webapp.test_helpers import attribute, label_group, make_channel, make_label
 
 # ---------------------------------------------------------------------------
 # backoffice/api/utils.py — _normalize
@@ -254,6 +255,21 @@ class LabelGroupViewSetTests(_ApiTestCase):
         self.assertEqual(resp.status_code, 200)
         self.group.refresh_from_db()
         self.assertEqual(self.group.description, "edited")
+
+    def test_switch_to_partition_with_overlap_rejected(self):
+        # Switching a group to a partition is refused while a channel holds overlapping
+        # periods in it; the error names the conflict so it can be fixed (ROADMAP 0.26).
+        grp = LabelGroup.objects.create(name="Topic", is_partition=False, color="#123456")
+        a = make_label("A", group=grp)
+        b = make_label("B", group=grp)
+        ch = make_channel(telegram_id=900, title="Chan")
+        attribute(ch, a, start=datetime.date(2020, 1, 1), end=datetime.date(2021, 1, 1))
+        attribute(ch, b, start=datetime.date(2020, 6, 1), end=None)  # overlaps A
+        resp = self.jpatch(_api(f"label-groups/{grp.pk}/"), {"is_partition": True})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Chan", json.dumps(resp.json()))
+        grp.refresh_from_db()
+        self.assertFalse(grp.is_partition)  # rejected, not persisted
 
     def test_setting_primary_demotes_others(self):
         # Promoting another group to primary must demote the existing primary group.

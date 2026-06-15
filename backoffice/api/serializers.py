@@ -22,6 +22,16 @@ class LabelGroupSerializer(serializers.ModelSerializer):
         model = LabelGroup
         fields = ["id", "name", "color", "description", "is_partition", "is_primary", "label_count"]
 
+    def validate(self, attrs):
+        # Refuse to switch a group to a partition while it still holds overlapping label
+        # periods for some channel — name the conflicts so the operator can resolve them.
+        is_partition = attrs.get("is_partition", getattr(self.instance, "is_partition", False))
+        if is_partition and self.instance is not None:
+            conflicts = self.instance.partition_conflicts()
+            if conflicts:
+                raise serializers.ValidationError(self.instance.partition_conflict_message(conflicts))
+        return attrs
+
     def _enforce_single_primary(self, instance):
         # Exactly one group is the primary ("Organization" replacement): node colour, the
         # Label export column, vacancy actor identity, and the default MODULEROLE

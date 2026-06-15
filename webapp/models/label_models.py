@@ -40,6 +40,58 @@ class LabelGroup(BaseColorModel):
         """The measure / community-strategy token selecting this group's partition."""
         return f"LABELGROUP{self.pk}"
 
+    def partition_conflicts(self) -> "list[tuple[ChannelLabel, ChannelLabel]]":
+        """Pairs of this group's ``ChannelLabel`` periods that overlap for the same channel.
+
+        Empty when the group already satisfies the partition constraint (at most one
+        label per channel at any moment). A *non*-partition group may have accumulated
+        overlapping memberships, so this is checked before switching ``is_partition`` on.
+        """
+        rows = list(
+            ChannelLabel.objects.filter(label__group_id=self.pk)
+            .select_related("channel", "label")
+            .order_by("channel_id", "start")
+        )
+        by_channel: dict[int, list[ChannelLabel]] = {}
+        for cl in rows:
+            by_channel.setdefault(cl.channel_id, []).append(cl)
+        conflicts: list[tuple[ChannelLabel, ChannelLabel]] = []
+        for channel_rows in by_channel.values():
+            for i in range(len(channel_rows)):
+                for j in range(i + 1, len(channel_rows)):
+                    a, b = channel_rows[i], channel_rows[j]
+                    if ChannelLabel._overlaps(a.start, a.end, b.start, b.end):
+                        conflicts.append((a, b))
+        return conflicts
+
+    @staticmethod
+    def _fmt_period(cl: "ChannelLabel") -> str:
+        lo = cl.start.isoformat() if cl.start else "…"
+        hi = cl.end.isoformat() if cl.end else "…"
+        return f"{lo} → {hi}"
+
+    def partition_conflict_message(self, conflicts: "list[tuple[ChannelLabel, ChannelLabel]]", limit: int = 5) -> str:
+        """A human-readable explanation of why the group cannot become a partition."""
+        parts = [
+            f"“{a.channel}” holds “{a.label.name}” ({self._fmt_period(a)}) and “{b.label.name}” ({self._fmt_period(b)})"
+            for a, b in conflicts[:limit]
+        ]
+        msg = (
+            f"Cannot make “{self.name}” a partition group: {len(conflicts)} overlapping label "
+            "period(s) must be resolved first — " + "; ".join(parts)
+        )
+        if len(conflicts) > limit:
+            msg += f"; and {len(conflicts) - limit} more"
+        return msg + "."
+
+    def clean(self) -> None:
+        # A partition group requires non-overlapping periods per channel; refuse to become one
+        # (or remain one) while conflicts exist, naming them so the operator can correct them.
+        if self.is_partition and self.pk:
+            conflicts = self.partition_conflicts()
+            if conflicts:
+                raise ValidationError({"is_partition": self.partition_conflict_message(conflicts)})
+
 
 class Label(BaseColorModel):
     """A single label within a :class:`LabelGroup`.

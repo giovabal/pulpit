@@ -185,7 +185,9 @@ class LabelInline(admin.TabularInline):
 @admin.register(LabelGroup)
 class LabelGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "color", "is_partition", "is_primary", "label_count")
-    list_editable = ["color", "is_partition"]
+    # is_partition is edited on the change form so LabelGroup.clean() can validate the
+    # partition switch against existing overlapping periods (list_editable would bypass it).
+    list_editable = ["color"]
     inlines = [LabelInline]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[LabelGroup]:
