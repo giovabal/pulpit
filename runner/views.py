@@ -17,7 +17,7 @@ from network import (
     vacancy_analysis,
 )
 from runner import tasks
-from webapp.models import ChannelGroup, ChannelVacancy, SearchTerm
+from webapp.models import ChannelGroup, ChannelVacancy, LabelGroup, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
@@ -166,6 +166,12 @@ class OperationsView(View):
                     ),
                     key=lambda kv: kv[1],
                 ),
+                # One LABELGROUP<id> community-strategy chip per partition label group (the
+                # manual-partition strategies that replaced the single ORGANIZATION strategy).
+                "community_metadata_strategies": [
+                    {"token": g.token, "label": g.name}
+                    for g in LabelGroup.objects.filter(is_partition=True).order_by("name")
+                ],
                 "palette_names": palette_utils.list_palette_names(),
                 # Ordered token lists seeding the drag-and-drop builders (measures + community
                 # strategies); each token may carry parameters, e.g. "DIFFUSIONLAG(window=60)" /

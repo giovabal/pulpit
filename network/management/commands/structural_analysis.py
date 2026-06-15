@@ -931,12 +931,14 @@ class Command(BaseCommand):
         here we only cross-check the *community-basis* parameters against --community-strategies
         (a basis that isn't computed cannot be read).
         """
-        invalid_strategies = [i.name for i in communities_strategy if i.name not in community.VALID_STRATEGIES]
+        invalid_strategies = [
+            i.name
+            for i in communities_strategy
+            if i.name not in community.VALID_STRATEGIES and not community.is_metadata_strategy(i.name)
+        ]
         if invalid_strategies:
-            raise CommandError(
-                f"Invalid --community-strategies value(s): {invalid_strategies!r}. "
-                f"Choose from {sorted(community.VALID_STRATEGIES) + ['ALL']}."
-            )
+            valid = sorted(community.VALID_STRATEGIES) + community.labelgroup_strategy_tokens() + ["ALL"]
+            raise CommandError(f"Invalid --community-strategies value(s): {invalid_strategies!r}. Choose from {valid}.")
         # Fail before the (hours-long) pipeline runs, not in the export phase where
         # _pick_interest_community_strategy would otherwise raise this after all the
         # layout/measure work has been discarded.

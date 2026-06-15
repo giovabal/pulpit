@@ -320,7 +320,7 @@ def write_csv(
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     role_groups = _role_companion_groups(measures_labels)
 
-    headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]

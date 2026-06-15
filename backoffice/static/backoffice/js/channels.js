@@ -275,7 +275,7 @@
         chk.type = "checkbox";
         chk.className = "bo-inspect-checkbox";
         chk.checked = !!ch.to_inspect;
-        chk.title = "Crawl this channel even when its organization isn't in target";
+        chk.title = "Crawl this channel even when it isn't in target";
         chk.addEventListener("change", function () {
             var newVal = chk.checked;
             var prev = ch.to_inspect;

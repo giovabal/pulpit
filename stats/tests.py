@@ -16,8 +16,8 @@ import pandas as pd
 
 class StatsViewsTests(TestCase):
     def test_messages_history_data_returns_json(self):
-        organization = make_label(name="In-target Org", is_in_target=True)
-        channel = make_channel(telegram_id=1, title="C1", label=organization)
+        lbl = make_label(name="In-target Org", is_in_target=True)
+        channel = make_channel(telegram_id=1, title="C1", label=lbl)
         Message.objects.create(telegram_id=1, channel=channel, date="2024-01-20T00:00:00Z")
 
         response = self.client.get(reverse("messages-history-data"))
@@ -32,9 +32,9 @@ class StatsViewsTests(TestCase):
         self.assertEqual(data["values"], [1])
 
     def test_active_channels_history_data_returns_json(self):
-        organization = make_label(name="In-target Org", is_in_target=True)
-        channel1 = make_channel(telegram_id=1, title="C1", label=organization)
-        channel2 = make_channel(telegram_id=2, title="C2", label=organization)
+        lbl = make_label(name="In-target Org", is_in_target=True)
+        channel1 = make_channel(telegram_id=1, title="C1", label=lbl)
+        channel2 = make_channel(telegram_id=2, title="C2", label=lbl)
         Message.objects.create(telegram_id=1, channel=channel1, date="2024-01-20T00:00:00Z")
         Message.objects.create(telegram_id=2, channel=channel2, date="2024-01-22T00:00:00Z")
 

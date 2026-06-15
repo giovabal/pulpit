@@ -340,7 +340,7 @@ def _analyze_vacancy(
     cand_channels: dict[int, Channel] = {
         c.pk: c
         for c in Channel.objects.filter(pk__in=cand_pks)
-        .prefetch_related("attributions__organization")
+        .prefetch_related("channel_labels__label__group")
         .annotate(first_msg=Min("message_set__date"))
     }
 

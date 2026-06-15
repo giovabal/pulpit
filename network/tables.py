@@ -99,7 +99,7 @@ def write_table_xlsx(
             annot = label[label.find(" (") :] if " (" in label else ""
             role_label_cols.append((comp["role_key"], comp["role_label"] + annot))
 
-    headers = ["Channel", "URL", "Organization", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
