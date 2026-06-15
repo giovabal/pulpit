@@ -10,8 +10,8 @@ from .maintenance import (
     purge_run,
 )
 from .views import (
-    ChannelGroupViewSet,
     ChannelLabelViewSet,
+    ChannelSourceViewSet,
     ChannelVacancyViewSet,
     ChannelViewSet,
     EventTypeViewSet,
@@ -30,7 +30,7 @@ router.register("channels", ChannelViewSet, basename="api-channels")
 router.register("channel-labels", ChannelLabelViewSet, basename="api-channel-labels")
 router.register("label-groups", LabelGroupViewSet, basename="api-label-groups")
 router.register("labels", LabelViewSet, basename="api-labels")
-router.register("groups", ChannelGroupViewSet, basename="api-groups")
+router.register("sources", ChannelSourceViewSet, basename="api-sources")
 router.register("search-terms", SearchTermViewSet, basename="api-search-terms")
 router.register("event-types", EventTypeViewSet, basename="api-event-types")
 router.register("events", EventViewSet, basename="api-events")

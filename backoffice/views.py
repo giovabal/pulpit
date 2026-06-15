@@ -36,8 +36,8 @@ class LabelsView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/labels.html"
 
 
-class GroupsView(StaffRequiredMixin, TemplateView):
-    template_name = "backoffice/groups.html"
+class SourcesView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/sources.html"
 
 
 class SearchTermsView(StaffRequiredMixin, TemplateView):

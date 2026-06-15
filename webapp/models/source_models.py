@@ -4,12 +4,12 @@ from django.utils.text import slugify
 from webapp.models.base import BaseModel
 
 
-class ChannelGroup(BaseModel):
+class ChannelSource(BaseModel):
     name = models.CharField(max_length=255, unique=True)
     key = models.SlugField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     note = models.TextField(blank=True)
-    channels = models.ManyToManyField("Channel", blank=True, related_name="groups")
+    channels = models.ManyToManyField("Channel", blank=True, related_name="sources")
 
     class Meta:
         ordering = ["name"]

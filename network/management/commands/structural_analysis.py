@@ -271,7 +271,7 @@ class ResolvedOptions:
     include_lost: bool
     include_private: bool
     channel_types: list[str]
-    channel_groups: list[str]
+    channel_sources: list[str]
     edge_weight_strategy: str
 
     # Communities and measures
@@ -717,14 +717,14 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--channel-groups",
-            dest="channel_groups",
+            "--channel-sources",
+            dest="channel_sources",
             default=None,
-            metavar="GROUPS",
+            metavar="SOURCES",
             help=(
-                "Comma-separated list of ChannelGroup keys. "
-                "When provided, only channels belonging to at least one of these groups are included in the graph. "
-                "Leave unset to include all in-target channels regardless of group membership."
+                "Comma-separated list of ChannelSource keys. "
+                "When provided, only channels belonging to at least one of these sources are included in the graph. "
+                "Leave unset to include all in-target channels regardless of source membership."
             ),
         )
         parser.add_argument(
@@ -1264,7 +1264,7 @@ class Command(BaseCommand):
         do_3dgraph: bool,
         do_xlsx: bool,
         channel_types: list[str],
-        channel_groups: list[str],
+        channel_sources: list[str],
         edge_weight_strategy: str,
         fa2_iterations: int,
         target_layout: str,
@@ -1308,7 +1308,7 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
                 channel_types=channel_types,
-                channel_groups=channel_groups or None,
+                channel_sources=channel_sources or None,
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
                 include_self_references=options["include_self_references"],
@@ -1535,11 +1535,13 @@ class Command(BaseCommand):
         channel_types = (
             _parse_csv(channel_types_raw) if channel_types_raw is not None else list(settings.DEFAULT_CHANNEL_TYPES)
         )
-        channel_groups_raw = options["channel_groups"]
-        # Case-preserving (NOT _parse_csv): ChannelGroup.key is a lowercase slug and
-        # groups__key__in matches case-sensitively — upper-casing would select zero
-        # channels for every group. crawl_channels parses this flag the same way.
-        channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
+        channel_sources_raw = options["channel_sources"]
+        # Case-preserving (NOT _parse_csv): ChannelSource.key is a lowercase slug and
+        # sources__key__in matches case-sensitively — upper-casing would select zero
+        # channels for every source. crawl_channels parses this flag the same way.
+        channel_sources = (
+            [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
+        )
         # Fall back to the config-derived strategy (settings.SA_EDGE_WEIGHT_STRATEGY) when
         # no --edge-weight-strategy is passed, then to the documented default. An empty
         # value would otherwise reach build_graph and silently zero every edge weight
@@ -1666,7 +1668,7 @@ class Command(BaseCommand):
             include_lost=_o("include_lost", False),
             include_private=_o("include_private", False),
             channel_types=channel_types,
-            channel_groups=channel_groups,
+            channel_sources=channel_sources,
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
             strategies_lower=[inst.key for inst in communities_strategy],
@@ -1743,7 +1745,7 @@ class Command(BaseCommand):
                 start_date=opts.start_date,
                 end_date=opts.end_date,
                 channel_types=opts.channel_types,
-                channel_groups=opts.channel_groups or None,
+                channel_sources=opts.channel_sources or None,
                 edge_weight_strategy=opts.edge_weight_strategy,
                 include_mentions=opts.include_mentions,
                 include_self_references=opts.include_self_references,
@@ -2128,7 +2130,7 @@ class Command(BaseCommand):
                         opts.do_3dgraph,
                         opts.do_xlsx,
                         opts.channel_types,
-                        opts.channel_groups,
+                        opts.channel_sources,
                         opts.edge_weight_strategy,
                         opts.fa2_iterations,
                         opts.target_layout,

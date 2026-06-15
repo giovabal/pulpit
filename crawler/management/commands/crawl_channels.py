@@ -99,7 +99,7 @@ class CrawlOptions:
     # Scope
     ids_str: str | None
     channel_types: list[str]
-    channel_groups: list[str]
+    channel_sources: list[str]
 
     @property
     def need_client(self) -> bool:
@@ -561,13 +561,13 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--channel-groups",
-            dest="channel_groups",
+            "--channel-sources",
+            dest="channel_sources",
             default=None,
-            metavar="GROUPS",
+            metavar="SOURCES",
             help=(
-                "Comma-separated list of ChannelGroup keys. "
-                "Only channels belonging to at least one of these groups are included."
+                "Comma-separated list of ChannelSource keys. "
+                "Only channels belonging to at least one of these sources are included."
             ),
         )
 
@@ -1219,8 +1219,10 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        channel_groups_raw = options.get("channel_groups")
-        channel_groups = [s.strip() for s in channel_groups_raw.split(",") if s.strip()] if channel_groups_raw else []
+        channel_sources_raw = options.get("channel_sources")
+        channel_sources = (
+            [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
+        )
 
         # Every toggle uses BooleanOptionalAction (default=None). A bare
         # `python manage.py crawl_channels` (no flags) must do nothing —
@@ -1258,7 +1260,7 @@ class Command(BaseCommand):
             out_degrees=_resolve_optional_bool(options["out_degrees"]),
             ids_str=options["ids"],
             channel_types=channel_types,
-            channel_groups=channel_groups,
+            channel_sources=channel_sources,
         )
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
@@ -1268,8 +1270,8 @@ class Command(BaseCommand):
         )
         if not opts.retry_lost_and_private:
             qs = qs.exclude(is_lost=True).exclude(is_private=True)
-        if opts.channel_groups:
-            qs = qs.filter(groups__key__in=opts.channel_groups).distinct()
+        if opts.channel_sources:
+            qs = qs.filter(sources__key__in=opts.channel_sources).distinct()
         return qs
 
     @contextmanager
@@ -1376,7 +1378,7 @@ class Command(BaseCommand):
         out_degrees = opts.out_degrees
         ids_str = opts.ids_str
         channel_types = opts.channel_types
-        channel_groups = opts.channel_groups
+        channel_sources = opts.channel_sources
 
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
@@ -1424,8 +1426,8 @@ class Command(BaseCommand):
                             excluded_by_type = all_in_target_base.exclude(channel_type_filter(channel_types)).order_by(
                                 "-id"
                             )
-                            if channel_groups:
-                                excluded_by_type = excluded_by_type.filter(groups__key__in=channel_groups).distinct()
+                            if channel_sources:
+                                excluded_by_type = excluded_by_type.filter(sources__key__in=channel_sources).distinct()
                             if ids_str:
                                 excluded_by_type = excluded_by_type.filter(parse_id_ranges(ids_str))
                             n_excluded = excluded_by_type.count()
@@ -1717,7 +1719,7 @@ class Command(BaseCommand):
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
             # Global, not crawl-scoped: degrees are network-wide quantities, and an
-            # ever-in-target channel outside --channel-groups/--channel-types scope must
+            # ever-in-target channel outside --channel-sources/--channel-types scope must
             # never fall into cited_pks — the out-degrees pass would overwrite it with
             # out_degree=0. Lost messages are excluded throughout to match
             # Channel.refresh_degrees() and the graph builder.

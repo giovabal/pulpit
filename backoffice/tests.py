@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from events.models import Event, EventType
-from webapp.models import Channel, ChannelGroup, LabelGroup, Message, SearchTerm
+from webapp.models import Channel, ChannelSource, LabelGroup, Message, SearchTerm
 from webapp.test_helpers import attribute, label_group, make_channel, make_label
 
 # ---------------------------------------------------------------------------
@@ -138,8 +138,8 @@ class BackofficePageTests(TestCase):
     def test_labels_page(self):
         self._check("labels")
 
-    def test_groups_page(self):
-        self._check("groups")
+    def test_sources_page(self):
+        self._check("sources")
 
     def test_search_terms_page(self):
         self._check("search-terms")
@@ -289,34 +289,34 @@ class LabelGroupViewSetTests(_ApiTestCase):
 
 
 # ---------------------------------------------------------------------------
-# backoffice/api — ChannelGroupViewSet
+# backoffice/api — ChannelSourceViewSet
 # ---------------------------------------------------------------------------
 
 
-class ChannelGroupViewSetTests(_ApiTestCase):
+class ChannelSourceViewSetTests(_ApiTestCase):
     def setUp(self):
-        self.group = ChannelGroup.objects.create(name="GroupA")
+        self.source = ChannelSource.objects.create(name="SourceA")
         self.label = make_label("O", color="#000000")
         self.ch1 = make_channel(telegram_id=10, title="C1", label=self.label)
         self.ch2 = make_channel(telegram_id=11, title="C2", label=self.label)
 
-    def test_list_returns_groups(self):
-        resp = self.jget(_api("groups/"))
-        names = [g["name"] for g in resp.json()["results"]]
-        self.assertIn("GroupA", names)
+    def test_list_returns_sources(self):
+        resp = self.jget(_api("sources/"))
+        names = [s["name"] for s in resp.json()["results"]]
+        self.assertIn("SourceA", names)
 
     def test_channel_count_annotation(self):
-        self.group.channels.add(self.ch1)
-        resp = self.jget(_api("groups/"))
-        group = next(g for g in resp.json()["results"] if g["name"] == "GroupA")
-        self.assertEqual(group["channel_count"], 1)
+        self.source.channels.add(self.ch1)
+        resp = self.jget(_api("sources/"))
+        source = next(s for s in resp.json()["results"] if s["name"] == "SourceA")
+        self.assertEqual(source["channel_count"], 1)
 
-    def test_create_group(self):
-        resp = self.jpost(_api("groups/"), {"name": "GroupB"})
+    def test_create_source(self):
+        resp = self.jpost(_api("sources/"), {"name": "SourceB"})
         self.assertEqual(resp.status_code, 201)
 
-    def test_delete_group(self):
-        resp = self.jdelete(_api(f"groups/{self.group.pk}/"))
+    def test_delete_source(self):
+        resp = self.jdelete(_api(f"sources/{self.source.pk}/"))
         self.assertEqual(resp.status_code, 204)
 
 
@@ -329,7 +329,7 @@ class ChannelViewSetTests(_ApiTestCase):
     def setUp(self):
         self.label = make_label("OrgA", color="#ff0000", is_in_target=True)
         self.label2 = make_label("OrgB", color="#0000ff")
-        self.group = ChannelGroup.objects.create(name="G1")
+        self.source = ChannelSource.objects.create(name="S1")
         self.ch = make_channel(telegram_id=1, title="Alpha Channel", username="alpha", label=self.label)
         self.ch_lost = make_channel(telegram_id=2, title="Lost", is_lost=True)
         self.ch_private = make_channel(telegram_id=3, title="Private", is_private=True)
@@ -364,10 +364,10 @@ class ChannelViewSetTests(_ApiTestCase):
         resp = self.jpost(_api("channel-labels/"), {"channel_id": self.ch.pk, "label_id": self.label2.pk})
         self.assertEqual(resp.status_code, 400)
 
-    def test_patch_assigns_groups(self):
-        resp = self.jpatch(_api(f"channels/{self.ch.pk}/"), {"group_ids": [self.group.pk]})
+    def test_patch_assigns_sources(self):
+        resp = self.jpatch(_api(f"channels/{self.ch.pk}/"), {"source_ids": [self.source.pk]})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(self.group, self.ch.groups.all())
+        self.assertIn(self.source, self.ch.sources.all())
 
     def test_search_filter_by_title(self):
         resp = self.jget(_api("channels/?search=Alpha"))
@@ -417,16 +417,16 @@ class ChannelViewSetTests(_ApiTestCase):
         resp = self.jpost(_api("channels/bulk-assign/"), {"ids": []})
         self.assertEqual(resp.status_code, 400)
 
-    def test_bulk_assign_add_group(self):
-        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk], "add_group_ids": [self.group.pk]})
+    def test_bulk_assign_add_source(self):
+        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk], "add_source_ids": [self.source.pk]})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(self.group, self.ch.groups.all())
+        self.assertIn(self.source, self.ch.sources.all())
 
-    def test_bulk_assign_remove_group(self):
-        self.ch.groups.add(self.group)
-        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk], "remove_group_ids": [self.group.pk]})
+    def test_bulk_assign_remove_source(self):
+        self.ch.sources.add(self.source)
+        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [self.ch.pk], "remove_source_ids": [self.source.pk]})
         self.assertEqual(resp.status_code, 200)
-        self.assertNotIn(self.group, self.ch.groups.all())
+        self.assertNotIn(self.source, self.ch.sources.all())
 
 
 # ---------------------------------------------------------------------------

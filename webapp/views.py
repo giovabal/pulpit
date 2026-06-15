@@ -22,8 +22,8 @@ from webapp.paginator import DiggPaginator
 
 from .models import (
     Channel,
-    ChannelGroup,
     ChannelLabel,
+    ChannelSource,
     ChannelVacancy,
     Label,
     Message,
@@ -335,7 +335,7 @@ class ChannelListView(ListView):
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.in_target()
-            .prefetch_related(self._pic_prefetch, "groups", "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -360,15 +360,15 @@ class ChannelListView(ListView):
         ctx["to_inspect_list"] = (
             Channel.objects.filter(to_inspect=True)
             .exclude(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "groups", "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
         ctx["labels"] = Label.objects.filter(group__is_primary=True, is_in_target=True).order_by("name")
-        ctx["groups"] = (
-            ChannelGroup.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
+        ctx["sources"] = (
+            ChannelSource.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )
         ctx["has_vacancies"] = ChannelVacancy.objects.exists()
         return ctx
@@ -829,7 +829,7 @@ class ChannelDetailView(ListView):
                 "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
                 "total_reactions": f"{total_reactions:,}",
-                "channel_groups": list(ch.groups.order_by("name")),
+                "channel_sources": list(ch.sources.order_by("name")),
                 "vacancy": vacancy,
                 "linked_channel": linked_channel,
                 "parent_channel": parent_channel,

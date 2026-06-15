@@ -50,7 +50,7 @@ def _crawl_opts(**overrides) -> CrawlOptions:
     """
     base = {f.name: False for f in fields(CrawlOptions)}
     base.update(
-        refresh_limit=None, refresh_from=None, refresh_to=None, ids_str=None, channel_types=[], channel_groups=[]
+        refresh_limit=None, refresh_from=None, refresh_to=None, ids_str=None, channel_types=[], channel_sources=[]
     )
     base.update(overrides)
     return CrawlOptions(**base)

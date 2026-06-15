@@ -9,6 +9,6 @@ from .media_models import (  # NOQA
     MessageVideo,
     ProfilePicture,
 )
-from .group_models import ChannelGroup  # NOQA
+from .source_models import ChannelSource  # NOQA
 from .vacancy_models import ChannelVacancy  # NOQA
 from .project_models import Project  # NOQA

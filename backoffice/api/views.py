@@ -7,8 +7,8 @@ from django.db.models import Count, Exists, OuterRef, Prefetch, ProtectedError, 
 from events.models import Event, EventType
 from webapp.models import (
     Channel,
-    ChannelGroup,
     ChannelLabel,
+    ChannelSource,
     ChannelVacancy,
     Label,
     LabelGroup,
@@ -18,9 +18,9 @@ from webapp.models import (
 )
 
 from .serializers import (
-    ChannelGroupSerializer,
     ChannelLabelSerializer,
     ChannelSerializer,
+    ChannelSourceSerializer,
     ChannelVacancySerializer,
     EventSerializer,
     EventTypeSerializer,
@@ -92,11 +92,11 @@ class LabelViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class ChannelGroupViewSet(viewsets.ModelViewSet):
-    serializer_class = ChannelGroupSerializer
+class ChannelSourceViewSet(viewsets.ModelViewSet):
+    serializer_class = ChannelSourceSerializer
 
     def get_queryset(self):
-        return ChannelGroup.objects.annotate(channel_count=Count("channels")).order_by("name")
+        return ChannelSource.objects.annotate(channel_count=Count("channels")).order_by("name")
 
 
 class ChannelViewSet(
@@ -114,7 +114,7 @@ class ChannelViewSet(
     def get_queryset(self):
         qs = Channel.objects.prefetch_related(
             "channel_labels__label__group",
-            "groups",
+            "sources",
             Prefetch(
                 "profilepicture_set",
                 queryset=ProfilePicture.objects.order_by("-date")[:1],
@@ -139,11 +139,11 @@ class ChannelViewSet(
                 raise ValidationError({"label": "must be an integer"})
             qs = qs.filter(channel_labels__label_id=int(label_id)).distinct()
 
-        group_id = self.request.query_params.get("group", "").strip()
-        if group_id:
-            if not group_id.isdigit():
-                raise ValidationError({"group": "must be an integer"})
-            qs = qs.filter(groups__id=int(group_id)).distinct()
+        source_id = self.request.query_params.get("source", "").strip()
+        if source_id:
+            if not source_id.isdigit():
+                raise ValidationError({"source": "must be an integer"})
+            qs = qs.filter(sources__id=int(source_id)).distinct()
 
         status_filter = self.request.query_params.get("status", "").strip()
         if status_filter == "unassigned":
@@ -184,11 +184,11 @@ class ChannelViewSet(
         if not ids:
             return Response({"error": "No channel ids provided."}, status=status.HTTP_400_BAD_REQUEST)
         label_id = request.data.get("label_id")
-        add_group_ids = _validate_id_list(request.data.get("add_group_ids", []))
-        remove_group_ids = _validate_id_list(request.data.get("remove_group_ids", []))
-        if add_group_ids is None or remove_group_ids is None:
+        add_source_ids = _validate_id_list(request.data.get("add_source_ids", []))
+        remove_source_ids = _validate_id_list(request.data.get("remove_source_ids", []))
+        if add_source_ids is None or remove_source_ids is None:
             return Response(
-                {"error": "'add_group_ids' and 'remove_group_ids' must be lists of integers."},
+                {"error": "'add_source_ids' and 'remove_source_ids' must be lists of integers."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         start_raw = request.data.get("start") or None
@@ -244,14 +244,14 @@ class ChannelViewSet(
                     # Explicit unassign: clear every label on the selected channels.
                     ChannelLabel.objects.filter(channel__in=channels).delete()
             # Pass validated ids to ``add()``/``remove()`` so the M2M operation runs
-            # once per group, rather than re-evaluating the ``channels`` queryset for
+            # once per source, rather than re-evaluating the ``channels`` queryset for
             # each ``*channels`` unpack (which would hit the DB N extra times).
-            if add_group_ids:
-                for grp in ChannelGroup.objects.filter(pk__in=add_group_ids):
-                    grp.channels.add(*valid_ids)
-            if remove_group_ids:
-                for grp in ChannelGroup.objects.filter(pk__in=remove_group_ids):
-                    grp.channels.remove(*valid_ids)
+            if add_source_ids:
+                for src in ChannelSource.objects.filter(pk__in=add_source_ids):
+                    src.channels.add(*valid_ids)
+            if remove_source_ids:
+                for src in ChannelSource.objects.filter(pk__in=remove_source_ids):
+                    src.channels.remove(*valid_ids)
 
         return Response({"updated": len(valid_ids)})
 

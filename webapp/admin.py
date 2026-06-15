@@ -7,8 +7,8 @@ from django.utils.html import format_html
 
 from .models import (
     Channel,
-    ChannelGroup,
     ChannelLabel,
+    ChannelSource,
     Label,
     LabelGroup,
     Message,
@@ -76,7 +76,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "telegram_url",
         "current_org",
     )
-    list_filter = ("channel_labels__label__is_in_target", "broadcast", "channel_labels__label", "groups")
+    list_filter = ("channel_labels__label__is_in_target", "broadcast", "channel_labels__label", "sources")
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
@@ -163,17 +163,17 @@ class SearchTermAdmin(admin.ModelAdmin):
     fieldsets = ((None, {"fields": ("word",)}),)
 
 
-@admin.register(ChannelGroup)
-class ChannelGroupAdmin(admin.ModelAdmin):
+@admin.register(ChannelSource)
+class ChannelSourceAdmin(admin.ModelAdmin):
     list_display = ("name", "channel_count", "description")
     search_fields = ("name",)
     filter_horizontal = ("channels",)
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[ChannelGroup]:
+    def get_queryset(self, request: HttpRequest) -> QuerySet[ChannelSource]:
         return super().get_queryset(request).annotate(_channel_count=Count("channels"))
 
     @admin.display(description="Channels")
-    def channel_count(self, obj: ChannelGroup) -> int:
+    def channel_count(self, obj: ChannelSource) -> int:
         return obj._channel_count  # type: ignore[attr-defined]
 
 

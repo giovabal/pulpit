@@ -17,7 +17,7 @@ from network import (
     vacancy_analysis,
 )
 from runner import tasks
-from webapp.models import ChannelGroup, ChannelVacancy, LabelGroup, SearchTerm
+from webapp.models import ChannelSource, ChannelVacancy, LabelGroup, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
@@ -65,7 +65,7 @@ class OperationsView(View):
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
-        channel_groups = list(ChannelGroup.objects.values("key", "name"))
+        channel_sources = list(ChannelSource.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
 
         def _expand(raw: str, all_set: set) -> set:
@@ -156,7 +156,7 @@ class OperationsView(View):
             {
                 "tasks": task_info,
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
-                "channel_groups": channel_groups,
+                "channel_sources": channel_sources,
                 "has_vacancies": has_vacancies,
                 # All partitions including LABELGROUP metadata — for the MODULEROLE basis select.
                 "all_basis_choices": sorted(
@@ -536,7 +536,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Scope
         ("value", "ids", "--ids"),
         ("channel_types", "--channel-types"),
-        ("csv", "channel_groups", "--channel-groups"),
+        ("csv", "channel_sources", "--channel-sources"),
     ],
     "search_channels": [
         ("value", "amount", "--amount"),
@@ -595,7 +595,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # CPM resolution now rides inside the community-strategy tokens
         # (e.g. "LEIDEN_CPM(resolution=0.05)"), so it is not a separate CLI flag from the panel.
         ("channel_types", "--channel-types"),
-        ("csv", "channel_groups", "--channel-groups"),
+        ("csv", "channel_sources", "--channel-sources"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
         ("bool_explicit", "include_private", "--include-private", "--no-include-private"),
         ("const", "timeline_step", "--timeline-step", "year"),

@@ -5,7 +5,7 @@
     var API_CH  = "/manage/api/channels/" + $root.dataset.channelPk + "/";
     var API_LABELS = "/manage/api/labels/?limit=500";
     var API_LABELGROUPS = "/manage/api/label-groups/?limit=500";
-    var API_GRP = "/manage/api/groups/?limit=500";
+    var API_SRC = "/manage/api/sources/?limit=500";
     var _picUrls  = [];
     var _picIndex = 0;
     var _picModal = null;
@@ -97,7 +97,7 @@
         if (typeof bootstrap !== "undefined") _picModal = new bootstrap.Modal($picModalEl);
     }
 
-    function render(ch, labels, labelGroups, channelGroups) {
+    function render(ch, labels, labelGroups, channelSources) {
         $root.innerHTML = "";
 
         /* ── Back link + title ────────────────────────────────────── */
@@ -238,18 +238,18 @@
         });
         form.appendChild(fgLabels);
 
-        /* Groups */
-        var fgGrp = makeFieldGroup("Groups");
-        var grpWrap = document.createElement("div"); grpWrap.className = "bo-ch-update-groups";
-        channelGroups.forEach(function (g) {
+        /* Sources */
+        var fgSrc = makeFieldGroup("Sources");
+        var srcWrap = document.createElement("div"); srcWrap.className = "bo-ch-update-sources";
+        channelSources.forEach(function (s) {
             var lbl = document.createElement("label"); lbl.className = "bo-check-label";
-            var chk = document.createElement("input"); chk.type = "checkbox"; chk.value = g.id;
-            chk.name = "group_ids";
-            if ((ch.group_ids || []).indexOf(g.id) !== -1) chk.checked = true;
-            lbl.appendChild(chk); lbl.appendChild(document.createTextNode(" " + g.name));
-            grpWrap.appendChild(lbl);
+            var chk = document.createElement("input"); chk.type = "checkbox"; chk.value = s.id;
+            chk.name = "source_ids";
+            if ((ch.source_ids || []).indexOf(s.id) !== -1) chk.checked = true;
+            lbl.appendChild(chk); lbl.appendChild(document.createTextNode(" " + s.name));
+            srcWrap.appendChild(lbl);
         });
-        fgGrp.appendChild(grpWrap); form.appendChild(fgGrp);
+        fgSrc.appendChild(srcWrap); form.appendChild(fgSrc);
 
         /* Flags */
         var fgFlags = makeFieldGroup("Flags");
@@ -350,12 +350,12 @@
     }
 
     function saveChannel(ch, form) {
-        var groupIds = Array.from(form.querySelectorAll("input[name=group_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
+        var sourceIds = Array.from(form.querySelectorAll("input[name=source_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
         var rows = collectLabels(form);
         var lerr = validateLabels(rows);
         if (lerr) { showToast(lerr, "error"); return; }
         var body = {
-            group_ids: groupIds,
+            source_ids: sourceIds,
             is_lost: form.querySelector("input[name=is_lost]").checked,
             is_private: form.querySelector("input[name=is_private]").checked,
             to_inspect: form.querySelector("input[name=to_inspect]").checked,
@@ -372,7 +372,7 @@
         apiFetch(API_CH),
         apiFetch(API_LABELS),
         apiFetch(API_LABELGROUPS),
-        apiFetch(API_GRP),
+        apiFetch(API_SRC),
     ]).then(function (res) {
         var ch = res[0];
         /* set modal title */

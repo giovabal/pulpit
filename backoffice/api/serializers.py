@@ -3,8 +3,8 @@ from django.contrib.auth.models import User
 from events.models import Event, EventType
 from webapp.models import (
     Channel,
-    ChannelGroup,
     ChannelLabel,
+    ChannelSource,
     ChannelVacancy,
     Label,
     LabelGroup,
@@ -88,12 +88,12 @@ class ChannelVacancySerializer(serializers.ModelSerializer):
         fields = ["id", "channel_id", "channel_title", "closure_date", "note"]
 
 
-class ChannelGroupSerializer(serializers.ModelSerializer):
+class ChannelSourceSerializer(serializers.ModelSerializer):
     channel_count = serializers.IntegerField(read_only=True)
     key = serializers.SlugField(required=False, allow_blank=True, max_length=100)
 
     class Meta:
-        model = ChannelGroup
+        model = ChannelSource
         fields = ["id", "name", "key", "description", "note", "channel_count"]
 
 
@@ -149,10 +149,10 @@ class ChannelLabelSerializer(serializers.ModelSerializer):
 class ChannelSerializer(serializers.ModelSerializer):
     current_labels = serializers.SerializerMethodField()
     labels = ChannelLabelSerializer(many=True, read_only=True, source="channel_labels")
-    group_ids = serializers.PrimaryKeyRelatedField(
+    source_ids = serializers.PrimaryKeyRelatedField(
         many=True,
-        source="groups",
-        queryset=ChannelGroup.objects.all(),
+        source="sources",
+        queryset=ChannelSource.objects.all(),
         required=False,
     )
     channel_type = serializers.CharField(read_only=True)
@@ -209,7 +209,7 @@ class ChannelSerializer(serializers.ModelSerializer):
             "detail_url",
             "current_labels",
             "labels",
-            "group_ids",
+            "source_ids",
             "participants_count",
             "in_degree",
             "out_degree",
@@ -264,10 +264,10 @@ class ChannelSerializer(serializers.ModelSerializer):
         ]
 
     def update(self, instance, validated_data):
-        groups = validated_data.pop("groups", None)
+        sources = validated_data.pop("sources", None)
         instance = super().update(instance, validated_data)
-        if groups is not None:
-            instance.groups.set(groups)
+        if sources is not None:
+            instance.sources.set(sources)
         return instance
 
 
