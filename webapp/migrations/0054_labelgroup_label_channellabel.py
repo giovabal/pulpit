@@ -7,7 +7,6 @@ import colorfield.fields
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("webapp", "0053_alter_message_webpage_url"),
     ]
@@ -19,7 +18,10 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("_created", models.DateTimeField(auto_now_add=True)),
                 ("_updated", models.DateTimeField(auto_now=True)),
-                ("color", colorfield.fields.ColorField(default="#FF0000", image_field=None, max_length=25, samples=None)),
+                (
+                    "color",
+                    colorfield.fields.ColorField(default="#FF0000", image_field=None, max_length=25, samples=None),
+                ),
                 ("name", models.CharField(max_length=255)),
                 ("description", models.TextField(blank=True, default="")),
                 ("is_partition", models.BooleanField(default=False)),
@@ -35,10 +37,18 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("_created", models.DateTimeField(auto_now_add=True)),
                 ("_updated", models.DateTimeField(auto_now=True)),
-                ("color", colorfield.fields.ColorField(default="#FF0000", image_field=None, max_length=25, samples=None)),
+                (
+                    "color",
+                    colorfield.fields.ColorField(default="#FF0000", image_field=None, max_length=25, samples=None),
+                ),
                 ("name", models.CharField(max_length=255)),
                 ("is_in_target", models.BooleanField(default=False)),
-                ("group", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="labels", to="webapp.labelgroup")),
+                (
+                    "group",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="labels", to="webapp.labelgroup"
+                    ),
+                ),
             ],
             options={
                 "ordering": ["group_id", "name"],
@@ -52,12 +62,26 @@ class Migration(migrations.Migration):
                 ("_updated", models.DateTimeField(auto_now=True)),
                 ("start", models.DateField(blank=True, null=True)),
                 ("end", models.DateField(blank=True, null=True)),
-                ("channel", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="channel_labels", to="webapp.channel")),
-                ("label", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="channel_labels", to="webapp.label")),
+                (
+                    "channel",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="channel_labels", to="webapp.channel"
+                    ),
+                ),
+                (
+                    "label",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="channel_labels", to="webapp.label"
+                    ),
+                ),
             ],
             options={
                 "ordering": ["channel_id", "start"],
-                "indexes": [models.Index(fields=["channel", "label"], name="webapp_chlabel_chan_lbl_idx"), models.Index(fields=["label"], name="webapp_chlabel_lbl_idx"), models.Index(fields=["channel", "start", "end"], name="webapp_chlabel_span_idx")],
+                "indexes": [
+                    models.Index(fields=["channel", "label"], name="webapp_chlabel_chan_lbl_idx"),
+                    models.Index(fields=["label"], name="webapp_chlabel_lbl_idx"),
+                    models.Index(fields=["channel", "start", "end"], name="webapp_chlabel_span_idx"),
+                ],
             },
         ),
     ]
