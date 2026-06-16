@@ -168,7 +168,9 @@ class OperationsView(View):
                         (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
                         for key in net_community.VALID_STRATEGIES
                     ]
-                    + [(g.token, g.name) for g in partition_groups],
+                    # Label groups are tagged "[custom label]" here — outside their own picker the
+                    # option needs to read as a manual partition, not an algorithm.
+                    + [(g.token, net_community.custom_label_display(g.name)) for g in partition_groups],
                     key=lambda kv: kv[1],
                 ),
                 # One chip per partition label group, feeding the "Label groups" fieldset's builder (the

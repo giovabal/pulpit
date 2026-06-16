@@ -72,6 +72,18 @@ def labelgroup_display_labels() -> dict[str, str]:
     }
 
 
+# Tag appended to a label group's name wherever it is offered as a community/strategy *option* outside
+# its own picker — the MODULEROLE basis select, the table / CSV / GEXF export columns, and the viewer's
+# colour-by selector (mirrored by ``strategy_label`` in webapp_engine/map/js/labels.js). Inside the
+# Operations "Label groups" fieldset the bare name is shown, since the context is already unambiguous.
+CUSTOM_LABEL_SUFFIX = " [custom label]"
+
+
+def custom_label_display(name: str) -> str:
+    """A label-group name tagged as a manual ("custom") partition, for display outside its own picker."""
+    return f"{name}{CUSTOM_LABEL_SUFFIX}"
+
+
 # Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
 # of the citation graph. Their reported modularity should use the undirected null
 # model (k_i·k_j / 2m), matching what they actually optimised — not the directed
@@ -179,7 +191,7 @@ class StrategyInstance(TokenInstance):
         gid = labelgroup_id(self.name)
         if gid is not None:
             group = LabelGroup.objects.filter(pk=gid).first()
-            base = group.name if group else self.name
+            base = custom_label_display(group.name) if group else self.name
         else:
             base = COMMUNITY_STRATEGY_LABELS.get(self.name, self.name.title())
         return base + self.label_annotation()
@@ -228,7 +240,7 @@ def strategy_display_label(key: str) -> str:
     gid = labelgroup_id(key)
     if gid is not None:
         group = LabelGroup.objects.filter(pk=gid).first()
-        return group.name if group else key
+        return custom_label_display(group.name) if group else key
     base = canonical_strategy_key(key)
     label = COMMUNITY_STRATEGY_LABELS.get(base.upper(), base.replace("_", " ").title())
     if key == base:
