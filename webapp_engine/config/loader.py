@@ -199,6 +199,39 @@ def _migrate_community_params(parsed: dict) -> dict:
     return parsed
 
 
+_LABELGROUP_TOKEN_RE = re.compile(r"^LABELGROUP\d+$")
+
+
+def _migrate_label_group_strategies(parsed: dict) -> dict:
+    """v0.26: the manual partition strategies move out of ``communities.strategies`` into their own
+    ``communities.label_groups`` key (they get a dedicated Operations-panel fieldset).
+
+    A ``LABELGROUP<id>`` token is lifted into ``label_groups`` (deduplicated, order preserved); the
+    legacy single ``ORGANIZATION`` token — superseded by the per-group ``LABELGROUP<pk>`` partitions —
+    has no stable successor in a committed, pk-free file, so it is dropped. Idempotent: a config
+    already written by ≥0.26 keeps its algorithmic strategies in place with nothing to move.
+    """
+    communities = parsed.get("communities")
+    if not isinstance(communities, dict):
+        return parsed
+    strategies = communities.get("strategies")
+    if not isinstance(strategies, list):
+        return parsed
+    label_groups = communities.setdefault("label_groups", [])
+    kept: list = []
+    for token in strategies:
+        base = _token_base(token).upper()
+        if base == "ORGANIZATION":
+            continue  # renamed to label groups; no committed-file successor key
+        if _LABELGROUP_TOKEN_RE.match(base):
+            if token not in label_groups:
+                label_groups.append(token)
+        else:
+            kept.append(token)
+    communities["strategies"] = kept
+    return parsed
+
+
 def _parse_toml(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -220,6 +253,7 @@ def _load(path: Path, defaults: dict, *, hermetic: bool) -> SimpleNamespace:
     _migrate_legacy_keys(parsed)
     _migrate_dropped_measures(parsed)
     _migrate_community_params(parsed)
+    _migrate_label_group_strategies(parsed)
     return _to_namespace(_deep_merge(defaults, parsed))
 
 
@@ -236,6 +270,7 @@ def _load_payload(path: Path, defaults: dict) -> dict | None:
     _migrate_legacy_keys(parsed)
     _migrate_dropped_measures(parsed)
     _migrate_community_params(parsed)
+    _migrate_label_group_strategies(parsed)
     return _deep_merge(defaults, parsed)
 
 

@@ -13,6 +13,16 @@ export var STRATEGY_LABELS = {
     sbm:              'Stochastic block model',
 };
 
+// LabelGroup partitions arrive as `labelgroup<id>` keys; the static map above can't know the
+// analyst's group names, so the exporter injects them as `window.STRATEGY_LABELS` (a classic inline
+// script that runs before these modules) — fold them in so strategy_label() and every other consumer
+// shows the real group name instead of a title-cased key.
+if (typeof window !== 'undefined' && window.STRATEGY_LABELS) {
+    Object.keys(window.STRATEGY_LABELS).forEach(function (k) {
+        STRATEGY_LABELS[String(k).toLowerCase()] = window.STRATEGY_LABELS[k];
+    });
+}
+
 // Base keys of the parameterised strategies (longest first), and their param kinds — used to strip a
 // parameter suffix back to the family and to reconstruct a readable annotation. Mirrors
 // network.community.canonical_strategy_key / strategy_display_label.

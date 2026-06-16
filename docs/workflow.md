@@ -171,14 +171,12 @@ Before clicking Run, expand **Options** and choose which outputs you want:
 
 > **Tip:** tick at least **2D graph** and **HTML tables** for a first run. That gives you the interactive map and a spreadsheet-style overview.
 
-### Choosing how clusters are detected
+### Choosing how channels are grouped
 
-Under **Community strategies**, select the algorithm Pulpit uses to group channels into clusters:
+The map can group and colour channels two complementary ways. Pick from either or both — every selection becomes a colour-by option you can switch between in the map without re-exporting:
 
-- **Organization** (default) — clusters follow the organizations you defined in Step 3. A good starting point to see whether your categories map onto the actual citation patterns.
-- **Leiden** or **Leiden Directed** — mathematical community detection based on citation patterns, independent of your labels. Often reveals groupings you did not expect.
-
-You can select multiple strategies at once; the map lets you switch between them without re-exporting.
+- **Label groups** — your own *partition* label groups from Manage › Labels (an axis where each channel holds at most one label at a time, e.g. an "Organization" or "Region" grouping). Drag the groups you want into the Selected area to carry them into the analysis. A good starting point to see whether your manual categories line up with the actual citation patterns. Only partition groups appear here.
+- **Community strategies** — algorithmic community detection from the citation patterns themselves, independent of your labels. **Leiden** or **Leiden Directed** are good defaults and often reveal groupings you did not expect.
 
 ### Other useful analysis options
 

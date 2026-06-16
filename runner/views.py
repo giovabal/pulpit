@@ -67,6 +67,9 @@ class OperationsView(View):
             task_info.append({**defn, "name": name, **status})
         channel_sources = list(ChannelSource.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
+        # Partition label groups: each is selectable in the "Label groups" fieldset and participates
+        # like a detected community (its LABELGROUP<id> token is merged into --community-strategies).
+        partition_groups = list(LabelGroup.objects.filter(is_partition=True).order_by("name"))
 
         def _expand(raw: str, all_set: set) -> set:
             items = {s.strip().upper() for s in raw.split(",") if s.strip()}
@@ -158,26 +161,26 @@ class OperationsView(View):
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_sources": channel_sources,
                 "has_vacancies": has_vacancies,
-                # All partitions including LABELGROUP metadata — for the MODULEROLE basis select.
+                # MODULEROLE basis choices: every algorithmic strategy plus each manual LABELGROUP<id>
+                # partition (so a within-module role can be computed against a label group too).
                 "all_basis_choices": sorted(
-                    (
+                    [
                         (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
                         for key in net_community.VALID_STRATEGIES
-                    ),
+                    ]
+                    + [(g.token, g.name) for g in partition_groups],
                     key=lambda kv: kv[1],
                 ),
-                # One LABELGROUP<id> community-strategy chip per partition label group (the
+                # One chip per partition label group, feeding the "Label groups" fieldset's builder (the
                 # manual-partition strategies that replaced the single ORGANIZATION strategy).
-                "community_metadata_strategies": [
-                    {"token": g.token, "label": g.name}
-                    for g in LabelGroup.objects.filter(is_partition=True).order_by("name")
-                ],
+                "community_metadata_strategies": [{"token": g.token, "label": g.name} for g in partition_groups],
                 "palette_names": palette_utils.list_palette_names(),
                 # Ordered token lists seeding the drag-and-drop builders (measures + community
                 # strategies); each token may carry parameters, e.g. "DIFFUSIONLAG(window=60)" /
                 # "LEIDEN_CPM(resolution=0.05)".
                 "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
                 "sa_strategy_tokens": [t.strip() for t in settings.SA_COMMUNITY_STRATEGIES.split(",") if t.strip()],
+                "sa_labelgroup_tokens": [t.strip() for t in settings.SA_LABEL_GROUPS.split(",") if t.strip()],
                 "ad": ad,
             },
         )
@@ -441,6 +444,15 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         val = ",".join(dict.fromkeys(post.getlist(key)))
         if val:
             args += [flag, val]
+    elif kind == "community_strategies":
+        # Manual label-group partitions (their own "Label groups" fieldset, name="label_groups")
+        # and the algorithmic strategies (name="community_strategies") share one CLI flag: the
+        # management command already accepts LABELGROUP<id> tokens inside --community-strategies. Label
+        # groups lead so their partitions sort first, matching the ALL-expansion order in community.py.
+        _, flag = spec
+        val = ",".join(post.getlist("label_groups") + post.getlist("community_strategies"))
+        if val:
+            args += [flag, val]
     elif kind == "const":
         _, key, flag, const_value = spec
         if post.get(key):
@@ -574,7 +586,9 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # One hidden <input name="measures"> per selected chip, in order; each value is a full
         # token carrying its parameters (e.g. "DIFFUSIONLAG(window=60)"). csv joins them with commas.
         ("csv", "measures", "--measures"),
-        ("csv", "community_strategies", "--community-strategies"),
+        # Combines the "Label groups" fieldset (label_groups) with the algorithmic Community
+        # strategies into one --community-strategies value. See the community_strategies arg kind.
+        ("community_strategies", "--community-strategies"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
         ("bool_explicit", "include_mentions", "--mentions", "--no-mentions"),
         ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
@@ -696,6 +710,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("layouts_3d", "layouts.layouts_3d", "list"),
         ("measures", "measures.selected", "list"),
         ("community_strategies", "communities.strategies", "list"),
+        ("label_groups", "communities.label_groups", "list"),
         ("network_stat_groups", "network_stats.groups", "list"),
         ("vacancy_measures", "vacancy.measures", "list"),
         ("vacancy_months_before", "vacancy.months_before", "int"),
@@ -760,7 +775,10 @@ def _validate_post_constraints(task: str, post: Any) -> None:
 
     if task == "structural_analysis":
         measure_tokens = post.getlist("measures") or []
-        strategy_tokens = post.getlist("community_strategies") or []
+        # The manual label-group partitions (their own fieldset) and the algorithmic strategies are
+        # one combined --community-strategies value, so validate them together — a MODULEROLE basis
+        # may name a label group, and a LABELGROUP partition counts as a (metadata) strategy.
+        strategy_tokens = (post.getlist("label_groups") or []) + (post.getlist("community_strategies") or [])
 
         # Parse measure + strategy tokens up-front for a friendly error (syntax / unknown param /
         # range / duplicate) before the subprocess launches.

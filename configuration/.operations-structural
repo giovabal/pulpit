@@ -60,11 +60,14 @@ selected = ["PAGERANK", "HITSHUB", "HITSAUTH", "INDEGCENTRALITY", "OUTDEGCENTRAL
 bridging_basis = ""
 
 [communities]
-# Webapp form default: density / structural / domain strategies, which read one-degree co-citation
-# directly — see docs/community-detection.md → "Interpretation guardrails: density vs. flow". The
-# flow-based methods (INFOMAP, INFOMAP_MEMORY, MCL, WALKTRAP) and STRONGCC are off by default but
-# remain selectable; the other valid density methods (LEIDEN, LEIDEN_CPM, LABELPROPAGATION, KCORE) too.
-strategies = ["ORGANIZATION", "LEIDEN_DIRECTED"]
+# Algorithmic community-detection strategies pre-selected in the form. LEIDEN_DIRECTED reads
+# one-degree co-citation directly (see docs/community-detection.md → "Interpretation guardrails:
+# density vs. flow"); LEIDEN, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, KCORE and SBM stay selectable.
+strategies = ["LEIDEN_DIRECTED"]
+# Manual label-group partitions (Operations panel → "Label groups"). DB-keyed LABELGROUP<id> tokens,
+# so the committed baseline leaves them empty — pick the groups per analysis. Nodes are still coloured
+# by the primary label group by default even when none is selected here.
+label_groups = []
 
 [network_stats]
 groups = ["SIZE", "PATHS", "COHESION", "COMPONENTS", "DEGCORRELATION", "CENTRALIZATION", "CONTENT"]

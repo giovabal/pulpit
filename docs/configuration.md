@@ -207,7 +207,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `communities.strategies` | Community detection strategies. See [Community detection](community-detection.md). Use `["ALL"]` for every strategy. | `[]` |
+| `communities.strategies` | Algorithmic community detection strategies. See [Community detection](community-detection.md). Use `["ALL"]` for every strategy. | `[]` |
+| `communities.label_groups` | Manual partition label groups to include as `LABELGROUP<id>` partitions (Operations panel → **Label groups**). Merged into `--community-strategies` at run time, so they behave like detected communities. DB-keyed, so the bundled baseline leaves this empty. | `[]` |
 
 ## `[network_stats]`
 

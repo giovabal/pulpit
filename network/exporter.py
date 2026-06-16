@@ -119,6 +119,7 @@ def _patch_html_file(
     extra_layouts_3d: "list[str] | None" = None,
     node_count: int = 0,
     edge_count: int = 0,
+    strategy_labels: "dict[str, str] | None" = None,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
     if not os.path.exists(path):
@@ -149,10 +150,16 @@ def _patch_html_file(
     layouts_json = json.dumps(extra_layouts or [])
     layouts_3d_json = json.dumps(extra_layouts_3d or [])
     version_js = json.dumps(app_version)
+    # Display names for the manual LABELGROUP<id> partitions, keyed by their lowercase community key
+    # (labelgroup<id>). The static viewer (js/labels.js) folds these into STRATEGY_LABELS so the
+    # colour-by selector and legend show the group's real name instead of a title-cased key. Escape
+    # "</" so a group name containing "</script>" can't break out of this inline script.
+    strategy_labels_json = json.dumps(strategy_labels or {}).replace("</", "<\\/")
     injection = (
         f"<script>window.VERTICAL_LAYOUT = {vl_value}; "
         f"window.EXTRA_LAYOUTS = {layouts_json}; "
         f"window.EXTRA_LAYOUTS_3D = {layouts_3d_json}; "
+        f"window.STRATEGY_LABELS = {strategy_labels_json}; "
         f"window.APP_VERSION = {version_js};</script>\n"
     )
     for marker in ('<script src="js/', '<script type="module" src="js/'):
@@ -186,6 +193,7 @@ def apply_robots_to_graph_html(
     extra_layouts_3d: "list[str] | None" = None,
     node_count: int = 0,
     edge_count: int = 0,
+    strategy_labels: "dict[str, str] | None" = None,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in the static graph HTML files after they are copied."""
     _patch_html_file(
@@ -197,6 +205,7 @@ def apply_robots_to_graph_html(
         extra_layouts_3d,
         node_count=node_count,
         edge_count=edge_count,
+        strategy_labels=strategy_labels,
     )
     if include_3d:
         _patch_html_file(
@@ -208,6 +217,7 @@ def apply_robots_to_graph_html(
             extra_layouts_3d,
             node_count=node_count,
             edge_count=edge_count,
+            strategy_labels=strategy_labels,
         )
 
 

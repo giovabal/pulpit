@@ -315,10 +315,13 @@ class LegacyCommunityParamsMigrationTests(TestCase):
                 "mcl_inflation = 3.0\n"
             )
             ns = load_structural_settings(hermetic=False)
+            # The legacy ORGANIZATION token is dropped by the label-group migration; the CPM presets
+            # fold into per-instance tokens and MCL is stripped as a removed strategy.
             self.assertEqual(
                 ns.communities.strategies,
-                ["ORGANIZATION", "LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"],
+                ["LEIDEN_CPM(resolution=0.01)", "LEIDEN_CPM(resolution=0.05)"],
             )
+            self.assertEqual(ns.communities.label_groups, [])
             self.assertFalse(hasattr(ns.computation, "leiden_coarse_resolution"))
             self.assertFalse(hasattr(ns.computation, "mcl_inflation"))
 
@@ -329,3 +332,36 @@ class LegacyCommunityParamsMigrationTests(TestCase):
             )
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(ns.communities.strategies, ["LEIDEN_DIRECTED", "LEIDEN_CPM(resolution=0.02)"])
+
+
+class LabelGroupStrategyMigrationTests(TestCase):
+    """v0.26: the manual partitions move out of communities.strategies into communities.label_groups.
+    A LABELGROUP<id> token is lifted across; the legacy single ORGANIZATION token (no committed-file
+    successor) is dropped; algorithmic strategies are left in place."""
+
+    def test_label_group_token_moves_into_label_groups(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[communities]\nstrategies = ["LABELGROUP3", "LEIDEN_DIRECTED"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.communities.strategies, ["LEIDEN_DIRECTED"])
+            self.assertEqual(ns.communities.label_groups, ["LABELGROUP3"])
+
+    def test_legacy_organization_token_dropped(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[communities]\nstrategies = ["ORGANIZATION", "LEIDEN"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.communities.strategies, ["LEIDEN"])
+            self.assertEqual(ns.communities.label_groups, [])
+
+    def test_modern_file_with_label_groups_untouched(self) -> None:
+        with _RedirectConfigPaths() as tmp:
+            (tmp / ".operations-structural").write_text(
+                '[communities]\nstrategies = ["LEIDEN_DIRECTED"]\nlabel_groups = ["LABELGROUP1"]\n'
+            )
+            ns = load_structural_settings(hermetic=False)
+            self.assertEqual(ns.communities.strategies, ["LEIDEN_DIRECTED"])
+            self.assertEqual(ns.communities.label_groups, ["LABELGROUP1"])
