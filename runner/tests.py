@@ -890,6 +890,21 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertIn("PAGERANK", args[idx + 1])
         self.assertIn("OUTDEGCENTRALITY", args[idx + 1])
 
+    def test_label_groups_merge_into_community_strategies(self):
+        # The dedicated "Label groups" field and the algorithmic Community strategies share one
+        # --community-strategies value; the manual partitions lead (matching community.py ALL order).
+        post = FakePost({"label_groups": ["LABELGROUP1"], "community_strategies": ["LEIDEN", "LEIDEN_DIRECTED"]})
+        args = _build_args("structural_analysis", post)
+        idx = args.index("--community-strategies")
+        self.assertEqual(args[idx + 1], "LABELGROUP1,LEIDEN,LEIDEN_DIRECTED")
+
+    def test_label_groups_only_still_emit_community_strategies(self):
+        # Selecting only label groups (no algorithmic strategy) must still pass the flag.
+        post = FakePost({"label_groups": ["LABELGROUP1"]})
+        args = _build_args("structural_analysis", post)
+        self.assertIn("--community-strategies", args)
+        self.assertEqual(args[args.index("--community-strategies") + 1], "LABELGROUP1")
+
     def test_date_filters(self):
         post = FakePost({"startdate": "2024-01-01", "enddate": "2024-12-31"})
         args = _build_args("structural_analysis", post)
@@ -1334,6 +1349,55 @@ class DefaultsViewTests(TestCase):
                     "title": "ok-consensus",
                     "consensus_matrix": "on",
                     "community_strategies": ["LEIDEN", "LEIDEN_DIRECTED"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+
+    def test_save_persists_label_groups_separately(self) -> None:
+        # The "Label groups" field is stored under communities.label_groups, not folded into
+        # communities.strategies, so the two selectors round-trip independently. (The seed migration
+        # creates a primary partition LabelGroup at pk=1, so LABELGROUP1 is a valid token.)
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "with-label-group",
+                    "label_groups": ["LABELGROUP1"],
+                    "community_strategies": ["LEIDEN_DIRECTED"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = _saved_file_content(tmp, ".operations-structural")
+            self.assertIn('label_groups = ["LABELGROUP1"]', content)
+            self.assertIn('strategies = ["LEIDEN_DIRECTED"]', content)
+
+    def test_save_consensus_matrix_counts_label_groups_as_metadata(self) -> None:
+        # A label group selected in its own field is still a metadata partition, so it doesn't count
+        # toward the ≥2 algorithmic strategies the consensus matrix needs — proving the validator
+        # reads label_groups together with community_strategies.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "thin-consensus-lg",
+                    "consensus_matrix": "on",
+                    "label_groups": ["LABELGROUP1"],
+                    "community_strategies": ["LEIDEN"],  # only 1 algorithmic strategy
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("Consensus matrix requires", resp.json()["error"])
+
+    def test_save_accepts_module_role_basis_on_selected_label_group(self) -> None:
+        # A MODULEROLE basis may name a label group selected in the "Label groups" field; the
+        # basis-in-selected-strategies check must therefore see label_groups too.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "role-on-label-group",
+                    "measures": ["MODULEROLE(basis=LABELGROUP1)"],
+                    "label_groups": ["LABELGROUP1"],
                 },
             )
             self.assertEqual(resp.status_code, 200)

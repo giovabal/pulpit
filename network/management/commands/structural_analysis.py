@@ -1855,6 +1855,8 @@ class Command(BaseCommand):
                 extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
                 node_count=len(graph_data.get("nodes", [])),
                 edge_count=len(graph_data.get("edges", [])),
+                # Real names for the manual LABELGROUP<id> colour-by options in the viewer.
+                strategy_labels=community.labelgroup_display_labels(),
             )
             exporter.write_robots_txt(root_target, opts.seo)
 

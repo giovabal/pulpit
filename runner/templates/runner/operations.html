@@ -719,6 +719,38 @@
 
           <div class="ops-fieldset-row">
           <fieldset class="ops-fieldset">
+            <legend>Label groups
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Your manual partition groups (at most one label per channel at a time). Each selected group takes part in the analysis just like a detected community — it becomes a colour-by option on the map, a column in the tables and exports, and an available MODULEROLE basis. Only partition groups appear here; manage them in Manage › Labels."></i>
+              <span class="ops-legend-actions">
+                <button type="button" class="ops-legend-btn" data-labelgroup-action="all">All</button>
+                <button type="button" class="ops-legend-btn" data-labelgroup-action="none">None</button>
+              </span>
+            </legend>
+            <div class="ops-measures">
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
+                <div class="ops-palette" id="labelgroup-palette">
+                  {% for ms in community_metadata_strategies %}
+                  <div class="ops-mchip" draggable="true" data-labelgroup="{{ ms.token }}" data-label="{{ ms.label }}"><i class="bi bi-arrows ops-dir" title="Undirectional — a manual partition, no graph structure used"></i><span class="ops-mchip-label">{{ ms.label }}</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their label in the “{{ ms.label }}” partition group — your manual categorisation, not a detection algorithm."></i><button type="button" class="ops-mchip-add" aria-label="Add {{ ms.label }}" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  {% empty %}
+                  <p class="ops-measures-hint">No partition label groups defined. Create one in <a href="{% url 'backoffice:labels' %}">Manage › Labels</a> and tick “Partition”.</p>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="ops-measures-col">
+                <p class="ops-measures-head">Selected <span class="ops-measures-hint" id="labelgroup-count"></span></p>
+                <div class="ops-dropzone" id="labelgroup-dropzone" aria-label="Selected label groups — drop here">
+                  <p class="ops-dropzone-empty">Nothing selected. Drag a label group here, or press + on one.</p>
+                </div>
+              </div>
+            </div>
+            {{ sa_labelgroup_tokens|json_script:"sa-labelgroup-tokens" }}
+          </fieldset>
+          </div>
+
+          <div class="ops-fieldset-row">
+          <fieldset class="ops-fieldset">
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                  title="Drag a strategy into the Selected area (or press +). → = uses edge direction; ↔ = graph symmetrised. The parameterised Leiden CPM (⚙) can be added more than once with different resolutions; each instance gets its own partition column."></i>
@@ -731,9 +763,6 @@
               <div class="ops-measures-col">
                 <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
                 <div class="ops-palette" id="strategy-palette">
-                  {% for ms in community_metadata_strategies %}
-                  <div class="ops-mchip" draggable="true" data-strategy="{{ ms.token }}" data-label="{{ ms.label }}"><i class="bi bi-arrows ops-dir" title="Undirectional — no graph structure used"></i><span class="ops-mchip-label">{{ ms.label }}</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by their label in the “{{ ms.label }}” partition group — your manual categorisation, not a detection algorithm."></i><button type="button" class="ops-mchip-add" aria-label="Add {{ ms.label }}" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  {% endfor %}
                   <div class="ops-mchip" draggable="true" data-strategy="LEIDEN" data-label="Leiden"><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_DIRECTED" data-label="Leiden directed"><i class="bi bi-arrow-right ops-dir" title="Directional — uses edge direction"></i><span class="ops-mchip-label">Leiden directed</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden directed" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Undirectional — graph symmetrised"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective — a community is stable when its internal edge density exceeds the resolution γ. γ ≈ 0.01 = fewer, larger communities; γ ≈ 0.05 = more, smaller. Add it more than once for a multi-resolution scan."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
@@ -1500,6 +1529,21 @@ function showToast(msg, type) {
   });
   window.rebuildStrategyBuilder = strategyBuilder.rebuild;
 
+  // Label-groups builder: the same factory, fed by the partition label-group chips. Each chip's
+  // hidden <input name="label_groups"> holds a LABELGROUP<id> token; these are parameter-free and get
+  // merged into --community-strategies server-side so they participate like detected communities.
+  var labelGroupBuilder = window.initTokenBuilder({
+    paletteId: 'labelgroup-palette',
+    dropzoneId: 'labelgroup-dropzone',
+    countId: 'labelgroup-count',
+    seedId: 'sa-labelgroup-tokens',
+    fieldName: 'label_groups',
+    itemKey: 'labelgroup',
+    actionSelector: '[data-labelgroup-action]',
+    actionKey: 'labelgroupAction',
+  });
+  window.rebuildLabelGroupBuilder = labelGroupBuilder.rebuild;
+
   // All / None buttons in fieldset legends.
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.ops-legend-btn');
@@ -1821,8 +1865,15 @@ function showToast(msg, type) {
         if (window.rebuildMeasureBuilder) {
             window.rebuildMeasureBuilder((opts.measures || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
         }
+        // A previous export records one merged --community-strategies value; split the manual
+        // LABELGROUP<id> partitions back out so each repopulates its own builder.
+        var stratTokens = (opts.community_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var isLabelGroupToken = function (t) { return /^LABELGROUP\d+$/i.test(t); };
         if (window.rebuildStrategyBuilder) {
-            window.rebuildStrategyBuilder((opts.community_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+            window.rebuildStrategyBuilder(stratTokens.filter(function (t) { return !isLabelGroupToken(t); }));
+        }
+        if (window.rebuildLabelGroupBuilder) {
+            window.rebuildLabelGroupBuilder(stratTokens.filter(isLabelGroupToken));
         }
         setMulti('network_stat_groups',  opts.network_stat_groups);
         setMulti('layouts_2d',           opts.layouts_2d || '');
@@ -1888,6 +1939,12 @@ function showToast(msg, type) {
       if (name === 'community_strategies') {
         if (window.rebuildStrategyBuilder) {
           window.rebuildStrategyBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+        }
+        return;
+      }
+      if (name === 'label_groups') {
+        if (window.rebuildLabelGroupBuilder) {
+          window.rebuildLabelGroupBuilder(Array.isArray(value) ? value : String(value || '').split(','));
         }
         return;
       }

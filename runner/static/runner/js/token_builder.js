@@ -151,7 +151,9 @@
         }
 
         function parseToken(token) {
-            var m = String(token).match(/^\s*([A-Za-z_]+)\s*(?:\(\s*(.*?)\s*\))?\s*$/);
+            // Token names are letters/underscores plus digits, so DB-keyed tokens like LABELGROUP3
+            // (the manual label-group partitions) round-trip through seed / load-defaults too.
+            var m = String(token).match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(\s*(.*?)\s*\))?\s*$/);
             if (!m) return null;
             var key = m[1].toUpperCase();
             var params = {};

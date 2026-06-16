@@ -60,6 +60,18 @@ def labelgroup_strategy_tokens() -> list[str]:
     return [f"LABELGROUP{pk}" for pk in LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True)]
 
 
+def labelgroup_display_labels() -> dict[str, str]:
+    """Map each partition LabelGroup's lowercase ``labelgroup<id>`` partition key to its display name.
+
+    Injected into the static viewer as ``window.STRATEGY_LABELS`` so a label-group colour-by option
+    shows the analyst's group name (e.g. "Region") rather than the title-cased key ("Labelgroup3").
+    The key matches ``StrategyInstance.key`` for a ``LABELGROUP<id>`` token (``name.lower()``).
+    """
+    return {
+        f"labelgroup{pk}": name for pk, name in LabelGroup.objects.filter(is_partition=True).values_list("pk", "name")
+    }
+
+
 # Strategies whose partition is optimised (or computed) on the UNDIRECTED projection
 # of the citation graph. Their reported modularity should use the undirected null
 # model (k_i·k_j / 2m), matching what they actually optimised — not the directed

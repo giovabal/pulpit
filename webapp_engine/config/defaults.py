@@ -110,6 +110,10 @@ STRUCTURAL_DEFAULTS: dict = {
     },
     "communities": {
         "strategies": [],
+        # LABELGROUP<id> tokens for the manual label-group partitions selected in the Operations
+        # panel's own "Label groups" fieldset. Merged into --community-strategies at run time, so they
+        # take part in the analysis exactly like the detected communities above.
+        "label_groups": [],
     },
     "network_stats": {
         "groups": [],
