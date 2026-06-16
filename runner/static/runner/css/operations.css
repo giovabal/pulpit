@@ -324,16 +324,24 @@
 }
 .ops-flags--grid .ops-flag { width: 100%; }
 .ops-dir {
+  /* All four markers (→ ↔ ● ○) share one fixed square box so they reserve identical horizontal and
+     vertical space — the chips stay aligned regardless of glyph, and the smaller dots sit centred
+     within the same box. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
   font-size: 1rem;
+  line-height: 1;
   flex-shrink: 0;
-  /* Receive hover so the direction-type tooltip (→ ↔ ● ○) can show; the icon has no click action. */
+  /* Receive hover so the direction-type tooltip can show; the icon has no click action. */
   pointer-events: auto;
   color: var(--muted);
 }
-/* The direction-invariant (●) and not-a-graph (○) markers read better as a smaller centred dot;
-   the chip rows are inline-flex + align-items:center, so the smaller glyph stays vertically centred. */
+/* Smaller glyph for the dots; the fixed .ops-dir box above keeps their footprint identical to the arrows. */
 .ops-dir.bi-circle-fill,
-.ops-dir.bi-circle { font-size: 0.62rem; }
+.ops-dir.bi-circle { font-size: 0.465rem; }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
 
 /* ---- drag-and-drop measure builder ---- */
