@@ -43,6 +43,9 @@ export function strategy_label(key) {
     var base = canonical_strategy_key(k);
     var label = STRATEGY_LABELS[base] ||
         (base.charAt(0).toUpperCase() + base.slice(1).replace(/_/g, ' '));
+    // Label-group partitions read as a manual "[custom label]" wherever they appear as a strategy
+    // option outside their own picker (mirrors CUSTOM_LABEL_SUFFIX in network/community.py).
+    if (/^labelgroup\d+$/.test(base)) label += ' [custom label]';
     if (k === base) return label;
     var rest = k.slice(base.length + 1);          // e.g. "resolution_0_05"
     var us = rest.indexOf('_');

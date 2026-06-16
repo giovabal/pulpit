@@ -504,6 +504,14 @@ class StrategyParserTests(TestCase):
         self.assertEqual(strategy_display_label("leiden_cpm_resolution_0_01"), "Leiden CPM (resolution=0.01)")
         self.assertEqual(strategy_display_label("leiden_directed"), "Leiden directed")
 
+    def test_label_group_display_carries_custom_label_tag(self) -> None:
+        # Outside its own picker a label group reads as a manual partition: both the key-based display
+        # label (exports/tables) and the instance label (basis dropdown, summaries) get "[custom label]".
+        group = label_group(name="Region", is_primary=False)
+        self.assertEqual(strategy_display_label(f"labelgroup{group.pk}"), "Region [custom label]")
+        inst = parse_strategies([f"LABELGROUP{group.pk}"])[0]
+        self.assertEqual(inst.label, "Region [custom label]")
+
     def test_strategy_name_sources_stay_in_sync(self) -> None:
         # Guard: measures.ALL_STRATEGIES (the measure "basis" choices) must match the community list.
         from network import measures
