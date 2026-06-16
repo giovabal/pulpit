@@ -326,9 +326,14 @@
 .ops-dir {
   font-size: 1rem;
   flex-shrink: 0;
-  pointer-events: none;
+  /* Receive hover so the direction-type tooltip (→ ↔ ● ○) can show; the icon has no click action. */
+  pointer-events: auto;
   color: var(--muted);
 }
+/* The direction-invariant (●) and not-a-graph (○) markers read better as a smaller centred dot;
+   the chip rows are inline-flex + align-items:center, so the smaller glyph stays vertically centred. */
+.ops-dir.bi-circle-fill,
+.ops-dir.bi-circle { font-size: 0.62rem; }
 .ops-flag:has(input:checked) .ops-dir { color: var(--accent); }
 
 /* ---- drag-and-drop measure builder ---- */
