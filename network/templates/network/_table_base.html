@@ -19,6 +19,7 @@
   <meta name="robots" content="{{ robots_meta }}">
   <meta name="generator" content="Pulpit">
   <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <script>window.STRATEGY_LABELS = {{ strategy_labels_json|default:"{}"|safe }};</script>
   {% block head_extra %}{% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

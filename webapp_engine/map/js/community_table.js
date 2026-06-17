@@ -258,28 +258,32 @@ function _render(d) {
         });
         container.appendChild(details);
 
-        // Organisation × community cross-tab (skip the metadata LABELGROUP<id> partitions —
-        // cross-tabbing a label partition against the primary-group labels is uninformative).
-        var orgCross = stratData.org_cross_tab;
-        if (!/^labelgroup\d+$/.test(String(strategyKey).toLowerCase()) && orgCross && orgCross.orgs && orgCross.orgs.length > 1) {
+        // Distribution cross-tabs shown under the strategy table: Organisation first, then one per
+        // label-group partition (Area, Nation, …). Each is precomputed server-side as
+        // {label, label_lc, orgs (row labels), communities, comm_colors, pct_by_org, pct_by_community}.
+        // Label-group strategy tables carry no cross_tabs (cross-tabbing a label partition is uninformative).
+        (stratData.cross_tabs || []).forEach(function(ct) {
+            if (!ct || !ct.orgs || ct.orgs.length < 2) return;
+            var dimLabel = ct.label || "Organisation";
+            var dimLabelLc = ct.label_lc || dimLabel;
             var crossDetails = document.createElement("details");
             crossDetails.className = "community-channels mt-2 mb-4";
             var crossSummary = document.createElement("summary");
             crossSummary.className = "text-muted small";
-            crossSummary.textContent = "Organisation × community distribution";
+            crossSummary.textContent = dimLabel + " × community distribution";
             crossDetails.appendChild(crossSummary);
 
             var crossWrapper = document.createElement("div");
             crossWrapper.style.cssText = "display:flex;flex-direction:column;gap:1.5rem;margin-top:.75rem;";
 
-            var colPerm = _hungarianColPerm(orgCross.pct_by_org, orgCross.communities.length);
-            var crossComm = colPerm.map(function(j) { return orgCross.communities[j]; });
-            var crossColors = colPerm.map(function(j) { return orgCross.comm_colors[j]; });
-            function reorderCols(matrix) {
+            var colPerm = _hungarianColPerm(ct.pct_by_org, ct.communities.length);
+            var crossComm = colPerm.map(function(j) { return ct.communities[j]; });
+            var crossColors = colPerm.map(function(j) { return ct.comm_colors[j]; });
+            var reorderCols = function(matrix) {
                 return matrix.map(function(row) { return colPerm.map(function(j) { return row[j]; }); });
-            }
-            var crossPctByOrg = reorderCols(orgCross.pct_by_org);
-            var crossPctByCommunity = reorderCols(orgCross.pct_by_community);
+            };
+            var crossPctByOrg = reorderCols(ct.pct_by_org);
+            var crossPctByCommunity = reorderCols(ct.pct_by_community);
 
             var buildCrossTable = function(matrix, tableTitle, tableTooltip) {
                 var distThreshold = (meta && meta.community_distribution_threshold != null) ? meta.community_distribution_threshold : 10;
@@ -301,7 +305,7 @@ function _render(d) {
                 tbl.style.cssText = "font-size:.8rem;white-space:nowrap;";
                 var thead = document.createElement("thead");
                 var htr = document.createElement("tr");
-                var th0 = document.createElement("th"); th0.scope = "col"; th0.textContent = "Organisation"; htr.appendChild(th0);
+                var th0 = document.createElement("th"); th0.scope = "col"; th0.textContent = dimLabel; htr.appendChild(th0);
                 visCols.forEach(function(ci) {
                     var th = document.createElement("th"); th.scope = "col"; th.className = "number";
                     var sw = document.createElement("span");
@@ -315,7 +319,7 @@ function _render(d) {
                 thead.appendChild(htr); tbl.appendChild(thead);
                 var tbody = document.createElement("tbody");
                 var frag = document.createDocumentFragment();
-                orgCross.orgs.forEach(function(org, oi) {
+                ct.orgs.forEach(function(org, oi) {
                     var tr = document.createElement("tr");
                     var tdOrg = document.createElement("td"); tdOrg.textContent = org; tr.appendChild(tdOrg);
                     visCols.forEach(function(ci) {
@@ -343,18 +347,18 @@ function _render(d) {
 
             crossWrapper.appendChild(buildCrossTable(
                 crossPctByOrg,
-                "% of organisation nodes per community",
-                "For each organisation: share of its nodes assigned to each community. Rows sum to 100%."
+                "% of " + dimLabelLc + " nodes per community",
+                "For each " + dimLabelLc + ": share of its nodes assigned to each community. Rows sum to 100%."
             ));
             crossWrapper.appendChild(buildCrossTable(
                 crossPctByCommunity,
-                "% of community nodes per organisation",
-                "For each community: share of its nodes coming from each organisation. Columns sum to 100%."
+                "% of community nodes per " + dimLabelLc,
+                "For each community: share of its nodes coming from each " + dimLabelLc + ". Columns sum to 100%."
             ));
 
             crossDetails.appendChild(crossWrapper);
             container.appendChild(crossDetails);
-        }
+        });
     });
 
     initSortableTables();
