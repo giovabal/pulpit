@@ -57,7 +57,7 @@ from network.measures import (
 )
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, Message
-from webapp.test_helpers import label_group, make_channel, make_label
+from webapp.test_helpers import attribute, label_group, make_channel, make_label
 from webapp.utils.colors import parse_color
 
 import networkx as nx
@@ -653,6 +653,27 @@ class BuildGraphTests(TestCase):
         self._create_forward()
         _, channel_dict, _, _ = build_graph(draw_dead_leaves=False)
         self.assertNotIn(str(ch3.pk), channel_dict)
+
+    def test_descriptive_group_partitions_by_out_of_target_labels(self) -> None:
+        """Regression: a non-primary partition group whose labels are all out-of-target
+        (a "Nation" group used only for colouring) must still resolve a window label per
+        node, so its LABELGROUP<id> colouring works. The primary group keeps resolving
+        in-target labels only."""
+        nation = label_group("Nation", is_primary=False)
+        belgium = make_label("Belgium", color="#112233", is_in_target=False, group=nation)
+        attribute(self.ch1, belgium)
+        self._create_forward()  # ch1↔ch2 edge so the build is valid
+
+        _, channel_dict, _, _ = build_graph()
+        node = channel_dict[str(self.ch1.pk)]["data"]
+        # The descriptive group is populated despite its label being out-of-target …
+        self.assertEqual(node["group_partitions"].get(nation.pk), (belgium.pk, belgium.color))
+        # … and detect_labelgroup colours the node by it.
+        community_map, palette = detect_labelgroup(nation.pk, channel_dict)
+        self.assertEqual(community_map[str(self.ch1.pk)], belgium.pk)
+        self.assertIn(belgium.pk, palette)
+        # The primary group's representative label is unchanged (in-target identity).
+        self.assertEqual(node["resolved_org_id"], self.label.pk)
 
     def test_draw_dead_leaves_survive_windowed_build(self) -> None:
         """Regression: a dead leaf cited inside the window must survive a windowed

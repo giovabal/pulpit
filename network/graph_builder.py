@@ -90,37 +90,46 @@ def _channel_activity_bounds(
     return bounds
 
 
-def _in_target_period_tuples(
+def _group_period_tuples(
     channel: Channel,
     group_id: int,
+    *,
+    in_target_only: bool,
 ) -> list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]]:
-    """(label_id, label_name, label_color, start, end) for the channel's in-target periods in ``group_id``.
+    """(label_id, label_name, label_color, start, end) for the channel's label periods in ``group_id``.
 
+    With ``in_target_only`` only the channel's *in-target* labels count — used for
+    the primary group, whose resolved label is the channel's in-target identity
+    (node colour, "organization" column). Otherwise every label in the group is
+    included, so a purely descriptive partition whose labels are all out-of-target
+    (e.g. a "Nation" group) still resolves a window label and can colour the graph.
     Reads from prefetched ``channel_labels__label`` so it issues no query.
     """
     periods = []
     for channel_label in channel.channel_labels.all():
         label = channel_label.label
-        if label.is_in_target and label.group_id == group_id:
+        if label.group_id == group_id and (label.is_in_target or not in_target_only):
             periods.append((label.id, label.name, label.color, channel_label.start, channel_label.end))
     return periods
 
 
 def resolve_window_label(
-    in_target_periods: list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]],
+    periods: list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]],
     window_start: datetime.date | None,
     window_end: datetime.date | None,
     channel_created: datetime.date | None,
     data_min: datetime.date | None,
     data_max: datetime.date | None,
 ) -> tuple[int, str, str] | None:
-    """Pick the in-target label whose period covers the most days inside the window.
+    """Pick the label whose period covers the most days inside the window.
 
-    Tiebreak: the period that starts earliest. ``None`` bounds are clamped — a
-    period start falls back to channel creation / earliest activity / window
-    start; a period end to the window end / latest activity / today; an open
-    analysis window to the channel's data range. Returns ``(label_id, label_name,
-    label_color)`` or ``None`` when no in-target period overlaps the window.
+    ``periods`` are the channel's label periods in one group (in-target only for
+    the primary group, all labels otherwise). Tiebreak: the period that starts
+    earliest. ``None`` bounds are clamped — a period start falls back to channel
+    creation / earliest activity / window start; a period end to the window end /
+    latest activity / today; an open analysis window to the channel's data range.
+    Returns ``(label_id, label_name, label_color)`` or ``None`` when no period
+    overlaps the window.
     """
     today = timezone.localdate()
     floor = channel_created or data_min or window_start or datetime.date.min
@@ -130,7 +139,7 @@ def resolve_window_label(
         w_hi = w_lo
     best_key: tuple[int, int] | None = None
     best_label: tuple[int, str, str] | None = None
-    for label_id, label_name, label_color, p_start, p_end in in_target_periods:
+    for label_id, label_name, label_color, p_start, p_end in periods:
         s = p_start or floor
         e = p_end or w_hi
         lo, hi = max(s, w_lo), min(e, w_hi)
@@ -288,12 +297,22 @@ def build_graph(
         group_partitions: dict[int, tuple[int, str]] = {}
         resolved_label: tuple[int, str, str] | None = None
         for group_id in partition_group_ids:
+            # The primary group resolves the channel's in-target identity (node colour,
+            # "organization" column), so it counts in-target labels only; descriptive
+            # groups partition by every label they carry — including all-out-of-target
+            # ones like a "Nation" group — so their LABELGROUP<id> colouring still works.
+            is_primary = group_id == primary_group_id
             resolved = resolve_window_label(
-                _in_target_period_tuples(channel, group_id), start_date, end_date, created, data_min, data_max
+                _group_period_tuples(channel, group_id, in_target_only=is_primary),
+                start_date,
+                end_date,
+                created,
+                data_min,
+                data_max,
             )
             if resolved is not None:
                 group_partitions[group_id] = (resolved[0], resolved[2])  # (label_id, label_color)
-                if group_id == primary_group_id:
+                if is_primary:
                     resolved_label = resolved
         node_data = channel_network_data(
             channel,

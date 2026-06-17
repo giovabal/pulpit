@@ -9,6 +9,7 @@ from .maintenance import (
     purge_preview,
     purge_run,
 )
+from .palettes import palette_colors
 from .views import (
     ChannelLabelViewSet,
     ChannelSourceViewSet,
@@ -40,6 +41,7 @@ router.register("vacancies", ChannelVacancyViewSet, basename="api-vacancies")
 urlpatterns = [
     *router.urls,
     path("project/", ProjectView.as_view(), name="api-project"),
+    path("palettes/<str:name>/colors/", palette_colors, name="api-palette-colors"),
     path("maintenance/", maintenance_info, name="api-maintenance-info"),
     path("maintenance/check-updates/", check_updates, name="api-maintenance-check-updates"),
     path("maintenance/optimize/", maintenance_optimize, name="api-maintenance-optimize"),

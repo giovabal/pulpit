@@ -390,12 +390,14 @@ def detect_label_propagation(
 
 
 def detect_labelgroup(group_id: int, channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
-    """Partition nodes by their resolved in-target label in LabelGroup ``group_id`` for the window.
+    """Partition nodes by their resolved label in LabelGroup ``group_id`` for the window.
 
     Reads the per-group window resolution ``graph_builder`` stored in ``node['group_partitions']``;
-    nodes with no in-target label in the group (dead leaves, or simply unlabelled in this group) are
-    left ungrouped. Community ids are ``Label`` pks and the palette is built from each label's own
-    colour, so the ``palette_name`` / ``reverse`` flags don't apply (as the old ORGANIZATION strategy).
+    nodes with no label in the group (dead leaves, or simply unlabelled in this group) are left
+    ungrouped. The primary group resolves in-target labels only; a descriptive group (e.g. "Nation")
+    partitions by every label it carries, in-target or not. Community ids are ``Label`` pks and the
+    palette is built from each label's own colour, so the ``palette_name`` / ``reverse`` flags don't
+    apply (as the old ORGANIZATION strategy).
     """
     community_map: CommunityMap = {}
     community_palette: CommunityPalette = {}
