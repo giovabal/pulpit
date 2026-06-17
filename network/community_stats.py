@@ -7,7 +7,7 @@ from typing import Any
 
 from django.db.models import Count, F, Q, QuerySet
 
-from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key
+from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key, labelgroup_display_labels
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
@@ -531,21 +531,22 @@ def _compute_behavioural_equivalence(
     }
 
 
-def _compute_org_cross_tab(
+def _compute_cross_tab(
     nodes: list[dict],
     strategy_rows: list[dict],
     strategy_key: str,
-    pk_to_org: "dict[str, str]",
+    pk_to_group: "dict[str, str]",
 ) -> "dict | None":
-    """Cross-tabulation of organisations vs. community groups.
+    """Cross-tabulation of an arbitrary node grouping vs. community groups.
 
-    Returns None when fewer than two organisations are present in the graph.
-    The returned dict has:
-      ``orgs``           — sorted list of organisation names (row labels)
+    ``pk_to_group`` maps node id → its row-dimension label (an organisation name, or — for a
+    label-group partition — its label in that group). Returns None when fewer than two distinct
+    row labels are present in the graph. The returned dict has:
+      ``orgs``           — sorted list of row labels (the grouping's values)
       ``communities``    — community labels in strategy_rows order (column labels)
       ``comm_colors``    — hex colour per community column
-      ``pct_by_org``     — matrix[org_idx][comm_idx]: % of that org's nodes in the community
-      ``pct_by_community``— matrix[org_idx][comm_idx]: % of that community's nodes from the org
+      ``pct_by_org``     — matrix[row_idx][comm_idx]: % of that row's nodes in the community
+      ``pct_by_community``— matrix[row_idx][comm_idx]: % of that community's nodes from the row
     """
     # Each row has a "group" tuple of (id, count, label, hex_color).
     community_labels = [row["group"][2] for row in strategy_rows]
@@ -554,7 +555,7 @@ def _compute_org_cross_tab(
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     org_names_seen: set[str] = set()
     for node in nodes:
-        org_name = pk_to_org.get(node["id"])
+        org_name = pk_to_group.get(node["id"])
         if org_name is None:
             continue
         comm_label = (node.get("communities") or {}).get(strategy_key)
@@ -595,6 +596,7 @@ def _compute_strategy_entry(
     graph: nx.DiGraph,
     id_to_node: dict[str, dict],
     pk_to_org: dict[str, str],
+    label_group_labels: "dict[str, str] | None" = None,
 ) -> dict[str, Any]:
     """Compute metrics for a single community-detection strategy."""
     label_to_nodes: dict[str, set[str]] = defaultdict(set)
@@ -676,10 +678,30 @@ def _compute_strategy_entry(
         "mean_ei_index": mean_ei_index,
         "rows": rows,
     }
-    if pk_to_org:
-        cross_tab = _compute_org_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
-        if cross_tab is not None:
-            entry["org_cross_tab"] = cross_tab
+    # Distribution cross-tabs shown under the strategy table: Organisation first, then one per
+    # label-group partition (Area, Nation, …) so the analyst sees how this strategy's communities
+    # overlap each grouping. Skipped for the label-group partitions themselves — cross-tabbing a
+    # label partition against the primary-group labels (or another label partition) is uninformative.
+    label_group_labels = label_group_labels or {}
+    if strategy_key not in label_group_labels:
+        cross_tabs: list[dict] = []
+        if pk_to_org:
+            org_ct = _compute_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
+            if org_ct is not None:
+                org_ct["label"], org_ct["label_lc"] = "Organisation", "organisation"
+                cross_tabs.append(org_ct)
+        for lg_key, lg_name in label_group_labels.items():
+            pk_to_label = {
+                node["id"]: label
+                for node in graph_data["nodes"]
+                if (label := (node.get("communities") or {}).get(lg_key)) is not None
+            }
+            lg_ct = _compute_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_label)
+            if lg_ct is not None:
+                lg_ct["label"], lg_ct["label_lc"] = lg_name, lg_name
+                cross_tabs.append(lg_ct)
+        if cross_tabs:
+            entry["cross_tabs"] = cross_tabs
     return entry
 
 
@@ -745,6 +767,10 @@ def compute_community_metrics(
         pk_to_org = {node["id"]: node["organization"] for node in graph_data["nodes"] if node.get("organization")}
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
+    # Label-group partitions selected in this run, keyed by partition key → display name. Each becomes
+    # an extra "<group> × community distribution" cross-tab under every non-label-group strategy table.
+    strategy_set = set(strategies)
+    label_group_labels = {k: v for k, v in labelgroup_display_labels().items() if k in strategy_set}
     if status_callback:
         status_callback("network")
     for strategy_key in strategies:
@@ -754,7 +780,7 @@ def compute_community_metrics(
                 status_callback(strategy_key)
             continue
         result["strategies"][strategy_key] = _compute_strategy_entry(
-            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org
+            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org, label_group_labels
         )
         if status_callback:
             status_callback(strategy_key)

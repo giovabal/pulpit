@@ -7,7 +7,7 @@ from typing import Any
 from django.conf import settings
 from django.template.loader import render_to_string
 
-from network.community import strategy_display_label
+from network.community import labelgroup_display_labels, strategy_display_label
 from network.community_stats import network_summary_rows
 from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
@@ -19,9 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def _pulpit_ctx() -> dict:
+    # Display names for the manual LABELGROUP<id> partitions, injected into every table page as
+    # window.STRATEGY_LABELS so labels.js → strategy_label() shows the analyst's group name ("Area")
+    # instead of a title-cased key ("Labelgroup1"). Escape "</" so a group name containing "</script>"
+    # can't break out of the inline <script> (mirrors network.exporter._patch_html_file).
+    strategy_labels_json = json.dumps(labelgroup_display_labels()).replace("</", "<\\/")
     return {
         "repository_url": getattr(settings, "REPOSITORY_URL", ""),
         "app_version": getattr(settings, "APP_VERSION", ""),
+        "strategy_labels_json": strategy_labels_json,
     }
 
 
@@ -494,9 +500,9 @@ def write_community_metrics_json(
             strategy_entry["inter_community_edge_ratio"] = round(icr, 6) if icr is not None else None
             mei = entry.get("mean_ei_index")
             strategy_entry["mean_ei_index"] = round(mei, 6) if mei is not None else None
-            cross_tab = entry.get("org_cross_tab")
-            if cross_tab is not None:
-                strategy_entry["org_cross_tab"] = cross_tab
+            cross_tabs = entry.get("cross_tabs")
+            if cross_tabs is not None:
+                strategy_entry["cross_tabs"] = cross_tabs
 
     with open(communities_path, "w") as f:
         f.write(json.dumps(communities_file))
