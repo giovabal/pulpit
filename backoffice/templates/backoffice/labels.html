@@ -30,6 +30,8 @@
 <div id="lbl-groups">
   <p class="bo-empty">Loading…</p>
 </div>
+
+{{ palette_names|json_script:"palette-names-data" }}
 {% endblock bo_content %}
 
 {% block extra_scripts %}

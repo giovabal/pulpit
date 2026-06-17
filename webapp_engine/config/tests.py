@@ -350,9 +350,7 @@ class LabelGroupStrategyMigrationTests(TestCase):
 
     def test_legacy_organization_token_dropped(self) -> None:
         with _RedirectConfigPaths() as tmp:
-            (tmp / ".operations-structural").write_text(
-                '[communities]\nstrategies = ["ORGANIZATION", "LEIDEN"]\n'
-            )
+            (tmp / ".operations-structural").write_text('[communities]\nstrategies = ["ORGANIZATION", "LEIDEN"]\n')
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(ns.communities.strategies, ["LEIDEN"])
             self.assertEqual(ns.communities.label_groups, [])

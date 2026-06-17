@@ -89,6 +89,9 @@
         var addLabelBtn = document.createElement("button"); addLabelBtn.className = "bo-btn bo-btn--sm bo-btn--ghost";
         addLabelBtn.innerHTML = '<i class="bi bi-plus me-1"></i>Add label';
         addLabelBtn.addEventListener("click", function () { startAddLabel(card, group); });
+        var recolorBtn = document.createElement("button"); recolorBtn.className = "bo-btn bo-btn--sm bo-btn--ghost";
+        recolorBtn.innerHTML = '<i class="bi bi-palette me-1"></i>Recolor';
+        recolorBtn.addEventListener("click", function () { openRecolor(group); });
         var editBtn = makeEditBtn();
         editBtn.addEventListener("click", function () { card.replaceChild(groupHeadEdit(card, group), head); });
         var delBtn = makeDeleteBtn(group.name);
@@ -100,7 +103,8 @@
                     .catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
         });
-        actions.appendChild(addLabelBtn); actions.appendChild(editBtn); actions.appendChild(delBtn);
+        actions.appendChild(addLabelBtn); actions.appendChild(recolorBtn);
+        actions.appendChild(editBtn); actions.appendChild(delBtn);
         head.appendChild(actions);
         return head;
     }
@@ -216,6 +220,145 @@
         });
         tdA.appendChild(save); tdA.appendChild(cancel); tr.appendChild(tdA);
         return tr;
+    }
+
+    /* ── Recolor (apply a colorcet palette to a group's labels) ─────────── */
+    var PALETTE_NAMES = (function () {
+        var el = document.getElementById("palette-names-data");
+        try { return el ? JSON.parse(el.textContent) : {}; } catch (_) { return {}; }
+    })();
+
+    var _recolorModal = null;
+    var _recolorEl, $rcTitle, $rcLabels, $rcPalette, $rcPaletteList, $rcApply, $rcSave;
+    var _recolorLabels = [];   /* the group's labels, in display order */
+    var _recolorInputs = [];   /* one <input type=color> per label, same order */
+
+    function buildRecolorModal() {
+        _recolorEl = document.createElement("div");
+        _recolorEl.className = "modal fade"; _recolorEl.id = "recolor-modal";
+        _recolorEl.tabIndex = -1; _recolorEl.setAttribute("aria-hidden", "true");
+        _recolorEl.setAttribute("aria-labelledby", "recolor-title");
+        _recolorEl.innerHTML =
+            '<div class="modal-dialog modal-dialog-centered modal-lg">' +
+              '<div class="modal-content">' +
+                '<div class="modal-header py-2">' +
+                  '<span class="modal-title fw-semibold" id="recolor-title"></span>' +
+                  '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
+                '</div>' +
+                '<div class="modal-body">' +
+                  '<div class="bo-recolor-labels" id="recolor-labels"></div>' +
+                  '<div class="bo-recolor-form">' +
+                    '<div class="bo-segmented" role="group" aria-label="Palette type">' +
+                      '<button type="button" class="bo-seg-btn" data-kind="categorical">Categorical</button>' +
+                      '<button type="button" class="bo-seg-btn" data-kind="continuous">Continuous</button>' +
+                    '</div>' +
+                    '<input class="bo-input bo-input--wide" id="recolor-palette" list="recolor-palette-list" ' +
+                      'placeholder="colorcet palette name (e.g. glasbey)" aria-label="colorcet palette name" autocomplete="off">' +
+                    '<datalist id="recolor-palette-list"></datalist>' +
+                    '<button type="button" class="bo-btn" id="recolor-apply">Apply</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="modal-footer py-2">' +
+                  '<button type="button" class="bo-btn bo-btn--ghost" data-bs-dismiss="modal">Cancel</button>' +
+                  '<button type="button" class="bo-btn" id="recolor-save">Save</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        document.body.appendChild(_recolorEl);
+
+        $rcTitle       = _recolorEl.querySelector("#recolor-title");
+        $rcLabels      = _recolorEl.querySelector("#recolor-labels");
+        $rcPalette     = _recolorEl.querySelector("#recolor-palette");
+        $rcPaletteList = _recolorEl.querySelector("#recolor-palette-list");
+        $rcApply       = _recolorEl.querySelector("#recolor-apply");
+        $rcSave        = _recolorEl.querySelector("#recolor-save");
+
+        _recolorEl.querySelectorAll(".bo-seg-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () { setKind(btn.dataset.kind); });
+        });
+        $rcApply.addEventListener("click", applyPalette);
+        $rcSave.addEventListener("click", saveRecolor);
+        if (typeof bootstrap !== "undefined") _recolorModal = new bootstrap.Modal(_recolorEl);
+    }
+
+    function setKind(kind) {
+        _recolorEl.querySelectorAll(".bo-seg-btn").forEach(function (btn) {
+            var on = btn.dataset.kind === kind;
+            btn.classList.toggle("is-active", on);
+            btn.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        var names = PALETTE_NAMES[kind] || [];
+        $rcPaletteList.innerHTML = "";
+        names.forEach(function (n) {
+            var opt = document.createElement("option"); opt.value = n; $rcPaletteList.appendChild(opt);
+        });
+        $rcPalette.value = "";
+    }
+
+    function openRecolor(group) {
+        if (!_recolorEl) buildRecolorModal();
+        if (!_recolorModal) return;   /* bootstrap unavailable */
+
+        $rcTitle.textContent = "Recolor — " + group.name;
+        _recolorLabels = (_labelsByGroup[group.id] || []).slice();
+        _recolorInputs = [];
+        $rcLabels.innerHTML = "";
+
+        var hasLabels = _recolorLabels.length > 0;
+        if (!hasLabels) {
+            $rcLabels.innerHTML = '<p class="bo-empty">No labels in this group yet.</p>';
+        } else {
+            _recolorLabels.forEach(function (label) {
+                var chip = document.createElement("label"); chip.className = "bo-recolor-chip";
+                var input = document.createElement("input");
+                input.type = "color"; input.className = "bo-input bo-input--color";
+                input.value = label.color || "#cccccc";
+                input.setAttribute("aria-label", "Colour for " + label.name);
+                var name = document.createElement("span"); name.className = "bo-recolor-chip-name"; name.textContent = label.name;
+                chip.appendChild(input); chip.appendChild(name);
+                $rcLabels.appendChild(chip);
+                _recolorInputs.push(input);
+            });
+        }
+        $rcApply.disabled = !hasLabels;
+        $rcSave.disabled = !hasLabels;
+        setKind("categorical");
+        _recolorModal.show();
+    }
+
+    function applyPalette() {
+        var name = $rcPalette.value.trim();
+        if (!name) { showToast("Choose a palette name.", "error"); return; }
+        var count = _recolorInputs.length;
+        if (!count) return;
+        $rcApply.disabled = true;
+        apiFetch("/manage/api/palettes/" + encodeURIComponent(name) + "/colors/?count=" + count)
+            .then(function (data) {
+                (data.colors || []).forEach(function (hex, i) {
+                    if (_recolorInputs[i]) _recolorInputs[i].value = hex;
+                });
+            })
+            .catch(function (e) { showToast("Error: " + e.message, "error"); })
+            .finally(function () { $rcApply.disabled = false; });
+    }
+
+    function saveRecolor() {
+        var changed = [];
+        _recolorLabels.forEach(function (label, i) {
+            var hex = _recolorInputs[i].value;
+            if (hex.toLowerCase() !== (label.color || "").toLowerCase()) changed.push({ id: label.id, color: hex });
+        });
+        if (!changed.length) { showToast("No colour changes to save."); return; }
+        $rcSave.disabled = true;
+        Promise.all(changed.map(function (c) {
+            return apiFetch(API_LABELS + c.id + "/", { method: "PATCH", body: { color: c.color } });
+        })).then(function () {
+            _recolorModal.hide();
+            showToast(changed.length + " label" + (changed.length !== 1 ? "s" : "") + " recoloured.");
+            loadAll();
+        }).catch(function (e) {
+            showToast("Error: " + e.message, "error");
+        }).finally(function () { $rcSave.disabled = false; });
     }
 
     /* ── Add group ──────────────────────────────────────────────────────── */

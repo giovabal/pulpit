@@ -639,6 +639,45 @@ tr:hover .bo-detail-btn { opacity: 1; }
 .bo-label-group-actions { display: flex; gap: var(--space-2); }
 .bo-label-table { margin-bottom: 0; }
 
+/* Recolor modal: labels wrap horizontally, each with an editable swatch */
+.bo-recolor-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.bo-recolor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.bo-recolor-chip-name { font-size: .875rem; }
+
+.bo-recolor-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.bo-segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.bo-seg-btn {
+  padding: .375rem .75rem;
+  font-size: .875rem;
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.bo-seg-btn + .bo-seg-btn { border-left: 1px solid var(--border); }
+.bo-seg-btn.is-active { background: var(--accent); color: #fff; }
+
 /* Per-channel editor: one label section per group */
 .bo-label-group-section {
   border-left: 2px solid var(--border);

@@ -1,7 +1,5 @@
 # Roadmap for Pulpit: Activities for Next Versions
 ## [0.26]
-- A button to set a palette for a label group, by example with colorcet
-- Using any label group that's a partition as community strategy
 
 ## [1.0]
 - An installer, or a package

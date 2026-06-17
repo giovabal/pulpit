@@ -158,3 +158,57 @@ def expand_colors(colors: Sequence[Any], count: int) -> list[Any]:
         return list(colors[:count])
     repeats = (count + len(colors) - 1) // len(colors)
     return (list(colors) * repeats)[:count]
+
+
+# ── colorcet palettes (label re-colouring) ──────────────────────────────────
+# Distinct from the pypalettes graph community palette above: the backoffice
+# "Recolor" picker draws label colours from colorcet, whose two families map
+# onto a continuous/categorical switch. The categorical family is glasbey.
+
+_CATEGORICAL_PREFIX = "glasbey"
+
+
+def _colorcet() -> Any:
+    import colorcet  # lazy: keeps the app booting if the optional dep is absent
+
+    return colorcet
+
+
+@functools.lru_cache(maxsize=1)
+def colorcet_palette_names() -> dict[str, list[str]]:
+    """colorcet's curated (``palette_n``) names split by kind, each sorted.
+
+    Categorical = the glasbey family (maximally-distinct ordered colours);
+    continuous = everything else (perceptually-uniform gradients).
+    """
+    names = sorted(_colorcet().palette_n.keys())
+    return {
+        "continuous": [name for name in names if not name.startswith(_CATEGORICAL_PREFIX)],
+        "categorical": [name for name in names if name.startswith(_CATEGORICAL_PREFIX)],
+    }
+
+
+def is_categorical_palette(name: str) -> bool:
+    return name.startswith(_CATEGORICAL_PREFIX)
+
+
+def colorcet_colors(name: str, count: int) -> list[str]:
+    """Return ``count`` hex colours drawn from colorcet palette ``name``.
+
+    Categorical (glasbey) palettes yield their first ``count`` colours in order
+    (cycled if ``count`` exceeds the palette); continuous palettes are sampled
+    at ``count`` evenly-spaced points across the full gradient. Raises
+    ``KeyError`` for an unknown palette name.
+    """
+    palette = _colorcet().palette.get(name)
+    if palette is None:
+        raise KeyError(name)
+    if count <= 0:
+        return []
+    colors = list(palette)
+    if is_categorical_palette(name):
+        return expand_colors(colors, count)
+    if count == 1:
+        return [colors[len(colors) // 2]]
+    last = len(colors) - 1
+    return [colors[round(index * last / (count - 1))] for index in range(count)]

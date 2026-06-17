@@ -35,6 +35,18 @@ class ChannelUpdateView(StaffRequiredMixin, TemplateView):
 class LabelsView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/labels.html"
 
+    def get_context_data(self, **kwargs):
+        from webapp.utils import colors as color_utils
+
+        ctx = super().get_context_data(**kwargs)
+        try:
+            ctx["palette_names"] = color_utils.colorcet_palette_names()
+        except Exception:
+            # colorcet is an optional dependency — degrade to no suggestions
+            # rather than breaking the whole Labels page if it is missing.
+            ctx["palette_names"] = {"continuous": [], "categorical": []}
+        return ctx
+
 
 class SourcesView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/sources.html"
