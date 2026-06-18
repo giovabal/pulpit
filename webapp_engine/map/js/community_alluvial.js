@@ -18,8 +18,8 @@ var NS = "http://www.w3.org/2000/svg";
 
 // ── Layout constants ────────────────────────────────────────────────────────────
 var BOX_W = 16;            // community-box width (px)
-var COL_SPACING = 170;     // distance between consecutive column left edges (px)
-var PLOT_H = 360;          // vertical plotting area for the tallest column (px)
+var MIN_COL_SPACING = 90;  // minimum distance between columns; below the page-fit width it scrolls (px)
+var PLOT_H = 560;          // vertical plotting area for the tallest column (px) — total height = 600
 var GAP_V = 3;             // vertical gap between stacked boxes in a column (px)
 var PAD_TOP = 10, PAD_BOTTOM = 30, PAD_LEFT = 10, PAD_RIGHT = 10;
 var ORDER_SWEEPS = 6;      // barycentre crossing-reduction passes
@@ -108,7 +108,7 @@ function _orderStages(stages, flows) {
 
 // Assign box geometry. One vertical unit (px per channel) is the largest value that keeps every
 // column within PLOT_H; columns are then centred vertically. Populates c.{x,y,h} and st.byLabel.
-function _layout(stages) {
+function _layout(stages, colSpacing) {
     var unit = Infinity;
     stages.forEach(function(st) {
         var total = st.comms.reduce(function(s, c) { return s + c.count; }, 0);
@@ -120,7 +120,7 @@ function _layout(stages) {
     stages.forEach(function(st, si) {
         var total = st.comms.reduce(function(s, c) { return s + c.count; }, 0);
         var colH = total * unit + (st.comms.length - 1) * GAP_V;
-        var x = PAD_LEFT + si * COL_SPACING;
+        var x = PAD_LEFT + si * colSpacing;
         var y = PAD_TOP + (PLOT_H - colH) / 2;
         st.x = x;
         st.byLabel = {};
@@ -172,23 +172,28 @@ function _svgEl(name, attrs) {
 
 // ── Public entry point ───────────────────────────────────────────────────────────
 // Returns a DOM section for one strategy's year-over-year community flow, or null when fewer than
-// two timeline years carry the strategy (nothing to connect).
-export function build_community_alluvial(strategyKey, yearComms) {
+// two timeline years carry the strategy (nothing to connect). ``availWidth`` is the page width the
+// diagram should fill (px); the columns spread to span it, down to MIN_COL_SPACING (then it scrolls).
+export function build_community_alluvial(strategyKey, yearComms, availWidth) {
     var stages = _yearStages(strategyKey, yearComms);
     if (stages.length < 2) return null;
 
     var flows = _computeFlows(stages);
     _orderStages(stages, flows);
-    var unit = _layout(stages);
 
-    var width = PAD_LEFT + (stages.length - 1) * COL_SPACING + BOX_W + PAD_RIGHT;
+    var gaps = stages.length - 1;
+    var fitSpacing = ((availWidth || 0) - PAD_LEFT - PAD_RIGHT - BOX_W) / gaps;
+    var colSpacing = Math.max(MIN_COL_SPACING, fitSpacing);
+    var unit = _layout(stages, colSpacing);
+
+    var width = PAD_LEFT + gaps * colSpacing + BOX_W + PAD_RIGHT;
     var height = PAD_TOP + PLOT_H + PAD_BOTTOM;
 
     var svg = _svgEl("svg", {
         viewBox: "0 0 " + width + " " + height, width: width, height: height, role: "img",
         "aria-label": "Community flow across " + stages.length + " years for this strategy",
     });
-    svg.style.cssText = "display:block;background:#fff;border-radius:4px;max-width:100%;height:auto;";
+    svg.style.cssText = "display:block;background:#fff;border-radius:4px;";
 
     // Ribbons first (under the boxes), per boundary.
     for (var bi = 0; bi < stages.length - 1; bi++) {
