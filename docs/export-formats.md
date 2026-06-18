@@ -152,7 +152,7 @@ Click any column header to sort. Download the `.xlsx` for further analysis in a 
 
 ## network_table.html / .xlsx — whole-network statistics
 
-Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm. A **Partition comparison** block then cross-compares every community strategy and label-group partition under four indices — ARI, AMI, NMI, and VI — as strategy × strategy heat-maps (also written as labelled blocks in the XLSX `Network` sheet); see [Partition comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi).
+Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm. (The cross-strategy **Partition comparison** matrices are rendered on `community_table.html`; they are still written as labelled blocks in this file's XLSX `Network` sheet.)
 
 For a full explanation of each metric, see [Whole-network statistics](whole-network-statistics.md).
 
@@ -161,6 +161,8 @@ For a full explanation of each metric, see [Whole-network statistics](whole-netw
 ## community_table.html / .xlsx — per-community metrics
 
 One section per active community detection strategy. For each strategy: a table of per-community structural metrics (node count, internal/external edges, density, reciprocity, clustering, E-I index, path lengths), a modularity-contribution column, and a collapsible organization × community distribution panel (when multiple organizations are present).
+
+A **Partition comparison** block (cross-strategy ARI / AMI / NMI / VI heat-maps, with a year selector) sits below the per-strategy tables — see [Whole-network statistics § Partition comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi).
 
 When the export carries a year timeline (`--timeline-step year`), the full-range **All** view additionally renders, under each strategy, a **Community flow** alluvial diagram — one column per year, communities stacked as boxes, and ribbons tracking how channels move between communities from one year to the next (thickness ∝ channel count). It is built client-side from the per-year `data_YYYY/communities.json` files. See [Community detection § Community flow across years](community-detection.md#community-flow-across-years) for how to read it.
 

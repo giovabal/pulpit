@@ -2,6 +2,7 @@ import { build_year_nav } from './year_nav.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
 import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
 import { build_community_alluvial, build_strategy_intersection_sankey } from './community_alluvial.js';
+import { render_partition_comparison } from './partition_comparison.js';
 
 // Mirrors network.community.UNDIRECTED_BASIS_STRATEGIES — strategies optimised on the undirected
 // W+Wᵀ projection, whose modularity (and per-community contributions) community_stats.py computes
@@ -81,6 +82,9 @@ var _resizeTimer = null;
 // Redraw closure for the standalone strategy-intersection Sankey at the foot of the page (set once it
 // is built), so a window resize can re-fit it to the new page width.
 var _redrawStrategySankey = null;
+// Per-year network_metrics.json cache (backs the Partition comparison matrices, which live in that
+// file alongside the whole-network stats).
+var _nmCache = {};
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -134,6 +138,67 @@ window.addEventListener("resize", function() {
         if (_redrawStrategySankey) _redrawStrategySankey();
     }, 200);
 });
+
+// ── Partition comparison (ARI / AMI / NMI / VI matrices, with a year selector) ───
+// Loads the partition_comparison block from network_metrics.json for the chosen year ("all" = the
+// full-range partition). Each timeline year has its own network_metrics.json, so the selector simply
+// swaps which one is rendered.
+function _fetch_network_metrics(year) {
+    if (year in _nmCache) return Promise.resolve(_nmCache[year]);
+    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    return fetchJsonOrNull(dd + "network_metrics.json").then(function(d) { _nmCache[year] = d; return d; });
+}
+
+function _build_partition_comparison_section() {
+    var section = document.getElementById("partition-comparison");
+    if (!section) return;
+    _fetch_network_metrics("all").then(function(nm) {
+        var pc = nm && nm.partition_comparison;
+        if (!pc || !pc.strategies || pc.strategies.length < 2) return;  // nothing comparable → stay empty
+        section.innerHTML = "";
+
+        var h3 = document.createElement("h3");
+        h3.className = "mt-4 mb-1";
+        h3.textContent = "Partition comparison";
+        section.appendChild(h3);
+        var intro = document.createElement("p");
+        intro.className = "text-muted small mb-3";
+        intro.textContent = "Pairwise agreement between every community strategy and every label-group "
+            + "partition, under four standard clustering-comparison indices. Each pair is scored on the "
+            + "channels assigned by both partitions. Read a label-group row against the algorithmic "
+            + "strategies to see how closely the analyst's manual grouping matches the structural communities.";
+        section.appendChild(intro);
+
+        var body = document.createElement("div");
+        body.id = "partition-comparison-body";
+
+        if (_ty.length) {
+            var controls = document.createElement("div");
+            controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+            var wrap = document.createElement("div");
+            var lbl = document.createElement("label");
+            lbl.className = "form-label mb-1 d-block fw-semibold small";
+            var selYear = document.createElement("select");
+            selYear.className = "form-select form-select-sm"; selYear.style.width = "auto";
+            selYear.id = "partition-comparison-year";
+            lbl.htmlFor = selYear.id; lbl.textContent = "Year";
+            [{ value: "all", label: "All years" }].concat(
+                _ty.map(function(y) { return { value: String(y.year), label: String(y.year) }; })
+            ).forEach(function(o) { selYear.appendChild(new Option(o.label, o.value)); });
+            wrap.appendChild(lbl); wrap.appendChild(selYear); controls.appendChild(wrap);
+            section.appendChild(controls);
+            selYear.addEventListener("change", function() {
+                var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
+                _fetch_network_metrics(year).then(function(d) {
+                    render_partition_comparison(body, d && d.partition_comparison);
+                });
+            });
+        }
+
+        section.appendChild(body);
+        render_partition_comparison(body, pc);   // initial view = all years (already fetched)
+    });
+}
 
 // ── Strategy-intersection Sankey (standalone widget at the foot of the page) ─────
 // Pick any two strategies and a year (or all years); ribbons show how many channels each pair of
@@ -515,6 +580,7 @@ Promise.all([
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
     _load_year_comms();
+    _build_partition_comparison_section();
     _build_strategy_sankey_section(Object.keys(results[0].strategies || {}));
 
     // Consensus matrix button — injected once based on full-range meta
