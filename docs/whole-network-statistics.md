@@ -238,7 +238,7 @@ Use E-I index together with reciprocity and inter-community edge ratio for a com
 
 ### Partition comparison matrices (ARI, AMI, NMI, VI)
 
-The **Partition comparison** block appears in `network_table.html` (and in the `Network` sheet of the network-statistics XLSX) whenever two or more comparable partitions are active. It renders **four** strategy × strategy heat-maps — one per index — that quantify, from complementary angles, how much any two partitions of the channels agree.
+The **Partition comparison** block appears on `community_table.html` (and in the `Network` sheet of the network-statistics XLSX) whenever two or more comparable partitions are active. It renders **four** strategy × strategy heat-maps — one per index — that quantify, from complementary angles, how much any two partitions of the channels agree. On a year-timeline export it carries its own **year selector** (*All years* or a single year), so you can compare the partitions of the full-range analysis or of any one year in isolation.
 
 **What the rows and columns are.** Every active **community-detection strategy** (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, SBM, …) *and* every **label-group partition** (each partition `LabelGroup` — the primary one is the analyst's organisation grouping). `KCORE` is excluded: it is a shell decomposition, not a community detection, so partition similarity against it is uninformative (the [consensus matrix](export-formats.md#consensus_matrixhtml--cross-strategy-agreement) excludes it for the same reason). Including the label groups is the point: it turns the block into a validation of the algorithms' structural communities against the analyst's manual labels.
 
