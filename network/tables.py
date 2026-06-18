@@ -8,7 +8,7 @@ from django.conf import settings
 from django.template.loader import render_to_string
 
 from network.community import labelgroup_display_labels, strategy_display_label
-from network.community_stats import network_summary_rows
+from network.community_stats import PARTITION_COMPARISON_METRICS, network_summary_rows
 from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
 
@@ -197,7 +197,7 @@ def write_network_metrics_json(
         ),
         "summary_rows": summary_rows,
         "modularity_rows": modularity_rows,
-        "nmi_matrix": community_table_data.get("nmi_matrix"),
+        "partition_comparison": community_table_data.get("partition_comparison"),
     }
     with open(os.path.join(data_dir, "network_metrics.json"), "w") as f:
         f.write(json.dumps(payload))
@@ -246,19 +246,23 @@ def write_network_table_xlsx(
             entry = ctd["strategies"].get(strategy_key)
             ws.append([strategy_display_label(strategy_key), entry["modularity"] if entry else None])
 
-        nmi_data = ctd.get("nmi_matrix")
-        if nmi_data and len(nmi_data.get("strategies", [])) >= 2:
-            nmi_strats = nmi_data["strategies"]
-            nmi_cells = nmi_data["cells"]
-            ws.append([])
-            ws.append(["Partition agreement (NMI)"])
-            for cell in ws[ws.max_row]:
-                cell.font = Font(bold=True)
-            ws.append([""] + [strategy_display_label(s) for s in nmi_strats])
-            for cell in ws[ws.max_row]:
-                cell.font = Font(bold=True)
-            for i, sk in enumerate(nmi_strats):
-                ws.append([strategy_display_label(sk)] + [nmi_cells[i][j] for j in range(len(nmi_strats))])
+        comparison = ctd.get("partition_comparison")
+        if comparison and len(comparison.get("strategies", [])) >= 2:
+            cmp_strats = comparison["strategies"]
+            cmp_labels = [strategy_display_label(s) for s in cmp_strats]
+            for metric_key, abbr, name, _is_distance in PARTITION_COMPARISON_METRICS:
+                cells = comparison["metrics"].get(metric_key)
+                if not cells:
+                    continue
+                ws.append([])
+                ws.append([f"{name} ({abbr})"])
+                for cell in ws[ws.max_row]:
+                    cell.font = Font(bold=True)
+                ws.append([""] + cmp_labels)
+                for cell in ws[ws.max_row]:
+                    cell.font = Font(bold=True)
+                for i, lbl in enumerate(cmp_labels):
+                    ws.append([lbl] + [cells[i][j] for j in range(len(cmp_strats))])
 
     wb = openpyxl.Workbook()
     wb.properties.creator = "Pulpit"

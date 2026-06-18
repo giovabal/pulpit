@@ -18,6 +18,10 @@ type CommunityTableData = dict[str, Any]
 #       {"group": tuple, "node_count": int, "metrics": dict},
 #       ...
 #     ]
+#   },
+#   "partition_comparison": {         # present when >= 2 comparable strategies (see community_stats)
+#     "strategies": [strategy_key, ...],
+#     "metrics": {"ari"|"ami"|"nmi"|"vi": [[float|None, ...], ...]},  # symmetric strategy×strategy
 #   }
 # }
 

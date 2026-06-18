@@ -152,7 +152,7 @@ Click any column header to sort. Download the `.xlsx` for further analysis in a 
 
 ## network_table.html / .xlsx — whole-network statistics
 
-Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm.
+Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm. A **Partition comparison** block then cross-compares every community strategy and label-group partition under four indices — ARI, AMI, NMI, and VI — as strategy × strategy heat-maps (also written as labelled blocks in the XLSX `Network` sheet); see [Partition comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi).
 
 For a full explanation of each metric, see [Whole-network statistics](whole-network-statistics.md).
 
