@@ -164,6 +164,8 @@ One section per active community detection strategy. For each strategy: a table 
 
 When the export carries a year timeline (`--timeline-step year`), the full-range **All** view additionally renders, under each strategy, a **Community flow** alluvial diagram — one column per year, communities stacked as boxes, and ribbons tracking how channels move between communities from one year to the next (thickness ∝ channel count). It is built client-side from the per-year `data_YYYY/communities.json` files. See [Community detection § Community flow across years](community-detection.md#community-flow-across-years) for how to read it.
 
+At the foot of the page is an interactive **Community intersection** Sankey: pick any two strategies and a year (or all years) to see, as flows, how many channels each pair of their communities shares — the two partitions' cross-tabulation rendered as a bipartite Sankey. See [Community detection § Community intersection (Sankey)](community-detection.md#community-intersection-sankey).
+
 For a full explanation of the metrics, see [Whole-network statistics](whole-network-statistics.md) and [Community detection](community-detection.md).
 
 ---

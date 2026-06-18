@@ -1,7 +1,7 @@
 import { build_year_nav } from './year_nav.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
 import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
-import { build_community_alluvial } from './community_alluvial.js';
+import { build_community_alluvial, build_strategy_intersection_sankey } from './community_alluvial.js';
 
 // Mirrors network.community.UNDIRECTED_BASIS_STRATEGIES — strategies optimised on the undirected
 // W+Wᵀ projection, whose modularity (and per-community contributions) community_stats.py computes
@@ -78,6 +78,9 @@ var _yearCommsLoading = false;
 // the new page width without rebuilding the whole table (which would reset sorting and expanded panels).
 var _alluvialEls = {};
 var _resizeTimer = null;
+// Redraw closure for the standalone strategy-intersection Sankey at the foot of the page (set once it
+// is built), so a window resize can re-fit it to the new page width.
+var _redrawStrategySankey = null;
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -126,8 +129,81 @@ function _refit_alluvials() {
 
 window.addEventListener("resize", function() {
     if (_resizeTimer) clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(_refit_alluvials, 200);
+    _resizeTimer = setTimeout(function() {
+        _refit_alluvials();
+        if (_redrawStrategySankey) _redrawStrategySankey();
+    }, 200);
 });
+
+// ── Strategy-intersection Sankey (standalone widget at the foot of the page) ─────
+// Pick any two strategies and a year (or all years); ribbons show how many channels each pair of
+// communities shares. It owns its controls and year selector — independent of the table year nav —
+// and persists across table re-renders. Needs the strategy keys (any snapshot has the same set).
+function _build_strategy_sankey_section(stratKeys) {
+    var section = document.getElementById("strategy-sankey");
+    if (!section || stratKeys.length < 2) return;
+    section.innerHTML = "";
+
+    var h3 = document.createElement("h3");
+    h3.className = "mt-4 mb-1";
+    h3.textContent = "Community intersection";
+    section.appendChild(h3);
+    var intro = document.createElement("p");
+    intro.className = "text-muted small mb-3";
+    intro.textContent = "Pick two strategies and a year to see how their communities overlap: each ribbon's "
+        + "thickness is the number of channels shared by a community on the left and a community on the right.";
+    section.appendChild(intro);
+
+    var controls = document.createElement("div");
+    controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+    function makeSelect(idSuffix, labelText, options, selectedValue) {
+        var wrap = document.createElement("div");
+        var lbl = document.createElement("label");
+        lbl.className = "form-label mb-1 d-block fw-semibold small";
+        var sel = document.createElement("select");
+        sel.className = "form-select form-select-sm";
+        sel.style.width = "auto";
+        sel.id = "strategy-sankey-" + idSuffix;
+        lbl.htmlFor = sel.id; lbl.textContent = labelText;
+        options.forEach(function(o) { sel.appendChild(new Option(o.label, o.value)); });
+        if (selectedValue != null) sel.value = selectedValue;
+        wrap.appendChild(lbl); wrap.appendChild(sel); controls.appendChild(wrap);
+        return sel;
+    }
+
+    var stratOptions = stratKeys.map(function(k) { return { value: k, label: _strat_label(k) }; });
+    var yearOptions = [{ value: "all", label: "All years" }].concat(
+        _ty.map(function(y) { return { value: String(y.year), label: String(y.year) }; })
+    );
+    var selA = makeSelect("a", "Strategy A", stratOptions, stratKeys[0]);
+    var selB = makeSelect("b", "Strategy B", stratOptions, stratKeys[1]);
+    var selYear = makeSelect("year", "Year", yearOptions, "all");
+    section.appendChild(controls);
+
+    var diagram = document.createElement("div");
+    diagram.id = "strategy-sankey-diagram";
+    section.appendChild(diagram);
+
+    function setMessage(text) {
+        diagram.innerHTML = "";
+        var msg = document.createElement("p"); msg.className = "text-muted"; msg.textContent = text;
+        diagram.appendChild(msg);
+    }
+    function redraw() {
+        var a = selA.value, b = selB.value;
+        var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
+        _fetch_year(year).then(function(d) {
+            var svg = build_strategy_intersection_sankey(d.data, a, b, _strat_label(a), _strat_label(b), diagram.clientWidth);
+            if (svg) { diagram.innerHTML = ""; diagram.appendChild(svg); }
+            else setMessage("One of the selected strategies assigned no channels for this selection.");
+        }).catch(function() { setMessage("Failed to load data for the selected year."); });
+    }
+    selA.addEventListener("change", redraw);
+    selB.addEventListener("change", redraw);
+    selYear.addEventListener("change", redraw);
+    _redrawStrategySankey = redraw;
+    redraw();
+}
 
 // ── Render ─────────────────────────────────────────────────────────────────────
 function _render(d) {
@@ -439,6 +515,7 @@ Promise.all([
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
     _load_year_comms();
+    _build_strategy_sankey_section(Object.keys(results[0].strategies || {}));
 
     // Consensus matrix button — injected once based on full-range meta
     var meta = results[1];
