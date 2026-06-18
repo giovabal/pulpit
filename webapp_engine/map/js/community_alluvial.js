@@ -1,16 +1,16 @@
-// Community-flow alluvial diagram for the community table page.
+// Stacked-bar Sankey / alluvial diagrams for the community table page.
 //
-// Given the per-year communities.json for one strategy, build an alluvial (stacked-bar Sankey)
-// with one column per timeline year. Each column's boxes are that year's communities; a ribbon
-// between consecutive years carries the channels that sat in community A one year and community B
-// the next. Because every year is partitioned independently, community *labels* don't carry across
-// years — continuity is read from the ribbon geometry: a single thick A->B ribbon means that cohort
-// stayed together (whatever it got re-labelled), a community fanning into many ribbons means it
-// fragmented, and several ribbons converging means cohorts merged.
+// Two views share one renderer:
+//   • build_community_alluvial — one column per timeline year, ribbons following channels from a
+//     strategy's community one year into the next (continuity over time).
+//   • build_strategy_intersection_sankey — two columns, one per chosen strategy, ribbons = the
+//     channels shared by a community on each side (the cross-tabulation of two partitions).
 //
-// Custom SVG (no chart dependency), matching the consensus / equivalence matrices: a white canvas,
-// the shared hover tooltip, and box colours straight from each year's community palette. Ribbons
-// take their source community's colour, so you can see where each community's members disperse to.
+// Both reduce to a generic list of "stages" (an ordered column of communities plus a node->community
+// map) fed to _render_stages_svg. Custom SVG (no chart dependency), matching the consensus /
+// equivalence matrices: a white canvas, the shared hover tooltip, box colours from the community
+// palette, and ribbons in their source community's colour. Because partitions are independent,
+// community labels carry no meaning between columns — continuity/overlap is read from the ribbons.
 
 import { showTip, moveTip, hideTip } from './_zoom_pan.js';
 
@@ -37,24 +37,31 @@ function _textOn(hex) {
 
 function _truncate(s, n) { s = String(s); return s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s; }
 
-// Per-year community membership for one strategy. Returns [{year, comms:[{label,hex,count}], nodeComm}]
-// keeping only years where the strategy produced at least one non-empty community.
+// One stage (column) from a strategy's communities.json rows. `colLabel` is shown under the column.
+// Returns null when the strategy assigned no channels.
+function _rowsToStage(rows, colLabel) {
+    var comms = [], nodeComm = {};
+    (rows || []).forEach(function(row) {
+        var members = 0;
+        (row.channels || []).forEach(function(ch) {
+            var id = (ch.pk != null) ? String(ch.pk) : ch.label;
+            nodeComm[id] = String(row.label);
+            members++;
+        });
+        if (members > 0) comms.push({ label: String(row.label), hex: row.hex_color || "#888888", count: members });
+    });
+    return comms.length ? { colLabel: colLabel, comms: comms, nodeComm: nodeComm } : null;
+}
+
+// Per-year stages for one strategy (the timeline alluvial), keeping only years that produced
+// communities for it.
 function _yearStages(strategyKey, yearComms) {
     var stages = [];
     yearComms.forEach(function(yc) {
         var sd = yc.data && yc.data.strategies && yc.data.strategies[strategyKey];
-        if (!sd || !sd.rows || !sd.rows.length) return;
-        var comms = [], nodeComm = {};
-        sd.rows.forEach(function(row) {
-            var members = 0;
-            (row.channels || []).forEach(function(ch) {
-                var id = (ch.pk != null) ? String(ch.pk) : ch.label;
-                nodeComm[id] = String(row.label);
-                members++;
-            });
-            if (members > 0) comms.push({ label: String(row.label), hex: row.hex_color || "#888888", count: members });
-        });
-        if (comms.length) stages.push({ year: yc.year, comms: comms, nodeComm: nodeComm });
+        if (!sd) return;
+        var stage = _rowsToStage(sd.rows, yc.year);
+        if (stage) stages.push(stage);
     });
     return stages;
 }
@@ -67,7 +74,7 @@ function _computeFlows(stages) {
         var a = stages[bi], b = stages[bi + 1], f = {};
         Object.keys(a.nodeComm).forEach(function(pk) {
             var dst = b.nodeComm[pk];
-            if (dst === undefined) return;                       // left the dataset next year
+            if (dst === undefined) return;                       // not assigned by the other side
             var row = f[a.nodeComm[pk]] || (f[a.nodeComm[pk]] = {});
             row[dst] = (row[dst] || 0) + 1;
         });
@@ -170,14 +177,17 @@ function _svgEl(name, attrs) {
     return el;
 }
 
-// ── Public entry point ───────────────────────────────────────────────────────────
-// Returns a DOM section for one strategy's year-over-year community flow, or null when fewer than
-// two timeline years carry the strategy (nothing to connect). ``availWidth`` is the page width the
-// diagram should fill (px); the columns spread to span it, down to MIN_COL_SPACING (then it scrolls).
-export function build_community_alluvial(strategyKey, yearComms, availWidth) {
-    var stages = _yearStages(strategyKey, yearComms);
-    if (stages.length < 2) return null;
+function _scrollWrap(svg) {
+    var d = document.createElement("div");
+    d.style.cssText = "overflow-x:auto;";
+    d.appendChild(svg);
+    return d;
+}
 
+// ── Generic stages → SVG renderer ─────────────────────────────────────────────────
+// `stages` is an ordered list of columns; `availWidth` is the page width to fill (columns spread to
+// span it, down to MIN_COL_SPACING, then it scrolls). Returns the <svg> element.
+function _render_stages_svg(stages, availWidth, ariaLabel) {
     var flows = _computeFlows(stages);
     _orderStages(stages, flows);
 
@@ -191,7 +201,7 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth) {
 
     var svg = _svgEl("svg", {
         viewBox: "0 0 " + width + " " + height, width: width, height: height, role: "img",
-        "aria-label": "Community flow across " + stages.length + " years for this strategy",
+        "aria-label": ariaLabel,
     });
     svg.style.cssText = "display:block;background:#fff;border-radius:4px;";
 
@@ -205,7 +215,7 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth) {
                 d: _ribbonPath(sc.x + BOX_W, dc.x, r.sy, r.dy, r.h),
                 fill: sc.hex, "fill-opacity": RIBBON_OPACITY, stroke: "none",
             });
-            var tip = r.src + " (" + src.year + ") → " + r.dst + " (" + dst.year + "): " +
+            var tip = r.src + " [" + src.colLabel + "] → " + r.dst + " [" + dst.colLabel + "]: " +
                 fmtInt(r.cnt) + " channel" + (r.cnt === 1 ? "" : "s");
             path.addEventListener("mouseenter", function(e) { path.setAttribute("fill-opacity", "0.7"); showTip(e, tip); });
             path.addEventListener("mousemove", moveTip);
@@ -217,7 +227,7 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth) {
     // Boxes + labels on top.
     stages.forEach(function(st) {
         st.comms.forEach(function(c) {
-            var tip = c.label + " — " + fmtInt(c.count) + " channel" + (c.count === 1 ? "" : "s") + " (" + st.year + ")";
+            var tip = c.label + " — " + fmtInt(c.count) + " channel" + (c.count === 1 ? "" : "s") + " [" + st.colLabel + "]";
             var rect = _svgEl("rect", {
                 x: c.x, y: c.y, width: BOX_W, height: Math.max(1, c.h), fill: c.hex,
                 stroke: "rgba(0,0,0,0.28)", "stroke-width": "0.5", role: "img", "aria-label": tip,
@@ -237,13 +247,24 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth) {
                 svg.appendChild(txt);
             }
         });
-        var yl = _svgEl("text", {
+        var cl = _svgEl("text", {
             x: st.x + BOX_W / 2, y: PAD_TOP + PLOT_H + 18, "text-anchor": "middle",
             "font-size": "12", "font-weight": "500", fill: "#333",
         });
-        yl.textContent = st.year;
-        svg.appendChild(yl);
+        cl.textContent = st.colLabel;
+        svg.appendChild(cl);
     });
+
+    return svg;
+}
+
+// ── Public entry points ────────────────────────────────────────────────────────────
+// One strategy's year-over-year community flow. Returns a titled DOM section, or null when fewer
+// than two timeline years carry the strategy (nothing to connect). `availWidth` is the page width.
+export function build_community_alluvial(strategyKey, yearComms, availWidth) {
+    var stages = _yearStages(strategyKey, yearComms);
+    if (stages.length < 2) return null;
+    var svg = _render_stages_svg(stages, availWidth, "Community flow across " + stages.length + " years for this strategy");
 
     var section = document.createElement("div");
     section.className = "community-alluvial mt-2 mb-4";
@@ -254,9 +275,19 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth) {
         "one year's community into the next. Communities are re-detected (and re-labelled) every year, so " +
         "read continuity from the ribbons: one thick ribbon = a cohort held together, many thin ribbons = it split.";
     section.appendChild(title);
-    var scroll = document.createElement("div");
-    scroll.style.cssText = "overflow-x:auto;";
-    scroll.appendChild(svg);
-    section.appendChild(scroll);
+    section.appendChild(_scrollWrap(svg));
     return section;
+}
+
+// Two strategies' communities for one snapshot, side by side, with ribbons sized by the channels
+// they share (the cross-tabulation of the two partitions). Returns a scroll-wrapped <svg>, or null
+// when either strategy assigned no channels in `data`. `availWidth` is the page width to fill.
+export function build_strategy_intersection_sankey(data, keyA, keyB, labelA, labelB, availWidth) {
+    var sdA = data && data.strategies && data.strategies[keyA];
+    var sdB = data && data.strategies && data.strategies[keyB];
+    var stageA = sdA ? _rowsToStage(sdA.rows, labelA) : null;
+    var stageB = sdB ? _rowsToStage(sdB.rows, labelB) : null;
+    if (!stageA || !stageB) return null;
+    var svg = _render_stages_svg([stageA, stageB], availWidth, "Community intersection between " + labelA + " and " + labelB);
+    return _scrollWrap(svg);
 }
