@@ -74,6 +74,10 @@ var _loading = false;
 // community-flow alluvials, which need every year at once (the per-year/All views load one year).
 var _yearComms = null;
 var _yearCommsLoading = false;
+// Alluvial sections currently mounted (strategyKey -> element), so a window resize can re-fit them to
+// the new page width without rebuilding the whole table (which would reset sorting and expanded panels).
+var _alluvialEls = {};
+var _resizeTimer = null;
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -106,11 +110,31 @@ function _load_year_comms() {
     });
 }
 
+// Re-fit the mounted alluvials to the current page width (after a window resize). Only the SVGs are
+// rebuilt — the tables, their sort order, and any expanded panels are left untouched.
+function _refit_alluvials() {
+    if (_current_year !== "all" || !_yearComms) return;
+    var container = document.getElementById("community-tables");
+    if (!container) return;
+    Object.keys(_alluvialEls).forEach(function(sk) {
+        var old = _alluvialEls[sk];
+        if (!old || !old.parentNode) return;
+        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth);
+        if (fresh) { old.replaceWith(fresh); _alluvialEls[sk] = fresh; }
+    });
+}
+
+window.addEventListener("resize", function() {
+    if (_resizeTimer) clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(_refit_alluvials, 200);
+});
+
 // ── Render ─────────────────────────────────────────────────────────────────────
 function _render(d) {
     var data = d.data, meta = d.meta;
     var container = document.getElementById("community-tables");
     container.innerHTML = "";
+    _alluvialEls = {};
     var strategies = Object.keys(data.strategies);
 
     // Preamble
@@ -247,8 +271,8 @@ function _render(d) {
         // Community-flow alluvial across the timeline years (full-range view only — it summarises every
         // year at once). Needs all years' data, loaded lazily by _load_year_comms after the first paint.
         if (_current_year === "all" && _yearComms) {
-            var alluvial = build_community_alluvial(strategyKey, _yearComms);
-            if (alluvial) container.appendChild(alluvial);
+            var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth);
+            if (alluvial) { container.appendChild(alluvial); _alluvialEls[strategyKey] = alluvial; }
         }
 
         // Channel list
