@@ -21,20 +21,14 @@ var BOX_W = 16;            // community-box width (px)
 var MIN_COL_SPACING = 90;  // minimum distance between columns; below the page-fit width it scrolls (px)
 var PLOT_H = 560;          // vertical plotting area for the tallest column (px) — total height = 600
 var GAP_V = 3;             // vertical gap between stacked boxes in a column (px)
-var PAD_TOP = 10, PAD_BOTTOM = 30, PAD_LEFT = 10, PAD_RIGHT = 10;
+var LABEL_MIN_H = 14;      // a box gets a text label only when at least this tall (else: tooltip only)
+var LABEL_CHAR_W = 6.2;    // approx. px per character at the 11px label font, for fit-to-space truncation
+// Generous left/right margins hold the first/last columns' horizontal labels.
+var PAD_TOP = 10, PAD_BOTTOM = 30, PAD_LEFT = 130, PAD_RIGHT = 130;
 var ORDER_SWEEPS = 6;      // barycentre crossing-reduction passes
 var RIBBON_OPACITY = 0.42;
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────────
-// Black or white box-label text, whichever contrasts better with the box colour.
-function _textOn(hex) {
-    var h = String(hex || "").replace("#", "");
-    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return "#1a1a1a";
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#1a1a1a" : "#ffffff";
-}
-
 function _truncate(s, n) { s = String(s); return s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s; }
 
 // One stage (column) from a strategy's communities.json rows. `colLabel` is shown under the column.
@@ -224,8 +218,11 @@ function _render_stages_svg(stages, availWidth, ariaLabel) {
         });
     }
 
-    // Boxes + labels on top.
-    stages.forEach(function(st) {
+    // Boxes, with a horizontal label beside each tall-enough box. Labels are drawn with a white halo
+    // (paint-order stroke) so they stay legible over the ribbons: the first column's labels sit in the
+    // left margin, the last column's in the right margin, and any middle column's just right of its box.
+    stages.forEach(function(st, si) {
+        var isFirst = (si === 0), isLast = (si === stages.length - 1);
         st.comms.forEach(function(c) {
             var tip = c.label + " — " + fmtInt(c.count) + " channel" + (c.count === 1 ? "" : "s") + " [" + st.colLabel + "]";
             var rect = _svgEl("rect", {
@@ -236,14 +233,15 @@ function _render_stages_svg(stages, availWidth, ariaLabel) {
             rect.addEventListener("mousemove", moveTip);
             rect.addEventListener("mouseleave", hideTip);
             svg.appendChild(rect);
-            if (c.h >= 26) {
-                var cx = c.x + BOX_W / 2, cy = c.y + c.h / 2;
+            if (c.h >= LABEL_MIN_H) {
+                var space = isFirst ? (PAD_LEFT - 8) : (isLast ? (PAD_RIGHT - 8) : (colSpacing - BOX_W - 10));
                 var txt = _svgEl("text", {
-                    x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "middle",
-                    transform: "rotate(-90 " + cx + " " + cy + ")", "font-size": "9",
-                    fill: _textOn(c.hex), "pointer-events": "none",
+                    x: isFirst ? c.x - 5 : c.x + BOX_W + 5, y: c.y + c.h / 2,
+                    "text-anchor": isFirst ? "end" : "start", "dominant-baseline": "middle",
+                    "font-size": "11", fill: "#1a1a1a", "pointer-events": "none",
+                    stroke: "#ffffff", "stroke-width": "3", "paint-order": "stroke",
                 });
-                txt.textContent = _truncate(c.label, Math.floor((c.h - 6) / 6));
+                txt.textContent = _truncate(c.label, Math.max(4, Math.floor(space / LABEL_CHAR_W)));
                 svg.appendChild(txt);
             }
         });
