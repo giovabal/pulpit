@@ -236,23 +236,32 @@ Use E-I index together with reciprocity and inter-community edge ratio for a com
 - **Low reciprocity + positive mean E-I:** hierarchical cross-community citation, typical of competitive or monitoring dynamics
 - **Mixed:** intermediate communities with both internal amplification and active external engagement
 
-### Partition agreement matrix (NMI)
+### Partition comparison matrices (ARI, AMI, NMI, VI)
 
-The Normalised Mutual Information matrix appears in `network_table.html` whenever two or more community strategies are active. Each cell shows NMI between a pair of strategies:
+The **Partition comparison** block appears in `network_table.html` (and in the `Network` sheet of the network-statistics XLSX) whenever two or more comparable partitions are active. It renders **four** strategy × strategy heat-maps — one per index — that quantify, from complementary angles, how much any two partitions of the channels agree.
 
-> NMI(U, V) = 2 · I(U; V) / (H(U) + H(V))
+**What the rows and columns are.** Every active **community-detection strategy** (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, SBM, …) *and* every **label-group partition** (each partition `LabelGroup` — the primary one is the analyst's organisation grouping). `KCORE` is excluded: it is a shell decomposition, not a community detection, so partition similarity against it is uninformative (the [consensus matrix](export-formats.md#consensus_matrixhtml--cross-strategy-agreement) excludes it for the same reason). Including the label groups is the point: it turns the block into a validation of the algorithms' structural communities against the analyst's manual labels.
 
-where I(U; V) is mutual information and H(·) is Shannon entropy. The formula is symmetric and normalised to [0, 1].
+**What each cell measures.** Build the contingency table of the two partitions over the channels each pair shares (see *intersection* below), then:
 
-- **NMI = 1** — the two partitions are identical up to label permutation (every community in strategy A maps bijectively to a community in strategy B).
-- **NMI = 0** — the two partitions are statistically independent: knowing which community a channel belongs to under strategy A gives no information about its community under strategy B.
-- Values in between measure partial agreement.
+| Index | Formula | Range | Identical | Independent | Chance-corrected |
+| :---- | :------ | :---- | :-------- | :---------- | :--------------: |
+| **ARI** — Adjusted Rand Index | (RI − E[RI]) / (max RI − E[RI]) | ≤ 1 (can be < 0) | 1 | 0 | ✓ |
+| **AMI** — Adjusted Mutual Information | (I − E[I]) / (mean(H) − E[I]) | ≤ 1 (can be < 0) | 1 | ≈ 0 | ✓ |
+| **NMI** — Normalised Mutual Information | 2 · I(U; V) / (H(U) + H(V)) | [0, 1] | 1 | 0 | ✗ |
+| **VI** — Variation of Information | H(U) + H(V) − 2 · I(U; V) | [0, log₂ N] bits | 0 | H(U)+H(V) | — (a distance) |
 
-Each pair is computed on the **intersection** of channels assigned in both strategies. This matters for `ORGANIZATION`, which only assigns channels that have an organization in the database; unassigned channels are silently excluded from that pair's NMI but not from others.
+where I(U; V) is the mutual information of the two partitions and H(·) is Shannon entropy. ARI counts agreeing channel **pairs** (do U and V put the same two channels together / apart?); AMI, NMI and VI are information-theoretic (how much does knowing a channel's community under U tell you about its community under V?). All four are invariant to how the communities are *labelled* — only the grouping matters.
 
-**Reference:** Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069); Fred, A.L.N. & Jain, A.K. (2003) "Robust data clustering." *CVPR* 2.
+- **ARI / AMI are chance-corrected** — they subtract the agreement two *random* partitions with the same cluster sizes would score, so they do not reward partitions merely for having many clusters. Prefer them when the two partitions have very different numbers of communities (e.g. a fine LEIDEN_CPM scan vs a coarse label group). A value near 0 means "no better than chance"; a negative value means "worse than chance".
+- **NMI is *not* chance-corrected** — it is the familiar [0, 1] score, but it is biased upward when either partition has many small clusters. It is kept for comparability with the large body of literature that reports NMI.
+- **VI is a true metric** on the space of partitions (it satisfies the triangle inequality; Meilă 2007), reported here in **bits**. It is a *distance*: **0 means identical** and larger means more different, bounded above by log₂ N for N co-assigned channels. In the heat-map its colour scale is therefore inverted (darker = smaller VI = more agreement) and normalised within the matrix; because VI is unnormalised, compare VI values cautiously across pairs whose channel coverage differs a lot.
 
-**In practice:** compare the `ORGANIZATION` row to each algorithmic strategy. A high NMI (> 0.7) means the analyst's manual grouping captures most of the structure that the algorithm finds automatically — the network really does split along organizational lines. A low NMI (< 0.3) means the structural communities cut across organizations: channels from the same organization are scattered across multiple structural clusters, or a single structural cluster spans several organizations. Comparing two algorithmic strategies (e.g. LEIDEN vs LEIDEN_DIRECTED) tells you how robust the partition is: high agreement across methods validates the finding; low agreement signals that the community structure is ambiguous or resolution-sensitive.
+**Intersection.** Each pair is computed on the **intersection** of channels assigned by *both* partitions. This matters for label-group partitions, which only assign the channels that carry one of the group's labels; channels missing from a group are silently excluded from that group's pairs but not from others. (Algorithmic strategies assign every graph node, so two algorithms are always compared on the full node set.)
+
+**References:** Hubert, L. & Arabie, P. (1985) "Comparing partitions." *Journal of Classification* 2. [doi:10.1007/BF01908075](https://doi.org/10.1007/BF01908075) (ARI). Vinh, N.X., Epps, J. & Bailey, J. (2010) "Information theoretic measures for clusterings comparison." *JMLR* 11. (AMI). Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069) (NMI). Meilă, M. (2007) "Comparing clusterings — an information based distance." *Journal of Multivariate Analysis* 98(5). [doi:10.1016/j.jmva.2006.11.013](https://doi.org/10.1016/j.jmva.2006.11.013) (VI). The chance-corrected indices are computed with [scikit-learn](https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation).
+
+**In practice:** read each **label-group row** against the algorithmic columns. High agreement (ARI/AMI > ~0.5, NMI > ~0.7, VI near 0) means the analyst's manual grouping captures most of the structure the algorithm finds on its own — the network really does split along those lines. Low agreement (ARI/AMI near 0, NMI < ~0.3, VI large) means the structural communities cut across the labels: channels sharing a label are scattered across several structural clusters, or one structural cluster spans several labels. Comparing two **algorithmic** strategies (e.g. LEIDEN vs LEIDEN_DIRECTED, or successive LEIDEN_CPM resolutions) instead measures how *robust* the partition is: agreement across methods validates the finding; disagreement flags an ambiguous or resolution-sensitive community structure. When the four indices disagree, trust the chance-corrected pair (ARI/AMI): a high NMI with a near-zero AMI is the classic signature of an over-fragmented partition.
 
 ## Structural equivalence matrix
 

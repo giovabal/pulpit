@@ -27,6 +27,8 @@ from network.community import (
     strategy_display_label,
 )
 from network.community_stats import (
+    PARTITION_COMPARISON_METRICS,
+    _compare_partitions,
     _freeman_centralization,
     _network_summary,
     compute_community_metrics,
@@ -2246,6 +2248,99 @@ class ComputeCommunityMetricsTests(TestCase):
         )
         # callback called once for "network" and once per strategy
         self.assertGreaterEqual(len(calls), 2)
+
+
+class ComparePartitionsTests(TestCase):
+    """The four-index partition-comparison helper (ARI, AMI, NMI, VI)."""
+
+    def test_returns_all_four_indices(self) -> None:
+        scores = _compare_partitions([0, 0, 1, 1], [0, 0, 1, 1])
+        self.assertEqual(set(scores), {key for key, *_ in PARTITION_COMPARISON_METRICS})
+
+    def test_identical_partitions_are_perfect(self) -> None:
+        # Relabeled-identical: the indices are invariant to how communities are named.
+        scores = _compare_partitions([0, 0, 1, 1, 2, 2], [7, 7, 3, 3, 9, 9])
+        self.assertEqual(scores, {"ari": 1.0, "ami": 1.0, "nmi": 1.0, "vi": 0.0})
+
+    def test_independent_partitions_score_low(self) -> None:
+        scores = _compare_partitions([0, 0, 1, 1, 2, 2], [0, 1, 2, 0, 1, 2])
+        self.assertLessEqual(scores["ari"], 0.0)  # chance-corrected: ≤ 0 when independent
+        self.assertLessEqual(scores["ami"], 0.0)
+        self.assertGreater(scores["vi"], 0.0)  # VI is a positive distance
+
+    def test_empty_input_returns_none(self) -> None:
+        self.assertIsNone(_compare_partitions([], []))
+
+
+class PartitionComparisonMatrixTests(TestCase):
+    """compute_community_metrics builds the strategy×strategy comparison matrices."""
+
+    def setUp(self) -> None:
+        self.graph = nx.DiGraph()
+        self.graph.add_edges_from([("1", "2"), ("3", "4"), ("5", "6"), ("2", "3"), ("4", "5")])
+        # leiden and leiden_directed are the same partition under different labels; kcore is a
+        # shell decomposition that must be excluded from the comparison matrices.
+        self.graph_data = {
+            "nodes": [
+                {"id": "1", "communities": {"leiden": "A", "leiden_directed": "X", "kcore": "0"}},
+                {"id": "2", "communities": {"leiden": "A", "leiden_directed": "X", "kcore": "0"}},
+                {"id": "3", "communities": {"leiden": "B", "leiden_directed": "Y", "kcore": "1"}},
+                {"id": "4", "communities": {"leiden": "B", "leiden_directed": "Y", "kcore": "1"}},
+                {"id": "5", "communities": {"leiden": "C", "leiden_directed": "Z", "kcore": "2"}},
+                {"id": "6", "communities": {"leiden": "C", "leiden_directed": "Z", "kcore": "2"}},
+            ],
+            "edges": [],
+        }
+        self.communities_data = {
+            "leiden": {"groups": [(1, 2, "A", "#f00"), (2, 2, "B", "#0f0"), (3, 2, "C", "#00f")]},
+            "leiden_directed": {"groups": [(1, 2, "X", "#f00"), (2, 2, "Y", "#0f0"), (3, 2, "Z", "#00f")]},
+            "kcore": {"groups": [(1, 2, "0", "#f00"), (2, 2, "1", "#0f0"), (3, 2, "2", "#00f")]},
+        }
+        self.strategies = ["leiden", "leiden_directed", "kcore"]
+
+    def _comparison(self) -> dict:
+        result = compute_community_metrics(self.graph_data, self.communities_data, self.graph, self.strategies)
+        self.assertIn("partition_comparison", result)
+        return result["partition_comparison"]
+
+    def test_kcore_excluded_from_strategies(self) -> None:
+        comparison = self._comparison()
+        self.assertEqual(comparison["strategies"], ["leiden", "leiden_directed"])
+
+    def test_all_four_metric_matrices_present_and_square(self) -> None:
+        comparison = self._comparison()
+        k = len(comparison["strategies"])
+        for key, *_ in PARTITION_COMPARISON_METRICS:
+            cells = comparison["metrics"][key]
+            self.assertEqual(len(cells), k)
+            self.assertTrue(all(len(row) == k for row in cells))
+
+    def test_diagonal_is_identity_per_metric(self) -> None:
+        metrics = self._comparison()["metrics"]
+        for key, _abbr, _name, is_distance in PARTITION_COMPARISON_METRICS:
+            diag = 0.0 if is_distance else 1.0
+            self.assertTrue(all(metrics[key][i][i] == diag for i in range(len(metrics[key]))))
+
+    def test_matrices_symmetric(self) -> None:
+        metrics = self._comparison()["metrics"]
+        for key, *_ in PARTITION_COMPARISON_METRICS:
+            cells = metrics[key]
+            for i in range(len(cells)):
+                for j in range(len(cells)):
+                    self.assertEqual(cells[i][j], cells[j][i])
+
+    def test_identical_partitions_agree_off_diagonal(self) -> None:
+        # leiden vs leiden_directed are the same grouping → perfect agreement off the diagonal.
+        metrics = self._comparison()["metrics"]
+        self.assertEqual(metrics["ari"][0][1], 1.0)
+        self.assertEqual(metrics["ami"][0][1], 1.0)
+        self.assertEqual(metrics["nmi"][0][1], 1.0)
+        self.assertEqual(metrics["vi"][0][1], 0.0)
+
+    def test_absent_when_fewer_than_two_comparable_strategies(self) -> None:
+        # Only kcore (excluded) plus one strategy leaves a single comparable partition.
+        result = compute_community_metrics(self.graph_data, self.communities_data, self.graph, ["leiden", "kcore"])
+        self.assertNotIn("partition_comparison", result)
 
 
 class DisparityFilterTests(TestCase):

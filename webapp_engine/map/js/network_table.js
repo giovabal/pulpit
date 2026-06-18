@@ -250,39 +250,65 @@ function _render_modularity(data) {
     initSortableTables();
 }
 
-function _render_nmi_matrix(data) {
-    var section = document.getElementById("nmi-section");
-    section.innerHTML = "";
-    var nm = data.nmi_matrix;
-    if (!nm || !nm.strategies || nm.strategies.length < 2) {
-        section.classList.add("d-none");
-        return;
+// Mirror of PARTITION_COMPARISON_METRICS in network/community_stats.py: the four pairwise
+// partition-comparison indices, in display order. `dist` flags Variation of Information — a distance
+// where lower = more similar. `dec` is the display precision; `tip`/`desc` are the heading tooltip
+// and the under-heading explainer.
+var PARTITION_COMPARISON_METRICS = [
+    {
+        key: "ari", abbr: "ARI", name: "Adjusted Rand Index", dist: false, dec: 3,
+        tip: "Adjusted Rand Index (Hubert & Arabie 1985): chance-corrected agreement on which channel "
+            + "pairs share a community. 1 = identical, 0 = random, < 0 = worse than random.",
+        desc: "Chance-corrected agreement on co-grouped channel pairs. 1 = identical, 0 = chance, "
+            + "negative = worse than chance.",
+    },
+    {
+        key: "ami", abbr: "AMI", name: "Adjusted Mutual Information", dist: false, dec: 3,
+        tip: "Adjusted Mutual Information (Vinh, Epps & Bailey 2010): shared information corrected for "
+            + "chance. 1 = identical, ≈ 0 = random.",
+        desc: "Shared information, corrected for chance. 1 = identical, ≈ 0 = independent.",
+    },
+    {
+        key: "nmi", abbr: "NMI", name: "Normalised Mutual Information", dist: false, dec: 3,
+        tip: "Normalised Mutual Information, arithmetic mean (Kvalseth 1987): 2·I /(H_a + H_b) ∈ [0, 1]. "
+            + "1 = identical, 0 = independent.",
+        desc: "Shared information normalised to [0, 1]. 1 = identical, 0 = independent. Not chance-corrected.",
+    },
+    {
+        key: "vi", abbr: "VI", name: "Variation of Information", dist: true, dec: 2,
+        tip: "Variation of Information (Meilă 2003), in bits: H(a) + H(b) − 2·I. A true metric on "
+            + "partitions. 0 = identical, larger = more different (upper bound log₂ N).",
+        desc: "Information distance, in bits. 0 = identical, larger = more different — a true metric "
+            + "(obeys the triangle inequality).",
+    },
+];
+
+// White → muted blue ramp; `t` in [0, 1], higher = more agreement = more saturated.
+function _comparison_cell_color(t) {
+    t = Math.max(0, Math.min(1, t));
+    var r = Math.round(255 - t * 70), g = Math.round(255 - t * 40), b = Math.round(255 - t * 20);
+    return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+function _comparison_matrix_el(strats, cells, metric) {
+    // For the VI distance, normalise colour intensity by the largest off-diagonal value so the
+    // heatmap stays readable and consistent with the similarity indices (darker = more agreement).
+    var vmax = 0;
+    if (metric.dist) {
+        for (var a = 0; a < strats.length; a++) {
+            for (var b2 = 0; b2 < strats.length; b2++) {
+                if (a !== b2 && cells[a][b2] != null && cells[a][b2] > vmax) vmax = cells[a][b2];
+            }
+        }
     }
-    section.classList.remove("d-none");
-    var strats = nm.strategies;
-    var cells = nm.cells;
-
-    var h5 = document.createElement("h5"); h5.className = "mb-1";
-    h5.textContent = "Partition agreement (NMI)";
-    h5.title = "Normalized Mutual Information between each pair of community strategies. "
-             + "NMI = 1: identical partitions; NMI = 0: statistically independent groupings. "
-             + "Computed on nodes assigned in both strategies. Kvalseth 1987 / Fred & Jain 2003.";
-    section.appendChild(h5);
-
-    var p = document.createElement("p"); p.className = "text-muted small mb-2";
-    p.textContent = "How much knowing one partition tells you about another. "
-                  + "High NMI means your organisations map well onto structural clusters; "
-                  + "low NMI means the network topology cuts across your manual labels.";
-    section.appendChild(p);
-
-    var tableWrap = document.createElement("div"); tableWrap.style.overflowX = "auto";
+    var wrap = document.createElement("div"); wrap.style.overflowX = "auto";
     var table = document.createElement("table");
-    table.className = "table table-sm table-bordered nmi-table";
+    table.className = "table table-sm table-bordered comparison-matrix";
     table.style.cssText = "width:auto;min-width:0;";
 
     var thead = document.createElement("thead");
     var htr = document.createElement("tr");
-    var th0 = document.createElement("th"); th0.scope = "col"; htr.appendChild(th0);
+    htr.appendChild(document.createElement("th"));
     strats.forEach(function(sk) {
         var th = document.createElement("th"); th.scope = "col"; th.className = "number";
         th.textContent = _strat_label(sk);
@@ -299,25 +325,57 @@ function _render_nmi_matrix(data) {
         strats.forEach(function(_sk_b, j) {
             var val = cells[i][j];
             var td = document.createElement("td"); td.className = "number";
-            if (i === j) {
+            if (i === j || val === null || val === undefined) {
                 td.textContent = "—";
                 td.style.color = "#adb5bd";
-            } else if (val === null || val === undefined) {
-                td.textContent = "—";
             } else {
-                td.textContent = val.toFixed(4);
-                var r = Math.round(255 - val * 70);
-                var g = Math.round(255 - val * 40);
-                var b = Math.round(255 - val * 20);
-                td.style.backgroundColor = "rgb(" + r + "," + g + "," + b + ")";
+                td.textContent = val.toFixed(metric.dec);
+                var t = metric.dist ? (vmax > 0 ? 1 - val / vmax : 1) : val;
+                td.style.backgroundColor = _comparison_cell_color(t);
             }
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
     });
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    section.appendChild(tableWrap);
+    table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+}
+
+function _render_partition_comparison(data) {
+    var section = document.getElementById("partition-comparison-section");
+    section.innerHTML = "";
+    var pc = data.partition_comparison;
+    if (!pc || !pc.strategies || pc.strategies.length < 2 || !pc.metrics) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+    var strats = pc.strategies;
+
+    var h3 = document.createElement("h3"); h3.className = "mb-1"; h3.textContent = "Partition comparison";
+    section.appendChild(h3);
+    var intro = document.createElement("p"); intro.className = "text-muted small mb-3";
+    intro.textContent = "Pairwise agreement between every community strategy and every label-group "
+        + "partition, under four standard clustering-comparison indices. Each pair is scored on the "
+        + "channels assigned by both partitions. Read a label-group row against the algorithmic "
+        + "strategies to see how closely the analyst's manual grouping matches the structural communities.";
+    section.appendChild(intro);
+
+    var grid = document.createElement("div"); grid.className = "row g-4";
+    PARTITION_COMPARISON_METRICS.forEach(function(metric) {
+        var cells = pc.metrics[metric.key];
+        if (!cells) return;
+        var col = document.createElement("div"); col.className = "col-12 col-xl-6";
+        var h5 = document.createElement("h5"); h5.className = "mb-1";
+        h5.textContent = metric.name + " (" + metric.abbr + ")";
+        h5.title = metric.tip;
+        col.appendChild(h5);
+        var p = document.createElement("p"); p.className = "text-muted small mb-2"; p.textContent = metric.desc;
+        col.appendChild(p);
+        col.appendChild(_comparison_matrix_el(strats, cells, metric));
+        grid.appendChild(col);
+    });
+    section.appendChild(grid);
 }
 
 // ── Build degree-distribution section (once on initial load) ───────────────────
@@ -447,7 +505,7 @@ function _switch_year(year) {
         _render_preamble(d.meta);
         _render_summary(d.data);
         _render_modularity(d.data);
-        _render_nmi_matrix(d.data);
+        _render_partition_comparison(d.data);
         _update_dist_chart();
         _update_scatter_chart();
         _loading = false;
@@ -499,7 +557,7 @@ Promise.all([
         _render_preamble(meta);
         _render_summary(data);
         _render_modularity(data);
-        _render_nmi_matrix(data);
+        _render_partition_comparison(data);
         _build_dist_section();
         _build_scatter_section();
     });

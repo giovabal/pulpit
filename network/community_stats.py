@@ -23,10 +23,27 @@ logger = logging.getLogger(__name__)
 # skipping them avoids calling weakly_connected_components on many 1–2 node subgraphs.
 _PATH_LENGTH_MIN_NODES = 3
 
-# Strategies dropped from the NMI matrix: connectivity/shell decompositions that are not
-# community detections (the consensus matrix also excludes them, plus ORGANIZATION — which
-# the NMI matrix keeps, since detection-vs-manual-labels is the comparison it exists for).
-_NMI_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"kcore"})
+# Strategies dropped from the partition-comparison matrices: connectivity/shell decompositions
+# that are not community detections (the consensus matrix also excludes them, plus the label-group
+# partitions — which these matrices keep, since detection-vs-manual-labels is the comparison they
+# exist for).
+_COMPARISON_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"kcore"})
+
+# Pairwise partition-comparison indices rendered as strategy×strategy matrices on the network page
+# (and as labelled blocks in the XLSX). Tuple order is the display order. Each entry is
+# ``(key, abbreviation, full name, is_distance)``; ``is_distance`` flags Variation of Information,
+# the one index where *lower* means more similar (0 = identical). Mirrored by
+# ``PARTITION_COMPARISON_METRICS`` in webapp_engine/map/js/network_table.js.
+PARTITION_COMPARISON_METRICS: tuple[tuple[str, str, str, bool], ...] = (
+    ("ari", "ARI", "Adjusted Rand Index", False),
+    ("ami", "AMI", "Adjusted Mutual Information", False),
+    ("nmi", "NMI", "Normalised Mutual Information", False),
+    ("vi", "VI", "Variation of Information", True),
+)
+
+# Natural-log → bits conversion, so Variation of Information is reported in bits with the intuitive
+# upper bound log2(N) (mutual information and entropies are computed in nats).
+_LOG2 = float(np.log(2.0))
 
 # Exceptions networkx routines may raise on graphs that are too small, empty,
 # or disconnected for a given metric. Centralised so a new "expected failure"
@@ -353,36 +370,49 @@ def _network_content_metrics(
     }
 
 
-def _compute_nmi(labels_a: list, labels_b: list) -> float | None:
-    """Normalized Mutual Information between two discrete label sequences.
+def _entropy_nats(labels: "np.ndarray") -> float:
+    """Shannon entropy (in nats) of a discrete label array."""
+    _, counts = np.unique(labels, return_counts=True)
+    p = counts / counts.sum()
+    return float(-np.sum(p * np.log(p)))
 
-    NMI(U,V) = 2·I(U;V) / (H(U) + H(V))   — Kvalseth 1987 / Fred & Jain 2003.
-    Returns None for empty input; 1.0 when both partitions are trivially uniform.
+
+def _compare_partitions(labels_a: list, labels_b: list) -> "dict[str, float] | None":
+    """Four standard partition-comparison indices between two label sequences over the same nodes.
+
+    Returns a dict keyed by ``ari``/``ami``/``nmi``/``vi`` (see ``PARTITION_COMPARISON_METRICS``):
+
+    * **ARI** — Adjusted Rand Index (Hubert & Arabie 1985): chance-corrected pair-counting agreement.
+      1 = identical, 0 = random, < 0 = worse than random.
+    * **AMI** — Adjusted Mutual Information (Vinh, Epps & Bailey 2010): mutual information corrected
+      for the agreement expected by chance. 1 = identical, ≈ 0 = random.
+    * **NMI** — Normalised Mutual Information, arithmetic mean (Kvalseth 1987): ``2·I /(H_a + H_b)`` in
+      [0, 1]. 1 = identical, 0 = independent.
+    * **VI** — Variation of Information (Meilă 2003), in **bits**: ``H(a) + H(b) − 2·I``. A true metric
+      on the space of partitions; 0 = identical, larger = more different (upper bound log2(N)).
+
+    All four are invariant to how the communities are labelled (permutation-invariant). Returns None
+    for empty input. scikit-learn supplies the chance-corrected indices — their expected-index
+    correction is the non-trivial part — and VI is derived from the same mutual information and the
+    plain label entropies. Both labelings being constant yields perfect agreement (1/1/1/0) by
+    scikit-learn's convention.
     """
-    n = len(labels_a)
-    if n == 0:
+    if not labels_a:
         return None
-    unique_a = sorted(set(labels_a))
-    unique_b = sorted(set(labels_b))
-    if len(unique_a) <= 1 and len(unique_b) <= 1:
-        return 1.0
-    idx_a = {v: i for i, v in enumerate(unique_a)}
-    idx_b = {v: i for i, v in enumerate(unique_b)}
-    ka, kb = len(unique_a), len(unique_b)
-    contingency = np.zeros((ka, kb), dtype=float)
-    for ai, bi in zip(labels_a, labels_b, strict=True):
-        contingency[idx_a[ai], idx_b[bi]] += 1.0
-    pa = contingency.sum(axis=1) / n
-    pb = contingency.sum(axis=0) / n
-    pab = contingency / n
-    h_a = -float(np.sum(pa[pa > 0] * np.log(pa[pa > 0])))
-    h_b = -float(np.sum(pb[pb > 0] * np.log(pb[pb > 0])))
-    denom = h_a + h_b
-    if denom < 1e-12:
-        return 1.0
-    h_ab = -float(np.sum(pab[pab > 0] * np.log(pab[pab > 0])))
-    mi = h_a + h_b - h_ab
-    return round(float(2.0 * mi / denom), 4)
+    from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, normalized_mutual_info_score
+    from sklearn.metrics.cluster import mutual_info_score
+
+    a = np.asarray(labels_a)
+    b = np.asarray(labels_b)
+    mi = float(mutual_info_score(a, b))  # nats
+    vi_bits = max((_entropy_nats(a) + _entropy_nats(b) - 2.0 * mi) / _LOG2, 0.0)
+    # ``round(...) or 0.0`` normalises -0.0 (and exact 0.0) to a clean 0.0 for JSON/XLSX.
+    return {
+        "ari": round(float(adjusted_rand_score(a, b)), 4) or 0.0,
+        "ami": round(float(adjusted_mutual_info_score(a, b, average_method="arithmetic")), 4) or 0.0,
+        "nmi": round(float(normalized_mutual_info_score(a, b, average_method="arithmetic")), 4) or 0.0,
+        "vi": round(vi_bits, 4) or 0.0,
+    }
 
 
 def _lower_triangle(sim: np.ndarray, n: int) -> list[list[float]]:
@@ -785,33 +815,40 @@ def compute_community_metrics(
         if status_callback:
             status_callback(strategy_key)
 
-    # ── NMI matrix ───────────────────────────────────────────────────────────────
-    # Pairwise Normalized Mutual Information between community strategies.
-    # Each pair is computed on the nodes assigned in both strategies (intersection),
-    # which matters for ORGANIZATION where unassigned nodes are silently skipped.
-    # KCORE is a shell decomposition, not a community detection, so pairwise
-    # partition-similarity against it is uninformative — drop it, matching the
-    # consensus matrix. ORGANIZATION is deliberately *kept*: validating
-    # detected communities against the manual org labels is exactly what this matrix
-    # is for.
-    nmi_strategies = [s for s in strategies if s not in _NMI_EXCLUDED_STRATEGIES]
-    if len(nmi_strategies) >= 2:
+    # ── Partition-comparison matrices ─────────────────────────────────────────────
+    # Pairwise agreement between every community strategy and every label-group partition, under the
+    # four indices in PARTITION_COMPARISON_METRICS (ARI, AMI, NMI, VI). Each pair is computed on the
+    # nodes assigned by *both* partitions (their intersection); this matters for partitions that leave
+    # some nodes unassigned — e.g. a label group only a subset of channels carry — whose unassigned
+    # nodes are silently skipped for that pair but not for others. KCORE is a shell decomposition, not
+    # a community detection, so partition-similarity against it is uninformative — dropped, matching
+    # the consensus matrix. Label-group partitions are deliberately *kept*: validating detected
+    # communities against the analyst's manual labels is exactly what these matrices are for.
+    comparison_strategies = [s for s in strategies if s not in _COMPARISON_EXCLUDED_STRATEGIES]
+    if len(comparison_strategies) >= 2:
         node_comms: dict[str, dict[str, Any]] = {n["id"]: (n.get("communities") or {}) for n in graph_data["nodes"]}
-        nmi_cells: list[list[float | None]] = [[None] * len(nmi_strategies) for _ in range(len(nmi_strategies))]
-        for i, sk_a in enumerate(nmi_strategies):
-            for j, sk_b in enumerate(nmi_strategies):
-                if i == j:
-                    nmi_cells[i][j] = 1.0
-                elif j > i:
-                    pairs = [
-                        (comms[sk_a], comms[sk_b])
-                        for comms in node_comms.values()
-                        if comms.get(sk_a) is not None and comms.get(sk_b) is not None
-                    ]
-                    v = _compute_nmi([p[0] for p in pairs], [p[1] for p in pairs]) if pairs else None
-                    nmi_cells[i][j] = v
-                    nmi_cells[j][i] = v
-        result["nmi_matrix"] = {"strategies": nmi_strategies, "cells": nmi_cells}
+        k = len(comparison_strategies)
+        # Self-comparison is the identity: 1 for the similarity indices, 0 for the VI distance.
+        matrices: dict[str, list[list[float | None]]] = {}
+        for metric_key, _abbr, _name, is_distance in PARTITION_COMPARISON_METRICS:
+            cells: list[list[float | None]] = [[None] * k for _ in range(k)]
+            for i in range(k):
+                cells[i][i] = 0.0 if is_distance else 1.0
+            matrices[metric_key] = cells
+        for i, sk_a in enumerate(comparison_strategies):
+            for j in range(i + 1, k):
+                sk_b = comparison_strategies[j]
+                pairs = [
+                    (comms[sk_a], comms[sk_b])
+                    for comms in node_comms.values()
+                    if comms.get(sk_a) is not None and comms.get(sk_b) is not None
+                ]
+                scores = _compare_partitions([p[0] for p in pairs], [p[1] for p in pairs]) if pairs else None
+                for metric_key, _abbr, _name, _is_distance in PARTITION_COMPARISON_METRICS:
+                    v = scores[metric_key] if scores else None
+                    matrices[metric_key][i][j] = v
+                    matrices[metric_key][j][i] = v
+        result["partition_comparison"] = {"strategies": comparison_strategies, "metrics": matrices}
 
     return result
 
