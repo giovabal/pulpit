@@ -162,6 +162,8 @@ For a full explanation of each metric, see [Whole-network statistics](whole-netw
 
 One section per active community detection strategy. For each strategy: a table of per-community structural metrics (node count, internal/external edges, density, reciprocity, clustering, E-I index, path lengths), a modularity-contribution column, and a collapsible organization × community distribution panel (when multiple organizations are present).
 
+When the export carries a year timeline (`--timeline-step year`), the full-range **All** view additionally renders, under each strategy, a **Community flow** alluvial diagram — one column per year, communities stacked as boxes, and ribbons tracking how channels move between communities from one year to the next (thickness ∝ channel count). It is built client-side from the per-year `data_YYYY/communities.json` files. See [Community detection § Community flow across years](community-detection.md#community-flow-across-years) for how to read it.
+
 For a full explanation of the metrics, see [Whole-network statistics](whole-network-statistics.md) and [Community detection](community-detection.md).
 
 ---

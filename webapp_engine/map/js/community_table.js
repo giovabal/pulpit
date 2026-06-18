@@ -1,6 +1,7 @@
 import { build_year_nav } from './year_nav.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
 import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
+import { build_community_alluvial } from './community_alluvial.js';
 
 // Mirrors network.community.UNDIRECTED_BASIS_STRATEGIES — strategies optimised on the undirected
 // W+Wᵀ projection, whose modularity (and per-community contributions) community_stats.py computes
@@ -69,6 +70,10 @@ var _base_dd = _ym ? "data/" : _dd;
 var _ty = [];
 var _cache = {};
 var _loading = false;
+// All timeline years' communities.json, [{year, data}] ascending — backs the per-strategy
+// community-flow alluvials, which need every year at once (the per-year/All views load one year).
+var _yearComms = null;
+var _yearCommsLoading = false;
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -81,6 +86,23 @@ function _fetch_year(year) {
         var d = { data: res[0], meta: res[1] };
         _cache[year] = d;
         return d;
+    });
+}
+
+// Load every timeline year's communities.json once, then (if the full-range view is showing) re-render
+// so the alluvials appear. No-op without a ≥2-year timeline.
+function _load_year_comms() {
+    if (_yearComms || _yearCommsLoading || _ty.length < 2) return;
+    _yearCommsLoading = true;
+    var years = _ty.map(function(y) { return y.year; }).sort(function(a, b) { return a - b; });
+    Promise.all(years.map(function(yr) {
+        return fetchJson("data_" + yr + "/communities.json")
+            .then(function(d) { return { year: yr, data: d }; })
+            .catch(function() { return null; });
+    })).then(function(list) {
+        _yearComms = list.filter(Boolean);
+        _yearCommsLoading = false;
+        if (_current_year === "all" && _cache["all"]) _render(_cache["all"]);
     });
 }
 
@@ -221,6 +243,13 @@ function _render(d) {
         table.appendChild(tbody);
         tableDiv.appendChild(table);
         container.appendChild(tableDiv);
+
+        // Community-flow alluvial across the timeline years (full-range view only — it summarises every
+        // year at once). Needs all years' data, loaded lazily by _load_year_comms after the first paint.
+        if (_current_year === "all" && _yearComms) {
+            var alluvial = build_community_alluvial(strategyKey, _yearComms);
+            if (alluvial) container.appendChild(alluvial);
+        }
 
         // Channel list
         var details = document.createElement("details");
@@ -385,6 +414,7 @@ Promise.all([
 
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    _load_year_comms();
 
     // Consensus matrix button — injected once based on full-range meta
     var meta = results[1];

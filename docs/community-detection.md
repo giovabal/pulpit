@@ -216,6 +216,23 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 
 ---
 
+## Community flow across years
+
+When the export was built with a year timeline (`--timeline-step year`; see [Workflow § Timeline export](workflow.md#timeline-export)), the community table's full-range (**All**) view shows, beneath each strategy's table, a **Community flow** alluvial diagram — one column per year, that year's communities stacked as boxes, and ribbons carrying the channels that moved from one year's community into the next. Ribbon thickness is proportional to the number of channels; hovering a ribbon or box gives the exact count.
+
+**Read continuity from the ribbons, not the colours.** Each year is partitioned *independently*, so a community's label, colour, and position carry no meaning across years — "community 3" in 2021 has nothing to do with "community 3" in 2022. What is meaningful is how a year's box flows into the next:
+
+- **One thick ribbon** leaving a box → that cohort stayed together (whatever it was re-labelled). The community persisted.
+- **A box fanning into several ribbons** → the community fragmented; its members dispersed into different clusters the following year.
+- **Several ribbons converging on one box** → previously separate cohorts merged.
+- **A box taller than the ribbons touching it** → churn: the unfilled part is channels that were not in the adjacent year's graph (they entered, left, or fell outside the in-target set that year). Ribbons stack from the top of each box, so this slack sits at the bottom.
+
+Box colours come from each year's own community palette; a ribbon takes its **source** community's colour, so you can follow where one community's members disperse to. Communities within a column are ordered (and ribbons stacked) to minimise crossings, so straighter, more horizontal bands indicate a more stable partition over time. A year in which the strategy produced no communities is omitted, and the diagram is drawn only for strategies present in at least two timeline years.
+
+**In practice:** a strategy whose alluvial is mostly straight, thick bands describes a stable community structure — the same blocs persist year over year. Heavy criss-crossing and fragmentation means the partition is volatile: either the underlying network is genuinely reorganising, or the strategy is resolution-sensitive on this data (compare against a steadier strategy, or against [Leiden CPM](#leiden-cpm) at a coarser resolution). Manual label-group partitions (e.g. an organisation axis) should flow almost perfectly straight — visible turbulence there points to channels whose attribution changed over the period.
+
+---
+
 ## Choosing a strategy
 
 | Research goal | Recommended strategy |
