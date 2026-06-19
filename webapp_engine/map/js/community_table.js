@@ -85,6 +85,10 @@ var _redrawStrategySankey = null;
 // Per-year network_metrics.json cache (backs the Partition comparison matrices, which live in that
 // file alongside the whole-network stats).
 var _nmCache = {};
+// Full-range channels.json nodes keyed by id (the union of every year's channels), loaded once at
+// init. Enriches the alluvial/Sankey click-to-list channel cards (avatar, org, message/fan counts,
+// activity span). Empty until loaded; the cards fall back to the ribbon's own {label, url}.
+var _nodeById = {};
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -126,7 +130,7 @@ function _refit_alluvials() {
     Object.keys(_alluvialEls).forEach(function(sk) {
         var old = _alluvialEls[sk];
         if (!old || !old.parentNode) return;
-        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth);
+        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById);
         if (fresh) { old.replaceWith(fresh); _alluvialEls[sk] = fresh; }
     });
 }
@@ -216,7 +220,8 @@ function _build_strategy_sankey_section(stratKeys) {
     var intro = document.createElement("p");
     intro.className = "text-muted small mb-3";
     intro.textContent = "Pick two strategies and a year to see how their communities overlap: each ribbon's "
-        + "thickness is the number of channels shared by a community on the left and a community on the right.";
+        + "thickness is the number of channels shared by a community on the left and a community on the right. "
+        + "Click a ribbon to list those channels beneath the diagram.";
     section.appendChild(intro);
 
     var controls = document.createElement("div");
@@ -258,8 +263,8 @@ function _build_strategy_sankey_section(stratKeys) {
         var a = selA.value, b = selB.value;
         var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
         _fetch_year(year).then(function(d) {
-            var svg = build_strategy_intersection_sankey(d.data, a, b, _strat_label(a), _strat_label(b), diagram.clientWidth);
-            if (svg) { diagram.innerHTML = ""; diagram.appendChild(svg); }
+            var fig = build_strategy_intersection_sankey(d.data, a, b, _strat_label(a), _strat_label(b), diagram.clientWidth, _nodeById);
+            if (fig) { diagram.innerHTML = ""; diagram.appendChild(fig); }
             else setMessage("One of the selected strategies assigned no channels for this selection.");
         }).catch(function() { setMessage("Failed to load data for the selected year."); });
     }
@@ -412,7 +417,7 @@ function _render(d) {
         // Community-flow alluvial across the timeline years (full-range view only — it summarises every
         // year at once). Needs all years' data, loaded lazily by _load_year_comms after the first paint.
         if (_current_year === "all" && _yearComms) {
-            var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth);
+            var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth, _nodeById);
             if (alluvial) { container.appendChild(alluvial); _alluvialEls[strategyKey] = alluvial; }
         }
 
@@ -572,10 +577,13 @@ Promise.all([
     fetchJson(_dd + "communities.json"),
     fetchJsonOrNull(_dd + "meta.json"),
     fetchJsonOrNull(_base_dd + "timeline.json"),
+    fetchJsonOrNull(_base_dd + "channels.json"),
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };
     var timeline = results[2];
     _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_community_html; }) : [];
+    var nodes = results[3] && results[3].nodes;
+    if (nodes) nodes.forEach(function(n) { _nodeById[String(n.id)] = n; });
 
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
