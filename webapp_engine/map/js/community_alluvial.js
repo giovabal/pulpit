@@ -411,9 +411,14 @@ function _renderChannelsPanel(panel, info, nodeById) {
     titleEl.appendChild(cnt);
     if (info.srcTotal && info.dstTotal) {
         var share = document.createElement("span"); share.className = "text-muted";
-        share.textContent = "· (" + info.srcPct + " → " + info.dstPct + ")";
-        share.title = info.srcPct + " of " + info.srcLabel + " [" + info.srcCol + "] flows here; this is "
-            + info.dstPct + " of " + info.dstLabel + " [" + info.dstCol + "]";
+        // The same flow read both ways: → from the left (source) community's side, ← from the right
+        // (destination) one. It's one set of channels, so each arrow carries that set's share of each
+        // community — the two percentages mirror across the arrows (left = source share, right = dest share).
+        share.textContent = "· (" + info.srcPct + " → " + info.dstPct + ", " + info.srcPct + " ← " + info.dstPct + ")";
+        share.title = "→ " + info.srcPct + " of " + info.srcLabel + " [" + info.srcCol + "] is in this flow, forming "
+            + info.dstPct + " of " + info.dstLabel + " [" + info.dstCol + "].   ← " + info.dstPct + " of "
+            + info.dstLabel + " [" + info.dstCol + "] is in this flow, forming " + info.srcPct + " of "
+            + info.srcLabel + " [" + info.srcCol + "].";
         titleEl.appendChild(share);
     }
     head.appendChild(titleEl);
