@@ -1345,6 +1345,31 @@ class Command(BaseCommand):
             gc.collect()
             sys.unraisablehook = previous_unraisable_hook
 
+    def _refresh_query_planner_stats(self) -> None:
+        """Keep the SQLite query planner's statistics current after a crawl.
+
+        Each crawl grows ``webapp_message`` (and the channel / label tables)
+        substantially. With stale or missing ``sqlite_stat1`` the planner
+        mis-plans the home page's album-tail ``EXISTS`` subquery into a per-row
+        whole-channel scan, turning a sub-second page load into a multi-minute
+        one. ``PRAGMA optimize`` paired with a bounded ``analysis_limit`` is the
+        SQLite-recommended lightweight refresh — it samples only the indexes
+        that have changed enough to matter, so it stays fast on a
+        multi-million-row table. A no-op on other backends (PostgreSQL keeps its
+        own statistics current via autovacuum / autoanalyze). Never allowed to
+        fail the crawl: a stats refresh is best-effort housekeeping.
+        """
+        from django.db import connection
+
+        if connection.vendor != "sqlite":
+            return
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("PRAGMA analysis_limit=400")
+                cursor.execute("PRAGMA optimize")
+        except Exception as exc:  # pragma: no cover - housekeeping must not break a crawl
+            self.stdout.write(self.style.WARNING(f"Query-planner stats refresh skipped: {exc}"))
+
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
@@ -1833,3 +1858,8 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
+
+        # Refresh planner statistics now that the crawl has grown the tables, so
+        # the next home / search / channel-detail page hit plans against current
+        # row counts rather than a stale (or empty) sqlite_stat1.
+        self._refresh_query_planner_stats()

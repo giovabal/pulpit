@@ -403,6 +403,12 @@ class Message(TelegramBaseModel):
             models.Index(fields=["channel", "total_reactions"], name="webapp_msg_chan_react_idx"),
             # Per-channel sort by interest_score for the "Top messages" panel.
             models.Index(fields=["channel", "interest_score"], name="webapp_msg_chan_interest_idx"),
+            # Serves the album-tail "is there an earlier sibling?" EXISTS subquery
+            # on the message list (webapp.views._exclude_album_tails): a precise
+            # 3-column seek (channel_id=, grouped_id=, telegram_id<) instead of a
+            # per-row whole-channel scan. Without it — and without fresh planner
+            # statistics — the home page degrades into a multi-minute query.
+            models.Index(fields=["channel", "grouped_id", "telegram_id"], name="webapp_msg_album_sib_idx"),
         ]
 
     def __str__(self) -> str:
