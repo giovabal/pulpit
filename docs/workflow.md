@@ -61,36 +61,48 @@ Each line is resolved on Telegram and the channel is added to the database. Chan
 
 ## Step 3 — Organize your channels
 
-Go to **Manage → Channels**. You will see a list of all channels Pulpit found. Your job here is to decide which ones matter for your research and assign each a label.
+Your job here is to decide which channels matter for your research and label them. A channel enters the analysis only while it carries an **in-target** label.
 
-### What is an organization?
+### Labels and label groups
 
-An "organization" in Pulpit is a category label you define — for example *Far right*, *Mainstream conservative*, *Pro-government*, *Independent media*, or any grouping that makes sense for your project. Every channel you want to analyse must belong to an organization.
+A **label** is a category you define — *Far right*, *Pro-government*, *State media*, *France*, or any grouping that fits your project. Labels live in **groups**; think of each group as one labelling *axis*:
 
-### How to assign channels
+- A **partition** group holds at most one label per channel at any moment — use it for mutually-exclusive axes like *Organization* or *Region*. A channel's periods within the group can't overlap.
+- A **non-partition** group lets a channel carry several of its labels at once — use it for free-form tags like *Topic*.
 
-1. In the Channels list, find a channel you want to include.
-2. Click on the channel's name or ID to open its edit page.
-3. Choose an organization from the **Organization** dropdown.
-4. Click **Save**.
+Exactly one group is the **primary** group. It supplies the node colour on the map, the "Label" column in the exports, the actor identity in vacancy analysis, and the default community / role basis — the job the old single "Organization" used to do. On a fresh install the primary group is called *Organization*, but you can rename it or make a different axis primary.
 
-Repeat for all the channels you want in your analysis. Channels without an organization are not collected or included in the map.
+Each label is marked **in target** or not. **Only channels that hold at least one in-target label are crawled and included in the map.** Everything else stays out of scope — though it can still show up as a *dead leaf* when an in-target channel forwards from it or mentions it.
 
-**To create organizations:** go to **Manage → Organizations**, click **Add**, give the organization a name and a colour, and make sure **In target** is ticked. Only organizations marked as in target are included in data collection.
+### Create your labels
 
-> **Tip:** you can also assign organizations in bulk. In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to set the organization for all of them at once.
+1. Go to **Manage → Labels**.
+2. Click **Add group**, give it a name and colour, and tick **Partition** (and **Primary** for your main axis).
+3. Add labels to the group; give each a colour and tick **In target** for the ones whose channels you want to analyse.
 
-**Inspect flag (optional, for discovery):** each channel has an **Inspect** checkbox that asks the crawler to fetch the channel's messages even when its organization is not in target. Inspected channels are *not* added to the analysis set — they remain out-of-target for measures, communities, and graph building — but their crawled messages are kept so you can discover new in-target candidates from the channels they forward and mention.
+### Apply labels to channels
 
-Set it from the **Inspect** column in the Channels list (inline checkbox) or from the channel edit page. Use this to try out a channel for a while before deciding whether to attach it to an in-target organization.
+1. Go to **Manage → Channels** and open a channel (click its name or ID).
+2. Add one or more labels. Each label membership can carry an optional **start** and **end** date, so a channel's grouping can change over the study period — e.g. a channel that switched hands mid-year. Leave both dates blank for an "always" membership.
+3. Click **Save**.
 
-**Channel sources (optional):** channel sources let you tag channels with one or more labels — for example *activists*, *media*, *state-affiliated* — independent of their organization. A channel can belong to any number of sources.
+Channels with no in-target label are left out of the analysis.
+
+> **Tip — bulk assign.** In the Channels list, tick the checkboxes next to several channels, then use the **Bulk assign** bar at the bottom of the page to give them all the same label at once.
+
+> **Why dated memberships?** Because label memberships are time-bounded, every forward is counted against whichever label the channel held *on the date of that message*. A channel that changed allegiance is split correctly across the timeline instead of being forced into a single present-day box.
+
+**Inspect flag (optional, for discovery):** each channel has an **Inspect** checkbox that asks the crawler to fetch the channel's messages even when the channel has no in-target label. Inspected channels are *not* added to the analysis set — they remain out-of-target for measures, communities, and graph building — but their crawled messages are kept so you can discover new in-target candidates from the channels they forward and mention.
+
+Set it from the **Inspect** column in the Channels list (inline checkbox) or from the channel edit page. Use this to try out a channel for a while before deciding whether to give it an in-target label.
+
+**Channel sources (optional):** channel sources are a separate tagging axis — for example *activists*, *media*, *state-affiliated* — independent of your label groups. A channel can belong to any number of sources.
 
 To create sources go to **Manage → Sources** and click **Add**. To assign a channel to a source, open its edit page and pick from the **Sources** field.
 
-Groups act as a scope filter: when you select one or more groups in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected groups are processed. Leaving all boxes unchecked means all in-target channels are included, as usual.
+Sources act as a scope filter: when you select one or more sources in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected sources are processed. Leaving all boxes unchecked means all in-target channels are included, as usual.
 
-Use groups when you want to run separate analyses on a subset of your corpus without changing organizations — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
+Use sources when you want to run separate analyses on a subset of your corpus without changing any labels — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
 
 ---
 
@@ -98,7 +110,7 @@ Use groups when you want to run separate analyses on a subset of your corpus wit
 
 In the Operations panel, find the **Crawl Channels** card (Step 2) and click **Run**.
 
-Pulpit downloads messages from all the channels you organized, and traces every cross-channel link — when one channel forwards a message from another, or mentions another channel by name.
+Pulpit downloads messages from every in-target channel, and traces every cross-channel link — when one channel forwards a message from another, or mentions another channel by name.
 
 This step can take a while, especially on a first run. The log shows progress channel by channel. When it finishes, the status changes to *done*.
 
@@ -110,7 +122,7 @@ The options panel is organized into three independent groups — each is its own
 
 | Option | When to use it |
 | :----- | :------------- |
-| **Get channels info** | On by default. Updates profile pictures, subscriber counts, about text, and other channel details. A linked chat seen for the first time — a channel's discussion group, or a group's broadcast channel — is added to the database and inherits the parent's current attribution (same organization and period), so it enters analysis scope right away; its timeline can then be edited like any other channel's. |
+| **Get channels info** | On by default. Updates profile pictures, subscriber counts, about text, and other channel details. A linked chat seen for the first time — a channel's discussion group, or a group's broadcast channel — is added to the database and inherits the parent's current labels (same labels and periods), so it enters analysis scope right away; its timeline can then be edited like any other channel's. |
 | **Mine about texts** | Scan channel descriptions for links to other Telegram channels and add any new ones to your database. |
 | **Fetch recommended channels** | Ask Telegram for its own channel suggestions and add them to the database. New channels are saved but not automatically crawled. |
 | **Retry lost & private** | Re-attempt channels previously marked as inaccessible. If a channel is now reachable its flag is cleared. |

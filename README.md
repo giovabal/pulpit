@@ -98,8 +98,8 @@ A Pulpit research project runs in five steps, all accessible from the browser in
 <br>
 
 1. **Find channels** — *Operations: Search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
-2. **Organize** — *Manage: Channels* — assign channels to categories you define (by political orientation, country, funding source, or any grouping that fits your research); channels without a category are excluded from analysis
-3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from all organized channels; Pulpit records every forward and every `t.me/` link, building a directed citation network
+2. **Organize** — *Manage: Labels* — define labels (political orientation, country, funding source, or any axis that fits your research), organise them into groups, and mark the ones you care about *in target*; then tag each channel from its editor. Memberships can be time-bounded, and only channels holding an in-target label enter the analysis
+3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from every in-target channel; Pulpit records every forward and every `t.me/` link, building a directed citation network
 4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
 5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
@@ -117,9 +117,9 @@ After export, the output directory contains self-contained files that can be sha
 | **Interactive 3D graph** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph) |
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
-| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; Organization × community cross-tabulation [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
+| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; label-group × community cross-tabulation, one per partition label group [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
 | **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
-| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (Organization and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
+| **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (your label-group partitions and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
@@ -163,13 +163,13 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 7 algorithms and one custom selection
+## Community detection — 7 algorithms and your own label groups
 
-Pulpit runs up to seven community detection algorithms at once, alongside your own Organization grouping as a baseline. Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to seven community detection algorithms at once, alongside your own *partition label groups* as baselines (the primary one is conventionally an "Organization" axis). Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
-| [Organization](docs/community-detection.md#organization) | Your own domain-knowledge categories as a baseline | — |
+| [Label groups](docs/community-detection.md#label-groups) | Your own domain-knowledge partitions (e.g. an "Organization" or "Region" axis) as a baseline | — |
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
 | [Leiden CPM](docs/community-detection.md#leiden-cpm) | Resolution γ tunes granularity — low γ gives few large communities, high γ many small ones | No |
@@ -178,7 +178,7 @@ Pulpit runs up to seven community detection algorithms at once, alongside your o
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
 | [Stochastic block model](docs/community-detection.md#stochastic-block-model) | Citation-role blocks — channels grouped by structural position (source/amplifier, core/periphery), not just dense clusters | Yes |
 
-The **Organization × community cross-tabulation** in every strategy section shows how your manual categories map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates the partition-based detection strategies — every algorithm except your manual Organization labels and the K-core shell decomposition — into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
+The **label-group × community cross-tabulation** in every strategy section shows how your manual label groups map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates the partition-based detection strategies — every algorithm except your manual label-group partitions and the K-core shell decomposition — into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
 
 See [Community detection](docs/community-detection.md) for descriptions, references, and a strategy selection guide.
 
