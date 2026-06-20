@@ -54,7 +54,7 @@ def _normalised_weights(weights: dict[str, float]) -> dict[str, float]:
 
 def _facet_stats(values: list[int], min_sample: int) -> tuple[float, float] | None:
     """Population mean and stddev when the sample is big enough and non-degenerate."""
-    if len(values) < min_sample:
+    if not values or len(values) < min_sample:
         return None
     mean = sum(values) / len(values)
     var = sum((v - mean) ** 2 for v in values) / len(values)

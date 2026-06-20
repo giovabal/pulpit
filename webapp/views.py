@@ -17,7 +17,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.utils import channel_cutoff_q, channel_period_date_q
-from network.vacancy_analysis import _scores_abc, _shift_months
+from network.vacancy_analysis import _scores_abc, _shift_months, orphaned_amplifier_pks
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -379,23 +379,18 @@ class VacanciesView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
-        # Count the distinct in-target channels that forwarded from the vacancy channel.
-        # Grouping by the (constant) forwarded-from target collapses to a single row;
-        # .order_by() clears any model default ordering that would otherwise leak an
-        # extra column into the GROUP BY and split the count across rows.
-        orphaned_sub = Subquery(
-            Channel.objects.in_target()
-            .filter(message_set__forwarded_from=OuterRef("channel"))
-            .order_by()
-            .values("message_set__forwarded_from")
-            .annotate(c=Count("pk", distinct=True))
-            .values("c")
-        )
+        # "Orphaned amplifiers" must mean the same thing here as on the per-channel
+        # vacancy-analysis card: in-target channels that forwarded from the vacancy within
+        # the before-window, counted period-aware over alive messages. Use the shared
+        # helper (with its default 12-month window) so the two figures can't diverge.
         rows = [
-            {"vacancy": vac, "channel": vac.channel, "orphaned_amplifier_count": vac.orphaned_amplifier_count or 0}
+            {
+                "vacancy": vac,
+                "channel": vac.channel,
+                "orphaned_amplifier_count": len(orphaned_amplifier_pks(vac.channel, vac.closure_date)),
+            }
             for vac in ChannelVacancy.objects.select_related("channel")
             .prefetch_related("channel__channel_labels__label")
-            .annotate(orphaned_amplifier_count=orphaned_sub)
             .order_by("-closure_date")
         ]
         ctx["vacancies"] = rows
@@ -875,20 +870,9 @@ class VacancyAnalysisView(View):
         )
 
         # Period-aware (channel_cutoff_q): only messages sent while the forwarding channel
-        # was in-target at that date count — matching the graph pipeline and the shared
-        # structural-analysis scorer, so the card and the export agree by construction.
-        orphaned_pks: set[int] = set(
-            Message.objects.alive()
-            .filter(
-                channel__in=Channel.objects.in_target(),
-                forwarded_from=ch,
-                date__gte=before_start,
-                date__lt=closure_dt,
-            )
-            .filter(channel_cutoff_q())
-            .values_list("channel_id", flat=True)
-            .distinct()
-        )
+        # was in-target at that date count — the shared canonical definition, so the card,
+        # the vacancies list, and the structural-analysis export agree by construction.
+        orphaned_pks = orphaned_amplifier_pks(ch, closure_date, months_before)
         total_orphaned = len(orphaned_pks)
 
         raw = list(

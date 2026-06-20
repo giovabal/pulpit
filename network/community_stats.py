@@ -687,7 +687,14 @@ def _compute_strategy_entry(
         for lbl, nodes in label_to_nodes.items():
             for nd in nodes:
                 node_to_community[nd] = str(lbl)
-        cross = sum(1 for u, v in graph.edges() if node_to_community.get(u) != node_to_community.get(v))
+        # An unassigned endpoint (no label in this partition) must make the edge
+        # *crossing*, per the comment above. Default each missing node to a per-node
+        # tuple sentinel: it never equals a real (string) community label, and two
+        # distinct unassigned endpoints still compare unequal (whereas `None != None`
+        # would wrongly count a both-unassigned edge as intra-community).
+        cross = sum(
+            1 for u, v in graph.edges() if node_to_community.get(u, ("", u)) != node_to_community.get(v, ("", v))
+        )
         inter_community_edge_ratio = round(cross / total_edges, 4)
 
     # ── Mean E-I index (weighted by community connection volume) ─────────────

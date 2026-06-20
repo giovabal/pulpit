@@ -64,11 +64,16 @@ def compute_neighbour_community_participation(
     for node in graph.nodes():
         weights: dict[Any, float] = {}
         for pred in graph.predecessors(node):
+            if pred == node:
+                continue  # self-loop: excluded so it isn't double-counted (node is in both
+                # predecessors and successors), matching the `- {node}` of the within-module z axis
             w = graph.edges[pred, node].get("weight", 1.0)
             c = partition.get(pred)
             if c is not None:
                 weights[c] = weights.get(c, 0.0) + w
         for succ in graph.successors(node):
+            if succ == node:
+                continue  # ditto
             w = graph.edges[node, succ].get("weight", 1.0)
             c = partition.get(succ)
             if c is not None:
