@@ -1149,6 +1149,7 @@ function showToast(msg, type) {
     constructor(name) {
       this.name = name;
       this.offset = 0;
+      this.startTime = null;
       this.poller = null;
       this.autoScroll = true;
 
@@ -1243,7 +1244,11 @@ function showToast(msg, type) {
     async fetchStatus() {
       let data;
       try {
-        const resp = await fetch('/operations/status/' + this.name + '/?offset=' + this.offset);
+        let url = '/operations/status/' + this.name + '/?offset=' + this.offset;
+        // Tell the server which run our offset belongs to, so it can reset to 0 when a
+        // new run started (otherwise this observer would skip the start of the new log).
+        if (this.startTime) url += '&since=' + encodeURIComponent(this.startTime);
+        const resp = await fetch(url);
         if (!resp.ok) {
           // Without this guard a JSON 5xx body would parse to an unrelated shape,
           // leave offset undefined, and re-stream the whole log on the next tick.
@@ -1258,6 +1263,7 @@ function showToast(msg, type) {
 
       if (data.lines && data.lines.length) this._appendLines(data.lines);
       this.offset = data.next_offset;
+      this.startTime = data.start_time || null;
       this._setBadge(data.status);
       this._setButtons(data.status);
 

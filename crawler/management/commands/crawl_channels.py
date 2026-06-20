@@ -624,6 +624,19 @@ class Command(BaseCommand):
                     )
                 )
                 return None
+            except errors.FloodWaitError as error:
+                # FloodWaitError subclasses Exception, so without this it would fall through to the
+                # generic handler below: logged as a misleading traceback and, critically, skipping
+                # the back-off sleep every other flood path honours.
+                printer.newline()
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipping {action} for channel {channel.telegram_id} due to flood wait: {error}"
+                    )
+                )
+                if not settings.IGNORE_FLOODWAIT:
+                    sleep(settings.TELEGRAM_FLOODWAIT_SLEEP_SECONDS)
+                return None
             except Exception as error:  # noqa: BLE001 - logged for the operator
                 printer.newline()
                 self.stdout.write(self.style.WARNING(f"Skipping {action} for channel {channel.telegram_id}: {error}"))
@@ -1502,7 +1515,10 @@ class Command(BaseCommand):
 
                         if mine_about_texts:
                             about_refs: set[str] = set()
-                            for about_text in channels.exclude(about="").values_list("about", flat=True):
+                            # Scan every channel's about text (per the flag's help/discovery purpose),
+                            # not just the crawl-scoped subset — references in GROUP/USER/out-of-scope
+                            # channels' descriptions would otherwise be missed.
+                            for about_text in Channel.objects.exclude(about="").values_list("about", flat=True):
                                 for m in _ABOUT_REF_RE.finditer(about_text):
                                     ref = m.group(1).strip().lower()
                                     if ref and ref not in SKIPPABLE_REFERENCES:

@@ -903,7 +903,7 @@ class VacancyAnalysisView(View):
             .exclude(forwarded_from=ch)
             .values("forwarded_from")
             .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
-            .order_by("-amplifier_count")[:30]
+            .order_by("-amplifier_count", "forwarded_from")[:30]
         )
 
         cand_ids = [r["forwarded_from"] for r in raw]

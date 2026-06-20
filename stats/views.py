@@ -317,7 +317,9 @@ class ReactionsHistoryDataView(View):
         cutoff_q = channel_cutoff_q(channel_field="message__channel", date_field="message__date")
 
         top_emojis_qs = (
-            MessageReaction.objects.filter(message__channel__in=in_target_pks, message__is_lost=False)
+            MessageReaction.objects.filter(
+                message__channel__in=in_target_pks, message__date__isnull=False, message__is_lost=False
+            )
             .filter(cutoff_q)
             .values("emoji")
             .annotate(total=Sum("count"))
@@ -366,7 +368,9 @@ class ChannelReactionsHistoryView(View):
         from network.utils import channel_period_date_q
 
         period_q = channel_period_date_q(channel, "message__date") if channel.in_target_periods.exists() else None
-        top_emojis_qs = MessageReaction.objects.filter(message__channel=channel, message__is_lost=False)
+        top_emojis_qs = MessageReaction.objects.filter(
+            message__channel=channel, message__date__isnull=False, message__is_lost=False
+        )
         if period_q is not None:
             top_emojis_qs = top_emojis_qs.filter(period_q)
         top_emojis_qs = top_emojis_qs.values("emoji").annotate(total=Sum("count")).order_by("-total")[:8]

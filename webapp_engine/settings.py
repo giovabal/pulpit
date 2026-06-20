@@ -394,6 +394,20 @@ TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, c
 # `WEB_ACCESS=ALL  # …` would otherwise produce a value like "ALL  # …" that
 # matches none of the modes and silently flips the middleware into PROTECTED.
 WEB_ACCESS = config("WEB_ACCESS", default="ALL", cast=str).split("#", 1)[0].strip().upper()
+# Validate against the known modes. The middleware treats any non-"ALL" value as "restricted" but
+# only enforces login-everywhere when the value is exactly "PROTECTED"; an unrecognised value (e.g. a
+# typo like "PROTECTEDD") would therefore fail OPEN — staff sections look protected while every public
+# path is served without authentication. Fail closed to the most restrictive mode instead.
+_VALID_WEB_ACCESS = {"ALL", "OPEN", "PROTECTED"}
+if WEB_ACCESS not in _VALID_WEB_ACCESS:
+    import warnings
+
+    warnings.warn(
+        f"Unrecognised WEB_ACCESS={WEB_ACCESS!r}; expected one of {sorted(_VALID_WEB_ACCESS)}. "
+        "Falling back to the most restrictive mode (PROTECTED).",
+        stacklevel=2,
+    )
+    WEB_ACCESS = "PROTECTED"
 
 # ── Network and analysis options (configuration/.operations-structural) ──────
 

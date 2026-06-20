@@ -37,6 +37,12 @@ def iter_hole_ranges(
         )
         if seed:
             prev_id, prev_date = seed
+        else:
+            # No stored message at or below the checkpoint (e.g. they were all purged): use the
+            # checkpoint itself as the lower bound so the first gap above it is still yielded
+            # instead of being silently and permanently skipped. prev_date stays None, so the gap
+            # is fetched conservatively.
+            prev_id = min_telegram_id
         qs = qs.filter(telegram_id__gt=min_telegram_id)
     for current_id, current_date in qs.values_list("telegram_id", "date").iterator():
         if prev_id is not None and current_id - prev_id > 1:

@@ -594,7 +594,7 @@ class TaskStatusViewTests(TestCase):
             patch("runner.views.tasks.get_log_lines", return_value=([], 20)) as mock_log,
         ):
             self.client.get(reverse("operations-status", args=["structural_analysis"]) + "?offset=20")
-        mock_log.assert_called_once_with("structural_analysis", 20)
+        mock_log.assert_called_once_with("structural_analysis", 20, since=None)
 
 
 # ---------------------------------------------------------------------------
