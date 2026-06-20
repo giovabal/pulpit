@@ -331,7 +331,7 @@ def _analyze_vacancy(
         .exclude(forwarded_from=ch)
         .values("forwarded_from")
         .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
-        .order_by("-amplifier_count")[:max_candidates]
+        .order_by("-amplifier_count", "forwarded_from")[:max_candidates]
     )
 
     cand_pks = [r["forwarded_from"] for r in raw_cands]

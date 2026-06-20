@@ -12,7 +12,12 @@ DEFAULT_FALLBACK_COLOR: ColorTuple = (204, 204, 204)
 
 
 def _normalize_rgb_sequence(value: Sequence[Any]) -> ColorTuple:
-    values = [float(part) for part in value[:3]]
+    try:
+        values = [float(part) for part in value[:3]]
+    except (ValueError, TypeError):
+        # Non-numeric or None channel values (e.g. {"r": None, ...} or ["a", 1, 2]):
+        # degrade to the fallback colour rather than raising — parse_color is a tolerant normalizer.
+        return DEFAULT_FALLBACK_COLOR
     if len(values) < 3:
         return DEFAULT_FALLBACK_COLOR
     if max(values) <= 1:
@@ -68,7 +73,11 @@ def parse_color(value: Any) -> ColorTuple:
         cleaned = value.strip()
         if cleaned.lower().startswith("rgb"):
             channel_values = cleaned[cleaned.find("(") + 1 : cleaned.rfind(")")].split(",")
-            parsed = [float(part.strip()) for part in channel_values if part.strip()]
+            try:
+                parsed = [float(part.strip()) for part in channel_values if part.strip()]
+            except ValueError:
+                # Malformed channel values (e.g. "rgb", "rgb(a,b,c)"): fall back instead of raising.
+                return DEFAULT_FALLBACK_COLOR
             if not parsed:
                 return DEFAULT_FALLBACK_COLOR
             if parsed and max(parsed) <= 1:

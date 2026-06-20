@@ -1109,7 +1109,9 @@ class ChannelCrawler:
             self.api_client.wait()
             try:
                 to_upsert: list[MessageReply] = []
-                for tg_reply in self.api_client.client.iter_messages(channel_entity, reply_to=msg_telegram_id):
+                for tg_reply in self.api_client.client.iter_messages(
+                    channel_entity, reply_to=msg_telegram_id, wait_time=self.api_client.wait_time
+                ):
                     if isinstance(tg_reply, MessageService):
                         continue
                     sender_name = ""

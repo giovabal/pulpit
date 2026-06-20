@@ -62,6 +62,9 @@ class Command(BaseCommand):
         if not target_name:
             raise CommandError("--target is required: specify the name of the export to write comparison files into.")
         root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
+        # Create the target before anything writes into it: copy_compare_project / the table writers
+        # below open files directly in root_target, so the directory must already exist.
+        os.makedirs(root_target, exist_ok=True)
         project_title: str = Project.load().title
         seo = options["seo"]
 
@@ -77,7 +80,6 @@ class Command(BaseCommand):
             project_title=project_title,
         )
         self.stdout.write("- index")
-        os.makedirs(root_target, exist_ok=True)
         tables.write_index_html(
             output_filename=os.path.join(root_target, "index.html"),
             seo=seo,

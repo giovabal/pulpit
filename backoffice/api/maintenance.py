@@ -279,7 +279,17 @@ def maintenance_optimize(request: Any) -> Response:
 
     catalog = _STRATEGIES[engine]
     all_names = [s["name"] for s in catalog]
-    requested = request.data.get("strategies") or all_names
+    requested = request.data.get("strategies")
+    if not requested:
+        # Missing or empty → run all strategies (the documented default).
+        requested = all_names
+    elif not isinstance(requested, list) or not all(isinstance(n, str) for n in requested):
+        # A scalar would raise an unhandled TypeError (500); a bare string would be iterated
+        # character-by-character into a misleading "unknown strategies" 400. Reject cleanly instead.
+        return Response(
+            {"detail": "'strategies' must be a list of strategy names."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     invalid = [n for n in requested if n not in all_names]
     if invalid:
         return Response(

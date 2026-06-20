@@ -474,7 +474,7 @@ def detect_leiden_directed(
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.ModularityVertexPartition,
-        weights="weight",
+        weights="weight" if weights else None,
         seed=0,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)

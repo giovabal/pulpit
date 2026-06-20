@@ -285,6 +285,14 @@ def build_graph(
     # primary group additionally drives node colour and the "Label" export column (node attribute "organization").
     primary_group_id = LabelGroup.objects.filter(is_primary=True).values_list("pk", flat=True).first()
     partition_group_ids = list(LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True))
+    # The primary group drives node colour and the "organization" column even when it is not itself a
+    # partition group, so its window label must still be resolved; only partition groups, however, feed
+    # group_partitions (the LABELGROUP<id> strategies). Resolve the union so a non-partition primary group
+    # (or none) no longer silently leaves every node colourless / orphan-prunable.
+    partition_id_set = set(partition_group_ids)
+    resolve_group_ids = list(partition_group_ids)
+    if primary_group_id is not None and primary_group_id not in partition_id_set:
+        resolve_group_ids.append(primary_group_id)
 
     _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()
@@ -296,7 +304,7 @@ def build_graph(
         created = timezone.localdate(channel.date) if channel.date else None
         group_partitions: dict[int, tuple[int, str]] = {}
         resolved_label: tuple[int, str, str] | None = None
-        for group_id in partition_group_ids:
+        for group_id in resolve_group_ids:
             # The primary group resolves the channel's in-target identity (node colour,
             # "organization" column), so it counts in-target labels only; descriptive
             # groups partition by every label they carry — including all-out-of-target
@@ -311,7 +319,8 @@ def build_graph(
                 data_max,
             )
             if resolved is not None:
-                group_partitions[group_id] = (resolved[0], resolved[2])  # (label_id, label_color)
+                if group_id in partition_id_set:
+                    group_partitions[group_id] = (resolved[0], resolved[2])  # (label_id, label_color)
                 if is_primary:
                     resolved_label = resolved
         node_data = channel_network_data(

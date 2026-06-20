@@ -126,19 +126,36 @@ def get_status(task: str) -> dict:
     }
 
 
-def get_log_lines(task: str, offset: int = 0) -> tuple[list[dict[str, str]], int]:
+def get_log_lines(task: str, offset: int = 0, since: str | None = None) -> tuple[list[dict[str, str]], int]:
     """Return (new_lines, new_offset) for the log since *offset* bytes.
 
     Each line is a ``{"text": <ANSI-stripped text>, "cls": <css class or "">}``
     dict — severity is classified server-side (from the line's ANSI colour,
     with keyword fallback) so the panel JS just applies the class.
+
+    *since* is the run's ``start_time`` the caller's *offset* was taken against;
+    when it differs from the current run's start_time a new run has begun, so the
+    offset is stale and reset to 0 (otherwise a secondary observer whose offset
+    predates the new run would seek past the start of the new log and silently
+    skip its opening output).
     """
     log_path = _log_path(task)
     if not log_path.exists():
         return [], 0
 
+    # A new run (different start_time) makes any prior offset meaningless, even when the
+    # new log has already grown past it — reset on run identity, not just on size.
+    if since is not None:
+        try:
+            current_start = json.loads(_meta_path(task).read_text()).get("start_time")
+        except (ValueError, OSError):
+            current_start = None
+        if current_start is not None and since != current_start:
+            offset = 0
+
     # `launch` truncates the log via open("wb"), so an offset from a previous
-    # run can land past the current EOF. Detect that and reset.
+    # run can land past the current EOF. Detect that and reset (backstop for the
+    # case where the caller did not pass *since*).
     if offset > log_path.stat().st_size:
         offset = 0
 
@@ -311,7 +328,11 @@ def abort(task: str) -> bool:
     try:
         os.kill(current["pid"], signal.SIGTERM)
         return True
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
+        # ProcessLookupError: the PID exited between the check and the kill.
+        # PermissionError: the PID was recycled onto a process we cannot signal — the
+        # same case _is_running() deliberately treats as "running". Either way the
+        # signal was not delivered to our task, so report failure instead of 500ing.
         return False
 
 

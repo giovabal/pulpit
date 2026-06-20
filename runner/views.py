@@ -261,8 +261,9 @@ class TaskStatusView(View):
             offset = max(0, int(request.GET.get("offset", 0)))
         except (ValueError, TypeError):
             return JsonResponse({"error": "invalid offset"}, status=400)
+        since = request.GET.get("since") or None
         status = tasks.get_status(task)
-        lines, new_offset = tasks.get_log_lines(task, offset)
+        lines, new_offset = tasks.get_log_lines(task, offset, since=since)
         return JsonResponse({**status, "lines": lines, "next_offset": new_offset})
 
 
