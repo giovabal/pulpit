@@ -18,7 +18,7 @@ Multiple strategies can be computed simultaneously and switched between in the g
 
 | Strategy | CLI key | Type | Preserves direction? |
 | :------- | :------ | :--- | :------------------- |
-| Organization | `ORGANIZATION` | Domain knowledge | — |
+| Label groups | `LABELGROUP<id>` | Domain knowledge | — |
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
 | Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
@@ -29,15 +29,17 @@ Multiple strategies can be computed simultaneously and switched between in the g
 
 ---
 
-## Organization
+## Label groups
 
-*Communities are the groupings you defined yourself in the admin interface — your own categories, used as a baseline.*
+*Communities are the groupings you defined yourself — your own label-group partitions, used as a baseline.*
 
-This is the only strategy in Pulpit that is not an algorithm: the communities are the analyst-defined Organizations attached to each channel — a political affiliation, a country, an editorial group, a funding source, whatever categorisation fits your investigation. Because the labels come from you, this strategy is the most interpretable and the natural baseline against which to read every algorithmic result. A channel's Organization can change over time (through time-bounded attribution periods); for each analysis window, the "representative" Organization is the one that covers the most days of the window for that channel.
+This is the only strategy family in Pulpit that is not an algorithm: the communities come from the **labels** you attach to channels in **Manage → Labels**. Labels live in *groups*, and any group you mark as a **partition** (a channel holds at most one of its labels at a time) can be carried into the analysis as a baseline — a political affiliation, a country, an editorial group, a funding source, whatever axis fits your investigation. Each partition group is selected on the CLI by the token `LABELGROUP<id>` (its database id; the Operations panel and the viewer show it by name). Because the labels come from you, this baseline is the most interpretable reference against which to read every algorithmic result.
 
-**In practice:** use Organization as your reference grid. When an algorithmic community cuts across one of your Organization labels — splitting one bloc into two, or merging two into one — the network is telling you something your labels do not capture, and that disagreement is where the most actionable findings tend to live. The Organization × community panel and the consensus matrix are designed exactly for this comparison.
+One group is the **primary** group (conventionally named *Organization*): it supplies the node colour, the "Label" export column, the vacancy-analysis actor identity, and the default `MODULEROLE` basis. Label memberships are **time-bounded**, so a channel can hold different labels over different date intervals and its grouping can change over the study period; for each analysis window, a channel's "representative" label is the one whose periods cover the most days of the window.
 
-**Example.** You categorise 200 channels into five organizations: far-right, mainstream right, centrist, left, and state media. The map coloured by Organization shows that far-right and mainstream right channels sit close together and cross-reference heavily, while state media forms an isolated cluster that gets cited but rarely cites back. This already tells you something about who is amplifying whom — and gives you the baseline against which the algorithmic strategies below can be compared.
+**In practice:** use a partition label group as your reference grid. When an algorithmic community cuts across one of your labels — splitting one bloc into two, or merging two into one — the network is telling you something your labels do not capture, and that disagreement is where the most actionable findings tend to live. The label-group × community panel and the [partition-comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi) are designed exactly for this comparison.
+
+**Example.** You sort 200 channels into five labels in your *Organization* group: far-right, mainstream right, centrist, left, and state media. The map coloured by that group shows that far-right and mainstream right channels sit close together and cross-reference heavily, while state media forms an isolated cluster that gets cited but rarely cites back. This already tells you something about who is amplifying whom — and gives you the baseline against which the algorithmic strategies below can be compared.
 
 ---
 
@@ -170,7 +172,7 @@ Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-
 - Peixoto, T.P. (2017) "Nonparametric Bayesian inference of the microcanonical stochastic block model." *Physical Review E* 95(1), 012317. [doi:10.1103/PhysRevE.95.012317](https://doi.org/10.1103/PhysRevE.95.012317) — the nested SBM.
 - Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1). [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the structural-equivalence notion that a block operationalises.
 
-**In practice:** reach for the SBM when modularity-based detection feels like it is fighting the data — when you suspect the network is hub-and-spoke or two-mode rather than a set of cohesive cliques. Because it separates *role* from *cohesion*, the SBM is the natural complement to Leiden: where Leiden tells you which channels cluster together, the SBM tells you which channels are interchangeable in the citation structure (e.g. "these forty amplifiers are structurally the same actor, pointed at the same three sources"). Compare it against `LEIDEN_DIRECTED` and `ORGANIZATION` in the consensus matrix — but remember the partitions answer different questions, so disagreement is expected and informative, not a failure.
+**In practice:** reach for the SBM when modularity-based detection feels like it is fighting the data — when you suspect the network is hub-and-spoke or two-mode rather than a set of cohesive cliques. Because it separates *role* from *cohesion*, the SBM is the natural complement to Leiden: where Leiden tells you which channels cluster together, the SBM tells you which channels are interchangeable in the citation structure (e.g. "these forty amplifiers are structurally the same actor, pointed at the same three sources"). Compare it against `LEIDEN_DIRECTED` in the consensus matrix, and against your label-group baseline in the partition-comparison matrices — but remember the partitions answer different questions, so disagreement is expected and informative, not a failure.
 
 **Example.** A network of 500 channels yields six tidy Leiden communities. The SBM, on the same graph, returns a block of 120 channels with almost no internal edges — channels Leiden had scattered across all six communities. Inspection shows they are pure amplifiers: each forwards from the same handful of source channels and is never cited by anyone. Leiden, hunting for density, distributed them by which source-neighbourhood they sat nearest; the SBM, hunting for role, recognised them as a single structural class — the network's audience, distinct from its producers.
 
@@ -184,20 +186,20 @@ Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-
 </figure>
 <br>
 
-### Organization × community distribution
+### Label group × community distribution
 
-For each non-ORGANIZATION strategy, the community table includes a collapsible **Organization × community distribution** panel with two cross-tabulation tables:
+For each algorithmic strategy, the community table includes a collapsible **‹label group› × community distribution** panel — one per partition label group, the primary group first (so for a default install the first panel is *Organization × community distribution*). Each panel holds two cross-tabulation tables:
 
-- **% of organization channels per community** (rows sum to 100%): for each organization, what fraction of its channels ended up in each detected community? A row concentrated in one column means that organization maps cleanly to a single algorithmic cluster; a spread-out row means the organization was split across multiple communities.
-- **% of community channels per organization** (columns sum to 100%): for each detected community, what fraction comes from each organization? A column dominated by one organization means the community is organization-pure; a mixed column means the algorithm grouped channels from different organizations together.
+- **% of label nodes per community** (rows sum to 100%): for each label, what fraction of its channels ended up in each detected community? A row concentrated in one column means that label maps cleanly to a single algorithmic cluster; a spread-out row means the label was split across multiple communities.
+- **% of community nodes per label** (columns sum to 100%): for each detected community, what fraction comes from each label? A column dominated by one label means the community is label-pure; a mixed column means the algorithm grouped channels from different labels together.
 
-Columns are sorted so that each organization's dominant community falls as close to a diagonal as possible (Hungarian algorithm), making alignment easy to read at a glance.
+Columns are sorted so that each label's dominant community falls as close to a diagonal as possible (Hungarian algorithm), making alignment easy to read at a glance.
 
-**In practice:** compare the two tables to understand mismatches between your domain-knowledge groupings and the algorithm's output. High purity on both sides confirms the algorithm. A spread-out row for one organization signals that the algorithm sees structure *within* what you treated as a single bloc — a prompt to investigate whether that organization should be split.
+**In practice:** compare the two tables to understand mismatches between your domain-knowledge groupings and the algorithm's output. High purity on both sides confirms the algorithm. A spread-out row for one label signals that the algorithm sees structure *within* what you treated as a single bloc — a prompt to investigate whether that label should be split.
 
 ### Consensus matrix
 
-Generated with `--consensus-matrix` (requires at least two partition-based strategies — i.e. excluding ORGANIZATION and K-core — active).
+Generated with `--consensus-matrix` (requires at least two algorithmic partition strategies — i.e. excluding your label-group partitions and K-core — active).
 
 <figure>
 <img src="../webapp_engine/static/screenshot_14.jpg" alt="Community consensus matrix">
@@ -205,14 +207,14 @@ Generated with `--consensus-matrix` (requires at least two partition-based strat
 </figure>
 <br>
 
-The consensus matrix answers: **across the partition-based strategies (every detection strategy except ORGANIZATION and the K-core shell decomposition), how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
+The consensus matrix answers: **across the partition-based strategies (every detection strategy except your label-group partitions and the K-core shell decomposition), how consistently is each pair of channels placed in the same community?** For every pair, the count of strategies that co-assign them is computed and displayed as a lower-triangle balloon plot:
 
 - **Radius** grows with agreement count
 - **Colour** shifts from blue (low agreement) to red (full agreement)
 
 Channels are sorted by plurality community assignment so that pairs from the same detected community cluster along the diagonal.
 
-**In practice:** the consensus matrix reveals which groupings are robust and which are algorithm-dependent. A pair of channels with near-full agreement (large red balloon) is co-clustered by every algorithm — that grouping is stable regardless of which method you trust. A pair with low agreement is structurally ambiguous: the network evidence for placing them together or apart is genuinely weak. Pairs in the same manual Organization that consistently appear in different algorithmic communities are candidates for review.
+**In practice:** the consensus matrix reveals which groupings are robust and which are algorithm-dependent. A pair of channels with near-full agreement (large red balloon) is co-clustered by every algorithm — that grouping is stable regardless of which method you trust. A pair with low agreement is structurally ambiguous: the network evidence for placing them together or apart is genuinely weak. Pairs in the same manual label group that consistently appear in different algorithmic communities are candidates for review.
 
 ### Community intersection (Sankey)
 
@@ -237,7 +239,7 @@ When the export was built with a year timeline (`--timeline-step year`; see [Wor
 
 Box colours come from each year's own community palette; a ribbon takes its **source** community's colour, so you can follow where one community's members disperse to. Communities within a column are ordered (and ribbons stacked) to minimise crossings, so straighter, more horizontal bands indicate a more stable partition over time. A year in which the strategy produced no communities is omitted, and the diagram is drawn only for strategies present in at least two timeline years.
 
-**In practice:** a strategy whose alluvial is mostly straight, thick bands describes a stable community structure — the same blocs persist year over year. Heavy criss-crossing and fragmentation means the partition is volatile: either the underlying network is genuinely reorganising, or the strategy is resolution-sensitive on this data (compare against a steadier strategy, or against [Leiden CPM](#leiden-cpm) at a coarser resolution). Manual label-group partitions (e.g. an organisation axis) should flow almost perfectly straight — visible turbulence there points to channels whose attribution changed over the period.
+**In practice:** a strategy whose alluvial is mostly straight, thick bands describes a stable community structure — the same blocs persist year over year. Heavy criss-crossing and fragmentation means the partition is volatile: either the underlying network is genuinely reorganising, or the strategy is resolution-sensitive on this data (compare against a steadier strategy, or against [Leiden CPM](#leiden-cpm) at a coarser resolution). Manual label-group partitions (e.g. an organisation axis) should flow almost perfectly straight — visible turbulence there points to channels whose labels changed over the period.
 
 ---
 
@@ -245,7 +247,7 @@ Box colours come from each year's own community palette; a ribbon takes its **so
 
 | Research goal | Recommended strategy |
 | :------------ | :------------------- |
-| Use your own domain knowledge as the baseline | `ORGANIZATION` |
+| Use your own domain knowledge as the baseline | `LABELGROUP<id>` |
 | Find all community structure, no prior knowledge | `LEIDEN` or `LEIDEN_DIRECTED` |
 | Fast parameter-free baseline for large graphs | `LABELPROPAGATION` |
 | Direction of citation matters | `LEIDEN_DIRECTED` |
