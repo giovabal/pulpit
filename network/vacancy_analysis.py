@@ -42,6 +42,38 @@ def _shift_months(d: datetime.date, n: int) -> datetime.date:
     return d.replace(year=year, month=month, day=day)
 
 
+def orphaned_amplifier_pks(
+    channel: Channel,
+    closure_date: datetime.date,
+    months_before: int = 12,
+) -> set[int]:
+    """Channel PKs of a vacancy's *orphaned amplifiers*.
+
+    The single canonical definition shared by the vacancies list, the
+    vacancy-analysis card, and the structural-analysis export: in-target channels
+    that forwarded from ``channel`` within the before-window
+    ``[closure_date - months_before, closure_date)``, counted period-aware
+    (``channel_cutoff_q``) over alive messages — so all three surfaces agree by
+    construction rather than by replicating the query.
+    """
+    before_start = datetime.datetime.combine(
+        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+    )
+    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=datetime.timezone.utc)
+    return set(
+        Message.objects.alive()
+        .filter(
+            channel__in=Channel.objects.in_target(),
+            forwarded_from=channel,
+            date__gte=before_start,
+            date__lt=closure_dt,
+        )
+        .filter(channel_cutoff_q())
+        .values_list("channel_id", flat=True)
+        .distinct()
+    )
+
+
 def _jaccard(a: frozenset, b: frozenset) -> float:
     union = a | b
     return len(a & b) / len(union) if union else 0.0
@@ -303,21 +335,9 @@ def _analyze_vacancy(
     )
 
     # Orphaned amplifiers: in-target channels that forwarded from the vacancy in the
-    # before window *while they were in-target at that date* — period-aware, matching the
-    # graph pipeline's channel_cutoff_q() chokepoint (built from the Message side so the
-    # cutoff applies to each forwarding message's own channel and date).
-    orphaned_pks: set[int] = set(
-        Message.objects.alive()
-        .filter(
-            channel__in=Channel.objects.in_target(),
-            forwarded_from=ch,
-            date__gte=before_start,
-            date__lt=closure_dt,
-        )
-        .filter(channel_cutoff_q())
-        .values_list("channel_id", flat=True)
-        .distinct()
-    )
+    # before window *while they were in-target at that date* (period-aware) — the shared
+    # canonical definition, so the card, the list, and this export agree by construction.
+    orphaned_pks = orphaned_amplifier_pks(ch, closure_date, months_before)
 
     raw_cands = list(
         Message.objects.alive()

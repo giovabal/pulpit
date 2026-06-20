@@ -846,9 +846,12 @@ class ChannelDetailViewTests(TestCase):
 
 
 class VacanciesViewTests(TestCase):
-    """The vacancies list reports the number of DISTINCT in-target channels that
-    forwarded from the vacancy channel — regression for the subquery that used to
-    return one arbitrary amplifier's message count (GROUP BY pk + LIMIT 1)."""
+    """The vacancies list "Orphaned amplifiers" figure uses the same canonical
+    definition as the per-channel vacancy-analysis card: DISTINCT in-target channels
+    that forwarded from the vacancy *within the before-window*, counted period-aware
+    over *alive* messages (shared ``orphaned_amplifier_pks`` helper). Regression both
+    for the old subquery that returned one arbitrary amplifier's message count and for
+    the later all-time count that ignored the window / lost / period filters."""
 
     def setUp(self) -> None:
         self.org = make_label(name="Org", is_in_target=True)
@@ -856,12 +859,27 @@ class VacanciesViewTests(TestCase):
         self.amp1 = make_channel(telegram_id=2, label=self.org, title="Amp1")
         self.amp2 = make_channel(telegram_id=3, label=self.org, title="Amp2")
         self.outsider = make_channel(telegram_id=4, title="Outsider")  # not in-target
+        self.amp_pre = make_channel(telegram_id=5, label=self.org, title="AmpPreWindow")
+        self.amp_lost = make_channel(telegram_id=6, label=self.org, title="AmpLost")
+        # Closure 2024-01-01 → default 12-month before-window is [2023-01-01, 2024-01-01).
+        in_window = datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc)
         # amp1 forwards from the vacancy 3 times, amp2 once → 2 distinct amplifiers.
         for tid in (1, 2, 3):
-            Message.objects.create(telegram_id=tid, channel=self.amp1, forwarded_from=self.vacancy_ch)
-        Message.objects.create(telegram_id=1, channel=self.amp2, forwarded_from=self.vacancy_ch)
+            Message.objects.create(telegram_id=tid, channel=self.amp1, forwarded_from=self.vacancy_ch, date=in_window)
+        Message.objects.create(telegram_id=1, channel=self.amp2, forwarded_from=self.vacancy_ch, date=in_window)
         # A non-in-target forwarder must not be counted.
-        Message.objects.create(telegram_id=1, channel=self.outsider, forwarded_from=self.vacancy_ch)
+        Message.objects.create(telegram_id=1, channel=self.outsider, forwarded_from=self.vacancy_ch, date=in_window)
+        # A forward before the before-window must not be counted (matches the card).
+        Message.objects.create(
+            telegram_id=1,
+            channel=self.amp_pre,
+            forwarded_from=self.vacancy_ch,
+            date=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        )
+        # A lost forward inside the window must not be counted (alive-only).
+        Message.objects.create(
+            telegram_id=1, channel=self.amp_lost, forwarded_from=self.vacancy_ch, date=in_window, is_lost=True
+        )
         ChannelVacancy.objects.create(channel=self.vacancy_ch, closure_date=datetime.date(2024, 1, 1))
 
     def test_orphaned_amplifier_count_is_distinct_in_target_channels(self) -> None:
@@ -869,8 +887,9 @@ class VacanciesViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         rows = response.context["vacancies"]
         self.assertEqual(len(rows), 1)
-        # 2 distinct amplifiers (amp1, amp2): not amp1's 3 messages, not amp2's 1,
-        # not the 4 total forwards, and the non-in-target outsider is excluded.
+        # 2 distinct amplifiers (amp1, amp2): not amp1's 3 messages, not the total
+        # forwards, and the non-in-target outsider, the pre-window forwarder, and the
+        # lost forwarder are all excluded — matching the vacancy-analysis card.
         self.assertEqual(rows[0]["orphaned_amplifier_count"], 2)
 
 
