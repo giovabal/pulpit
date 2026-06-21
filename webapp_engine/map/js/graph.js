@@ -1180,7 +1180,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // year data is preloaded, updating the message for each year as it loads.
     var graph_promise = new Promise(function(resolve) {
         loading_el.addEventListener('shown.bs.modal', function() {
-            get_data(current_data_dir).then(resolve);
+            get_data(current_data_dir).then(resolve).catch(function(err) {
+                console.error('get_data failed:', err);
+                resolve();  // never leave the (static, non-dismissable) spinner trapped
+            });
         }, { once: true });
     });
 
@@ -1209,7 +1212,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Keep spinner open until both the graph and all year caches are ready
     Promise.all([graph_promise, years_promise])
-        .then(function() { loading_modal_bs.hide(); });
+        .then(function() { loading_modal_bs.hide(); })
+        .catch(function() { loading_modal_bs.hide(); });
 
     // Sigma click handlers registered once here (not inside get_data to avoid duplicates on reload)
     sigma_instance.on('clickNode', function(event) {

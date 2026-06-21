@@ -255,6 +255,38 @@ class ChannelViewSet(
 
         return Response({"updated": len(valid_ids)})
 
+    @action(detail=True, methods=["post"], url_path="replace-labels")
+    def replace_labels(self, request, pk=None):
+        """Atomically replace a channel's label periods.
+
+        Deleting the old periods and recreating the new set happen inside one
+        transaction, so a validation or DB error rolls everything back instead of
+        leaving the channel with a half-written or empty labelling (the failure
+        mode of deleting first and then POSTing each new period separately).
+        """
+        channel = self.get_object()
+        periods = request.data.get("periods", [])
+        if not isinstance(periods, list):
+            return Response({"error": "'periods' must be a list."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            ChannelLabel.objects.filter(channel=channel).delete()
+            created = []
+            for row in periods:
+                row = row if isinstance(row, dict) else {}
+                serializer = ChannelLabelSerializer(
+                    data={
+                        "channel_id": channel.id,
+                        "label_id": row.get("label_id"),
+                        "start": row.get("start") or None,
+                        "end": row.get("end") or None,
+                    }
+                )
+                serializer.is_valid(raise_exception=True)
+                created.append(serializer.save())
+
+        return Response({"labels": ChannelLabelSerializer(created, many=True).data})
+
 
 class ChannelLabelViewSet(viewsets.ModelViewSet):
     serializer_class = ChannelLabelSerializer

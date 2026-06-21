@@ -11,6 +11,7 @@
     var _total = 0;
     var _offset = 0;
     var _loading = false;
+    var _reloadQueued = false;   /* {u: updateUrl} when a load was requested mid-flight */
     var _searchTimer = null;
     var _sortField = "id";
     var _sortDir   = "desc";
@@ -425,7 +426,10 @@
 
     /* ── Data loading ───────────────────────────────────────────────────── */
     function loadChannels(updateUrl) {
-        if (_loading) return;
+        // Don't drop a reload requested while a fetch is in flight — remember the
+        // latest request and replay it on completion so the table never lags the
+        // sort/filter/page controls (which have already mutated visible state).
+        if (_loading) { _reloadQueued = { u: updateUrl }; return; }
         _loading = true;
         $tbody.innerHTML = '<tr><td colspan="10" class="bo-empty">Loading…</td></tr>';
         $selectAll.checked = false;
@@ -454,7 +458,10 @@
                 tr.appendChild(td);
                 $tbody.replaceChildren(tr);
             })
-            .finally(function () { _loading = false; });
+            .finally(function () {
+                _loading = false;
+                if (_reloadQueued) { var q = _reloadQueued; _reloadQueued = false; loadChannels(q.u); }
+            });
     }
 
     /* ── Init ───────────────────────────────────────────────────────────── */
@@ -499,6 +506,7 @@
     var _picIndex  = 0;
     var _picModal  = null;
     var _picCache  = {};   /* channel id → urls array */
+    var _picModalChannelId = null;   /* channel currently shown, to drop stale fetches */
 
     var $picModalEl  = document.getElementById("pic-modal");
     var $picImg      = document.getElementById("pic-modal-img");
@@ -563,6 +571,7 @@
 
     function _openPicModal(ch) {
         if (!_picModal) return;
+        _picModalChannelId = ch.id;
         $picTitle.textContent = ch.title || ("Channel #" + ch.id);
         $picCounter.textContent = "";
         $picFooter.style.display = "none";
@@ -578,10 +587,12 @@
         apiFetch("/manage/api/channels/" + ch.id + "/pictures/")
             .then(function (data) {
                 _picCache[ch.id] = data.pictures.length ? data.pictures : [_chSeed(ch)];
+                if (_picModalChannelId !== ch.id) return;  // a different channel is now shown
                 _picUrls = _picCache[ch.id];
                 _showPic(0);
             })
             .catch(function () {
+                if (_picModalChannelId !== ch.id) return;
                 _picUrls = [_chSeed(ch)];
                 _showPic(0);
             });

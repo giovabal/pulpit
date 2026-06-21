@@ -70,8 +70,8 @@ Promise.all([
         tablesSection.appendChild(h5m);
 
         var aMod = {}, bMod = {};
-        (dataA.modularity_rows || []).forEach(function(row) { aMod[row.strategy] = row.value; });
-        (dataB.modularity_rows || []).forEach(function(row) { bMod[row.strategy] = row.value; });
+        (dataA.modularity_rows || []).forEach(function(row) { aMod[row.strategy] = row.modularity; });
+        (dataB.modularity_rows || []).forEach(function(row) { bMod[row.strategy] = row.modularity; });
 
         var allStrategies = [], seenS = {};
         (dataA.modularity_rows || []).forEach(function(row) {
@@ -278,16 +278,26 @@ Promise.all([
         return { slope: slope, intercept: (sumY - slope * sumX) / n };
     }
 
-    function buildRegLine(pts) {
-        var valid = pts.filter(function(p) { return p.x > 0 && p.y > 0; });
-        var fit = powerLawFit(valid);
+    // Fit on RAW values (which every point carries) so a node normalized to exactly
+    // 0 is not dropped by the log filter, then map the two endpoints back into the
+    // plotted (optionally normalized) coordinate space. `ax` is null in raw mode.
+    function buildRegLine(pts, ax) {
+        var valid = pts.filter(function(p) { return p.xRaw > 0 && p.yRaw > 0; });
+        var fit = powerLawFit(valid.map(function(p) { return { x: p.xRaw, y: p.yRaw }; }));
         if (!fit) return [];
-        var xs = valid.map(function(p) { return p.x; });
+        var xs = valid.map(function(p) { return p.xRaw; });
         var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
-        return [
+        var endpoints = [
             { x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
             { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }
         ];
+        if (!ax) return endpoints;
+        return endpoints.map(function(p) {
+            return {
+                x: ax.x.range ? (p.x - ax.x.min) / ax.x.range : p.x,
+                y: ax.y.range ? (p.y - ax.y.min) / ax.y.range : p.y
+            };
+        });
     }
 
     function buildDatasets(xKey, yKey) {
@@ -296,7 +306,7 @@ Promise.all([
         var axB = normalize ? { x: minMax(nodesB, xKey), y: minMax(nodesB, yKey) } : null;
         var ptsA = buildPts(nodesA, xKey, yKey, axA && axA.x.min, axA && axA.x.range, axA && axA.y.min, axA && axA.y.range);
         var ptsB = buildPts(nodesB, xKey, yKey, axB && axB.x.min, axB && axB.x.range, axB && axB.y.min, axB && axB.y.range);
-        return { ptsA: ptsA, ptsB: ptsB, regA: buildRegLine(ptsA), regB: buildRegLine(ptsB) };
+        return { ptsA: ptsA, ptsB: ptsB, regA: buildRegLine(ptsA, axA), regB: buildRegLine(ptsB, axB) };
     }
 
     var initial = buildDatasets(xSelect.value, ySelect.value);

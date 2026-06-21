@@ -194,6 +194,7 @@ function _build_partition_comparison_section() {
             selYear.addEventListener("change", function() {
                 var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
                 _fetch_network_metrics(year).then(function(d) {
+                    if (String(selYear.value) !== String(year)) return;  // superseded by a newer selection
                     render_partition_comparison(body, d && d.partition_comparison);
                 });
             });
@@ -259,14 +260,20 @@ function _build_strategy_sankey_section(stratKeys) {
         var msg = document.createElement("p"); msg.className = "text-muted"; msg.textContent = text;
         diagram.appendChild(msg);
     }
+    var _sankeyReq = 0;
     function redraw() {
         var a = selA.value, b = selB.value;
         var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
+        var myReq = ++_sankeyReq;
         _fetch_year(year).then(function(d) {
+            if (myReq !== _sankeyReq) return;  // a newer redraw (year/strategy change or resize) superseded this
             var fig = build_strategy_intersection_sankey(d.data, a, b, _strat_label(a), _strat_label(b), diagram.clientWidth, _nodeById);
             if (fig) { diagram.innerHTML = ""; diagram.appendChild(fig); }
             else setMessage("One of the selected strategies assigned no channels for this selection.");
-        }).catch(function() { setMessage("Failed to load data for the selected year."); });
+        }).catch(function() {
+            if (myReq !== _sankeyReq) return;
+            setMessage("Failed to load data for the selected year.");
+        });
     }
     selA.addEventListener("change", redraw);
     selB.addEventListener("change", redraw);

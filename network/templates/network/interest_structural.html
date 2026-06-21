@@ -33,7 +33,7 @@
 </style>
 
 <script type="module">
-import { fetchJson } from "./js/utils.js";
+import { fetchJson, fetchJsonOrNull } from "./js/utils.js";
 
 (function () {
   var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
@@ -41,11 +41,13 @@ import { fetchJson } from "./js/utils.js";
 
   Promise.all([
     fetchJson(dataDir + "interest_structural.json"),
-    fetchJson(dataDir + "channels.json")
+    fetchJsonOrNull(dataDir + "channels.json")
   ])
-    .then(function (results) { render(results[0], results[1]); })
+    // channels.json only supplies display metadata; if it's missing, still render the
+    // table (render tolerates empty channel data) rather than blaming the wrong file.
+    .then(function (results) { render(results[0], results[1] || { nodes: [] }); })
     .catch(function () {
-      document.getElementById("is-summary").textContent = "Failed to load interest_structural.json.";
+      document.getElementById("is-summary").textContent = "Failed to load data.";
     });
 
   function render(data, channelsData) {

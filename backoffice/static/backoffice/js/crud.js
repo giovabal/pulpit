@@ -106,7 +106,25 @@ async function apiFetch(url, options) {
     var r = await fetch(url, init);
     if (!r.ok) {
         var msg = r.status + " " + r.statusText;
-        try { var err = await r.json(); msg = err.detail || err.error || JSON.stringify(err); } catch (_) {}
+        try {
+            var err = await r.json();
+            if (err && typeof err === "object") {
+                if (err.detail || err.error) {
+                    msg = err.detail || err.error;
+                } else if (Array.isArray(err)) {
+                    msg = err.join(" ");
+                } else {
+                    // DRF serializer errors: { field: ["msg", ...], non_field_errors: [...] }
+                    var lines = [];
+                    Object.keys(err).forEach(function (k) {
+                        var v = err[k];
+                        var text = Array.isArray(v) ? v.join(" ") : String(v);
+                        lines.push(k === "non_field_errors" ? text : k + ": " + text);
+                    });
+                    msg = lines.length ? lines.join(" ") : JSON.stringify(err);
+                }
+            }
+        } catch (_) {}
         throw new Error(msg);
     }
     if (r.status === 204) return null;

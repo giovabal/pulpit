@@ -114,6 +114,11 @@
     collapse.addEventListener('show.bs.collapse', function () {
       if (loaded) return;
       loaded = true;
+      spinner.classList.remove('hidden');
+      // Drop any error message left by a previous failed attempt before retrying,
+      // so failures don't stack and a successful retry leaves no stale message.
+      var stale = wrap && wrap.querySelector('.chart-load-error');
+      if (stale) stale.remove();
       Promise.all([
         fetchJson(collapse.dataset.chartUrl),
         eventsPromise,
@@ -130,7 +135,7 @@
         loaded = false;
         if (wrap) {
           var p = document.createElement('p');
-          p.className = 'text-muted';
+          p.className = 'text-muted chart-load-error';
           p.textContent = 'Failed to load chart.';
           wrap.appendChild(p);
         }
