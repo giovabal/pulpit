@@ -344,7 +344,7 @@ class ChannelListView(ListView):
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
             Channel.objects.filter(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )

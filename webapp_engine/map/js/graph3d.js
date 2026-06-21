@@ -784,11 +784,17 @@ function neighbors_of(id) {
 }
 
 function reset_colors() {
-    Object.keys(nodes_index).forEach(function(id) {
-        var node = nodes_index[id];
-        node.mesh.material.color.copy(node.orig_color);
-    });
-    rebuild_edge_colors();
+    if (current_group) {
+        // Keep the active group-filter dimming in sync with #group-select and the
+        // info-chip instead of un-fading every node back to full colour.
+        apply_group_filter(current_group);
+    } else {
+        Object.keys(nodes_index).forEach(function(id) {
+            var node = nodes_index[id];
+            node.mesh.material.color.copy(node.orig_color);
+        });
+        rebuild_edge_colors();
+    }
     selected_node_id = null;
     el('infobar').style.display = 'none';
 }

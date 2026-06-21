@@ -179,21 +179,42 @@
       return '<th scope="col" aria-sort="' + sortState + '" class="vac-sort-th ' + col.cls + '" data-col="' + col.key + '"><button type="button" class="vac-sort-btn">' + col.label + arrow + '</button></th>';
     }).join('') + '</tr>';
 
-    var tbody = sorted.map(function(c) {
-      var dot = c.org_color ? '<span class="org-dot" style="background:' + c.org_color + ';" aria-hidden="true"></span>' : '';
-      return '<tr>' +
-        '<th scope="row">' + dot + '<a href="' + c.url + '">' + c.title + '</a></th>' +
-        '<td>' + (c.first_activity || '—') + '</td>' +
-        '<td class="text-end">' + fmtScore(c.score_b) + '</td>' +
-        '<td class="text-end">' + fmtScore(c.score_c) + '</td>' +
-        '<td class="text-end">' + c.amplifier_count + '</td>' +
-        '<td>' + (c.last_forwarded || '—') + '</td>' +
-        '</tr>';
-    }).join('');
-
     var tableEl = document.createElement('table');
     tableEl.className = 'stats-table vacancy-candidates-table';
-    tableEl.innerHTML = '<caption class="sr-only">Replacement candidates for ' + (document.querySelector('.vacancy-impact-title') ? 'this vacancy' : 'the vacancy') + ', sorted by ' + _sortCol + '.</caption><thead>' + thead + '</thead><tbody>' + tbody + '</tbody>';
+    tableEl.innerHTML = '<caption class="sr-only">Replacement candidates for ' + (document.querySelector('.vacancy-impact-title') ? 'this vacancy' : 'the vacancy') + ', sorted by ' + _sortCol + '.</caption><thead>' + thead + '</thead><tbody></tbody>';
+
+    // Build body rows with the DOM API so channel-supplied fields (title) cannot
+    // inject markup; only the static, code-controlled thead above uses innerHTML.
+    function cell(text, cls) {
+      var td = document.createElement('td');
+      if (cls) td.className = cls;
+      td.textContent = text;
+      return td;
+    }
+    var tbodyEl = tableEl.querySelector('tbody');
+    sorted.forEach(function(c) {
+      var tr = document.createElement('tr');
+      var th = document.createElement('th');
+      th.scope = 'row';
+      if (c.org_color) {
+        var dot = document.createElement('span');
+        dot.className = 'org-dot';
+        dot.style.background = c.org_color;
+        dot.setAttribute('aria-hidden', 'true');
+        th.appendChild(dot);
+      }
+      var a = document.createElement('a');
+      a.href = c.url;
+      a.textContent = c.title;
+      th.appendChild(a);
+      tr.appendChild(th);
+      tr.appendChild(cell(c.first_activity || '—'));
+      tr.appendChild(cell(fmtScore(c.score_b), 'text-end'));
+      tr.appendChild(cell(fmtScore(c.score_c), 'text-end'));
+      tr.appendChild(cell(c.amplifier_count, 'text-end'));
+      tr.appendChild(cell(c.last_forwarded || '—'));
+      tbodyEl.appendChild(tr);
+    });
     tableEl.querySelectorAll('th[data-col]').forEach(function(th) {
       var btn = th.querySelector('.vac-sort-btn') || th;
       btn.addEventListener('click', function() {
@@ -324,6 +345,9 @@
         if (isChart) fetches.push(getEventsPromise());
         Promise.all(fetches).then(function (results) {
           spinner.classList.add('hidden');
+          var _w = collapse.querySelector('.panel-tables-wrap') || collapse.querySelector('.chart-canvas-wrap');
+          var _stale = _w && _w.querySelector('.bo-empty');
+          if (_stale) _stale.remove();
           if (ptype === 'table') {
             renderContactTables(collapse.querySelector('.panel-tables-wrap'), results[0]);
           } else if (ptype === 'cross-refs') {

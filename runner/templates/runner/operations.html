@@ -1609,7 +1609,12 @@ function showToast(msg, type) {
     // Collect all layout checkboxes (FA2 + extras).
     var layoutCbs = Array.from(layoutsFs.querySelectorAll('input[type="checkbox"]'));
     layoutCbs.forEach(function (cb) {
-      cb.addEventListener('change', function () {
+      cb.addEventListener('change', function (e) {
+        // Only enforce for real user clicks. Programmatic loads (setMulti /
+        // applyLoadedDefaults) set the whole group's state by dispatching a change
+        // per box; enforcing on those would re-check FA2 (the first box) because it
+        // is unchecked before the intended boxes are processed.
+        if (!e.isTrusted) return;
         var anyChecked = layoutCbs.some(function (c) { return c.checked; });
         if (!anyChecked) cb.checked = true;  // silently restore the last one
       });
@@ -1630,7 +1635,8 @@ function showToast(msg, type) {
 
     var layout3dCbs = Array.from(layouts3dFs.querySelectorAll('input[type="checkbox"]'));
     layout3dCbs.forEach(function (cb) {
-      cb.addEventListener('change', function () {
+      cb.addEventListener('change', function (e) {
+        if (!e.isTrusted) return;  // ignore programmatic bulk-load changes (see 2D note)
         var anyChecked = layout3dCbs.some(function (c) { return c.checked; });
         if (!anyChecked) cb.checked = true;
       });

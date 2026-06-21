@@ -48,7 +48,7 @@
         if (!$chDrop.contains(e.target) && e.target !== $chSearch) $chDrop.style.display = "none";
     });
 
-    var _editCleanup = null;
+    var _closeOpenEdit = null;   // reverts the currently-open edit row (per-row closure)
 
     // ---- render row ----
     function renderRow(vac, editing) {
@@ -56,7 +56,7 @@
         tr.dataset.id = vac.id;
 
         if (editing) {
-            if (_editCleanup) { _editCleanup(); _editCleanup = null; }
+            if (_closeOpenEdit) _closeOpenEdit();
 
             var tdCh = document.createElement("td");
             var chInput = document.createElement("input"); chInput.className = "bo-input"; chInput.style.minWidth = "27rem"; chInput.value = vac.channel_title || "";
@@ -92,7 +92,18 @@
                 if (!drop.contains(e.target) && e.target !== chInput) drop.style.display = "none";
             }
             document.addEventListener("click", dropCloseHandler);
-            _editCleanup = function () { document.removeEventListener("click", dropCloseHandler); };
+            // Per-row teardown (idempotent): drop this row's outside-click listener and
+            // release the shared "currently-open edit" slot if it still points here.
+            var endEdit = function () {
+                document.removeEventListener("click", dropCloseHandler);
+                if (_closeOpenEdit === revertToDisplay) _closeOpenEdit = null;
+            };
+            // Revert this row to display mode; called when another row's edit opens.
+            var revertToDisplay = function () {
+                endEdit();
+                $tbody.replaceChild(renderRow(vac, false), tr);
+            };
+            _closeOpenEdit = revertToDisplay;
             tdCh.appendChild(wrap); tr.appendChild(tdCh);
 
             var tdDate = document.createElement("td");
@@ -111,7 +122,7 @@
                 if (chIdInput.value) body.channel_id = parseInt(chIdInput.value, 10);
                 apiFetch(API + vac.id + "/", { method: "PATCH", body: body })
                     .then(function (updated) {
-                        _editCleanup(); _editCleanup = null;
+                        endEdit();
                         Object.assign(vac, updated);
                         $tbody.replaceChild(renderRow(vac, false), tr);
                         showToast("Saved.");
@@ -119,7 +130,7 @@
                     .catch(function (e) { showToast("Error: " + e.message, "error"); });
             });
             cancelBtn.addEventListener("click", function () {
-                _editCleanup(); _editCleanup = null;
+                endEdit();
                 $tbody.replaceChild(renderRow(vac, false), tr);
             });
             tdA.appendChild(saveBtn); tdA.appendChild(cancelBtn); tr.appendChild(tdA);

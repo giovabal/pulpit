@@ -334,18 +334,19 @@
     }
 
     function replaceLabels(ch, rows) {
-        var API_CL = "/manage/api/channel-labels/";
-        var dels = (ch.labels || []).map(function (cl) {
-            return apiFetch(API_CL + cl.id + "/", { method: "DELETE" });
-        });
-        return Promise.all(dels).then(function () {
-            ch.labels = [];
-            return Promise.all(rows.map(function (r) {
-                return apiFetch(API_CL, {
-                    method: "POST",
-                    body: { channel_id: ch.id, label_id: r.label_id, start: r.start, end: r.end },
-                }).then(function (created) { ch.labels.push(created); });
-            }));
+        // Atomic server-side replace: a single transaction deletes the old periods and
+        // recreates the new set, so a mid-batch failure can never wipe a channel's
+        // labelling down to a partial/empty state. On error apiFetch rejects and
+        // ch.labels is left untouched (matching the rolled-back DB).
+        return apiFetch("/manage/api/channels/" + ch.id + "/replace-labels/", {
+            method: "POST",
+            body: {
+                periods: rows.map(function (r) {
+                    return { label_id: r.label_id, start: r.start, end: r.end };
+                }),
+            },
+        }).then(function (data) {
+            ch.labels = data.labels || [];
         });
     }
 

@@ -104,7 +104,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="lost-list">
     {% for channel in lost_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-sources="{% for s in channel.sources.all %}{{ s.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">
@@ -141,7 +141,7 @@
   </div>
   <ul class="channels-list list-unstyled" id="private-list">
     {% for channel in private_list %}
-    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
+    <li class="channel-row" data-title="{{ channel.title|lower }}" data-type="{{ channel.channel_type_key }}" data-org="{{ channel.current_label.pk|default:'' }}" data-sources="{% for s in channel.sources.all %}{{ s.pk }} {% endfor %}" data-date-min="{{ channel.first_message_date|date:'Y-m-d' }}" data-date-max="{{ channel.last_message_date|date:'Y-m-d' }}" data-followers="{{ channel.participants_count|default_if_none:'' }}" data-messages="{{ channel.messages_count }}" data-org-name="{{ channel.current_label.name|default:''|lower }}" data-tag="{{ channel.username|lower }}">
       <a href="{{ channel.get_absolute_url }}" class="channel-row-link channel-row-link--excluded">
         <span class="org-dot channel-row-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>
         <span class="channel-row-body">

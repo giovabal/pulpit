@@ -173,6 +173,7 @@
                 var empty = $evTbody.querySelector(".bo-empty");
                 if (empty) empty.parentNode.remove();
                 $evTbody.insertBefore(renderEventRow(ev), $evTbody.firstChild);
+                _evTotal++; _evRenderPagination();
                 $evAddForm.reset(); $evAddForm.classList.add("d-none"); $evAddBtn.classList.remove("d-none");
                 showToast("Event created.");
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
