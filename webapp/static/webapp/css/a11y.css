@@ -20,7 +20,7 @@
   left: 8px;
   z-index: 1080;
   padding: 8px 14px;
-  background: var(--accent);
+  background: var(--accent, #4338ca);
   color: #fff;
   font-weight: 600;
   border-radius: var(--radius, .5rem);
@@ -31,12 +31,12 @@
 .skip-link:focus-visible {
   top: 8px;
   color: #fff;
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent, #4338ca);
   outline-offset: 2px;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent, #4338ca);
   outline-offset: 2px;
 }
 :focus:not(:focus-visible) {
