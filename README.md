@@ -113,7 +113,7 @@ After export, the output directory contains self-contained files that can be sha
 
 | Output | What it is |
 | :----- | :--------- |
-| **Interactive 2D graph** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Spectral, Spring, and Circular layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--2d-interactive-graph) |
+| **Interactive 2D graph** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Kamada-Kawai, Circular, Community-shell, t-SNE, UMAP, and Hyperbolic layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--2d-interactive-graph) |
 | **Interactive 3D graph** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph) |
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
@@ -207,7 +207,7 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment information flow across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
 
-The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#what-gets-attacked) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under several attack strategies and tracks how the residual network shrinks:
+The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#the-backbone-disparity-filter) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under several attack strategies and tracks how the residual network shrinks:
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |

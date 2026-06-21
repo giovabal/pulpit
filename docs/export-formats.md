@@ -1,6 +1,6 @@
 # Export formats
 
-Every export is written by the **Export Network** operation (or `structural_analysis` on the CLI) into a named subdirectory of `exports/`. This document describes each output file and how to use it.
+Every export is written by the **Structural Analysis** operation (or `structural_analysis` on the CLI) into a named subdirectory of `exports/`. This document describes each output file and how to use it.
 
 ---
 
@@ -20,6 +20,7 @@ exports/
     behavioural_equivalence.html  ← behavioural equivalence matrix (optional)
     network_compare_table.html   ← network comparison (optional)
     robustness_table.html   ← node-removal R-index page (optional)
+    vacancy_analysis.html   ← replacement-candidate ranking (optional)
     channel_table.xlsx      ← Excel version (optional)
     network_table.xlsx
     community_table.xlsx
@@ -108,7 +109,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requi
 - **Community filter** — colour nodes by any active community strategy; switch strategies via the options panel
 - **Node size** — resize nodes by any computed measure (PageRank, amplification, etc.)
 - **Click a node** — opens a detail panel with subscriber count, all computed measures, and direct links to the channel and to its detail page in the web interface
-- **Year navigator** — appears when a timeline export was generated; step through annual snapshots with animated transitions (see [Workflow § Timeline export](workflow.md#timeline-export))
+- **Year navigator** — appears when a timeline export was generated; step through annual snapshots with animated transitions (see [Workflow § Timeline export](workflow.md#timeline-see-how-the-network-changed-over-time))
 
 <figure>
 <img src="../webapp_engine/static/screenshot_16.jpg" alt="2D interactive graph">
@@ -144,7 +145,7 @@ Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requir
 
 One row per channel. All computed measures appear as sortable columns. Generated with `--html`; the Excel version with `--xlsx`.
 
-Columns include: channel name and link, organization, all computed network measures (PageRank, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
+Columns include: channel name and link, label (the channel's primary-group label), all computed network measures (PageRank, amplification, etc.), subscriber count, message count, activity period, in-degree, out-degree.
 
 Click any column header to sort. Download the `.xlsx` for further analysis in a spreadsheet application.
 
@@ -204,7 +205,7 @@ See [Whole-network statistics § Behavioural equivalence matrix](whole-network-s
 
 ## consensus_matrix.html — cross-strategy agreement
 
-Generated with `--consensus-matrix` (requires at least two non-ORGANIZATION community strategies).
+Generated with `--consensus-matrix` (requires at least two non-metadata (non-LABELGROUP) community strategies).
 
 A lower-triangle balloon plot where each cell shows how many active strategies co-assign a pair of channels to the same community. Larger, redder circles indicate higher agreement. Channels are sorted by plurality community assignment so that consistently co-clustered pairs appear near the diagonal.
 
@@ -246,7 +247,7 @@ Contains:
 - Interactive scatter plots with the current network's channels in blue and the compare network's channels in red
 - A "Normalise axes [0–1] per network" toggle that min-max-scales each network independently, making size-dependent measures comparable across networks of different sizes
 
-See [Workflow § Network comparison](workflow.md#network-comparison) for how to generate it.
+See [Workflow § Network comparison](workflow.md#compare-two-networks) for how to generate it.
 
 ---
 
@@ -262,6 +263,7 @@ One row per channel, mirroring `channel_table.xlsx`:
 | :----- | :------ |
 | Channel | Channel label (name or username) |
 | URL | Telegram URL |
+| Label | Primary-group label assigned to this channel |
 | Users | Subscriber count |
 | Messages | Total message count |
 | Inbound | In-degree (number of channels that forward or cite this channel) |

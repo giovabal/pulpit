@@ -190,7 +190,7 @@ The HTML page is linked from `index.html` under a **Vacancy Analysis** section t
 | `--vacancy-months-after N` | 24 | Forward window (months) after each vacancy's closure date |
 | `--vacancy-max-candidates N` | 30 | Maximum candidates scored per vacancy (ranked by orphaned-amplifier count) |
 
-In the **Operations panel**, all four measures are pre-checked when any vacancy exists in the database. Use the **All** / **None** buttons in the Vacancy Analysis legend to toggle the group in one click.
+In the **Operations panel**, the **Neighbour-set Equivalence** and **Brokerage overlap** measures are pre-checked by default (per the committed `.operations-structural` baseline, which sets `measures = ["STRUCTURAL_EQUIV", "BROKERAGE"]`); the fieldset is enabled only when at least one vacancy exists in the database. Use the **All** / **None** buttons in the Vacancy Analysis legend to toggle the whole group in one click.
 
 ---
 

@@ -100,7 +100,7 @@ The circular layout assigns positions purely by rank along a circle, with no inf
 
 Community shells uses NetworkX's `shell_layout` algorithm with community assignments as input. The largest community occupies the outermost ring, progressively smaller communities fill inner rings, and isolated nodes sit in the centre. Each ring's nodes are arranged at equal angular intervals around their shell.
 
-Pulpit picks the community strategy in this order of preference: **LEIDEN → LEIDEN_DIRECTED → first available strategy**. If no community strategy has been computed, it falls back to a plain shell layout without community grouping.
+Pulpit picks the community strategy in this order of preference: **LEIDEN → LEIDEN_DIRECTED → LABELPROPAGATION → first available strategy**. If no community strategy has been computed, it falls back to a plain shell layout without community grouping.
 
 **In practice:** community shells is the most *presentation-ready* layout. It makes community boundaries spatially unambiguous in a way that force-directed layouts cannot guarantee — communities that appear as overlapping blobs in FA2 are cleanly separated as distinct rings. Use it for reports, publications, or any situation where the audience needs to immediately understand which channels belong to which group.
 
@@ -114,7 +114,7 @@ Pulpit picks the community strategy in this order of preference: **LEIDEN → LE
 
 t-SNE (t-distributed Stochastic Neighbour Embedding) converts high-dimensional similarity between data points into 2D or 3D positions, optimising so that nodes that are similar are placed close together and dissimilar nodes are placed far apart. Unlike spectral methods, t-SNE can represent complex curved or non-convex cluster geometry: communities that curve around each other, or clusters within clusters, are faithfully preserved.
 
-Pulpit feeds t-SNE the **top-10 normalised Laplacian eigenvectors** of the undirected graph as input features. These eigenvectors capture the spectral community structure; t-SNE then non-linearly compresses them into 2D or 3D. Perplexity is set to `min(30, max(5, n÷4))` and a fixed random seed ensures reproducible results.
+Pulpit feeds t-SNE the **top-10 normalised Laplacian eigenvectors** of the undirected graph as input features. These eigenvectors capture the spectral community structure; t-SNE then non-linearly compresses them into 2D or 3D. Perplexity is set to `min(30, max(5, n÷4), n−1)` and a fixed random seed (`random_state=42`) ensures reproducible results.
 
 **Reference:** van der Maaten, L. & Hinton, G. (2008) "Visualizing data using t-SNE." *Journal of Machine Learning Research* 9. [http://jmlr.org/papers/v9/vandermaaten08a.html](http://jmlr.org/papers/v9/vandermaaten08a.html)
 

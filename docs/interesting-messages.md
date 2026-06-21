@@ -16,7 +16,7 @@ Both layers are read-only from the analyst's perspective: the hot layer is alway
 | `Message.z_views` / `z_forwards` / `z_reactions` | The three facet z-scores feeding the composite, exposed separately so you can see *why* a post scored well. |
 | `interest_desc` / `interest_asc` sort modes | New radio options in the Options dropdown on home (`/`), search (`/search/`), and channel detail (`/channel/<pk>/`). |
 | `/messages/highlights/` | New global feed across all in-target channels, default-sorted by `interest_score`. Cold-start channels are excluded. |
-| **Top messages** panel on the channel detail page | Per-channel sortable table: date, message preview, interest, facet z-scores; optional cross-community reach and authority-weighted reach when a structural export is loaded. |
+| `interest_structural.html` (structural-analysis export page) | Standalone page ranking the hottest messages with *C* (cross-community reach) and *D* (authority-weighted reach) columns; reads the `interest_structural.json` sidecar client-side. |
 | `data/interest_structural.json` (export sidecar) | Per-message *cross-community reach* (C) and *authority-weighted reach* (D), produced opt-in by `structural_analysis --interest-structural`. |
 
 ---
@@ -72,10 +72,9 @@ python manage.py compute_message_scores --weights "reactions=0.6,forwards=0.3,vi
 
 ### Surfaces
 
-Two new entry points expose the hot layer; the existing message browser also gains new sort options for free.
+A new global feed exposes the hot layer, and the existing message browsers also gain new sort options for free.
 
 - **`/messages/highlights/`** — new global feed listing the highest-`interest_score` messages across every in-target channel. Default sort is `interest_desc`; the standard Options dropdown (date range, content type, lost-message filter, sort selector) all apply. Cold-start channels are excluded (their `interest_score` is `NULL`).
-- **Top messages** panel on the channel detail page — appears below the standard charts on `/channel/<pk>/`. Returns the channel's top 30 by `interest_score`, presented as a sortable table with click-to-sort columns for Date, Message preview, Interest, z(react), z(fwd), z(views), plus two more columns when a structural export sidecar is loaded (see next section).
 - **Sort dropdown** — home, search, and channel detail browsers all gain `Most interesting` / `Least interesting` radio options alongside the existing date / views / reactions sorts. `?sort=interest_desc` propagates through `MessageJumpView` and every paginated link.
 
 ---
@@ -133,11 +132,9 @@ The structural layer is most informative on networks that satisfy two conditions
 
 ## Surfaces revisited: how C and D appear in the UI
 
-When `data/interest_structural.json` exists in the latest published export, the per-channel **Top messages** panel automatically gains two extra columns — *Cross-comm.* (the integer C) and *Auth. reach* (the float D). A small caption above the table records the chosen community strategy, authority key, and window so the analyst sees exactly what the numbers mean. When no structural export is present (the typical case during day-to-day crawling), the panel renders just the hot layer; nothing breaks.
+The structural layer (C and D) is surfaced only by the standalone **`interest_structural.html`** page that `structural_analysis --interest-structural` writes into the export. It ranks the hottest messages with two extra columns — *C* (cross-community reach, the integer) and *D* (authority-weighted reach, the float) — and a caption recording the chosen community strategy, authority key, and window so the analyst sees exactly what the numbers mean. The page reads its own `data/interest_structural.json` sidecar client-side (`fetchJson("data/interest_structural.json")`).
 
-The sidecar is read on demand by `webapp/utils/exports.py::latest_export_payload`, which finds the most-recently-modified `exports/<name>/` whose `summary.json` exists, skipping `.tmp` and `.old` directories, and caches the JSON decode keyed on the file's modification time so a re-published export invalidates the cache automatically.
-
-The global `/messages/highlights/` feed is *not* enriched with C and D inline — the post-card rendering is shared with home and search, where adding two columns would feel out of place. The intended pattern for cross-channel investigation of structural reach is: open `interest_structural.json` directly in a JSON viewer or through a notebook, or visit the per-channel "Top messages" panel for any candidate channel.
+The live web app's hot-layer surfaces — the global `/messages/highlights/` feed and the `interest_desc` / `interest_asc` sort options on the home, search, and channel-detail browsers — show only the database `interest_score`; they are *not* enriched with C and D, because the structural layer is an export-time artifact rather than a crawl-time DB column. The intended pattern for cross-channel investigation of structural reach is to open the `interest_structural.html` export page, or `interest_structural.json` directly in a JSON viewer or notebook.
 
 ---
 
