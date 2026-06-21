@@ -15,7 +15,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>2D Network map</h5>
+        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>2D Network map</h3>
         <p class="card-text text-muted small">Interactive force-directed graph of all channels. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.</p>
         <a href="graph.html" class="btn btn-outline-primary btn-sm">Open map</a>
       </div>
@@ -26,7 +26,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h5>
+        <h3 class="card-title h5"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h3>
         <p class="card-text text-muted small">3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.</p>
         <a href="graph3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
       </div>
@@ -43,7 +43,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <h3 class="card-title h5"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h3>
         <p class="card-text text-muted small">One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments for each detection strategy.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="channel_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
@@ -57,7 +57,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <h3 class="card-title h5"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h3>
         <p class="card-text text-muted small">One row per channel. Columns include degree, activity metrics, computed node measures (PageRank, Burt's constraint, …) and community assignments for each detection strategy.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="channel_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
@@ -72,7 +72,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h3>
         <p class="card-text text-muted small">Structural metrics per detected community{% if strategies %} ({{ strategies|join:", " }}){% endif %}: size, internal/external edges, density, reciprocity, clustering, path length.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="community_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
@@ -86,7 +86,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h3>
         <p class="card-text text-muted small">Structural metrics per detected community{% if strategies %} ({{ strategies|join:", " }}){% endif %}: size, internal/external edges, density, reciprocity, clustering, path length.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="community_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
@@ -101,7 +101,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h3>
         <p class="card-text text-muted small">Channel-pair co-clustering agreement heatmap aggregated across all detection strategies. Pairs consistently grouped together appear with larger, darker circles.</p>
         <a href="consensus_matrix.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
       </div>
@@ -113,7 +113,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h3>
         <p class="card-text text-muted small">Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy, and aggregate content measures.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="network_table.html" class="btn btn-outline-primary btn-sm">Open table</a>
@@ -127,7 +127,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h3>
         <p class="card-text text-muted small">Whole-network structural metrics: size, density, reciprocity, clustering, path length, diameter, modularity per strategy, and aggregate content measures.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="network_table.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>
@@ -142,7 +142,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h3>
         <p class="card-text text-muted small">Channel × channel cosine similarity of weighted in + out tie profiles (Lorrain &amp; White 1971). Channels that cite, and are cited by, the same channels appear darker — interchangeable network positions.</p>
         <a href="structural_similarity.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
       </div>
@@ -153,7 +153,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h3>
         <p class="card-text text-muted small">Channel × channel cosine similarity of behavioural-measure profiles (amplification, originality, diffusion lag, followers, messages; min-max normalised, missing values imputed to the median). Channels that behave alike appear darker.</p>
         <a href="behavioural_equivalence.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
       </div>
@@ -165,7 +165,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-shield-exclamation text-secondary me-2" aria-hidden="true"></i>Robustness</h5>
+        <h3 class="card-title h5"><i class="bi bi-shield-exclamation text-secondary me-2" aria-hidden="true"></i>Robustness</h3>
         <p class="card-text text-muted small">Resistance to node removal: residual-size R per attack strategy, z-score vs a weight-rewiring null model, and intra/inter community edge survival curves.</p>
         <div class="d-flex gap-2 flex-wrap">
           {% if include_robustness_html %}<a href="robustness_table.html" class="btn btn-outline-primary btn-sm">Open analysis</a>{% endif %}
@@ -185,7 +185,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-arrow-repeat text-secondary me-2" aria-hidden="true"></i>Vacancy succession</h5>
+        <h3 class="card-title h5"><i class="bi bi-arrow-repeat text-secondary me-2" aria-hidden="true"></i>Vacancy succession</h3>
         <p class="card-text text-muted small">Replacement candidates scored per closed channel using structural and temporal algorithms: Amplifier Coverage, Neighbour-set Equivalence, Brokerage overlap, and Temporal Adoption.</p>
         <a href="vacancy_analysis.html" class="btn btn-outline-primary btn-sm">Open analysis</a>
       </div>
@@ -200,7 +200,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-stars text-secondary me-2" aria-hidden="true"></i>Interesting messages</h5>
+        <h3 class="card-title h5"><i class="bi bi-stars text-secondary me-2" aria-hidden="true"></i>Interesting messages</h3>
         <p class="card-text text-muted small">Per-message structural reach: cross-community reach C (a depth-1 breadth proxy in the spirit of Goel et al. 2016, not their Wiener-index virality) and authority-weighted reach D (Cha et al. 2010), alongside the per-channel z-scored engagement composite (Suh 2010 / Salganik 2006).</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="interest_structural.html" class="btn btn-outline-primary btn-sm">Open table</a>
@@ -220,7 +220,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100 border-primary">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-intersect text-primary me-2" aria-hidden="true"></i>Side-by-side comparison</h5>
+        <h3 class="card-title h5"><i class="bi bi-intersect text-primary me-2" aria-hidden="true"></i>Side-by-side comparison</h3>
         <p class="card-text text-muted small">Metrics tables and scatter plots with both networks overlaid.</p>
         <a href="network_compare_table.html" class="btn btn-primary btn-sm">Open comparison</a>
       </div>
@@ -235,7 +235,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>2D Network map</h5>
+        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>2D Network map</h3>
         <p class="card-text text-muted small">Force-directed graph of the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="graph_2.html" class="btn btn-outline-primary btn-sm">Open map</a>
@@ -248,7 +248,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h5>
+        <h3 class="card-title h5"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h3>
         <p class="card-text text-muted small">3D force-directed graph of the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="graph3d_2.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
@@ -266,7 +266,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h5>
+        <h3 class="card-title h5"><i class="bi bi-table text-secondary me-2" aria-hidden="true"></i>Channels</h3>
         <p class="card-text text-muted small">Per-channel metrics for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           {% if "channel_table_2.html" in compare_files %}<a href="channel_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
@@ -280,7 +280,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-diagram-3 text-secondary me-2" aria-hidden="true"></i>Community statistics</h3>
         <p class="card-text text-muted small">Per-community metrics for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           {% if "community_table_2.html" in compare_files %}<a href="community_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
@@ -294,7 +294,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h5>
+        <h3 class="card-title h5"><i class="bi bi-bar-chart text-secondary me-2" aria-hidden="true"></i>Network statistics</h3>
         <p class="card-text text-muted small">Whole-network structural metrics for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           {% if "network_table_2.html" in compare_files %}<a href="network_table_2.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
@@ -308,7 +308,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid text-secondary me-2" aria-hidden="true"></i>Consensus matrix</h3>
         <p class="card-text text-muted small">Channel-pair co-clustering agreement for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="consensus_matrix_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
@@ -321,7 +321,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Structural equivalence</h3>
         <p class="card-text text-muted small">Cosine similarity of weighted in + out tie profiles for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="structural_similarity_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>
@@ -334,7 +334,7 @@
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h5>
+        <h3 class="card-title h5"><i class="bi bi-grid-3x3 text-secondary me-2" aria-hidden="true"></i>Behavioural equivalence</h3>
         <p class="card-text text-muted small">Cosine similarity of behavioural-measure profiles for the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="behavioural_equivalence_2.html" class="btn btn-outline-primary btn-sm">Open matrix</a>

@@ -137,6 +137,11 @@
   width: 100%;
   gap: .4rem;
 }
+.ops-subheader {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
 .ops-legend-actions {
   display: flex;
   gap: .2rem;

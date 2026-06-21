@@ -831,6 +831,9 @@ body {
 .stats-table tr:last-child td { border-bottom: none; }
 .stats-table th:last-child,
 .stats-table td:last-child { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* Vacancy list: the last column is free-text Note prose, not a number — keep it left-aligned and sans. */
+.stats-table.vacancy-list-table th:last-child,
+.stats-table.vacancy-list-table td:last-child { text-align: left; font-family: inherit; }
 
 /* ---------- Home ---------- */
 .home-page .stats-panel { max-width: none; }

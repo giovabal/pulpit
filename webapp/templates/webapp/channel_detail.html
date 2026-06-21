@@ -477,7 +477,7 @@
       Forwards only
     </label>
     {% else %}
-    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" id="msg-self-ref">
+    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" id="msg-self-ref" aria-label="Self-reference filter">
       <option value="include" {% if self_ref == "include" %}selected{% endif %}>Include self-references</option>
       <option value="exclude" {% if self_ref == "exclude" %}selected{% endif %}>Do not include self-references</option>
       <option value="only" {% if self_ref == "only" %}selected{% endif %}>Show only self-references</option>
