@@ -19,7 +19,7 @@ Metrics are organized into selectable groups. Controlled via `--network-stat-gro
 | Group | Metrics | Cost |
 | :---- | :------ | :--- |
 | `SIZE` | Nodes, Edges, Density | Low |
-| `PATHS` | Avg Path Length, Diameter, Directed variants | Medium–High |
+| `PATHS` | Reciprocity, Avg Clustering, Avg Path Length, Diameter, Directed variants | Medium–High |
 | `COHESION` | Transitivity, Global Efficiency, Algebraic Connectivity, Degree CV | High |
 | `COMPONENTS` | WCC count, Largest WCC, SCC count, Largest SCC | Low |
 | `DEGCORRELATION` | Directed assortativity (4 coefficients) | Low |
@@ -68,10 +68,6 @@ The mean of all directed shortest-path distances between node pairs in the **lar
 
 The longest directed shortest path in the largest strongly connected component.
 
----
-
-## COHESION
-
 ### Reciprocity
 
 The fraction of edges that are mutual — if A→B exists, does B→A also exist? Computed as (number of mutual pairs) / (total number of edges).
@@ -83,6 +79,10 @@ The fraction of edges that are mutual — if A→B exists, does B→A also exist
 For each channel, the clustering coefficient measures how interconnected its immediate neighbours are — do the channels that reference A also reference each other? The average is taken over all channels.
 
 **In practice:** a high average clustering coefficient means channels tend to form tight triangles of mutual reference — characteristic of ideologically homogeneous clusters. A low clustering coefficient indicates a more tree-like or hub-and-spoke structure.
+
+---
+
+## COHESION
 
 ### Transitivity
 
@@ -106,7 +106,7 @@ The mean reciprocal directed shortest-path length over all ordered pairs of chan
 
 ### Algebraic Connectivity (Fiedler value)
 
-The second-smallest eigenvalue λ₂ of the graph Laplacian, computed on the undirected projection. This is the *Fiedler value* (Fiedler 1973). It equals 0 exactly when the graph is disconnected. For connected graphs it is strictly positive; larger values indicate stronger cohesion. Approximated using the LOBPCG algorithm.
+The second-smallest eigenvalue λ₂ of the graph Laplacian, computed on the undirected projection. This is the *Fiedler value* (Fiedler 1973). It equals 0 exactly when the graph is disconnected. For connected graphs it is strictly positive; larger values indicate stronger cohesion. Approximated using the trace-minimization algorithm (`tracemin_pcg`).
 
 Two fundamental properties make λ₂ particularly meaningful:
 - **Cheeger inequality:** λ₂/2 ≤ edge expansion ≤ √(2λ₂) — it lower-bounds the edge connectivity (minimum cut)

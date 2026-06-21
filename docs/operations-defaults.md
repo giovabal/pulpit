@@ -28,7 +28,7 @@ Click → modal asks for a **title** (e.g. *"Production crawl, no media"*) → `
 
 The committed baseline is read-only via the API. Saves always create a new file; duplicate titles are allowed (uniqueness comes from the filename's timestamp). Same-second collisions advance the timestamp by 1 second so concurrent saves don't overwrite each other.
 
-Server-side validation (`_validate_post_constraints` in `runner/views.py`) rejects inconsistent inputs before writing — e.g. a `consensus_matrix` request with fewer than two non-ORGANIZATION strategies, an `amount` ≤ 0 for `search_channels`, an empty `project_dir` for `compare_analysis`.
+Server-side validation (`_validate_post_constraints` in `runner/views.py`) rejects inconsistent inputs before writing — e.g. a `consensus_matrix` request with fewer than two non-metadata (non-LABELGROUP) community strategies, a negative `amount` (`< 0`) for `search_channels`, an empty `project_dir` for `compare_analysis`.
 
 ### Load defaults
 
@@ -94,7 +94,7 @@ When you add an option that the analyst should be able to tweak:
 4. **OperationsView ad dict** — add `"X": settings.X` in `runner/views.py`'s `OperationsView.get`.
 5. **TASK_DEFAULT_SPECS** — add `(post_key, "section.key", kind)` so "Save as defaults" persists the value through the round-trip.
 6. **TASK_ARG_SPECS** — add the kind that emits the matching CLI flag(s).
-7. **CLI argparse** — add the flag in the management command, with `default=None` and the appropriate type/action; resolve via `_o(key, NO_OP_LITERAL)` or the equivalent helper.
+7. **CLI argparse** — add the flag in the management command, with `default=None` and the appropriate type/action; resolve via `_o(key, default)` (structural_analysis) or `_resolve_optional_bool(options[key])` (crawl_channels).
 8. **Bundled baseline** — if you want the option non-empty by default, add it under the matching section in the committed `.operations-{crawl,structural}` file.
 
 The `TASK_DEFAULT_SPECS` walker (`_form_to_toml_payload` and `_toml_to_form_payload` in `runner/views.py`) drives both Save and Load. Anything in the spec round-trips automatically; anything outside the spec (export name, start/end dates, channel sources, etc.) is per-run only.

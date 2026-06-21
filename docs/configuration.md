@@ -26,7 +26,7 @@ Fill in at least the three Telegram credentials in `configuration/.env` before r
 | `TELEGRAM_API_HASH` | API hash from Telegram | **required** |
 | `TELEGRAM_PHONE_NUMBER` | Phone number linked to your Telegram account | **required** |
 
-See [Getting started § Telegram API credentials](getting-started.md#telegram-api-credentials) for the registration walk-through.
+See [Getting started § Telegram API credentials](getting-started.md#step-2--get-telegram-api-credentials) for the registration walk-through.
 
 ## Telegram client tuning
 
@@ -176,7 +176,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
 | `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles) | `false` |
 | `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (cosine of behavioural-measure profiles) | `false` |
-| `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-ORGANIZATION strategies in `communities.strategies`) | `false` |
+| `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
 
@@ -196,6 +196,14 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. Empty `""` disables FA2. | `""` |
 | `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables. `0` keeps every community. | `0` |
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
+
+## `[interest]`
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `interest.structural` | Compute the per-message structural-reach sidecar — cross-community reach (C; Goel et al. 2016) and authority-weighted reach (D; Cha et al. 2010) — and write `data/interest_structural.json` + `interest_structural.html`. Requires at least one community strategy (and ideally `PAGERANK` in `measures.selected`). | `false` |
+| `interest.window_days` | Reaction window in days for the structural scoring: only forwards within this many days of the origin post count toward C and D. `0` disables the window. | `30` |
+| `interest.include_mentions` | Accepted for forward compatibility; currently a no-op (logs a warning when set). | `false` |
 
 ## `[measures]`
 

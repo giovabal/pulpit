@@ -238,7 +238,7 @@ Per-channel z-scored engagement is always on once the relevant migration has bee
 
 ## Viewing your results
 
-Go to **Data** (`/data/`) to see all your exports. Click an export name to open its index page, which links to the interactive map, tables, and any other files you generated.
+Go to **Operations → Exports** (`/operations/exports/`) to see all your exports. Click an export name to open its index page, which links to the interactive map, tables, and any other files you generated.
 
 You can also share an export by copying the whole `exports/<name>/` folder to a web server or to a colleague's machine. The files are self-contained and work without an internet connection.
 
@@ -324,10 +324,10 @@ python manage.py compute_message_scores --channel-id 42 --recency-days 90       
 python manage.py structural_analysis --interest-structural --measures PAGERANK --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --interest-structural --interest-window-days 0     # disable the 30-day forwarder window
 
-# Compare two exports
-python manage.py compare_analysis /path/to/exports/<other-name>
+# Compare two exports (--target names the export the comparison is written into)
+python manage.py compare_analysis /path/to/exports/<other-name> --target my-export
 # Windows: use backslashes or quote the path
-# python manage.py compare_analysis exports\<other-name>
+# python manage.py compare_analysis exports\<other-name> --target my-export
 ```
 
 See `python manage.py <command> --help` for the full list of flags for any command.

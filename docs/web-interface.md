@@ -16,7 +16,7 @@ The Operations panel is the dashboard you use to launch data collection and anal
 
 The landing page gives a project-level snapshot of the monitored corpus:
 
-- **Summary cards** — total in-target channels, total messages collected, the date range of the message archive, and the count of forwarded messages. Lost messages are excluded from every aggregate so the totals match the crawl scope. All four values are computed in a single aggregate query for fast page loads on large databases.
+- **Summary cards** — two rows of cards. Row 1: channels (with the to-inspect count), messages collected (with replies), media (with a per-type breakdown), and total views (with subscribers). Row 2: forwards sent, mentions sent, and the date range of the message archive. Lost messages are excluded from every aggregate so the totals match the crawl scope. The cards are built from several cached aggregates and memoised for fast page loads on large databases.
 - **Time-series charts** — month-by-month aggregates across the whole corpus: messages sent, active channels, forwards, views, reactions, and average involvement. Each chart is rendered by the same Chart.js component used on channel detail pages, including the dashed vertical-line event annotations (see [Workflow § Events](workflow.md#mark-events-on-charts)).
 - **Recent messages** — a feed of the latest posts collected, with a link to each source channel and the same post-card layout used elsewhere (views, forwards, reactions, edit indicator, replies pill).
 
@@ -26,19 +26,19 @@ The landing page gives a project-level snapshot of the monitored corpus:
 
 <figure>
 <img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel list">
-<figcaption><em>Channel list with organization filter, sort controls, and group chips.</em></figcaption>
+<figcaption><em>Channel list with label filter, sort controls, and group chips.</em></figcaption>
 </figure>
 <br>
 
 A paginated list of all channels in the database. Filters and controls:
 
 - **Search** — filter by channel name or username
-- **Organization filter** — show only channels assigned to a specific organization
+- **Label filter** — show only channels with a specific (primary-group, in-target) label
 - **Source filter** — show channels belonging to a specific ChannelSource
-- **Sort** — by name, subscriber count, message count, in-degree, or out-degree
-- **Channel chips** — each card shows the channel's current organization colour, subscriber count, message count, and group chips
+- **Sort** — by name, tag name, first activity, last activity, followers (subscriber count), message count, or label
+- **Channel chips** — each card shows the channel's current label colour, subscriber count, message count, and group chips
 
-A channel shows its network position data once crawled while it has an in-target **attribution period** — a time-bounded link to an organization whose `is_in_target` flag is set (see the channel editor below).
+A channel shows its network position data once crawled while it has an in-target **label period** — a time-bounded `ChannelLabel` whose `Label` has `is_in_target` set (see the channel editor below).
 
 ---
 
@@ -80,7 +80,7 @@ See [Vacancy analysis](vacancy-analysis.md) for the full documentation.
 
 ---
 
-## Data page — `/data/`
+## Exports browser — `/operations/exports/`
 
 The export browser. Shows all completed exports ordered by date. For each export:
 
@@ -102,8 +102,8 @@ Use this page as the starting point for sharing or exploring results without nav
 The operations panel presents the four pipeline tasks as numbered cards:
 
 1. **Search Channels** — find new channels by keyword
-2. **Get Channels** — crawl messages and resolve references
-3. **Export Network** — build the graph and write output files
+2. **Crawl Channels** — crawl messages and resolve references
+3. **Structural Analysis** — build the graph and write output files
 4. **Compare Analysis** — compare two network exports
 
 For each task:
@@ -112,8 +112,8 @@ For each task:
 - **Abort** — sends SIGTERM to the running process
 - **Options** — expand to set task-specific parameters (see [Workflow](workflow.md) for a full reference)
 - **Status indicator** — idle / running / done / failed
-- **Import from export** — pre-fill the Export Network options from a previous export's `summary.json` to reproduce or extend it
-- **Retry lost messages** — a Get Channels option that bulk-refetches every message currently marked as lost; rows Telegram returns are unmarked and their stats refreshed
+- **Import from export** — pre-fill the Structural Analysis options from a previous export's `summary.json` to reproduce or extend it
+- **Retry lost messages** — a Crawl Channels option that bulk-refetches every message currently marked as lost; rows Telegram returns are unmarked and their stats refreshed
 - **Export name overwrite confirmation** — when the typed export name collides with an export already on disk, clicking *Run* on Structural Analysis opens a confirmation modal before launching the task; cancelling leaves the form untouched
 
 ---
@@ -132,7 +132,7 @@ Staff-only management interface for corpus administration. Accessible only to us
 
 <figure>
 <img src="../webapp_engine/static/screenshot_09.jpg" alt="Backoffice channels view">
-<figcaption><em>Backoffice channels view: bulk organization assignment and group chip management.</em></figcaption>
+<figcaption><em>Backoffice channels view: bulk label assignment and group chip management.</em></figcaption>
 </figure>
 <br>
 
@@ -140,30 +140,30 @@ Staff-only management interface for corpus administration. Accessible only to us
 
 Bulk management of the channel database:
 
-- **Assign organization** — select multiple channels and replace their attribution timeline with a single period under one organization in one action
+- **Assign label** — select multiple channels and replace their periods *within one label's group* with a single period under one label in one action
 - **Source chips** — add or remove ChannelSource memberships inline
-- **Edit individual** — click through to edit a channel's details, its **attribution periods** (organization + optional start/end, non-overlapping), `to_inspect` flag, and vacancy record
-- **Filter** — by organization, group, in-target status, entity type
+- **Edit individual** — click through to edit a channel's details, its **label periods** (label + optional start/end, non-overlapping within a partition group), `to_inspect` flag, and vacancy record
+- **Filter** — by label, group, in-target status, entity type
 
-### Organizations — `/manage/organizations/`
+### Labels — `/manage/labels/`
 
-Create and edit organizations. Key fields:
+Create and edit label groups and their labels. Labels live in *groups* (a *partition* group holds at most one label per channel at a time; exactly one group is *primary*). Key fields:
 
-- **Name** — label used throughout the interface
-- **Color** — hex color used in the graph when `COMMUNITY_PALETTE=ORGANIZATION`
-- **In target** — when checked, all channels in this organization are included in crawls and exports
+- **Name** — label name used throughout the interface
+- **Color** — hex colour used to draw the node when the graph is coloured by this label's group (the `LABELGROUP<id>` community); the **Recolor** button applies a colorcet palette across a group
+- **In target** — when checked, a channel's periods under this label are included in crawls and exports (`is_in_target`)
 
 ### Sources — `/manage/sources/`
 
-ChannelSources are labels you apply to channels for flexible filtering. They are independent of organizations — a channel can be in any number of sources and belong to one organization. Use sources to define subsets for targeted analysis (e.g. run an export with `--channel-sources activist,media` to analyse only those channels).
+ChannelSources are tags you apply to channels for flexible filtering. They are independent of labels — a channel can be in any number of sources, regardless of its label periods. Use sources to define subsets for targeted analysis (e.g. run an export with `--channel-sources activist,media` to analyse only those channels).
 
 ### Search terms — `/manage/search-terms/`
 
 Add or remove search keywords for channel discovery. Terms are processed in order of oldest check date.
 
-### Events and event types — `/manage/events/`, `/manage/event-types/`
+### Events and event types — `/manage/events/`
 
-Manage the events and event type entries used for chart annotations. See [Workflow § Events](workflow.md#events-optional).
+Manage the events and event type entries used for chart annotations (event types are managed within the Events page). See [Workflow § Events](workflow.md#mark-events-on-charts).
 
 ### Users — `/manage/users/`
 
