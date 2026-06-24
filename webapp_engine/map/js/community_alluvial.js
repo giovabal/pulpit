@@ -243,18 +243,23 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
 
     // Ribbon selection: clicking a ribbon highlights it and reports its channels via onSelect; clicking
     // it again (or closing the panel, via the returned deselect) clears it. One ribbon selected at a time.
-    var _selected = null;
-    function _selectRibbon(path, info) {
+    // Each ribbon carries a stable identity key (boundary + src + dst) so a resize-driven rebuild can
+    // re-open the same flow's panel via selectByKey().
+    var _selected = null, _selectedKey = null;
+    var _pathByKey = {}, _infoByKey = {};
+    function _selectRibbon(path, info, key, restore) {
         if (_selected === path) {                       // toggle the current selection off
             path.setAttribute("fill-opacity", RIBBON_OPACITY);
             _selected = null;
+            _selectedKey = null;
             if (onSelect) onSelect(null);
             return;
         }
         if (_selected) _selected.setAttribute("fill-opacity", RIBBON_OPACITY);
         _selected = path;
+        _selectedKey = key;
         path.setAttribute("fill-opacity", RIBBON_SELECTED_OPACITY);
-        if (onSelect) onSelect(info);
+        if (onSelect) onSelect(info, { restore: !!restore });
     }
 
     // Ribbons first (under the boxes), per boundary. Each ribbon is a clickable "flow".
@@ -270,15 +275,18 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
             });
             path.style.cursor = "pointer";
             var info = _ribbonInfo(src, dst, r, sc.hex, dc.hex);
+            var key = bi + "\u0000" + r.src + "\u0000" + r.dst;
+            _pathByKey[key] = path;
+            _infoByKey[key] = info;
             var tip = r.src + " [" + src.colLabel + "] → " + r.dst + " [" + dst.colLabel + "]: " +
                 fmtInt(r.cnt) + " channel" + (r.cnt === 1 ? "" : "s") + " — click to list";
             path.setAttribute("aria-label", tip);
             path.addEventListener("mouseenter", function(e) { if (path !== _selected) path.setAttribute("fill-opacity", "0.7"); showTip(e, tip); });
             path.addEventListener("mousemove", moveTip);
             path.addEventListener("mouseleave", function() { path.setAttribute("fill-opacity", path === _selected ? RIBBON_SELECTED_OPACITY : RIBBON_OPACITY); hideTip(); });
-            path.addEventListener("click", function() { _selectRibbon(path, info); });
+            path.addEventListener("click", function() { _selectRibbon(path, info, key, false); });
             path.addEventListener("keydown", function(e) {
-                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); _selectRibbon(path, info); }
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); _selectRibbon(path, info, key, false); }
             });
             svg.appendChild(path);
         });
@@ -319,7 +327,17 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
         svg.appendChild(cl);
     });
 
-    return { svg: svg, deselect: function() { if (_selected) _selectRibbon(_selected); } };
+    return {
+        svg: svg,
+        deselect: function() { if (_selected) _selectRibbon(_selected, null, null, false); },
+        // Identity of the currently open ribbon (null when none), and re-selection by that identity —
+        // used to carry an open panel across a resize-driven rebuild.
+        currentKey: function() { return _selectedKey; },
+        selectByKey: function(key) {
+            var p = _pathByKey[key];
+            if (p && p !== _selected) _selectRibbon(p, _infoByKey[key], key, true);
+        },
+    };
 }
 
 // ── Involved-channels panel (click a flow to list its channels) ──────────────────
@@ -439,17 +457,21 @@ function _renderChannelsPanel(panel, info, nodeById) {
 
 // Assemble the scroll-wrapped SVG plus the (initially hidden) channels panel, wiring ribbon selection
 // to the panel. `nodeById` enriches the cards (channels.json nodes keyed by id); may be omitted.
-function _buildFigure(stages, availWidth, ariaLabel, nodeById) {
+function _buildFigure(stages, availWidth, ariaLabel, nodeById, initialKey) {
     var panel = document.createElement("div"); panel.className = "alluvial-channels"; panel.hidden = true;
-    var api = _render_stages_svg(stages, availWidth, ariaLabel, function(info) {
+    var api = _render_stages_svg(stages, availWidth, ariaLabel, function(info, opts) {
         if (!info) { panel.hidden = true; panel.textContent = ""; return; }
         var close = _renderChannelsPanel(panel, info, nodeById);
         close.addEventListener("click", function() { api.deselect(); });
-        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // Don't yank the viewport when re-opening a panel during a resize rebuild — only on a real click.
+        if (!(opts && opts.restore)) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     var fig = document.createElement("div"); fig.className = "alluvial-figure";
     fig.appendChild(_scrollWrap(api.svg));
     fig.appendChild(panel);
+    if (initialKey) api.selectByKey(initialKey);
+    // Expose the open ribbon's identity so a rebuild can preserve it (see _refit_alluvials).
+    fig.alluvialSelectedKey = function() { return api.currentKey(); };
     return fig;
 }
 
@@ -457,7 +479,7 @@ function _buildFigure(stages, availWidth, ariaLabel, nodeById) {
 // One strategy's year-over-year community flow. Returns a titled DOM section, or null when fewer
 // than two timeline years carry the strategy (nothing to connect). `availWidth` is the page width;
 // `nodeById` (channels.json nodes keyed by id) enriches the click-to-list channel cards.
-export function build_community_alluvial(strategyKey, yearComms, availWidth, nodeById) {
+export function build_community_alluvial(strategyKey, yearComms, availWidth, nodeById, selectedKey) {
     var stages = _yearStages(strategyKey, yearComms);
     if (stages.length < 2) return null;
 
@@ -471,8 +493,11 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth, nod
         "read continuity from the ribbons: one thick ribbon = a cohort held together, many thin ribbons = it " +
         "split. Click a ribbon to list the channels travelling along that flow.";
     section.appendChild(title);
-    section.appendChild(_buildFigure(stages, availWidth,
-        "Community flow across " + stages.length + " years for this strategy", nodeById));
+    var fig = _buildFigure(stages, availWidth,
+        "Community flow across " + stages.length + " years for this strategy", nodeById, selectedKey);
+    section.appendChild(fig);
+    // Surface the open ribbon's identity on the section so a resize rebuild can re-open the same panel.
+    section.alluvialSelectedKey = fig.alluvialSelectedKey;
     return section;
 }
 

@@ -60,12 +60,19 @@
         if (!word) return;
         apiFetch(API, { method: "POST", body: { word: word } })
             .then(function (term) {
+                $input.value = "";
+                // get_or_create returned an existing term: don't add a phantom row or inflate the count.
+                if (term.created === false) {
+                    var existing = $tbody.querySelector('tr[data-id="' + term.id + '"]');
+                    if (existing) { existing.scrollIntoView({ block: "nearest" }); }
+                    showToast("“" + term.word + "” is already in the list.", "error");
+                    return;
+                }
                 _total++;
                 _renderPagination();
                 var empty = $tbody.querySelector(".bo-empty");
                 if (empty) empty.parentNode.remove();
                 $tbody.insertBefore(renderRow(term), $tbody.firstChild);
-                $input.value = "";
                 showToast("Term added.");
             }).catch(function (e) { showToast("Error: " + e.message, "error"); });
     });

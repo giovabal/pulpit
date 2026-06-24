@@ -79,8 +79,16 @@ export function showTip(e, txt) {
     var t = _ensure_tip();
     t.textContent = txt;
     t.style.display = "block";
-    t.style.left = (e.clientX + 14) + "px";
-    t.style.top  = (e.clientY - 30) + "px";
+    // Mouse events carry clientX/Y; focus events (keyboard a11y, wired by the matrix views) do not —
+    // fall back to the focused element's box so the tooltip isn't positioned at NaNpx.
+    var x = e.clientX, y = e.clientY;
+    if (x === undefined || y === undefined) {
+        var r = e.target && e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : null;
+        if (r) { x = r.left + r.width / 2; y = r.top; }
+        else { x = 0; y = 0; }
+    }
+    t.style.left = (x + 14) + "px";
+    t.style.top  = (y - 30) + "px";
 }
 export function moveTip(e) {
     var t = _ensure_tip();

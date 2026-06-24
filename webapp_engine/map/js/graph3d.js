@@ -5,7 +5,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
 // Constants
@@ -255,8 +255,8 @@ function build_graph(pos_data, ch_data) {
 
     // ── 2. Metric range for initial size key ───────────────────────────────────
     var vals  = ch_data.nodes.map(function(n) { return n[current_size_key] || 0; });
-    var minV  = Math.min.apply(null, vals);
-    var range = (Math.max.apply(null, vals) - minV) || 1;
+    var minV  = arrMin(vals);
+    var range = (arrMax(vals) - minV) || 1;
 
     // ── 3. Build node meshes ───────────────────────────────────────────────────
     pos_data.nodes.forEach(function(pos) {
@@ -743,8 +743,8 @@ function apply_strategy_colors(strategy) {
 function apply_node_size(metric) {
     current_size_key = metric;
     var vals  = Object.values(nodes_index).map(function(n) { return n[metric] || 0; });
-    var minV  = Math.min.apply(null, vals);
-    var range = (Math.max.apply(null, vals) - minV) || 1;
+    var minV  = arrMin(vals);
+    var range = (arrMax(vals) - minV) || 1;
     Object.keys(nodes_index).forEach(function(id) {
         var node = nodes_index[id];
         var size = node_size_from_metric((node[metric] || 0), minV, range);
@@ -939,6 +939,9 @@ function show_node_info(id) {
 
 function search(word, result_el) {
     result_el.innerHTML = '';
+    // The modal's hide handler sets #results to display:none; undo that here (as graph.js does) so
+    // results stay visible on every reopen, not just the first search after the modal was opened.
+    result_el.style.display = '';
     if (word.length <= 2) { result_el.innerHTML = '<i>Search for terms of at least 3 characters.</i>'; return; }
     var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     var pattern = new RegExp(escaped, 'i');
@@ -1210,8 +1213,8 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     var new_size_max = new_diam * SIZE_MAX_FRAC;
 
     var sv = new_pos_data.nodes.map(function(n) { return (new_ch_map[n.id] || {})[current_size_key] || 0; });
-    var sv_min = sv.length ? Math.min.apply(null, sv) : 0;
-    var sv_rng = ((sv.length ? Math.max.apply(null, sv) : 0) - sv_min) || 1;
+    var sv_min = sv.length ? arrMin(sv) : 0;
+    var sv_rng = ((sv.length ? arrMax(sv) : 0) - sv_min) || 1;
     var target_sizes = {};
     new_pos_data.nodes.forEach(function(n) {
         var v = (new_ch_map[n.id] || {})[current_size_key] || 0;

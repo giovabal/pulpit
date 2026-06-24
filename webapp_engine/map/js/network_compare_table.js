@@ -1,5 +1,5 @@
 import { strategy_label } from './labels.js';
-import { fetchJson } from './utils.js';
+import { fetchJson, arrMin, arrMax } from './utils.js';
 
 Promise.all([
     fetchJson("data/network_metrics.json"),
@@ -134,7 +134,7 @@ Promise.all([
     function buildCompareDistData(key) {
         var valsA = nodesA.map(function(n) { return n[key] || 0; });
         var valsB = nodesB.map(function(n) { return n[key] || 0; });
-        var maxVal = Math.max.apply(null, valsA.concat(valsB));
+        var maxVal = arrMax(valsA.concat(valsB));
         var binSize = 10;
         var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
         var countsA = new Array(numBins).fill(0);
@@ -263,7 +263,7 @@ Promise.all([
 
     function minMax(nodes, key) {
         var vals = nodes.map(function(n) { return n[key] || 0; });
-        var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+        var mn = arrMin(vals), mx = arrMax(vals);
         return { min: mn, range: mx - mn || 1 };
     }
 
@@ -286,7 +286,7 @@ Promise.all([
         var fit = powerLawFit(valid.map(function(p) { return { x: p.xRaw, y: p.yRaw }; }));
         if (!fit) return [];
         var xs = valid.map(function(p) { return p.xRaw; });
-        var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+        var xMin = arrMin(xs), xMax = arrMax(xs);
         var endpoints = [
             { x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
             { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }

@@ -333,37 +333,27 @@
         return null;
     }
 
-    function replaceLabels(ch, rows) {
-        // Atomic server-side replace: a single transaction deletes the old periods and
-        // recreates the new set, so a mid-batch failure can never wipe a channel's
-        // labelling down to a partial/empty state. On error apiFetch rejects and
-        // ch.labels is left untouched (matching the rolled-back DB).
-        return apiFetch("/manage/api/channels/" + ch.id + "/replace-labels/", {
-            method: "POST",
-            body: {
-                periods: rows.map(function (r) {
-                    return { label_id: r.label_id, start: r.start, end: r.end };
-                }),
-            },
-        }).then(function (data) {
-            ch.labels = data.labels || [];
-        });
-    }
-
     function saveChannel(ch, form) {
         var sourceIds = Array.from(form.querySelectorAll("input[name=source_ids]:checked")).map(function (el) { return parseInt(el.value, 10); });
         var rows = collectLabels(form);
         var lerr = validateLabels(rows);
         if (lerr) { showToast(lerr, "error"); return; }
-        var body = {
-            source_ids: sourceIds,
-            is_lost: form.querySelector("input[name=is_lost]").checked,
-            is_private: form.querySelector("input[name=is_private]").checked,
-            to_inspect: form.querySelector("input[name=to_inspect]").checked,
-        };
-        apiFetch(API_CH, { method: "PATCH", body: body })
-            .then(function () { return replaceLabels(ch, rows); })
-            .then(function () { showToast("Saved."); })
+        // Single atomic save: the flags, sources, and label periods are all replaced inside one
+        // server-side transaction, so a label failure can never leave the flags/sources committed
+        // while the toast says the save failed. On error apiFetch rejects and nothing is persisted.
+        apiFetch("/manage/api/channels/" + ch.id + "/replace-labels/", {
+            method: "POST",
+            body: {
+                source_ids: sourceIds,
+                is_lost: form.querySelector("input[name=is_lost]").checked,
+                is_private: form.querySelector("input[name=is_private]").checked,
+                to_inspect: form.querySelector("input[name=to_inspect]").checked,
+                periods: rows.map(function (r) {
+                    return { label_id: r.label_id, start: r.start, end: r.end };
+                }),
+            },
+        })
+            .then(function (data) { ch.labels = data.labels || []; showToast("Saved."); })
             .catch(function (e) { showToast("Error: " + e.message, "error"); });
     }
 
