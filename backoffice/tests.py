@@ -428,6 +428,52 @@ class ChannelViewSetTests(_ApiTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn(self.source, self.ch.sources.all())
 
+    def test_replace_labels_periods_only(self):
+        # Backward-compatible: a request carrying only `periods` still replaces the labelling.
+        resp = self.jpost(
+            _api(f"channels/{self.ch.pk}/replace-labels/"),
+            {"periods": [{"label_id": self.label2.pk, "start": None, "end": None}]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.ch.refresh_from_db()
+        self.assertEqual(self.ch.current_label, self.label2)
+
+    def test_replace_labels_saves_flags_sources_and_periods(self):
+        # The channel editor's single save endpoint applies flags + sources + labels together.
+        resp = self.jpost(
+            _api(f"channels/{self.ch.pk}/replace-labels/"),
+            {
+                "is_private": True,
+                "to_inspect": True,
+                "source_ids": [self.source.pk],
+                "periods": [{"label_id": self.label2.pk, "start": None, "end": None}],
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.ch.refresh_from_db()
+        self.assertTrue(self.ch.is_private)
+        self.assertTrue(self.ch.to_inspect)
+        self.assertIn(self.source, self.ch.sources.all())
+        self.assertEqual(self.ch.current_label, self.label2)
+
+    def test_replace_labels_rolls_back_flags_on_period_error(self):
+        # A bad period must roll back the flag/source changes too (one transaction): the channel is
+        # left exactly as it was, never with its flags committed while the labelling failed.
+        resp = self.jpost(
+            _api(f"channels/{self.ch.pk}/replace-labels/"),
+            {
+                "is_private": True,
+                "source_ids": [self.source.pk],
+                "periods": [{"label_id": 999999, "start": None, "end": None}],
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.ch.refresh_from_db()
+        self.assertFalse(self.ch.is_private)
+        self.assertNotIn(self.source, self.ch.sources.all())
+        # The original labelling survived the rollback.
+        self.assertEqual(self.ch.current_label, self.label)
+
 
 # ---------------------------------------------------------------------------
 # backoffice/api — SearchTermViewSet
@@ -445,6 +491,8 @@ class SearchTermViewSetTests(_ApiTestCase):
         resp = self.jpost(_api("search-terms/"), {"word": "TELEGRAM"})
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(SearchTerm.objects.filter(word="telegram").exists())
+        # A genuinely new term reports created=True so the client inserts a row + bumps the count.
+        self.assertTrue(resp.json()["created"])
 
     def test_create_trims_whitespace(self):
         resp = self.jpost(_api("search-terms/"), {"word": "  test  "})
@@ -456,6 +504,8 @@ class SearchTermViewSetTests(_ApiTestCase):
         resp = self.jpost(_api("search-terms/"), {"word": "NEWS"})
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(SearchTerm.objects.filter(word="news").count(), 1)
+        # An existing term reports created=False so the client skips the phantom-row insert.
+        self.assertFalse(resp.json()["created"])
 
     def test_delete_search_term(self):
         st = SearchTerm.objects.create(word="delete-me")

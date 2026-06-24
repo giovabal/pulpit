@@ -130,7 +130,10 @@ function _refit_alluvials() {
     Object.keys(_alluvialEls).forEach(function(sk) {
         var old = _alluvialEls[sk];
         if (!old || !old.parentNode) return;
-        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById);
+        // Carry an open channel-list panel across the rebuild by re-selecting the same ribbon, so a
+        // resize no longer silently closes it (honouring this function's "expanded panels untouched").
+        var openKey = old.alluvialSelectedKey ? old.alluvialSelectedKey() : null;
+        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById, openKey);
         if (fresh) { old.replaceWith(fresh); _alluvialEls[sk] = fresh; }
     });
 }
@@ -573,10 +576,17 @@ function _render(d) {
 // ── Year switching ─────────────────────────────────────────────────────────────
 function _switch_year(year) {
     if (year === _current_year || _loading) return;
+    var prev = _current_year;
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year);
-    _fetch_year(year).then(function(d) { _render(d); _loading = false; }).catch(function() { _loading = false; });
+    _fetch_year(year).then(function(d) { _render(d); _loading = false; }).catch(function() {
+        // Fetch failed: roll back to the year still on screen so the nav highlight matches the
+        // displayed table and a re-click on the failed year (now != _current_year) can retry it.
+        _current_year = prev;
+        _loading = false;
+        build_year_nav(_ty, _current_year, _switch_year);
+    });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────

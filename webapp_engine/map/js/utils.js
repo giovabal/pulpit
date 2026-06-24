@@ -20,6 +20,23 @@ export function fetchJsonOrNull(url) {
         .catch(function () { return null; });
 }
 
+// Min / max over an array WITHOUT spreading it through Function.prototype.apply.
+// `Math.min.apply(null, arr)` / `Math.max.apply(null, arr)` push every element as a
+// separate argument and throw a RangeError once the array exceeds the engine's
+// argument-count limit (~10^5) — reachable on large graphs, where these run over
+// one value per node. The reduce-style loop has no such ceiling. Semantics match
+// Math.min/Math.max on the empty array (Infinity / -Infinity).
+export function arrMin(arr) {
+    var m = Infinity;
+    for (var i = 0; i < arr.length; i++) { if (arr[i] < m) m = arr[i]; }
+    return m;
+}
+export function arrMax(arr) {
+    var m = -Infinity;
+    for (var i = 0; i < arr.length; i++) { if (arr[i] > m) m = arr[i]; }
+    return m;
+}
+
 // communities[strategy].groups holds rows of [id, count, label, hexColor];
 // build a {strategy: {label: hexColor}} lookup used for node colouring.
 export function buildCommunityColorMaps(communities) {

@@ -257,19 +257,36 @@ class ChannelViewSet(
 
     @action(detail=True, methods=["post"], url_path="replace-labels")
     def replace_labels(self, request, pk=None):
-        """Atomically replace a channel's label periods.
+        """Atomically save a channel's label periods and (optionally) its editable fields.
 
-        Deleting the old periods and recreating the new set happen inside one
-        transaction, so a validation or DB error rolls everything back instead of
-        leaving the channel with a half-written or empty labelling (the failure
-        mode of deleting first and then POSTing each new period separately).
+        This is the channel editor's single save endpoint. Replacing the label
+        periods (delete old, recreate new) AND applying the scalar flags
+        (is_lost / is_private / to_inspect) and source memberships all happen
+        inside one transaction, so a validation or DB error rolls *everything*
+        back. That avoids the split-save failure mode where the flags/sources were
+        PATCHed separately and stayed committed while the labels failed (or the
+        labelling was left half-written by POSTing each period on its own).
+
+        The channel fields are optional: a request with only ``periods`` behaves
+        exactly as before.
         """
         channel = self.get_object()
         periods = request.data.get("periods", [])
         if not isinstance(periods, list):
             return Response({"error": "'periods' must be a list."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Editable channel fields the editor sends alongside the periods; absent keys are left alone.
+        field_data = {
+            k: request.data[k] for k in ("source_ids", "is_lost", "is_private", "to_inspect") if k in request.data
+        }
+
         with transaction.atomic():
+            if field_data:
+                # Reuse ChannelSerializer for validation (source_ids existence, field types) and its
+                # update() (which applies sources.set). raise_exception rolls back the whole save.
+                ch_serializer = self.get_serializer(channel, data=field_data, partial=True)
+                ch_serializer.is_valid(raise_exception=True)
+                ch_serializer.save()
             ChannelLabel.objects.filter(channel=channel).delete()
             created = []
             for row in periods:
@@ -313,6 +330,20 @@ class SearchTermViewSet(
 
     def get_queryset(self):
         return SearchTerm.objects.order_by("word")
+
+    def create(self, request, *args, **kwargs):
+        # Standard create, but add a `created` flag to the body so the client can avoid inserting a
+        # duplicate row / inflating its count when get_or_create returned a pre-existing term. The
+        # status stays 201 (the endpoint is idempotent by design).
+        response = super().create(request, *args, **kwargs)
+        serializer = getattr(self, "_last_serializer", None)
+        created = getattr(getattr(serializer, "instance", None), "_was_created", True)
+        response.data["created"] = created
+        return response
+
+    def perform_create(self, serializer):
+        serializer.save()
+        self._last_serializer = serializer
 
 
 class EventTypeViewSet(viewsets.ModelViewSet):

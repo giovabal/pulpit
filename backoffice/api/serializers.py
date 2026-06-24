@@ -278,8 +278,11 @@ class SearchTermSerializer(serializers.ModelSerializer):
         read_only_fields = ["last_check"]
 
     def create(self, validated_data):
-        # Reuse the model's lowercasing/dedup via get_or_create.
-        obj, _ = SearchTerm.objects.get_or_create(word=validated_data["word"].strip().lower())
+        # Reuse the model's lowercasing/dedup via get_or_create. Stash whether a new row was
+        # actually created so the view can tell the client (which otherwise can't distinguish a
+        # fresh term from an existing one returned by get_or_create, and would add a phantom row).
+        obj, created = SearchTerm.objects.get_or_create(word=validated_data["word"].strip().lower())
+        obj._was_created = created
         return obj
 
 

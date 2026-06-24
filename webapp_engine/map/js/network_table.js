@@ -1,7 +1,7 @@
 import { strategy_label as _strat_label } from './labels.js';
 import { build_year_nav } from './year_nav.js';
 import { mini_hist as _mini_hist } from './charts.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { fetchJson, fetchJsonOrNull, arrMin, arrMax } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 var _ym = _dd.match(/data_(\d{4,})\//);
@@ -39,7 +39,7 @@ function _fetch_year(year) {
 // ── Chart helpers — use module-scope _nodes ────────────────────────────────────
 function _build_dist_data(key) {
     var vals = _nodes.map(function(n) { return n[key] || 0; });
-    var maxVal = Math.max.apply(null, vals);
+    var maxVal = arrMax(vals);
     var binSize = 10;
     var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
     var counts = new Array(numBins).fill(0);
@@ -68,7 +68,7 @@ function _build_scatter_data(xKey, yKey) {
     var regData = [];
     if (fit) {
         var xs = pts.map(function(p) { return p.x; });
-        var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+        var xMin = arrMin(xs), xMax = arrMax(xs);
         regData = [{ x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
                    { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }];
     }

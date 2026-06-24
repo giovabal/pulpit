@@ -4,7 +4,7 @@ import EdgeCurveProgram, { EdgeCurvedArrowProgram } from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel, EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
 // Measure and strategy tooltips
@@ -321,7 +321,7 @@ function get_group(node) {
         var label       = node.communities[strategy] || '';
         var colorMap    = community_color_maps[strategy] || {};
         var color       = (label && colorMap[label]) ? colorMap[label] : '#ccc';
-        var displayName = strategy.charAt(0).toUpperCase() + strategy.slice(1);
+        var displayName = strategy_label(strategy);
         parts.push('<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '"></i>'
                  + ' <b>' + escHtml(displayName) + ':</b> ' + escHtml(label));
     }
@@ -544,8 +544,8 @@ function update_info_bar() {
 
 function apply_node_size(metric) {
     var vals  = graph.nodes().map(function(id) { return graph.getNodeAttribute(id, metric) || 0; });
-    var minV  = Math.min.apply(null, vals);
-    var range = (Math.max.apply(null, vals) - minV) || 1;
+    var minV  = arrMin(vals);
+    var range = (arrMax(vals) - minV) || 1;
     graph.nodes().forEach(function(id) {
         var val = graph.getNodeAttribute(id, metric) || 0;
         graph.setNodeAttribute(id, 'size', 1.5 + (val - minV) / range * 13.5);
@@ -677,8 +677,8 @@ function get_data(data_dir) {
         ch_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
 
         var inDegVals  = pos_data.nodes.map(function(n) { return (measure_map[n.id] || {}).in_deg || 0; });
-        var minInDeg   = Math.min.apply(null, inDegVals);
-        var inDegRange = (Math.max.apply(null, inDegVals) - minInDeg) || 1;
+        var minInDeg   = arrMin(inDegVals);
+        var inDegRange = (arrMax(inDegVals) - minInDeg) || 1;
 
         var _t = THEMES[active_theme] || THEMES.dark;
         pos_data.nodes.forEach(function(pos) {
@@ -924,8 +924,8 @@ function animate_year_transition(new_pos_data, new_ch_data, duration_ms) {
 
     // Target sizes (in_deg-based, same formula as get_data)
     var in_deg_vals = new_pos_data.nodes.map(function(n) { return (new_ch_map[n.id] || {}).in_deg || 0; });
-    var min_in_deg  = in_deg_vals.length ? Math.min.apply(null, in_deg_vals) : 0;
-    var in_deg_rng  = ((in_deg_vals.length ? Math.max.apply(null, in_deg_vals) : 0) - min_in_deg) || 1;
+    var min_in_deg  = in_deg_vals.length ? arrMin(in_deg_vals) : 0;
+    var in_deg_rng  = ((in_deg_vals.length ? arrMax(in_deg_vals) : 0) - min_in_deg) || 1;
     var target_size = {};
     new_pos_data.nodes.forEach(function(n) {
         target_size[n.id] = 1.5 + (((new_ch_map[n.id] || {}).in_deg || 0) - min_in_deg) / in_deg_rng * 13.5;
@@ -1090,6 +1090,23 @@ function animate_layout_transition(new_pos_data, duration_ms) {
     animation_frame_id = requestAnimationFrame(step);
 }
 
+// Point the layout dropdown at `algo`, reflecting the active layout. The <option> list is built
+// only from window.EXTRA_LAYOUTS, which omits 'fa2' unless FA2 was exported as a selectable layout;
+// assigning a value with no matching <option> would silently blank the control (selectedIndex = -1).
+// So add a matching option first when one is missing (e.g. the FA2 fallback on a failed layout load).
+function select_layout_option(algo) {
+    var sel = el('layout-select');
+    if (!sel) return;
+    var has = Array.prototype.some.call(sel.options, function(o) { return o.value === algo; });
+    if (!has) {
+        var opt = document.createElement('option');
+        opt.value = algo;
+        opt.textContent = layout_long_label(algo);
+        sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = algo;
+}
+
 function switch_layout(algo) {
     if (algo === active_layout || !graph_loaded) return;
     active_layout = algo;
@@ -1106,7 +1123,7 @@ function switch_layout(algo) {
             .catch(function(err) {
                 console.error('Failed to load layout', algo, err);
                 active_layout = 'fa2';
-                if (el('layout-select')) el('layout-select').value = 'fa2';
+                select_layout_option('fa2');
             });
     }
 }
@@ -1151,8 +1168,7 @@ function reload_graph(data_dir) {
         }).catch(function() {
             console.error('reload_graph: layout', active_layout, 'not available for', data_dir, '— falling back to FA2');
             active_layout = 'fa2';
-            var layoutSel = el('layout-select');
-            if (layoutSel) layoutSel.value = 'fa2';
+            select_layout_option('fa2');
             reload_graph(data_dir);
         });
     }
