@@ -1,5 +1,4 @@
 import datetime
-import logging
 from typing import Any
 
 from django.conf import settings
@@ -12,8 +11,6 @@ from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
 
 import networkx as nx
-
-logger = logging.getLogger(__name__)
 
 
 def channel_network_data(
@@ -248,8 +245,8 @@ def build_graph(
 
     A *dead-leaf* node is an out-of-target channel that at least one in-target
     channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
-    gated by ``draw_dead_leaves``: ``Channel.refresh_cited_degree()`` counts
-    every such forward/mention from the in-target set and stores the total in
+    gated by ``draw_dead_leaves``: the crawl counts every such forward/mention
+    from the in-target set and stores the total in the out-of-target channel's
     ``in_degree``, so a non-zero in-degree is exactly the dead-leaf criterion.
     """
     # Node set: channels with an in-target period overlapping [start_date, end_date]

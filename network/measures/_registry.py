@@ -105,10 +105,6 @@ MEASURE_STEPS: list[tuple[str, str, str]] = [
 ]
 
 
-def is_valid_measure(token: str) -> bool:
-    return token in VALID_MEASURES
-
-
 # ── Parameterised measures & measure instances ────────────────────────────────
 #
 # A handful of measures take tunable parameters and may therefore be requested *more than once*

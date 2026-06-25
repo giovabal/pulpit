@@ -110,18 +110,18 @@ class ChannelMonthSpineTests(TestCase):
 class ReindexToSpineTests(TestCase):
     def test_fills_missing_months_with_zero(self):
         df = pd.DataFrame({"month": ["2024-01", "2024-03"], "count": [5, 3]})
-        result = _reindex_to_spine(df, "count", ["2024-01", "2024-02", "2024-03"])
+        result = _reindex_to_spine(df, ["2024-01", "2024-02", "2024-03"])
         self.assertEqual(list(result["month"]), ["2024-01", "2024-02", "2024-03"])
         self.assertEqual(list(result["count"]), [5, 0, 3])
 
     def test_preserves_existing_values(self):
         df = pd.DataFrame({"month": ["2024-01"], "val": [42]})
-        result = _reindex_to_spine(df, "val", ["2024-01"])
+        result = _reindex_to_spine(df, ["2024-01"])
         self.assertEqual(list(result["val"]), [42])
 
     def test_all_months_missing_fills_all_zeros(self):
         df = pd.DataFrame({"month": [], "val": []})
-        result = _reindex_to_spine(df, "val", ["2024-01", "2024-02"])
+        result = _reindex_to_spine(df, ["2024-01", "2024-02"])
         self.assertEqual(list(result["val"]), [0, 0])
 
 

@@ -188,7 +188,7 @@ def purge(*, dry_run: bool = False) -> PurgeReport:
         )
 
     with transaction.atomic():
-        deleted_total, deleted_by_type = qs.delete()
+        _deleted_total, deleted_by_type = qs.delete()
     # Explicit labels: of the five media models only "MessageOtherMedia" contains
     # the substring "Media", so a substring match would omit the other four.
     media_labels = {

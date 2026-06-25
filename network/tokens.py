@@ -146,9 +146,6 @@ class TokenInstance:
         parts = [f"{k}={str(v).lower() if isinstance(v, str) else v}" for k, v in vis]
         return " (" + ", ".join(parts) + ")"
 
-    def key_for(self, base_key: str) -> str:
-        return base_key + self.suffix()
-
     def resolved_with(self, **overrides: object) -> "TokenInstance":
         """Return a copy with some parameter values replaced (used to pin an auto-resolved value).
 

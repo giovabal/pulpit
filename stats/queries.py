@@ -43,6 +43,6 @@ def channel_month_spine(channel: Channel) -> list[str]:
     return _month_spine(models.Q(channel=channel))
 
 
-def reindex_to_spine(df: "pd.DataFrame", field: str, spine: list[str]) -> "pd.DataFrame":
+def reindex_to_spine(df: "pd.DataFrame", spine: list[str]) -> "pd.DataFrame":
     """Reindex a month-indexed DataFrame to a full spine, filling missing months with 0."""
     return df.set_index("month").reindex(spine, fill_value=0).reset_index()

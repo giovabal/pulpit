@@ -407,14 +407,6 @@ def list_defaults(task: str) -> list[dict]:
     return out
 
 
-def load_crawl_payload() -> dict | None:
-    return _load_payload(CRAWL_PATH, CRAWL_DEFAULTS)
-
-
-def load_structural_payload() -> dict | None:
-    return _load_payload(STRUCTURAL_PATH, STRUCTURAL_DEFAULTS)
-
-
 def read_pulpit_version(path: Path) -> str | None:
     """Return the `pulpit_version` field from a TOML file, or None if absent.
 

@@ -164,7 +164,7 @@ def _laplacian_features(graph: nx.DiGraph, k: int = 10) -> tuple[list, np.ndarra
         d_inv_sqrt = np.where(deg > 0, 1.0 / np.sqrt(deg), 0.0)
     D_inv_sqrt = np.diag(d_inv_sqrt)
     L_norm = np.eye(n) - D_inv_sqrt @ A @ D_inv_sqrt
-    eigenvalues, eigenvectors = np.linalg.eigh(L_norm)
+    _eigenvalues, eigenvectors = np.linalg.eigh(L_norm)
     # skip eigenvector 0 (constant, eigenvalue ≈ 0)
     features = eigenvectors[:, 1 : k + 1]
     return nodes, features
