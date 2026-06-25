@@ -1445,14 +1445,6 @@ class Command(BaseCommand):
                 shutil.rmtree(year_data_dst)
             shutil.move(os.path.join(tmp_dir, "data"), year_data_dst)
 
-        def _mk_ctx(title_part: str, *, description: str = "") -> dict:
-            full_title = f"{project_title} | {title_part}" if project_title else title_part
-            return {
-                "title": full_title,
-                "robots_meta": "index, follow" if seo else "noindex, nofollow",
-                "description": description,
-            }
-
         # Per-year XLSX files are not written individually; data is returned so the
         # caller can assemble a single multi-sheet workbook for each table type.
         return {

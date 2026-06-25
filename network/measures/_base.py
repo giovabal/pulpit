@@ -1,5 +1,4 @@
 import datetime
-import logging
 from typing import Any
 
 from django.db.models import Count, F, Max, Min, Q
@@ -8,8 +7,6 @@ from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
 import networkx as nx
-
-logger = logging.getLogger(__name__)
 
 
 def channel_pks_from_graph_data(graph_data: GraphData, channel_dict: dict[str, Any]) -> list[int]:

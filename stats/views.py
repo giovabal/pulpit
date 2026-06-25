@@ -49,7 +49,7 @@ class _GlobalTimeSeriesBase(View):
             [{"month": e["month"].strftime("%Y-%m"), self.annotate_field: e[self.annotate_field]} for e in monthly_data]
         )
         df = (
-            reindex_to_spine(df, self.annotate_field, spine)
+            reindex_to_spine(df, spine)
             if not df.empty
             else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
         )
@@ -162,7 +162,7 @@ class _ChannelTimeSeriesBase(View):
         rows = self._get_monthly_data(channel)
         df = pd.DataFrame(rows)
         df = (
-            reindex_to_spine(df, self.annotate_field, spine)
+            reindex_to_spine(df, spine)
             if not df.empty
             else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
         )

@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import shutil
 from typing import Any
@@ -14,8 +13,6 @@ from network.utils import CommunityTableData, GraphData
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill
-
-logger = logging.getLogger(__name__)
 
 
 def _pulpit_ctx() -> dict:

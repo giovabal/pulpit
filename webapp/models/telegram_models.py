@@ -6,11 +6,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from webapp.models.label_models import ChannelLabel, Label, LabelGroup
     from webapp.models.media_models import (
-        MessageAudio,
-        MessageOtherMedia,
-        MessagePicture,
-        MessageSticker,
-        MessageVideo,
         ProfilePicture,
     )
 
@@ -288,27 +283,6 @@ class Channel(TelegramBaseModel):
         )
         self._set_degrees(cited_by, cites)
 
-    def refresh_cited_degree(self) -> None:
-        """Recompute and persist the citation count for an out-of-target channel.
-
-        Counts how many messages from in-target channels cite this channel (via
-        forwards or t.me/username references) and stores the total in ``in_degree``
-        (citations arrive as incoming edges under the amplifier→source convention);
-        ``out_degree`` is set to 0.
-        """
-        from network.utils import channel_cutoff_q
-
-        citations = (
-            Message.objects.alive()
-            .filter(channel__in=Channel.objects.in_target())
-            .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(channel_cutoff_q())
-            .exclude(channel=self)
-            .distinct()
-            .count()
-        )
-        self._set_degrees(citations, 0)
-
 
 class Message(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
@@ -432,26 +406,6 @@ class Message(TelegramBaseModel):
         # swallow trailing sentence punctuation ("t.me/canale." → reference "canale.")
         # and the resolver would classify the mangled handle as a permanent failure.
         return [url[5:] for url in re.findall(r"t\.me/(?:\w|(?:%[\da-fA-F]{2}))+", str(self.message))]
-
-    @property
-    def message_picture(self) -> "MessagePicture | None":
-        return self.messagepicture_set.order_by("date").last()
-
-    @property
-    def message_video(self) -> "MessageVideo | None":
-        return self.messagevideo_set.order_by("date").last()
-
-    @property
-    def message_audio(self) -> "MessageAudio | None":
-        return self.messageaudio_set.order_by("date").last()
-
-    @property
-    def message_sticker(self) -> "MessageSticker | None":
-        return self.messagesticker_set.order_by("date").last()
-
-    @property
-    def message_other_media(self) -> "MessageOtherMedia | None":
-        return self.messageothermedia_set.order_by("date").last()
 
     @property
     def is_album(self) -> bool:

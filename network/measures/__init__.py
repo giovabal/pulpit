@@ -22,7 +22,6 @@ from network.measures._registry import (
     MeasureParam,
     MeasureSpec,
     canonical_measure_key,
-    is_valid_measure,
     parse_measures,
     role_companions,
 )
@@ -52,6 +51,5 @@ __all__ = [
     "apply_out_degree_centrality",
     "apply_pagerank",
     "compute_hits",
-    "is_valid_measure",
     "VALID_NETWORK_STAT_GROUPS",
 ]
