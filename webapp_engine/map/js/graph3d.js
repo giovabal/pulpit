@@ -71,6 +71,13 @@ var current_group     = '';
 var labels_mode       = 'on_size';
 
 var current_data_dir      = window.DATA_DIR || 'data/';
+var base_data_dir         = window.DATA_DIR || 'data/';
+
+// Per-year data directory for this page's base layer: data/ → data_YYYY/,
+// data_coordination/ → data_coordination_YYYY/.
+function year_data_dir(year) {
+    return year === 'all' ? base_data_dir : base_data_dir.replace(/\/+$/, '') + '_' + year + '/';
+}
 var active_year           = null;
 var year_sequence         = [];
 var _year_switcher_inited = false;
@@ -1428,7 +1435,7 @@ function update_year_buttons_active(year_str) {
 function _go_year_3d(year) {
     if (year === active_year) return;
     update_year_buttons_active(year);
-    reload_graph_3d(year === 'all' ? 'data/' : 'data_' + year + '/');
+    reload_graph_3d(year_data_dir(year));
 }
 
 function _year_drop_close() {
@@ -1534,17 +1541,21 @@ document.addEventListener('DOMContentLoaded', function() {
     loading_modal_bs.show();
     el('loading_message').innerHTML = 'Loading…<br>Please wait.';
 
-    var years_promise = fetchJsonOrNull('data/timeline.json')
+    // Resolved against the page's data directory: alternate-layer pages
+    // (window.DATA_DIR, e.g. the coordination map's data_coordination/) carry
+    // no timeline.json, so their year switcher stays hidden instead of
+    // driving the main graph's years.
+    var years_promise = fetchJsonOrNull(current_data_dir + 'timeline.json')
         .then(function(timeline) {
             if (!timeline) return;
             init_year_switcher(timeline);
             var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
-            var dirs  = ['data/'].concat(years.map(function(y) { return 'data_' + y.year + '/'; }));
+            var dirs  = [base_data_dir].concat(years.map(function(y) { return year_data_dir(y.year); }));
             var total = dirs.length, done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year_3d(dir).then(function() {
                     done++;
-                    var m = dir.match(/data_(\d+)\//);
+                    var m = dir.match(/_(\d+)\/$/);
                     el('loading_message').innerHTML =
                         (m ? m[1] : 'All') + ' (' + done + ' / ' + total + ')';
                 });

@@ -139,6 +139,10 @@ class OperationsView(View):
             # SA interest (per-message structural reach)
             "SA_INTEREST_WINDOW_DAYS": settings.SA_INTEREST_WINDOW_DAYS,
             "SA_INTEREST_INCLUDE_MENTIONS": settings.SA_INTEREST_INCLUDE_MENTIONS,
+            # SA coordination (temporal co-forwarding maps)
+            "SA_COORDINATION": settings.SA_COORDINATION,
+            "SA_COORDINATION_WINDOW": settings.SA_COORDINATION_WINDOW,
+            "SA_COORDINATION_MIN_EVENTS": settings.SA_COORDINATION_MIN_EVENTS,
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
             # SA expanded sets for checkbox groups
@@ -626,6 +630,9 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "robustness_null", "--robustness-null"),
         ("value", "robustness_seed", "--robustness-seed"),
         ("value", "robustness_sample", "--robustness-sample"),
+        ("bool_explicit", "coordination", "--coordination", "--no-coordination"),
+        ("value", "coordination_window", "--coordination-window"),
+        ("value", "coordination_min_events", "--coordination-min-events"),
     ],
     "compare_analysis": [
         ("positional", "project_dir"),
@@ -728,6 +735,9 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("interest_structural", "interest.structural", "bool"),
         ("interest_window_days", "interest.window_days", "int"),
         ("interest_include_mentions", "interest.include_mentions", "bool"),
+        ("coordination", "coordination.enabled", "bool"),
+        ("coordination_window", "coordination.window_seconds", "int"),
+        ("coordination_min_events", "coordination.min_events", "int"),
     ],
 }
 

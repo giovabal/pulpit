@@ -28,6 +28,13 @@ var graph_loaded                = false;
 var accessory_loaded            = false;
 var is_graph_completely_rendered = false;
 var current_data_dir            = window.DATA_DIR || 'data/';
+var base_data_dir               = window.DATA_DIR || 'data/';
+
+// Per-year data directory for this page's base layer: data/ → data_YYYY/,
+// data_coordination/ → data_coordination_YYYY/.
+function year_data_dir(year) {
+    return year === 'all' ? base_data_dir : base_data_dir.replace(/\/+$/, '') + '_' + year + '/';
+}
 var is_year_switch              = false;
 var active_year                 = null;
 var animation_frame_id          = null;
@@ -827,7 +834,7 @@ function update_year_buttons_active(year_str) {
 function _go_year(year) {
     if (year === active_year) return;
     update_year_buttons_active(year);
-    reload_graph(year === 'all' ? 'data/' : 'data_' + year + '/');
+    reload_graph(year_data_dir(year));
 }
 
 function _year_drop_close() {
@@ -1208,18 +1215,21 @@ document.addEventListener('DOMContentLoaded', function() {
     load_accessory(current_data_dir);
 
     // Fetch timeline and preload ALL year data in parallel with the graph build,
-    // so everything is cached by the time the spinner closes.
-    var years_promise = fetchJsonOrNull('data/timeline.json')
+    // so everything is cached by the time the spinner closes. Resolved against
+    // the page's data directory: alternate-layer pages (window.DATA_DIR, e.g.
+    // the coordination map's data_coordination/) carry no timeline.json, so
+    // their year switcher stays hidden instead of driving the main graph's years.
+    var years_promise = fetchJsonOrNull(current_data_dir + 'timeline.json')
         .then(function(timeline) {
             if (!timeline) return;
             init_year_switcher(timeline);
             var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
-            var dirs  = ['data/'].concat(years.map(function(y) { return 'data_' + y.year + '/'; }));
+            var dirs  = [base_data_dir].concat(years.map(function(y) { return year_data_dir(y.year); }));
             var total = dirs.length, done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year(dir).then(function() {
                     done++;
-                    var m = dir.match(/data_(\d+)\//);
+                    var m = dir.match(/_(\d+)\/$/);
                     el('loading_message').innerHTML =
                         (m ? m[1] : 'All') + ' (' + done + ' / ' + total + ')';
                 });

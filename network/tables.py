@@ -773,6 +773,7 @@ def write_index_html(
     include_robustness_html: bool = False,
     include_robustness_xlsx: bool = False,
     include_interest_structural: bool = False,
+    include_coordination: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -804,6 +805,7 @@ def write_index_html(
         "include_robustness_html": include_robustness_html,
         "include_robustness_xlsx": include_robustness_xlsx,
         "include_interest_structural": include_interest_structural,
+        "include_coordination": include_coordination,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

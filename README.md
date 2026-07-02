@@ -40,6 +40,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 - Which channels are pure distributors — aggregating and reposting from many sources without producing original content? *([HITS Hub](docs/network-measures.md#hits-hub-score), [Content Originality](docs/network-measures.md#content-originality))*
 - Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Burt's Constraint](docs/network-measures.md#burts-constraint))*
 - Whose content spreads farthest per post published, despite a modest following? *([Amplification Factor](docs/network-measures.md#amplification-factor))*
+- Which channels repeatedly forward the same content within minutes of each other — moving in step rather than merely citing one another? *([Coordination Analysis](docs/coordination-analysis.md))*
 
 **About communities:**
 
@@ -122,6 +123,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (your label-group partitions and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
+| **Coordination maps** (`coordination.html` / `coordination3d.html`) | Temporal co-forwarding layer: dedicated 2D and 3D maps of channels that repeatedly forwarded the same origin message within a short time window [more](docs/coordination-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
 | **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
@@ -159,7 +161,7 @@ Each channel receives a score for up to 11 measures. All can be used to size nod
 | [Content originality](docs/network-measures.md#content-originality) | Producers vs. redistributors — 1 minus the fraction of forwarded messages |
 | [Diffusion lag](docs/network-measures.md#diffusion-lag) | Median hours between a forwarded message's original publication and this channel forwarding it — early adopter vs. late amplifier |
 
-See [Network measures](docs/network-measures.md) for academic references and worked examples for each measure.
+See [Network measures](docs/network-measures.md) for academic references and worked examples for each measure — and for the reasoning behind the familiar measures Pulpit deliberately leaves out ([betweenness and its relatives](docs/network-measures.md#measures-deliberately-not-computed)).
 
 ---
 
@@ -205,7 +207,7 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 ## Robustness analysis — 7 attack strategies
 
-How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment information flow across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
+How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment the citation web across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
 
 The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#the-backbone-disparity-filter) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under several attack strategies and tracks how the residual network shrinks:
 
@@ -231,7 +233,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 
 **Crawling.** The official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) downloads messages from the channels you select. For each message, Pulpit records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels). The result is a directed, weighted graph. Edge weight is computed as the number of forwards and references from A to B divided by the number of A's messages that contain any outward reference — not A's total message count — so channels that mostly publish original content and channels that are mostly aggregators are treated symmetrically.
 
-**Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance. Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. The NMI matrix (Kvalseth 1987) quantifies how much two community partitions agree, independently of community labels.
+**Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance; the battery is deliberately matched to what Telegram's forward-attribution data can support, and the measures left out are documented with the same care as the ones included ([why](docs/network-measures.md#measures-deliberately-not-computed)). Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. The NMI matrix (Kvalseth 1987) quantifies how much two community partitions agree, independently of community labels.
 
 **Layout and visualisation.** Nodes are placed using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2) seeded from a Kamada-Kawai initial layout, improving reproducibility across re-exports. Alternative spatial layouts (Spectral, Spring, Circular) are pre-computed at export time and selectable at viewing time with smooth animated transitions. The 2D graph is a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/). The optional 3D graph uses [Three.js](https://threejs.org/) with Lambert-shaded spheres and full mouse rotation, zoom, and pan.
 
@@ -254,6 +256,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
+| [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D graphs |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |

@@ -9,7 +9,7 @@
   <a href="{{ repository_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Documentation</a>
 </div>
 
-{% if include_graph or include_3d_graph %}
+{% if include_graph or include_3d_graph or include_coordination %}
 <div class="row g-4 mb-4">
   {% if include_graph %}
   <div class="col-md-6 col-xl-4">
@@ -29,6 +29,21 @@
         <h3 class="card-title h5"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>3D Network map</h3>
         <p class="card-text text-muted small">3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.</p>
         <a href="graph3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if include_coordination %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="card-title h5"><i class="bi bi-stopwatch text-secondary me-2" aria-hidden="true"></i>Coordination map</h3>
+        <p class="card-text text-muted small">Temporal co-forwarding network: channels tied together when they repeatedly forwarded the same origin message within a short time window. A separate layer from the citation graph — synchrony, not amplification volume.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="coordination.html" class="btn btn-outline-primary btn-sm">Open 2D map</a>
+          <a href="coordination3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
+          <a href="{{ repository_url }}/blob/main/docs/coordination-analysis.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
       </div>
     </div>
   </div>

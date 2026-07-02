@@ -46,23 +46,25 @@ The fraction of all possible directed edges that actually exist. For a directed 
 
 ## PATHS
 
+> Path-based statistics appear in Pulpit only here, at the network level, as **shape descriptors** of the citation topology — how compact or fragmented the recorded web of attribution is — and they are best read comparatively, across exports or over time. No per-channel path measure exists (see [Measures → what this catalogue covers](network-measures.md#what-this-catalogue-covers)): under one-degree attribution a multi-hop path is a chain of attributions, not a route content travelled, so no individual channel is credited for sitting on one. Read "distance" below as *degrees of citation separation*, not as hops content takes.
+
 ### Average Path Length
 
 The mean of the shortest path lengths between all reachable pairs of nodes, computed on the **largest weakly connected component** (treated as undirected).
 
-**In practice:** average path length is the network's "diameter in practice" — how many hops it takes, on average, for content to travel from one channel to another. Short average path lengths indicate a well-connected small-world network where information spreads quickly; long paths suggest a fragmented ecosystem where content circulates only within isolated sub-networks.
+**In practice:** average path length is the network's "diameter in practice" — the typical number of citation steps separating two channels. Short values indicate a compact, small-world citation topology; long values suggest a fragmented ecosystem of loosely connected sub-networks. Read it as compactness of the recorded structure, not as a transit time for content.
 
 ### Diameter
 
 The longest shortest path in the network, computed on the largest weakly connected component (undirected).
 
-**In practice:** the diameter sets an upper bound on how far a piece of content can travel. A small diameter (common in social networks) means any channel is reachable from any other in a few hops.
+**In practice:** the diameter is the network's span — the longest chain of citation separation it contains. A small diameter (common in social networks) means every channel sits within a few citation steps of every other.
 
 ### Directed Average Path Length
 
-The mean of all directed shortest-path distances between node pairs in the **largest strongly connected component** (SCC), following edge direction. Where the undirected path length ignores direction, this metric answers: *how many forwarding steps does content need to travel between two channels?*
+The mean of all directed shortest-path distances between node pairs in the **largest strongly connected component** (SCC), following edge direction. Where the undirected path length ignores direction, this metric measures separation when only the citation direction is followed.
 
-**In practice:** comparing directed and undirected path lengths reveals how much directionality constrains information flow. A large gap between the two suggests many edges are one-way bridges that slow directed propagation significantly.
+**In practice:** comparing directed and undirected path lengths reveals how much directionality constrains the structure. A large gap means many links are one-way — channels that cite without being cited back — so the mutually-citing core is far smaller than the connected whole.
 
 ### Directed Diameter
 
@@ -72,7 +74,7 @@ The longest directed shortest path in the largest strongly connected component.
 
 The fraction of edges that are mutual — if A→B exists, does B→A also exist? Computed as (number of mutual pairs) / (total number of edges).
 
-**In practice:** reciprocity measures how symmetric information exchange is. A low reciprocity means the network is predominantly hierarchical: content flows from producers to distributors in one direction. A high reciprocity suggests peer-like mutual amplification. In political networks, high reciprocity within a community often signals tight ideological cohesion or coordinated behaviour.
+**In practice:** reciprocity measures how symmetric information exchange is. A low reciprocity means the network is predominantly hierarchical: content flows from producers to distributors in one direction. A high reciprocity suggests peer-like mutual amplification. In political networks, high reciprocity within a community usually signals tight ideological cohesion; it is also a natural place to *look* for arranged mutual amplification, though the static graph alone cannot tell arrangement from affinity — that distinction lives in message-level timing, which the [coordination analysis](coordination-analysis.md) tests directly.
 
 ### Average Clustering Coefficient
 
@@ -100,7 +102,7 @@ The mean reciprocal directed shortest-path length over all ordered pairs of chan
 
 **Reference:** Latora, V. & Marchiori, M. (2001) "Efficient behavior of small-world networks." *Physical Review Letters* 87. [doi:10.1103/PhysRevLett.87.198701](https://doi.org/10.1103/PhysRevLett.87.198701)
 
-**In practice:** global efficiency is the single most direct summary of how well information can flow across the entire network, including disconnected parts. A rising value over time indicates the ecosystem is becoming better integrated; a falling value signals fragmentation. Because it averages *inverse* distances, it is dominated by short paths rather than long ones.
+**In practice:** global efficiency is the single most direct one-number summary of how compact and integrated the citation topology is, disconnected parts included. A rising value over time indicates the ecosystem is becoming better integrated; a falling value signals fragmentation. Because it averages *inverse* distances, it is dominated by short paths rather than long ones.
 
 > Note: computation requires all-pairs shortest paths (O(n·(n+m))); for large graphs (n > 3,000) this is the most expensive metric in the summary.
 
@@ -110,7 +112,7 @@ The second-smallest eigenvalue λ₂ of the graph Laplacian, computed on the und
 
 Two fundamental properties make λ₂ particularly meaningful:
 - **Cheeger inequality:** λ₂/2 ≤ edge expansion ≤ √(2λ₂) — it lower-bounds the edge connectivity (minimum cut)
-- **Spectral gap:** λ₂ determines the mixing time of a random walk — how quickly a random walker forgets its starting position. Larger λ₂ → faster mixing → faster information diffusion.
+- **Spectral gap:** λ₂ determines the mixing time of a random walk — how quickly a random walker forgets its starting position. Larger λ₂ → faster mixing → a more integrated topology.
 
 **In practice:** algebraic connectivity answers *how robustly cohesive is this network?* A value near 0 means the network is on the verge of fragmentation. Unlike component counts (which detect existing disconnection), λ₂ detects *imminent* fragmentation — a network can have a single component yet be close to breaking apart.
 
@@ -122,7 +124,7 @@ The coefficient of variation (σ/μ) of the in-degree and out-degree distributio
 
 **Reference:** Pastor-Satorras, R. & Vespignani, A. (2001) "Epidemic spreading in scale-free networks." *Physical Review Letters* 86. [doi:10.1103/PhysRevLett.86.3200](https://doi.org/10.1103/PhysRevLett.86.3200)
 
-**In practice:** degree CV is the quickest diagnostic for the presence of hub structure. High in-degree CV reveals a few central channels cited by many others — potential amplification bottlenecks. High out-degree CV reveals a few channels driving most of the citation activity — potential coordinating accounts. Comparing in- and out-degree CV characterises the asymmetry of influence.
+**In practice:** degree CV is the quickest diagnostic for the presence of hub structure. High in-degree CV reveals a few central channels cited by many others — potential amplification bottlenecks. High out-degree CV reveals a few channels driving most of the citation activity — a concentrated aggregator layer. Comparing in- and out-degree CV characterises the asymmetry of influence.
 
 ---
 
@@ -163,7 +165,7 @@ Values range from −1 (disassortative: high-degree nodes connect to low-degree 
 
 **Reference:** Newman, M.E.J. (2003) "Mixing patterns in networks." *Physical Review E* 67. [doi:10.1103/PhysRevE.67.026126](https://doi.org/10.1103/PhysRevE.67.026126)
 
-**In practice:** most information networks are disassortative on in-degree — popular channels (high in-degree) tend to be referenced by channels that are themselves not widely referenced. Strong disassortativity on out→in (high-out-degree channels point to low-in-degree targets) can indicate hub-and-spoke amplification of marginal content. Positive assortativity on out→out may signal coordinated distribution rings.
+**In practice:** most information networks are disassortative on in-degree — popular channels (high in-degree) tend to be referenced by channels that are themselves not widely referenced. Strong disassortativity on out→in (high-out-degree channels point to low-in-degree targets) can indicate hub-and-spoke amplification of marginal content. Positive assortativity on out→out means the busiest citers tend to cite one another — a distribution layer that watches itself; whether by arrangement or by shared habit is a timing question the static graph does not settle.
 
 ---
 
@@ -183,7 +185,7 @@ A value of 1 means all centrality is concentrated in a single channel (star grap
 
 ### Mean Burt's constraint
 
-The average Burt's constraint score across all channels. A low mean indicates a network with many structural holes and active brokerage — channels are not tightly embedded in closed cliques and information can flow through diverse paths. A high mean indicates a network dominated by dense, redundant clusters.
+The average Burt's constraint score across all channels. A low mean indicates a network rich in structural holes — most channels keep citation portfolios that are not redundant with their contacts' — while a high mean indicates an ecosystem of dense, mutually citing clusters.
 
 ---
 
@@ -303,6 +305,6 @@ The heatmap rendering matches the structural equivalence matrix (white → steel
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Coordination](coordination-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">
