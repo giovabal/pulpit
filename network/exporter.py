@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 from math import sqrt
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db.models import QuerySet
@@ -16,9 +16,13 @@ from network.community import strategy_display_label
 from network.measures._registry import role_companions
 from network.utils import GraphData
 from webapp.models import Channel
+from webapp.utils.colors import parse_color, rgb_avg
 
 import networkx as nx
 from networkx.readwrite.gexf import GEXFWriter
+
+if TYPE_CHECKING:
+    from network.coordination import CoordinationResult
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +124,7 @@ def _patch_html_file(
     node_count: int = 0,
     edge_count: int = 0,
     strategy_labels: "dict[str, str] | None" = None,
+    data_dir: "str | None" = None,
 ) -> None:
     """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
     if not os.path.exists(path):
@@ -155,8 +160,11 @@ def _patch_html_file(
     # colour-by selector and legend show the group's real name instead of a title-cased key. Escape
     # "</" so a group name containing "</script>" can't break out of this inline script.
     strategy_labels_json = json.dumps(strategy_labels or {}).replace("</", "<\\/")
+    # A non-default data_dir turns the page into a viewer for a sibling data
+    # directory (e.g. data_coordination/) — same JS, different payload.
+    data_dir_js = f"window.DATA_DIR = {json.dumps(data_dir)}; " if data_dir else ""
     injection = (
-        f"<script>window.VERTICAL_LAYOUT = {vl_value}; "
+        f"<script>{data_dir_js}window.VERTICAL_LAYOUT = {vl_value}; "
         f"window.EXTRA_LAYOUTS = {layouts_json}; "
         f"window.EXTRA_LAYOUTS_3D = {layouts_3d_json}; "
         f"window.STRATEGY_LABELS = {strategy_labels_json}; "
@@ -604,6 +612,9 @@ def write_summary_json(
         "interest_structural",
         "interest_window_days",
         "interest_include_mentions",
+        "coordination",
+        "coordination_window",
+        "coordination_min_events",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -674,6 +685,212 @@ def write_robustness_json(payload: dict, graph_dir: str) -> None:
         # the sanitizer rather than silently producing JSON the browser cannot
         # parse (cf. SyntaxError: Unexpected token 'N' on JSON.parse).
         f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+_COORDINATION_DATA_DIR = "data_coordination"
+
+
+def build_coordination_graph_data(
+    graph_data: GraphData,
+    coord_result: "CoordinationResult",
+    positions: dict[str, tuple[float, float]],
+) -> GraphData:
+    """Serialize the coordination network, reusing the main graph's node dicts.
+
+    Every participating channel is already a node of the main export (the
+    coordination query runs over the citation graph's channel set), so its
+    fully-enriched node dict — colour, communities, metadata, computed measures
+    — is copied verbatim and only the position and the coordination scores are
+    added. Each tie is emitted in both directions so the viewer renders and
+    lists it as the mutual relation it is; edge colours follow the citation
+    map's convention (dimmed average of the endpoint colours).
+    """
+    node_by_id = {n["id"]: n for n in graph_data["nodes"]}
+    out: GraphData = {"nodes": [], "edges": []}
+    for node_id in coord_result.node_ids:
+        source = node_by_id.get(node_id)
+        if source is None:  # defensive: scores for a channel outside the export
+            continue
+        node = dict(source)
+        pos = positions.get(node_id)
+        node["x"] = float(pos[0]) if pos is not None else 0.0
+        node["y"] = float(pos[1]) if pos is not None else 0.0
+        scores = coord_result.node_scores.get(node_id, {})
+        node["coordination_strength"] = int(scores.get("strength", 0))
+        node["coordination_partners"] = int(scores.get("partners", 0))
+        node["coordination_ratio"] = float(scores.get("ratio", 0.0))
+        out["nodes"].append(node)
+
+    color_by_id = {n["id"]: n.get("color") or "" for n in out["nodes"]}
+    index = 0
+    for a, b, n_events in coord_result.edges:
+        if a not in color_by_id or b not in color_by_id:
+            continue
+        avg = rgb_avg(parse_color(color_by_id[a]), parse_color(color_by_id[b]))
+        color = ",".join(str(int(c * 0.75)) for c in avg)
+        for source, target in ((a, b), (b, a)):
+            out["edges"].append(
+                {"source": source, "target": target, "weight": float(n_events), "color": color, "id": index}
+            )
+            index += 1
+    return out
+
+
+def write_coordination_files(
+    coord_graph_data: GraphData,
+    positions_3d: dict[str, tuple[float, float, float]],
+    measures_labels: list[tuple[str, str]],
+    graph_dir: str,
+    *,
+    communities_data: "dict[str, Any] | None" = None,
+    dir_name: str = _COORDINATION_DATA_DIR,
+) -> None:
+    """Write a coordination data directory (``data_coordination/`` or a per-year sibling).
+
+    Same file contract as ``data/`` (``channel_position.json``,
+    ``channel_position_3d.json``, ``channels.json``, ``communities.json``), so
+    the standard 2D/3D viewers render it unmodified once ``window.DATA_DIR``
+    points here — the viewers unconditionally fetch all four files.
+    ``communities_data`` is the strategy payload of the matching citation-graph
+    scope (full range or one year), so community colouring and the legend work
+    on the coordination map too. ``dir_name`` selects the directory: the
+    default full-range ``data_coordination``, or ``data_coordination_<year>``
+    for timeline years (the year switcher derives that name from the page's
+    base directory).
+    """
+    data_dir = os.path.join(graph_dir, dir_name)
+    os.makedirs(data_dir, exist_ok=True)
+
+    position_payload = {
+        "nodes": [{"id": n["id"], "x": n["x"], "y": n["y"]} for n in coord_graph_data["nodes"]],
+        "edges": coord_graph_data["edges"],
+    }
+    with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
+        f.write(json.dumps(position_payload))
+
+    nodes_3d = []
+    for n in coord_graph_data["nodes"]:
+        pos = positions_3d.get(n["id"])
+        nodes_3d.append(
+            {
+                "id": n["id"],
+                "x": float(pos[0]) if pos is not None else 0.0,
+                "y": float(pos[1]) if pos is not None else 0.0,
+                "z": float(pos[2]) if pos is not None else 0.0,
+            }
+        )
+    with open(os.path.join(data_dir, "channel_position_3d.json"), "w") as f:
+        f.write(json.dumps({"nodes": nodes_3d, "edges": coord_graph_data["edges"]}))
+
+    channels_payload = {
+        "nodes": coord_graph_data["nodes"],
+        "measures": measures_labels,
+        "total_pages_count": len(coord_graph_data["nodes"]),
+    }
+    with open(os.path.join(data_dir, "channels.json"), "w") as f:
+        f.write(json.dumps(channels_payload))
+
+    with open(os.path.join(data_dir, "communities.json"), "w") as f:
+        f.write(json.dumps({"strategies": communities_data or {}}))
+
+
+def write_coordination_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:
+    """Write ``data_coordination/timeline.json`` — the coordination map's year switcher.
+
+    Lists only the years whose per-year coordination network survived the
+    thresholds (``has_coordination``), so the switcher never offers a year
+    whose data directory does not exist. Same shape as ``data/timeline.json``
+    (the viewers read ``year`` and ``has_graph``).
+    """
+    data_dir = os.path.join(graph_dir, _COORDINATION_DATA_DIR)
+    os.makedirs(data_dir, exist_ok=True)
+    years = [
+        {
+            "year": e["year"],
+            "nodes": e.get("coordination_nodes", 0),
+            "edges": e.get("coordination_ties", 0),
+            "has_graph": True,
+        }
+        for e in timeline_entries
+        if e.get("has_coordination")
+    ]
+    with open(os.path.join(data_dir, "timeline.json"), "w") as f:
+        f.write(json.dumps({"years": years}))
+
+
+_COORD_DESC_2D = (
+    "An interactive map of temporal co-forwarding coordination: Telegram channels linked when they "
+    "repeatedly forwarded the same origin message within a short time window."
+)
+_COORD_DESC_3D = "An interactive 3D map of temporal co-forwarding coordination between Telegram channels."
+
+
+def write_coordination_pages(
+    root_target: str,
+    *,
+    seo: bool,
+    project_title: str = "",
+    vertical_layout: bool = False,
+    node_count: int = 0,
+    tie_count: int = 0,
+    strategy_labels: "dict[str, str] | None" = None,
+) -> None:
+    """Write ``coordination.html`` and ``coordination3d.html`` into the export root.
+
+    Each page is the pristine map template re-pointed at ``data_coordination/``
+    via ``window.DATA_DIR``, with titles and descriptions reworded for the
+    coordination layer. ``tie_count`` is the number of *unordered* pairs — the
+    figure quoted in the screen-reader summary ("mutual co-forwarding ties").
+    No extra layouts are advertised (FA2 only), so the layout switcher stays
+    hidden and the year navigation never appears (``data_coordination/`` has no
+    ``timeline.json``).
+    """
+    map_src = str(settings.BASE_DIR / "webapp_engine" / "map")
+    coord_title = f"{project_title} — Coordination" if project_title else "Co-forwarding coordination"
+    for src_name, dst_name, desc_old, desc_new, title_old, title_new in (
+        (
+            "graph.html",
+            "coordination.html",
+            "An interactive force-directed network map of Telegram channels, "
+            "showing connections through forwards and references.",
+            _COORD_DESC_2D,
+            "A map for Telegram channels",
+            "Co-forwarding coordination map",
+        ),
+        (
+            "graph3d.html",
+            "coordination3d.html",
+            "An interactive 3D force-directed network map of Telegram channels.",
+            _COORD_DESC_3D,
+            "Pulpit project — 3D map",
+            "Co-forwarding coordination — 3D map",
+        ),
+    ):
+        src_path = os.path.join(map_src, src_name)
+        dst_path = os.path.join(root_target, dst_name)
+        try:
+            with open(src_path) as f:
+                content = f.read()
+        except OSError as e:
+            logger.warning("Could not read map template %s: %s", src_path, e)
+            continue
+        content = content.replace(desc_old, desc_new)
+        content = content.replace(title_old, title_new)
+        content = content.replace("</strong> directed edges", "</strong> mutual co-forwarding ties")
+        with open(dst_path, "w") as f:
+            f.write(content)
+        _patch_html_file(
+            dst_path,
+            seo,
+            coord_title,
+            vertical_layout=vertical_layout,
+            extra_layouts=[],
+            extra_layouts_3d=[],
+            node_count=node_count,
+            edge_count=tie_count,
+            strategy_labels=strategy_labels,
+            data_dir=f"{_COORDINATION_DATA_DIR}/",
+        )
 
 
 def copy_channel_media(channel_qs: QuerySet[Channel], root_target: str) -> None:

@@ -230,6 +230,10 @@ Enable in the Structural Analysis options (or with `--robustness` on the CLI). T
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
 
+### Coordination: temporal co-forwarding maps
+
+Enable in the Structural Analysis options (or with `--coordination` on the CLI). Pulpit ties together channels that repeatedly forward the **same origin message** within `--coordination-window` seconds of each other (default 300), keeping only pairs with at least `--coordination-min-events` distinct shared origins (default 3) — repetition across different content is what separates coordination from coincidence on viral posts. The result is a second network layer with its own force-directed layouts, rendered as two dedicated interactive maps: `coordination.html` (2D) and `coordination3d.html` (3D), backed by `data_coordination/`. Node colours and community assignments are carried over from the main citation graph so the two maps read side by side; node size defaults to the number of coordinated co-forwards. Combined with `--timeline-step year`, the layer is recomputed per year (`data_coordination_YYYY/`, layouts seeded from the full-range coordination layout) and the coordination maps gain the same in-page year switcher as the main maps, listing only the years with surviving ties. See [Coordination analysis](coordination-analysis.md) for the method, the parameter guidance, and the interpretation guardrails.
+
 ### Interesting messages
 
 Per-channel z-scored engagement is always on once the relevant migration has been applied — Pulpit refreshes the scores automatically at the end of each crawl, and you can recompute on demand with `python manage.py compute_message_scores` (accepts `--channel-id`, `--min-sample`, `--recency-days`, `--weights`). The structural reach metrics (cross-community reach + authority-weighted reach) are opt-in via `--interest-structural` on `structural_analysis`, with companion flags `--interest-window-days N` (default 30, matches `--diffusion-window`; 0 disables) and `--interest-include-mentions` (accepted for forward compatibility, currently a no-op). The structural layer writes `data/interest_structural.json` and is consumed on demand by the per-channel **Top messages** panel. See [Interesting messages](interesting-messages.md) for the scoring formula, the academic references, and when the metrics are interpretable.
@@ -318,6 +322,11 @@ python manage.py structural_analysis --robustness --robustness-strategies ALL   
 python manage.py structural_analysis --robustness --robustness-strategies random,pagerank,in_strength   # custom subset
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 
+# Coordination analysis (temporal co-forwarding maps: coordination.html + coordination3d.html)
+python manage.py structural_analysis --coordination                                     # defaults: 300 s window, ≥3 shared origins per pair
+python manage.py structural_analysis --coordination --coordination-window 60            # strict: automation-scale synchrony only
+python manage.py structural_analysis --coordination --coordination-min-events 2         # looser repetition threshold for small corpora
+
 # Interesting messages — structural reach layer (hot per-channel z-scores are always on)
 python manage.py compute_message_scores                                                 # recompute hot scores for every channel
 python manage.py compute_message_scores --channel-id 42 --recency-days 90               # one channel, rolling baseline
@@ -334,6 +343,6 @@ See `python manage.py <command> --help` for the full list of flags for any comma
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Coordination](coordination-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">

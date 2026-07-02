@@ -1,6 +1,6 @@
 # Robustness analysis
 
-A *robustness analysis* asks: **how well does this network hold up when channels start disappearing?** Telegram channels go silent for many reasons — platform moderation, legal pressure, voluntary shutdown, sheer inactivity — and the consequences are very uneven. Losing a peripheral amplifier costs the ecosystem almost nothing; losing a hub or a bridge between communities can fragment information flow across half the network.
+A *robustness analysis* asks: **how well does this network hold up when channels start disappearing?** Telegram channels go silent for many reasons — platform moderation, legal pressure, voluntary shutdown, sheer inactivity — and the consequences are very uneven. Losing a peripheral amplifier costs the ecosystem almost nothing; losing a hub or a bridge between communities can fragment the citation web across half the network.
 
 Pulpit's robustness analysis turns this intuition into measurable curves and a single score per attack strategy, with a statistical sanity check against a randomised version of the same network. The whole battery runs on the directed citation graph that the rest of `structural_analysis` already builds, so no extra crawl is needed.
 
@@ -121,17 +121,17 @@ A strongly connected component is a group of channels that all ultimately cite e
 
 **In practice:** `R_scc` is meaningful when the network has a non-trivial core — an "echo chamber" or "coordinated nucleus" of channels that cite each other along closed citation cycles, like the tight nucleus surfaced by the [K-core](community-detection.md#k-core) partition. On sparse trees or one-way fan-out structures, `R_scc` will be near zero from `q=0` and won't tell you much. Use `R_wcc` or `R_reach` for those.
 
-**Example.** In a coordinated disinformation network where 8 channels repost each other in a cycle (the SCC), `R_scc` drops sharply the moment the first of those 8 is removed — the cycle breaks into chains and no SCC larger than 1 remains. The network's overall information-flow capacity might decay more gradually, which is why `R_scc` is compared against `R_wcc` and `R_reach`.
+**Example.** In a coordinated disinformation network where 8 channels repost each other in a cycle (the SCC), `R_scc` drops sharply the moment the first of those 8 is removed — the cycle breaks into chains and no SCC larger than 1 remains. The network's overall directed connectivity might decay more gradually, which is why `R_scc` is compared against `R_wcc` and `R_reach`.
 
 ### `R_reach` — directed reachability
 
 *The fraction of ordered channel pairs (A, B) such that A can still reach B by following citation direction.*
 
-This is the most directly meaningful measure for information flow: it counts how many sources can still reach how many destinations through the (possibly long, possibly indirect) chain of forwards.
+This is the metric most sensitive to the directed architecture: it counts how many ordered pairs are still joined by an unbroken directed chain of citations. Read it as surviving *connectivity of the citation web* — under one-degree attribution a directed path certifies recorded structure, not a route content takes (see [Measures → what this catalogue covers](network-measures.md#what-this-catalogue-covers)).
 
-**In practice:** `R_reach` answers *"if a story breaks at channel A, can it still reach channel B?"*. On graphs above `--robustness-sample` nodes (default 500), Pulpit estimates the reachable-pair count from a uniform random sample of `--robustness-sample` sources drawn fresh at every step; smaller graphs use exact computation.
+**In practice:** `R_reach` answers *"how much of the network's directed connectivity survives?"* — the share of ordered channel pairs still joined by the citation web. On graphs above `--robustness-sample` nodes (default 500), Pulpit estimates the reachable-pair count from a uniform random sample of `--robustness-sample` sources drawn fresh at every step; smaller graphs use exact computation.
 
-**Example.** In a hub-and-spoke network where one central channel routes everything, static reach is high (every source can reach every destination via the hub). Removing the hub via PageRank attack drops `R_reach` from near 1 to near 0 in a single step — even though `R_wcc` might still look healthy because the hub's leaves remain pairwise un-fragmented in undirected terms.
+**Example.** In a hub-and-spoke network where one central channel links everything, static reach is high (every ordered pair is joined via the hub). Removing the hub via PageRank attack drops `R_reach` from near 1 to near 0 in a single step — even though `R_wcc` might still look healthy because the hub's leaves remain pairwise un-fragmented in undirected terms.
 
 ---
 
@@ -243,6 +243,6 @@ Cost scales with `K_null × N_strategies × N_years`, so expect noticeably longe
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Coordination](coordination-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">

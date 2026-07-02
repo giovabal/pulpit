@@ -17,6 +17,7 @@ from django.utils import timezone
 from network import (
     community,
     community_stats,
+    coordination,
     exporter,
     graph_builder,
     interest_structural,
@@ -311,6 +312,11 @@ class ResolvedOptions:
     interest_window_days: int = 30
     interest_include_mentions: bool = False
 
+    # Coordination analysis (temporal co-forwarding)
+    do_coordination: bool = False
+    coordination_window: int = 300
+    coordination_min_events: int = 3
+
     # Export naming
     export_name: str = ""
 
@@ -359,6 +365,9 @@ class ResolvedOptions:
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
+            "coordination": self.do_coordination,
+            "coordination_window": self.coordination_window,
+            "coordination_min_events": self.coordination_min_events,
         }
 
 
@@ -904,6 +913,45 @@ class Command(BaseCommand):
                 "implementation needs separate design. A warning is logged when set."
             ),
         )
+        # ── Coordination analysis (temporal co-forwarding) ────────────────────
+        parser.add_argument(
+            "--coordination",
+            dest="coordination",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Build the temporal co-forwarding coordination layer: channels are tied when they "
+                "repeatedly forward the same origin message within --coordination-window seconds, "
+                "keeping pairs with at least --coordination-min-events shared origins. Writes "
+                "data_coordination/ plus two dedicated interactive maps, coordination.html (2D) "
+                "and coordination3d.html (3D), with their own force-directed layouts."
+            ),
+        )
+        parser.add_argument(
+            "--coordination-window",
+            dest="coordination_window",
+            type=int,
+            default=None,
+            metavar="SECONDS",
+            help=(
+                "Co-forwarding window in seconds: two forwards of the same origin message count as "
+                "one coordinated event when they land within this many seconds of each other. "
+                "Lower is stricter (automation-scale synchrony); higher also catches slower, "
+                "human-paced pushes. Default: 300."
+            ),
+        )
+        parser.add_argument(
+            "--coordination-min-events",
+            dest="coordination_min_events",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Minimum number of distinct origin messages a channel pair must have co-forwarded "
+                "inside the window before its coordination tie is kept. Repetition across different "
+                "origins is what separates coordination from coincidence on viral content. Default: 3."
+            ),
+        )
         parser.add_argument(
             "--name",
             dest="name",
@@ -1285,6 +1333,11 @@ class Command(BaseCommand):
         do_interest_structural: bool = False,
         interest_window_days: int = 30,
         interest_include_mentions: bool = False,
+        do_coordination: bool = False,
+        coordination_window: int = 300,
+        coordination_min_events: int = 3,
+        coord_reference_positions: dict | None = None,
+        coord_reference_positions_3d: dict | None = None,
         window_start: datetime.date | None = None,
         window_end: datetime.date | None = None,
     ) -> dict | None:
@@ -1445,6 +1498,55 @@ class Command(BaseCommand):
                 shutil.rmtree(year_data_dst)
             shutil.move(os.path.join(tmp_dir, "data"), year_data_dst)
 
+        # Per-year coordination layer: same thresholds as the full range, seeded
+        # from the full-range coordination layout so years keep a stable
+        # orientation (mirroring the reference-seeding scheme of the main map).
+        # A year's ties are a subset of the full range's (counts only grow with
+        # a wider window), so the reference covers every per-year node; the
+        # Kamada-Kawai fallback below is defensive only.
+        has_coordination = False
+        coordination_nodes = 0
+        coordination_ties = 0
+        if do_coordination:
+            coord_result = coordination.compute_coordination(
+                [int(cid) for cid in channel_dict],
+                start_date=start_date,
+                end_date=end_date,
+                window_seconds=coordination_window,
+                min_events=coordination_min_events,
+            )
+            if coord_result.edges:
+                co_graph = coordination.build_nx_graph(coord_result, graph)
+                co_iterations = layout.resolve_iterations(fa2_iterations, co_graph.number_of_nodes())
+                ref = coord_reference_positions or {}
+                if any(n not in ref for n in co_graph.nodes()):
+                    kk = layout.kamada_kawai_positions(co_graph)
+                    initial = {n: ref.get(n, kk[n]) for n in co_graph.nodes()}
+                else:
+                    initial = {n: ref[n] for n in co_graph.nodes()}
+                co_positions = layout.forceatlas2_positions(co_graph, initial, co_iterations)
+                if ref:
+                    co_positions = layout.align_to_reference(co_positions, ref)
+                ref_3d = coord_reference_positions_3d or {}
+                if any(n not in ref_3d for n in co_graph.nodes()):
+                    kk_3d = layout.kamada_kawai_positions_3d(co_graph)
+                    initial_3d = {n: ref_3d.get(n, kk_3d[n]) for n in co_graph.nodes()}
+                else:
+                    initial_3d = {n: ref_3d[n] for n in co_graph.nodes()}
+                co_positions_3d = layout.forceatlas2_positions_3d(co_graph, initial_3d, co_iterations)
+                coord_graph_data = exporter.build_coordination_graph_data(graph_data, coord_result, co_positions)
+                exporter.write_coordination_files(
+                    coord_graph_data,
+                    co_positions_3d,
+                    coordination.coordination_measures_labels(),
+                    root_target,
+                    communities_data=communities_data,
+                    dir_name=f"data_coordination_{year}",
+                )
+                has_coordination = True
+                coordination_nodes = len(coord_graph_data["nodes"])
+                coordination_ties = len(coord_result.edges)
+
         # Per-year XLSX files are not written individually; data is returned so the
         # caller can assemble a single multi-sheet workbook for each table type.
         return {
@@ -1456,6 +1558,9 @@ class Command(BaseCommand):
             "has_network_html": True,
             "has_community_html": True,
             "has_robustness": do_robustness and rob_payload is not None,
+            "has_coordination": has_coordination,
+            "coordination_nodes": coordination_nodes,
+            "coordination_ties": coordination_ties,
             # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
@@ -1599,6 +1704,14 @@ class Command(BaseCommand):
                 f"Choose from {sorted(layout.EXTRA_LAYOUT_CHOICES_3D)} or ALL."
             )
 
+        # Coordination analysis — plain numeric parameters of an opt-in feature.
+        coordination_window = _o("coordination_window", coordination.DEFAULT_WINDOW_SECONDS)
+        coordination_min_events = _o("coordination_min_events", coordination.DEFAULT_MIN_EVENTS)
+        if coordination_window < 1:
+            raise CommandError("--coordination-window must be at least 1 second.")
+        if coordination_min_events < 1:
+            raise CommandError("--coordination-min-events must be at least 1.")
+
         vertical = _o("vertical_layout", False)
         export_name = re.sub(r"[^\w\-]", "-", (options.get("name") or "").strip()).strip("-")
         if not export_name:
@@ -1684,6 +1797,9 @@ class Command(BaseCommand):
             do_interest_structural=_o("interest_structural", False),
             interest_window_days=_o("interest_window_days", 30),
             interest_include_mentions=_o("interest_include_mentions", False),
+            do_coordination=_o("coordination", False),
+            coordination_window=coordination_window,
+            coordination_min_events=coordination_min_events,
             export_name=export_name,
         )
 
@@ -1720,6 +1836,7 @@ class Command(BaseCommand):
                 opts.selected_vacancy_measures,
                 opts.do_robustness,
                 opts.do_interest_structural,
+                opts.do_coordination,
             )
         ):
             self.stdout.write(
@@ -1830,26 +1947,29 @@ class Command(BaseCommand):
             # interest_structural.html imports ./js/utils.js and css/tables.css from
             # the copied map assets, like the vacancy/robustness pages above.
             or opts.do_interest_structural
+            # coordination.html / coordination3d.html reuse the map viewer JS/CSS.
+            or opts.do_coordination
         )
         if need_static_assets:
             exporter.ensure_graph_root(root_target)
 
-        if opts.do_graph or opts.do_3dgraph:
+        if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("\nGenerate map")
             self.stdout.write("- config files")
-            exporter.apply_robots_to_graph_html(
-                root_target,
-                opts.seo,
-                project_title=project_title,
-                include_3d=opts.do_3dgraph,
-                vertical_layout=opts.vertical_layout,
-                extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
-                extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
-                node_count=len(graph_data.get("nodes", [])),
-                edge_count=len(graph_data.get("edges", [])),
-                # Real names for the manual LABELGROUP<id> colour-by options in the viewer.
-                strategy_labels=community.labelgroup_display_labels(),
-            )
+            if opts.do_graph or opts.do_3dgraph:
+                exporter.apply_robots_to_graph_html(
+                    root_target,
+                    opts.seo,
+                    project_title=project_title,
+                    include_3d=opts.do_3dgraph,
+                    vertical_layout=opts.vertical_layout,
+                    extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
+                    extra_layouts_3d=(["fa2"] if fa2_in_3d else []) + list(extra_positions_3d.keys()),
+                    node_count=len(graph_data.get("nodes", [])),
+                    edge_count=len(graph_data.get("edges", [])),
+                    # Real names for the manual LABELGROUP<id> colour-by options in the viewer.
+                    strategy_labels=community.labelgroup_display_labels(),
+                )
             exporter.write_robots_txt(root_target, opts.seo)
 
         self.stdout.write("- data files")
@@ -1962,7 +2082,7 @@ class Command(BaseCommand):
                 project_title=project_title,
             )
 
-        if opts.do_graph or opts.do_3dgraph:
+        if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("- media")
             exporter.copy_channel_media(channel_qs, root_target)
 
@@ -2097,6 +2217,79 @@ class Command(BaseCommand):
             # Excel write is deferred until after the timeline loop so per-year
             # robustness payloads can be folded into the same workbook.
 
+        coordination_written = False
+        # Full-range coordination layouts double as the per-year reference (same
+        # seeding/orientation-alignment scheme the main map uses for timeline years).
+        coord_reference_positions: dict | None = None
+        coord_reference_positions_3d: dict | None = None
+        if opts.do_coordination:
+            self.stdout.write("\nCoordination analysis")
+            self.stdout.write(
+                f"- co-forwarding pairs (window {opts.coordination_window}s, "
+                f"min shared origins {opts.coordination_min_events}) … ",
+                ending="",
+            )
+            self.stdout.flush()
+            coord_result = coordination.compute_coordination(
+                [int(cid) for cid in channel_dict],
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                window_seconds=opts.coordination_window,
+                min_events=opts.coordination_min_events,
+            )
+            self.stdout.write(f"{len(coord_result.edges)} ties among {len(coord_result.node_ids)} channels")
+            if coord_result.edges:
+                co_graph = coordination.build_nx_graph(coord_result, graph)
+                co_iterations = layout.resolve_iterations(opts.fa2_iterations, co_graph.number_of_nodes())
+                self.stdout.write(f"- layout 2D (ForceAtlas2, {co_iterations} iterations) … ", ending="")
+                self.stdout.flush()
+                co_positions = layout.forceatlas2_positions(
+                    co_graph, layout.kamada_kawai_positions(co_graph), co_iterations
+                )
+                # Match the export's target orientation, mirroring the main map's heuristic.
+                xs, ys = zip(*co_positions.values(), strict=False)
+                co_width, co_height = max(xs) - min(xs), max(ys) - min(ys)
+                if (opts.target_layout == layout.LAYOUT_HORIZONTAL and co_height > co_width) or (
+                    opts.target_layout == layout.LAYOUT_VERTICAL and co_width > co_height
+                ):
+                    co_positions = layout.rotate_positions(co_positions)
+                self.stdout.write("done")
+                self.stdout.write(f"- layout 3D (ForceAtlas2, {co_iterations} iterations) … ", ending="")
+                self.stdout.flush()
+                co_positions_3d = layout.forceatlas2_positions_3d(
+                    co_graph, layout.kamada_kawai_positions_3d(co_graph), co_iterations
+                )
+                self.stdout.write("done")
+                coord_reference_positions = co_positions
+                coord_reference_positions_3d = co_positions_3d
+                coord_graph_data = exporter.build_coordination_graph_data(graph_data, coord_result, co_positions)
+                exporter.write_coordination_files(
+                    coord_graph_data,
+                    co_positions_3d,
+                    coordination.coordination_measures_labels(),
+                    root_target,
+                    communities_data=communities_data,
+                )
+                self.stdout.write("- data_coordination/ files")
+                exporter.write_coordination_pages(
+                    root_target,
+                    seo=opts.seo,
+                    project_title=project_title,
+                    vertical_layout=opts.vertical_layout,
+                    node_count=len(coord_graph_data["nodes"]),
+                    tie_count=len(coord_result.edges),
+                    strategy_labels=community.labelgroup_display_labels(),
+                )
+                self.stdout.write("- coordination.html, coordination3d.html")
+                coordination_written = True
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        "- no coordinated pairs at these thresholds; coordination maps skipped "
+                        "(widen --coordination-window or lower --coordination-min-events to loosen them)"
+                    )
+                )
+
         timeline_entries: list[dict] = []
         if opts.timeline_step == "year":
             year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
@@ -2145,6 +2338,14 @@ class Command(BaseCommand):
                         do_interest_structural=opts.do_interest_structural,
                         interest_window_days=opts.interest_window_days,
                         interest_include_mentions=opts.interest_include_mentions,
+                        # Only when the full range produced ties: a year's ties are a
+                        # subset of the full range's, so an empty full range means
+                        # every per-year run would come back empty too.
+                        do_coordination=opts.do_coordination and coordination_written,
+                        coordination_window=opts.coordination_window,
+                        coordination_min_events=opts.coordination_min_events,
+                        coord_reference_positions=coord_reference_positions,
+                        coord_reference_positions_3d=coord_reference_positions_3d,
                         window_start=opts.start_date,
                         window_end=opts.end_date,
                     )
@@ -2152,6 +2353,8 @@ class Command(BaseCommand):
                         timeline_entries.append(entry)
                 if timeline_entries:
                     tables.write_timeline_json(timeline_entries, graph_dir=root_target)
+                    if coordination_written and any(e.get("has_coordination") for e in timeline_entries):
+                        exporter.write_coordination_timeline_json(timeline_entries, root_target)
 
         if opts.do_xlsx:
             year_xlsx = [
@@ -2225,6 +2428,7 @@ class Command(BaseCommand):
             include_robustness_html=opts.do_robustness and opts.do_html,
             include_robustness_xlsx=opts.do_robustness and opts.do_xlsx,
             include_interest_structural=opts.do_interest_structural,
+            include_coordination=coordination_written,
         )
 
         exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))

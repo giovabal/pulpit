@@ -34,11 +34,16 @@ from network.community_stats import (
     compute_community_metrics,
     network_summary_rows,
 )
+from network.coordination import build_nx_graph, compute_coordination
 from network.exporter import (
+    build_coordination_graph_data,
     build_graph_data,
     ensure_graph_root,
     find_main_component,
     reposition_isolated_nodes,
+    write_coordination_files,
+    write_coordination_pages,
+    write_coordination_timeline_json,
     write_graph_files,
 )
 from network.graph_builder import build_graph, resolve_window_label
@@ -2089,6 +2094,315 @@ class ApplyContentOriginalityTests(TestCase):
         graph_data: dict = {"nodes": [{"id": str(empty_ch.pk)}], "edges": []}
         apply_content_originality(graph_data, nx.DiGraph(), channel_dict)
         self.assertIsNone(graph_data["nodes"][0]["content_originality"])
+
+
+# ---------------------------------------------------------------------------
+# coordination.py — compute_coordination / build_nx_graph
+# ---------------------------------------------------------------------------
+
+
+class ComputeCoordinationTests(TestCase):
+    WINDOW = 300
+
+    def setUp(self) -> None:
+        label = make_label("CoordOrg", color="#112233")
+        self.origin = make_channel(telegram_id=900, label=label, title="Origin")
+        self.a = make_channel(telegram_id=901, label=label, title="A")
+        self.b = make_channel(telegram_id=902, label=label, title="B")
+        self.c = make_channel(telegram_id=903, label=label, title="C")
+        self.ids = [self.a.pk, self.b.pk, self.c.pk]
+        self.t0 = datetime.datetime(2024, 5, 1, 12, 0, tzinfo=datetime.timezone.utc)
+        self._tg = 5000
+
+    def _fwd(self, channel, origin_post, seconds, *, origin=None, fwd_date=None):
+        """One forward of ``origin_post`` (origin-message id) at t0 + ``seconds``."""
+        self._tg += 1
+        return Message.objects.create(
+            telegram_id=self._tg,
+            channel=channel,
+            forwarded_from=origin or self.origin,
+            fwd_from_channel_post=origin_post,
+            fwd_from_date=fwd_date or (self.t0 - datetime.timedelta(days=1)),
+            date=self.t0 + datetime.timedelta(seconds=seconds),
+        )
+
+    def _compute(self, min_events: int = 3, ids=None):
+        return compute_coordination(
+            ids if ids is not None else self.ids, window_seconds=self.WINDOW, min_events=min_events
+        )
+
+    def test_repeated_within_window_pair_is_kept(self) -> None:
+        for post in (1, 2, 3):
+            self._fwd(self.a, post, 0)
+            self._fwd(self.b, post, 100)
+        result = self._compute(min_events=3)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 3)])
+        for node_id in (str(self.a.pk), str(self.b.pk)):
+            self.assertEqual(result.node_scores[node_id]["partners"], 1)
+            self.assertEqual(result.node_scores[node_id]["strength"], 3)
+            self.assertAlmostEqual(result.node_scores[node_id]["ratio"], 1.0)
+        self.assertEqual(result.channels_seen, 2)
+        self.assertEqual(result.origins_seen, 3)
+
+    def test_forwards_outside_window_do_not_pair(self) -> None:
+        self._fwd(self.a, 1, 0)
+        self._fwd(self.b, 1, self.WINDOW + 1)
+        result = self._compute(min_events=1)
+        self.assertEqual(result.edges, [])
+        self.assertEqual(result.node_ids, [])
+
+    def test_exactly_window_apart_still_counts(self) -> None:
+        self._fwd(self.a, 1, 0)
+        self._fwd(self.b, 1, self.WINDOW)
+        result = self._compute(min_events=1)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 1)])
+
+    def test_min_events_filters_incidental_pairs(self) -> None:
+        for post in (1, 2):
+            self._fwd(self.a, post, 0)
+            self._fwd(self.b, post, 50)
+        result = self._compute(min_events=3)
+        self.assertEqual(result.edges, [])
+
+    def test_repeat_forwards_of_same_origin_count_once(self) -> None:
+        self._fwd(self.a, 1, 0)
+        self._fwd(self.a, 1, 40)  # A re-shares the same origin — not an extra event
+        self._fwd(self.b, 1, 100)
+        result = self._compute(min_events=1)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 1)])
+
+    def test_self_forwards_are_ignored(self) -> None:
+        self._fwd(self.origin, 1, 0, origin=self.origin)  # origin re-broadcasting itself
+        self._fwd(self.a, 1, 10)
+        result = self._compute(min_events=1, ids=[self.origin.pk, *self.ids])
+        self.assertEqual(result.edges, [])
+
+    def test_fallback_origin_key_uses_fwd_date(self) -> None:
+        shared_origin_date = self.t0 - datetime.timedelta(days=2)
+        self._fwd(self.a, None, 0, fwd_date=shared_origin_date)
+        self._fwd(self.b, None, 60, fwd_date=shared_origin_date)
+        # Same channels, no post id and a *different* origin date — a different origin.
+        self._fwd(self.a, None, 200, fwd_date=self.t0 - datetime.timedelta(days=3))
+        result = self._compute(min_events=1)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 1)])
+
+    def test_unidentifiable_origin_rows_are_skipped(self) -> None:
+        for channel, seconds in ((self.a, 0), (self.b, 30)):
+            self._tg += 1
+            Message.objects.create(
+                telegram_id=self._tg,
+                channel=channel,
+                forwarded_from=self.origin,
+                fwd_from_channel_post=None,
+                fwd_from_date=None,
+                date=self.t0 + datetime.timedelta(seconds=seconds),
+            )
+        result = self._compute(min_events=1)
+        self.assertEqual(result.edges, [])
+        self.assertEqual(result.origins_seen, 0)
+
+    def test_ratio_is_coordinated_share_of_forwarded_origins(self) -> None:
+        # A forwards 4 origins; B co-forwards 2 of them inside the window.
+        for post in (1, 2, 3, 4):
+            self._fwd(self.a, post, 0)
+        self._fwd(self.b, 1, 50)
+        self._fwd(self.b, 2, 80)
+        result = self._compute(min_events=2)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 2)])
+        self.assertAlmostEqual(result.node_scores[str(self.a.pk)]["ratio"], 0.5)
+        self.assertAlmostEqual(result.node_scores[str(self.b.pk)]["ratio"], 1.0)
+
+    def test_filtered_partner_does_not_appear(self) -> None:
+        for post in (1, 2, 3):
+            self._fwd(self.a, post, 0)
+            self._fwd(self.b, post, 100)
+        self._fwd(self.c, 1, 150)  # C syncs on a single origin only
+        result = self._compute(min_events=2)
+        self.assertEqual(result.edges, [(str(self.a.pk), str(self.b.pk), 3)])
+        self.assertNotIn(str(self.c.pk), result.node_ids)
+        # A's coordinated origins are counted over retained pairs only.
+        self.assertEqual(result.node_scores[str(self.a.pk)]["partners"], 1)
+
+    def test_build_nx_graph_is_bidirectional_with_shared_node_data(self) -> None:
+        for post in (1, 2, 3):
+            self._fwd(self.a, post, 0)
+            self._fwd(self.b, post, 100)
+        result = self._compute(min_events=3)
+        main_graph = nx.DiGraph()
+        for channel in (self.a, self.b):
+            main_graph.add_node(str(channel.pk), data={"pk": str(channel.pk), "color": "10,20,30"})
+        co_graph = build_nx_graph(result, main_graph)
+        a_id, b_id = str(self.a.pk), str(self.b.pk)
+        self.assertTrue(co_graph.has_edge(a_id, b_id))
+        self.assertTrue(co_graph.has_edge(b_id, a_id))
+        self.assertEqual(co_graph.edges[a_id, b_id]["weight"], 3.0)
+        self.assertEqual(co_graph.nodes[a_id]["data"], main_graph.nodes[a_id]["data"])
+
+
+class BuildCoordinationGraphDataTests(TestCase):
+    def setUp(self) -> None:
+        label = make_label("CoordGD", color="#445566")
+        self.a = make_channel(telegram_id=910, label=label, title="A")
+        self.b = make_channel(telegram_id=911, label=label, title="B")
+        self.origin = make_channel(telegram_id=912, label=label, title="Origin")
+        t0 = datetime.datetime(2024, 6, 1, 9, 0, tzinfo=datetime.timezone.utc)
+        for post, offset in ((1, 0), (2, 0), (3, 0)):
+            for channel, extra in ((self.a, 0), (self.b, 30)):
+                Message.objects.create(
+                    telegram_id=6000 + post * 10 + extra,
+                    channel=channel,
+                    forwarded_from=self.origin,
+                    fwd_from_channel_post=post,
+                    fwd_from_date=t0 - datetime.timedelta(days=1),
+                    date=t0 + datetime.timedelta(seconds=offset + extra),
+                )
+        self.result = compute_coordination([self.a.pk, self.b.pk], window_seconds=300, min_events=3)
+
+    def test_nodes_copy_main_dicts_and_carry_scores(self) -> None:
+        a_id, b_id = str(self.a.pk), str(self.b.pk)
+        graph_data = {
+            "nodes": [
+                {"id": a_id, "label": "A", "color": "255,0,0", "fans": 5},
+                {"id": b_id, "label": "B", "color": "0,0,255", "fans": 7},
+            ],
+            "edges": [],
+        }
+        positions = {a_id: (1.0, 2.0), b_id: (3.0, 4.0)}
+        coord_data = build_coordination_graph_data(graph_data, self.result, positions)
+        self.assertEqual(len(coord_data["nodes"]), 2)
+        node_a = next(n for n in coord_data["nodes"] if n["id"] == a_id)
+        self.assertEqual((node_a["x"], node_a["y"]), (1.0, 2.0))
+        self.assertEqual(node_a["fans"], 5)  # copied from the main graph's node dict
+        self.assertEqual(node_a["coordination_strength"], 3)
+        self.assertEqual(node_a["coordination_partners"], 1)
+        self.assertAlmostEqual(node_a["coordination_ratio"], 1.0)
+        # One tie, materialised in both directions, with a dimmed averaged colour.
+        self.assertEqual(len(coord_data["edges"]), 2)
+        sources = {e["source"] for e in coord_data["edges"]}
+        self.assertEqual(sources, {a_id, b_id})
+        for edge in coord_data["edges"]:
+            self.assertEqual(edge["weight"], 3.0)
+            self.assertEqual(len(edge["color"].split(",")), 3)
+
+
+class WriteCoordinationOutputsTests(TestCase):
+    """Integration: the coordination data dir + both viewer pages, against the real map templates."""
+
+    def setUp(self) -> None:
+        self.coord_graph_data = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "x": 0.0,
+                    "y": 1.0,
+                    "label": "A",
+                    "color": "255,0,0",
+                    "coordination_strength": 3,
+                    "coordination_partners": 1,
+                    "coordination_ratio": 1.0,
+                },
+                {
+                    "id": "2",
+                    "x": 2.0,
+                    "y": 3.0,
+                    "label": "B",
+                    "color": "0,0,255",
+                    "coordination_strength": 3,
+                    "coordination_partners": 1,
+                    "coordination_ratio": 0.5,
+                },
+            ],
+            "edges": [
+                {"source": "1", "target": "2", "weight": 3.0, "color": "95,0,95", "id": 0},
+                {"source": "2", "target": "1", "weight": 3.0, "color": "95,0,95", "id": 1},
+            ],
+        }
+        self.positions_3d = {"1": (0.0, 1.0, 2.0), "2": (3.0, 4.0, 5.0)}
+
+    def test_data_files_written_and_parseable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_files(
+                self.coord_graph_data,
+                self.positions_3d,
+                [("coordination_strength", "Coordinated co-forwards")],
+                tmp,
+                communities_data={"leiden": {"groups": [], "main_groups": {}}},
+            )
+            data_dir = os.path.join(tmp, "data_coordination")
+            with open(os.path.join(data_dir, "channel_position.json")) as f:
+                positions = json.load(f)
+            self.assertEqual(len(positions["nodes"]), 2)
+            self.assertEqual(len(positions["edges"]), 2)
+            with open(os.path.join(data_dir, "channel_position_3d.json")) as f:
+                positions_3d = json.load(f)
+            self.assertEqual(positions_3d["nodes"][0]["z"], 2.0)
+            with open(os.path.join(data_dir, "channels.json")) as f:
+                channels = json.load(f)
+            self.assertEqual(channels["total_pages_count"], 2)
+            self.assertEqual(channels["measures"][0][0], "coordination_strength")
+            self.assertEqual(channels["nodes"][0]["coordination_partners"], 1)
+            # The viewers unconditionally fetch communities.json — it must exist.
+            with open(os.path.join(data_dir, "communities.json")) as f:
+                communities = json.load(f)
+            self.assertIn("leiden", communities["strategies"])
+
+    def test_dir_name_selects_per_year_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_files(
+                self.coord_graph_data,
+                self.positions_3d,
+                [("coordination_strength", "Coordinated co-forwards")],
+                tmp,
+                dir_name="data_coordination_2023",
+            )
+            year_dir = os.path.join(tmp, "data_coordination_2023")
+            for name in ("channel_position.json", "channel_position_3d.json", "channels.json", "communities.json"):
+                self.assertTrue(os.path.exists(os.path.join(year_dir, name)), name)
+            # Absent communities_data still yields a parseable, empty payload.
+            with open(os.path.join(year_dir, "communities.json")) as f:
+                self.assertEqual(json.load(f), {"strategies": {}})
+
+    def test_timeline_json_lists_only_years_with_coordination(self) -> None:
+        entries = [
+            {"year": 2022, "has_coordination": True, "coordination_nodes": 4, "coordination_ties": 3},
+            {"year": 2023, "has_coordination": False},
+            {"year": 2024, "has_coordination": True, "coordination_nodes": 2, "coordination_ties": 1},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_timeline_json(entries, tmp)
+            with open(os.path.join(tmp, "data_coordination", "timeline.json")) as f:
+                timeline = json.load(f)
+        self.assertEqual([y["year"] for y in timeline["years"]], [2022, 2024])
+        self.assertTrue(all(y["has_graph"] for y in timeline["years"]))
+        self.assertEqual(timeline["years"][0]["edges"], 3)
+
+    def test_pages_written_from_real_templates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_pages(
+                tmp,
+                seo=False,
+                project_title="Test Project",
+                node_count=2,
+                tie_count=1,
+                strategy_labels={"labelgroup1": "Org"},
+            )
+            for page in ("coordination.html", "coordination3d.html"):
+                path = os.path.join(tmp, page)
+                self.assertTrue(os.path.exists(path), page)
+                with open(path) as f:
+                    content = f.read()
+                # Re-pointed at the coordination data dir, with the shims injected.
+                self.assertIn('window.DATA_DIR = "data_coordination/"', content)
+                self.assertIn("window.EXTRA_LAYOUTS = []", content)
+                self.assertIn('window.STRATEGY_LABELS = {"labelgroup1": "Org"}', content)
+                # Placeholders resolved and reworded for mutual ties.
+                self.assertNotIn("__NODE_COUNT__", content)
+                self.assertNotIn("__EDGE_COUNT__", content)
+                self.assertIn("mutual co-forwarding ties", content)
+                self.assertNotIn("directed edges", content)
+                # Titled after the project, still noindex without --seo.
+                self.assertIn("<title>Test Project — Coordination</title>", content)
+                self.assertIn('content="noindex"', content)
 
 
 # ---------------------------------------------------------------------------

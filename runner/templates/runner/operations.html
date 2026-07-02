@@ -925,6 +925,34 @@
           </fieldset>
           </div>
 
+          <div class="ops-fieldset-row">
+          <fieldset class="ops-fieldset">
+            <legend>Coordination Analysis
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Temporal co-forwarding coordination: channels are tied when they repeatedly forward the same origin message within a short time window. Generates data_coordination/ plus two dedicated interactive maps — coordination.html (2D) and coordination3d.html (3D) — with their own force-directed layouts. See docs/coordination-analysis.md."></i>
+            </legend>
+            <div class="ops-flags">
+              <label class="ops-flag"><input type="checkbox" name="coordination" {% if ad.SA_COORDINATION %}checked{% endif %}>Coordination maps (2D + 3D)<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Builds the co-forwarding coordination network and renders it as dedicated 2D and 3D maps. A separate layer from the citation graph: it measures synchrony, not amplification volume."></i></label>
+            </div>
+            <div class="ops-params mt-2">
+              <div class="ops-param">
+                <label for="coordination_window">Window (seconds)
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Two forwards of the same origin message count as one coordinated event when they land within this many seconds of each other. Lower = stricter (automation-scale synchrony); higher also catches slower, human-paced pushes. Default: 300."></i>
+                </label>
+                <input type="number" name="coordination_window" id="coordination_window" placeholder="{{ ad.SA_COORDINATION_WINDOW }}" value="{{ ad.SA_COORDINATION_WINDOW }}" min="1" max="86400">
+              </div>
+              <div class="ops-param">
+                <label for="coordination_min_events">Min shared origins
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="A channel pair keeps its coordination tie only after co-forwarding at least this many distinct origin messages within the window. Repetition across different origins is what separates coordination from coincidence on viral content. Default: 3."></i>
+                </label>
+                <input type="number" name="coordination_min_events" id="coordination_min_events" placeholder="{{ ad.SA_COORDINATION_MIN_EVENTS }}" value="{{ ad.SA_COORDINATION_MIN_EVENTS }}" min="1" max="1000">
+              </div>
+            </div>
+          </fieldset>
+          </div>
+
           {% elif task.name == "compare_analysis" %}
           <fieldset class="ops-fieldset">
             <legend>Target export</legend>
