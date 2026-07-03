@@ -1,5 +1,5 @@
 # Changelog
-## [0.26] - To be announced
+## [0.26] - 2026-07-03
 *Organizations are generalised into label groups, selectable in structural analysis as partitions. Sankey diagrams and communities overlapping analysis. Temporal co-forwarding coordination layer.*
 
 ### New features
