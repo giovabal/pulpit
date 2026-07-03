@@ -320,6 +320,87 @@ class DetectConsensusTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# community.py — detect_leiden_temporal
+# ---------------------------------------------------------------------------
+
+
+class DetectLeidenTemporalTests(TestCase):
+    """Interslice-coupled temporal detection over synthetic year slices (real leidenalg)."""
+
+    def _year_graph(self, edges: list[tuple[str, str]], isolated: tuple[str, ...] = ()) -> "Any":
+        graph = nx.DiGraph()
+        for s, t in edges:
+            graph.add_edge(s, t, weight=1.0)
+        graph.add_nodes_from(isolated)
+        return graph
+
+    def _two_blocks(self) -> list[tuple[str, str]]:
+        return [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")]
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_stable_ids_across_years(self, _mock: MagicMock) -> None:
+        from network.community import detect_leiden_temporal
+
+        year_graphs = {2020: self._year_graph(self._two_blocks()), 2021: self._year_graph(self._two_blocks())}
+        per_year, plurality, palette = detect_leiden_temporal(year_graphs, "SomePalette", 0.3, 1.0)
+        self.assertEqual(set(per_year), {2020, 2021})
+        for node in "abcdef":
+            # Same structure in both years + identity coupling → same community id per node.
+            self.assertEqual(per_year[2020][node], per_year[2021][node])
+            self.assertEqual(plurality[node], per_year[2020][node])
+        self.assertEqual(per_year[2020]["a"], per_year[2020]["b"])
+        self.assertEqual(per_year[2020]["d"], per_year[2020]["e"])
+        self.assertNotEqual(per_year[2020]["a"], per_year[2020]["d"])
+        for cid in plurality.values():
+            self.assertIn(cid, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_coupling_carries_an_isolated_year_through(self, _mock: MagicMock) -> None:
+        # 'a' has no edges in 2021 but exists; with ω=1 the identity link keeps it in its
+        # 2020 community — the persistence the method is for. With ω=0 the years decouple
+        # and isolated 'a' falls out into its own community.
+        from network.community import detect_leiden_temporal
+
+        year_graphs = {
+            2020: self._year_graph(self._two_blocks()),
+            2021: self._year_graph(
+                [("b", "c"), ("c", "b"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")], isolated=("a",)
+            ),
+        }
+        per_year, _, _ = detect_leiden_temporal(year_graphs, "SomePalette", 0.3, 1.0)
+        self.assertEqual(per_year[2021]["a"], per_year[2021]["b"])
+        per_year_uncoupled, _, _ = detect_leiden_temporal(year_graphs, "SomePalette", 0.3, 0.0)
+        self.assertNotEqual(per_year_uncoupled[2021]["a"], per_year_uncoupled[2021]["b"])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_plurality_tie_breaks_to_latest_year(self, _mock: MagicMock) -> None:
+        # 'x' spends one year with the a-block and one with the d-block (1–1 tie): the
+        # full-range summary takes the latest year's assignment.
+        from network.community import detect_leiden_temporal
+
+        base = self._two_blocks()
+        year_graphs = {
+            2020: self._year_graph(base + [("x", "a"), ("a", "x"), ("x", "b"), ("b", "x")]),
+            2021: self._year_graph(base + [("x", "d"), ("d", "x"), ("x", "e"), ("e", "x")]),
+        }
+        per_year, plurality, _ = detect_leiden_temporal(year_graphs, "SomePalette", 0.3, 0.0)
+        if per_year[2020]["x"] != per_year[2021]["x"]:  # decoupled years → genuinely different homes
+            self.assertEqual(plurality["x"], per_year[2021]["x"])
+
+    def test_requires_two_year_slices(self) -> None:
+        from network.community import detect_leiden_temporal
+
+        with self.assertRaisesRegex(ValueError, "at least two"):
+            detect_leiden_temporal({2020: self._year_graph(self._two_blocks())}, "SomePalette", 0.3, 1.0)
+
+    def test_detect_rejects_temporal_token(self) -> None:
+        from network.community import detect
+
+        with self.assertRaisesRegex(ValueError, "dispatched separately"):
+            detect(parse_strategies(["LEIDEN_TEMPORAL"])[0], "vaporwave", nx.DiGraph(), {})
+
+
+# ---------------------------------------------------------------------------
 # community.py — detect_kcore
 # ---------------------------------------------------------------------------
 
@@ -543,15 +624,19 @@ class StrategyParserTests(TestCase):
 
     def test_all_expands_to_every_strategy(self) -> None:
         # ALL expands to every algorithm strategy plus one LABELGROUP<id> per partition group
-        # (the seed migration creates the primary "Organization" partition group). The metadata
-        # LABELGROUP tokens are DB-derived, so build the expected set from the current partitions.
+        # (the seed migration creates the primary "Organization" partition group) — minus
+        # EXCLUDED_FROM_ALL (LEIDEN_TEMPORAL needs a year timeline, so ALL must not imply it).
+        # The metadata LABELGROUP tokens are DB-derived, so build the expected set from the
+        # current partitions.
+        from network.community import EXCLUDED_FROM_ALL
         from webapp.models import LabelGroup
 
         names = {i.name for i in parse_strategies(["ALL"])}
-        expected = set(VALID_STRATEGIES) | {
+        expected = (set(VALID_STRATEGIES) - EXCLUDED_FROM_ALL) | {
             f"LABELGROUP{pk}" for pk in LabelGroup.objects.filter(is_partition=True).values_list("pk", flat=True)
         }
         self.assertEqual(names, expected)
+        self.assertNotIn("LEIDEN_TEMPORAL", names)
 
     def test_bare_token_inherits_default(self) -> None:
         (inst,) = parse_strategies(["LEIDEN_CPM"], defaults={"LEIDEN_CPM": {"resolution": 0.02}})
@@ -651,6 +736,40 @@ class StrategyParserTests(TestCase):
         self.assertNotIn("LABELPROPAGATION", VALID_STRATEGIES)
         with self.assertRaises(ValueError):
             parse_strategies(["LABELPROPAGATION"])
+
+    def test_leiden_temporal_token_key_and_label(self) -> None:
+        # Bare token inherits γ=0.05 and ω=1.0; both parameters ride in the key and the label.
+        insts = parse_strategies(["LEIDEN_TEMPORAL", "LEIDEN_TEMPORAL(resolution=0.01,interslice=0.5)"])
+        self.assertEqual(
+            [i.key for i in insts],
+            ["leiden_temporal_resolution_0_05_interslice_1_0", "leiden_temporal_resolution_0_01_interslice_0_5"],
+        )
+        self.assertEqual(canonical_strategy_key(insts[0].key), "leiden_temporal")
+        self.assertEqual(
+            strategy_display_label("leiden_temporal_resolution_0_05_interslice_1_0"),
+            "Leiden temporal (resolution=0.05, interslice=1.0)",
+        )
+
+    def test_sbm_assortative_token_key_and_label(self) -> None:
+        # Bare token has no visible params (refine defaults empty) → bare stable key; MCMC suffixes.
+        insts = parse_strategies(["SBM_ASSORTATIVE", "SBM_ASSORTATIVE(refine=MCMC)"])
+        self.assertEqual([i.key for i in insts], ["sbm_assortative", "sbm_assortative_refine_mcmc"])
+        self.assertEqual(canonical_strategy_key("sbm_assortative_refine_mcmc"), "sbm_assortative")
+        self.assertEqual(strategy_display_label("sbm_assortative"), "Assortative SBM")
+        self.assertEqual(strategy_display_label("sbm_assortative_refine_mcmc"), "Assortative SBM (refine=mcmc)")
+        from network.community import sbm_confidence_display_label, sbm_confidence_key
+
+        self.assertEqual(sbm_confidence_key("sbm_assortative_refine_mcmc"), "sbm_confidence_assortative_refine_mcmc")
+        self.assertEqual(
+            sbm_confidence_display_label("sbm_assortative_refine_mcmc"),
+            "Assortative SBM confidence (refine=mcmc)",
+        )
+
+    def test_temporal_not_consensus_eligible(self) -> None:
+        from network.community import consensus_eligible
+
+        self.assertFalse(consensus_eligible("LEIDEN_TEMPORAL"))
+        self.assertTrue(consensus_eligible("SBM_ASSORTATIVE"))
 
     def test_sbm_without_graph_tool_raises_value_error(self) -> None:
         # When graph-tool is absent, detect() surfaces a clear ValueError (caught as CommandError upstream).
@@ -753,6 +872,62 @@ class DetectSbmValidationTests(TestCase):
 
         with self.assertRaisesRegex(ValueError, "EXPONENTIAL.*positive"):
             detect_sbm(self._graph(0.0), "vaporwave", "FLAT", weights="EXPONENTIAL")
+
+
+class DetectSbmAssortativeTests(TestCase):
+    """Planted-partition detector — live tests skipped unless graph-tool is installed."""
+
+    def _graph(self) -> "Any":
+        graph = nx.DiGraph()
+        for s, t in [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")]:
+            graph.add_edge(s, t, weight=1.0)
+        return graph
+
+    def test_without_graph_tool_raises_value_error(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is not None:
+            self.skipTest("graph-tool installed — error path not exercised")
+        from network.community import detect_sbm_assortative
+
+        with self.assertRaisesRegex(ValueError, "graph-tool"):
+            detect_sbm_assortative(self._graph(), "vaporwave")
+
+    def test_returns_partition_over_all_nodes(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        from network.community import detect_sbm_assortative
+
+        community_map, palette, confidence = detect_sbm_assortative(self._graph(), "vaporwave")
+        self.assertEqual(set(community_map), set(self._graph().nodes()))
+        self.assertEqual(set(community_map.values()), set(palette))
+        self.assertIsNone(confidence)
+
+    def test_deterministic_under_fixed_seed(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        from network.community import detect_sbm_assortative
+
+        first, _, _ = detect_sbm_assortative(self._graph(), "vaporwave")
+        second, _, _ = detect_sbm_assortative(self._graph(), "vaporwave")
+        self.assertEqual(first, second)
+
+    def test_mcmc_refine_returns_confidence(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        from network.community import detect_sbm_assortative
+
+        community_map, _, confidence = detect_sbm_assortative(self._graph(), "vaporwave", refine="MCMC")
+        self.assertEqual(set(confidence), set(community_map))
+        for value in confidence.values():
+            self.assertGreaterEqual(value, 0.0)
+            self.assertLessEqual(value, 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1607,6 +1782,84 @@ class CopyChannelMediaTests(TestCase):
 _EXPORT_CMD = "network.management.commands.structural_analysis"
 
 
+class TemporalPrecomputeTests(TestCase):
+    """_compute_temporal_partitions over real messages in two calendar years."""
+
+    def setUp(self) -> None:
+        label = make_label("Org1", color="#FF0000")
+        self.channels = [make_channel(telegram_id=i, label=label, title=f"C{i}") for i in range(1, 5)]
+        telegram_id = 100
+        # Two mutual-forward pairs, repeated in 2023 and 2024: {C1,C2} and {C3,C4}.
+        for year in (2023, 2024):
+            for src, dst in [
+                (self.channels[0], self.channels[1]),
+                (self.channels[1], self.channels[0]),
+                (self.channels[2], self.channels[3]),
+                (self.channels[3], self.channels[2]),
+            ]:
+                telegram_id += 1
+                Message.objects.create(
+                    telegram_id=telegram_id,
+                    channel=dst,
+                    forwarded_from=src,
+                    date=datetime.datetime(year, 6, 1, tzinfo=datetime.timezone.utc),
+                )
+
+    def test_precompute_builds_coupled_per_year_maps(self) -> None:
+        from django.core.management.base import OutputWrapper
+
+        from network.management.commands.structural_analysis import Command
+
+        cmd = Command()
+        cmd.stdout = OutputWrapper(io.StringIO())
+        parser = cmd.create_parser("manage.py", "structural_analysis")
+        options = vars(
+            parser.parse_args(
+                [
+                    "--community-strategies",
+                    "LEIDEN,LEIDEN_TEMPORAL",
+                    "--timeline-step",
+                    "year",
+                    "--edge-weight-strategy",
+                    "PARTIAL_REFERENCES",
+                ]
+            )
+        )
+        opts = cmd._resolve_options(options)
+        temporal_instances = [i for i in opts.communities_strategy if i.name == "LEIDEN_TEMPORAL"]
+        results = cmd._compute_temporal_partitions(opts, temporal_instances)
+
+        (key,) = [inst.key for inst in temporal_instances]
+        per_year, plurality, palette = results[key]
+        self.assertEqual(set(per_year), {2023, 2024})
+        pk1, pk2, pk3, pk4 = (str(c.pk) for c in self.channels)
+        for pk in (pk1, pk2, pk3, pk4):
+            # Same structure both years + identity coupling → stable ids, and the plurality
+            # summary agrees with them.
+            self.assertEqual(per_year[2023][pk], per_year[2024][pk])
+            self.assertEqual(plurality[pk], per_year[2023][pk])
+        self.assertEqual(per_year[2023][pk1], per_year[2023][pk2])
+        self.assertEqual(per_year[2023][pk3], per_year[2023][pk4])
+        self.assertNotEqual(per_year[2023][pk1], per_year[2023][pk3])
+        for cid in plurality.values():
+            self.assertIn(cid, palette)
+
+    def test_precompute_fails_with_single_year(self) -> None:
+        from django.core.management.base import CommandError, OutputWrapper
+
+        from network.management.commands.structural_analysis import Command
+
+        Message.objects.filter(date__year=2024).delete()
+        cmd = Command()
+        cmd.stdout = OutputWrapper(io.StringIO())
+        parser = cmd.create_parser("manage.py", "structural_analysis")
+        options = vars(parser.parse_args(["--community-strategies", "LEIDEN_TEMPORAL", "--timeline-step", "year"]))
+        opts = cmd._resolve_options(options)
+        temporal_instances = list(opts.communities_strategy)
+        with self.assertRaisesRegex(CommandError, "at least two"):
+            cmd._compute_temporal_partitions(opts, temporal_instances)
+
+
 def _patch_export_pipeline() -> list:
     """Return a list of patch decorators for all structural_analysis submodule calls."""
     targets = [
@@ -1960,6 +2213,32 @@ class ExportNetworkCommandTests(TestCase):
             call_command(
                 "structural_analysis",
                 community_strategies="LEIDEN,KCORE,CONSENSUS",
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
+
+    def test_temporal_requires_year_timeline(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaisesRegex(CommandError, "timeline-step year"):
+            call_command(
+                "structural_analysis",
+                community_strategies="LEIDEN,LEIDEN_TEMPORAL",
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
+
+    def test_temporal_not_eligible_as_consensus_input(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        # LEIDEN + LEIDEN_TEMPORAL = one eligible input only (temporal doesn't count).
+        with self.assertRaisesRegex(CommandError, "consensus-eligible"):
+            call_command(
+                "structural_analysis",
+                community_strategies="LEIDEN,LEIDEN_TEMPORAL,CONSENSUS",
+                timeline_step="year",
                 stdout=io.StringIO(),
                 stderr=io.StringIO(),
             )

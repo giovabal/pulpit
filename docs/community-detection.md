@@ -22,9 +22,11 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Leiden | `LEIDEN` | Modularity | No |
 | Leiden (directed) | `LEIDEN_DIRECTED` | Modularity | Yes |
 | Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
+| Leiden temporal | `LEIDEN_TEMPORAL(resolution=γ, interslice=ω)` | Multislice CPM over the timeline years | No |
 | Louvain | `LOUVAIN` | Modularity (classic baseline) | No |
 | K-core | `KCORE` | Structural hierarchy | No |
 | Stochastic block model | `SBM(mode=…, weights=…, refine=…)` | Generative block model | Yes |
+| Assortative SBM | `SBM_ASSORTATIVE(refine=…)` | Generative planted partition | No |
 | Consensus | `CONSENSUS(threshold=τ)` | Cross-method agreement | Inherited from inputs |
 
 (`LABELPROPAGATION` was removed in v0.27: it ignored both edge weights *and* direction, had a documented runaway-to-one-giant-community failure mode on dense cores, and its cheap-baseline role is better served by `CONSENSUS`. Old saved configurations that still name it load cleanly — the token is dropped on read.)
@@ -107,6 +109,30 @@ A bare `LEIDEN_CPM` starts at γ = 0.05; override per instance, or change the de
 
 ---
 
+## Leiden temporal
+
+*Leiden temporal partitions the whole timeline at once: each year is a layer, every channel is tied to itself across adjacent years, and communities keep the same identity — and colour — from year to year. Persistence, splits, and merges become properties of the partition instead of guesses read off the year switcher.*
+
+On a year-timeline export every other strategy partitions each year *independently*: "community 3" in 2021 has nothing to do with "community 3" in 2022, and continuity has to be reconstructed visually from the [Community flow](#community-flow-across-years) ribbons. Multislice community detection (Mucha, Richardson, Macon, Porter & Onnela 2010) fixes this at the source. Each year's citation graph becomes one **slice** (the same symmetrised, weighted projection `LEIDEN_CPM` uses); an **identity link** of weight ω (`interslice`, default 1.0) ties each channel to itself in adjacent years; and a single optimisation of the CPM objective (γ = `resolution`, as in Leiden CPM) runs over all slices at once. The identity link connects a channel only to *itself* across time — no multi-hop flow claim — so the method sits comfortably inside the one-degree model.
+
+The result, in Pulpit's outputs:
+
+- **Stable identities.** One global community-id space (and one palette) spans every year: the same cohort keeps its number and colour across the year switcher, and the Community flow alluvial for this strategy becomes an evolution diagram of persistent objects rather than independently re-coloured snapshots.
+- **A full-range summary column.** The full-range map and tables show each channel's *plurality* community — the one it belonged to for most of the timeline, ties broken by the latest year. Read it as "this channel's home community over the study period", not as a detection of the full-range graph (for that reason the strategy is excluded from the [consensus](#consensus) inputs and the consensus matrix).
+- **Tunable smoothing.** ω = 0 decouples the years (each partitioned alone, but still in one id space); raising ω makes identities stickier — a channel isolated or briefly absent in one year inherits its neighbouring years' community instead of falling out. Add the strategy more than once (`LEIDEN_TEMPORAL(resolution=0.05,interslice=0.5)`, `…(interslice=2)`) to see which transitions survive stronger smoothing: splits that persist at high ω are real reorganisations, not year-boundary noise.
+
+**Requires `--timeline-step year`** (the strategy couples the per-year slices; without a timeline there is nothing to couple) and is deliberately **not included in `ALL`** — request it explicitly. Computed once over all years before the exports, then applied to the full-range and per-year outputs; with `--community-backbone-alpha` each year's slice is backbone-filtered first, like every other detection.
+
+**References:**
+- Mucha, P.J., Richardson, T., Macon, K., Porter, M.A. & Onnela, J.-P. (2010) "Community structure in time-dependent, multiscale, and multiplex networks." *Science* 328(5980), 876–878. [doi:10.1126/science.1184819](https://doi.org/10.1126/science.1184819) — the multislice framework with identity interslice coupling.
+- Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the optimiser (leidenalg's multiplex machinery implements the Mucha et al. objective).
+
+**In practice:** this is the strategy for longitudinal questions — did the movement's blocs survive the platform's deplatforming wave, did two communities merge after an event, when did a splinter group actually split? Where the per-year strategies + alluvial show you *that* membership changed, Leiden temporal *decides* what counts as the same community across years, using the data on both sides of the boundary. Cross-check its year columns against plain per-year Leiden in the partition-comparison matrices: large disagreement in one year means the temporal coupling is smoothing over a genuine single-year anomaly — which is itself worth investigating.
+
+**Example.** A monitoring project tracks a movement across 2020–2023. Per-year Leiden shows 2021 splitting one bloc into two clusters that the 2022 partition seems to re-merge — but with independently numbered communities nobody can say whether the 2022 group is "the same" bloc re-formed. Leiden temporal returns one community that persists 2020→2023 plus a second that exists only in 2021: the split was a one-year fracture (a leadership dispute, as the messages confirm), and the re-merge is now a property of the partition, not an interpretation of ribbon widths.
+
+---
+
 ## Louvain
 
 *Louvain groups channels that connect to each other more than chance would predict — the classic, field-standard community detector. Kept mainly for comparison with the large body of older studies that report Louvain results; for new analyses, [Leiden](#leiden) (or [Leiden (directed)](#leiden-directed)) is the better choice.*
@@ -186,13 +212,36 @@ A weighted fit separates blocks the binary fit cannot: forty channels that each 
 
 ---
 
+## Assortative SBM
+
+*The assortative SBM answers the same question as Leiden — where are the cohesive blocs? — but as a statistical model: it draws a community boundary only where the data actually support one. A partition boundary that survives here is evidence, not an optimiser's preference.*
+
+Modularity-family detectors always return *some* partition — including on random graphs, whose fluctuations alone produce high-modularity divisions (Guimerà, Sales-Pardo & Amaral 2004): the method has no way to say "there is nothing here". The Bayesian **planted partition model** (Zhang & Peixoto 2020) closes that gap. It is the [SBM](#stochastic-block-model) constrained to *assortative* structure — one within-community citation rate, one between-communities rate — fitted by the same description-length machinery, so it inherits the SBM's statistical discipline while answering Leiden's question. Zhang & Peixoto show the approach "succeeds in finding statistically significant assortative modules … unlike alternatives such as modularity maximization, which systematically overfits", can uncover any number of communities the evidence supports, and has **no resolution limit**.
+
+Pulpit fits it on the **undirected W+Wᵀ projection** (assortativity is a symmetric notion — the same projection the Leiden family uses), **unweighted** (binary citation structure, invariant to `--edge-weight-strategy`), parameter-free, and seeded. `refine=MCMC` works exactly as on the SBM: posterior sampling, max-marginal communities, and a per-channel **Assortative SBM confidence** column (share of posterior samples agreeing) in the channel table and every export.
+
+The three-way division of labour: **Leiden** = descriptive cohesive communities (always returns a partition, fast, interpretable); **SBM** = inferential *role* blocks (source/amplifier structure cohesion methods can't see); **assortative SBM** = inferential *cohesive* communities (Leiden's question, with statistical support). When Leiden reports twelve communities and the assortative SBM reports five, the difference is a measurement: seven of Leiden's divisions don't have statistical evidence behind them at this data size.
+
+**Dependency.** Like the SBM, requires `graph-tool` (conda-forge / system packages, **not pip**); a missing package fails with a clear message and the other strategies are unaffected.
+
+**References:**
+- Zhang, L. & Peixoto, T.P. (2020) "Statistical inference of assortative community structures." *Physical Review Research* 2, 043271. [doi:10.1103/PhysRevResearch.2.043271](https://doi.org/10.1103/PhysRevResearch.2.043271) — the Bayesian planted-partition model and the modularity-overfits result.
+- Guimerà, R., Sales-Pardo, M. & Amaral, L.A.N. (2004) "Modularity from fluctuations in random graphs and complex networks." *Physical Review E* 70, 025101. [doi:10.1103/PhysRevE.70.025101](https://doi.org/10.1103/PhysRevE.70.025101) — random graphs have high-modularity partitions, the failure mode this strategy exists to avoid.
+- Peixoto, T.P. (2023) *Descriptive vs. Inferential Community Detection in Networks.* Cambridge University Press. [doi:10.1017/9781009118897](https://doi.org/10.1017/9781009118897) — the descriptive/inferential distinction this strategy operationalises.
+
+**In practice:** run it alongside Leiden whenever the communities will be *published or contested* — for an observatory whose outputs name real organisations, "there is statistical evidence for this boundary" is a materially stronger claim than "the optimiser drew it". High ARI between Leiden and the assortative SBM in the comparison matrices means the descriptive partition rests on real structure; a Leiden community the assortative SBM dissolves was likely noise or resolution-limit artefact. Pair with `refine=MCMC` and sort by the confidence column to find the channels whose community membership the data genuinely pin down.
+
+**Example.** Leiden partitions a 250-channel network into nine communities, three of them small (6–10 channels each). The assortative SBM returns six: the three small ones are absorbed, and their former members carry low assignment confidence under MCMC refinement. The write-up reports six statistically supported communities — and flags the three dissolved groupings as candidate substructure that the current data cannot yet distinguish from noise, to be re-tested after the next crawl.
+
+---
+
 ## Consensus
 
 *The consensus strategy turns "which groupings survive across methods?" from a visual judgement into a partition of its own: channels are grouped together only when at least a threshold share of the other selected algorithms agree they belong together.*
 
 Every detector in this catalogue embodies one notion of community, and each can be led astray by its own blind spot — modularity's resolution limit, a weighting choice, one algorithm's tie-breaking. Consensus clustering (Lancichinetti & Fortunato 2012) hedges across them: take the partitions the run has already computed, count for every pair of channels the fraction of partitions that co-assign them (the **co-assignment matrix**), keep only pairs at or above the **threshold τ** (`threshold`, default 0.5 — a majority), and cluster the resulting agreement graph (Pulpit uses the same seeded Leiden machinery as `LEIDEN`, weighted by the agreement fractions). The output is an ordinary partition: it colours the map, fills a column in every table and export, and — most usefully — joins the [partition-comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi), where "how much of the analyst's labelling survives cross-method agreement" becomes a single ARI/AMI number.
 
-**Inputs.** All other selected *algorithmic* strategies feed it — the Leiden family, Louvain, the SBM instances — with two exclusions: `KCORE` (a shell decomposition, not a community detection) and your `LABELGROUP<id>` partitions (the consensus should stay a purely structural result you can then compare *against* the labels). At least **two eligible inputs** must be selected or the run refuses to start. Add the strategy more than once with different thresholds (`CONSENSUS(threshold=0.5),CONSENSUS(threshold=0.9)`) to see agreement cores tighten as τ rises. Channels that no sufficient coalition of algorithms can place end up as singletons — an honest "no consensus" rather than a forced assignment.
+**Inputs.** All other selected *algorithmic* strategies feed it — the Leiden family, Louvain, the SBM and assortative-SBM instances — with three exclusions: `KCORE` (a shell decomposition, not a community detection), `LEIDEN_TEMPORAL` (its full-range column is a plurality summary across timeline slices, not an independent detection of this graph), and your `LABELGROUP<id>` partitions (the consensus should stay a purely structural result you can then compare *against* the labels). At least **two eligible inputs** must be selected or the run refuses to start. Add the strategy more than once with different thresholds (`CONSENSUS(threshold=0.5),CONSENSUS(threshold=0.9)`) to see agreement cores tighten as τ rises. Channels that no sufficient coalition of algorithms can place end up as singletons — an honest "no consensus" rather than a forced assignment.
 
 **Adaptation note.** Lancichinetti & Fortunato iterate their procedure — recluster the co-assignment matrix repeatedly until it turns block-diagonal — because their inputs are many runs of one *stochastic* algorithm. Pulpit's inputs are deterministic (every strategy is seeded), so after the first clustering pass the procedure is at a fixed point; the single pass Pulpit runs is the faithful specialisation, not a shortcut. This is *method* consensus — one run each of different algorithms, in the lineage of ensemble practice in political-network research (e.g. Evkoski et al. 2021's Ensemble Louvain) — rather than *run* consensus over stochastic restarts.
 
@@ -281,7 +330,7 @@ This is the per-pair, per-community companion to the whole-graph agreement score
 
 When the export was built with a year timeline (`--timeline-step year`; see [Workflow § Timeline export](workflow.md#timeline-see-how-the-network-changed-over-time)), the community table's full-range (**All**) view shows, beneath each strategy's table, a **Community flow** alluvial diagram — one column per year, that year's communities stacked as boxes, and ribbons carrying the channels that moved from one year's community into the next. Ribbon thickness is proportional to the number of channels; hovering a ribbon or box gives the exact count, and **clicking a ribbon lists the channels travelling along that flow** beneath the diagram as channel cards in the `/channels/` layout.
 
-**Read continuity from the ribbons, not the colours.** Each year is partitioned *independently*, so a community's label, colour, and position carry no meaning across years — "community 3" in 2021 has nothing to do with "community 3" in 2022. What is meaningful is how a year's box flows into the next:
+**Read continuity from the ribbons, not the colours.** Each year is partitioned *independently*, so a community's label, colour, and position carry no meaning across years — "community 3" in 2021 has nothing to do with "community 3" in 2022. The one exception is [`LEIDEN_TEMPORAL`](#leiden-temporal), whose whole point is a shared id space: for that strategy the labels and colours *are* stable across years, and its alluvial reads as the evolution of persistent communities. For every other strategy, what is meaningful is how a year's box flows into the next:
 
 - **One thick ribbon** leaving a box → that cohort stayed together (whatever it was re-labelled). The community persisted.
 - **A box fanning into several ribbons** → the community fragmented; its members dispersed into different clusters the following year.
@@ -303,6 +352,8 @@ Box colours come from each year's own community palette; a ribbon takes its **so
 | Direction of citation matters | `SBM` (and `LEIDEN_DIRECTED` as a sensitivity check) |
 | Find the ideological core vs. periphery | `KCORE` |
 | Group channels by structural *role* (incl. source/amplifier, non-cohesive groups) | `SBM` |
+| Cohesive communities with statistical support (publishable boundaries) | `SBM_ASSORTATIVE` |
+| Track communities across years with stable identities | `LEIDEN_TEMPORAL` (+ `--timeline-step year`) |
 | Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
 | Reproduce / compare against an older study's classic modularity baseline | `LOUVAIN` (prefer `LEIDEN` for new work) |
 | One robust partition where the methods agree | `CONSENSUS` (with ≥2 other algorithmic strategies) |

@@ -213,6 +213,37 @@ def _date_window_filter(start_date: datetime.date | None, end_date: datetime.dat
     return out
 
 
+def _timeline_year_range(start_date: datetime.date | None, end_date: datetime.date | None) -> "tuple[int, int] | None":
+    """First/last calendar year of the timeline export, or ``None`` when no messages exist.
+
+    localdate(): the per-year exports filter messages by TIME_ZONE calendar days
+    (``date__date__gte/lte``), so the bounds must use the same convention — a newest message in
+    the next *local* year past the UTC max would otherwise appear in no year export at all.
+    Shared by the timeline loop and the LEIDEN_TEMPORAL precompute so both walk identical years.
+    """
+    year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
+    min_date, max_date = year_agg["min_date"], year_agg["max_date"]
+    if min_date is None:
+        return None
+    min_local, max_local = timezone.localdate(min_date), timezone.localdate(max_date)
+    first_year = max(min_local.year, start_date.year) if start_date else min_local.year
+    last_year = min(max_local.year, end_date.year) if end_date else max_local.year
+    return first_year, last_year
+
+
+def _clamp_year_window(
+    year: int, window_start: datetime.date | None, window_end: datetime.date | None
+) -> tuple[datetime.date, datetime.date]:
+    """Clamp a calendar year to the user's --startdate/--enddate window (shared with the year loop)."""
+    start_date = datetime.date(year, 1, 1)
+    end_date = datetime.date(year, 12, 31)
+    if window_start and window_start > start_date:
+        start_date = window_start
+    if window_end and window_end < end_date:
+        end_date = window_end
+    return start_date, end_date
+
+
 def _atomic_publish(staging: str, final_target: str) -> None:
     """Atomically swap ``staging`` into ``final_target``.
 
@@ -538,13 +569,19 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, KCORE, SBM, CONSENSUS, "
+                "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LEIDEN_TEMPORAL, LOUVAIN, KCORE, SBM, "
+                "SBM_ASSORTATIVE, CONSENSUS, "
                 "LABELGROUP<id> (the manual partition induced by partition LabelGroup <id>), ALL. "
                 "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
+                "LEIDEN_TEMPORAL(resolution=…, interslice=…) couples the per-year timeline slices into one "
+                "temporal partition with stable community ids across years (Mucha et al. 2010); requires "
+                "--timeline-step year and is NOT included in ALL. "
                 "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED, "
-                "weights=POISSON|EXPONENTIAL, refine=MCMC and requires graph-tool (conda/apt, not pip). "
+                "weights=POISSON|EXPONENTIAL, refine=MCMC; SBM_ASSORTATIVE (Bayesian planted partition, "
+                "statistically supported cohesive communities) takes refine=MCMC; both require graph-tool "
+                "(conda/apt, not pip). "
                 "CONSENSUS(threshold=0.5) is the Lancichinetti-Fortunato consensus of the other selected "
-                "algorithmic strategies (KCORE excluded) and needs at least two of them. "
+                "algorithmic strategies (KCORE and LEIDEN_TEMPORAL excluded) and needs at least two of them. "
                 "LOUVAIN is the classic modularity baseline kept for comparison with older studies; "
                 "prefer LEIDEN / LEIDEN_DIRECTED otherwise. "
                 "Default: no community detection."
@@ -1037,15 +1074,15 @@ class Command(BaseCommand):
                 "--interest-structural requires at least one community strategy in --community-strategies."
             )
         # CONSENSUS aggregates the other algorithmic partitions — fail up-front when fewer than two
-        # eligible inputs are selected, mirroring detect_consensus (KCORE and the manual label-group
-        # partitions don't count; neither does another CONSENSUS instance).
+        # eligible inputs are selected, mirroring detect_consensus (KCORE, LEIDEN_TEMPORAL, and the
+        # manual label-group partitions don't count; neither does another CONSENSUS instance).
         if any(i.name == "CONSENSUS" for i in communities_strategy):
             eligible = [i for i in communities_strategy if community.consensus_eligible(i.name)]
             if len(eligible) < 2:
                 raise CommandError(
                     "CONSENSUS needs at least two consensus-eligible input strategies in "
-                    "--community-strategies (algorithmic strategies other than KCORE; "
-                    f"currently: {len(eligible)})."
+                    "--community-strategies (algorithmic strategies other than KCORE and "
+                    f"LEIDEN_TEMPORAL; currently: {len(eligible)})."
                 )
         # A measure basis names a strategy *family*; check it against the selected strategy names.
         strategy_names = {i.name for i in communities_strategy}
@@ -1102,6 +1139,8 @@ class Command(BaseCommand):
         edge_list: list,
         communities_strategy: list[str],
         options: dict,
+        temporal_results: "dict[str, tuple] | None" = None,
+        year: "int | None" = None,
     ) -> tuple[dict[str, tuple], "nx.DiGraph | None"]:
         """Run all community detection strategies and apply results to the graph.
 
@@ -1111,6 +1150,12 @@ class Command(BaseCommand):
         ``None`` — the caller forwards it to ``compute_community_metrics`` so reported
         modularity matches what was optimised. Label-group partitions read the channels'
         labels, not the graph, so the backbone never affects them.
+
+        ``temporal_results`` carries the LEIDEN_TEMPORAL precompute
+        (``{instance.key: (per_year_maps, plurality_map, palette)}``, from
+        ``_compute_temporal_partitions``); temporal instances are applied by lookup — the
+        plurality map on the full-range pass (``year=None``), the year's slice map on a
+        per-year pass — never via ``community.detect``.
         """
         strategy_results: dict[str, tuple] = {}
         detection_graph: "nx.DiGraph | None" = None
@@ -1126,10 +1171,12 @@ class Command(BaseCommand):
                 f"{detection_graph.number_of_edges()}/{graph.number_of_edges()} edges kept"
             )
             self.stdout.flush()
-        # CONSENSUS aggregates the other strategies' partitions, so it runs in a second phase
-        # after every direct detection has finished — its position in the ordered token list only
-        # affects display order, never compute order.
-        direct = [inst for inst in communities_strategy if inst.name != "CONSENSUS"]
+        # CONSENSUS aggregates the other strategies' partitions and LEIDEN_TEMPORAL is precomputed
+        # over the timeline slices, so both are dispatched outside the direct loop — their position
+        # in the ordered token list only affects display order, never compute order.
+        _special = {"CONSENSUS", "LEIDEN_TEMPORAL"}
+        direct = [inst for inst in communities_strategy if inst.name not in _special]
+        temporal_instances = [inst for inst in communities_strategy if inst.name == "LEIDEN_TEMPORAL"]
         consensus_instances = [inst for inst in communities_strategy if inst.name == "CONSENSUS"]
         for instance in direct:
             self.stdout.write(f"- {instance.label} … ", ending="")
@@ -1150,6 +1197,29 @@ class Command(BaseCommand):
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
             self.stdout.write(f"{n_communities} communities")
+            self.stdout.flush()
+        for instance in temporal_instances:
+            entry = (temporal_results or {}).get(instance.key)
+            self.stdout.write(f"- {instance.label} … ", ending="")
+            self.stdout.flush()
+            if entry is None:
+                # Defensive: validation + precompute run before any _compute_communities call,
+                # so a missing entry means the precompute was skipped upstream.
+                self.stdout.write(self.style.WARNING("skipped (no temporal precompute available)"))
+                continue
+            per_year_maps, plurality_map, community_palette = entry
+            if year is None:
+                community_map = plurality_map
+                note = f" (plurality across {len(per_year_maps)} slices)"
+            else:
+                # A year that exports successfully was built with the same arguments as its
+                # temporal slice, so the map exists; guard anyway rather than KeyError.
+                community_map = per_year_maps.get(year, {})
+                note = "" if year in per_year_maps else " (year missing from temporal slices)"
+            community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
+            strategy_results[instance.key] = (community_map, community_palette)
+            n_communities = len(set(community_map.values()))
+            self.stdout.write(f"{n_communities} communities{note}")
             self.stdout.flush()
         for instance in consensus_instances:
             input_maps = {
@@ -1400,6 +1470,70 @@ class Command(BaseCommand):
 
         return measures_labels
 
+    def _compute_temporal_partitions(
+        self,
+        opts: ResolvedOptions,
+        temporal_instances: "list[community.StrategyInstance]",
+    ) -> dict[str, tuple]:
+        """Precompute every LEIDEN_TEMPORAL instance over the per-year timeline slices.
+
+        Builds one graph per timeline year with exactly the arguments ``_run_year_export`` will
+        use (so slices and year exports always agree), applies the ``--community-backbone-alpha``
+        filter when set (matching what per-year detection would see), and runs
+        :func:`community.detect_leiden_temporal` per instance. Returns
+        ``{instance.key: (per_year_maps, plurality_map, palette)}`` for
+        ``_compute_communities`` to apply by lookup. Raises ``CommandError`` when fewer than two
+        years yield a non-empty graph — the coupling needs at least two slices.
+        """
+        year_range = _timeline_year_range(opts.start_date, opts.end_date)
+        years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
+        self.stdout.write("Temporal community slices")
+        year_graphs: dict[int, nx.DiGraph] = {}
+        for year in years:
+            start_date, end_date = _clamp_year_window(year, opts.start_date, opts.end_date)
+            try:
+                year_graph, _, _, _ = graph_builder.build_graph(
+                    draw_dead_leaves=opts.draw_dead_leaves,
+                    dead_leaves_color=opts.dead_leaves_color,
+                    start_date=start_date,
+                    end_date=end_date,
+                    channel_types=opts.channel_types,
+                    channel_sources=opts.channel_sources or None,
+                    edge_weight_strategy=opts.edge_weight_strategy,
+                    include_mentions=opts.include_mentions,
+                    include_self_references=opts.include_self_references,
+                    include_lost=opts.include_lost,
+                    include_private=opts.include_private,
+                )
+            except ValueError:
+                continue  # year without relationships — no slice, matching the year loop's skip
+            if not year_graph.nodes:
+                continue
+            if opts.community_backbone_alpha:
+                year_graph = disparity_filter(year_graph, opts.community_backbone_alpha)
+            year_graphs[year] = year_graph
+        self.stdout.write(f"- {len(year_graphs)} usable year slices ({', '.join(map(str, sorted(year_graphs)))})")
+        temporal_results: dict[str, tuple] = {}
+        for instance in temporal_instances:
+            self.stdout.write(f"- {instance.label} … ", ending="")
+            self.stdout.flush()
+            params = instance.params_dict
+            try:
+                per_year, plurality, palette = community.detect_leiden_temporal(
+                    year_graphs,
+                    opts.community_palette,
+                    float(params.get("resolution", community.CPM_DEFAULT_RESOLUTION)),
+                    float(params.get("interslice", community.TEMPORAL_DEFAULT_INTERSLICE)),
+                    reverse=opts.community_palette_reversed,
+                )
+            except ValueError as e:
+                raise CommandError(str(e)) from e
+            temporal_results[instance.key] = (per_year, plurality, palette)
+            n_communities = len({cid for cmap in per_year.values() for cid in cmap.values()})
+            self.stdout.write(f"{n_communities} communities across {len(per_year)} slices")
+            self.stdout.flush()
+        return temporal_results
+
     def _run_year_export(
         self,
         year: int,
@@ -1441,16 +1575,12 @@ class Command(BaseCommand):
         coord_reference_positions_3d: dict | None = None,
         window_start: datetime.date | None = None,
         window_end: datetime.date | None = None,
+        temporal_results: "dict[str, tuple] | None" = None,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
-        start_date = datetime.date(year, 1, 1)
-        end_date = datetime.date(year, 12, 31)
         # Clamp the calendar year to the user's --startdate/--enddate window so a
         # windowed run does not emit graphs for the out-of-window part of a year.
-        if window_start and window_start > start_date:
-            start_date = window_start
-        if window_end and window_end < end_date:
-            end_date = window_end
+        start_date, end_date = _clamp_year_window(year, window_start, window_end)
 
         self.stdout.write(f"\n  {year} … ", ending="")
         self.stdout.flush()
@@ -1481,7 +1611,7 @@ class Command(BaseCommand):
         self.stdout.write(f"{n_nodes} nodes, {n_edges} edges")
 
         strategy_results, detection_graph = self._compute_communities(
-            graph, channel_dict, edge_list, communities_strategy, options
+            graph, channel_dict, edge_list, communities_strategy, options, temporal_results=temporal_results, year=year
         )
         positions, positions_3d = self._compute_layout(
             graph,
@@ -1820,6 +1950,15 @@ class Command(BaseCommand):
                 f"--community-backbone-alpha must be 0 (off) or in (0, 1); got {community_backbone_alpha!r}."
             )
 
+        # LEIDEN_TEMPORAL couples the per-year timeline slices — without a year timeline there is
+        # nothing to couple, so fail before any heavy work rather than in the export phase.
+        timeline_step = _o("timeline_step", "none")
+        if any(i.name == "LEIDEN_TEMPORAL" for i in communities_strategy) and timeline_step != "year":
+            raise CommandError(
+                "LEIDEN_TEMPORAL requires --timeline-step year: it couples the per-year timeline "
+                "slices into one temporal partition. Enable the timeline, or drop the strategy."
+            )
+
         # Coordination analysis — plain numeric parameters of an opt-in feature.
         coordination_window = _o("coordination_window", coordination.DEFAULT_WINDOW_SECONDS)
         coordination_min_events = _o("coordination_min_events", coordination.DEFAULT_MIN_EVENTS)
@@ -1899,7 +2038,7 @@ class Command(BaseCommand):
             diffusion_window=_o("diffusion_window", 30),
             leiden_cpm_resolution=leiden_cpm_resolution,
             community_distribution_threshold=_o("community_distribution_threshold", 0),
-            timeline_step=_o("timeline_step", "none"),
+            timeline_step=timeline_step,
             selected_vacancy_measures=selected_vacancy_measures,
             vacancy_months_before=_o("vacancy_months_before", 12),
             vacancy_months_after=_o("vacancy_months_after", 24),
@@ -1984,8 +2123,16 @@ class Command(BaseCommand):
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
         self.stdout.flush()
 
+        # LEIDEN_TEMPORAL is precomputed over every timeline year at once (its whole point is
+        # coupling the slices), then applied by lookup — the plurality summary on this full-range
+        # pass, each year's slice map inside the timeline loop below.
+        temporal_instances = [i for i in opts.communities_strategy if i.name == "LEIDEN_TEMPORAL"]
+        temporal_results: dict[str, tuple] = {}
+        if temporal_instances:
+            temporal_results = self._compute_temporal_partitions(opts, temporal_instances)
+
         strategy_results, detection_graph = self._compute_communities(
-            graph, channel_dict, edge_list, opts.communities_strategy, options
+            graph, channel_dict, edge_list, opts.communities_strategy, options, temporal_results=temporal_results
         )
         positions, positions_3d = self._compute_layout(
             graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
@@ -2426,18 +2573,11 @@ class Command(BaseCommand):
 
         timeline_entries: list[dict] = []
         if opts.timeline_step == "year":
-            year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
-            min_date, max_date = year_agg["min_date"], year_agg["max_date"]
-            if min_date is None:
+            year_range = _timeline_year_range(opts.start_date, opts.end_date)
+            if year_range is None:
                 self.stdout.write(self.style.WARNING("\nTimeline: no messages found, skipping."))
             else:
-                # localdate(): the per-year exports filter messages by TIME_ZONE
-                # calendar days (date__date__gte/lte), so the loop bounds must use the
-                # same convention — a newest message in the next *local* year past the
-                # UTC max would otherwise appear in no year export at all.
-                min_local, max_local = timezone.localdate(min_date), timezone.localdate(max_date)
-                first_year = max(min_local.year, opts.start_date.year) if opts.start_date else min_local.year
-                last_year = min(max_local.year, opts.end_date.year) if opts.end_date else max_local.year
+                first_year, last_year = year_range
                 self.stdout.write(f"\nTimeline export ({first_year}–{last_year})")
                 for yr in range(first_year, last_year + 1):
                     entry = self._run_year_export(
@@ -2483,6 +2623,7 @@ class Command(BaseCommand):
                         coord_reference_positions_3d=coord_reference_positions_3d,
                         window_start=opts.start_date,
                         window_end=opts.end_date,
+                        temporal_results=temporal_results,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)

@@ -43,12 +43,16 @@ function _render(d) {
 
     // Exclude the manual LABELGROUP<id> partitions (metadata labels, keyed `labelgroup<id>`), the
     // structural decomposition KCORE — a shell partition, not community detection, that would
-    // bias the co-association count — and the derived CONSENSUS partitions (keyed
-    // `consensus_threshold_*`), which summarise these very inputs and would double-count them.
+    // bias the co-association count — the derived CONSENSUS partitions (keyed
+    // `consensus_threshold_*`), which summarise these very inputs and would double-count them,
+    // and LEIDEN_TEMPORAL, whose full-range column is a plurality summary across timeline slices
+    // rather than an independent detection of this graph.
     // Mirrors network.community.consensus_eligible. Keys in communities.json are lowercase.
     function _consensusExcluded(s) {
         var k = String(s).toLowerCase();
-        return k === "kcore" || /^labelgroup\d+$/.test(k) || k === "consensus" || k.indexOf("consensus_") === 0;
+        return k === "kcore" || /^labelgroup\d+$/.test(k) ||
+            k === "consensus" || k.indexOf("consensus_") === 0 ||
+            k === "leiden_temporal" || k.indexOf("leiden_temporal_") === 0;
     }
     var nonOrgKeys = strategies.filter(function(s) { return !_consensusExcluded(s); });
     if (nonOrgKeys.length < 2) {

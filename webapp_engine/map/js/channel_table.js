@@ -172,17 +172,20 @@ function _render(d) {
         var comp = roleCompanion(m[0]);
         if (comp) roleCols.push({ key: comp.roleKey, label: comp.roleLabel + labelAnnotation(m[1]), tip: comp.tip });
     });
-    // SBM assignment-confidence companions (written by SBM(refine=MCMC)): one numeric column per
-    // SBM instance whose nodes actually carry the suffixed sbm_confidence_* attribute. Mirrors
-    // sbm_confidence_key / sbm_confidence_display_label in network/community.py.
+    // SBM-family assignment-confidence companions (written by refine=MCMC on SBM or the
+    // assortative SBM): one numeric column per instance whose nodes actually carry the suffixed
+    // sbm_confidence_* attribute. Mirrors sbm_confidence_key / sbm_confidence_display_label in
+    // network/community.py.
     var confCols = [];
     Object.keys(communities.strategies).forEach(function(s) {
-        if (canonical_strategy_key(s) !== "sbm") return;
+        var canon = canonical_strategy_key(s);
+        if (canon !== "sbm" && canon !== "sbm_assortative") return;
         var key = "sbm_confidence" + s.slice(3);
         if (!nodes.some(function(n) { return n[key] !== null && n[key] !== undefined; })) return;
         var lbl = strategy_label(s);
         var i = lbl.indexOf(" (");
-        confCols.push({ key: key, label: "SBM confidence" + (i !== -1 ? lbl.slice(i) : "") });
+        var prefix = canon === "sbm_assortative" ? "Assortative SBM confidence" : "SBM confidence";
+        confCols.push({ key: key, label: prefix + (i !== -1 ? lbl.slice(i) : "") });
     });
 
     // Preamble

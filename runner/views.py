@@ -836,8 +836,12 @@ def _validate_post_constraints(task: str, post: Any) -> None:
         if any(inst.name == "CONSENSUS" for inst in parsed_strategies) and len(eligible) < 2:
             raise ValueError(
                 "The Consensus strategy requires at least two other algorithmic community strategies "
-                f"(excluding K-core; currently: {len(eligible)})"
+                f"(excluding K-core and Leiden temporal; currently: {len(eligible)})"
             )
+
+        # Leiden temporal couples the per-year timeline slices — meaningless without the timeline.
+        if any(inst.name == "LEIDEN_TEMPORAL" for inst in parsed_strategies) and not post.get("timeline_step"):
+            raise ValueError("Leiden temporal requires the Timeline option (per-year exports) to be enabled")
         return
 
     if task == "compare_analysis":
