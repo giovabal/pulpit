@@ -7,15 +7,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,user-scalable=no">
   <meta name="theme-color" content="#123">
-  <meta name="description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
+  <meta name="description" content="An interactive map of Telegram channels, showing how they connect through forwards and mentions.">
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="A map for Telegram channels">
-  <meta property="og:description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
+  <meta property="og:description" content="An interactive map of Telegram channels, showing how they connect through forwards and mentions.">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="A map for Telegram channels">
-  <meta name="twitter:description" content="An interactive force-directed network map of Telegram channels, showing connections through forwards and references.">
+  <meta name="twitter:description" content="An interactive map of Telegram channels, showing how they connect through forwards and mentions.">
   <link rel="icon" href="favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,7 +44,7 @@
     <div class="sigma-expand" id="sigma-canvas" style="background-color: #123;"></div>
     <section class="sr-only" aria-label="Network summary">
       <h2>Network summary</h2>
-      <p>Interactive force-directed graph of <strong>__NODE_COUNT__</strong> Telegram channels and <strong>__EDGE_COUNT__</strong> directed edges. Communities are encoded by node color. Because the rendering is canvas-based, screen-reader users can browse the equivalent data in the table reports:
+      <p>Interactive map of <strong>__NODE_COUNT__</strong> Telegram channels and the <strong>__EDGE_COUNT__</strong> connections between them. Each channel's color shows the group it belongs to. Because the map itself can't be read by a screen reader, the same information is available in these tables:
         <a href="channel_table.html">per-channel measures</a>,
         <a href="community_table.html">community statistics</a>, and
         <a href="network_table.html">whole-network statistics</a>.
@@ -199,7 +199,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
-	  <p>Pulpit (Political Undercurrents: Linkage, Propagation, Influence on Telegram) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive force-directed network graph — designed for political and social network analysis.</p>
+	  <p>Pulpit (Political Undercurrents: Linkage, Propagation, Influence on Telegram) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive network map — designed for political and social network analysis.</p>
 	  <p><a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer"><i class="bi bi-github" aria-hidden="true"></i> github.com/giovabal/pulpit</a></p>
 	  <hr>
 	  <p id="about_graph_stats"></p>
