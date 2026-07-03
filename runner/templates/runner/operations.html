@@ -223,12 +223,12 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="in_degrees" {% if ad.CRAWL_IN_DEGREES %}checked{% endif %}>In target channels
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Recompute in-degree and out-degree for all in-target channels."></i>
+                       title="Recount, for every in-target channel, how many channels cite it and how many it cites."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="out_degrees" {% if ad.CRAWL_OUT_DEGREES %}checked{% endif %}>Out of target channels
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Recompute citation degree for out-of-target channels forwarded or mentioned by in-target ones. Does not open a Telegram connection."></i>
+                       title="Recount how many times each out-of-target channel is forwarded or mentioned by in-target ones. Does not open a Telegram connection."></i>
                   </label>
                 </div>
               </fieldset>
@@ -340,7 +340,7 @@
               <div class="ops-flags">
                 <label class="ops-flag"><input type="checkbox" name="graph" {% if ad.SA_OUTPUT_GRAPH %}checked{% endif %}>Structural 2D map
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate the structural 2D map (graph.html) — the interactive force-directed citation graph. Includes layout computation."></i>
+                     title="Generate the structural 2D map (graph.html) — the interactive map of how channels quote each other. Includes computing the layout."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="graph_3d" {% if ad.SA_OUTPUT_3DGRAPH %}checked{% endif %}>Structural 3D map
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -349,11 +349,11 @@
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="coordination_2d" {% if ad.SA_COORDINATION_2D %}checked{% endif %}>Coordination 2D map
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Temporal co-forwarding coordination map (coordination.html): channels tied when they repeatedly forward the same origin message within the window below. A separate layer from the citation graph — synchrony, not amplification volume. See docs/coordination-analysis.md."></i>
+                     title="Coordination map (coordination.html): links channels that repeatedly shared the same post within the time window set below — a possible sign of working together, rather than how often a channel is quoted. See docs/coordination-analysis.md."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="coordination_3d" {% if ad.SA_COORDINATION_3D %}checked{% endif %}>Coordination 3D map
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D rendering of the same co-forwarding coordination network (coordination3d.html), with its own 3D force-directed layout."></i>
+                     title="3D version of the same coordination map (coordination3d.html), which you can rotate and zoom."></i>
                 </label>
               </div>
               <div class="ops-params">
@@ -403,19 +403,19 @@
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="structural_similarity" {% if ad.SA_STRUCTURAL_SIMILARITY %}checked{% endif %}>Structural equivalence
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate a structural equivalence matrix page (Lorrain & White 1971): pairwise cosine similarity of each channel's weighted in+out tie profile — high = cite, and are cited by, the same channels."></i>
+                     title="Generate the structural equivalence page: a grid comparing every pair of channels by who they quote and who quotes them. Channels that connect to the same others score high."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="behavioural_equivalence" {% if ad.SA_BEHAVIOURAL_EQUIVALENCE %}checked{% endif %}>Behavioural equivalence
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate a behavioural equivalence matrix page: pairwise cosine similarity of channels' behavioural-measure profiles (amplification, content originality, diffusion lag, followers, message count); min-max normalised, missing values imputed to the median."></i>
+                     title="Generate the behavioural equivalence page: a grid comparing every pair of channels by how they behave — how much they amplify others, how original and how fast they are, their following and how much they post. Channels that act alike score high."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Generate a consensus matrix page (consensus_matrix.html) showing how consistently each channel pair is co-clustered across all algorithmic (non-label-group) community strategies."></i>
+                     title="Generate the consensus matrix page (consensus_matrix.html): how consistently each pair of channels ends up in the same group across all the automatic grouping methods."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="interest_structural" {% if ad.SA_INTEREST_STRUCTURAL %}checked{% endif %}>Interesting messages
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Compute per-message cross-community reach (Goel et al. 2016 adapted to Telegram's depth-1 forwarding) and authority-weighted reach (Cha et al. 2010 weighted indegree). Writes data/interest_structural.json. Per-channel z-scored engagement scores (Salganik 2006 / Suh 2010) are always on and computed at crawl time."></i>
+                     title="Rank individual messages by how far they travelled — how many different groups they reached and how influential the channels that picked them up were. Writes data/interest_structural.json. Each message is also scored on the engagement it drew compared with its channel's usual level (always on, computed at crawl time)."></i>
                   <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Tunable: Interest window, Include mentions in reach (Linked parameters)"></i>
                 </label>
@@ -555,24 +555,24 @@
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="KAMADA_KAWAI" {% if "KAMADA_KAWAI" in ad.sa_layouts_2d %}checked{% endif %}>Kamada-Kawai
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Stress-minimisation: places pairs of nodes so geometric distance mirrors graph-theoretic distance (Kamada &amp; Kawai 1989). Slow on large graphs."></i>
+                     title="Places channels so that the distance between them on screen reflects how far apart they are in the network. Slow on large graphs."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="COMMUNITY_SHELL" {% if "COMMUNITY_SHELL" in ad.sa_layouts_2d %}checked{% endif %}>Community shells
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Concentric shells, one per community (largest outermost). Picks LEIDEN → LEIDEN_DIRECTED → first available strategy."></i>
+                     title="Arranges channels in concentric rings, one ring per group, with the largest group on the outside."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="TSNE" {% if "TSNE" in ad.sa_layouts_2d %}checked{% endif %}>t-SNE
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Non-linear dimensionality reduction on Laplacian eigenvectors — reveals cluster separation not visible in spectral layouts (van der Maaten &amp; Hinton 2008)."></i>
+                     title="Spreads channels out so that tightly-knit clusters stand out clearly — good for spotting separate groups."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="UMAP" {% if "UMAP" in ad.sa_layouts_2d %}checked{% endif %}>UMAP
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Uniform Manifold Approximation — topology-preserving embedding; globally more faithful than t-SNE (McInnes et al. 2018)."></i>
+                     title="Like t-SNE, makes clusters stand out, while keeping the network's overall shape truer to the original."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_2d" value="HYPERBOLIC" {% if "HYPERBOLIC" in ad.sa_layouts_2d %}checked{% endif %}>Hyperbolic
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Pseudo-hyperbolic (Poincaré-disk) layout: hub channels placed at the centre, peripheral channels at the edge — approximates hyperbolic geometry for scale-free networks (Krioukov et al. 2010)."></i>
+                     title="Places the most-connected hub channels in the centre and less-connected ones toward the edge."></i>
                 </label>
               </div>
             </fieldset>
@@ -584,29 +584,29 @@
               <div class="ops-flags">
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="FA2" {% if "FA2" in ad.sa_layouts_3d %}checked{% endif %}>Force Atlas 2
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="ForceAtlas2 with Kamada-Kawai seed — default 3D layout."></i>
+                     title="The default 3D layout: connected channels pull together, unconnected ones drift apart."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="SPECTRAL" {% if "SPECTRAL" in ad.sa_layouts_3d %}checked{% endif %}>Spectral
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D Laplacian eigenvectors — tends to spatially separate community clusters (Koren 2005)."></i>
+                     title="Tends to pull the different groups apart into separate regions of space."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="SPRING" {% if "SPRING" in ad.sa_layouts_3d %}checked{% endif %}>Spring
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D Fruchterman-Reingold force-directed layout (Fruchterman &amp; Reingold 1991)."></i>
+                     title="A force-based 3D arrangement: connected channels pull together, unconnected ones push apart."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="KAMADA_KAWAI" {% if "KAMADA_KAWAI" in ad.sa_layouts_3d %}checked{% endif %}>Kamada-Kawai
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D stress-minimisation layout: geometric distance mirrors graph-theoretic distance. Slow on large graphs."></i>
+                     title="Places channels so that distance in space reflects how far apart they are in the network. Slow on large graphs."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="TSNE" {% if "TSNE" in ad.sa_layouts_3d %}checked{% endif %}>t-SNE
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D non-linear embedding on Laplacian eigenvectors (van der Maaten &amp; Hinton 2008)."></i>
+                     title="The 3D version of t-SNE — spreads channels so tightly-knit clusters stand out."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="layouts_3d" value="UMAP" {% if "UMAP" in ad.sa_layouts_3d %}checked{% endif %}>UMAP
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="3D UMAP topology-preserving embedding (McInnes et al. 2018)."></i>
+                     title="The 3D version of UMAP — makes clusters stand out while keeping the network's overall shape."></i>
                 </label>
               </div>
             </fieldset>
@@ -716,11 +716,11 @@
               <div class="ops-measures-col">
                 <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
                 <div class="ops-palette" id="measure-palette">
-                  <div class="ops-mchip" draggable="true" data-measure="PAGERANK" data-label="PageRank"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">PageRank</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank — channels cited by high-ranked channels rank higher. Standard measure of network influence."></i><button type="button" class="ops-mchip-add" aria-label="Add PageRank" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="HITSHUB" data-label="HITS Hub"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">HITS Hub</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS hub score — how well this channel links to authoritative channels; high hub = active amplifier."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Hub" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="HITSAUTH" data-label="HITS Authority"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">HITS Authority</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS authority score — how often this channel is cited by high-hub channels; high authority = trusted source."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Authority" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="INDEGCENTRALITY" data-label="In-degree"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">In-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised in-degree centrality — fraction of all channels that forward or cite this channel."></i><button type="button" class="ops-mchip-add" aria-label="Add In-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-measure="OUTDEGCENTRALITY" data-label="Out-degree"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">Out-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised out-degree centrality — fraction of all channels this channel forwards or cites."></i><button type="button" class="ops-mchip-add" aria-label="Add Out-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="PAGERANK" data-label="PageRank"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">PageRank</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank — channels cited by high-ranked channels rank higher. Standard measure of network influence."></i><button type="button" class="ops-mchip-add" aria-label="Add PageRank" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="HITSHUB" data-label="HITS Hub"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">HITS Hub</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS hub score — how well this channel links to authoritative channels; high hub = active amplifier."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Hub" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="HITSAUTH" data-label="HITS Authority"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">HITS Authority</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="HITS authority score — how often this channel is cited by high-hub channels; high authority = trusted source."></i><button type="button" class="ops-mchip-add" aria-label="Add HITS Authority" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="INDEGCENTRALITY" data-label="In-degree"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">In-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised in-degree centrality — fraction of all channels that forward or cite this channel."></i><button type="button" class="ops-mchip-add" aria-label="Add In-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="OUTDEGCENTRALITY" data-label="Out-degree"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">Out-degree</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Normalised out-degree centrality — fraction of all channels this channel forwards or cites."></i><button type="button" class="ops-mchip-add" aria-label="Add Out-degree" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="BURTCONSTRAINT" data-label="Burt's Constraint"><i class="bi bi-circle-fill ops-dir" title="Direction-invariant — a graph measure with the same value on the graph and its reverse (edge weights still apply, direction doesn't)"></i><span class="ops-mchip-label">Burt's Constraint</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Burt's structural constraint (Burt 1992, 2004) — how redundant a channel's ego-network is; low = structural-hole broker with diverse, non-overlapping ties. Typically in [0, 1] (theoretical max ≈ 1.125). nx.constraint symmetrises direction internally — only edge weights affect the ranking, not the citation direction."></i><button type="button" class="ops-mchip-add" aria-label="Add Burt's Constraint" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="LOCALCLUSTERING" data-label="Local Clustering"><i class="bi bi-circle-fill ops-dir" title="Direction-invariant — a graph measure with the same value on the graph and its reverse (edge weights still apply, direction doesn't)"></i><span class="ops-mchip-label">Local Clustering</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed local clustering coefficient (Fagiolo 2007) — count of directed triangles through this node (cycle / middleman / in / out patterns) divided by the maximum allowed by its degree configuration. In [0, 1]. High = the node's contacts also cite each other, forming tight mutual-amplification triangles. nx.clustering is called unweighted and the formula sums all 8 directed triangle orientations symmetrically, so direction and edge weights do not affect the ranking."></i><button type="button" class="ops-mchip-add" aria-label="Add Local Clustering" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="RECIPROCITY" data-label="Reciprocity"><i class="bi bi-circle-fill ops-dir" title="Direction-invariant — a graph measure with the same value on the graph and its reverse (edge weights still apply, direction doesn't)"></i><span class="ops-mchip-label">Reciprocity</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Node-level reciprocity (Garlaschelli & Loffredo 2004) — the share of a channel's citation partners that are mutual, in [0, 1]. 1 = every partner is a two-way alliance; 0 = purely one-way position (broadcaster or pure amplifier). Unweighted: mutuality is about whether a return tie exists, not how heavy it is."></i><button type="button" class="ops-mchip-add" aria-label="Add Reciprocity" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
@@ -781,7 +781,7 @@
           <fieldset class="ops-fieldset">
             <legend>Community strategies
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Drag a strategy into the Selected area (or press +). → = uses edge direction; ↔ = graph symmetrised. The parameterised Leiden CPM (⚙) can be added more than once with different resolutions; each instance gets its own partition column."></i>
+                 title="Drag a strategy into the Selected area (or press +). → = takes citation direction into account; ↔ = treats connections as two-way. Leiden CPM (⚙) can be added more than once with different resolutions; each one gets its own column."></i>
               <span class="ops-legend-actions">
                 <button type="button" class="ops-legend-btn" data-strategy-action="all">All</button>
                 <button type="button" class="ops-legend-btn" data-strategy-action="none">None</button>
@@ -791,13 +791,13 @@
               <div class="ops-measures-col">
                 <p class="ops-measures-head">Available <span class="ops-measures-hint">drag → or press +</span></p>
                 <div class="ops-palette" id="strategy-palette">
-                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN" data-label="Leiden"><i class="bi bi-arrows ops-dir" title="Undirected — computed on the symmetrised graph; citation direction is discarded"></i><span class="ops-mchip-label">Leiden</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden (Traag et al. 2019) on the undirected graph — modularity optimisation with a guarantee that every community is internally well-connected."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_DIRECTED" data-label="Leiden directed"><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">Leiden directed</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden on the directed graph, preserving edge direction during community refinement."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden directed" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Undirected — computed on the symmetrised graph; citation direction is discarded"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Leiden with the Constant Potts Model objective — a community is stable when its internal edge density exceeds the resolution γ. γ ≈ 0.01 = fewer, larger communities; γ ≈ 0.05 = more, smaller. Add it more than once for a multi-resolution scan."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="LOUVAIN" data-label="Louvain"><i class="bi bi-arrows ops-dir" title="Undirected — computed on the symmetrised graph; citation direction is discarded"></i><span class="ops-mchip-label">Louvain</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Louvain modularity maximisation (Blondel et al. 2008) — the classic, field-standard community detector that predates Leiden. Kept for comparison with the large body of older studies that report Louvain partitions; for your own analyses prefer Leiden (or Leiden directed), which adds a refinement step guaranteeing every community is internally connected. Runs on the symmetrised graph; edge weights honoured."></i><button type="button" class="ops-mchip-add" aria-label="Add Louvain" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Undirected — computed on the symmetrised graph; citation direction is discarded"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Semi-synchronous label propagation (Cordasco &amp; Gargano 2010) — parameter-free, near-linear time, deterministic. Each node adopts the majority label of its neighbours until convergence. Best used as a fast baseline for large graphs."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Undirected — computed on the symmetrised graph; citation direction is discarded"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="K-core decomposition — assigns each channel to the deepest shell it belongs to; measures network coreness rather than community membership."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"}]'><i class="bi bi-arrow-right ops-dir" title="Directional — uses the citation direction (citing → cited); reversing it changes the result"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Bayesian degree-corrected SBM (Peixoto) via graph-tool — recovers arbitrary block structure (assortative, disassortative, core-periphery, bipartite source/amplifier), not just dense communities. Blocks are citation-role / structural-equivalence classes, not necessarily cohesive groups. Directed + degree-corrected + unweighted. NESTED = better model selection; FLAT = single level."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode (nested/flat). Can be added once per mode."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN" data-label="Leiden"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Leiden</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels that are more densely connected to each other than to the rest, treating connections as two-way. The modern standard, and a good default."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_DIRECTED" data-label="Leiden directed"><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">Leiden directed</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like Leiden, but takes the direction of citations into account when forming groups."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden directed" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LEIDEN_CPM" data-label="Leiden CPM" data-multi="1" data-params='[{"name":"resolution","kind":"float","default":{{ ad.SA_CPM_RESOLUTION }},"min":0,"step":0.001,"label":"Resolution γ"}]'><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Leiden CPM</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="A version of Leiden with a resolution dial: lower values (around 0.01) give fewer, larger groups; higher values (around 0.05) give more, smaller ones. Add it more than once to compare resolutions."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: resolution γ. Can be added multiple times with different resolutions."></i><button type="button" class="ops-mchip-add" aria-label="Add Leiden CPM" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LOUVAIN" data-label="Louvain"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Louvain</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="The classic grouping method that predates Leiden. Kept mainly so results can be compared with the many older studies that used it; for new analyses prefer Leiden, which improves on it. Treats connections as two-way."></i><button type="button" class="ops-mchip-add" aria-label="Add Louvain" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="A fast method where each channel repeatedly joins whichever group most of its neighbours are in, until things settle. Handy as a quick baseline on large networks."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Ranks channels by how deep in the well-connected core of the network they sit, rather than sorting them into groups."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"}]'><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by the role they play rather than by who they cluster with — it can pick out sources, amplifiers and core-vs-periphery patterns the other methods miss. Requires the graph-tool package. Nested usually fits best; Flat is a simpler single-level version."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode (nested/flat). Can be added once per mode."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                 </div>
               </div>
               <div class="ops-measures-col">
@@ -823,12 +823,12 @@
             </legend>
             <div class="ops-flags ops-flags--grid">
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="SIZE" {% if "SIZE" in ad.sa_stat_groups %}checked{% endif %}>Size<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Node count, edge count, density. Always cheap."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="PATHS" {% if "PATHS" in ad.sa_stat_groups %}checked{% endif %}>Paths<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Reciprocity, average clustering, average path length and diameter on the largest WCC and SCC. Expensive on large networks (O(n·m) BFS)."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COHESION" {% if "COHESION" in ad.sa_stat_groups %}checked{% endif %}>Cohesion<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Transitivity, global efficiency, algebraic connectivity (Fiedler value), and degree CV. Global efficiency and algebraic connectivity are expensive on large networks."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COMPONENTS" {% if "COMPONENTS" in ad.sa_stat_groups %}checked{% endif %}>Components<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Weakly and strongly connected component counts and largest-component fractions. Fast (O(n+m))."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="DEGCORRELATION" {% if "DEGCORRELATION" in ad.sa_stat_groups %}checked{% endif %}>Degree correlation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Directed degree assortativity (in→in, in→out, out→in, out→out Pearson correlations). Measures whether high-degree nodes preferentially connect to other high-degree nodes."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CENTRALIZATION" {% if "CENTRALIZATION" in ad.sa_stat_groups %}checked{% endif %}>Centralization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Freeman graph centralization for each computed node measure, plus mean Burt's constraint. Derived from node-level measures — no extra graph computation required."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CONTENT" {% if "CONTENT" in ad.sa_stat_groups %}checked{% endif %}>Content<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Network-wide content originality (1 − forwarded/total) and amplification ratio (received forwards / total messages). Requires DB queries."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="PATHS" {% if "PATHS" in ad.sa_stat_groups %}checked{% endif %}>Paths<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Reciprocity, average clustering, the typical number of steps between channels, and the network's overall span. Slow on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COHESION" {% if "COHESION" in ad.sa_stat_groups %}checked{% endif %}>Cohesion<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Several measures of how well-knit the network is overall and how evenly connections are spread across channels. Some of these are slow on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="COMPONENTS" {% if "COMPONENTS" in ad.sa_stat_groups %}checked{% endif %}>Components<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="How many separate pieces the network breaks into, and how much of it sits in the largest piece. Fast."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="DEGCORRELATION" {% if "DEGCORRELATION" in ad.sa_stat_groups %}checked{% endif %}>Degree correlation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Measures whether heavily-connected channels tend to link up with other heavily-connected channels, or with quieter ones."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CENTRALIZATION" {% if "CENTRALIZATION" in ad.sa_stat_groups %}checked{% endif %}>Centralization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="How concentrated each measure is in a few channels versus spread evenly across them. Computed from the node measures, so it adds no extra time."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CONTENT" {% if "CONTENT" in ad.sa_stat_groups %}checked{% endif %}>Content<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Network-wide originality (share of posts that are original rather than forwarded) and amplification (forwards received per message). Requires database queries."></i></label>
             </div>
           </fieldset>
 
@@ -845,22 +845,22 @@
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="AMPLIFIER_JACCARD" {% if "AMPLIFIER_JACCARD" in ad.sa_vacancy_measures %}checked{% endif %}>Amplifier Coverage
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Fraction of the vacancy's orphaned amplifiers that forwarded from this candidate after closure (|A ∩ B| / |A| — coverage/recall, not a Jaccard)."></i>
+                   title="Of the channels left without a source when the vacancy closed, the share that went on to forward from this candidate."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Neighbour-set Equivalence
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Binary set-overlap cosine of shared in-neighbours (amplifiers) and out-neighbours (sources) — does the candidate occupy the same structural position as the vacancy? Operationalises Lorrain &amp; White (1971) in binary form; distinct from the weighted structural-equivalence matrix."></i>
+                   title="How much the candidate shares the vacancy's connections — the same channels forwarding from it and the same sources it draws on. High means it sits in the same position in the network."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="BROKERAGE" {% if "BROKERAGE" in ad.sa_vacancy_measures %}checked{% endif %}>Brokerage overlap
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Jaccard overlap of the (source-org × amplifier-org) pairs the candidate spans vs. those the vacancy spanned — does it sit in the same organisational position, drawing on the same source orgs and amplified by the same audience orgs? Built from the channel's direct citations (one-degree), so it captures structural position, not content flowing between the orgs through it. Operationalises the brokerage concept (Gould &amp; Fernandez 1989), not their flow-based census."></i>
+                   title="Whether the candidate bridges the same kinds of groups the vacancy did — drawing on the same source organisations and reaching the same audiences. A match of network position, not of content passing through it."></i>
               </label>
               <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Coverage of the orphaned amplifier set hyperbolically discounted by mean days-to-first-adoption (halved at a 30-day mean delay; Mazur 1987) — rewards candidates adopted quickly by many orphaned channels."></i>
+                   title="Rewards candidates that many orphaned channels started forwarding from soon after the vacancy closed — the more of them, and the sooner, the higher the score."></i>
               </label>
             </div>
             <div class="ops-params mt-2">
@@ -893,7 +893,7 @@
           <fieldset class="ops-fieldset">
             <legend>Robustness Analysis
               <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                 title="Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge-survival curves. Generates data/robustness.json (always), robustness_table.html (with HTML tables), and robustness_table.xlsx (with Excel)."></i>
+                 title="Tests how well the network holds together as channels are removed one by one, under each attack strategy below, and compares that against a random baseline. Generates data/robustness.json (always), robustness_table.html (with HTML tables), and robustness_table.xlsx (with Excel)."></i>
             </legend>
             <div class="ops-subheader">Attack strategies
               <span class="ops-legend-actions">
@@ -904,20 +904,20 @@
                  title="Selecting at least one strategy turns the robustness analysis on; deselecting them all turns it off. Each strategy gives a different attack scenario — see docs/robustness-analysis.md for what each one models. Dynamic variants (_dyn) recompute the ranking after every removal — much costlier than static."></i>
             </div>
             <div class="ops-flags ops-flags--grid">
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="random" {% if "RANDOM" in ad.sa_robustness_strategies %}checked{% endif %}>Random failure<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Uniform shuffle, averaged over Random runs. The baseline that targeted attacks should look much worse than."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength" {% if "IN_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted in-degree. Removes the most-cited channels first."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength" {% if "OUT_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing weighted out-degree. Removes the most-active aggregators first."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank" {% if "PAGERANK" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Decreasing PageRank. Removes the highest-prestige channels first."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="In-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Out-strength recomputed after every removal. Cost: O(N·(N+m))."></i></label>
-              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank_dyn" {% if "PAGERANK_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="PageRank recomputed after every removal. Cost: O(N · pagerank-iteration)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="random" {% if "RANDOM" in ad.sa_robustness_strategies %}checked{% endif %}>Random failure<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes channels in random order, averaged over the number of runs set below. The baseline that targeted attacks should look much worse than."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength" {% if "IN_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the most-cited channels first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength" {% if "OUT_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the most active forwarders first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank" {% if "PAGERANK" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the highest-ranked, most influential channels first."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like In-strength, but recalculates who is most-cited after every removal. Much slower on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like Out-strength, but recalculates who is most active after every removal. Much slower on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank_dyn" {% if "PAGERANK_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like PageRank, but recalculates the ranking after every removal. Much slower on large networks."></i></label>
             </div>
 
             <div class="ops-params mt-2">
               <div class="ops-param">
                 <label for="robustness_alpha">Disparity-filter α
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Serrano-Boguñá-Vespignani threshold applied before the attacks. Values in (0, 1) keep statistically significant edges only; 0 disables the filter and uses the full graph. Default: 0.05."></i>
+                     title="A filter that keeps only the statistically strong connections before running the attacks. Values between 0 and 1 keep fewer, stronger connections; 0 turns the filter off and uses the whole network. Default: 0.05."></i>
                 </label>
                 <input type="number" name="robustness_alpha" id="robustness_alpha" placeholder="{{ ad.SA_ROBUSTNESS_ALPHA }}" value="{{ ad.SA_ROBUSTNESS_ALPHA }}" min="0" max="1" step="0.001">
               </div>
@@ -931,14 +931,14 @@
               <div class="ops-param">
                 <label for="robustness_null">Null simulations
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Number of weight-rewiring null-model simulations per strategy. 0 disables the null model (no z-scores). Default: 20."></i>
+                     title="How many randomised comparison networks to build per strategy, used to judge whether the network's resilience is more than chance. 0 turns this comparison off. Default: 20."></i>
                 </label>
                 <input type="number" name="robustness_null" id="robustness_null" placeholder="{{ ad.SA_ROBUSTNESS_NULL }}" value="{{ ad.SA_ROBUSTNESS_NULL }}" min="0" max="1000">
               </div>
               <div class="ops-param">
                 <label for="robustness_seed">Seed
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Single seed driving every stochastic component of the analysis — random removal, sampling, null-model rewiring. Identical seed → identical payload. Default: 42."></i>
+                     title="A single number that drives every random step in the analysis (random removal, sampling, and the comparison networks), so the same seed always reproduces exactly the same results. Default: 42."></i>
                 </label>
                 <input type="number" name="robustness_seed" id="robustness_seed" placeholder="{{ ad.SA_ROBUSTNESS_SEED }}" value="{{ ad.SA_ROBUSTNESS_SEED }}" min="0">
               </div>

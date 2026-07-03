@@ -7,7 +7,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,user-scalable=no">
   <meta name="theme-color" content="#123">
-  <meta name="description" content="An interactive 3D force-directed network map of Telegram channels.">
+  <meta name="description" content="An interactive 3D map of Telegram channels and the connections between them.">
   <link rel="icon" href="favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -43,7 +43,7 @@
   <main id="canvas-container" aria-label="3D network graph"></main>
   <section class="sr-only" aria-label="Network summary">
     <h2>Network summary</h2>
-    <p>Interactive 3D force-directed graph of <strong>__NODE_COUNT__</strong> Telegram channels and <strong>__EDGE_COUNT__</strong> directed edges. Node color encodes community. Because the rendering is WebGL-based, screen-reader users can browse the equivalent data in the table reports:
+    <p>Interactive 3D map of <strong>__NODE_COUNT__</strong> Telegram channels and the <strong>__EDGE_COUNT__</strong> connections between them. Each channel's color shows the group it belongs to. Because the map itself can't be read by a screen reader, the same information is available in these tables:
       <a href="channel_table.html">per-channel measures</a>,
       <a href="community_table.html">community statistics</a>, and
       <a href="network_table.html">whole-network statistics</a>.
@@ -233,7 +233,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p>Pulpit (Political Undercurrents: Linkage, Propagation, Influence on Telegram) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive force-directed network graph — designed for political and social network analysis.</p>
+          <p>Pulpit (Political Undercurrents: Linkage, Propagation, Influence on Telegram) is an open-source tool that crawls Telegram channels, maps the relationships between them through forwards and <code>t.me/</code> references, and produces an interactive network map — designed for political and social network analysis.</p>
           <p><a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer"><i class="bi bi-github" aria-hidden="true"></i> github.com/giovabal/pulpit</a></p>
           <hr>
           <p id="about_graph_stats"></p>
