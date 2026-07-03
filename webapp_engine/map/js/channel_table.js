@@ -6,7 +6,7 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"in_degree_centrality":1,"out_degree_centrality":1};
-var STRUCTURAL_KEYS = {"burt_constraint":1,"within_module_z":1};
+var STRUCTURAL_KEYS = {"burt_constraint":1,"within_module_z":1,"participation":1,"reciprocity":1};
 var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1};
 var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
 var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
@@ -22,6 +22,8 @@ var COL_TOOLTIPS = {
     "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
     "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
     "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
+    "participation":       "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's ties spread across communities; 0 → all ties inside one community, → 1 → a cross-community bridge. The continuous score behind the Role column's connector labels",
+    "reciprocity":         "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
     "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
@@ -32,7 +34,7 @@ var COL_TOOLTIPS = {
 // canonicalKey strips that suffix back to the base so column grouping and tooltips still match;
 // it mirrors network.measures._registry.canonical_measure_key. (Longest-first so the most specific
 // base wins; these are the numeric measure keys that can carry a suffix.)
-var PARAM_BASE_KEYS = ["within_module_z", "diffusion_lag"]
+var PARAM_BASE_KEYS = ["within_module_z", "participation", "diffusion_lag"]
     .sort(function(a, b) { return b.length - a.length; });
 function canonicalKey(key) {
     for (var i = 0; i < PARAM_BASE_KEYS.length; i++) {

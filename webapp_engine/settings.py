@@ -493,7 +493,8 @@ SA_ROBUSTNESS_SAMPLE = _structural.robustness.sample
 SA_INTEREST_STRUCTURAL = _structural.interest.structural
 SA_INTEREST_WINDOW_DAYS = _structural.interest.window_days
 SA_INTEREST_INCLUDE_MENTIONS = _structural.interest.include_mentions
-SA_COORDINATION = _structural.coordination.enabled
+SA_COORDINATION_2D = _structural.coordination.map_2d
+SA_COORDINATION_3D = _structural.coordination.map_3d
 SA_COORDINATION_WINDOW = _structural.coordination.window_seconds
 SA_COORDINATION_MIN_EVENTS = _structural.coordination.min_events
 

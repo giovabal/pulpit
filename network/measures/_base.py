@@ -51,7 +51,8 @@ def compute_neighbour_community_participation(
     many communities — the canonical community-role quantity, bounded in ``[0, 1]``.
 
     Used by :func:`network.measures._centrality.apply_module_role` as the P axis
-    of the Guimerà & Amaral within-module-role plane.
+    of the Guimerà & Amaral within-module-role plane, and exported by it as the
+    sortable numeric measure ``participation``.
 
     Nodes absent from ``partition``: their edges are skipped (treated as
     "unknown community", contributing nothing). Nodes with no community-tagged

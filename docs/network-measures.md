@@ -57,7 +57,8 @@ One nuance keeps the boundary honest in the other direction. A few *network-leve
 | Out-degree centrality | `OUTDEGCENTRALITY` | Which channels cite the largest fraction of others? |
 | Burt's constraint | `BURTCONSTRAINT` | Which channels bridge structural holes between otherwise separate groups? |
 | Local clustering | `LOCALCLUSTERING` | Do this channel's contacts also cite each other — is its immediate neighbourhood closed in on itself? |
-| Within-module role | `MODULEROLE` | Is this channel a within-community hub or a cross-community connector? |
+| Reciprocity | `RECIPROCITY` | What share of this channel's citation partners cite it back — two-way alliances or one-way audience? |
+| Within-module role | `MODULEROLE` | Is this channel a within-community hub or a cross-community connector? Emits within-module z, the participation coefficient, and the role label |
 | Amplification factor | `AMPLIFICATION` | Whose content spreads furthest relative to its output volume? |
 | Content originality | `CONTENTORIGINALITY` | Which channels produce original content vs. redistribute others'? |
 | Diffusion lag | `DIFFUSIONLAG` | When this channel forwards a narrative, is it an early adopter or a late amplifier? |
@@ -196,11 +197,32 @@ Local clustering measures the density of citations *among a channel's contacts*:
 
 ---
 
+## Reciprocity
+
+*What share of this channel's citation relationships are mutual? A high score marks two-way alliances; a low score marks a purely one-way position — a source that never cites back, or an amplifier never cited back.*
+
+Node-level reciprocity is the fraction of a channel's citation partners that are reciprocated: `r(v) = 2·|P ∩ S| / (|P| + |S|)`, where `P` is the set of channels citing v and `S` the set v cites (self-citations excluded). It ranges from 0 (every tie is one-way) to 1 (every partner is mutual), and is undefined (`null`) for isolated channels. It is the node-level rung of a ladder Pulpit already reports: the whole-network *Reciprocity* statistic says how hierarchical the ecosystem is overall, the per-community reciprocity says which communities are peer-like — this column says **which channels** form the mutual-amplification pairs. Purely dyadic, so fully at home in the [one-degree model](#what-this-catalogue-covers): a reciprocated dyad is simply two channels that each cite the other.
+
+**Unweighted by design**, like the degree centralities: mutuality is about *whether* a return tie exists, not how heavy it is, so the ranking is invariant to `--edge-weight-strategy`. Direction-invariant (reversing every edge swaps citers and cited but leaves mutual pairs mutual).
+
+**References:**
+- Garlaschelli, D. & Loffredo, M.I. (2004) "Patterns of link reciprocity in directed networks." *Physical Review Letters* 93(26), 268701. [doi:10.1103/PhysRevLett.93.268701](https://doi.org/10.1103/PhysRevLett.93.268701) — reciprocity as a fundamental dyadic quantity of directed networks, measured against its density baseline.
+- Squartini, T., Picciolo, F., Ruzzenenti, F. & Garlaschelli, D. (2013) "Reciprocity of weighted networks." *Scientific Reports* 3, 2729. [doi:10.1038/srep02729](https://doi.org/10.1038/srep02729) — the weighted extension (not implemented here; noted for the road not taken).
+- Wasserman, S. & Faust, K. (1994) *Social Network Analysis*, ch. 13 — the dyad-census tradition reciprocity descends from.
+
+**In practice:** forwarding networks are strongly hierarchical — most citation relationships run one way, from amplifiers up to sources — so the *exceptions* are informative. A channel with high reciprocity keeps symmetric relationships: it is amplified by the same channels it amplifies, the signature of an alliance or a peer circle rather than an audience. Read it with the prestige columns: high in-strength with near-zero reciprocity is the classic broadcaster profile; modest in-strength with high reciprocity is a member of a mutual-support cell. The map's info panel already lists each channel's *Two ways connections* — this column turns that count into a normalised, sortable score, so "size nodes by Reciprocity" lights up the alliance cores against the hierarchical bulk.
+
+**Example.** In a monitored ecosystem, a cluster of five regional channels shows reciprocity between 0.7 and 1.0 — they systematically re-forward each other, a stable mutual-amplification pact. The ecosystem's most-cited channel, by contrast, scores 0.04: two hundred channels forward it, it forwards almost none of them back. Both are "important", but the two columns describe different kinds of standing — conferred attention versus maintained alliances — and only the reciprocity column separates them.
+
+**Caveats:** three reading notes. *(1)* The chance baseline rises with degree and density: in a dense milieu some mutual pairs arise by coincidence, so read individual scores against the whole-network Reciprocity figure as the floor. *(2)* Dead leaves score exactly 0.0 by construction — their outgoing citations are out of scope — a boundary fact, not a finding (the same footnote as the HITS hub score). *(3)* Static mutuality is not coordination: a mutual tie says the relationship is symmetric, not that it is synchronised. The [coordination analysis](coordination-analysis.md) is the timing instrument; the two read well together, and a pair that is both mutual *and* coordinated is the strongest structural signal this toolkit can produce.
+
+---
+
 ## Within-module role
 
 *Is this channel a hub inside its own community, a bridge between communities, or a peripheral member? The within-module role names the position directly, on top of any community partition.*
 
-The within-module role characterises every channel by two scores measured *against its own community*: one for internal embeddedness (how unusually well-connected the channel is *within* its community), and one for cross-community reach (how broadly the channel's contacts spread *across* communities). These two scores are collapsed into seven canonical labels — from *ultra-peripheral* (a channel that barely interacts outside its own community) to *connector hub* (a channel that is both internally central and spans communities widely).
+The within-module role characterises every channel by two scores measured *against its own community*: the **within-module degree z-score** (how unusually well-connected the channel is *within* its community) and the **participation coefficient** (how evenly the channel's ties spread *across* communities: 0 = every tie inside one community, approaching 1 = ties spread evenly over many). Both are exported as sortable numeric columns — `within_module_z` and `participation` — and the pair is additionally collapsed into seven canonical labels, from *ultra-peripheral* (a channel that barely interacts outside its own community) to *connector hub* (a channel that is both internally central and spans communities widely). The participation coefficient is the direct, continuous answer to the mainstreaming question — *which channels bridge milieus?* — with the role labels as its readable legend.
 
 **References:**
 - Guimerà, R. & Amaral, L.A.N. (2005) "Functional cartography of complex metabolic networks." *Nature* 433(7028). [doi:10.1038/nature03288](https://doi.org/10.1038/nature03288)
@@ -209,7 +231,7 @@ The within-module role characterises every channel by two scores measured *again
 
 **Example.** In a 400-channel political ecosystem, two channels look nearly identical on the static prestige columns — comparable PageRank, similar citation strength. The role taxonomy separates them. The first lands as a *connector hub* — both internally central in its community *and* with ties that span multiple distinct communities. The second is a *provincial hub* — the kingpin of its own community, but with ties that do not systematically cross out. Reading PageRank alone, the two look like equivalent leaders; reading the role labels, they are different jobs. Removing the first severs both internal cohesion and the cross-community ties it carried; removing the second only fragments one community.
 
-**Caveats:** the seven labels are conventions, not measurements. The z/P thresholds behind them come from the original study's calibration on metabolic networks (Guimerà & Amaral 2005) and have travelled to social networks as *useful bins* rather than validated cut-points — so sort and reason with the continuous `within_module_z` column, read the labels as a legend, and treat a channel near a threshold as near it. Roles are also relative to the chosen basis partition: a different community strategy can assign different roles (strategies are seeded, so identical re-runs agree). And in very small or degree-uniform communities the z-score degenerates to 0 — a five-channel community cannot produce a meaningful within-module hub.
+**Caveats:** the seven labels are conventions, not measurements. The z/P thresholds behind them come from the original study's calibration on metabolic networks (Guimerà & Amaral 2005) and have travelled to social networks as *useful bins* rather than validated cut-points — so sort and reason with the continuous columns, `within_module_z` and `participation`, read the labels as a legend, and treat a channel near a threshold as near it. The two continuous scores also differ in what they weigh: z counts distinct same-module neighbours (unweighted), while participation sums edge weights per community — so the participation ranking responds to `--edge-weight-strategy` and z does not. Roles are also relative to the chosen basis partition: a different community strategy can assign different roles (strategies are seeded, so identical re-runs agree). And in very small or degree-uniform communities the z-score degenerates to 0 — a five-channel community cannot produce a meaningful within-module hub.
 
 ---
 
@@ -269,17 +291,17 @@ Diffusion lag is the median number of hours between when a piece of content is f
 
 ## Reading the battery as a whole
 
-### Five dimensions, not eleven columns
+### Five dimensions, not one per column
 
 The prestige columns — in-degree, in-strength, PageRank, HITS authority, amplification factor — all draw on the same underlying fact (*being cited*) and will usually correlate strongly. That is expected, not redundant: each refines the fact differently (breadth, intensity, endorser quality, distributor quality, per-post rate), and the **disagreements** between them are where a reading starts — broadly cited but not prestigious, prestigious but narrow, amplified beyond its size. Taken together the battery spans roughly five distinct dimensions:
 
 1. **Conferred prestige** — in-degree, in-strength, PageRank, HITS authority, amplification factor
 2. **Curatorial activity** — out-degree, out-strength, HITS hub, (low) content originality
-3. **Portfolio structure** — Burt's constraint, local clustering
-4. **Community role** — within-module z, module role
+3. **Tie structure** — Burt's constraint, local clustering, reciprocity
+4. **Community role** — within-module z, participation coefficient, module role
 5. **Temporal signature** — diffusion lag
 
-Treat the columns as five questions, not eleven independent verdicts. The measure-comparison scatter (drag two measures onto the axes) is the built-in tool for finding the informative disagreements.
+Treat the columns as five questions, not as one verdict per column. The measure-comparison scatter (drag two measures onto the axes) is the built-in tool for finding the informative disagreements.
 
 ### Which columns respond to `--edge-weight-strategy`
 
@@ -291,7 +313,10 @@ Treat the columns as five questions, not eleven independent verdicts. The measur
 | In/out-strength | Yes | Sums of raw weights |
 | Burt's constraint | Yes | Proportional investments *p* come from weights |
 | Local clustering | No | Unweighted triangle census |
-| Within-module z / role | z: no; label: mildly | z counts distinct neighbours; the role's participation axis is weight-based |
+| Reciprocity | No | Unweighted mutual-partner share |
+| Within-module z | No | Counts distinct same-module neighbours |
+| Participation coefficient | Yes | Community attachments are summed edge weights |
+| Module role label | Mildly | Binned from z and the weighted participation axis |
 | Amplification, originality, lag | No | Computed from the message ledger, not the graph |
 
 ### Coverage is a floor, not a census

@@ -7,6 +7,7 @@ from network.measures._centrality import (
     apply_module_role,
     apply_out_degree_centrality,
     apply_pagerank,
+    apply_reciprocity,
     compute_hits,
 )
 from network.measures._content import apply_amplification_factor, apply_content_originality, apply_diffusion_lag
@@ -50,6 +51,7 @@ __all__ = [
     "apply_module_role",
     "apply_out_degree_centrality",
     "apply_pagerank",
+    "apply_reciprocity",
     "compute_hits",
     "VALID_NETWORK_STAT_GROUPS",
 ]

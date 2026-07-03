@@ -131,6 +131,7 @@ _MEASURE_PROGRESS: dict[str, str] = {
     "OUTDEGCENTRALITY": "out-degree centrality",
     "BURTCONSTRAINT": "Burt's constraint",
     "LOCALCLUSTERING": "local clustering",
+    "RECIPROCITY": "reciprocity",
     "AMPLIFICATION": "amplification factor",
     "CONTENTORIGINALITY": "content originality",
     "DIFFUSIONLAG": "diffusion lag",
@@ -313,7 +314,8 @@ class ResolvedOptions:
     interest_include_mentions: bool = False
 
     # Coordination analysis (temporal co-forwarding)
-    do_coordination: bool = False
+    do_coordination_2d: bool = False
+    do_coordination_3d: bool = False
     coordination_window: int = 300
     coordination_min_events: int = 3
 
@@ -323,6 +325,10 @@ class ResolvedOptions:
     @property
     def do_vacancy(self) -> bool:
         return bool(self.selected_vacancy_measures)
+
+    @property
+    def do_coordination(self) -> bool:
+        return self.do_coordination_2d or self.do_coordination_3d
 
     def to_options_dict(self) -> dict[str, Any]:
         """Compatibility shim: ``_run_year_export`` still takes a plain dict."""
@@ -365,7 +371,8 @@ class ResolvedOptions:
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
-            "coordination": self.do_coordination,
+            "coordination_2d": self.do_coordination_2d,
+            "coordination_3d": self.do_coordination_3d,
             "coordination_window": self.coordination_window,
             "coordination_min_events": self.coordination_min_events,
         }
@@ -385,7 +392,7 @@ class Command(BaseCommand):
             dest="graph",
             action=argparse.BooleanOptionalAction,
             default=None,
-            help="Generate the 2D interactive graph (graph.html and layout computation).",
+            help="Generate the structural 2D map (graph.html) — the interactive citation graph — including layout computation.",
         )
         parser.add_argument(
             "--graph-3d",
@@ -393,7 +400,7 @@ class Command(BaseCommand):
             dest="graph_3d",
             action=argparse.BooleanOptionalAction,
             default=None,
-            help="Also produce a 3D graph (graph3d.html). Slower on large graphs.",
+            help="Also produce the structural 3D map (graph3d.html). Slower on large graphs.",
         )
         parser.add_argument(
             "--html",
@@ -496,7 +503,7 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of 3D layout algorithms to compute. "
                 "When omitted, ForceAtlas2 (FA2) is computed as the only layout. "
-                "The 3D graph viewer offers a dropdown to switch between them at viewing time. "
+                "The structural 3D map's viewer offers a dropdown to switch between them at viewing time. "
                 "Available: FA2, SPECTRAL, SPRING, KAMADA_KAWAI, TSNE, UMAP, ALL. Requires --graph-3d."
             ),
         )
@@ -508,8 +515,9 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of centrality measures to compute. "
                 "Available: PAGERANK, HITSHUB, HITSAUTH, INDEGCENTRALITY, OUTDEGCENTRALITY, "
-                "BURTCONSTRAINT, LOCALCLUSTERING, "
-                "MODULEROLE (Guimerà-Amaral role; needs a community strategy), "
+                "BURTCONSTRAINT, LOCALCLUSTERING, RECIPROCITY, "
+                "MODULEROLE (Guimerà-Amaral role; needs a community strategy; emits within-module z "
+                "and the participation coefficient plus the categorical role label), "
                 "AMPLIFICATION, CONTENTORIGINALITY, DIFFUSIONLAG, ALL. "
                 "Default: no measures. "
                 "Parameterised measures take keyword arguments in parentheses and may be listed more "
@@ -915,16 +923,26 @@ class Command(BaseCommand):
         )
         # ── Coordination analysis (temporal co-forwarding) ────────────────────
         parser.add_argument(
-            "--coordination",
-            dest="coordination",
+            "--coordination-2d",
+            dest="coordination_2d",
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Build the temporal co-forwarding coordination layer: channels are tied when they "
-                "repeatedly forward the same origin message within --coordination-window seconds, "
-                "keeping pairs with at least --coordination-min-events shared origins. Writes "
-                "data_coordination/ plus two dedicated interactive maps, coordination.html (2D) "
-                "and coordination3d.html (3D), with their own force-directed layouts."
+                "Build the temporal co-forwarding coordination layer and its 2D map "
+                "(coordination.html): channels are tied when they repeatedly forward the same "
+                "origin message within --coordination-window seconds, keeping pairs with at "
+                "least --coordination-min-events shared origins. Writes data_coordination/ "
+                "with its own force-directed layout. The coordination counterpart of --graph-2d."
+            ),
+        )
+        parser.add_argument(
+            "--coordination-3d",
+            dest="coordination_3d",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Also (or only) produce the 3D coordination map (coordination3d.html) with its "
+                "own 3D force-directed layout. The coordination counterpart of --graph-3d."
             ),
         )
         parser.add_argument(
@@ -1334,6 +1352,7 @@ class Command(BaseCommand):
         interest_window_days: int = 30,
         interest_include_mentions: bool = False,
         do_coordination: bool = False,
+        do_coordination_3d: bool = False,
         coordination_window: int = 300,
         coordination_min_events: int = 3,
         coord_reference_positions: dict | None = None,
@@ -1527,13 +1546,15 @@ class Command(BaseCommand):
                 co_positions = layout.forceatlas2_positions(co_graph, initial, co_iterations)
                 if ref:
                     co_positions = layout.align_to_reference(co_positions, ref)
-                ref_3d = coord_reference_positions_3d or {}
-                if any(n not in ref_3d for n in co_graph.nodes()):
-                    kk_3d = layout.kamada_kawai_positions_3d(co_graph)
-                    initial_3d = {n: ref_3d.get(n, kk_3d[n]) for n in co_graph.nodes()}
-                else:
-                    initial_3d = {n: ref_3d[n] for n in co_graph.nodes()}
-                co_positions_3d = layout.forceatlas2_positions_3d(co_graph, initial_3d, co_iterations)
+                co_positions_3d = None
+                if do_coordination_3d:
+                    ref_3d = coord_reference_positions_3d or {}
+                    if any(n not in ref_3d for n in co_graph.nodes()):
+                        kk_3d = layout.kamada_kawai_positions_3d(co_graph)
+                        initial_3d = {n: ref_3d.get(n, kk_3d[n]) for n in co_graph.nodes()}
+                    else:
+                        initial_3d = {n: ref_3d[n] for n in co_graph.nodes()}
+                    co_positions_3d = layout.forceatlas2_positions_3d(co_graph, initial_3d, co_iterations)
                 coord_graph_data = exporter.build_coordination_graph_data(graph_data, coord_result, co_positions)
                 exporter.write_coordination_files(
                     coord_graph_data,
@@ -1797,7 +1818,8 @@ class Command(BaseCommand):
             do_interest_structural=_o("interest_structural", False),
             interest_window_days=_o("interest_window_days", 30),
             interest_include_mentions=_o("interest_include_mentions", False),
-            do_coordination=_o("coordination", False),
+            do_coordination_2d=_o("coordination_2d", False),
+            do_coordination_3d=_o("coordination_3d", False),
             coordination_window=coordination_window,
             coordination_min_events=coordination_min_events,
             export_name=export_name,
@@ -2254,12 +2276,14 @@ class Command(BaseCommand):
                 ):
                     co_positions = layout.rotate_positions(co_positions)
                 self.stdout.write("done")
-                self.stdout.write(f"- layout 3D (ForceAtlas2, {co_iterations} iterations) … ", ending="")
-                self.stdout.flush()
-                co_positions_3d = layout.forceatlas2_positions_3d(
-                    co_graph, layout.kamada_kawai_positions_3d(co_graph), co_iterations
-                )
-                self.stdout.write("done")
+                co_positions_3d = None
+                if opts.do_coordination_3d:
+                    self.stdout.write(f"- layout 3D (ForceAtlas2, {co_iterations} iterations) … ", ending="")
+                    self.stdout.flush()
+                    co_positions_3d = layout.forceatlas2_positions_3d(
+                        co_graph, layout.kamada_kawai_positions_3d(co_graph), co_iterations
+                    )
+                    self.stdout.write("done")
                 coord_reference_positions = co_positions
                 coord_reference_positions_3d = co_positions_3d
                 coord_graph_data = exporter.build_coordination_graph_data(graph_data, coord_result, co_positions)
@@ -2279,8 +2303,18 @@ class Command(BaseCommand):
                     node_count=len(coord_graph_data["nodes"]),
                     tie_count=len(coord_result.edges),
                     strategy_labels=community.labelgroup_display_labels(),
+                    include_2d=opts.do_coordination_2d,
+                    include_3d=opts.do_coordination_3d,
                 )
-                self.stdout.write("- coordination.html, coordination3d.html")
+                written_pages = [
+                    name
+                    for flag, name in (
+                        (opts.do_coordination_2d, "coordination.html"),
+                        (opts.do_coordination_3d, "coordination3d.html"),
+                    )
+                    if flag
+                ]
+                self.stdout.write(f"- {', '.join(written_pages)}")
                 coordination_written = True
             else:
                 self.stdout.write(
@@ -2342,6 +2376,7 @@ class Command(BaseCommand):
                         # subset of the full range's, so an empty full range means
                         # every per-year run would come back empty too.
                         do_coordination=opts.do_coordination and coordination_written,
+                        do_coordination_3d=opts.do_coordination_3d,
                         coordination_window=opts.coordination_window,
                         coordination_min_events=opts.coordination_min_events,
                         coord_reference_positions=coord_reference_positions,
@@ -2428,7 +2463,8 @@ class Command(BaseCommand):
             include_robustness_html=opts.do_robustness and opts.do_html,
             include_robustness_xlsx=opts.do_robustness and opts.do_xlsx,
             include_interest_structural=opts.do_interest_structural,
-            include_coordination=coordination_written,
+            include_coordination_2d=coordination_written and opts.do_coordination_2d,
+            include_coordination_3d=coordination_written and opts.do_coordination_3d,
         )
 
         exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))
