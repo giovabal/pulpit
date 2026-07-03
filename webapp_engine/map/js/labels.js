@@ -8,9 +8,11 @@ export var STRATEGY_LABELS = {
     leiden_directed:  'Leiden directed',
     leiden_cpm:       'Leiden CPM',
     louvain:          'Louvain',
-    labelpropagation: 'Label propagation',
     kcore:            'K-core',
     sbm:              'Stochastic block model',
+    consensus:        'Consensus',
+    // Removed in v0.27 — kept so pre-0.27 exports rebuilt with fresh map assets still label it.
+    labelpropagation: 'Label propagation',
 };
 
 // LabelGroup partitions arrive as `labelgroup<id>` keys; the static map above can't know the
@@ -26,9 +28,9 @@ if (typeof window !== 'undefined' && window.STRATEGY_LABELS) {
 // Base keys of the parameterised strategies (longest first), their declared params (spec order) and
 // param kinds — used to strip a parameter suffix back to the family and to reconstruct a readable
 // annotation. Mirrors network.community.canonical_strategy_key / strategy_display_label.
-var STRATEGY_BASE_KEYS = ['leiden_cpm', 'sbm'];
-var STRATEGY_PARAMS = { leiden_cpm: ['resolution'], sbm: ['mode', 'weights', 'refine'] };
-var STRATEGY_PARAM_KINDS = { resolution: 'float', mode: 'enum', weights: 'enum', refine: 'enum' };
+var STRATEGY_BASE_KEYS = ['leiden_cpm', 'consensus', 'sbm'];
+var STRATEGY_PARAMS = { leiden_cpm: ['resolution'], consensus: ['threshold'], sbm: ['mode', 'weights', 'refine'] };
+var STRATEGY_PARAM_KINDS = { resolution: 'float', threshold: 'float', mode: 'enum', weights: 'enum', refine: 'enum' };
 
 export function canonical_strategy_key(key) {
     var k = String(key).toLowerCase();

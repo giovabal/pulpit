@@ -121,8 +121,12 @@ _DROPPED_ATTACK_STRATEGIES: frozenset[str] = frozenset(
     {"harmonic", "betweenness", "betweenness_dyn", "bridging", "spreading"}
 )
 # Flow / random-walk community strategies removed in v0.26 (same one-degree rationale as the
-# measures). An old config may still name them in ``communities.strategies``.
-_DROPPED_COMMUNITY_STRATEGIES: frozenset[str] = frozenset({"INFOMAP", "INFOMAP_MEMORY", "MCL", "WALKTRAP", "STRONGCC"})
+# measures), plus LABELPROPAGATION removed in v0.27 (unweighted and undirected, superseded by
+# CONSENSUS as the cheap cross-method baseline). An old config may still name them in
+# ``communities.strategies``.
+_DROPPED_COMMUNITY_STRATEGIES: frozenset[str] = frozenset(
+    {"INFOMAP", "INFOMAP_MEMORY", "MCL", "WALKTRAP", "STRONGCC", "LABELPROPAGATION"}
+)
 
 
 def _token_base(token: object) -> str:

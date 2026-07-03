@@ -41,12 +41,14 @@ function _render(d) {
         container.appendChild(pEl);
     }
 
-    // Exclude the manual LABELGROUP<id> partitions (metadata labels, keyed `labelgroup<id>`) plus
-    // the structural decomposition KCORE — a shell partition, not community detection, that would
-    // bias the co-association count. Keys in communities.json are lowercase.
+    // Exclude the manual LABELGROUP<id> partitions (metadata labels, keyed `labelgroup<id>`), the
+    // structural decomposition KCORE — a shell partition, not community detection, that would
+    // bias the co-association count — and the derived CONSENSUS partitions (keyed
+    // `consensus_threshold_*`), which summarise these very inputs and would double-count them.
+    // Mirrors network.community.consensus_eligible. Keys in communities.json are lowercase.
     function _consensusExcluded(s) {
         var k = String(s).toLowerCase();
-        return k === "kcore" || /^labelgroup\d+$/.test(k);
+        return k === "kcore" || /^labelgroup\d+$/.test(k) || k === "consensus" || k.indexOf("consensus_") === 0;
     }
     var nonOrgKeys = strategies.filter(function(s) { return !_consensusExcluded(s); });
     if (nonOrgKeys.length < 2) {
@@ -105,7 +107,7 @@ function _render(d) {
     var noteEl = document.createElement("p");
     noteEl.className = "text-muted small mb-2";
     noteEl.textContent = n + " × " + n + " channels — " + maxCount + " partition" + (maxCount !== 1 ? "s" : "") +
-        " compared (LABELGROUP and component/shell partitions excluded). Balloon area ∝ agreement count; colour shifts blue→red with increasing agreement. Lower triangle; diagonal omitted.";
+        " compared (LABELGROUP, component/shell, and derived Consensus partitions excluded). Balloon area ∝ agreement count; colour shifts blue→red with increasing agreement. Lower triangle; diagonal omitted.";
     container.appendChild(noteEl);
 
     var legendDiv = document.createElement("div");

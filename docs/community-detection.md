@@ -24,8 +24,10 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Leiden CPM | `LEIDEN_CPM(resolution=γ)` | Constant Potts Model | No |
 | Louvain | `LOUVAIN` | Modularity (classic baseline) | No |
 | K-core | `KCORE` | Structural hierarchy | No |
-| Label propagation | `LABELPROPAGATION` | Label consensus | No |
 | Stochastic block model | `SBM(mode=…, weights=…, refine=…)` | Generative block model | Yes |
+| Consensus | `CONSENSUS(threshold=τ)` | Cross-method agreement | Inherited from inputs |
+
+(`LABELPROPAGATION` was removed in v0.27: it ignored both edge weights *and* direction, had a documented runaway-to-one-giant-community failure mode on dense cores, and its cheap-baseline role is better served by `CONSENSUS`. Old saved configurations that still name it load cleanly — the token is dropped on read.)
 
 All algorithmic strategies can optionally run on the **disparity-filter backbone** of the citation graph instead of the full graph — see [Detection on a noise-filtered backbone](#detection-on-a-noise-filtered-backbone).
 
@@ -141,22 +143,6 @@ K-core decomposition repeatedly removes channels with too few internal connectio
 
 ---
 
-## Label propagation
-
-*Label propagation groups channels by local consensus — every channel adopts the most common label among its neighbours, until everyone agrees.*
-
-Each channel starts with a unique label. At each step every channel adopts the label that is most common among its neighbours; the process stops when no channel would change on the next pass. The result is a fully automatic partition with no parameters to tune and no quality function to maximise — communities emerge from purely local consensus. The algorithm is dramatically faster than every other strategy in this list, which makes it a useful cheap baseline. Pulpit runs the **semi-synchronous variant**, which guarantees the algorithm terminates and produces the same partition every time on the same graph (no random seed needed). The input is the symmetrised citation graph, and edge weights are **ignored** by NetworkX's implementation — the partition is invariant to `--edge-weight-strategy` and to direction. This is the coarsest possible view of the citation graph: pure unweighted connectivity.
-
-**References:**
-- Raghavan, U.N., Albert, R. & Kumara, S. (2007) "Near linear time algorithm to detect community structures in large-scale networks." *Physical Review E* 76(3), 036106. [doi:10.1103/PhysRevE.76.036106](https://doi.org/10.1103/PhysRevE.76.036106) — the foundational asynchronous algorithm.
-- Cordasco, G. & Gargano, L. (2010) "Community detection via semi-synchronous label propagation algorithms." [doi:10.1109/BASNA.2010.5730298](https://doi.org/10.1109/BASNA.2010.5730298) — the deterministic semi-synchronous variant Pulpit uses.
-
-**In practice:** label propagation is by far the cheapest community detector in Pulpit's suite, which makes it the right choice for very large networks where the modularity-based strategies would be too slow, or as a parameter-free baseline in the consensus matrix. Because it ignores weights and direction, a grouping that appears under both label propagation *and* Leiden is unlikely to be an artefact of weighting choices or directionality — it is robust on the bare topology. Watch for one well-known failure mode: on dense networks the consensus dynamic can run away and produce a single giant community absorbing most of the network. If that happens, switch to Leiden.
-
-**Example.** A monitoring project tracks 1,200 channels. Leiden (directed) takes several minutes and returns 14 communities; label propagation runs in well under a second and returns 8. Six of the eight label-propagation communities each absorb a pair of Leiden communities; the remaining two correspond one-to-one with Leiden. Inspection reveals the merged pairs are exactly the hub-and-spoke patterns — one aggregator and a constellation of amplifiers that don't cite each other. Leiden (directed) splits broadcaster from audience; label propagation, blind to direction, sees one densely connected blob. The disagreement is the actionable signal — it separates "shared neighbourhood" from "shared editorial role".
-
----
-
 ## Stochastic block model
 
 *The SBM asks a different question from every other strategy here: not "where are the dense clusters?" but "which channels play the same role in the citation web?" — grouping channels that cite, and are cited by, the rest of the network in the same way.*
@@ -200,6 +186,26 @@ A weighted fit separates blocks the binary fit cannot: forty channels that each 
 
 ---
 
+## Consensus
+
+*The consensus strategy turns "which groupings survive across methods?" from a visual judgement into a partition of its own: channels are grouped together only when at least a threshold share of the other selected algorithms agree they belong together.*
+
+Every detector in this catalogue embodies one notion of community, and each can be led astray by its own blind spot — modularity's resolution limit, a weighting choice, one algorithm's tie-breaking. Consensus clustering (Lancichinetti & Fortunato 2012) hedges across them: take the partitions the run has already computed, count for every pair of channels the fraction of partitions that co-assign them (the **co-assignment matrix**), keep only pairs at or above the **threshold τ** (`threshold`, default 0.5 — a majority), and cluster the resulting agreement graph (Pulpit uses the same seeded Leiden machinery as `LEIDEN`, weighted by the agreement fractions). The output is an ordinary partition: it colours the map, fills a column in every table and export, and — most usefully — joins the [partition-comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi), where "how much of the analyst's labelling survives cross-method agreement" becomes a single ARI/AMI number.
+
+**Inputs.** All other selected *algorithmic* strategies feed it — the Leiden family, Louvain, the SBM instances — with two exclusions: `KCORE` (a shell decomposition, not a community detection) and your `LABELGROUP<id>` partitions (the consensus should stay a purely structural result you can then compare *against* the labels). At least **two eligible inputs** must be selected or the run refuses to start. Add the strategy more than once with different thresholds (`CONSENSUS(threshold=0.5),CONSENSUS(threshold=0.9)`) to see agreement cores tighten as τ rises. Channels that no sufficient coalition of algorithms can place end up as singletons — an honest "no consensus" rather than a forced assignment.
+
+**Adaptation note.** Lancichinetti & Fortunato iterate their procedure — recluster the co-assignment matrix repeatedly until it turns block-diagonal — because their inputs are many runs of one *stochastic* algorithm. Pulpit's inputs are deterministic (every strategy is seeded), so after the first clustering pass the procedure is at a fixed point; the single pass Pulpit runs is the faithful specialisation, not a shortcut. This is *method* consensus — one run each of different algorithms, in the lineage of ensemble practice in political-network research (e.g. Evkoski et al. 2021's Ensemble Louvain) — rather than *run* consensus over stochastic restarts.
+
+**References:**
+- Lancichinetti, A. & Fortunato, S. (2012) "Consensus clustering in complex networks." *Scientific Reports* 2, 336. [doi:10.1038/srep00336](https://doi.org/10.1038/srep00336) — the co-assignment/threshold/recluster procedure.
+- Evkoski, B., Mozetič, I., Ljubešić, N. & Kralj Novak, P. (2021) "Community evolution in retweet networks." *PLOS ONE* 16(9), e0256175. [doi:10.1371/journal.pone.0256175](https://doi.org/10.1371/journal.pone.0256175) — ensemble (consensus) community detection in applied political-network research.
+
+**In practice:** run it alongside `LEIDEN`, `LEIDEN_DIRECTED`, `LOUVAIN`, and `SBM`, and treat its communities as the *defensible core* of the analysis — groupings you can report without the caveat "under algorithm X". It is the partition-valued companion of the [consensus matrix](#consensus-matrix): the balloon plot shows pairwise agreement for inspection, the consensus strategy commits to the partition those agreements imply (and is excluded from the matrix's own inputs, which it would double-count). Report contested channels too: a channel that is a singleton here but confidently placed by individual algorithms is exactly the kind of boundary case worth a qualitative look.
+
+**Example.** Four strategies partition a 300-channel network. Three of them keep a cluster of twelve regional channels together; the fourth splits it. At τ = 0.5 the consensus keeps the twelve intact (3/4 ≥ τ) — but two other channels that only ever co-cluster with them under a single strategy fall out as singletons. The write-up can now say "these twelve channels form a community under every reasonable structural definition", and the two singletons get flagged for manual review instead of being silently absorbed.
+
+---
+
 ## Detection on a noise-filtered backbone
 
 *`--community-backbone-alpha` runs every algorithmic strategy on the statistically significant skeleton of the citation graph, so one-off forwards of a viral post don't glue unrelated blocs together.*
@@ -208,7 +214,7 @@ A long crawl accumulates many **incidental** edges: a channel forwarded somethin
 
 Setting `--community-backbone-alpha 0.05` (0 = off, the default; the Operations panel exposes it as *Community backbone α* under Computation) makes **community detection alone** run on this backbone:
 
-- Every algorithmic strategy — the Leiden family, Louvain, label propagation, K-core, SBM — sees the filtered graph. Channels whose every edge is filtered away become isolated for detection purposes and are folded into one residual community, exactly like channels that were isolated to begin with.
+- Every algorithmic strategy — the Leiden family, Louvain, K-core, SBM, and (through its inputs) the consensus partition — sees the filtered graph. Channels whose every edge is filtered away become isolated for detection purposes and are folded into one residual community, exactly like channels that were isolated to begin with.
 - Label-group partitions are untouched (they read your labels, not the graph).
 - **Everything else stays on the full graph** — measures, layout, node/edge counts, tables, exports. The backbone is a lens for detection, not a modified dataset.
 - Reported **modularity** for the detected partitions is computed against the backbone they were optimised on (the community table's preamble says so when the flag was used); all other per-community metrics keep describing the full graph.
@@ -294,13 +300,14 @@ Box colours come from each year's own community palette; a ribbon takes its **so
 | :------------ | :------------------- |
 | Use your own domain knowledge as the baseline | `LABELGROUP<id>` |
 | Find all community structure, no prior knowledge | `LEIDEN` or `LEIDEN_DIRECTED` |
-| Fast parameter-free baseline for large graphs | `LABELPROPAGATION` |
-| Direction of citation matters | `LEIDEN_DIRECTED` |
+| Direction of citation matters | `SBM` (and `LEIDEN_DIRECTED` as a sensitivity check) |
 | Find the ideological core vs. periphery | `KCORE` |
 | Group channels by structural *role* (incl. source/amplifier, non-cohesive groups) | `SBM` |
 | Probe at multiple granularities | `LEIDEN` + `LEIDEN_CPM(resolution=0.01)` + `LEIDEN_CPM(resolution=0.05)` |
 | Reproduce / compare against an older study's classic modularity baseline | `LOUVAIN` (prefer `LEIDEN` for new work) |
+| One robust partition where the methods agree | `CONSENSUS` (with ≥2 other algorithmic strategies) |
 | Compare algorithms for robustness | `ALL` + `--consensus-matrix` |
+| Keep incidental one-off forwards out of the communities | any of the above + `--community-backbone-alpha 0.05` |
 
 ---
 
