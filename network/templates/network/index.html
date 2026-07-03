@@ -11,24 +11,17 @@
 
 {% if include_graph or include_3d_graph or include_coordination_2d or include_coordination_3d %}
 <div class="row g-4 mb-4">
-  {% if include_graph %}
+  {% if include_graph or include_3d_graph %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Structural 2D map</h3>
-        <p class="card-text text-muted small">Interactive force-directed graph of all channels. Nodes are channels; edges represent forwards and mentions. Color encodes community membership.</p>
-        <a href="graph.html" class="btn btn-outline-primary btn-sm">Open map</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-  {% if include_3d_graph %}
-  <div class="col-md-6 col-xl-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h3 class="card-title h5"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>Structural 3D map</h3>
-        <p class="card-text text-muted small">3D force-directed graph rendered with Three.js. Rotate, zoom, and pan with mouse. Click a node to inspect its connections.</p>
-        <a href="graph3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
+        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Structural map</h3>
+        <p class="card-text text-muted small">Interactive force-directed graph of the citation network: nodes are channels, edges are forwards and mentions, colour encodes community. The 3D view adds rotate, zoom, and click-to-inspect.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if include_graph %}<a href="graph.html" class="btn btn-outline-primary btn-sm">Open 2D map</a>{% endif %}
+          {% if include_3d_graph %}<a href="graph3d.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>{% endif %}
+          <a href="{{ repository_url }}/blob/main/docs/graph-layouts.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
       </div>
     </div>
   </div>
@@ -246,32 +239,18 @@
 
 {% if "graph_2.html" in compare_files or "graph3d_2.html" in compare_files %}
 <div class="row g-4 mb-4">
-  {% if "graph_2.html" in compare_files %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
-        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Structural 2D map</h3>
+        <h3 class="card-title h5"><i class="bi bi-map text-secondary me-2" aria-hidden="true"></i>Structural map</h3>
         <p class="card-text text-muted small">Force-directed graph of the compare network.</p>
         <div class="d-flex gap-2 flex-wrap">
-          <a href="graph_2.html" class="btn btn-outline-primary btn-sm">Open map</a>
+          {% if "graph_2.html" in compare_files %}<a href="graph_2.html" class="btn btn-outline-primary btn-sm">Open 2D map</a>{% endif %}
+          {% if "graph3d_2.html" in compare_files %}<a href="graph3d_2.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>{% endif %}
         </div>
       </div>
     </div>
   </div>
-  {% endif %}
-  {% if "graph3d_2.html" in compare_files %}
-  <div class="col-md-6 col-xl-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h3 class="card-title h5"><i class="bi bi-box text-secondary me-2" aria-hidden="true"></i>Structural 3D map</h3>
-        <p class="card-text text-muted small">3D force-directed graph of the compare network.</p>
-        <div class="d-flex gap-2 flex-wrap">
-          <a href="graph3d_2.html" class="btn btn-outline-primary btn-sm">Open 3D map</a>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 </div>
 {% endif %}
 
