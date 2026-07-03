@@ -18,7 +18,6 @@ from network.community import (
     build_community_palette,
     canonical_strategy_key,
     detect_kcore,
-    detect_label_propagation,
     detect_labelgroup,
     detect_leiden,
     detect_louvain,
@@ -230,37 +229,94 @@ class DetectLabelGroupTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# community.py — detect_label_propagation
+# community.py — detect_consensus
 # ---------------------------------------------------------------------------
 
 
-class DetectLabelPropagationTests(TestCase):
+class DetectConsensusTests(TestCase):
+    """Lancichinetti & Fortunato 2012 consensus over the other strategies' partitions."""
+
     def setUp(self) -> None:
         self.graph = nx.DiGraph()
         self.graph.add_nodes_from(["a", "b", "c", "d"])
-        self.graph.add_edges_from([("a", "b"), ("b", "c"), ("c", "a"), ("d", "a")])
+        self.graph.add_edges_from([("a", "b"), ("c", "d"), ("b", "c")])
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_returns_community_map_and_palette(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_label_propagation(self.graph, "SomePalette")
-        self.assertIsInstance(community_map, dict)
-        self.assertIsInstance(palette, dict)
+    def test_majority_agreement_groups_survive(self, _mock: MagicMock) -> None:
+        # Two of three partitions agree on {a,b} + {c,d}; the third scatters everything.
+        # At τ=0.5 the 2/3 co-assignments survive and the consensus recovers the agreed blocks.
+        from network.community import detect_consensus
 
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_all_nodes_assigned(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_label_propagation(self.graph, "SomePalette")
-        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_community_ids_start_at_1(self, _mock: MagicMock) -> None:
-        community_map, _ = detect_label_propagation(self.graph, "SomePalette")
-        self.assertGreaterEqual(min(community_map.values()), 1)
-
-    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
-    def test_palette_covers_all_detected_communities(self, _mock: MagicMock) -> None:
-        community_map, palette = detect_label_propagation(self.graph, "SomePalette")
+        inputs = {
+            "leiden": {"a": 1, "b": 1, "c": 2, "d": 2},
+            "louvain": {"a": 7, "b": 7, "c": 9, "d": 9},
+            "sbm_mode_nested": {"a": 1, "b": 2, "c": 3, "d": 4},
+        }
+        community_map, palette = detect_consensus(self.graph, "SomePalette", inputs, 0.5)
+        self.assertEqual(community_map["a"], community_map["b"])
+        self.assertEqual(community_map["c"], community_map["d"])
+        self.assertNotEqual(community_map["a"], community_map["c"])
         for community_id in community_map.values():
             self.assertIn(community_id, palette)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_threshold_prunes_minority_pairs(self, _mock: MagicMock) -> None:
+        # a-b co-assigned by 1 of 3 partitions (agreement 1/3): kept at τ=0.3, dropped at τ=0.5.
+        from network.community import detect_consensus
+
+        inputs = {
+            "p1": {"a": 1, "b": 1, "c": 2, "d": 3},
+            "p2": {"a": 1, "b": 2, "c": 3, "d": 4},
+            "p3": {"a": 1, "b": 2, "c": 3, "d": 4},
+        }
+        loose, _ = detect_consensus(self.graph, "SomePalette", inputs, 0.3)
+        self.assertEqual(loose["a"], loose["b"])
+        strict, _ = detect_consensus(self.graph, "SomePalette", inputs, 0.5)
+        self.assertNotEqual(strict["a"], strict["b"])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_unanimous_inputs_recover_the_partition(self, _mock: MagicMock) -> None:
+        from network.community import detect_consensus
+
+        shared = {"a": 1, "b": 1, "c": 2, "d": 2}
+        community_map, _ = detect_consensus(self.graph, "SomePalette", {"x": shared, "y": dict(shared)}, 0.5)
+        self.assertEqual(community_map["a"], community_map["b"])
+        self.assertEqual(community_map["c"], community_map["d"])
+        self.assertNotEqual(community_map["a"], community_map["c"])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_all_nodes_assigned_even_without_consensus(self, _mock: MagicMock) -> None:
+        # Fully disagreeing inputs → no pair survives; every node still gets a community id.
+        from network.community import detect_consensus
+
+        inputs = {
+            "p1": {"a": 1, "b": 2, "c": 3, "d": 4},
+            "p2": {"a": 4, "b": 3, "c": 2, "d": 1},
+        }
+        community_map, _ = detect_consensus(self.graph, "SomePalette", inputs, 0.9)
+        self.assertEqual(set(community_map.keys()), set(self.graph.nodes()))
+
+    def test_requires_two_input_partitions(self) -> None:
+        from network.community import detect_consensus
+
+        with self.assertRaisesRegex(ValueError, "at least two"):
+            detect_consensus(self.graph, "SomePalette", {"only": {"a": 1}}, 0.5)
+
+    def test_detect_rejects_consensus_token(self) -> None:
+        # CONSENSUS is dispatched by the pipeline (detect_consensus), never by detect().
+        from network.community import detect
+
+        with self.assertRaisesRegex(ValueError, "dispatched separately"):
+            detect(parse_strategies(["CONSENSUS"])[0], "vaporwave", self.graph, {})
+
+    def test_consensus_eligibility_rule(self) -> None:
+        from network.community import consensus_eligible
+
+        self.assertTrue(consensus_eligible("LEIDEN"))
+        self.assertTrue(consensus_eligible("SBM"))
+        self.assertFalse(consensus_eligible("KCORE"))
+        self.assertFalse(consensus_eligible("CONSENSUS"))
+        self.assertFalse(consensus_eligible("LABELGROUP3"))
 
 
 # ---------------------------------------------------------------------------
@@ -576,6 +632,25 @@ class StrategyParserTests(TestCase):
             sbm_confidence_display_label("sbm_mode_nested_refine_mcmc"),
             "SBM confidence (mode=nested, refine=mcmc)",
         )
+
+    def test_consensus_token_key_and_label(self) -> None:
+        # Bare CONSENSUS inherits τ=0.5; per-threshold instances get distinct suffixed keys.
+        insts = parse_strategies(["CONSENSUS", "CONSENSUS(threshold=0.75)"])
+        self.assertEqual([i.key for i in insts], ["consensus_threshold_0_5", "consensus_threshold_0_75"])
+        self.assertEqual(insts[0].token(), "CONSENSUS(threshold=0.5)")
+        self.assertEqual(canonical_strategy_key("consensus_threshold_0_5"), "consensus")
+        self.assertEqual(strategy_display_label("consensus_threshold_0_5"), "Consensus (threshold=0.5)")
+
+    def test_consensus_rejects_out_of_range_threshold(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["CONSENSUS(threshold=1.5)"])
+        with self.assertRaises(ValueError):
+            parse_strategies(["CONSENSUS(threshold=-0.1)"])
+
+    def test_labelpropagation_removed(self) -> None:
+        self.assertNotIn("LABELPROPAGATION", VALID_STRATEGIES)
+        with self.assertRaises(ValueError):
+            parse_strategies(["LABELPROPAGATION"])
 
     def test_sbm_without_graph_tool_raises_value_error(self) -> None:
         # When graph-tool is absent, detect() surfaces a clear ValueError (caught as CommandError upstream).
@@ -1875,6 +1950,95 @@ class ExportNetworkCommandTests(TestCase):
         )
         # Without the flag, detection runs on the very graph build_graph returned.
         self.assertIs(mock_detect.call_args[0][2], fake_graph)
+
+    def test_consensus_requires_two_eligible_inputs(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        # One eligible input (LEIDEN) — KCORE and LABELGROUPs don't count.
+        with self.assertRaisesRegex(CommandError, "consensus-eligible"):
+            call_command(
+                "structural_analysis",
+                community_strategies="LEIDEN,KCORE,CONSENSUS",
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_consensus_dispatched_after_direct_strategies(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        *_mocks: MagicMock,
+    ) -> None:
+        """CONSENSUS runs the real detect_consensus over the direct strategies' (mocked) partitions.
+
+        detect() is mocked to hand LEIDEN and LOUVAIN identical two-block partitions over a
+        4-node graph, so the real consensus aggregation must recover those blocks and
+        apply_to_graph must be called once per strategy (3 times), with the CONSENSUS instance
+        receiving a map that co-assigns the agreed pairs.
+        """
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
+        )
+        fake_graph = nx.DiGraph()
+        fake_graph.add_edges_from([("a", "b"), ("c", "d"), ("b", "c")])
+        channel_dict = {n: {"data": {}} for n in fake_graph.nodes()}
+        fake_qs = MagicMock()
+        fake_qs.filter.return_value = fake_qs
+        fake_qs.count.return_value = 0
+        mock_build.return_value = (fake_graph, channel_dict, [["a", "b", 1.0]], fake_qs)
+        mock_detect.return_value = ({"a": 1, "b": 1, "c": 2, "d": 2}, {1: (255, 0, 0), 2: (0, 255, 0)})
+
+        call_command(
+            "structural_analysis",
+            graph=True,
+            community_strategies="CONSENSUS,LEIDEN,LOUVAIN",  # order must not matter
+            community_palette="vaporwave",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+
+        self.assertEqual(mock_detect.call_count, 2)  # LEIDEN + LOUVAIN only; CONSENSUS not via detect()
+        applied = {call.args[4].key: call.args[2] for call in mock_apply_to_graph.call_args_list}
+        self.assertEqual(set(applied), {"leiden", "louvain", "consensus_threshold_0_5"})
+        consensus_map = applied["consensus_threshold_0_5"]
+        self.assertEqual(consensus_map["a"], consensus_map["b"])
+        self.assertEqual(consensus_map["c"], consensus_map["d"])
+        self.assertNotEqual(consensus_map["a"], consensus_map["c"])
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")

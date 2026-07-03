@@ -1382,6 +1382,45 @@ class DefaultsViewTests(TestCase):
             )
             self.assertEqual(resp.status_code, 200)
 
+    def test_save_rejects_consensus_matrix_counting_kcore(self) -> None:
+        # KCORE is a shell decomposition the matrix excludes, so LEIDEN + KCORE is still too thin.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "kcore-consensus",
+                    "consensus_matrix": "on",
+                    "community_strategies": ["LEIDEN", "KCORE"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("Consensus matrix requires", resp.json()["error"])
+
+    def test_save_rejects_consensus_strategy_with_few_inputs(self) -> None:
+        # The CONSENSUS strategy aggregates the other algorithmic partitions; KCORE and another
+        # CONSENSUS instance don't count as inputs.
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "thin-consensus-strategy",
+                    "community_strategies": ["LEIDEN", "KCORE", "CONSENSUS"],
+                },
+            )
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("Consensus strategy requires", resp.json()["error"])
+
+    def test_save_accepts_consensus_strategy_with_two_inputs(self) -> None:
+        with _RedirectConfigPathsForRunner():
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={
+                    "title": "ok-consensus-strategy",
+                    "community_strategies": ["LEIDEN", "LOUVAIN", "CONSENSUS(threshold=0.75)"],
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+
     def test_save_persists_label_groups_separately(self) -> None:
         # The "Label groups" field is stored under communities.label_groups, not folded into
         # communities.strategies, so the two selectors round-trip independently. (The seed migration

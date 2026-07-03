@@ -538,11 +538,13 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of community detection algorithms to apply. "
-                "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, LABELPROPAGATION, KCORE, SBM, "
+                "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, KCORE, SBM, CONSENSUS, "
                 "LABELGROUP<id> (the manual partition induced by partition LabelGroup <id>), ALL. "
                 "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
-                "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED and requires "
-                "graph-tool (conda/apt, not pip). "
+                "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED, "
+                "weights=POISSON|EXPONENTIAL, refine=MCMC and requires graph-tool (conda/apt, not pip). "
+                "CONSENSUS(threshold=0.5) is the Lancichinetti-Fortunato consensus of the other selected "
+                "algorithmic strategies (KCORE excluded) and needs at least two of them. "
                 "LOUVAIN is the classic modularity baseline kept for comparison with older studies; "
                 "prefer LEIDEN / LEIDEN_DIRECTED otherwise. "
                 "Default: no community detection."
@@ -1034,6 +1036,17 @@ class Command(BaseCommand):
             raise CommandError(
                 "--interest-structural requires at least one community strategy in --community-strategies."
             )
+        # CONSENSUS aggregates the other algorithmic partitions — fail up-front when fewer than two
+        # eligible inputs are selected, mirroring detect_consensus (KCORE and the manual label-group
+        # partitions don't count; neither does another CONSENSUS instance).
+        if any(i.name == "CONSENSUS" for i in communities_strategy):
+            eligible = [i for i in communities_strategy if community.consensus_eligible(i.name)]
+            if len(eligible) < 2:
+                raise CommandError(
+                    "CONSENSUS needs at least two consensus-eligible input strategies in "
+                    "--community-strategies (algorithmic strategies other than KCORE; "
+                    f"currently: {len(eligible)})."
+                )
         # A measure basis names a strategy *family*; check it against the selected strategy names.
         strategy_names = {i.name for i in communities_strategy}
         for inst in measure_instances:
@@ -1113,7 +1126,12 @@ class Command(BaseCommand):
                 f"{detection_graph.number_of_edges()}/{graph.number_of_edges()} edges kept"
             )
             self.stdout.flush()
-        for instance in communities_strategy:
+        # CONSENSUS aggregates the other strategies' partitions, so it runs in a second phase
+        # after every direct detection has finished — its position in the ordered token list only
+        # affects display order, never compute order.
+        direct = [inst for inst in communities_strategy if inst.name != "CONSENSUS"]
+        consensus_instances = [inst for inst in communities_strategy if inst.name == "CONSENSUS"]
+        for instance in direct:
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
             try:
@@ -1132,6 +1150,29 @@ class Command(BaseCommand):
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
             self.stdout.write(f"{n_communities} communities")
+            self.stdout.flush()
+        for instance in consensus_instances:
+            input_maps = {
+                inst.key: strategy_results[inst.key][0]
+                for inst in direct
+                if community.consensus_eligible(inst.name) and inst.key in strategy_results
+            }
+            self.stdout.write(f"- {instance.label} … ", ending="")
+            self.stdout.flush()
+            try:
+                community_map, community_palette = community.detect_consensus(
+                    detect_on,
+                    options["community_palette"],
+                    input_maps,
+                    float(instance.params_dict.get("threshold", community.CONSENSUS_DEFAULT_THRESHOLD)),
+                    reverse=options["community_palette_reversed"],
+                )
+            except ValueError as e:
+                raise CommandError(str(e)) from e
+            community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
+            strategy_results[instance.key] = (community_map, community_palette)
+            n_communities = len(set(community_map.values()))
+            self.stdout.write(f"{n_communities} communities (from {len(input_maps)} partitions)")
             self.stdout.flush()
         community.apply_edge_colors(graph, edge_list, channel_dict)
         return strategy_results, detection_graph

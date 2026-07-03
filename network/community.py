@@ -1,6 +1,7 @@
 import re
 from collections import Counter
 from collections.abc import Iterable
+from itertools import combinations
 from typing import Any
 
 from django.utils.text import slugify
@@ -25,15 +26,18 @@ import networkx as nx
 # Canonical ordered list of community-strategy names. Mirrors measures.ALL_STRATEGIES (which feeds
 # the measure "basis" choices); a guard test keeps the two in sync. LEIDEN_CPM is a single
 # parameterised strategy (its resolution γ is per-instance and it may be requested more than once),
-# replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets.
+# replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets. CONSENSUS is derived from
+# the other selected strategies' partitions (dispatched after them; see detect_consensus).
+# LABELPROPAGATION was removed in v0.27 (unweighted *and* undirected, so it discarded both the
+# edge-weight and the direction signal; its cheap-baseline role is superseded by CONSENSUS).
 ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
     "LOUVAIN",
-    "LABELPROPAGATION",
     "KCORE",
     "SBM",
+    "CONSENSUS",
 ]
 # Every static strategy is an algorithm; the only *metadata* partitions are the dynamic, DB-keyed
 # ``LABELGROUP<id>`` strategies (one per partition LabelGroup), which replaced the old single
@@ -92,9 +96,9 @@ def custom_label_display(name: str) -> str:
 # modularity, the form it was built against.
 # Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
 # canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
-UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
-    {"leiden", "leiden_cpm", "louvain", "labelpropagation", "kcore"}
-)
+# CONSENSUS is optimised on the (undirected) co-assignment graph, not the citation graph;
+# its modularity is reported against the undirected projection, the closest null.
+UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset({"leiden", "leiden_cpm", "louvain", "kcore", "consensus"})
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
@@ -104,10 +108,25 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN_DIRECTED": "Leiden directed",
     "LEIDEN_CPM": "Leiden CPM",
     "LOUVAIN": "Louvain",
-    "LABELPROPAGATION": "Label propagation",
     "KCORE": "K-core",
     "SBM": "Stochastic block model",
+    "CONSENSUS": "Consensus",
 }
+
+
+def consensus_eligible(strategy_name: str) -> bool:
+    """Whether a strategy's partition may feed consensus aggregation (the CONSENSUS strategy
+    and the consensus-matrix balloon plot alike).
+
+    Eligible = a genuine algorithmic community detection: not a manual ``LABELGROUP<id>``
+    partition, not the KCORE shell decomposition (a connectivity hierarchy, not a community
+    detection), and not CONSENSUS itself (a derived partition must not feed its own input —
+    nor double-count in the matrix it summarises). Mirrored by ``_consensusExcluded`` in
+    webapp_engine/map/js/consensus_matrix.js.
+    """
+    name = strategy_name.upper()
+    return name not in {"KCORE", "CONSENSUS"} and not is_metadata_strategy(name)
+
 
 # ── Parameterised community strategies & strategy instances ────────────────────
 #
@@ -123,6 +142,7 @@ StrategySpec = TokenSpec
 
 CPM_DEFAULT_RESOLUTION = 0.05
 SBM_DEFAULT_MODE = "NESTED"
+CONSENSUS_DEFAULT_THRESHOLD = 0.5
 
 # Base key of the per-channel SBM assignment-confidence companion column written by
 # SBM(refine=MCMC); the per-instance parameter suffix is appended at compute time
@@ -184,6 +204,24 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
         ),
         primary_keys=("sbm",),
         aux_keys=(SBM_CONFIDENCE_BASE_KEY,),
+    ),
+    "CONSENSUS": StrategySpec(
+        "CONSENSUS",
+        "Consensus",
+        params=(
+            StrategyParam(
+                "threshold",
+                "float",
+                CONSENSUS_DEFAULT_THRESHOLD,
+                minimum=0.0,
+                maximum=1.0,
+                label="Threshold τ",
+                help="Minimum share of the input partitions that must co-assign two channels for the "
+                "pair to survive into the consensus graph (Lancichinetti & Fortunato 2012). "
+                "0.5 = a majority of the algorithms agree; higher = stricter, smaller cores.",
+            ),
+        ),
+        primary_keys=("consensus",),
     ),
 }
 
@@ -413,36 +451,6 @@ def _finalize_partition(
 # ── Detection algorithms ──────────────────────────────────────────────────────
 
 
-def detect_label_propagation(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
-    """Label propagation community detection — Cordasco & Gargano 2010 / Raghavan et al. 2007.
-
-    Each node is initialised with a unique label; at each step every node adopts
-    the most frequent label among its neighbours, with ties broken by the
-    deterministic Prec-Max rule (keep the current label if it is among the
-    tied top labels, otherwise pick the lexicographically largest). The
-    NetworkX implementation uses the semi-synchronous variant (Cordasco &
-    Gargano 2010): nodes are greedy-coloured so neighbours get different
-    colours, and only same-coloured nodes update in each sweep — the
-    safeguard that makes the algorithm provably terminate and avoid the
-    bipartite oscillations the original asynchronous variant suffers from.
-    Parameter-free, deterministic given the input, and near-linear time per
-    iteration; no random seed required.
-
-    Edge weights are not used — ``label_propagation_communities`` discards
-    them, so ``--edge-weight-strategy`` does not affect the partition.
-    Citation direction is also discarded: the function rejects directed
-    input, so Pulpit symmetrises the graph with ``to_undirected_sum``
-    (W+Wᵀ, the same projection used by ``LEIDEN``/``KCORE``
-    and the reported modularity). Because weights are ignored, this yields
-    the identical partition to a plain ``to_undirected()``; the W+Wᵀ choice
-    is for consistency across strategies, not for effect.
-    """
-    communities = sorted(nx.community.label_propagation_communities(to_undirected_sum(graph)), key=len, reverse=True)
-    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
-
-
 def detect_labelgroup(group_id: int, channel_dict: dict[str, Any]) -> tuple[CommunityMap, CommunityPalette]:
     """Partition nodes by their resolved label in LabelGroup ``group_id`` for the window.
 
@@ -602,6 +610,76 @@ def detect_louvain(
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
+def detect_consensus(
+    graph: nx.DiGraph,
+    palette_name: str,
+    input_maps: dict[str, CommunityMap],
+    threshold: float,
+    *,
+    reverse: bool = False,
+) -> tuple[CommunityMap, CommunityPalette]:
+    """Consensus partition over the other selected algorithmic strategies (Lancichinetti & Fortunato 2012).
+
+    ``input_maps`` holds one :type:`CommunityMap` per consensus-eligible strategy instance
+    (see :func:`consensus_eligible`) — the partitions this run already computed. The
+    co-assignment matrix ``D_ij`` = the fraction of input partitions placing ``i`` and ``j``
+    in the same community; pairs with ``D_ij ≥ threshold`` become the weighted, undirected
+    *consensus graph*, which is clustered with Leiden modularity (``seed=0``, the same
+    machinery as ``LEIDEN``). Channels grouped together only when at least a ``threshold``
+    share of the algorithms agree; channels no algorithm coalition can place end up as
+    singletons — an honest "no consensus" answer rather than a forced assignment.
+
+    **Adaptation note.** Lancichinetti & Fortunato iterate — recluster ``D`` with the base
+    algorithm ``n_P`` times, rebuild ``D``, repeat until block-diagonal — because their
+    inputs are stochastic re-runs of one algorithm. Pulpit's input partitions are
+    deterministic (every detector is seeded), so the procedure degenerates: after the first
+    clustering pass the rebuilt ``D`` is exactly the 0/1 block matrix of that partition and
+    every further pass is a fixed point. One pass is therefore the faithful specialisation,
+    and what runs here. This is *method* consensus (different algorithms, one run each) in
+    the lineage of ensemble approaches such as Evkoski et al. 2021's Ensemble Louvain,
+    rather than *run* consensus.
+
+    The result is a genuine partition: it joins the ARI/AMI/NMI/VI comparison matrices
+    (measuring, e.g., how much of the analyst's label structure survives across-method
+    agreement) but is excluded from the consensus balloon plot's inputs, which it would
+    double-count. Weights/direction enter only through the input partitions.
+    """
+    if len(input_maps) < 2:
+        raise ValueError(
+            "CONSENSUS needs at least two consensus-eligible input partitions "
+            "(algorithmic strategies other than KCORE) in --community-strategies."
+        )
+    node_ids, node_id_map = _node_id_index(graph)
+    n_partitions = len(input_maps)
+    pair_counts: Counter[tuple[int, int]] = Counter()
+    for community_map in input_maps.values():
+        by_community: dict[Any, list[int]] = {}
+        for node_id, community_id in community_map.items():
+            index = node_id_map.get(node_id)
+            if index is not None:
+                by_community.setdefault(community_id, []).append(index)
+        for members in by_community.values():
+            members.sort()
+            pair_counts.update(combinations(members, 2))
+
+    consensus_graph = ig.Graph(n=len(node_ids), directed=False)
+    edges: list[tuple[int, int]] = []
+    weights: list[float] = []
+    for pair, count in pair_counts.items():
+        agreement = count / n_partitions
+        if agreement >= threshold:
+            edges.append(pair)
+            weights.append(agreement)
+    consensus_graph.add_edges(edges)
+    partition = leidenalg.find_partition(
+        consensus_graph,
+        leidenalg.ModularityVertexPartition,
+        weights=weights if weights else None,
+        seed=0,
+    )
+    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+
+
 # SBM(refine=MCMC) run lengths: `wait` bounds the multiflip equilibration phase, `samples` is the
 # number of posterior partitions collected for the marginals. Modest by graph-tool-docs standards
 # (which use wait=1000), sized for Pulpit's few-hundred-to-few-thousand-node citation graphs.
@@ -637,7 +715,7 @@ def detect_sbm(
 
     ``weights`` selects the edge model. Empty (default): **unweighted** binary citation
     structure — edge weights are not passed, so the partition is invariant to
-    ``--edge-weight-strategy``, like ``LABELPROPAGATION`` / ``KCORE``. ``POISSON`` /
+    ``--edge-weight-strategy``, like ``KCORE``. ``POISSON`` /
     ``EXPONENTIAL`` fit a **weighted SBM** with the edge weights as covariates (Peixoto 2018,
     "Nonparametric weighted stochastic block models"): POISSON models discrete counts (pair
     with ``--edge-weight-strategy TOTAL``), EXPONENTIAL positive reals (pair with the
@@ -772,8 +850,13 @@ def detect(
         instance = StrategyInstance(instance.upper())
     strategy = instance.name
     params = instance.params_dict
-    if strategy == "LABELPROPAGATION":
-        return detect_label_propagation(graph, palette_name, reverse=reverse)
+    if strategy == "CONSENSUS":
+        # Derived from the other strategies' partitions — the export pipeline dispatches it to
+        # detect_consensus() after every other strategy has run; it cannot be detected standalone.
+        raise ValueError(
+            "CONSENSUS is computed from the other selected strategies' partitions and is "
+            "dispatched separately by the export pipeline (detect_consensus), not by detect()."
+        )
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":

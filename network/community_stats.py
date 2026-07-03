@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 _PATH_LENGTH_MIN_NODES = 3
 
 # Strategies dropped from the partition-comparison matrices: connectivity/shell decompositions
-# that are not community detections (the consensus matrix also excludes them, plus the label-group
-# partitions — which these matrices keep, since detection-vs-manual-labels is the comparison they
-# exist for).
+# that are not community detections (the consensus balloon plot also excludes them, plus the
+# label-group partitions and the derived CONSENSUS partition — whereas these matrices keep the
+# label groups *and* CONSENSUS: detection-vs-manual-labels and consensus-vs-inputs are exactly
+# the comparisons they exist for).
 _COMPARISON_EXCLUDED_STRATEGIES: frozenset[str] = frozenset({"kcore"})
 
 # Pairwise partition-comparison indices rendered as strategy×strategy matrices on the network page

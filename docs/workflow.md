@@ -310,6 +310,7 @@ python manage.py structural_analysis --community-strategies "SBM(mode=NESTED),SB
 python manage.py structural_analysis --community-strategies "SBM(weights=POISSON)" --edge-weight-strategy TOTAL   # weighted SBM: blocks reflect citation intensity (POISSON=counts, EXPONENTIAL=PARTIAL_* ratios)
 python manage.py structural_analysis --community-strategies "SBM(refine=MCMC)"   # posterior sampling: max-marginal blocks + per-channel SBM-confidence column (slower)
 python manage.py structural_analysis --community-strategies "LEIDEN,LOUVAIN"   # classic Louvain baseline alongside Leiden, for comparison with older studies
+python manage.py structural_analysis --community-strategies "LEIDEN,LEIDEN_DIRECTED,LOUVAIN,CONSENSUS(threshold=0.5)"   # consensus partition of the other strategies (needs ≥2 of them; KCORE doesn't count)
 python manage.py structural_analysis --community-strategies ALL
 python manage.py structural_analysis --community-strategies LEIDEN --community-backbone-alpha 0.05   # detect on the disparity-filter backbone; everything else stays on the full graph
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31

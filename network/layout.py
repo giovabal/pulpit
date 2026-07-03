@@ -220,7 +220,7 @@ def community_shell_positions(
     ``{strategy_key: (community_map, palette)}`` keyed by the parameter-suffixed partition key
     (``StrategyInstance.key``) where *community_map* is ``{node_id: community_label}``.
     """
-    preferred = ["leiden", "leiden_directed", "labelpropagation"]
+    preferred = ["leiden", "leiden_directed", "consensus", "louvain"]
     community_map: dict | None = None
     for key in preferred:
         if key in strategy_results:

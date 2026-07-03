@@ -823,15 +823,21 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                         f"(currently: {present}), or left blank to auto-resolve"
                     )
 
-        if post.get("consensus_matrix"):
-            # Metadata (LABELGROUP) partitions are excluded from the consensus matrix — they
-            # replaced the old single ORGANIZATION strategy. Need ≥2 algorithm strategies.
-            non_meta = [inst for inst in parsed_strategies if not net_community.is_metadata_strategy(inst.name)]
-            if len(non_meta) < 2:
-                raise ValueError(
-                    "Consensus matrix requires at least two non-metadata community strategies"
-                    f" (currently: {len(non_meta)})"
-                )
+        # The consensus matrix and the CONSENSUS strategy aggregate the same inputs: the
+        # algorithmic partitions minus KCORE (a shell decomposition) and minus CONSENSUS itself
+        # (a derived partition must not feed its own aggregation). net_community.consensus_eligible
+        # is the single source of that rule.
+        eligible = [inst for inst in parsed_strategies if net_community.consensus_eligible(inst.name)]
+        if post.get("consensus_matrix") and len(eligible) < 2:
+            raise ValueError(
+                "Consensus matrix requires at least two consensus-eligible community strategies "
+                f"(algorithmic, excluding K-core; currently: {len(eligible)})"
+            )
+        if any(inst.name == "CONSENSUS" for inst in parsed_strategies) and len(eligible) < 2:
+            raise ValueError(
+                "The Consensus strategy requires at least two other algorithmic community strategies "
+                f"(excluding K-core; currently: {len(eligible)})"
+            )
         return
 
     if task == "compare_analysis":
