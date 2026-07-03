@@ -88,9 +88,11 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
+    "LEIDEN_TEMPORAL",
     "LOUVAIN",
     "KCORE",
     "SBM",
+    "SBM_ASSORTATIVE",
     "CONSENSUS",
 ]
 

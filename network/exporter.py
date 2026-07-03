@@ -338,7 +338,7 @@ def sbm_confidence_columns(graph_data: GraphData, strategies: list[str]) -> list
     """
     cols: list[tuple[str, str]] = []
     for s in strategies:
-        if canonical_strategy_key(s) != "sbm":
+        if canonical_strategy_key(s) not in ("sbm", "sbm_assortative"):
             continue
         key = sbm_confidence_key(s)
         if any(key in n for n in graph_data["nodes"]):

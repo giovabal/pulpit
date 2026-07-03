@@ -498,6 +498,35 @@ class WriteCliCommandViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Community strategies", resp.json()["error"])
 
+    def test_structural_rejects_temporal_without_timeline(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["LEIDEN", "LEIDEN_TEMPORAL"]},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Timeline", resp.json()["error"])
+
+    def test_structural_accepts_temporal_with_timeline(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={
+                "community_strategies": ["LEIDEN", "LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)"],
+                "timeline_step": "on",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        cmd = resp.json()["command"]
+        self.assertIn("LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)", cmd)
+        self.assertIn("--timeline-step year", cmd)
+
+    def test_structural_accepts_sbm_assortative(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["SBM_ASSORTATIVE(refine=MCMC)", "SBM_ASSORTATIVE"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("SBM_ASSORTATIVE(refine=MCMC)", resp.json()["command"])
+
     def test_command_quotes_args_with_spaces(self):
         # search_channels --extra-term may carry multi-word phrases.  The
         # preview must remain executable when pasted into a shell.

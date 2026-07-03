@@ -7,7 +7,8 @@ import { render_partition_comparison } from './partition_comparison.js';
 // Mirrors network.community.UNDIRECTED_BASIS_STRATEGIES — strategies optimised on the undirected
 // W+Wᵀ projection, whose modularity (and per-community contributions) community_stats.py computes
 // with the undirected null model rather than the directed Leicht & Newman one.
-var UNDIRECTED_BASIS_STRATEGIES = ['leiden', 'leiden_cpm', 'louvain', 'kcore', 'consensus',
+var UNDIRECTED_BASIS_STRATEGIES = ['leiden', 'leiden_cpm', 'leiden_temporal', 'louvain', 'kcore',
+    'sbm_assortative', 'consensus',
     // labelpropagation was removed in v0.27; kept so pre-0.27 exports rebuilt with fresh
     // map assets still report their modularity against the projection it was computed on.
     'labelpropagation'];

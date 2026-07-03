@@ -7,9 +7,11 @@ export var STRATEGY_LABELS = {
     leiden:           'Leiden',
     leiden_directed:  'Leiden directed',
     leiden_cpm:       'Leiden CPM',
+    leiden_temporal:  'Leiden temporal',
     louvain:          'Louvain',
     kcore:            'K-core',
     sbm:              'Stochastic block model',
+    sbm_assortative:  'Assortative SBM',
     consensus:        'Consensus',
     // Removed in v0.27 — kept so pre-0.27 exports rebuilt with fresh map assets still label it.
     labelpropagation: 'Label propagation',
@@ -28,9 +30,19 @@ if (typeof window !== 'undefined' && window.STRATEGY_LABELS) {
 // Base keys of the parameterised strategies (longest first), their declared params (spec order) and
 // param kinds — used to strip a parameter suffix back to the family and to reconstruct a readable
 // annotation. Mirrors network.community.canonical_strategy_key / strategy_display_label.
-var STRATEGY_BASE_KEYS = ['leiden_cpm', 'consensus', 'sbm'];
-var STRATEGY_PARAMS = { leiden_cpm: ['resolution'], consensus: ['threshold'], sbm: ['mode', 'weights', 'refine'] };
-var STRATEGY_PARAM_KINDS = { resolution: 'float', threshold: 'float', mode: 'enum', weights: 'enum', refine: 'enum' };
+// Ordered longest-first where one base prefixes another (sbm_assortative before sbm).
+var STRATEGY_BASE_KEYS = ['leiden_temporal', 'leiden_cpm', 'sbm_assortative', 'consensus', 'sbm'];
+var STRATEGY_PARAMS = {
+    leiden_cpm: ['resolution'],
+    leiden_temporal: ['resolution', 'interslice'],
+    consensus: ['threshold'],
+    sbm: ['mode', 'weights', 'refine'],
+    sbm_assortative: ['refine'],
+};
+var STRATEGY_PARAM_KINDS = {
+    resolution: 'float', interslice: 'float', threshold: 'float',
+    mode: 'enum', weights: 'enum', refine: 'enum',
+};
 
 export function canonical_strategy_key(key) {
     var k = String(key).toLowerCase();

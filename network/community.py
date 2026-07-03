@@ -34,11 +34,18 @@ ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
     "LEIDEN_CPM",
+    "LEIDEN_TEMPORAL",
     "LOUVAIN",
     "KCORE",
     "SBM",
+    "SBM_ASSORTATIVE",
     "CONSENSUS",
 ]
+
+# Strategies the ``ALL`` token does NOT expand to. LEIDEN_TEMPORAL hard-requires a year timeline
+# (``--timeline-step year``), so folding it into ALL would break every non-timeline ``ALL`` run;
+# it must be requested explicitly.
+EXCLUDED_FROM_ALL: frozenset[str] = frozenset({"LEIDEN_TEMPORAL"})
 # Every static strategy is an algorithm; the only *metadata* partitions are the dynamic, DB-keyed
 # ``LABELGROUP<id>`` strategies (one per partition LabelGroup), which replaced the old single
 # ``ORGANIZATION`` strategy. ``is_metadata_strategy`` distinguishes them.
@@ -97,8 +104,12 @@ def custom_label_display(name: str) -> str:
 # Keys are *canonical* (parameter-suffix-stripped) strategy keys — membership is tested via
 # canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
 # CONSENSUS is optimised on the (undirected) co-assignment graph, not the citation graph;
-# its modularity is reported against the undirected projection, the closest null.
-UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset({"leiden", "leiden_cpm", "louvain", "kcore", "consensus"})
+# its modularity is reported against the undirected projection, the closest null. LEIDEN_TEMPORAL
+# and SBM_ASSORTATIVE are both fitted on the undirected W+Wᵀ projection (per-year slices for the
+# former), so they report against the undirected null too.
+UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
+    {"leiden", "leiden_cpm", "leiden_temporal", "louvain", "kcore", "sbm_assortative", "consensus"}
+)
 
 # Human-readable labels for the strategy keys above — mirrors STRATEGY_LABELS in
 # webapp_engine/map/js/labels.js so the same display text shows up in browser
@@ -107,9 +118,11 @@ COMMUNITY_STRATEGY_LABELS: dict[str, str] = {
     "LEIDEN": "Leiden",
     "LEIDEN_DIRECTED": "Leiden directed",
     "LEIDEN_CPM": "Leiden CPM",
+    "LEIDEN_TEMPORAL": "Leiden temporal",
     "LOUVAIN": "Louvain",
     "KCORE": "K-core",
     "SBM": "Stochastic block model",
+    "SBM_ASSORTATIVE": "Assortative SBM",
     "CONSENSUS": "Consensus",
 }
 
@@ -118,14 +131,17 @@ def consensus_eligible(strategy_name: str) -> bool:
     """Whether a strategy's partition may feed consensus aggregation (the CONSENSUS strategy
     and the consensus-matrix balloon plot alike).
 
-    Eligible = a genuine algorithmic community detection: not a manual ``LABELGROUP<id>``
-    partition, not the KCORE shell decomposition (a connectivity hierarchy, not a community
-    detection), and not CONSENSUS itself (a derived partition must not feed its own input —
-    nor double-count in the matrix it summarises). Mirrored by ``_consensusExcluded`` in
+    Eligible = a genuine algorithmic community detection *of the graph under analysis*: not a
+    manual ``LABELGROUP<id>`` partition, not the KCORE shell decomposition (a connectivity
+    hierarchy, not a community detection), not CONSENSUS itself (a derived partition must not
+    feed its own input — nor double-count in the matrix it summarises), and not LEIDEN_TEMPORAL
+    (its full-range column is a plurality summary across timeline slices and its per-year
+    partitions are deliberately coupled to neighbouring years — neither is an independent
+    detection of the graph being aggregated). Mirrored by ``_consensusExcluded`` in
     webapp_engine/map/js/consensus_matrix.js.
     """
     name = strategy_name.upper()
-    return name not in {"KCORE", "CONSENSUS"} and not is_metadata_strategy(name)
+    return name not in {"KCORE", "CONSENSUS", "LEIDEN_TEMPORAL"} and not is_metadata_strategy(name)
 
 
 # ── Parameterised community strategies & strategy instances ────────────────────
@@ -143,6 +159,9 @@ StrategySpec = TokenSpec
 CPM_DEFAULT_RESOLUTION = 0.05
 SBM_DEFAULT_MODE = "NESTED"
 CONSENSUS_DEFAULT_THRESHOLD = 0.5
+# leidenalg's own default coupling weight; higher ω = smoother, more persistent communities
+# across years, lower ω = each year re-partitioned nearly independently.
+TEMPORAL_DEFAULT_INTERSLICE = 1.0
 
 # Base key of the per-channel SBM assignment-confidence companion column written by
 # SBM(refine=MCMC); the per-instance parameter suffix is appended at compute time
@@ -204,6 +223,49 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
         ),
         primary_keys=("sbm",),
         aux_keys=(SBM_CONFIDENCE_BASE_KEY,),
+    ),
+    "LEIDEN_TEMPORAL": StrategySpec(
+        "LEIDEN_TEMPORAL",
+        "Leiden temporal",
+        params=(
+            StrategyParam(
+                "resolution",
+                "float",
+                CPM_DEFAULT_RESOLUTION,
+                minimum=0.0,
+                label="Resolution γ",
+                help="CPM resolution of each year slice, as in LEIDEN_CPM: lower = fewer, larger "
+                "communities; higher = more, smaller ones.",
+            ),
+            StrategyParam(
+                "interslice",
+                "float",
+                TEMPORAL_DEFAULT_INTERSLICE,
+                minimum=0.0,
+                label="Coupling ω",
+                help="Weight of the identity link tying each channel to itself in adjacent years "
+                "(Mucha et al. 2010). 0 = years partitioned independently; higher = smoother, more "
+                "persistent communities across the timeline.",
+            ),
+        ),
+        primary_keys=("leiden_temporal",),
+    ),
+    "SBM_ASSORTATIVE": StrategySpec(
+        "SBM_ASSORTATIVE",
+        "Assortative SBM",
+        params=(
+            StrategyParam(
+                "refine",
+                "enum",
+                "",
+                choices=("MCMC",),
+                label="Refine",
+                help="Empty = single greedy fit. MCMC equilibrates the fit and samples the posterior, "
+                "reporting each channel's most probable community plus a per-channel "
+                "assignment-confidence column (share of posterior samples agreeing).",
+            ),
+        ),
+        primary_keys=("sbm_assortative",),
     ),
     "CONSENSUS": StrategySpec(
         "CONSENSUS",
@@ -280,8 +342,10 @@ def parse_strategies(
         tokens,
         registry=PARAMETERISED_STRATEGIES,
         known_tokens=VALID_STRATEGIES | set(labelgroup_tokens),
-        # ALL expands to the metadata partitions first (the old ORGANIZATION-first order), then algorithms.
-        all_tokens=labelgroup_tokens + ALL_STRATEGIES,
+        # ALL expands to the metadata partitions first (the old ORGANIZATION-first order), then the
+        # algorithms — minus the strategies that only work in specific run shapes (EXCLUDED_FROM_ALL:
+        # LEIDEN_TEMPORAL needs a year timeline, so it must be requested explicitly).
+        all_tokens=labelgroup_tokens + [s for s in ALL_STRATEGIES if s not in EXCLUDED_FROM_ALL],
         instance_cls=StrategyInstance,
         defaults=defaults,
         noun="strategy",
@@ -335,19 +399,24 @@ def strategy_display_label(key: str) -> str:
 
 
 def sbm_confidence_key(strategy_key: str) -> str:
-    """Node-attribute key of the SBM assignment-confidence column for an SBM instance key.
+    """Node-attribute key of the SBM assignment-confidence column for an SBM-family instance key.
 
-    ``sbm_mode_nested_refine_mcmc`` → ``sbm_confidence_mode_nested_refine_mcmc``. Only populated
+    ``sbm_mode_nested_refine_mcmc`` → ``sbm_confidence_mode_nested_refine_mcmc``;
+    ``sbm_assortative_refine_mcmc`` → ``sbm_confidence_assortative_refine_mcmc``. Only populated
     when the instance ran with ``refine=MCMC``; exporters probe the nodes for its presence.
     """
     return SBM_CONFIDENCE_BASE_KEY + strategy_key[len("sbm") :]
 
 
 def sbm_confidence_display_label(strategy_key: str) -> str:
-    """Human label for an SBM confidence column, e.g. ``SBM confidence (mode=nested, refine=mcmc)``."""
+    """Human label for an SBM-family confidence column, e.g. ``SBM confidence (mode=nested, refine=mcmc)``
+    or ``Assortative SBM confidence (refine=mcmc)``."""
+    prefix = (
+        "Assortative SBM confidence" if canonical_strategy_key(strategy_key) == "sbm_assortative" else "SBM confidence"
+    )
     label = strategy_display_label(strategy_key)
     idx = label.find(" (")
-    return "SBM confidence" + (label[idx:] if idx != -1 else "")
+    return prefix + (label[idx:] if idx != -1 else "")
 
 
 type CommunityMap = dict[str, int]
@@ -579,6 +648,104 @@ def detect_leiden_cpm(
         seed=0,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+
+
+def detect_leiden_temporal(
+    year_graphs: dict[int, nx.DiGraph],
+    palette_name: str,
+    resolution: float,
+    interslice_weight: float,
+    *,
+    reverse: bool = False,
+) -> tuple[dict[int, CommunityMap], CommunityMap, CommunityPalette]:
+    """Interslice-coupled temporal communities over the timeline years (Mucha et al. 2010).
+
+    ``year_graphs`` maps each non-empty timeline year to its citation graph (built with the same
+    scope/weight settings as that year's export). Each year becomes one **slice** — the undirected
+    W+Wᵀ projection with edge weights, exactly as ``LEIDEN_CPM`` sees a single graph — and every
+    channel present in two consecutive slices is tied to *itself* across them with weight
+    ``interslice_weight`` (ω). ``leidenalg.find_partition_temporal`` then optimises the CPM
+    objective (``resolution`` γ, seed=0) over all slices at once, so a community's identity is
+    **shared across years**: persistence, splits, and merges become properties of the partition
+    itself rather than post-hoc ribbon-reading in the alluvial diagram. The identity link ties a
+    channel only to itself in adjacent years — no multi-hop flow claim — so the strategy stays
+    inside the one-degree attribution model.
+
+    Returns ``(per_year, plurality, palette)``:
+
+    * ``per_year`` — one :type:`CommunityMap` per year, all sharing a single global community-id
+      space (ids renumbered once, by total membership across every slice, so "community 3" means
+      the same cohort in 2021 and 2022 — and keeps the same colour).
+    * ``plurality`` — the full-range summary column: each channel's most frequent community
+      across the slices it appears in, ties broken by its latest year's assignment. This is a
+      *derived summary* for the full-range map/table, not an independent detection of the
+      full-range graph (which is why the strategy is not consensus-eligible).
+    * ``palette`` — one palette over the global id space, shared by every year.
+
+    Isolated-in-a-year channels are deliberately *not* merged into a residual community (unlike
+    the single-graph detectors): the interslice coupling lets a channel isolated in one year
+    inherit its neighbouring years' community, which is exactly the point of the method.
+    """
+    if len(year_graphs) < 2:
+        raise ValueError(
+            "LEIDEN_TEMPORAL needs at least two non-empty timeline years to couple; "
+            f"got {len(year_graphs)}. Check --timeline-step year and the date window."
+        )
+    years = sorted(year_graphs)
+    slices: list[ig.Graph] = []
+    for year in years:
+        undirected = to_undirected_sum(year_graphs[year])
+        node_ids = sorted(undirected.nodes())
+        node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
+        slice_graph = ig.Graph(n=len(node_ids), directed=False)
+        slice_graph.vs["id"] = node_ids  # identity attribute the interslice coupling joins on
+        edges, weights = [], []
+        for s, t in undirected.edges():
+            edges.append((node_id_map[s], node_id_map[t]))
+            weights.append(undirected.edges[s, t].get("weight", 1.0))
+        slice_graph.add_edges(edges)
+        slice_graph.es["weight"] = weights
+        slices.append(slice_graph)
+
+    memberships, _improvement = leidenalg.find_partition_temporal(
+        slices,
+        leidenalg.CPMVertexPartition,
+        interslice_weight=interslice_weight,
+        vertex_id_attr="id",
+        weight_attr="weight",
+        seed=0,
+        resolution_parameter=resolution,
+    )
+
+    per_year: dict[int, CommunityMap] = {}
+    for year, slice_graph, membership in zip(years, slices, memberships, strict=True):
+        per_year[year] = {slice_graph.vs[index]["id"]: int(cid) for index, cid in enumerate(membership)}
+
+    # One global renumbering by total membership across all slices (size desc, id asc — the
+    # normalize_community_map convention, applied once so ids and colours are stable across years).
+    counts = Counter(cid for community_map in per_year.values() for cid in community_map.values())
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    remap = {cid: index for index, (cid, _) in enumerate(ordered, start=1)}
+    per_year = {
+        year: {node_id: remap[cid] for node_id, cid in community_map.items()}
+        for year, community_map in per_year.items()
+    }
+
+    # Full-range plurality: most frequent community per channel, ties → the latest year's assignment.
+    votes: dict[str, Counter] = {}
+    latest: dict[str, int] = {}
+    for year in years:
+        for node_id, cid in per_year[year].items():
+            votes.setdefault(node_id, Counter())[cid] += 1
+            latest[node_id] = cid
+    plurality: CommunityMap = {}
+    for node_id, counter in votes.items():
+        top = max(counter.values())
+        tied = {cid for cid, count in counter.items() if count == top}
+        plurality[node_id] = latest[node_id] if latest[node_id] in tied else min(tied)
+
+    palette = build_community_palette({str(cid): cid for cid in remap.values()}, palette_name, reverse=reverse)
+    return per_year, plurality, palette
 
 
 def detect_louvain(
@@ -831,6 +998,120 @@ def detect_sbm(
     return final_map, palette, confidence
 
 
+# Zero-temperature merge-split sweeps for the planted-partition greedy fit — the value used in
+# graph-tool's own PPBlockState documentation example.
+PP_GREEDY_NITER = 1000
+
+
+def detect_sbm_assortative(
+    graph: nx.DiGraph,
+    palette_name: str,
+    refine: str = "",
+    *,
+    reverse: bool = False,
+) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
+    """Bayesian planted-partition communities (Zhang & Peixoto 2020) via graph-tool's ``PPBlockState``.
+
+    The **inferential counterpart of Leiden**: like the modularity family it looks only for
+    *assortative* structure — groups denser inside than out — but as a generative model selected
+    by description length it places a community boundary only where the data statistically
+    support one. Zhang & Peixoto show this "succeeds in finding statistically significant
+    assortative modules … unlike alternatives such as modularity maximization, which
+    systematically overfits", with no resolution limit. Where ``SBM`` answers "which channels
+    play the same role?", this answers Leiden's question — "where are the cohesive blocs?" —
+    with statistical backing: a partition boundary that survives here is evidence, not an
+    optimiser's preference. Read the two side by side in the partition-comparison matrices.
+
+    Fitted on the **undirected W+Wᵀ projection** (assortativity is a symmetric notion — the
+    same projection the Leiden family uses) and **unweighted** (binary citation structure, so
+    the partition is invariant to ``--edge-weight-strategy``, like ``KCORE`` and the binary
+    ``SBM``). Parameter-free and seeded: the greedy fit runs ``PP_GREEDY_NITER``
+    zero-temperature merge-split sweeps, graph-tool's documented pattern.
+
+    ``refine``: empty (default) reports the greedy point estimate. ``MCMC`` equilibrates and
+    samples the posterior exactly like ``SBM(refine=MCMC)`` — the reported partition becomes
+    each channel's max-marginal community and the third return value carries the per-channel
+    assignment confidence (share of posterior samples agreeing); ``None`` without MCMC.
+
+    Requires the ``graph-tool`` package (conda-forge / system packages — not pip-installable);
+    a clear ``ValueError`` is raised when it is absent.
+    """
+    refine = (refine or "").upper()
+    try:
+        import graph_tool.all as gt
+    except ImportError as exc:  # pragma: no cover - optional heavy dependency
+        raise ValueError(
+            "The SBM_ASSORTATIVE community strategy requires the 'graph-tool' package, which is not "
+            "installed. Install it via conda-forge ('conda install -c conda-forge graph-tool') or your "
+            "system package manager — it is not available from pip. See docs/community-detection.md."
+        ) from exc
+
+    import numpy as np
+
+    gt.seed_rng(0)
+    node_ids, node_id_map = _node_id_index(graph)
+    undirected = to_undirected_sum(graph)
+    gt_graph = gt.Graph(directed=False)
+    gt_graph.add_vertex(len(node_ids))
+    gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()])
+
+    state = gt.PPBlockState(gt_graph)
+    state.multiflip_mcmc_sweep(beta=np.inf, niter=PP_GREEDY_NITER)
+
+    confidence: dict[str, float] | None = None
+    community_map: CommunityMap
+    if refine == "MCMC":
+        gt.mcmc_equilibrate(state, wait=SBM_MCMC_WAIT, mcmc_args={"niter": 10})
+
+        partitions: list[Any] = []
+
+        def _collect(s: Any) -> None:
+            partitions.append(np.asarray(s.get_blocks().a).copy())
+
+        gt.mcmc_equilibrate(state, force_niter=SBM_MCMC_SAMPLES, mcmc_args={"niter": 10}, callback=_collect)
+        pmode = gt.PartitionModeState(partitions, converge=True)
+        marginals = pmode.get_marginal(gt_graph)
+        b_max = pmode.get_max(gt_graph)
+        n_samples = len(partitions)
+        community_map = {}
+        confidence = {}
+        for index, node_id in enumerate(node_ids):
+            block = int(b_max[index])
+            community_map[node_id] = block
+            marginal_counts = marginals[index]
+            agree = marginal_counts[block] if block < len(marginal_counts) else 0
+            confidence[node_id] = round(float(agree) / n_samples, 4) if n_samples else 0.0
+    else:
+        blocks = state.get_blocks()
+        community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+
+    final_map, palette = _finalize_partition(graph, community_map, palette_name, reverse=reverse)
+    return final_map, palette, confidence
+
+
+def _write_confidence(
+    graph: nx.DiGraph,
+    channel_dict: dict[str, Any],
+    instance: "StrategyInstance",
+    confidence: "dict[str, float] | None",
+) -> None:
+    """Attach an SBM-family ``refine=MCMC`` confidence map to the node data and channel_dict.
+
+    The confidence companion rides on the node data like a measure column, under the instance's
+    parameter-suffixed key (:func:`sbm_confidence_key`); exporters probe the nodes for its presence.
+    No-op when ``confidence`` is ``None``/empty (no MCMC refinement ran).
+    """
+    if not confidence:
+        return
+    conf_key = sbm_confidence_key(instance.key)
+    for node_id, value in confidence.items():
+        if node_id in graph.nodes:
+            graph.nodes[node_id].setdefault("data", {})[conf_key] = value
+        entry = channel_dict.get(node_id)
+        if entry is not None:
+            entry["data"][conf_key] = value
+
+
 def detect(
     instance: "StrategyInstance | str",
     palette_name: str,
@@ -857,6 +1138,13 @@ def detect(
             "CONSENSUS is computed from the other selected strategies' partitions and is "
             "dispatched separately by the export pipeline (detect_consensus), not by detect()."
         )
+    if strategy == "LEIDEN_TEMPORAL":
+        # Needs every timeline year's slice at once — the export pipeline precomputes it via
+        # detect_leiden_temporal() and applies the per-year / plurality maps directly.
+        raise ValueError(
+            "LEIDEN_TEMPORAL is computed over the per-year timeline slices and is dispatched "
+            "separately by the export pipeline (detect_leiden_temporal), not by detect()."
+        )
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":
@@ -878,16 +1166,16 @@ def detect(
             str(params.get("refine", "") or ""),
             reverse=reverse,
         )
-        if confidence:
-            # The confidence companion rides on the node data like a measure column, under the
-            # instance's parameter-suffixed key; exporters probe the nodes for its presence.
-            conf_key = sbm_confidence_key(instance.key)
-            for node_id, value in confidence.items():
-                if node_id in graph.nodes:
-                    graph.nodes[node_id].setdefault("data", {})[conf_key] = value
-                entry = channel_dict.get(node_id)
-                if entry is not None:
-                    entry["data"][conf_key] = value
+        _write_confidence(graph, channel_dict, instance, confidence)
+        return community_map, community_palette
+    if strategy == "SBM_ASSORTATIVE":
+        community_map, community_palette, confidence = detect_sbm_assortative(
+            graph,
+            palette_name,
+            str(params.get("refine", "") or ""),
+            reverse=reverse,
+        )
+        _write_confidence(graph, channel_dict, instance, confidence)
         return community_map, community_palette
     gid = labelgroup_id(strategy)
     if gid is not None:
