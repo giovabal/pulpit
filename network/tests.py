@@ -58,6 +58,7 @@ from network.measures import (
     apply_module_role,
     apply_out_degree_centrality,
     apply_pagerank,
+    apply_reciprocity,
     canonical_measure_key,
     parse_measures,
     role_companions,
@@ -1913,13 +1914,23 @@ class ApplyModuleRoleTests(TestCase):
         graph_data: dict = {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}
         return graph, graph_data
 
-    def test_emits_numeric_z_measure_and_role_label(self) -> None:
+    def test_emits_numeric_z_and_participation_and_role_label(self) -> None:
         graph, graph_data = self._graph_with_communities()
         labels = apply_module_role(graph_data, graph, "leiden_directed")
-        self.assertEqual(labels, [("within_module_z", "Within-module z")])
+        self.assertEqual(
+            labels,
+            [("within_module_z", "Within-module z"), ("participation", "Participation Coefficient")],
+        )
         for node in graph_data["nodes"]:
             self.assertIn("within_module_z", node)
+            self.assertGreaterEqual(node["participation"], 0.0)
+            self.assertLessEqual(node["participation"], 1.0)
             self.assertIn(node["module_role"], self._ROLES)
+        node_map = {n["id"]: n for n in graph_data["nodes"]}
+        # "a" bridges the two communities (ties to b, c in its own and d outside);
+        # "b" and "c" stay entirely inside theirs.
+        self.assertGreater(node_map["a"]["participation"], 0.0)
+        self.assertEqual(node_map["b"]["participation"], 0.0)
 
     def test_node_without_community_gets_none(self) -> None:
         graph, graph_data = self._graph_with_communities()
@@ -1929,6 +1940,7 @@ class ApplyModuleRoleTests(TestCase):
         apply_module_role(graph_data, graph, "leiden_directed")
         node_map = {n["id"]: n for n in graph_data["nodes"]}
         self.assertIsNone(node_map["loner"]["within_module_z"])
+        self.assertIsNone(node_map["loner"]["participation"])
         self.assertIsNone(node_map["loner"]["module_role"])
 
 
@@ -2004,6 +2016,54 @@ class ApplyLocalClusteringTests(TestCase):
         labels = apply_local_clustering(self.graph_data, self.graph)
         keys = [k for k, _ in labels]
         self.assertIn("local_clustering", keys)
+
+
+# ---------------------------------------------------------------------------
+# measures/_centrality.py — apply_reciprocity
+# ---------------------------------------------------------------------------
+
+
+class ApplyReciprocityTests(TestCase):
+    def _apply(self, edges, nodes=None):
+        graph = nx.DiGraph()
+        if nodes:
+            graph.add_nodes_from(nodes)
+        graph.add_edges_from(edges)
+        graph_data: dict = {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}
+        labels = apply_reciprocity(graph_data, graph)
+        return {n["id"]: n["reciprocity"] for n in graph_data["nodes"]}, labels
+
+    def test_mutual_pair_scores_one(self) -> None:
+        values, labels = self._apply([("a", "b"), ("b", "a")])
+        self.assertEqual(labels, [("reciprocity", "Reciprocity")])
+        self.assertAlmostEqual(values["a"], 1.0)
+        self.assertAlmostEqual(values["b"], 1.0)
+
+    def test_one_way_tie_scores_zero(self) -> None:
+        values, _ = self._apply([("a", "b")])
+        self.assertEqual(values["a"], 0.0)
+        self.assertEqual(values["b"], 0.0)
+
+    def test_mixed_partners(self) -> None:
+        # a↔b mutual, a→c one-way: r(a) = 2·1 / (1 + 2) = 0.6667
+        values, _ = self._apply([("a", "b"), ("b", "a"), ("a", "c")])
+        self.assertAlmostEqual(values["a"], 0.6667)
+        self.assertAlmostEqual(values["b"], 1.0)
+        self.assertEqual(values["c"], 0.0)
+
+    def test_isolated_node_gets_none(self) -> None:
+        values, _ = self._apply([("a", "b"), ("b", "a")], nodes=["loner"])
+        self.assertIsNone(values["loner"])
+
+    def test_self_loop_is_excluded(self) -> None:
+        # A self-loop must count neither as a partner nor as a reciprocated tie.
+        values, _ = self._apply([("a", "a"), ("a", "b")])
+        self.assertEqual(values["a"], 0.0)
+
+    def test_in_edges_only_scores_zero(self) -> None:
+        # The dead-leaf shape: cited by others, never citing (out-edges out of scope).
+        values, _ = self._apply([("a", "leaf"), ("b", "leaf")])
+        self.assertEqual(values["leaf"], 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -2362,6 +2422,18 @@ class WriteCoordinationOutputsTests(TestCase):
             with open(os.path.join(year_dir, "communities.json")) as f:
                 self.assertEqual(json.load(f), {"strategies": {}})
 
+    def test_no_3d_positions_skips_the_3d_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_files(
+                self.coord_graph_data,
+                None,
+                [("coordination_strength", "Coordinated co-forwards")],
+                tmp,
+            )
+            data_dir = os.path.join(tmp, "data_coordination")
+            self.assertTrue(os.path.exists(os.path.join(data_dir, "channel_position.json")))
+            self.assertFalse(os.path.exists(os.path.join(data_dir, "channel_position_3d.json")))
+
     def test_timeline_json_lists_only_years_with_coordination(self) -> None:
         entries = [
             {"year": 2022, "has_coordination": True, "coordination_nodes": 4, "coordination_ties": 3},
@@ -2403,6 +2475,34 @@ class WriteCoordinationOutputsTests(TestCase):
                 # Titled after the project, still noindex without --seo.
                 self.assertIn("<title>Test Project — Coordination</title>", content)
                 self.assertIn('content="noindex"', content)
+
+    def test_include_flags_gate_the_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_pages(
+                tmp,
+                seo=False,
+                project_title="Test Project",
+                node_count=2,
+                tie_count=1,
+                strategy_labels={},
+                include_2d=True,
+                include_3d=False,
+            )
+            self.assertTrue(os.path.exists(os.path.join(tmp, "coordination.html")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "coordination3d.html")))
+        with tempfile.TemporaryDirectory() as tmp:
+            write_coordination_pages(
+                tmp,
+                seo=False,
+                project_title="Test Project",
+                node_count=2,
+                tie_count=1,
+                strategy_labels={},
+                include_2d=False,
+                include_3d=True,
+            )
+            self.assertFalse(os.path.exists(os.path.join(tmp, "coordination.html")))
+            self.assertTrue(os.path.exists(os.path.join(tmp, "coordination3d.html")))
 
 
 # ---------------------------------------------------------------------------
@@ -4150,6 +4250,7 @@ class MeasureParserTests(TestCase):
 
     def test_canonical_measure_key(self) -> None:
         self.assertEqual(canonical_measure_key("within_module_z_basis_leiden_directed"), "within_module_z")
+        self.assertEqual(canonical_measure_key("participation_basis_leiden_directed"), "participation")
         self.assertEqual(canonical_measure_key("diffusion_lag_window_60"), "diffusion_lag")
         self.assertEqual(canonical_measure_key("pagerank"), "pagerank")  # non-parameterised unchanged
 

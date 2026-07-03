@@ -2,7 +2,7 @@
 
 The *coordination analysis* asks: **which channels move in step?** Two channels form a coordination tie when they repeatedly forward the **same origin message** within a short time window of each other. This is a second network layer, deliberately distinct from the citation graph: the citation graph records *who amplifies whom* (volume and direction of attention), the coordination graph records *who acts in synchrony with whom* (timing). A channel pair can be prominent in one layer and absent from the other — and the difference is the finding.
 
-Enable with `--coordination` on `structural_analysis`, or the **Coordination Analysis** fieldset in the Operations panel. The output is a dedicated data directory (`data_coordination/`) and **two interactive maps with their own force-directed layouts**: `coordination.html` (2D) and `coordination3d.html` (3D), rendered by the same viewers as the main network maps.
+Enable with `--coordination-2d` and/or `--coordination-3d` on `structural_analysis` — the coordination counterparts of `--graph-2d` / `--graph-3d` — or with the two **Coordination map** toggles on the second row of the Operations panel's **Outputs** fieldset. The output is a dedicated data directory (`data_coordination/`) and, per selected toggle, an **interactive map with its own force-directed layout**: `coordination.html` (2D) and `coordination3d.html` (3D), rendered by the same viewers as the main network maps.
 
 ---
 
@@ -42,7 +42,8 @@ Node colours, community assignments, and channel metadata are copied verbatim fr
 
 | Flag | Default | Meaning |
 | :--- | :------ | :------ |
-| `--coordination` | off | Enable the layer (2D + 3D maps and `data_coordination/`) |
+| `--coordination-2d` | off | Build the layer and its 2D map (`coordination.html` + `data_coordination/`) |
+| `--coordination-3d` | off | Also (or only) build the 3D map (`coordination3d.html`, with its own 3D layout) |
 | `--coordination-window` | `300` s | Two forwards of the same origin count as coordinated when they land within this many seconds of each other |
 | `--coordination-min-events` | `3` | Minimum distinct shared origins before a pair's tie is kept |
 
@@ -65,10 +66,10 @@ Node colours, community assignments, and channel metadata are copied verbatim fr
 
 | File | Content |
 | :--- | :------ |
-| `coordination.html` | 2D interactive map of the coordination network (requires an HTTP server, like `graph.html`) |
-| `coordination3d.html` | 3D interactive map (requires an HTTP server) |
+| `coordination.html` | 2D interactive map of the coordination network (with `--coordination-2d`; requires an HTTP server, like `graph.html`) |
+| `coordination3d.html` | 3D interactive map (with `--coordination-3d`; requires an HTTP server) |
 | `data_coordination/channel_position.json` | 2D layout + ties |
-| `data_coordination/channel_position_3d.json` | 3D layout + ties |
+| `data_coordination/channel_position_3d.json` | 3D layout + ties (only with `--coordination-3d`) |
 | `data_coordination/channels.json` | Node metadata, coordination measures, community assignments |
 | `data_coordination/communities.json` | Community-strategy payload of the matching citation-graph scope (drives colour-by and the legend) |
 | `data_coordination/timeline.json` | Year switcher entries (only with `--timeline-step year`; lists only years with surviving ties) |

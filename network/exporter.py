@@ -612,7 +612,8 @@ def write_summary_json(
         "interest_structural",
         "interest_window_days",
         "interest_include_mentions",
-        "coordination",
+        "coordination_2d",
+        "coordination_3d",
         "coordination_window",
         "coordination_min_events",
     )
@@ -738,7 +739,7 @@ def build_coordination_graph_data(
 
 def write_coordination_files(
     coord_graph_data: GraphData,
-    positions_3d: dict[str, tuple[float, float, float]],
+    positions_3d: "dict[str, tuple[float, float, float]] | None",
     measures_labels: list[tuple[str, str]],
     graph_dir: str,
     *,
@@ -750,7 +751,10 @@ def write_coordination_files(
     Same file contract as ``data/`` (``channel_position.json``,
     ``channel_position_3d.json``, ``channels.json``, ``communities.json``), so
     the standard 2D/3D viewers render it unmodified once ``window.DATA_DIR``
-    points here — the viewers unconditionally fetch all four files.
+    points here — the 2D viewer needs the first, third and fourth files, the
+    3D viewer the last three. ``positions_3d`` is ``None`` when the 3D
+    coordination map was not requested; ``channel_position_3d.json`` is then
+    skipped, mirroring the main export's optional 3D positions file.
     ``communities_data`` is the strategy payload of the matching citation-graph
     scope (full range or one year), so community colouring and the legend work
     on the coordination map too. ``dir_name`` selects the directory: the
@@ -768,19 +772,20 @@ def write_coordination_files(
     with open(os.path.join(data_dir, "channel_position.json"), "w") as f:
         f.write(json.dumps(position_payload))
 
-    nodes_3d = []
-    for n in coord_graph_data["nodes"]:
-        pos = positions_3d.get(n["id"])
-        nodes_3d.append(
-            {
-                "id": n["id"],
-                "x": float(pos[0]) if pos is not None else 0.0,
-                "y": float(pos[1]) if pos is not None else 0.0,
-                "z": float(pos[2]) if pos is not None else 0.0,
-            }
-        )
-    with open(os.path.join(data_dir, "channel_position_3d.json"), "w") as f:
-        f.write(json.dumps({"nodes": nodes_3d, "edges": coord_graph_data["edges"]}))
+    if positions_3d is not None:
+        nodes_3d = []
+        for n in coord_graph_data["nodes"]:
+            pos = positions_3d.get(n["id"])
+            nodes_3d.append(
+                {
+                    "id": n["id"],
+                    "x": float(pos[0]) if pos is not None else 0.0,
+                    "y": float(pos[1]) if pos is not None else 0.0,
+                    "z": float(pos[2]) if pos is not None else 0.0,
+                }
+            )
+        with open(os.path.join(data_dir, "channel_position_3d.json"), "w") as f:
+            f.write(json.dumps({"nodes": nodes_3d, "edges": coord_graph_data["edges"]}))
 
     channels_payload = {
         "nodes": coord_graph_data["nodes"],
@@ -834,21 +839,25 @@ def write_coordination_pages(
     node_count: int = 0,
     tie_count: int = 0,
     strategy_labels: "dict[str, str] | None" = None,
+    include_2d: bool = True,
+    include_3d: bool = True,
 ) -> None:
-    """Write ``coordination.html`` and ``coordination3d.html`` into the export root.
+    """Write ``coordination.html`` and/or ``coordination3d.html`` into the export root.
 
-    Each page is the pristine map template re-pointed at ``data_coordination/``
-    via ``window.DATA_DIR``, with titles and descriptions reworded for the
-    coordination layer. ``tie_count`` is the number of *unordered* pairs — the
-    figure quoted in the screen-reader summary ("mutual co-forwarding ties").
-    No extra layouts are advertised (FA2 only), so the layout switcher stays
-    hidden and the year navigation never appears (``data_coordination/`` has no
-    ``timeline.json``).
+    ``include_2d`` / ``include_3d`` mirror the ``--coordination-2d`` /
+    ``--coordination-3d`` output toggles. Each page is the pristine map
+    template re-pointed at ``data_coordination/`` via ``window.DATA_DIR``, with
+    titles and descriptions reworded for the coordination layer. ``tie_count``
+    is the number of *unordered* pairs — the figure quoted in the
+    screen-reader summary ("mutual co-forwarding ties"). No extra layouts are
+    advertised (FA2 only), so the layout switcher stays hidden; the year
+    switcher appears only when ``data_coordination/timeline.json`` exists.
     """
     map_src = str(settings.BASE_DIR / "webapp_engine" / "map")
     coord_title = f"{project_title} — Coordination" if project_title else "Co-forwarding coordination"
-    for src_name, dst_name, desc_old, desc_new, title_old, title_new in (
+    page_specs = (
         (
+            include_2d,
             "graph.html",
             "coordination.html",
             "An interactive force-directed network map of Telegram channels, "
@@ -858,6 +867,7 @@ def write_coordination_pages(
             "Co-forwarding coordination map",
         ),
         (
+            include_3d,
             "graph3d.html",
             "coordination3d.html",
             "An interactive 3D force-directed network map of Telegram channels.",
@@ -865,7 +875,10 @@ def write_coordination_pages(
             "Pulpit project — 3D map",
             "Co-forwarding coordination — 3D map",
         ),
-    ):
+    )
+    for included, src_name, dst_name, desc_old, desc_new, title_old, title_new in page_specs:
+        if not included:
+            continue
         src_path = os.path.join(map_src, src_name)
         dst_path = os.path.join(root_target, dst_name)
         try:

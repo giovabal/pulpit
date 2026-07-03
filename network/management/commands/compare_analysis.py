@@ -102,7 +102,8 @@ class Command(BaseCommand):
             include_robustness_html=exists("robustness_table.html"),
             include_robustness_xlsx=exists("robustness_table.xlsx"),
             include_interest_structural=exists("interest_structural.html"),
-            include_coordination=exists("coordination.html"),
+            include_coordination_2d=exists("coordination.html"),
+            include_coordination_3d=exists("coordination3d.html"),
             include_compare_html=True,
             compare_files=compare_files,
         )

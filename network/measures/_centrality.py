@@ -219,6 +219,37 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     return apply_measure(graph_data, values, "local_clustering", "Local Clustering")
 
 
+def apply_reciprocity(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
+    """Add node-level reciprocity: the share of a channel's citation partners that are mutual.
+
+    ``r(v) = 2 · |pred(v) ∩ succ(v)| / (|pred(v)| + |succ(v)|)``, self-loops excluded —
+    the node-level counterpart of the whole-network *Reciprocity* statistic and of the
+    per-community reciprocity column. Purely dyadic, so fully consistent with the
+    one-degree attribution model: a reciprocated pair is two channels that each cite
+    the other — a mutual-amplification relationship rather than one-way audience.
+
+    Range [0, 1]; ``None`` for isolated nodes (no partners → undefined, matching Burt's
+    constraint's convention). **Unweighted by design**, like the Freeman degree
+    centralities: mutuality is about *whether* a return tie exists, not how heavy it
+    is, so the ranking is invariant to ``--edge-weight-strategy``. Direction-invariant
+    (predecessors and successors swap under ``G.reverse()``, the overlap does not).
+
+    Hand-rolled rather than ``nx.reciprocity``, which raises on the isolated in-target
+    nodes Pulpit deliberately keeps in the graph and counts self-loops as reciprocated.
+
+    Refs: Garlaschelli & Loffredo 2004, *PRL* 93(26); Squartini, Picciolo, Ruzzenenti
+    & Garlaschelli 2013, *Sci. Rep.* 3:2729 (weighted extension, not implemented);
+    Wasserman & Faust 1994 ch. 13 (dyad census).
+    """
+    values: dict[str, float | None] = {}
+    for node in graph.nodes():
+        pred = set(graph.predecessors(node)) - {node}
+        succ = set(graph.successors(node)) - {node}
+        total = len(pred) + len(succ)
+        values[node] = round(2 * len(pred & succ) / total, 4) if total else None
+    return apply_measure(graph_data, values, "reciprocity", "Reciprocity", default=None)
+
+
 # Guimerà & Amaral (2005) within-module-degree-z / participation-coefficient role thresholds.
 _GA_Z_HUB = 2.5
 
@@ -253,7 +284,9 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
       ``z`` marks a hub *inside* its own community. Emitted as the sortable numeric measure
       ``within_module_z``.
     * **participation coefficient** ``P`` (Guimerà & Amaral 2005) — how evenly the node's ties
-      spread across communities.
+      spread across communities: 0 = every tie inside one community, → 1 = ties spread evenly
+      across many. Emitted as the sortable numeric measure ``participation`` — the continuous
+      cross-community bridging score the seven role labels quantise.
 
     The (z, P) pair maps to one of seven canonical roles (ultra-peripheral, peripheral,
     connector, kinless; and provincial / connector / kinless hub), written as the categorical
@@ -289,10 +322,12 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
         nid = node["id"]
         if nid not in module_degree:
             node["within_module_z"] = None
+            node["participation"] = None
             node["module_role"] = None
             continue
         mean, std = module_stats[community_map[nid]]
         z = (module_degree[nid] - mean) / std if std > 0 else 0.0
         node["within_module_z"] = round(z, 4)
+        node["participation"] = round(participation.get(nid, 0.0), 4)
         node["module_role"] = _ga_role(z, participation.get(nid, 0.0))
-    return [("within_module_z", "Within-module z")]
+    return [("within_module_z", "Within-module z"), ("participation", "Participation Coefficient")]

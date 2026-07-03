@@ -10,8 +10,8 @@ Every export is written by the **Structural Analysis** operation (or `structural
 exports/
   <name>/
     index.html              ← landing page
-    graph.html              ← 2D interactive graph
-    graph3d.html            ← 3D interactive graph (optional)
+    graph.html              ← structural 2D map
+    graph3d.html            ← structural 3D map (optional)
     channel_table.html      ← per-channel metrics table
     network_table.html      ← whole-network metrics
     community_table.html    ← per-community metrics
@@ -20,8 +20,8 @@ exports/
     behavioural_equivalence.html  ← behavioural equivalence matrix (optional)
     network_compare_table.html   ← network comparison (optional)
     robustness_table.html   ← node-removal R-index page (optional)
-    coordination.html       ← 2D co-forwarding coordination map (optional)
-    coordination3d.html     ← 3D co-forwarding coordination map (optional)
+    coordination.html       ← 2D co-forwarding coordination map (with --coordination-2d)
+    coordination3d.html     ← 3D co-forwarding coordination map (with --coordination-3d)
     vacancy_analysis.html   ← replacement-candidate ranking (optional)
     channel_table.xlsx      ← Excel version (optional)
     network_table.xlsx
@@ -44,13 +44,13 @@ exports/
       timeline.json         (when --timeline-step year)
     data_YYYY/              (one per year when --timeline-step year)
       ...
-    data_coordination/      (when --coordination)
+    data_coordination/      (when --coordination-2d / --coordination-3d)
       channels.json
       channel_position.json
-      channel_position_3d.json
+      channel_position_3d.json  (when --coordination-3d)
       communities.json
       timeline.json         (when --timeline-step year; only years with ties)
-    data_coordination_YYYY/ (per year with ties, when --coordination + --timeline-step year)
+    data_coordination_YYYY/ (per year with ties, when combined with --timeline-step year)
       ...
     media/
       <channel_id>.jpg      ← channel avatars
@@ -104,7 +104,7 @@ The entry point for sharing or publishing results. Lists every generated file wi
 
 ---
 
-## graph.html — 2D interactive graph
+## graph.html — structural 2D map
 
 <figure>
 <img src="../webapp_engine/static/screenshot_08.jpg" alt="Options panel in the interactive graph">
@@ -123,8 +123,8 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requi
 - **Year navigator** — appears when a timeline export was generated; step through annual snapshots with animated transitions (see [Workflow § Timeline export](workflow.md#timeline-see-how-the-network-changed-over-time))
 
 <figure>
-<img src="../webapp_engine/static/screenshot_16.jpg" alt="2D interactive graph">
-<figcaption><em>Details of 2D interactive graph (fully opaque edges, vaporwave palette).</em></figcaption>
+<img src="../webapp_engine/static/screenshot_16.jpg" alt="Structural 2D map">
+<figcaption><em>Details of the structural 2D map (fully opaque edges, vaporwave palette).</em></figcaption>
 </figure>
 <br>
 
@@ -132,7 +132,7 @@ Powered by [Sigma.js](http://sigmajs.org/). Generated with `--graph-2d`. **Requi
 
 ---
 
-## graph3d.html — 3D interactive graph
+## graph3d.html — structural 3D map
 
 Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requires `--graph-2d`). **Requires an HTTP server** — see [Opening the output files](#opening-the-output-files-http-server-vs-direct-file-access).
 
@@ -141,13 +141,13 @@ Powered by [Three.js](https://threejs.org/). Generated with `--graph-3d` (requir
 - The year navigator is also present when a timeline export was generated
 
 <figure>
-<img src="../webapp_engine/static/screenshot_07.jpg" alt="Node detail panel in the 3D graph">
+<img src="../webapp_engine/static/screenshot_07.jpg" alt="Node detail panel in the structural 3D map">
 <figcaption><em>Node detail panel: subscriber count, all computed measures, direct channel link.</em></figcaption>
 </figure>
 <br>
 <figure>
-<img src="../webapp_engine/static/screenshot_06.jpg" alt="3D interactive graph">
-<figcaption><em>3D interactive graph (~800 nodes, ~5,000 edges): rotate, zoom, click nodes to inspect measures.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_06.jpg" alt="Structural 3D map">
+<figcaption><em>Structural 3D map (~800 nodes, ~5,000 edges): rotate, zoom, click nodes to inspect measures.</em></figcaption>
 </figure>
 
 ---
@@ -250,7 +250,7 @@ See [Robustness analysis](robustness-analysis.md) for what each metric measures,
 
 ## coordination.html / coordination3d.html — co-forwarding coordination maps
 
-Generated when `--coordination` is enabled and at least one channel pair survives the thresholds. **Both require an HTTP server** — they are the standard 2D/3D graph viewers re-pointed at `data_coordination/` (`channels.json`, `channel_position.json`, `channel_position_3d.json`, `communities.json`), which holds the coordination network: channels tied when they repeatedly forwarded the same origin message within `--coordination-window` seconds, with edge weight equal to the number of distinct co-forwarded origins and the coordination node measures (`coordination_strength`, `coordination_partners`, `coordination_ratio`) driving the *Nodes dimension* selector. Only channels with at least one retained tie appear. Node colours and community assignments match the main maps, so the two layers read side by side.
+Generated per toggle — `coordination.html` with `--coordination-2d`, `coordination3d.html` with `--coordination-3d` — when at least one channel pair survives the thresholds. **Both require an HTTP server** — they are the standard 2D/3D graph viewers re-pointed at `data_coordination/` (`channels.json`, `channel_position.json`, `channel_position_3d.json`, `communities.json`), which holds the coordination network: channels tied when they repeatedly forwarded the same origin message within `--coordination-window` seconds, with edge weight equal to the number of distinct co-forwarded origins and the coordination node measures (`coordination_strength`, `coordination_partners`, `coordination_ratio`) driving the *Nodes dimension* selector. Only channels with at least one retained tie appear. Node colours and community assignments match the main maps, so the two layers read side by side.
 
 With `--timeline-step year`, each timeline year with surviving ties additionally gets a `data_coordination_YYYY/` directory (same four files), and `data_coordination/timeline.json` lists those years — the coordination pages then show the same in-page year switcher as the main maps, with per-year layouts seeded from the full-range coordination layout for a stable orientation.
 

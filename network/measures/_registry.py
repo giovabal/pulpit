@@ -20,6 +20,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "INDEGCENTRALITY",
         "OUTDEGCENTRALITY",
         "BURTCONSTRAINT",
+        "RECIPROCITY",
         "AMPLIFICATION",
         "CONTENTORIGINALITY",
         "DIFFUSIONLAG",
@@ -33,9 +34,9 @@ ALL_MEASURES: list[str] = sorted(VALID_MEASURES)
 # Node-attribute keys that are genuine centrality indices — the only measures for
 # which a Freeman-style centralization (score concentration around the max) is
 # meaningful. Excludes audience/activity attributes (fans, messages_count), local
-# coefficients (burt_constraint, local_clustering), the within-module z-score
-# (within_module_z, no star-based maximum), and behavioural metrics
-# (amplification_factor, content_originality, diffusion_lag). The weighted in/out
+# coefficients (burt_constraint, local_clustering, reciprocity), the within-module
+# role scores (within_module_z, participation — no star-based maximum), and
+# behavioural metrics (amplification_factor, content_originality, diffusion_lag). The weighted in/out
 # *strength* columns (in_deg, out_deg) are also excluded: strength has no
 # star-based theoretical maximum, so the generic (n−1)·C_max normaliser is too
 # loose to be a useful Freeman approximation. The unweighted, normalised
@@ -102,6 +103,7 @@ MEASURE_STEPS: list[tuple[str, str, str]] = [
     ("OUTDEGCENTRALITY", "out-degree centrality", "apply_out_degree_centrality"),
     ("BURTCONSTRAINT", "Burt's constraint", "apply_burt_constraint"),
     ("LOCALCLUSTERING", "local clustering", "apply_local_clustering"),
+    ("RECIPROCITY", "reciprocity", "apply_reciprocity"),
 ]
 
 
@@ -148,7 +150,7 @@ PARAMETERISED_MEASURES: dict[str, MeasureSpec] = {
         "MODULEROLE",
         "Module Role",
         params=(_basis_param(""),),
-        primary_keys=("within_module_z",),
+        primary_keys=("within_module_z", "participation"),
         aux_keys=("module_role",),
     ),
 }

@@ -146,11 +146,13 @@ STRUCTURAL_DEFAULTS: dict = {
         "include_mentions": False,
     },
     "coordination": {
-        # Temporal co-forwarding coordination maps (coordination.html /
-        # coordination3d.html): channels tied when they repeatedly forward the
-        # same origin message within `window_seconds`, keeping pairs with at
-        # least `min_events` distinct shared origins.
-        "enabled": False,
+        # Temporal co-forwarding coordination maps: channels tied when they
+        # repeatedly forward the same origin message within `window_seconds`,
+        # keeping pairs with at least `min_events` distinct shared origins.
+        # The two map toggles mirror outputs.graph / outputs.graph_3d
+        # (coordination.html and coordination3d.html respectively).
+        "map_2d": False,
+        "map_3d": False,
         "window_seconds": 300,
         "min_events": 3,
     },

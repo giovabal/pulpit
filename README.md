@@ -114,8 +114,8 @@ After export, the output directory contains self-contained files that can be sha
 
 | Output | What it is |
 | :----- | :--------- |
-| **Interactive 2D graph** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Kamada-Kawai, Circular, Community-shell, t-SNE, UMAP, and Hyperbolic layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--2d-interactive-graph) |
-| **Interactive 3D graph** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--3d-interactive-graph) |
+| **Structural 2D map** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Kamada-Kawai, Circular, Community-shell, t-SNE, UMAP, and Hyperbolic layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--structural-2d-map) |
+| **Structural 3D map** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--structural-3d-map) |
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
 | **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
 | **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; label-group × community cross-tabulation, one per partition label group [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
@@ -124,7 +124,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Coordination maps** (`coordination.html` / `coordination3d.html`) | Temporal co-forwarding layer: dedicated 2D and 3D maps of channels that repeatedly forwarded the same origin message within a short time window [more](docs/coordination-analysis.md) |
-| **Timeline animation** | Step through annual snapshots with animated node transitions in both the 2D and 3D graphs [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
+| **Timeline animation** | Step through annual snapshots with animated node transitions in the structural and coordination maps, 2D and 3D [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
 | **CSV node and edge lists** (`nodes.csv`, `edges.csv`) | Most portable format for scripting in R, Python, or shell. `nodes.csv` has the same columns as the channel table. `edges.csv` has `source_label`, `target_label`, `weight`, `weight_forwards`, `weight_mentions`. [more](docs/export-formats.md) |
 | **GEXF and GraphML** | For Gephi, Cytoscape, R/igraph, and any graph-analysis tool [more](docs/export-formats.md#networkgexf--networkgraphml--network-exchange-formats) |
@@ -152,7 +152,8 @@ Each channel receives a score for up to 11 measures. All can be used to size nod
 | :------ | :--------------- |
 | [Burt's constraint](docs/network-measures.md#burts-constraint) | Structural hole brokers — the only bridges between otherwise disconnected groups |
 | [Local clustering](docs/network-measures.md#local-clustering) | Whether the channel's immediate contacts also cite each other — a tight mutual-amplification neighbourhood vs. an open star of independent sources (Fagiolo 2007) |
-| [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — the Guimerà-Amaral role taxonomy |
+| [Reciprocity](docs/network-measures.md#reciprocity) | The share of a channel's citation partners that cite it back — two-way alliances vs. one-way audience (Garlaschelli & Loffredo 2004) |
+| [Within-module role](docs/network-measures.md#within-module-role) | Within-community hub vs. cross-community connector — within-module z, the participation coefficient, and the Guimerà-Amaral role label |
 
 **Content and dynamics**
 
@@ -235,7 +236,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 
 **Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance; the battery is deliberately matched to what Telegram's forward-attribution data can support, and the measures left out are documented with the same care as the ones included ([why](docs/network-measures.md#measures-deliberately-not-computed)). Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. The NMI matrix (Kvalseth 1987) quantifies how much two community partitions agree, independently of community labels.
 
-**Layout and visualisation.** Nodes are placed using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2) seeded from a Kamada-Kawai initial layout, improving reproducibility across re-exports. Alternative spatial layouts (Spectral, Spring, Circular) are pre-computed at export time and selectable at viewing time with smooth animated transitions. The 2D graph is a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/). The optional 3D graph uses [Three.js](https://threejs.org/) with Lambert-shaded spheres and full mouse rotation, zoom, and pan.
+**Layout and visualisation.** Nodes are placed using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2) seeded from a Kamada-Kawai initial layout, improving reproducibility across re-exports. Alternative spatial layouts (Spectral, Spring, Circular) are pre-computed at export time and selectable at viewing time with smooth animated transitions. The structural 2D map is a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/). The optional structural 3D map uses [Three.js](https://threejs.org/) with Lambert-shaded spheres and full mouse rotation, zoom, and pan.
 
 **Storage and access control.** Data is stored in SQLite by default — a single file, no database server required. PostgreSQL, MySQL/MariaDB, and Oracle are supported for multi-user deployments. The browser interface supports three access modes: fully open (personal use on your own machine), semi-protected (public channel browser, restricted operations panel), and fully protected (login required for all pages).
 
@@ -251,12 +252,12 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | :--- | :------- |
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
-| [Network measures](docs/network-measures.md) | All 11 per-channel measures with academic references and worked examples |
+| [Network measures](docs/network-measures.md) | All 12 per-channel measures with academic references and worked examples |
 | [Community detection](docs/community-detection.md) | 8 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
-| [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D graphs |
+| [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D maps |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |

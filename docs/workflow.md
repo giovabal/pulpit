@@ -175,13 +175,13 @@ Before clicking Run, expand **Options** and choose which outputs you want:
 
 | Output | What it is |
 | :----- | :--------- |
-| **2D graph** | An interactive map (`graph.html`) you can open in a browser — search, zoom, filter by cluster, click channels for details. This is the main output most people want. |
-| **3D graph** | The same map in a rotatable 3D view (`graph3d.html`). |
+| **Structural 2D map** | An interactive map of the citation network (`graph.html`) you can open in a browser — search, zoom, filter by cluster, click channels for details. This is the main output most people want. |
+| **Structural 3D map** | The same map in a rotatable 3D view (`graph3d.html`). |
 | **HTML tables** | Sortable tables listing every channel with its network scores, and tables summarising each cluster. |
 | **Excel spreadsheets** | The same tables as `.xlsx` files you can open in Excel or Google Sheets. |
 | **GEXF / GraphML** | Files for network analysis software like Gephi or Cytoscape. |
 
-> **Tip:** tick at least **2D graph** and **HTML tables** for a first run. That gives you the interactive map and a spreadsheet-style overview.
+> **Tip:** tick at least **Structural 2D map** and **HTML tables** for a first run. That gives you the interactive map and a spreadsheet-style overview.
 
 ### Choosing how channels are grouped
 
@@ -232,7 +232,7 @@ Results are written to `data/robustness.json` (always) and rendered as `robustne
 
 ### Coordination: temporal co-forwarding maps
 
-Enable in the Structural Analysis options (or with `--coordination` on the CLI). Pulpit ties together channels that repeatedly forward the **same origin message** within `--coordination-window` seconds of each other (default 300), keeping only pairs with at least `--coordination-min-events` distinct shared origins (default 3) — repetition across different content is what separates coordination from coincidence on viral posts. The result is a second network layer with its own force-directed layouts, rendered as two dedicated interactive maps: `coordination.html` (2D) and `coordination3d.html` (3D), backed by `data_coordination/`. Node colours and community assignments are carried over from the main citation graph so the two maps read side by side; node size defaults to the number of coordinated co-forwards. Combined with `--timeline-step year`, the layer is recomputed per year (`data_coordination_YYYY/`, layouts seeded from the full-range coordination layout) and the coordination maps gain the same in-page year switcher as the main maps, listing only the years with surviving ties. See [Coordination analysis](coordination-analysis.md) for the method, the parameter guidance, and the interpretation guardrails.
+Enable with the two **Coordination map** toggles on the second row of the Outputs fieldset (or `--coordination-2d` / `--coordination-3d` on the CLI — the coordination counterparts of `--graph-2d` / `--graph-3d`). Pulpit ties together channels that repeatedly forward the **same origin message** within `--coordination-window` seconds of each other (default 300), keeping only pairs with at least `--coordination-min-events` distinct shared origins (default 3) — repetition across different content is what separates coordination from coincidence on viral posts. The result is a second network layer with its own force-directed layouts, rendered per selected toggle as a dedicated interactive map: `coordination.html` (2D) and `coordination3d.html` (3D), backed by `data_coordination/`. Node colours and community assignments are carried over from the main citation graph so the two maps read side by side; node size defaults to the number of coordinated co-forwards. Combined with `--timeline-step year`, the layer is recomputed per year (`data_coordination_YYYY/`, layouts seeded from the full-range coordination layout) and the coordination maps gain the same in-page year switcher as the main maps, listing only the years with surviving ties. See [Coordination analysis](coordination-analysis.md) for the method, the parameter guidance, and the interpretation guardrails.
 
 ### Interesting messages
 
@@ -322,10 +322,10 @@ python manage.py structural_analysis --robustness --robustness-strategies ALL   
 python manage.py structural_analysis --robustness --robustness-strategies random,pagerank,in_strength   # custom subset
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
 
-# Coordination analysis (temporal co-forwarding maps: coordination.html + coordination3d.html)
-python manage.py structural_analysis --coordination                                     # defaults: 300 s window, ≥3 shared origins per pair
-python manage.py structural_analysis --coordination --coordination-window 60            # strict: automation-scale synchrony only
-python manage.py structural_analysis --coordination --coordination-min-events 2         # looser repetition threshold for small corpora
+# Coordination analysis (temporal co-forwarding maps: coordination.html / coordination3d.html)
+python manage.py structural_analysis --coordination-2d --coordination-3d                # both maps; defaults: 300 s window, ≥3 shared origins per pair
+python manage.py structural_analysis --coordination-2d --coordination-window 60         # 2D map only, strict: automation-scale synchrony
+python manage.py structural_analysis --coordination-2d --coordination-min-events 2      # looser repetition threshold for small corpora
 
 # Interesting messages — structural reach layer (hot per-channel z-scores are always on)
 python manage.py compute_message_scores                                                 # recompute hot scores for every channel

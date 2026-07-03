@@ -7,8 +7,8 @@ Imagine you have a map of 400 channels. Community detection automatically draws 
 Multiple strategies can be computed simultaneously and switched between in the graph viewer and table outputs.
 
 <figure>
-<img src="../webapp_engine/static/screenshot_00.jpg" alt="2D graph coloured by communities">
-<figcaption><em>2D graph coloured by Leiden directed communities, print layout. Each colour cluster is one detected community.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_00.jpg" alt="Structural 2D map coloured by communities">
+<figcaption><em>Structural 2D map coloured by Leiden directed communities, print layout. Each colour cluster is one detected community.</em></figcaption>
 </figure>
 <br>
 

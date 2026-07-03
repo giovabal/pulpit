@@ -165,8 +165,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 
 | Path | Effect | Built-in default |
 | :--- | :----- | ---------------: |
-| `outputs.graph` | Write `graph.html` (interactive 2D map) | `false` |
-| `outputs.graph_3d` | Write `graph3d.html` (Three.js 3D map) | `false` |
+| `outputs.graph` | Write `graph.html` (the structural 2D map) | `false` |
+| `outputs.graph_3d` | Write `graph3d.html` (the structural 3D map, Three.js) | `false` |
 | `outputs.html` | Write HTML tables (channel, network, community) | `false` |
 | `outputs.xlsx` | Write Excel workbooks alongside HTML tables | `false` |
 | `outputs.gexf` | Write `network.gexf` (Gephi-compatible) | `false` |
@@ -275,6 +275,17 @@ There is no `robustness.enabled` knob — robustness analysis runs iff `robustne
 | `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`. Use `["ALL"]` for every strategy. | `[]` |
 | `robustness.seed` | Single seed driving every stochastic component of the robustness analysis | `42` |
 | `robustness.sample` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+
+## `[coordination]`
+
+Temporal co-forwarding coordination maps: channels tied when they repeatedly forward the same origin message within a short time window. The two map toggles sit on the second row of the Operations panel's **Outputs** fieldset and mirror `outputs.graph` / `outputs.graph_3d`. See [Coordination analysis](coordination-analysis.md).
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `coordination.map_2d` | Generate the 2D coordination map (`coordination.html`, `--coordination-2d`) | `false` |
+| `coordination.map_3d` | Generate the 3D coordination map (`coordination3d.html`, `--coordination-3d`) | `false` |
+| `coordination.window_seconds` | Two forwards of the same origin message count as one coordinated event when they land within this many seconds of each other | `300` |
+| `coordination.min_events` | Minimum distinct shared origins before a channel pair's coordination tie is kept | `3` |
 
 ---
 
