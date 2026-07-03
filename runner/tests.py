@@ -470,6 +470,7 @@ class WriteCliCommandViewTests(TestCase):
                 "html": "on",
                 "include_mentions": "on",
                 "community_strategies": ["LEIDEN"],
+                "community_backbone_alpha": "0.05",
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -479,6 +480,23 @@ class WriteCliCommandViewTests(TestCase):
         self.assertIn("--html", cmd)
         self.assertIn("--mentions", cmd)
         self.assertIn("--community-strategies LEIDEN", cmd)
+        self.assertIn("--community-backbone-alpha 0.05", cmd)
+
+    def test_structural_accepts_sbm_weights_and_refine_params(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["SBM(mode=NESTED,weights=POISSON,refine=MCMC)", "SBM(mode=FLAT)"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("SBM(mode=NESTED,weights=POISSON,refine=MCMC)", resp.json()["command"])
+
+    def test_structural_rejects_bad_sbm_weights_value(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["SBM(weights=GAMMA)"]},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Community strategies", resp.json()["error"])
 
     def test_command_quotes_args_with_spaces(self):
         # search_channels --extra-term may carry multi-word phrases.  The
@@ -1197,6 +1215,17 @@ class DefaultsViewTests(TestCase):
             )
             self.assertEqual(resp.status_code, 200)
             self.assertIn("community_distribution_threshold = 0", _saved_file_content(tmp, ".operations-structural"))
+
+    def test_community_backbone_alpha_round_trip(self) -> None:
+        # Saved under [communities] and projected back onto the form by the load endpoint.
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "t", "community_backbone_alpha": "0.05", "graph": "on"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = _saved_file_content(tmp, ".operations-structural")
+            self.assertIn("backbone_alpha = 0.05", content.split("[communities]", 1)[-1])
 
     def test_fa2_iterations_multiplier_form_saved_as_string(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:

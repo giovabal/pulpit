@@ -124,6 +124,11 @@ StrategySpec = TokenSpec
 CPM_DEFAULT_RESOLUTION = 0.05
 SBM_DEFAULT_MODE = "NESTED"
 
+# Base key of the per-channel SBM assignment-confidence companion column written by
+# SBM(refine=MCMC); the per-instance parameter suffix is appended at compute time
+# (sbm_mode_nested_refine_mcmc → sbm_confidence_mode_nested_refine_mcmc).
+SBM_CONFIDENCE_BASE_KEY = "sbm_confidence"
+
 PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
     "LEIDEN_CPM": StrategySpec(
         "LEIDEN_CPM",
@@ -155,8 +160,30 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 help="NESTED = nested SBM (Peixoto 2017), partition taken at the finest level — better "
                 "model selection on large graphs. FLAT = single-level SBM. May be added once per mode.",
             ),
+            StrategyParam(
+                "weights",
+                "enum",
+                "",
+                choices=("POISSON", "EXPONENTIAL"),
+                label="Weights",
+                help="Edge-covariate model for a weighted SBM fit (Peixoto 2018). Empty = binary fit on the "
+                "bare citation structure (the historical behaviour, invariant to --edge-weight-strategy). "
+                "POISSON models weights as discrete counts — pair with --edge-weight-strategy TOTAL; "
+                "EXPONENTIAL models them as positive reals — pair with the ratio-valued PARTIAL_* strategies.",
+            ),
+            StrategyParam(
+                "refine",
+                "enum",
+                "",
+                choices=("MCMC",),
+                label="Refine",
+                help="Empty = single minimum-description-length fit. MCMC equilibrates the fit and samples "
+                "the posterior (Peixoto 2014; 2021), reporting each channel's most probable block plus a "
+                "per-channel assignment-confidence column (share of posterior samples agreeing).",
+            ),
         ),
         primary_keys=("sbm",),
+        aux_keys=(SBM_CONFIDENCE_BASE_KEY,),
     ),
 }
 
@@ -246,16 +273,43 @@ def strategy_display_label(key: str) -> str:
     if key == base:
         return label
     spec = PARAMETERISED_STRATEGIES.get(base.upper())
-    rest = key[len(base) + 1 :]  # drop "base_" → e.g. "resolution_0_05"
+    rest = key[len(base) + 1 :]  # drop "base_" → e.g. "mode_nested_weights_poisson"
     parts: list[str] = []
-    for param in spec.params if spec else ():
+    params = list(spec.params) if spec else []
+    for i, param in enumerate(params):
         prefix = f"{param.name}_"
-        if rest.startswith(prefix):
-            raw = rest[len(prefix) :]
-            value = raw.replace("_", ".") if param.kind == "float" else raw
-            parts.append(f"{param.name}={value}")
-            rest = ""
+        if not rest.startswith(prefix):
+            continue  # omitted (empty-default) parameter — absent from the suffix
+        value_part = rest[len(prefix) :]
+        # The value runs until the next declared parameter's "_<name>_" boundary (suffix order is
+        # spec order, so only later params can follow). Enum values carry no "_" and float slugs
+        # are digits and "_", so a parameter-name boundary is unambiguous.
+        cut = len(value_part)
+        for later in params[i + 1 :]:
+            pos = value_part.find(f"_{later.name}_")
+            if pos != -1 and pos < cut:
+                cut = pos
+        raw = value_part[:cut]
+        rest = value_part[cut + 1 :] if cut < len(value_part) else ""
+        value = raw.replace("_", ".") if param.kind == "float" else raw
+        parts.append(f"{param.name}={value}")
     return f"{label} ({', '.join(parts)})" if parts else label
+
+
+def sbm_confidence_key(strategy_key: str) -> str:
+    """Node-attribute key of the SBM assignment-confidence column for an SBM instance key.
+
+    ``sbm_mode_nested_refine_mcmc`` → ``sbm_confidence_mode_nested_refine_mcmc``. Only populated
+    when the instance ran with ``refine=MCMC``; exporters probe the nodes for its presence.
+    """
+    return SBM_CONFIDENCE_BASE_KEY + strategy_key[len("sbm") :]
+
+
+def sbm_confidence_display_label(strategy_key: str) -> str:
+    """Human label for an SBM confidence column, e.g. ``SBM confidence (mode=nested, refine=mcmc)``."""
+    label = strategy_display_label(strategy_key)
+    idx = label.find(" (")
+    return "SBM confidence" + (label[idx:] if idx != -1 else "")
 
 
 type CommunityMap = dict[str, int]
@@ -548,9 +602,22 @@ def detect_louvain(
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
 
+# SBM(refine=MCMC) run lengths: `wait` bounds the multiflip equilibration phase, `samples` is the
+# number of posterior partitions collected for the marginals. Modest by graph-tool-docs standards
+# (which use wait=1000), sized for Pulpit's few-hundred-to-few-thousand-node citation graphs.
+SBM_MCMC_WAIT = 100
+SBM_MCMC_SAMPLES = 100
+
+
 def detect_sbm(
-    graph: nx.DiGraph, palette_name: str, mode: str, *, reverse: bool = False
-) -> tuple[CommunityMap, CommunityPalette]:
+    graph: nx.DiGraph,
+    palette_name: str,
+    mode: str,
+    weights: str = "",
+    refine: str = "",
+    *,
+    reverse: bool = False,
+) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
     """Bayesian degree-corrected stochastic block model (Karrer & Newman 2011; Peixoto 2014, 2017) via graph-tool.
 
     Fits a **directed, degree-corrected** SBM by minimum description length. Unlike the
@@ -567,17 +634,57 @@ def detect_sbm(
     Built on the **directed** citation graph (direction preserved → asymmetric block
     affinities) and **degree-corrected**, so the partition reflects block structure *beyond*
     the in-degree heterogeneity of the star topology rather than merely re-encoding it.
-    **Unweighted** (binary citation structure): edge weights are not passed, so the partition
-    is invariant to ``--edge-weight-strategy`` — like ``LABELPROPAGATION`` / ``KCORE``.
+
+    ``weights`` selects the edge model. Empty (default): **unweighted** binary citation
+    structure — edge weights are not passed, so the partition is invariant to
+    ``--edge-weight-strategy``, like ``LABELPROPAGATION`` / ``KCORE``. ``POISSON`` /
+    ``EXPONENTIAL`` fit a **weighted SBM** with the edge weights as covariates (Peixoto 2018,
+    "Nonparametric weighted stochastic block models"): POISSON models discrete counts (pair
+    with ``--edge-weight-strategy TOTAL``), EXPONENTIAL positive reals (pair with the
+    ratio-valued ``PARTIAL_*`` strategies). The weight model is validated against the actual
+    edge weights before graph-tool is imported.
 
     ``mode``: ``NESTED`` (default) fits the nested SBM (Peixoto 2017) and takes the partition
     at the bottom (finest) hierarchy level — better model selection on large graphs, avoiding
     the underfitting of the flat model; ``FLAT`` fits a single-level SBM.
 
-    graph-tool's inference is stochastic (agglomerative MCMC); the RNG is seeded for a
-    reproducible partition. Requires the ``graph-tool`` package (conda-forge / system packages —
-    it is *not* installable from pip; see docs/community-detection.md).
+    ``refine``: empty (default) reports the single MDL point estimate. ``MCMC`` follows the
+    fit with multiflip MCMC equilibration and collects ``SBM_MCMC_SAMPLES`` posterior
+    partitions; the reported partition is then each node's **maximum-marginal** block after
+    label alignment (Peixoto 2021, "Revealing consensus and dissensus between network
+    partitions", via ``PartitionModeState``), and the third return value maps each node to
+    its **assignment confidence** — the share of posterior samples agreeing with the reported
+    block (1.0 = the data pin the channel down; low values = structurally ambiguous). Without
+    ``MCMC`` the third return value is ``None``.
+
+    graph-tool's inference is stochastic (agglomerative + multiflip MCMC); the RNG is seeded
+    for a reproducible partition. Requires the ``graph-tool`` package (conda-forge / system
+    packages — it is *not* installable from pip; see docs/community-detection.md).
     """
+    weights = (weights or "").upper()
+    refine = (refine or "").upper()
+
+    edge_weights: list[float] = []
+    if weights:
+        edge_weights = [float(graph.edges[s, t].get("weight", 1.0)) for s, t in graph.edges()]
+        if weights == "POISSON":
+            bad = next((w for w in edge_weights if w < 0 or not w.is_integer()), None)
+            if bad is not None:
+                raise ValueError(
+                    "SBM(weights=POISSON) models edge weights as discrete counts, but the graph carries "
+                    f"non-integer weights (e.g. {bad!r}). Use --edge-weight-strategy TOTAL (raw counts), "
+                    "or switch to weights=EXPONENTIAL for the ratio-valued PARTIAL_* strategies."
+                )
+        elif weights == "EXPONENTIAL":
+            bad = next((w for w in edge_weights if w <= 0), None)
+            if bad is not None:
+                raise ValueError(
+                    "SBM(weights=EXPONENTIAL) models edge weights as positive reals, but the graph carries "
+                    f"a non-positive weight ({bad!r}). Check --edge-weight-strategy."
+                )
+        else:  # defensive — parse_strategies already validated the enum
+            raise ValueError(f"Unknown SBM weights model: {weights!r}. Choose POISSON or EXPONENTIAL.")
+
     try:
         import graph_tool.all as gt
     except ImportError as exc:  # pragma: no cover - optional heavy dependency
@@ -591,17 +698,59 @@ def detect_sbm(
     node_ids, node_id_map = _node_id_index(graph)
     gt_graph = gt.Graph(directed=True)
     gt_graph.add_vertex(len(node_ids))
-    gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
-
-    if mode.upper() == "FLAT":
-        state = gt.minimize_blockmodel_dl(gt_graph)
-        blocks = state.get_blocks()
+    state_args: dict[str, Any] = {}
+    if weights:
+        rec = gt_graph.new_edge_property("int" if weights == "POISSON" else "double")
+        gt_graph.add_edge_list(
+            [(node_id_map[s], node_id_map[t], w) for (s, t), w in zip(graph.edges(), edge_weights, strict=True)],
+            eprops=[rec],
+        )
+        state_args = {"recs": [rec], "rec_types": ["discrete-poisson" if weights == "POISSON" else "real-exponential"]}
     else:
-        state = gt.minimize_nested_blockmodel_dl(gt_graph)
-        blocks = state.get_levels()[0].get_blocks()
+        gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
 
-    community_map: CommunityMap = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
-    return _finalize_partition(graph, community_map, palette_name, reverse=reverse)
+    nested = mode.upper() != "FLAT"
+    if nested:
+        state = gt.minimize_nested_blockmodel_dl(gt_graph, state_args=state_args)
+    else:
+        state = gt.minimize_blockmodel_dl(gt_graph, state_args=state_args)
+
+    confidence: dict[str, float] | None = None
+    community_map: CommunityMap
+    if refine == "MCMC":
+        import numpy as np
+
+        if nested:
+            # Pad the hierarchy with empty levels so it can grow during sampling, and switch the
+            # nested state to sampling mode — graph-tool's documented equilibration pattern.
+            state = state.copy(bs=state.get_bs() + [np.zeros(1)] * 4, sampling=True)
+        gt.mcmc_equilibrate(state, wait=SBM_MCMC_WAIT, mcmc_args={"niter": 10})
+
+        partitions: list[Any] = []
+
+        def _collect(s: Any) -> None:
+            b = s.levels[0].b if nested else s.b
+            partitions.append(np.asarray(b.a).copy())
+
+        gt.mcmc_equilibrate(state, force_niter=SBM_MCMC_SAMPLES, mcmc_args={"niter": 10}, callback=_collect)
+        pmode = gt.PartitionModeState(partitions, converge=True)
+        marginals = pmode.get_marginal(gt_graph)
+        b_max = pmode.get_max(gt_graph)
+        n_samples = len(partitions)
+        community_map = {}
+        confidence = {}
+        for index, node_id in enumerate(node_ids):
+            block = int(b_max[index])
+            community_map[node_id] = block
+            counts = marginals[index]
+            agree = counts[block] if block < len(counts) else 0
+            confidence[node_id] = round(float(agree) / n_samples, 4) if n_samples else 0.0
+    else:
+        blocks = (state.get_levels()[0] if nested else state).get_blocks()
+        community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+
+    final_map, palette = _finalize_partition(graph, community_map, palette_name, reverse=reverse)
+    return final_map, palette, confidence
 
 
 def detect(
@@ -638,7 +787,25 @@ def detect(
     if strategy == "LOUVAIN":
         return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "SBM":
-        return detect_sbm(graph, palette_name, str(params.get("mode", SBM_DEFAULT_MODE)), reverse=reverse)
+        community_map, community_palette, confidence = detect_sbm(
+            graph,
+            palette_name,
+            str(params.get("mode", SBM_DEFAULT_MODE)),
+            str(params.get("weights", "") or ""),
+            str(params.get("refine", "") or ""),
+            reverse=reverse,
+        )
+        if confidence:
+            # The confidence companion rides on the node data like a measure column, under the
+            # instance's parameter-suffixed key; exporters probe the nodes for its presence.
+            conf_key = sbm_confidence_key(instance.key)
+            for node_id, value in confidence.items():
+                if node_id in graph.nodes:
+                    graph.nodes[node_id].setdefault("data", {})[conf_key] = value
+                entry = channel_dict.get(node_id)
+                if entry is not None:
+                    entry["data"][conf_key] = value
+        return community_map, community_palette
     gid = labelgroup_id(strategy)
     if gid is not None:
         # LABELGROUP<id> builds its palette from each Label's own colour directly, so the

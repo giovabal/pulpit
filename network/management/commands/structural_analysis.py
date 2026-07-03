@@ -28,6 +28,7 @@ from network import (
     vacancy_analysis,
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
+from network.robustness.disparity_filter import disparity_filter
 from network.utils import GraphData
 from webapp import scoring
 from webapp.models import Message, Project
@@ -279,6 +280,9 @@ class ResolvedOptions:
     # Communities and measures
     communities_strategy: list["community.StrategyInstance"]
     strategies_lower: list[str]  # parameter-suffixed partition keys, one per instance, in order
+    # Disparity-filter α applied to the graph before the algorithmic community detections
+    # (0 = off, detection runs on the full graph). Label-group partitions are unaffected.
+    community_backbone_alpha: float
     # Ordered, de-duplicated list of requested measures, each carrying its own resolved
     # parameters (a measure may appear more than once with different params — e.g. two
     # DIFFUSIONLAG windows).
@@ -357,6 +361,7 @@ class ResolvedOptions:
             "timeline_step": self.timeline_step,
             "diffusion_window": self.diffusion_window,
             "leiden_cpm_resolution": self.leiden_cpm_resolution,
+            "community_backbone_alpha": self.community_backbone_alpha,
             "community_distribution_threshold": self.community_distribution_threshold,
             "vacancy_months_before": self.vacancy_months_before,
             "vacancy_months_after": self.vacancy_months_after,
@@ -673,6 +678,23 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--leiden-fine-resolution", dest="leiden_fine_resolution", type=float, default=None, help=argparse.SUPPRESS
+        )
+        parser.add_argument(
+            "--community-backbone-alpha",
+            dest="community_backbone_alpha",
+            type=float,
+            default=None,
+            metavar="α",
+            help=(
+                "Run the algorithmic community detections on the disparity-filter backbone "
+                "(Serrano, Boguñá & Vespignani 2009) of the citation graph instead of the full graph: "
+                "only edges carrying significantly more of a channel's citation weight than a uniform "
+                "spread would predict (significance < α) are kept for detection. Values in (0, 1) filter "
+                "(0.05 is the literature convention); 0 disables (default). Every other output — measures, "
+                "layout, tables, exports — stays on the full graph; label-group partitions are unaffected. "
+                "Reported modularity for the detected partitions is computed on the backbone they were "
+                "optimised on."
+            ),
         )
         parser.add_argument(
             "--consensus-matrix",
@@ -1067,11 +1089,30 @@ class Command(BaseCommand):
         edge_list: list,
         communities_strategy: list[str],
         options: dict,
-    ) -> dict[str, tuple]:
-        """Run all community detection strategies and apply results to the graph."""
+    ) -> tuple[dict[str, tuple], "nx.DiGraph | None"]:
+        """Run all community detection strategies and apply results to the graph.
+
+        Returns ``(strategy_results, detection_graph)``. ``detection_graph`` is the
+        disparity-filter backbone the algorithmic detections ran on when
+        ``--community-backbone-alpha`` is set (same vertex set as ``graph``, fewer edges), else
+        ``None`` — the caller forwards it to ``compute_community_metrics`` so reported
+        modularity matches what was optimised. Label-group partitions read the channels'
+        labels, not the graph, so the backbone never affects them.
+        """
         strategy_results: dict[str, tuple] = {}
+        detection_graph: "nx.DiGraph | None" = None
+        detect_on = graph
+        backbone_alpha = options.get("community_backbone_alpha") or 0.0
         self.stdout.write("Calculate communities")
         self.stdout.flush()
+        if backbone_alpha and communities_strategy:
+            detection_graph = disparity_filter(graph, backbone_alpha)
+            detect_on = detection_graph
+            self.stdout.write(
+                f"- disparity-filter backbone (α={backbone_alpha:g}) … "
+                f"{detection_graph.number_of_edges()}/{graph.number_of_edges()} edges kept"
+            )
+            self.stdout.flush()
         for instance in communities_strategy:
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
@@ -1081,7 +1122,7 @@ class Command(BaseCommand):
                 community_map, community_palette = community.detect(
                     instance,
                     options["community_palette"],
-                    graph,
+                    detect_on,
                     channel_dict,
                     reverse=options["community_palette_reversed"],
                 )
@@ -1093,7 +1134,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{n_communities} communities")
             self.stdout.flush()
         community.apply_edge_colors(graph, edge_list, channel_dict)
-        return strategy_results
+        return strategy_results, detection_graph
 
     def _compute_layout(
         self,
@@ -1398,7 +1439,9 @@ class Command(BaseCommand):
         n_nodes, n_edges = len(graph.nodes), len(graph.edges)
         self.stdout.write(f"{n_nodes} nodes, {n_edges} edges")
 
-        strategy_results = self._compute_communities(graph, channel_dict, edge_list, communities_strategy, options)
+        strategy_results, detection_graph = self._compute_communities(
+            graph, channel_dict, edge_list, communities_strategy, options
+        )
         positions, positions_3d = self._compute_layout(
             graph,
             do_graph,
@@ -1459,6 +1502,7 @@ class Command(BaseCommand):
                 total_edges=n_edges,
                 community_distribution_threshold=options["community_distribution_threshold"],
                 has_consensus_matrix=False,
+                community_backbone_alpha=options.get("community_backbone_alpha") or 0.0,
             )
             community_table_data = community_stats.compute_community_metrics(
                 graph_data,
@@ -1471,6 +1515,7 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
                 selected_network_groups=selected_network_groups,
+                detection_graph=detection_graph,
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
@@ -1725,6 +1770,15 @@ class Command(BaseCommand):
                 f"Choose from {sorted(layout.EXTRA_LAYOUT_CHOICES_3D)} or ALL."
             )
 
+        # Community-detection backbone — 0 disables; α in (0, 1) filters. 1 keeps every edge
+        # (the disparity test is a strict <), so it is rejected as a likely typo rather than
+        # silently running an unfiltered "backbone".
+        community_backbone_alpha = _o("community_backbone_alpha", 0.0)
+        if not (0.0 <= community_backbone_alpha < 1.0):
+            raise CommandError(
+                f"--community-backbone-alpha must be 0 (off) or in (0, 1); got {community_backbone_alpha!r}."
+            )
+
         # Coordination analysis — plain numeric parameters of an opt-in feature.
         coordination_window = _o("coordination_window", coordination.DEFAULT_WINDOW_SECONDS)
         coordination_min_events = _o("coordination_min_events", coordination.DEFAULT_MIN_EVENTS)
@@ -1798,6 +1852,7 @@ class Command(BaseCommand):
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
             strategies_lower=[inst.key for inst in communities_strategy],
+            community_backbone_alpha=community_backbone_alpha,
             measure_instances=measure_instances,
             selected_network_groups=frozenset(network_stat_groups),
             diffusion_window=_o("diffusion_window", 30),
@@ -1888,7 +1943,9 @@ class Command(BaseCommand):
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
         self.stdout.flush()
 
-        strategy_results = self._compute_communities(graph, channel_dict, edge_list, opts.communities_strategy, options)
+        strategy_results, detection_graph = self._compute_communities(
+            graph, channel_dict, edge_list, opts.communities_strategy, options
+        )
         positions, positions_3d = self._compute_layout(
             graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
         )
@@ -2016,6 +2073,7 @@ class Command(BaseCommand):
             total_edges=len(graph.edges),
             community_distribution_threshold=opts.community_distribution_threshold,
             has_consensus_matrix=opts.do_consensus_matrix,
+            community_backbone_alpha=opts.community_backbone_alpha,
         )
 
         need_community_metrics = opts.do_html or opts.do_xlsx or opts.do_consensus_matrix
@@ -2047,6 +2105,7 @@ class Command(BaseCommand):
                 start_date=opts.start_date,
                 end_date=opts.end_date,
                 selected_network_groups=opts.selected_network_groups,
+                detection_graph=detection_graph,
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)

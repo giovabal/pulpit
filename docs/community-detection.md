@@ -25,7 +25,9 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Louvain | `LOUVAIN` | Modularity (classic baseline) | No |
 | K-core | `KCORE` | Structural hierarchy | No |
 | Label propagation | `LABELPROPAGATION` | Label consensus | No |
-| Stochastic block model | `SBM(mode=NESTED\|FLAT)` | Generative block model | Yes |
+| Stochastic block model | `SBM(mode=…, weights=…, refine=…)` | Generative block model | Yes |
+
+All algorithmic strategies can optionally run on the **disparity-filter backbone** of the citation graph instead of the full graph — see [Detection on a noise-filtered backbone](#detection-on-a-noise-filtered-backbone).
 
 ---
 
@@ -61,17 +63,21 @@ Leiden looks for partitions where the density of connections inside each group i
 
 ## Leiden (directed)
 
-*Leiden (directed) works like Leiden but treats "who cites" and "who gets cited" as different signals — for when the direction of forwards carries meaning.*
+*Leiden (directed) works like Leiden but scores partitions against a null model that knows who cites and who gets cited. A worthwhile sensitivity check — but a weaker use of direction than its name suggests; for genuinely direction-driven grouping, reach for the [SBM](#stochastic-block-model).*
 
-Standard Leiden treats every forward the same regardless of direction, which can blur the picture when a network has a hub-and-spoke shape — many small channels forwarding from a single popular source without being forwarded back. The directed variant takes that asymmetry seriously: it expects A→B and B→A to mean different things, so a one-way forwarding pattern doesn't automatically force two channels into the same community. Pulpit runs this variant on the original directed citation graph, with edge weights from `--edge-weight-strategy`. It is also the default community basis for the [within-module role measure](network-measures.md#within-module-role) — the role formula itself is direction-blind (it counts neighbours on both sides), so this choice of basis is where direction enters the role classification.
+Standard Leiden compares each candidate community's internal density against what a random, direction-blind network would produce. The directed variant (Leicht & Newman 2008) refines only the *comparison*: the expected weight of an edge A→B becomes proportional to A's out-degree times B's in-degree, so a group of channels whose density is fully explained by "prolific citers pointing at popular targets" no longer scores as a community. Pulpit runs it on the original directed citation graph, with edge weights from `--edge-weight-strategy`. It is also the default community basis for the [within-module role measure](network-measures.md#within-module-role) — the role formula itself is direction-blind (it counts neighbours on both sides), so this choice of basis is where direction enters the role classification.
+
+**Know the limit.** Direction enters *only* through that expected-weight term. The score still sums w(A→B) and w(B→A) under the same "are they in the same community?" test, so the objective **cannot distinguish the orientation of the links themselves** — a chain of one-way citations and a set of mutual alliances with the same weights and degrees score identically (Kim, Son & Jeong 2010 construct explicit counterexamples; the Malliaros & Vazirgiannis 2013 survey lists this as the directed modularity's first limitation). In practice, expect partitions close to undirected Leiden's, with occasional splits where the in/out-degree null bites. The strategy that actually *models* citation orientation — asymmetric block-to-block rates, source vs. amplifier roles — is the [stochastic block model](#stochastic-block-model).
 
 **References:**
 - Leicht, E.A. & Newman, M.E.J. (2008) "Community structure in directed networks." *Physical Review Letters* 100, 118703. [doi:10.1103/PhysRevLett.100.118703](https://doi.org/10.1103/PhysRevLett.100.118703) — the directed-modularity formulation.
+- Kim, Y., Son, S.-W. & Jeong, H. (2010) "Finding communities in directed networks." *Physical Review E* 81, 016103. [doi:10.1103/PhysRevE.81.016103](https://doi.org/10.1103/PhysRevE.81.016103) — shows the generalised modularity "does not distinguish the direction of links".
+- Malliaros, F.D. & Vazirgiannis, M. (2013) "Clustering and community detection in directed networks: A survey." *Physics Reports* 533(4), 95–142. [doi:10.1016/j.physrep.2013.08.002](https://doi.org/10.1016/j.physrep.2013.08.002) — the survey cataloguing that limitation.
 - Traag, V.A. et al. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — the Leiden refinement, inherited from [`LEIDEN`](#leiden).
 
-**In practice:** use Leiden (directed) when the distinction between "who cites" and "who is cited" carries meaning — which on Telegram political networks it almost always does, since amplification flows asymmetrically from smaller amplifiers toward influential sources. Picking it also matches the default basis of Pulpit's within-module-role classification, which resolves to this partition when no explicit basis is given.
+**In practice:** run Leiden (directed) alongside plain Leiden as a degree-null sensitivity check: where the two agree, the grouping doesn't hinge on how direction is handled; where they diverge, the directed null is discounting hub-and-spoke density, which is worth inspecting. Picking it also matches the default basis of Pulpit's within-module-role classification, which resolves to this partition when no explicit basis is given. When the research question is genuinely about direction — who produces, who amplifies, which blocs cite which — pair it with (or prefer) the SBM rather than reading directional structure off this partition alone.
 
-**Example.** Seven regional nationalist channels all forward content from a single national aggregator but are never cited by it. Under undirected Leiden the seven plus the aggregator are merged into one community, because the undirected edge density is high. Under Leiden (directed), the seven form their own community while the aggregator joins a different group whose other members it actually cites both ways. The hub-and-spoke amplification pattern becomes visible at a glance — what looked like a single bloc is one broadcaster and seven amplifiers.
+**Example.** Seven regional nationalist channels all forward from a single national aggregator with enormous in-degree. Under undirected Leiden, the aggregator's hub density pulls all eight into one community. Under Leiden (directed), the expected-weight term absorbs much of that density — it is exactly what "high out-degree channels citing a high in-degree target" predicts — so the seven amplifiers separate from the aggregator. The same data under the SBM goes further: it puts the seven in one *role block* (same citation profile) and the aggregator in another, and its block matrix states the direction of the relationship explicitly.
 
 ---
 
@@ -157,11 +163,24 @@ Each channel starts with a unique label. At each step every channel adopts the l
 
 Every other detector in this list looks for **assortative** structure: groups that are dense inside and sparse outside. The stochastic block model drops that assumption. It is a *generative* model — it asks which assignment of channels to blocks best explains the observed pattern of citations, where the probability of a citation depends only on the two channels' blocks. Because the block-to-block citation rates are free to take any values, the SBM recovers structure the modularity family is blind to: not just assortative communities, but **disassortative** groups (channels that avoid each other), **core-periphery** layers, and the **bipartite source / amplifier** pattern that dominates a forward-attribution network — a set of amplifiers that all cite the same sources but never cite each other is a perfectly good block, even though it has zero internal density.
 
-Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-tool.skewed.de/) (Peixoto). *Directed*: citation direction is preserved, so the block-affinity matrix is asymmetric — "block A cites block B" is distinct from the reverse, which is exactly the source-vs-amplifier signal. *Degree-corrected* (Karrer & Newman 2011): the model accounts for each channel's degree, so the blocks reflect citation structure **beyond** the raw in-degree heterogeneity of the star topology rather than simply lumping all the high-in-degree hubs together. The fit is **unweighted** (binary citation structure), so the partition is invariant to `--edge-weight-strategy`. Inference is by minimum description length, which is **self-regularising**: unlike modularity, the SBM will not invent blocks the data don't support, so it does not hallucinate community structure in a near-random graph.
+Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-tool.skewed.de/) (Peixoto). *Directed*: citation direction is preserved, so the block-affinity matrix is asymmetric — "block A cites block B" is distinct from the reverse, which is exactly the source-vs-amplifier signal. *Degree-corrected* (Karrer & Newman 2011): the model accounts for each channel's degree, so the blocks reflect citation structure **beyond** the raw in-degree heterogeneity of the star topology rather than simply lumping all the high-in-degree hubs together. By default the fit is **unweighted** (binary citation structure), so the partition is invariant to `--edge-weight-strategy` — set `weights=` to change that (below). Inference is by minimum description length, which is **self-regularising**: unlike modularity, the SBM will not invent blocks the data don't support, so it does not hallucinate community structure in a near-random graph.
 
-`mode` selects the inference variant and may be added once per mode:
+The strategy takes three per-instance parameters and may be added once per parameter combination:
+
+`mode` selects the inference variant:
 - **`NESTED`** (default) — the nested SBM (Peixoto 2017) fits a hierarchy of blocks and Pulpit reports the partition at the finest level. Better model selection on large graphs; avoids the underfitting the flat model suffers on big networks.
 - **`FLAT`** — a single-level SBM.
+
+`weights` selects the edge model (Peixoto 2018, nonparametric *weighted* SBM):
+- **empty** (default) — binary fit on the bare citation structure; how often channels cite each other doesn't influence the blocks, only *whether* they do.
+- **`POISSON`** — edge weights enter the model as discrete counts. Pair with `--edge-weight-strategy TOTAL` (raw forward+mention counts); the fit rejects fractional weights with a clear error.
+- **`EXPONENTIAL`** — edge weights enter as positive reals. Pair with the ratio-valued `PARTIAL_MESSAGES` / `PARTIAL_REFERENCES` strategies.
+
+A weighted fit separates blocks the binary fit cannot: forty channels that each forwarded a source once and three channels that forward it daily have identical binary profiles but very different weighted ones. The block structure then reflects citation *intensity*, not just citation *existence* — at the cost of the partition now depending on your `--edge-weight-strategy` choice.
+
+`refine` selects the inference depth:
+- **empty** (default) — a single minimum-description-length point estimate: the one best partition found.
+- **`MCMC`** — after the fit, the sampler explores the posterior distribution of partitions (multiflip MCMC equilibration, then a fixed sample of partitions) and reports each channel's **most probable block** across the samples (aligned via Peixoto 2021's partition-mode machinery), plus a new per-channel **SBM confidence** column: the share of posterior samples agreeing with the reported block. 1.0 means the data pin the channel's role down; a low value means the channel sits between roles and its assignment should not be leaned on. The column appears in the channel table, CSV/XLSX, and GEXF/GraphML exports, suffixed by the instance's parameters like every parameterised output (e.g. `sbm_confidence_mode_nested_refine_mcmc`). Slower — expect the SBM step to take several times longer.
 
 > **Interpretation guardrail — blocks are roles, not cohesive groups.** An SBM block is a set of channels that are *stochastically equivalent* — they connect to the rest of the network the same way — i.e. a **citation-role / structural-equivalence class** (Lorrain & White 1971). It is **not** necessarily a community of mutually-citing channels: two channels can share a block while having no tie between them, simply because they cite the same sources and are cited by the same amplifiers. Read an SBM block as "these channels occupy the same structural position in the citation ecosystem", never as "these channels talk to each other". Likewise, a block-affinity entry is a one-step, group-to-group **direct citation rate** — not a claim that content flows from one block through to another. This keeps the SBM consistent with Pulpit's one-degree attribution model (see [Measures → interpretation guardrails](network-measures.md#what-this-catalogue-covers)), where multi-hop flow is not recoverable from the data.
 
@@ -171,11 +190,36 @@ Pulpit fits a **directed, degree-corrected** SBM via [graph-tool](https://graph-
 - Karrer, B. & Newman, M.E.J. (2011) "Stochastic blockmodels and community structure in networks." *Physical Review E* 83(1), 016107. [doi:10.1103/PhysRevE.83.016107](https://doi.org/10.1103/PhysRevE.83.016107) — the degree-corrected SBM.
 - Peixoto, T.P. (2014) "Efficient Monte Carlo and greedy heuristic for the inference of stochastic block models." *Physical Review E* 89(1), 012804. [doi:10.1103/PhysRevE.89.012804](https://doi.org/10.1103/PhysRevE.89.012804) — the MDL inference Pulpit calls.
 - Peixoto, T.P. (2017) "Nonparametric Bayesian inference of the microcanonical stochastic block model." *Physical Review E* 95(1), 012317. [doi:10.1103/PhysRevE.95.012317](https://doi.org/10.1103/PhysRevE.95.012317) — the nested SBM.
+- Peixoto, T.P. (2018) "Nonparametric weighted stochastic block models." *Physical Review E* 97, 012306. [doi:10.1103/PhysRevE.97.012306](https://doi.org/10.1103/PhysRevE.97.012306) — the edge-covariate model behind `weights=`.
+- Peixoto, T.P. (2021) "Revealing consensus and dissensus between network partitions." *Physical Review X* 11, 021003. [doi:10.1103/PhysRevX.11.021003](https://doi.org/10.1103/PhysRevX.11.021003) — the partition-alignment machinery behind `refine=MCMC`'s max-marginal partition and confidence column.
 - Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1). [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the structural-equivalence notion that a block operationalises.
 
 **In practice:** reach for the SBM when modularity-based detection feels like it is fighting the data — when you suspect the network is hub-and-spoke or two-mode rather than a set of cohesive cliques. Because it separates *role* from *cohesion*, the SBM is the natural complement to Leiden: where Leiden tells you which channels cluster together, the SBM tells you which channels are interchangeable in the citation structure (e.g. "these forty amplifiers are structurally the same actor, pointed at the same three sources"). Compare it against `LEIDEN_DIRECTED` in the consensus matrix, and against your label-group baseline in the partition-comparison matrices — but remember the partitions answer different questions, so disagreement is expected and informative, not a failure.
 
 **Example.** A network of 500 channels yields six tidy Leiden communities. The SBM, on the same graph, returns a block of 120 channels with almost no internal edges — channels Leiden had scattered across all six communities. Inspection shows they are pure amplifiers: each forwards from the same handful of source channels and is never cited by anyone. Leiden, hunting for density, distributed them by which source-neighbourhood they sat nearest; the SBM, hunting for role, recognised them as a single structural class — the network's audience, distinct from its producers.
+
+---
+
+## Detection on a noise-filtered backbone
+
+*`--community-backbone-alpha` runs every algorithmic strategy on the statistically significant skeleton of the citation graph, so one-off forwards of a viral post don't glue unrelated blocs together.*
+
+A long crawl accumulates many **incidental** edges: a channel forwarded something from another exactly once, two years ago. Each such edge is individually negligible, but collectively they blur community boundaries — modularity-family detectors happily merge two blocs connected by enough one-off noise. The disparity filter (Serrano, Boguñá & Vespignani 2009) removes them on a principled, *per-channel* basis: an edge is kept only when it carries significantly more of one of its endpoints' citation weight than an even spread across that channel's partners would predict (significance < α). Because the test is local, it preserves the strong ties of small channels rather than just keeping the globally heaviest edges — which is what a naive weight threshold would do.
+
+Setting `--community-backbone-alpha 0.05` (0 = off, the default; the Operations panel exposes it as *Community backbone α* under Computation) makes **community detection alone** run on this backbone:
+
+- Every algorithmic strategy — the Leiden family, Louvain, label propagation, K-core, SBM — sees the filtered graph. Channels whose every edge is filtered away become isolated for detection purposes and are folded into one residual community, exactly like channels that were isolated to begin with.
+- Label-group partitions are untouched (they read your labels, not the graph).
+- **Everything else stays on the full graph** — measures, layout, node/edge counts, tables, exports. The backbone is a lens for detection, not a modified dataset.
+- Reported **modularity** for the detected partitions is computed against the backbone they were optimised on (the community table's preamble says so when the flag was used); all other per-community metrics keep describing the full graph.
+
+The same filter, with the same α convention, already powers the [robustness analysis](robustness-analysis.md)'s attack backbone — this flag brings it to the detection stage. The precedent for backboning *before* community detection on Telegram forwarding networks is Zehring & Domahidi (2023), who filtered at α = 0.05 before running community detection on the German corona-protest network.
+
+**References:**
+- Serrano, M.Á., Boguñá, M. & Vespignani, A. (2009) "Extracting the multiscale backbone of complex weighted networks." *PNAS* 106(16), 6483–6488. [doi:10.1073/pnas.0808904106](https://doi.org/10.1073/pnas.0808904106) — the disparity filter.
+- Zehring, M. & Domahidi, E. (2023) "German Corona Protest Mobilizers on Telegram and Their Relations to the Far Right: A Network and Topic Analysis." *Social Media + Society* 9(1). [doi:10.1177/20563051231155106](https://doi.org/10.1177/20563051231155106) — disparity-filter backboning before community detection on a Telegram forwarding network.
+
+**In practice:** leave the flag off for a first look, then re-run with α = 0.05 and compare partitions in the [partition-comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi): communities that survive backboning rest on repeated, significant citation ties; groupings that dissolve were held together by incidental edges. On a year timeline the filter is re-applied within each year's graph. Note that the weight-dependence of the filter means `--edge-weight-strategy` now matters even for the otherwise weight-blind detectors (label propagation, K-core, unweighted SBM) — the α test runs on the edge weights.
 
 ---
 

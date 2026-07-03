@@ -1,6 +1,15 @@
 # Changelog
 ## [0.27] - To be announced
 
+### New features
+- **The SBM can now weigh ties and say how sure it is.** The stochastic block model strategy gains two per-instance parameters. `SBM(weights=POISSON)` / `SBM(weights=EXPONENTIAL)` fit the *weighted* SBM (Peixoto 2018): citation intensity — not just existence — shapes the blocks, separating a daily amplifier from a one-time forwarder (Poisson pairs with raw `TOTAL` counts, Exponential with the `PARTIAL_*` ratio weights; the default stays the binary fit). `SBM(refine=MCMC)` follows the fit with posterior sampling and reports each channel's most probable block plus a new **SBM confidence** column — the share of posterior samples agreeing with the assignment — so structurally ambiguous channels are visible instead of silently pinned to one role. The column flows to the channel table, CSV/XLSX, and GEXF/GraphML. See [docs/community-detection.md](docs/community-detection.md#stochastic-block-model).
+- **Community detection can run on the significant backbone of the network.** `structural_analysis --community-backbone-alpha 0.05` (Operations panel: *Community backbone α*) applies the disparity filter (Serrano et al. 2009 — the same filter the robustness analysis already uses) before the algorithmic community detections, so blocs glued together by one-off incidental forwards separate cleanly; the precedent on Telegram forwarding networks is Zehring & Domahidi (2023). Only detection sees the backbone — measures, layouts, tables and exports keep the full graph, label-group partitions are unaffected, and reported modularity is computed against the backbone the partitions were actually optimised on (the community table says so in its preamble). See [docs/community-detection.md](docs/community-detection.md#detection-on-a-noise-filtered-backbone).
+
+### Improvements
+- **The Leiden (directed) docs no longer oversell direction.** Directed modularity uses edge direction only through its null model and cannot distinguish the orientation of the links themselves (Kim, Son & Jeong 2010) — the rewritten section says so, repositions the strategy as a degree-null sensitivity check next to plain Leiden, and points direction-driven questions at the SBM, which models asymmetric citation explicitly.
+
+### Fixes
+- **Coordination maps' screen-reader summary lost its specific wording.** The 0.26 rewrite of the map descriptions changed "directed edges" to "connections between them" in the templates, silently breaking the coordination pages' replacement of that phrase — they now correctly describe ties as "mutual co-forwarding ties" again.
 
 ## [0.26] - 2026-07-03
 *Organizations are generalised into label groups, selectable in structural analysis as partitions. Sankey diagrams and communities overlapping analysis. Temporal co-forwarding coordination layer.*

@@ -8,6 +8,7 @@ from django.template.loader import render_to_string
 
 from network.community import labelgroup_display_labels, strategy_display_label
 from network.community_stats import PARTITION_COMPARISON_METRICS, network_summary_rows
+from network.exporter import sbm_confidence_columns
 from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
 
@@ -101,6 +102,8 @@ def write_table_xlsx(
         if comp:
             annot = label[label.find(" (") :] if " (" in label else ""
             role_label_cols.append((comp["role_key"], comp["role_label"] + annot))
+    # SBM(refine=MCMC) assignment-confidence companions, one per refined SBM instance.
+    conf_cols = sbm_confidence_columns(graph_data, strategies)
 
     headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
@@ -108,6 +111,7 @@ def write_table_xlsx(
     headers += [lbl for _, lbl in other_extra]
     headers += [hdr for _, hdr in role_label_cols]
     headers += [strategy_display_label(s) for s in strategies]
+    headers += [lbl for _, lbl in conf_cols]
     headers += ["Activity start", "Activity end"]
 
     def _fill(ws: Any, gd: GraphData) -> None:
@@ -133,6 +137,8 @@ def write_table_xlsx(
                 row.append(node.get(role_key) or "")
             for s in strategies:
                 row.append(communities.get(s, ""))
+            for key, _ in conf_cols:
+                row.append(node.get(key))
             row.append(node.get("activity_start") or "")
             row.append(node.get("activity_end") or "")
             ws.append(row)

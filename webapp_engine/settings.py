@@ -462,6 +462,7 @@ SA_LAYOUTS_3D = ",".join(_structural.layouts.layouts_3d)
 SA_MEASURES = ",".join(_structural.measures.selected)
 SA_COMMUNITY_STRATEGIES = ",".join(_structural.communities.strategies)
 SA_LABEL_GROUPS = ",".join(_structural.communities.label_groups)
+SA_COMMUNITY_BACKBONE_ALPHA = _structural.communities.backbone_alpha
 SA_NETWORK_STAT_GROUPS = ",".join(_structural.network_stats.groups)
 SA_INCLUDE_MENTIONS = _structural.edges.include_mentions
 SA_INCLUDE_SELF_REFERENCES = _structural.edges.include_self_references

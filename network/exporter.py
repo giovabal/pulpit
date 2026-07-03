@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Any
 from django.conf import settings
 from django.db.models import QuerySet
 
-from network.community import strategy_display_label
+from network.community import (
+    SBM_CONFIDENCE_BASE_KEY,
+    canonical_strategy_key,
+    sbm_confidence_display_label,
+    sbm_confidence_key,
+    strategy_display_label,
+)
 from network.measures._registry import role_companions
 from network.utils import GraphData
 from webapp.models import Channel
@@ -59,6 +65,12 @@ def build_graph_data(
             "out_deg",
         ):
             node_info[key] = node_data["data"][key]
+        # SBM(refine=MCMC) assignment-confidence companions — written onto the node data by
+        # community detection (which runs before this serialisation), one parameter-suffixed
+        # key per refined SBM instance.
+        for key, value in node_data["data"].items():
+            if key.startswith(SBM_CONFIDENCE_BASE_KEY):
+                node_info[key] = value
         graph_data["nodes"].append(node_info)
 
     for index, (source, target, edge_data) in enumerate(graph.edges(data=True)):
@@ -316,6 +328,24 @@ def _role_companion_groups(measures_labels: list[tuple[str, str]]) -> list[tuple
     return groups
 
 
+def sbm_confidence_columns(graph_data: GraphData, strategies: list[str]) -> list[tuple[str, str]]:
+    """(node_key, header) pairs of the SBM assignment-confidence companion columns.
+
+    One per SBM instance in ``strategies`` whose nodes actually carry the suffixed
+    ``sbm_confidence_*`` attribute — i.e. instances that ran with ``refine=MCMC``. Shared by
+    the CSV and XLSX channel-table writers (the browser table derives the same columns
+    client-side in channel_table.js).
+    """
+    cols: list[tuple[str, str]] = []
+    for s in strategies:
+        if canonical_strategy_key(s) != "sbm":
+            continue
+        key = sbm_confidence_key(s)
+        if any(key in n for n in graph_data["nodes"]):
+            cols.append((key, sbm_confidence_display_label(s)))
+    return cols
+
+
 def write_csv(
     graph_data: GraphData,
     edge_list: list[list],
@@ -338,6 +368,7 @@ def write_csv(
     pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
     other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
     role_groups = _role_companion_groups(measures_labels)
+    conf_cols = sbm_confidence_columns(graph_data, strategies)
 
     headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
@@ -347,6 +378,7 @@ def write_csv(
         headers.append(comp["role_label"] + annot)
         headers += [cl + annot for cl in comp["count_labels"]]
     headers += [strategy_display_label(s) for s in strategies]
+    headers += [lbl for _, lbl in conf_cols]
     headers += ["Activity start", "Activity end"]
 
     with open(os.path.join(output_dir, "nodes.csv"), "w", newline="", encoding="utf-8") as fh:
@@ -373,6 +405,8 @@ def write_csv(
                     row.append(node.get(count_key))
             for s in strategies:
                 row.append(communities.get(s, ""))
+            for key, _ in conf_cols:
+                row.append(node.get(key))
             row.append(node.get("activity_start") or "")
             row.append(node.get("activity_end") or "")
             writer.writerow(row)
@@ -501,6 +535,8 @@ def write_graph_files(
         if comp:
             node_keys.add(comp["role_key"])
             node_keys.update(comp["count_keys"])
+    # SBM(refine=MCMC) assignment-confidence companions, present on nodes when a refined SBM ran.
+    node_keys |= {k for n in graph_data["nodes"] for k in n if k.startswith(SBM_CONFIDENCE_BASE_KEY)}
     channels_payload: dict[str, Any] = {
         "nodes": [
             {**{k: n[k] for k in node_keys if k in n}, "communities": n.get("communities", {})}
@@ -528,6 +564,7 @@ def write_meta_json(
     total_edges: int = 0,
     community_distribution_threshold: int = 10,
     has_consensus_matrix: bool = False,
+    community_backbone_alpha: float = 0.0,
 ) -> None:
     """Write data/meta.json with export metadata consumed by table preambles.
 
@@ -553,6 +590,9 @@ def write_meta_json(
         "total_edges": total_edges,
         "community_distribution_threshold": community_distribution_threshold,
         "has_consensus_matrix": has_consensus_matrix,
+        # α of the disparity-filter backbone the algorithmic community detections ran on
+        # (0 = detection ran on the full graph). Surfaced in the community-table preamble.
+        "community_backbone_alpha": community_backbone_alpha,
     }
     data_dir = os.path.join(graph_dir, "data")
     with open(os.path.join(data_dir, "meta.json"), "w") as f:
@@ -590,6 +630,7 @@ def write_summary_json(
         "diffusion_window",
         "community_distribution_threshold",
         "leiden_cpm_resolution",
+        "community_backbone_alpha",
         "measures",
         "community_strategies",
         "network_stat_groups",
@@ -889,7 +930,9 @@ def write_coordination_pages(
             continue
         content = content.replace(desc_old, desc_new)
         content = content.replace(title_old, title_new)
-        content = content.replace("</strong> directed edges", "</strong> mutual co-forwarding ties")
+        content = content.replace(
+            "</strong> connections between them", "</strong> mutual co-forwarding ties between them"
+        )
         with open(dst_path, "w") as f:
             f.write(content)
         _patch_html_file(

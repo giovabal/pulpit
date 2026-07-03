@@ -627,8 +627,17 @@ def _compute_strategy_entry(
     id_to_node: dict[str, dict],
     pk_to_org: dict[str, str],
     label_group_labels: "dict[str, str] | None" = None,
+    detection_graph: "nx.DiGraph | None" = None,
 ) -> dict[str, Any]:
-    """Compute metrics for a single community-detection strategy."""
+    """Compute metrics for a single community-detection strategy.
+
+    ``detection_graph`` is the graph community detection actually ran on when it differs from
+    ``graph`` — the disparity-filtered backbone under ``--community-backbone-alpha``. Reported
+    modularity (headline + per-community contributions) is computed against it so the number
+    describes the objective the algorithms optimised; every other metric keeps describing the
+    full graph. Manual label-group partitions are not detections, so their modularity stays on
+    the full graph.
+    """
     label_to_nodes: dict[str, set[str]] = defaultdict(set)
     for node in graph_data["nodes"]:
         lbl = (node.get("communities") or {}).get(strategy_key)
@@ -637,10 +646,15 @@ def _compute_strategy_entry(
 
     # Report modularity against the projection the strategy was optimised on:
     # the undirected W+Wᵀ graph for undirected-basis strategies, the directed
-    # graph otherwise. Computed once per strategy and reused for the per-community
+    # graph otherwise — of the graph detection ran on (the backbone when one was
+    # used). Computed once per strategy and reused for the per-community
     # contributions so they stay consistent with the overall value.
+    is_labelgroup = strategy_key in (label_group_labels or {})
+    det_graph = graph if (detection_graph is None or is_labelgroup) else detection_graph
     mod_graph: "nx.DiGraph | nx.Graph" = (
-        to_undirected_sum(graph) if canonical_strategy_key(strategy_key) in UNDIRECTED_BASIS_STRATEGIES else graph
+        to_undirected_sum(det_graph)
+        if canonical_strategy_key(strategy_key) in UNDIRECTED_BASIS_STRATEGIES
+        else det_graph
     )
 
     rows = []
@@ -753,6 +767,7 @@ def compute_community_metrics(
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
     selected_network_groups: "frozenset[str] | None" = None,
+    detection_graph: "nx.DiGraph | None" = None,
 ) -> CommunityTableData:
     """Pre-compute all structural metrics needed for community table outputs.
 
@@ -763,6 +778,10 @@ def compute_community_metrics(
     ``channel_qs`` enables whole-network content originality and amplification ratio metrics.
     ``selected_network_groups`` restricts which whole-network stat groups are computed;
     ``None`` means all groups (backward-compatible default).
+    ``detection_graph`` is the disparity-filtered backbone community detection ran on when
+    ``--community-backbone-alpha`` was set; reported modularity for the algorithmic strategies
+    is computed against it (see ``_compute_strategy_entry``). ``None`` = detection ran on
+    ``graph`` itself.
     """
 
     def _grp(key: str) -> bool:
@@ -817,7 +836,7 @@ def compute_community_metrics(
                 status_callback(strategy_key)
             continue
         result["strategies"][strategy_key] = _compute_strategy_entry(
-            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org, label_group_labels
+            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org, label_group_labels, detection_graph
         )
         if status_callback:
             status_callback(strategy_key)
