@@ -307,8 +307,11 @@ python manage.py structural_analysis --measures "MODULEROLE(basis=LEIDEN_DIRECTE
 python manage.py structural_analysis --measures DIFFUSIONLAG --diffusion-window 7   # bare token inherits the global default; 0 disables
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED
 python manage.py structural_analysis --community-strategies "SBM(mode=NESTED),SBM(mode=FLAT)"   # role-based blocks; needs graph-tool (conda/apt, not pip)
+python manage.py structural_analysis --community-strategies "SBM(weights=POISSON)" --edge-weight-strategy TOTAL   # weighted SBM: blocks reflect citation intensity (POISSON=counts, EXPONENTIAL=PARTIAL_* ratios)
+python manage.py structural_analysis --community-strategies "SBM(refine=MCMC)"   # posterior sampling: max-marginal blocks + per-channel SBM-confidence column (slower)
 python manage.py structural_analysis --community-strategies "LEIDEN,LOUVAIN"   # classic Louvain baseline alongside Leiden, for comparison with older studies
 python manage.py structural_analysis --community-strategies ALL
+python manage.py structural_analysis --community-strategies LEIDEN --community-backbone-alpha 0.05   # detect on the disparity-filter backbone; everything else stays on the full graph
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --graph-2d --timeline-step year

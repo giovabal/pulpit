@@ -1,6 +1,6 @@
 import { build_year_nav } from './year_nav.js';
 import { mini_hist } from './charts.js';
-import { strategy_label } from './labels.js';
+import { canonical_strategy_key, strategy_label } from './labels.js';
 import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
@@ -27,14 +27,17 @@ var COL_TOOLTIPS = {
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
     "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
+    "sbm_confidence":      "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
 };
 
 // Parameterised measures may be requested more than once, each producing a parameter-suffixed
 // column key (e.g. "diffusion_lag_window_60", "within_module_z_basis_leiden_directed").
 // canonicalKey strips that suffix back to the base so column grouping and tooltips still match;
 // it mirrors network.measures._registry.canonical_measure_key. (Longest-first so the most specific
-// base wins; these are the numeric measure keys that can carry a suffix.)
-var PARAM_BASE_KEYS = ["within_module_z", "participation", "diffusion_lag"]
+// base wins; these are the numeric measure keys that can carry a suffix. "sbm_confidence" is not a
+// measure — it is the SBM(refine=MCMC) companion column — but its suffixed keys canonicalise the
+// same way for tooltip lookup.)
+var PARAM_BASE_KEYS = ["within_module_z", "participation", "diffusion_lag", "sbm_confidence"]
     .sort(function(a, b) { return b.length - a.length; });
 function canonicalKey(key) {
     for (var i = 0; i < PARAM_BASE_KEYS.length; i++) {
@@ -169,6 +172,18 @@ function _render(d) {
         var comp = roleCompanion(m[0]);
         if (comp) roleCols.push({ key: comp.roleKey, label: comp.roleLabel + labelAnnotation(m[1]), tip: comp.tip });
     });
+    // SBM assignment-confidence companions (written by SBM(refine=MCMC)): one numeric column per
+    // SBM instance whose nodes actually carry the suffixed sbm_confidence_* attribute. Mirrors
+    // sbm_confidence_key / sbm_confidence_display_label in network/community.py.
+    var confCols = [];
+    Object.keys(communities.strategies).forEach(function(s) {
+        if (canonical_strategy_key(s) !== "sbm") return;
+        var key = "sbm_confidence" + s.slice(3);
+        if (!nodes.some(function(n) { return n[key] !== null && n[key] !== undefined; })) return;
+        var lbl = strategy_label(s);
+        var i = lbl.indexOf(" (");
+        confCols.push({ key: key, label: "SBM confidence" + (i !== -1 ? lbl.slice(i) : "") });
+    });
 
     // Preamble
     var preambleTarget = document.getElementById("channel-preamble");
@@ -202,6 +217,7 @@ function _render(d) {
     structuralCols.forEach(function(m) { cols.push({key: m[0], label: m[1], group: "structural", isBase: false}); });
     contentCols.forEach(function(m)    { cols.push({key: m[0], label: m[1], group: "content",    isBase: false}); });
     otherCols.forEach(function(m)      { cols.push({key: m[0], label: m[1], group: "other",      isBase: false}); });
+    confCols.forEach(function(c)       { cols.push({key: c.key, label: c.label, group: "sbm_confidence", isBase: false}); });
 
     // Heatmap ranges
     var hmRanges = {};

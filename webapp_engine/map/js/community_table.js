@@ -300,6 +300,10 @@ function _render(d) {
         parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
         if (meta.start_date || meta.end_date)
             parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
+        if (meta.community_backbone_alpha)
+            parts.push("Community detection ran on the disparity-filter backbone (α = " +
+                meta.community_backbone_alpha + "); modularity is reported against that backbone, " +
+                "while all other metrics describe the full graph.");
         parts.push("Exported " + meta.export_date + ".");
         pEl.textContent = parts.join(" ");
         container.appendChild(pEl);

@@ -126,6 +126,7 @@ class OperationsView(View):
             # Default value pre-filled on a freshly-dragged community-strategy chip (per-instance).
             "SA_CPM_RESOLUTION": net_community.CPM_DEFAULT_RESOLUTION,
             "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
+            "SA_COMMUNITY_BACKBONE_ALPHA": settings.SA_COMMUNITY_BACKBONE_ALPHA,
             "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
             "SA_VACANCY_MONTHS_AFTER": settings.SA_VACANCY_MONTHS_AFTER,
             "SA_VACANCY_MAX_CANDIDATES": settings.SA_VACANCY_MAX_CANDIDATES,
@@ -597,6 +598,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Combines the "Label groups" fieldset (label_groups) with the algorithmic Community
         # strategies into one --community-strategies value. See the community_strategies arg kind.
         ("community_strategies", "--community-strategies"),
+        ("value", "community_backbone_alpha", "--community-backbone-alpha"),
         ("csv", "network_stat_groups", "--network-stat-groups"),
         ("bool_explicit", "include_mentions", "--mentions", "--no-mentions"),
         ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
@@ -723,6 +725,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("measures", "measures.selected", "list"),
         ("community_strategies", "communities.strategies", "list"),
         ("label_groups", "communities.label_groups", "list"),
+        ("community_backbone_alpha", "communities.backbone_alpha", "float"),
         ("network_stat_groups", "network_stats.groups", "list"),
         ("vacancy_measures", "vacancy.measures", "list"),
         ("vacancy_months_before", "vacancy.months_before", "int"),

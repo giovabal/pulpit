@@ -540,6 +540,43 @@ class StrategyParserTests(TestCase):
         self.assertEqual(canonical_strategy_key("sbm_mode_nested"), "sbm")
         self.assertEqual(strategy_display_label("sbm_mode_flat"), "Stochastic block model (mode=flat)")
 
+    def test_sbm_weights_and_refine_params(self) -> None:
+        # Bare SBM keeps its historical key (config round-trip stability); the new empty-default
+        # params contribute to the key/token only when set, and combinations are distinct instances.
+        insts = parse_strategies(["SBM", "SBM(mode=NESTED,weights=POISSON)", "SBM(weights=POISSON,refine=MCMC)"])
+        self.assertEqual(
+            [i.key for i in insts],
+            ["sbm_mode_nested", "sbm_mode_nested_weights_poisson", "sbm_mode_nested_weights_poisson_refine_mcmc"],
+        )
+        self.assertEqual(insts[1].token(), "SBM(mode=NESTED,weights=POISSON)")
+
+    def test_sbm_rejects_bad_weights_and_refine(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_strategies(["SBM(weights=GAMMA)"])
+        with self.assertRaises(ValueError):
+            parse_strategies(["SBM(refine=EXACT)"])
+
+    def test_sbm_multi_param_display_label(self) -> None:
+        # Multi-parameter suffixes parse back into per-parameter annotations (the value runs to the
+        # next declared parameter's boundary) — the JS mirror is strategy_label in labels.js.
+        self.assertEqual(
+            strategy_display_label("sbm_mode_nested_weights_poisson_refine_mcmc"),
+            "Stochastic block model (mode=nested, weights=poisson, refine=mcmc)",
+        )
+        self.assertEqual(
+            strategy_display_label("sbm_mode_flat_refine_mcmc"),
+            "Stochastic block model (mode=flat, refine=mcmc)",
+        )
+
+    def test_sbm_confidence_key_and_label(self) -> None:
+        from network.community import sbm_confidence_display_label, sbm_confidence_key
+
+        self.assertEqual(sbm_confidence_key("sbm_mode_nested_refine_mcmc"), "sbm_confidence_mode_nested_refine_mcmc")
+        self.assertEqual(
+            sbm_confidence_display_label("sbm_mode_nested_refine_mcmc"),
+            "SBM confidence (mode=nested, refine=mcmc)",
+        )
+
     def test_sbm_without_graph_tool_raises_value_error(self) -> None:
         # When graph-tool is absent, detect() surfaces a clear ValueError (caught as CommandError upstream).
         import importlib.util
@@ -577,18 +614,70 @@ class DetectSbmTests(TestCase):
     def test_returns_partition_over_all_nodes(self) -> None:
         from network.community import detect_sbm
 
-        community_map, palette = detect_sbm(self.graph, "vaporwave", "FLAT")
+        community_map, palette, confidence = detect_sbm(self.graph, "vaporwave", "FLAT")
         self.assertEqual(set(community_map), set(self.graph.nodes()))
         self.assertTrue(all(isinstance(v, int) for v in community_map.values()))
         self.assertEqual(set(community_map.values()), set(palette))
+        self.assertIsNone(confidence)  # no refine → no confidence companion
 
     def test_modes_are_deterministic(self) -> None:
         from network.community import detect_sbm
 
         for mode in ("FLAT", "NESTED"):
-            first, _ = detect_sbm(self.graph, "vaporwave", mode)
-            second, _ = detect_sbm(self.graph, "vaporwave", mode)
+            first, _, _ = detect_sbm(self.graph, "vaporwave", mode)
+            second, _, _ = detect_sbm(self.graph, "vaporwave", mode)
             self.assertEqual(first, second, f"{mode} partition not reproducible under fixed seed")
+
+    def test_weighted_fit_accepts_integer_counts(self) -> None:
+        from network.community import detect_sbm
+
+        community_map, _, _ = detect_sbm(self.graph, "vaporwave", "FLAT", weights="POISSON")
+        self.assertEqual(set(community_map), set(self.graph.nodes()))
+
+    def test_weighted_fit_accepts_positive_reals(self) -> None:
+        from network.community import detect_sbm
+
+        import networkx as nx
+
+        graph = nx.DiGraph()
+        for s, t in self.graph.edges():
+            graph.add_edge(s, t, weight=0.37)
+        community_map, _, _ = detect_sbm(graph, "vaporwave", "FLAT", weights="EXPONENTIAL")
+        self.assertEqual(set(community_map), set(graph.nodes()))
+
+    def test_mcmc_refine_returns_confidence_per_node(self) -> None:
+        from network.community import detect_sbm
+
+        community_map, _, confidence = detect_sbm(self.graph, "vaporwave", "FLAT", refine="MCMC")
+        self.assertEqual(set(community_map), set(self.graph.nodes()))
+        self.assertEqual(set(confidence), set(self.graph.nodes()))
+        for value in confidence.values():
+            self.assertGreaterEqual(value, 0.0)
+            self.assertLessEqual(value, 1.0)
+
+
+class DetectSbmValidationTests(TestCase):
+    """Weight-model validation fires before the graph-tool import, so these run everywhere."""
+
+    def _graph(self, weight: float) -> "Any":
+        import networkx as nx
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b", weight=weight)
+        graph.add_edge("b", "c", weight=weight)
+        return graph
+
+    def test_poisson_rejects_fractional_weights(self) -> None:
+        from network.community import detect_sbm
+
+        with self.assertRaisesRegex(ValueError, "POISSON.*TOTAL"):
+            detect_sbm(self._graph(0.4), "vaporwave", "FLAT", weights="POISSON")
+
+    def test_exponential_rejects_non_positive_weights(self) -> None:
+        from network.community import detect_sbm
+
+        with self.assertRaisesRegex(ValueError, "EXPONENTIAL.*positive"):
+            detect_sbm(self._graph(0.0), "vaporwave", "FLAT", weights="EXPONENTIAL")
 
 
 # ---------------------------------------------------------------------------
@@ -1639,6 +1728,153 @@ class ExportNetworkCommandTests(TestCase):
         mock_table_html.assert_called_once()
         mock_table_xls.assert_not_called()
         mock_copy.assert_called_once()
+
+    def test_rejects_out_of_range_backbone_alpha(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        for bad in (-0.1, 1.0, 1.5):
+            with self.assertRaises(CommandError):
+                call_command(
+                    "structural_analysis",
+                    community_strategies="LEIDEN",
+                    community_backbone_alpha=bad,
+                    stdout=io.StringIO(),
+                    stderr=io.StringIO(),
+                )
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_backbone_alpha_filters_detection_graph(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        *_mocks: MagicMock,
+    ) -> None:
+        """--community-backbone-alpha runs detection on the disparity-filtered backbone.
+
+        3×3 bipartite fixture with one dominant target per source (weight 100 vs 0.001):
+        the six off-diagonal edges are insignificant from both endpoints at α=0.05, so
+        detection must see the 3-edge backbone while the full 9-edge graph flows on to
+        layout / measures / exports untouched.
+        """
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
+        )
+        fake_graph = nx.DiGraph()
+        for i, source in enumerate(("s1", "s2", "s3")):
+            for j, target in enumerate(("t1", "t2", "t3")):
+                fake_graph.add_edge(source, target, weight=100.0 if i == j else 0.001)
+        channel_dict = {n: {"data": {}} for n in fake_graph.nodes()}
+        fake_qs = MagicMock()
+        fake_qs.filter.return_value = fake_qs
+        fake_qs.count.return_value = 0
+        mock_build.return_value = (fake_graph, channel_dict, [["s1", "t1", 1.0]], fake_qs)
+
+        call_command(
+            "structural_analysis",
+            graph=True,
+            community_strategies="LEIDEN",
+            community_backbone_alpha=0.05,
+            edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+
+        detect_graph = mock_detect.call_args[0][2]
+        self.assertIsNot(detect_graph, fake_graph)
+        self.assertEqual(set(detect_graph.nodes()), set(fake_graph.nodes()))  # vertex set preserved
+        self.assertEqual(detect_graph.number_of_edges(), 3)
+        self.assertEqual(set(detect_graph.edges()), {("s1", "t1"), ("s2", "t2"), ("s3", "t3")})
+        self.assertEqual(fake_graph.number_of_edges(), 9)  # full graph untouched
+        # apply_to_graph still writes onto the FULL graph, not the backbone.
+        self.assertIs(mock_apply_to_graph.call_args[0][0], fake_graph)
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_no_backbone_alpha_detects_on_full_graph(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        *_mocks: MagicMock,
+    ) -> None:
+        from django.core.management import call_command
+
+        self._configure_happy_path(
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
+        )
+        fake_graph = mock_build.return_value[0]
+
+        call_command(
+            "structural_analysis",
+            graph=True,
+            community_strategies="LEIDEN",
+            edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+        # Without the flag, detection runs on the very graph build_graph returned.
+        self.assertIs(mock_detect.call_args[0][2], fake_graph)
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")

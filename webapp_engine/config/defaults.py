@@ -114,6 +114,10 @@ STRUCTURAL_DEFAULTS: dict = {
         # panel's own "Label groups" fieldset. Merged into --community-strategies at run time, so they
         # take part in the analysis exactly like the detected communities above.
         "label_groups": [],
+        # Disparity-filter α applied to the graph before the algorithmic community detections
+        # (Serrano et al. 2009). 0 = off (detection on the full graph); 0.05 is the literature
+        # convention when backboning is wanted. Label-group partitions are unaffected.
+        "backbone_alpha": 0.0,
     },
     "network_stats": {
         "groups": [],

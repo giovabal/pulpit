@@ -664,6 +664,13 @@
                   </label>
                   <input type="number" name="community_distribution_threshold" id="community_distribution_threshold" placeholder="{{ ad.SA_COMMUNITY_DISTRIBUTION_THRESHOLD }}" value="{{ ad.SA_COMMUNITY_DISTRIBUTION_THRESHOLD }}" min="0" max="100">
                 </div>
+                <div class="ops-param">
+                  <label for="community_backbone_alpha">Community backbone α
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Run community detection on the statistically significant backbone of the network instead of the full graph: only ties carrying significantly more of a channel's citation weight than an even spread would predict are kept (disparity filter). 0 = off (use the full graph); 0.05 is the usual choice when filtering. Only affects the detected communities — measures, maps and tables still use the full graph."></i>
+                  </label>
+                  <input type="number" name="community_backbone_alpha" id="community_backbone_alpha" placeholder="0" value="{{ ad.SA_COMMUNITY_BACKBONE_ALPHA }}" min="0" max="0.99" step="0.01">
+                </div>
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
@@ -739,8 +746,10 @@
             </div>
             {# Option list for the per-instance community-basis select, cloned by the builder JS. #}
             <template id="tpl-mbasis-role"><option value="">(auto)</option>{% for key, label in all_basis_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</template>
-            {# Option list for the SBM "mode" select (nested vs flat), cloned by the strategy builder. #}
+            {# Option lists for the SBM per-instance selects (mode / weights / refine), cloned by the strategy builder. #}
             <template id="tpl-sbm-mode"><option value="NESTED">Nested (hierarchical)</option><option value="FLAT">Flat</option></template>
+            <template id="tpl-sbm-weights"><option value="">Binary (ignore weights)</option><option value="POISSON">Poisson (raw counts)</option><option value="EXPONENTIAL">Exponential (partial weights)</option></template>
+            <template id="tpl-sbm-refine"><option value="">Point estimate</option><option value="MCMC">MCMC + confidence</option></template>
             {{ sa_measure_tokens|json_script:"sa-measure-tokens" }}
           </fieldset>
           </div>
@@ -797,7 +806,7 @@
                   <div class="ops-mchip" draggable="true" data-strategy="LOUVAIN" data-label="Louvain"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Louvain</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="The classic grouping method that predates Leiden. Kept mainly so results can be compared with the many older studies that used it; for new analyses prefer Leiden, which improves on it. Treats connections as two-way."></i><button type="button" class="ops-mchip-add" aria-label="Add Louvain" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="LABELPROPAGATION" data-label="Label propagation"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">Label propagation</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="A fast method where each channel repeatedly joins whichever group most of its neighbours are in, until things settle. Handy as a quick baseline on large networks."></i><button type="button" class="ops-mchip-add" aria-label="Add Label propagation" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-strategy="KCORE" data-label="K-core"><i class="bi bi-arrows ops-dir" title="Ignores who cited whom — treats every connection as two-way"></i><span class="ops-mchip-label">K-core</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Ranks channels by how deep in the well-connected core of the network they sit, rather than sorting them into groups."></i><button type="button" class="ops-mchip-add" aria-label="Add K-core" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
-                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"}]'><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by the role they play rather than by who they cluster with — it can pick out sources, amplifiers and core-vs-periphery patterns the other methods miss. Requires the graph-tool package. Nested usually fits best; Flat is a simpler single-level version."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode (nested/flat). Can be added once per mode."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-strategy="SBM" data-label="Stochastic block model" data-multi="1" data-params='[{"name":"mode","kind":"sbm-mode","default":"NESTED","label":"Mode"},{"name":"weights","kind":"sbm-weights","default":"","label":"Weights"},{"name":"refine","kind":"sbm-refine","default":"","label":"Refine"}]'><i class="bi bi-arrow-right ops-dir" title="Takes into account who cited whom (citing → cited)"></i><span class="ops-mchip-label">Stochastic block model</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Groups channels by the role they play rather than by who they cluster with — it can pick out sources, amplifiers and core-vs-periphery patterns the other methods miss. Requires the graph-tool package. Nested usually fits best. Weights makes the fit use tie strength (Poisson for raw counts, Exponential for the partial weight strategies) instead of just who-cites-whom. Refine: MCMC samples many fits and adds a per-channel confidence column."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: mode, weights, refine. Can be added once per parameter combination."></i><button type="button" class="ops-mchip-add" aria-label="Add Stochastic block model" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                 </div>
               </div>
               <div class="ops-measures-col">
@@ -1561,8 +1570,9 @@ function showToast(msg, type) {
     actionSelector: '[data-strategy-action]',
     actionKey: 'strategyAction',
     selectOptions: function (kind) {
-      // SBM (kind 'sbm-mode') is the only strategy with a per-instance enum select.
-      var tpl = kind === 'sbm-mode' ? document.getElementById('tpl-sbm-mode') : null;
+      // SBM's per-instance enum selects: kinds 'sbm-mode' / 'sbm-weights' / 'sbm-refine',
+      // each backed by a matching <template id="tpl-<kind>"> option list above.
+      var tpl = document.getElementById('tpl-' + kind);
       return tpl ? tpl.innerHTML : '';
     },
   });
@@ -1904,6 +1914,7 @@ function showToast(msg, type) {
         if (opts.dead_leaves_color) setVal('dead_leaves_color', opts.dead_leaves_color);
         setVal('fa2_iterations',                 opts.fa2_iterations);
         setVal('community_distribution_threshold', opts.community_distribution_threshold);
+        setVal('community_backbone_alpha',       opts.community_backbone_alpha != null ? opts.community_backbone_alpha : '');
 
         // Measures: rebuild the drag-and-drop builder from the ordered token list (each token
         // carries its own parameters, e.g. "DIFFUSIONLAG(window=60)").

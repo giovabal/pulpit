@@ -23,11 +23,12 @@ if (typeof window !== 'undefined' && window.STRATEGY_LABELS) {
     });
 }
 
-// Base keys of the parameterised strategies (longest first), and their param kinds — used to strip a
-// parameter suffix back to the family and to reconstruct a readable annotation. Mirrors
-// network.community.canonical_strategy_key / strategy_display_label.
+// Base keys of the parameterised strategies (longest first), their declared params (spec order) and
+// param kinds — used to strip a parameter suffix back to the family and to reconstruct a readable
+// annotation. Mirrors network.community.canonical_strategy_key / strategy_display_label.
 var STRATEGY_BASE_KEYS = ['leiden_cpm', 'sbm'];
-var STRATEGY_PARAM_KINDS = { resolution: 'float', mode: 'enum' };
+var STRATEGY_PARAMS = { leiden_cpm: ['resolution'], sbm: ['mode', 'weights', 'refine'] };
+var STRATEGY_PARAM_KINDS = { resolution: 'float', mode: 'enum', weights: 'enum', refine: 'enum' };
 
 export function canonical_strategy_key(key) {
     var k = String(key).toLowerCase();
@@ -47,13 +48,26 @@ export function strategy_label(key) {
     // option outside their own picker (mirrors CUSTOM_LABEL_SUFFIX in network/community.py).
     if (/^labelgroup\d+$/.test(base)) label += ' [custom label]';
     if (k === base) return label;
-    var rest = k.slice(base.length + 1);          // e.g. "resolution_0_05"
-    var us = rest.indexOf('_');
-    if (us === -1) return label;
-    var pname = rest.slice(0, us);
-    var raw = rest.slice(us + 1);
-    var val = STRATEGY_PARAM_KINDS[pname] === 'float' ? raw.replace(/_/g, '.') : raw;
-    return label + ' (' + pname + '=' + val + ')';
+    var rest = k.slice(base.length + 1);          // e.g. "mode_nested_weights_poisson"
+    var params = STRATEGY_PARAMS[base] || [];
+    var parts = [];
+    for (var i = 0; i < params.length; i++) {
+        var prefix = params[i] + '_';
+        if (rest.indexOf(prefix) !== 0) continue;  // omitted (empty-default) parameter
+        var valuePart = rest.slice(prefix.length);
+        // The value runs until the next declared parameter's "_<name>_" boundary (suffix order is
+        // spec order); enum values carry no "_" and float slugs are digits and "_", so the
+        // boundary is unambiguous. Mirrors strategy_display_label in network/community.py.
+        var cut = valuePart.length;
+        for (var j = i + 1; j < params.length; j++) {
+            var pos = valuePart.indexOf('_' + params[j] + '_');
+            if (pos !== -1 && pos < cut) cut = pos;
+        }
+        var raw = valuePart.slice(0, cut);
+        rest = cut < valuePart.length ? valuePart.slice(cut + 1) : '';
+        parts.push(params[i] + '=' + (STRATEGY_PARAM_KINDS[params[i]] === 'float' ? raw.replace(/_/g, '.') : raw));
+    }
+    return parts.length ? label + ' (' + parts.join(', ') + ')' : label;
 }
 
 // Short labels shown in info-bar chips — kept terse so chips stay compact.
