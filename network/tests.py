@@ -62,6 +62,7 @@ from network.measures import (
     parse_measures,
     role_companions,
 )
+from network.tokens import split_tokens
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, Message
 from webapp.test_helpers import attribute, label_group, make_channel, make_label
@@ -593,6 +594,34 @@ class BuildCommunitiesPayloadTests(TestCase):
 # ---------------------------------------------------------------------------
 # community.py — parse_strategies / StrategyInstance / canonical / labels
 # ---------------------------------------------------------------------------
+
+
+class SplitTokensTests(TestCase):
+    def test_plain_tokens(self) -> None:
+        self.assertEqual(split_tokens("LEIDEN,KCORE"), ["LEIDEN", "KCORE"])
+
+    def test_comma_inside_params_does_not_split(self) -> None:
+        self.assertEqual(
+            split_tokens("LEIDEN,LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0),KCORE"),
+            ["LEIDEN", "LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)", "KCORE"],
+        )
+
+    def test_multi_param_token_round_trips_through_parse(self) -> None:
+        tokens = [t.upper() for t in split_tokens("LEIDEN_TEMPORAL(RESOLUTION=0.05,INTERSLICE=1.0)")]
+        (inst,) = parse_strategies(tokens)
+        self.assertEqual(inst.params_dict, {"resolution": 0.05, "interslice": 1.0})
+
+    def test_whitespace_and_empty_pieces(self) -> None:
+        self.assertEqual(
+            split_tokens(" LEIDEN , ,SBM(mode=NESTED, refine=MCMC) ,"), ["LEIDEN", "SBM(mode=NESTED, refine=MCMC)"]
+        )
+
+    def test_empty_string(self) -> None:
+        self.assertEqual(split_tokens(""), [])
+
+    def test_unbalanced_paren_still_returns_pieces(self) -> None:
+        # A malformed token isn't the splitter's problem — parse_tokens rejects it downstream.
+        self.assertEqual(split_tokens("LEIDEN_TEMPORAL(resolution=0.05"), ["LEIDEN_TEMPORAL(resolution=0.05"])
 
 
 class StrategyParserTests(TestCase):

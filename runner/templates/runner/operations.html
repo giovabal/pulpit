@@ -1919,13 +1919,14 @@ function showToast(msg, type) {
         setVal('community_backbone_alpha',       opts.community_backbone_alpha != null ? opts.community_backbone_alpha : '');
 
         // Measures: rebuild the drag-and-drop builder from the ordered token list (each token
-        // carries its own parameters, e.g. "DIFFUSIONLAG(window=60)").
+        // carries its own parameters, e.g. "DIFFUSIONLAG(window=60)"). window.splitTokens keeps
+        // multi-parameter tokens whole (their parens contain commas).
         if (window.rebuildMeasureBuilder) {
-            window.rebuildMeasureBuilder((opts.measures || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean));
+            window.rebuildMeasureBuilder(window.splitTokens(opts.measures || ''));
         }
         // A previous export records one merged --community-strategies value; split the manual
         // LABELGROUP<id> partitions back out so each repopulates its own builder.
-        var stratTokens = (opts.community_strategies || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var stratTokens = window.splitTokens(opts.community_strategies || '');
         var isLabelGroupToken = function (t) { return /^LABELGROUP\d+$/i.test(t); };
         if (window.rebuildStrategyBuilder) {
             window.rebuildStrategyBuilder(stratTokens.filter(function (t) { return !isLabelGroupToken(t); }));
@@ -1990,19 +1991,19 @@ function showToast(msg, type) {
       // builders, not plain form controls.
       if (name === 'measures') {
         if (window.rebuildMeasureBuilder) {
-          window.rebuildMeasureBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+          window.rebuildMeasureBuilder(Array.isArray(value) ? value : window.splitTokens(value || ''));
         }
         return;
       }
       if (name === 'community_strategies') {
         if (window.rebuildStrategyBuilder) {
-          window.rebuildStrategyBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+          window.rebuildStrategyBuilder(Array.isArray(value) ? value : window.splitTokens(value || ''));
         }
         return;
       }
       if (name === 'label_groups') {
         if (window.rebuildLabelGroupBuilder) {
-          window.rebuildLabelGroupBuilder(Array.isArray(value) ? value : String(value || '').split(','));
+          window.rebuildLabelGroupBuilder(Array.isArray(value) ? value : window.splitTokens(value || ''));
         }
         return;
       }

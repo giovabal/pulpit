@@ -16,6 +16,7 @@ from network import (
     robustness as net_robustness,
     vacancy_analysis,
 )
+from network.tokens import split_tokens
 from runner import tasks
 from webapp.models import ChannelSource, ChannelVacancy, LabelGroup, SearchTerm
 from webapp.utils import colors as palette_utils
@@ -186,9 +187,11 @@ class OperationsView(View):
                 # Ordered token lists seeding the drag-and-drop builders (measures + community
                 # strategies); each token may carry parameters, e.g. "DIFFUSIONLAG(window=60)" /
                 # "LEIDEN_CPM(resolution=0.05)".
-                "sa_measure_tokens": [t.strip() for t in settings.SA_MEASURES.split(",") if t.strip()],
-                "sa_strategy_tokens": [t.strip() for t in settings.SA_COMMUNITY_STRATEGIES.split(",") if t.strip()],
-                "sa_labelgroup_tokens": [t.strip() for t in settings.SA_LABEL_GROUPS.split(",") if t.strip()],
+                # split_tokens, not str.split: the comma inside a multi-parameter token
+                # ("LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)") must not split it.
+                "sa_measure_tokens": split_tokens(settings.SA_MEASURES),
+                "sa_strategy_tokens": split_tokens(settings.SA_COMMUNITY_STRATEGIES),
+                "sa_labelgroup_tokens": split_tokens(settings.SA_LABEL_GROUPS),
                 "ad": ad,
             },
         )
