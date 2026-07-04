@@ -61,7 +61,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 
 ## Quick start
 
-> **Prerequisites:** Python 3.12, 3.13, or 3.14 (all fully supported). No Git required for the download below.
+> **Prerequisites:** Python 3.12 (newer 3.x are not yet supported — the pinned numpy has no wheels for them). No Git required for the download below.
 
 1. **Download the latest stable release:** open the **[releases page](https://github.com/giovabal/pulpit/releases/latest)**, download **Source code (zip)** under *Assets*, and unzip it. You'll get a folder such as `pulpit-0.25`.
 2. **Open a terminal in that folder** and run the setup for your platform:
