@@ -24,6 +24,7 @@ python manage.py crawl_channels        # Crawl channels and resolve references
 python manage.py structural_analysis      # Build graph, detect communities, export
 python manage.py purge_out_of_target_messages --dry-run   # Preview cleanup of out-of-target channels' messages + in-target channels' out-of-period messages
 python manage.py purge_orphan_media --dry-run             # Preview cleanup of media files with no DB reference
+python export_installation.py DEST --media ALL            # Bundle DB + session + config + media into a drop-in export dir (docs/backup-and-migration.md)
 ```
 
 See [docs/workflow.md](docs/workflow.md) for all flags and options.

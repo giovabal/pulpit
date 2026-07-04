@@ -26,6 +26,7 @@ import argparse
 import os
 import shutil
 import sqlite3
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # The path layout (MEDIA_ROOT, DATABASES, TELEGRAM_SESSION_NAME, BASE_DIR) lives in Django settings,
@@ -38,6 +39,27 @@ django.setup()
 
 from django.conf import settings  # noqa: E402
 
+# Optional pretty output: the exporter runs anywhere, but when `rich` is importable it renders a
+# header panel, live per-file progress bars, a summary table and styled notices. Without it, the
+# same information prints as plain lines — no hard dependency, so the script stays portable.
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import (
+        BarColumn,
+        DownloadColumn,
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        TimeRemainingColumn,
+        TransferSpeedColumn,
+    )
+    from rich.table import Table
+
+    _console: Console | None = Console()
+except ImportError:
+    _console = None
+
 # Media-type token → subdirectory of MEDIA_ROOT. Mirrors the five message-media models
 # (photos/videos/audios/stickers/others) plus channel profile pictures (channels/<ch>/profile/…).
 MEDIA_DIRS: dict[str, str] = {
@@ -48,6 +70,43 @@ MEDIA_DIRS: dict[str, str] = {
     "OTHER_MEDIA": "others",
     "PROFILE": "channels",
 }
+
+# status → (rich style, plain glyph) for the summary rows.
+_STATUS: dict[str, tuple[str, str]] = {
+    "exported": ("green", "✓ exported"),
+    "planned": ("cyan", "• planned"),
+    "skipped": ("yellow", "– skipped"),
+}
+
+
+@dataclass
+class Result:
+    """One line of the export summary: what a step touched and how it went."""
+
+    component: str
+    detail: str
+    files: int = 0
+    nbytes: int = 0
+    status: str = "exported"
+    note: str = ""
+
+
+@dataclass
+class Report:
+    """Accumulated results plus running totals."""
+
+    rows: list[Result] = field(default_factory=list)
+
+    def add(self, result: Result) -> None:
+        self.rows.append(result)
+
+    @property
+    def total_files(self) -> int:
+        return sum(r.files for r in self.rows)
+
+    @property
+    def total_bytes(self) -> int:
+        return sum(r.nbytes for r in self.rows)
 
 
 def human(nbytes: int) -> str:
@@ -88,122 +147,238 @@ def rel_to_base(path: Path, base_dir: Path) -> Path:
         return Path(path.name)
 
 
-def copy_tree_counted(src: Path, dst: Path, dry_run: bool) -> tuple[int, int]:
-    """Recursively copy ``src`` into ``dst`` (real files only), returning (file count, byte total).
+def scan_tree(src: Path) -> tuple[int, int]:
+    """Walk ``src`` and return (real-file count, byte total) without copying — cheap, metadata only."""
+    files = total = 0
+    for root, _dirs, names in os.walk(src):
+        for name in names:
+            p = Path(root) / name
+            if p.is_symlink() or not p.is_file():
+                continue
+            files += 1
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+    return files, total
+
+
+def copy_tree(src: Path, dst: Path, on_file=None) -> tuple[int, int]:
+    """Recursively copy real files from ``src`` to ``dst``; call ``on_file(size)`` after each.
 
     Symlinks are skipped so the bundle holds real bytes, not links into the source tree.
     """
-    files = 0
-    total = 0
+    files = total = 0
     for root, _dirs, names in os.walk(src):
         target_dir = dst / Path(root).relative_to(src)
-        if not dry_run:
-            target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)
         for name in names:
             source = Path(root) / name
             if source.is_symlink() or not source.is_file():
                 continue
+            size = source.stat().st_size
+            shutil.copy2(source, target_dir / name)
             files += 1
-            try:
-                total += source.stat().st_size
-            except OSError:
-                pass
-            if not dry_run:
-                shutil.copy2(source, target_dir / name)
+            total += size
+            if on_file:
+                on_file(size)
     return files, total
 
 
-def copy_file_counted(src: Path, dst: Path, dry_run: bool) -> tuple[int, int]:
-    """Copy a single file, returning (1, size) if it was a real file, else (0, 0)."""
+def copy_file(src: Path, dst: Path) -> tuple[int, int]:
+    """Copy a single real file, returning (1, size) or (0, 0) if it is not a real file."""
     if src.is_symlink() or not src.is_file():
         return 0, 0
     size = src.stat().st_size
-    if not dry_run:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
     return 1, size
 
 
-def export_database(base_dir: Path, dest: Path, dry_run: bool) -> tuple[int, int]:
-    """Snapshot the database into the bundle. SQLite only — external engines are reported and skipped."""
+def _status(message: str):
+    """A transient spinner while a quick step runs (rich), or a no-op context otherwise."""
+    if _console:
+        return _console.status(f"[cyan]{message}")
+
+    class _Null:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    return _Null()
+
+
+def export_database(base_dir: Path, dest: Path, dry_run: bool, report: Report) -> None:
+    """Snapshot the database. SQLite only — external engines are reported and skipped."""
     db = settings.DATABASES["default"]
     engine = str(db["ENGINE"])
     if "sqlite3" not in engine:
         backend = engine.rsplit(".", 1)[-1]
-        print(f"  database  : SKIPPED — engine is {backend!r}, not a bundleable file.")
-        print("              Dump it separately (e.g. pg_dump) and restore on the target; the .env")
-        print(f"              in this bundle already points at a {backend!r} database.")
-        return 0, 0
+        report.add(Result("database", f"{backend} engine", status="skipped", note="dump separately (e.g. pg_dump)"))
+        return
     src_name = Path(db["NAME"])
     if not src_name.exists():
-        print(f"  database  : SKIPPED — {src_name} not found.")
-        return 0, 0
+        report.add(Result("database", str(src_name), status="skipped", note="file not found"))
+        return
     rel = rel_to_base(src_name, base_dir)
-    target = dest / rel
     if dry_run:
-        print(f"  database  : {rel}  (VACUUM INTO, ~{human(src_name.stat().st_size)} source)")
-        return 1, src_name.stat().st_size
+        report.add(Result("database", str(rel), 1, src_name.stat().st_size, status="planned", note="VACUUM INTO"))
+        return
+    target = dest / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         target.unlink()
     # VACUUM INTO writes a consistent, defragmented single-file copy even in WAL mode, so the bundle
     # never needs the -wal/-shm sidecars. A private connection keeps Django's own connection untouched.
-    conn = sqlite3.connect(str(src_name))
-    try:
-        conn.execute("VACUUM INTO ?", (str(target),))
-    finally:
-        conn.close()
-    out = target.stat().st_size
-    print(f"  database  : {rel}  ({human(out)}, clean snapshot)")
-    return 1, out
+    with _status(f"Snapshotting database → {rel} (VACUUM INTO)…"):
+        conn = sqlite3.connect(str(src_name))
+        try:
+            conn.execute("VACUUM INTO ?", (str(target),))
+        finally:
+            conn.close()
+    report.add(Result("database", str(rel), 1, target.stat().st_size, note="clean snapshot"))
 
 
-def export_session(base_dir: Path, dest: Path, dry_run: bool) -> tuple[int, int]:
+def export_session(base_dir: Path, dest: Path, dry_run: bool, report: Report) -> None:
     """Copy the Telethon session file (and any journal/WAL sidecars) into the bundle."""
     session = Path(f"{settings.TELEGRAM_SESSION_NAME}.session")
     if not session.is_absolute():
         session = base_dir / session
     present = [p for p in [session, *session.parent.glob(session.name + "-*")] if p.is_file()]
     if not present:
-        print(f"  session   : SKIPPED — {session.name} not found (no Telegram login yet).")
-        return 0, 0
+        report.add(Result("session", session.name, status="skipped", note="no Telegram login yet"))
+        return
+    rel = rel_to_base(session, base_dir)
+    if dry_run:
+        report.add(Result("session", str(rel), len(present), sum(p.stat().st_size for p in present), status="planned"))
+        return
     files = total = 0
-    for p in present:
-        rel = rel_to_base(p, base_dir)
-        n, b = copy_file_counted(p, dest / rel, dry_run)
-        files += n
-        total += b
-    print(f"  session   : {rel_to_base(session, base_dir)}  ({files} file(s), {human(total)})")
-    return files, total
+    with _status(f"Copying Telegram session → {rel}…"):
+        for p in present:
+            n, b = copy_file(p, dest / rel_to_base(p, base_dir))
+            files += n
+            total += b
+    report.add(Result("session", str(rel), files, total))
 
 
-def export_configuration(base_dir: Path, dest: Path, dry_run: bool) -> tuple[int, int]:
+def export_configuration(base_dir: Path, dest: Path, dry_run: bool, report: Report) -> None:
     """Copy the whole configuration/ directory (.env, env.example, .operations-* baselines/snapshots)."""
     src = base_dir / "configuration"
     if not src.is_dir():
-        print("  config    : SKIPPED — configuration/ not found.")
-        return 0, 0
-    files, total = copy_tree_counted(src, dest / "configuration", dry_run)
-    print(f"  config    : configuration/  ({files} files, {human(total)})")
-    return files, total
+        report.add(Result("config", "configuration/", status="skipped", note="directory not found"))
+        return
+    if dry_run:
+        n, b = scan_tree(src)
+        report.add(Result("config", "configuration/", n, b, status="planned"))
+        return
+    with _status("Copying configuration files…"):
+        files, total = copy_tree(src, dest / "configuration")
+    report.add(Result("config", "configuration/", files, total))
 
 
-def export_media(base_dir: Path, dest: Path, media_types: list[str], dry_run: bool) -> tuple[int, int]:
-    """Copy each selected media type's subdirectory of MEDIA_ROOT into the bundle."""
+def export_media(base_dir: Path, dest: Path, media_types: list[str], dry_run: bool, report: Report) -> None:
+    """Copy each selected media type's subdirectory of MEDIA_ROOT, with a live progress bar per type."""
     media_root = Path(settings.MEDIA_ROOT)
     media_rel = rel_to_base(media_root, base_dir)
-    files = total = 0
+
+    # Pre-scan so we know per-type totals (drives the dry-run report and the progress bars' size/ETA).
+    plans: list[tuple[str, str, Path, int, int]] = []
     for token in media_types:
         sub = MEDIA_DIRS[token]
         src = media_root / sub
         if not src.is_dir():
-            print(f"  media     : {token:12s} SKIPPED — {media_rel}/{sub}/ not present")
+            report.add(Result("media", f"{token} · {media_rel}/{sub}/", status="skipped", note="not present"))
             continue
-        n, b = copy_tree_counted(src, dest / media_rel / sub, dry_run)
-        files += n
-        total += b
-        print(f"  media     : {token:12s} {media_rel}/{sub}/  ({n} files, {human(b)})")
-    return files, total
+        n, b = scan_tree(src)
+        plans.append((token, sub, src, n, b))
+
+    if dry_run:
+        for token, sub, _src, n, b in plans:
+            report.add(Result("media", f"{token} · {media_rel}/{sub}/", n, b, status="planned"))
+        return
+
+    if _console and plans:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+            console=_console,
+        ) as progress:
+            for token, sub, src, n, b in plans:
+                task = progress.add_task(f"{token:<11} {media_rel}/{sub}/", total=b or 1)
+                copy_tree(src, dest / media_rel / sub, on_file=lambda size, t=task: progress.update(t, advance=size))
+                progress.update(task, completed=b or 1)
+                report.add(Result("media", f"{token} · {media_rel}/{sub}/", n, b))
+    else:
+        for token, sub, src, n, b in plans:
+            copy_tree(src, dest / media_rel / sub)
+            print(f"  media    : {token:<12} {media_rel}/{sub}/  ({n} files, {human(b)})")
+            report.add(Result("media", f"{token} · {media_rel}/{sub}/", n, b))
+
+
+def render_header(base_dir: Path, dest: Path, selection: str, dry_run: bool) -> None:
+    title = "Planning Pulpit export (dry run)" if dry_run else "Exporting Pulpit installation"
+    if _console:
+        body = f"[dim]from [/] {base_dir}\n[dim]to   [/] {dest}\n[dim]media[/] {selection}"
+        _console.print(Panel(body, title=f"📦 {title}", border_style="cyan", expand=False))
+    else:
+        print(title)
+        print(f"  from : {base_dir}")
+        print(f"  to   : {dest}")
+        print(f"  media: {selection}\n")
+
+
+def render_summary(report: Report) -> None:
+    if _console:
+        table = Table(title="Export summary", title_style="bold", header_style="bold", expand=False)
+        table.add_column("Component")
+        table.add_column("Detail", overflow="fold")
+        table.add_column("Files", justify="right")
+        table.add_column("Size", justify="right")
+        table.add_column("Status")
+        for r in report.rows:
+            style, glyph = _STATUS.get(r.status, ("white", r.status))
+            detail = r.detail if not r.note else f"{r.detail}  [dim]({r.note})[/]"
+            table.add_row(
+                r.component,
+                detail,
+                str(r.files) if r.files else "—",
+                human(r.nbytes) if r.nbytes else "—",
+                f"[{style}]{glyph}[/]",
+            )
+        table.add_section()
+        table.add_row(
+            "[bold]total[/]", "", f"[bold]{report.total_files}[/]", f"[bold]{human(report.total_bytes)}[/]", ""
+        )
+        _console.print(table)
+    else:
+        for r in report.rows:
+            _, glyph = _STATUS.get(r.status, ("", r.status))
+            note = f" ({r.note})" if r.note else ""
+            print(f"  {r.component:9s}: {r.detail}{note}  [{r.files} files, {human(r.nbytes)}] {glyph}")
+        print(f"  {'total':9s}: {report.total_files} files, {human(report.total_bytes)}")
+
+
+def render_footer(dest: Path) -> None:
+    steps = f'cp -a "{dest}/." /path/to/other/pulpit/\n(cd /path/to/other/pulpit && python manage.py migrate)'
+    warning = (
+        "This bundle contains configuration/.env (API keys, SECRET_KEY) and the\n"
+        "Telegram session (full account access). Transfer and store it securely."
+    )
+    if _console:
+        _console.print(Panel(steps, title="[green]✓ Drop-in ready — apply with[/]", border_style="green", expand=False))
+        _console.print(Panel(warning, title="[yellow]⚠ Sensitive data[/]", border_style="yellow", expand=False))
+    else:
+        print("\nDrop-in ready. Apply it to another Pulpit installation with:")
+        print(f'    cp -a "{dest}/." /path/to/other/pulpit/')
+        print("    (cd /path/to/other/pulpit && python manage.py migrate)")
+        print("NOTE: contains .env secrets and the Telegram session — transfer securely.")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -240,39 +415,29 @@ def main(argv: list[str] | None = None) -> int:
     if dest.exists() and any(dest.iterdir()) and not args.force:
         raise SystemExit(f"error: {dest} already exists and is not empty. Re-run with --force to export into it.")
 
-    label = "Planning export (dry run)" if args.dry_run else "Exporting"
-    selection = ", ".join(media_types) if media_types else "none"
-    print(f"{label} of Pulpit installation")
-    print(f"  from : {base_dir}")
-    print(f"  to   : {dest}")
-    print(f"  media: {selection}\n")
+    selection = ", ".join(media_types) if media_types else "none (database + config + session only)"
+    render_header(base_dir, dest, selection, args.dry_run)
 
     if not args.dry_run:
         dest.mkdir(parents=True, exist_ok=True)
 
-    total_files = total_bytes = 0
-    for files, byts in (
-        export_database(base_dir, dest, args.dry_run),
-        export_session(base_dir, dest, args.dry_run),
-        export_configuration(base_dir, dest, args.dry_run),
-        export_media(base_dir, dest, media_types, args.dry_run),
-    ):
-        total_files += files
-        total_bytes += byts
+    report = Report()
+    export_database(base_dir, dest, args.dry_run, report)
+    export_session(base_dir, dest, args.dry_run, report)
+    export_configuration(base_dir, dest, args.dry_run, report)
+    export_media(base_dir, dest, media_types, args.dry_run, report)
 
-    print()
+    render_summary(report)
+
     if args.dry_run:
-        print(f"[dry-run] would export {total_files} files ({human(total_bytes)}). Nothing was written.")
+        msg = f"Dry run — would export {report.total_files} files ({human(report.total_bytes)}). Nothing was written."
+        if _console:
+            _console.print(f"[dim]{msg}[/]")
+        else:
+            print(msg)
         return 0
 
-    print(f"Done. Bundle written to {dest} — {total_files} files, {human(total_bytes)}.")
-    print("It mirrors the Pulpit project layout. To apply it to another installation:")
-    print(f'    cp -a "{dest}/." /path/to/other/pulpit/')
-    print("    (cd /path/to/other/pulpit && python manage.py migrate)")
-    print(
-        "NOTE: the bundle contains configuration/.env (API keys, SECRET_KEY) and the Telegram session\n"
-        "      (full account access). Transfer and store it securely."
-    )
+    render_footer(dest)
     return 0
 
 
