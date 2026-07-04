@@ -4,20 +4,22 @@
 
 set -e
 
-# Require Python 3.12, 3.13, or 3.14 (Pulpit supports all three; prefer the newest available)
+# Require Python 3.12. Newer interpreters are intentionally excluded: the numpy<2 pin
+# (kept for ABI compatibility with apt/conda graph-tool builds, see requirements.txt)
+# has no wheels for Python 3.13+, so those interpreters cannot install this project.
 PY=""
-for candidate in python3.14 python3.13 python3.12 python3 python; do
+for candidate in python3.12 python3 python; do
     bin=$(command -v "$candidate" 2>/dev/null) || continue
     version=$("$bin" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null) || continue
     case "$version" in
-        3.12 | 3.13 | 3.14)
+        3.12)
             PY="$bin"
             break
             ;;
     esac
 done
 if [ -z "$PY" ]; then
-    echo "Error: Python 3.12, 3.13, or 3.14 is required but was not found." >&2
+    echo "Error: Python 3.12 is required but was not found." >&2
     echo "Download it from https://www.python.org/downloads/" >&2
     exit 1
 fi
@@ -39,12 +41,13 @@ elif "$PY" -c "import graph_tool" >/dev/null 2>&1 && grep -q "include-system-sit
     echo "         Recreate it (rm -rf $VENV_DIR && ./setup.sh) or set 'include-system-site-packages = true' in $VENV_DIR/pyvenv.cfg." >&2
 fi
 
-# Activate the environment
-source "$VENV_DIR/bin/activate"
+# Use the venv interpreter directly (POSIX-portable; avoids the bash-only `source`,
+# so `sh setup.sh` works under dash as well as bash).
+VENV_PY="$VENV_DIR/bin/python"
 
 # Upgrade pip and install requirements
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements_dev.txt
+"$VENV_PY" -m pip install --upgrade pip
+"$VENV_PY" -m pip install -r requirements.txt -r requirements_dev.txt
 
 # Bootstrap configuration/.env from configuration/env.example if not present
 mkdir -p configuration
@@ -74,7 +77,7 @@ else
 fi
 
 # Apply database migrations
-python manage.py migrate
+"$VENV_PY" manage.py migrate
 
 echo ""
 echo "Setup complete. Activate the environment with:"

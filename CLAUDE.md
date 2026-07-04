@@ -109,7 +109,7 @@ Only messages dated **within a channel's in-target label periods** contribute â€
 
 ### Code style
 
-- Python 3.12â€“3.14 (all fully supported), line length 120, double quotes (see `ruff.toml`)
+- Python 3.12 (the `numpy<2` pin, kept for graph-tool ABI compatibility, has no wheels for 3.13+), line length 120, double quotes (see `ruff.toml`)
 - `ruff` for linting and formatting
 
 ### Configuration
