@@ -29,6 +29,20 @@ fi
 # apt/conda into the *system* site-packages. When the chosen Python has it, create the venv with
 # --system-site-packages so it is importable inside the venv; other setups get a fully isolated one.
 VENV_DIR=".venv"
+
+# A venv built with a different interpreter cannot be reused (e.g. an older 3.14 venv from before this
+# 3.12 pin): the numpy<2 requirement has no wheels for 3.13+, so pip would fall back to building numpy
+# from source and fail with a confusing "Cannot compile Python.h" error deep in the install. Detect a
+# version mismatch up front and recreate the venv from scratch with the interpreter selected above.
+if [ -d "$VENV_DIR" ]; then
+    required_version=$("$PY" -c "import sys; print('%d.%d' % sys.version_info[:2])")
+    existing_version=$("$VENV_DIR/bin/python" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null || true)
+    if [ "$existing_version" != "$required_version" ]; then
+        echo "Existing $VENV_DIR was built with Python ${existing_version:-unknown}, but $required_version is required — recreating it."
+        rm -rf "$VENV_DIR"
+    fi
+fi
+
 if [ ! -d "$VENV_DIR" ]; then
     VENV_OPTS=""
     if "$PY" -c "import graph_tool" >/dev/null 2>&1; then
