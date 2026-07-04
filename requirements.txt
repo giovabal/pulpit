@@ -17,6 +17,7 @@ django-colorfield==0.14.0
 django-extensions==4.1
 python-decouple==3.8
 tomlkit>=0.13
+rich>=13  # progress bars + summary tables for export_installation.py (imported optionally; plain fallback if absent)
 telethon==1.43.2
 pypalettes==0.2.1
 colorcet==3.2.1

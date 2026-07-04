@@ -263,6 +263,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Export formats](docs/export-formats.md) | All output files: graphs, tables, GEXF, GraphML, atomic write safety |
 | [Operations defaults & configuration](docs/operations-defaults.md) | How the form, the CLI, and the snapshot files relate; the three buttons (Save / Load / Write CLI); the every-flag-must-be-explicit CLI rule |
 | [Configuration reference](docs/configuration.md) | Every setting in `configuration/.env` and the two `.operations-*` TOML files, with built-in defaults |
+| [Backup and migration](docs/backup-and-migration.md) | Bundle an installation (database, session, configuration, media) into a drop-in directory to back it up or move it to another machine |
 | [Changelog](CHANGELOG.md) | Version history |
 
 ---
