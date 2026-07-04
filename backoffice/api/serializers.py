@@ -82,10 +82,27 @@ class ProjectSerializer(serializers.ModelSerializer):
 class ChannelVacancySerializer(serializers.ModelSerializer):
     channel_id = serializers.PrimaryKeyRelatedField(source="channel", queryset=Channel.objects.all())
     channel_title = serializers.CharField(source="channel.title", read_only=True)
+    successor_id = serializers.PrimaryKeyRelatedField(
+        source="successor", queryset=Channel.objects.all(), allow_null=True, required=False
+    )
+    successor_title = serializers.SerializerMethodField()
 
     class Meta:
         model = ChannelVacancy
-        fields = ["id", "channel_id", "channel_title", "closure_date", "note"]
+        fields = ["id", "channel_id", "channel_title", "closure_date", "note", "successor_id", "successor_title"]
+
+    def get_successor_title(self, obj):
+        return obj.successor.title if obj.successor_id else None
+
+    def validate(self, attrs):
+        channel = attrs.get("channel", getattr(self.instance, "channel", None))
+        if "successor" in attrs:
+            successor = attrs["successor"]
+        else:
+            successor = getattr(self.instance, "successor", None)
+        if channel and successor and channel.pk == successor.pk:
+            raise serializers.ValidationError({"successor_id": "A vacancy channel cannot be its own successor."})
+        return attrs
 
 
 class ChannelSourceSerializer(serializers.ModelSerializer):

@@ -13,6 +13,7 @@
   </label>
 </div>
 
+<div id="va-validation" class="export-wide"></div>
 <div id="va-root" class="export-wide"></div>
 
 <style>
@@ -69,6 +70,8 @@ import { fetchJson } from "./js/utils.js";
       " · window: " + data.months_before + " mo before / " + data.months_after + " mo after" +
       " · measures: " + measures.map(function (m) { return labels[m] || m; }).join(", ");
 
+    renderValidation(data, measures, labels);
+
     var root = document.getElementById("va-root");
     if (!vacancies.length) {
       root.innerHTML = '<p class="va-empty">No vacancies found in the database.</p>';
@@ -88,6 +91,33 @@ import { fetchJson } from "./js/utils.js";
     if (typeof initSortableTables === "function") {
       initSortableTables();
     }
+  }
+
+  // Retrieval-style validation against the analyst-labelled known successors:
+  // per measure, how often the successor ranked 1st / top-3 / top-5, plus MRR.
+  function renderValidation(data, measures, labels) {
+    var host = document.getElementById("va-validation");
+    var v = data.validation;
+    if (!v || !v.n_labelled) { host.innerHTML = ""; return; }
+    var rows = measures.map(function (m) {
+      var s = v.per_measure[m] || {};
+      return "<tr><td>" + esc(labels[m] || m) + "</td>" +
+        '<td class="number">' + s.hits_at_1 + "</td>" +
+        '<td class="number">' + s.hits_at_3 + "</td>" +
+        '<td class="number">' + s.hits_at_5 + "</td>" +
+        '<td class="number">' + s.mrr.toFixed(3) + "</td></tr>";
+    }).join("");
+    host.innerHTML =
+      '<div class="card mb-4"><div class="card-body py-2">' +
+      '<h3 class="h6 mb-1">Validation against known successors</h3>' +
+      '<p class="text-muted small mb-2">Over the ' + v.n_labelled + " vacanc" + (v.n_labelled === 1 ? "y" : "ies") +
+      " with an analyst-labelled successor: how often each measure ranked the true successor first / in the top 3 / " +
+      "in the top 5, and the mean reciprocal rank. A successor outside the candidate list counts as a miss.</p>" +
+      '<div class="table-responsive"><table class="table table-sm mb-0">' +
+      '<thead><tr><th scope="col">Measure</th><th class="number" scope="col">Hits@1</th>' +
+      '<th class="number" scope="col">Hits@3</th><th class="number" scope="col">Hits@5</th>' +
+      '<th class="number" scope="col">MRR</th></tr></thead>' +
+      "<tbody>" + rows + "</tbody></table></div></div></div>";
   }
 
   function buildItem(vac, i, measures, labels, filter) {
@@ -119,11 +149,24 @@ import { fetchJson } from "./js/utils.js";
           ' aria-labelledby="' + headId + '">' +
         '<div class="accordion-body">' +
           (vac.note ? '<p class="text-muted small mb-3">' + esc(vac.note) + "</p>" : "") +
+          successorLine(vac, measures, labels) +
           buildTable(candidates, vac, measures, labels) +
         "</div>" +
       "</div>";
 
     return item;
+  }
+
+  function successorLine(vac, measures, labels) {
+    var succ = vac.successor;
+    if (!succ) return "";
+    var rankBits = measures.map(function (m) {
+      var rk = succ.ranks ? succ.ranks[m] : null;
+      return esc(labels[m] || m) + ": " + (rk != null ? "#" + rk : "—");
+    }).join(" · ");
+    var note = succ.in_candidates ? rankBits : "not among the scored candidates";
+    return '<p class="text-muted small mb-3">★ Known successor: <strong>' + esc(succ.title) +
+      "</strong> — rank " + note + "</p>";
   }
 
   function buildTable(candidates, vac, measures, labels) {
@@ -140,12 +183,33 @@ import { fetchJson } from "./js/utils.js";
       colMax[m] = vals.length ? Math.max.apply(null, vals) : 0;
     });
 
+    // Null-model calibration columns (BH-adjusted hypergeometric q of the amplifier-
+    // and source-set overlaps), present when the run computed the underlying sets.
+    var hasAmpQ = candidates.some(function (c) { return c.significance && c.significance.amplifiers; });
+    var hasSrcQ = candidates.some(function (c) { return c.significance && c.significance.sources; });
+
+    function sigStars(q) {
+      if (q == null) return "";
+      if (q < 0.001) return " ***";
+      if (q < 0.01) return " **";
+      if (q < 0.05) return " *";
+      return "";
+    }
+
+    function qCell(sig) {
+      if (!sig) return '<td class="va-score-cell"><span class="va-null">—</span></td>';
+      return '<td class="va-score-cell" data-sort-value="' + esc(String(sig.q)) + '" title="p = ' + esc(String(sig.p)) + '">' +
+        esc(String(sig.q)) + sigStars(sig.q) + "</td>";
+    }
+
     var head = "<thead><tr>" +
       '<th scope="col">Channel</th>' +
       '<th class="date" scope="col">First active</th>' +
       measures.map(function (m) {
         return '<th class="number" scope="col">' + esc(labels[m] || m) + "</th>";
       }).join("") +
+      (hasAmpQ ? '<th class="number" scope="col" title="BH-adjusted hypergeometric tail probability of the amplifier-set overlap under a random-draw null">Amplifier q</th>' : "") +
+      (hasSrcQ ? '<th class="number" scope="col" title="BH-adjusted hypergeometric tail probability of the source-set overlap under a random-draw null">Source q</th>' : "") +
       '<th class="number" scope="col">Amplifiers</th>' +
       '<th class="date" scope="col">Last forwarded</th>' +
       "</tr></thead>";
@@ -155,23 +219,33 @@ import { fetchJson } from "./js/utils.js";
         var dot = cand.org_color
           ? '<span class="va-org-dot" style="background:' + esc(cand.org_color) + '"></span>'
           : "";
-        var titleCell = dot + '<a href="' + esc(cand.url) + '" target="_blank" rel="noopener">' + esc(cand.title) + "</a>";
+        var succMark = cand.is_successor
+          ? ' <span title="Analyst-labelled known successor" aria-label="known successor">★</span>'
+          : "";
+        var titleCell = dot + '<a href="' + esc(cand.url) + '" target="_blank" rel="noopener">' + esc(cand.title) + "</a>" + succMark;
 
         var scoreCells = measures.map(function (m) {
           var v = cand.scores ? cand.scores[m] : null;
           var bg = (v != null && typeof heatmapBg === "function") ? heatmapBg(v, colMin[m], colMax[m]) : "";
           var display = v != null ? v.toFixed(3) : '<span class="va-null">—</span>';
           var sortVal = v != null ? String(v) : "";
-          return '<td class="va-score-cell"' +
+          var extra = "";
+          if (m === "NEW_ADOPTERS" && cand.new_adopter_count != null) {
+            extra = ' title="' + cand.new_adopter_count + ' newly adopting orphan' + (cand.new_adopter_count !== 1 ? "s" : "") + '"';
+          }
+          return '<td class="va-score-cell"' + extra +
             (bg ? ' style="' + esc(bg) + '"' : "") +
             (sortVal ? ' data-sort-value="' + esc(sortVal) + '"' : "") +
             ">" + display + "</td>";
         }).join("");
 
+        var sig = cand.significance || {};
         return "<tr>" +
           "<td>" + titleCell + "</td>" +
           '<td data-sort-value="' + esc(cand.first_activity_iso || "") + '">' + esc(cand.first_activity || "—") + "</td>" +
           scoreCells +
+          (hasAmpQ ? qCell(sig.amplifiers) : "") +
+          (hasSrcQ ? qCell(sig.sources) : "") +
           "<td>" + (cand.amplifier_count != null ? cand.amplifier_count : "—") + "</td>" +
           '<td data-sort-value="' + esc(cand.last_forwarded_iso || "") + '">' + esc(cand.last_forwarded || "—") + "</td>" +
           "</tr>";

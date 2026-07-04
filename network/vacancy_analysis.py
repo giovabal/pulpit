@@ -14,10 +14,13 @@ from django.utils import timezone
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelLabel, ChannelVacancy, LabelGroup, Message
 
-VALID_VACANCY_MEASURES: frozenset[str] = frozenset({"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE", "TEMPORAL"})
+VALID_VACANCY_MEASURES: frozenset[str] = frozenset(
+    {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE", "TEMPORAL"}
+)
 
 ALL_VACANCY_MEASURES: list[str] = [
     "AMPLIFIER_JACCARD",
+    "NEW_ADOPTERS",
     "STRUCTURAL_EQUIV",
     "BROKERAGE",
     "TEMPORAL",
@@ -25,10 +28,16 @@ ALL_VACANCY_MEASURES: list[str] = [
 
 MEASURE_LABELS: dict[str, str] = {
     "AMPLIFIER_JACCARD": "Amplifier Coverage",
+    "NEW_ADOPTERS": "New-adopter Coverage",
     "STRUCTURAL_EQUIV": "Neighbour-set Equivalence",
     "BROKERAGE": "Brokerage overlap",
     "TEMPORAL": "Temporal Adoption",
 }
+
+# Reserved key carrying per-candidate companions (counts, significance) through the
+# scores dict returned by _scores_abc; callers pop it before treating the rest as
+# measure-token → score pairs.
+EXTRAS_KEY = "_extras"
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -85,6 +94,50 @@ def _cosine(a: set, b: set) -> float:
     return len(a & b) / (math.sqrt(len(a)) * math.sqrt(len(b)))
 
 
+def _hypergeom_sf(k: int, population: int, successes: int, draws: int) -> float:
+    """One-tailed hypergeometric tail probability P(X ≥ k).
+
+    X counts the marked items (``successes`` marked out of ``population``) in a
+    uniform draw of ``draws`` items without replacement — the chance that an overlap
+    at least as large as the observed ``k`` arises if the candidate's neighbour set
+    were assembled at random from the universe. Exact (``math.comb``), no SciPy;
+    the universes here are at most a few thousand channels. Degenerate inputs
+    (empty universe/sets, inconsistent sizes) return 1.0 — "no evidence", never
+    spurious significance.
+    """
+    if population <= 0 or successes <= 0 or draws <= 0 or successes > population or draws > population:
+        return 1.0
+    if k <= 0:
+        return 1.0
+    k_max = min(successes, draws)
+    if k > k_max:
+        return 0.0
+    tail = sum(math.comb(successes, i) * math.comb(population - successes, draws - i) for i in range(k, k_max + 1))
+    return tail / math.comb(population, draws)
+
+
+def _bh_adjust(pvals: list[float]) -> list[float]:
+    """Benjamini-Hochberg adjusted p-values (q-values), order-preserving.
+
+    Standard step-up adjustment: q_(i) = min over j ≥ i of p_(j) · m / j, capped at 1.
+    Controls the false-discovery rate across the candidates tested for one vacancy
+    (Benjamini & Hochberg 1995).
+    """
+    m = len(pvals)
+    order = sorted(range(m), key=lambda i: pvals[i])
+    adjusted = [0.0] * m
+    running_min = 1.0
+    for rank in range(m - 1, -1, -1):
+        i = order[rank]
+        running_min = min(running_min, pvals[i] * m / (rank + 1))
+        adjusted[i] = running_min
+    return adjusted
+
+
+def _round_p(p: float) -> float:
+    return float(f"{p:.4g}")
+
+
 # ── Per-algorithm scorers ─────────────────────────────────────────────────────
 
 
@@ -97,7 +150,8 @@ def _scores_abc(
     after_end: datetime.datetime,
     selected: set[str],
 ) -> dict[int, dict[str, float | None]]:
-    """Scores A (Amplifier Coverage), B (Neighbour-set Equivalence), C (Brokerage overlap).
+    """Scores A (Amplifier Coverage), N (New-adopter Coverage), B (Neighbour-set
+    Equivalence), C (Brokerage overlap), plus per-candidate significance.
 
     Note: score B here is a *binary* (Ochiai) cosine over in/out neighbour **sets** —
     it ignores tie strength and is computed between one vacancy and each candidate. It
@@ -106,12 +160,21 @@ def _scores_abc(
     :func:`network.community_stats._compute_structural_equivalence`; the two answer
     related questions with different maths, hence the separate "Neighbour-set
     Equivalence" label.
+
+    Each candidate's scores dict also carries an :data:`EXTRAS_KEY` entry with the
+    new-adopter count and the null-model calibration: exact hypergeometric tail
+    probabilities for the amplifier-set and source-set overlaps (how surprising the
+    observed overlap is if the candidate drew its neighbours at random from the
+    active universe), BH-adjusted across the candidate list.
     """
     total_orphaned = len(orphaned_pks)
 
-    amp_counts: dict[int, int] = {}
-    if "AMPLIFIER_JACCARD" in selected:
-        for r in (
+    # Distinct (orphan, candidate) forward pairs in the after-window — the raw
+    # material for both Amplifier Coverage and New-adopter Coverage.
+    after_pairs: set[tuple[int, int]] = set()
+    amp_counts: dict[int, int] = defaultdict(int)
+    if selected & {"AMPLIFIER_JACCARD", "NEW_ADOPTERS"}:
+        after_pairs = set(
             Message.objects.alive()
             .filter(
                 channel__in=orphaned_pks,
@@ -120,17 +183,43 @@ def _scores_abc(
                 date__lte=after_end,
             )
             .filter(channel_cutoff_q())
-            .values("forwarded_from_id")
-            .annotate(amp_count=Count("channel", distinct=True))
-        ):
-            amp_counts[r["forwarded_from_id"]] = r["amp_count"]
+            .values_list("channel_id", "forwarded_from_id")
+            .distinct()
+        )
+        for _, fwd_id in after_pairs:
+            amp_counts[fwd_id] += 1
+
+    # (orphan, candidate) pairs already present in the BEFORE window: an orphan that
+    # forwarded the candidate before the closure is a pre-existing habit, not a new
+    # adoption. Windowed on the same before-window that defines the orphans, so the
+    # before/after comparison is symmetric in design.
+    new_counts: dict[int, int] = defaultdict(int)
+    if "NEW_ADOPTERS" in selected:
+        prior_pairs = set(
+            Message.objects.alive()
+            .filter(
+                channel__in=orphaned_pks,
+                forwarded_from__in=candidate_pks,
+                date__gte=before_start,
+                date__lt=closure_dt,
+            )
+            .filter(channel_cutoff_q())
+            .values_list("channel_id", "forwarded_from_id")
+            .distinct()
+        )
+        for pair in after_pairs:
+            if pair not in prior_pairs:
+                new_counts[pair[1]] += 1
 
     # Each candidate's in-amplifier set: in-target channels that forwarded from the
     # candidate in the after-window. Restricted to in-target so it shares the universe
     # of the vacancy's amplifier set (orphaned_pks ⊆ in-target), giving a well-defined
     # cosine for STRUCTURAL_EQUIV. Note |orphaned_pks ∩ cand_in_pks[cid]| == amp_count.
+    # Also fetched for AMPLIFIER_JACCARD / NEW_ADOPTERS: the amplifier-overlap
+    # significance test needs each candidate's full amplifier-set size.
+    amp_test_selected = bool(selected & {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV"})
     cand_in_pks: dict[int, set[int]] = defaultdict(set)
-    if "STRUCTURAL_EQUIV" in selected:
+    if amp_test_selected:
         for fwd_id, ch_id in (
             Message.objects.alive()
             .filter(
@@ -217,9 +306,73 @@ def _scores_abc(
             if org:
                 cand_amp_org_pks[r["forwarded_from_id"]].add(org)
 
-    result: dict[int, dict[str, float | None]] = {}
+    # ── Null-model calibration ────────────────────────────────────────────────
+    # Exact hypergeometric tests of the two set overlaps the scores are built on,
+    # against a uniform-draw null over the active universe: a big, indiscriminately
+    # amplified candidate overlaps any orphan set somewhat by chance alone, and these
+    # p-values say how surprising the observed overlap actually is. BH-adjusted
+    # (q-values) across the candidates tested for this vacancy.
+    amp_sig: dict[int, dict[str, float]] = {}
+    src_sig: dict[int, dict[str, float]] = {}
+    if amp_test_selected and candidate_pks:
+        in_target = Channel.objects.in_target()
+        # Universe: in-target channels that made ≥1 (alive, period-aware) forward from
+        # an in-target channel in the after-window — the pool a candidate's amplifier
+        # set is drawn from. Marked items: the orphans still active in that pool.
+        active_amplifiers = (
+            Message.objects.alive()
+            .filter(channel__in=in_target, forwarded_from__in=in_target, date__gte=closure_dt, date__lte=after_end)
+            .filter(channel_cutoff_q())
+        )
+        amp_population = active_amplifiers.values("channel_id").distinct().count()
+        active_orphans = active_amplifiers.filter(channel__in=orphaned_pks).values("channel_id").distinct().count()
+        amp_p = {
+            cid: _hypergeom_sf(
+                len(orphaned_pks & cand_in_pks.get(cid, set())),
+                amp_population,
+                active_orphans,
+                len(cand_in_pks.get(cid, set())),
+            )
+            for cid in candidate_pks
+        }
+        for cid, q in zip(candidate_pks, _bh_adjust([amp_p[c] for c in candidate_pks]), strict=True):
+            amp_sig[cid] = {"p": _round_p(amp_p[cid]), "q": _round_p(q)}
+
+    if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"} and candidate_pks and vacancy_out_pks:
+        # Universe: every channel forwarded from by an in-target channel (alive,
+        # period-aware) across the combined before+after span — the common frame the
+        # vacancy's before-window sources and each candidate's after-window sources
+        # are both drawn from. Candidates with no sources at all are not tested
+        # (no data ≠ evidence of independence).
+        src_population = (
+            Message.objects.alive()
+            .filter(
+                channel__in=Channel.objects.in_target(),
+                forwarded_from__isnull=False,
+                date__gte=before_start,
+                date__lte=after_end,
+            )
+            .filter(channel_cutoff_q())
+            .values("forwarded_from_id")
+            .distinct()
+            .count()
+        )
+        tested = [cid for cid in candidate_pks if cand_out_pks.get(cid)]
+        src_p = {
+            cid: _hypergeom_sf(
+                len(vacancy_out_pks & cand_out_pks[cid]),
+                src_population,
+                len(vacancy_out_pks),
+                len(cand_out_pks[cid]),
+            )
+            for cid in tested
+        }
+        for cid, q in zip(tested, _bh_adjust([src_p[c] for c in tested]), strict=True):
+            src_sig[cid] = {"p": _round_p(src_p[cid]), "q": _round_p(q)}
+
+    result: dict[int, dict[str, Any]] = {}
     for cid in candidate_pks:
-        scores: dict[str, float | None] = {}
+        scores: dict[str, Any] = {}
         a_count = amp_counts.get(cid, 0)
 
         if "AMPLIFIER_JACCARD" in selected:
@@ -228,6 +381,13 @@ def _scores_abc(
             # asymmetric overlap measure, NOT a Jaccard (which divides by |A ∪ B|);
             # the token is kept verbatim only for saved-config / JS compatibility.
             scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, 3) if total_orphaned else 0.0
+
+        if "NEW_ADOPTERS" in selected:
+            # Coverage restricted to orphans that did NOT forward the candidate in the
+            # before-window — genuinely new adoption after the closure, the succession-
+            # specific complement of Amplifier Coverage (which counts habit and new
+            # adoption alike). A − N is the pre-existing-habit share.
+            scores["NEW_ADOPTERS"] = round(new_counts.get(cid, 0) / total_orphaned, 3) if total_orphaned else 0.0
 
         if "STRUCTURAL_EQUIV" in selected:
             # Binary (Ochiai) cosine of in-neighbour sets (who amplifies them) and
@@ -251,6 +411,13 @@ def _scores_abc(
             )
             scores["BROKERAGE"] = round(_jaccard(vacancy_org_pairs, cand_org_pairs), 3) if vacancy_org_pairs else None
 
+        scores[EXTRAS_KEY] = {
+            "new_adopter_count": new_counts.get(cid, 0) if "NEW_ADOPTERS" in selected else None,
+            "significance": {
+                "amplifiers": amp_sig.get(cid),
+                "sources": src_sig.get(cid),
+            },
+        }
         result[cid] = scores
 
     return result
@@ -314,6 +481,19 @@ def _scores_temporal(
     return scores
 
 
+def _successor_ranks(candidates: list[dict[str, Any]], successor_pk: int, measures: set[str]) -> dict[str, int | None]:
+    """Competition rank (1-based, ties share the best rank) of the known successor
+    on each measure; ``None`` when the successor is unscored on that measure."""
+    ranks: dict[str, int | None] = {}
+    for m in sorted(measures):
+        succ_score = next((c["scores"].get(m) for c in candidates if c["pk"] == successor_pk), None)
+        if succ_score is None:
+            ranks[m] = None
+        else:
+            ranks[m] = 1 + sum(1 for c in candidates if (v := c["scores"].get(m)) is not None and v > succ_score)
+    return ranks
+
+
 # ── Per-vacancy analysis ──────────────────────────────────────────────────────
 
 
@@ -364,9 +544,9 @@ def _analyze_vacancy(
         .annotate(first_msg=Min("message_set__date"))
     }
 
-    score_map: dict[int, dict[str, float | None]] = {cid: {} for cid in cand_pks}
+    score_map: dict[int, dict[str, Any]] = {cid: {} for cid in cand_pks}
 
-    abc_sel = selected_measures & {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE"}
+    abc_sel = selected_measures & {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE"}
     if abc_sel:
         for cid, s in _scores_abc(ch.pk, orphaned_pks, cand_pks, before_start, closure_dt, after_end, abc_sel).items():
             score_map[cid].update(s)
@@ -382,6 +562,7 @@ def _analyze_vacancy(
             continue
         lf = cand_meta[cid]["last_forwarded"]
         fm = c.first_msg
+        extras = score_map[cid].get(EXTRAS_KEY) or {}
         rec: dict[str, Any] = {
             "pk": c.pk,
             "title": c.title,
@@ -393,10 +574,23 @@ def _analyze_vacancy(
             "first_activity": fm.strftime("%b %-d, %Y") if fm else None,
             "first_activity_iso": fm.date().isoformat() if fm else None,
             "scores": {m: score_map[cid].get(m) for m in sorted(selected_measures)},
+            "new_adopter_count": extras.get("new_adopter_count"),
+            "significance": extras.get("significance") or {"amplifiers": None, "sources": None},
         }
+        if vac.successor_id and cid == vac.successor_id:
+            rec["is_successor"] = True
         candidates.append(rec)
 
     candidates.sort(key=lambda r: r["first_activity_iso"] or "")
+
+    successor: dict[str, Any] | None = None
+    if vac.successor_id:
+        successor = {
+            "pk": vac.successor_id,
+            "title": vac.successor.title,
+            "in_candidates": any(r.get("is_successor") for r in candidates),
+            "ranks": _successor_ranks(candidates, vac.successor_id, selected_measures),
+        }
 
     return {
         "pk": ch.pk,
@@ -406,6 +600,7 @@ def _analyze_vacancy(
         "note": vac.note or "",
         "orphaned_count": len(orphaned_pks),
         "candidates": candidates,
+        "successor": successor,
     }
 
 
@@ -423,7 +618,7 @@ def compute_vacancy_analysis(
 
     Returns a payload dict suitable for serialisation to vacancy_analysis.json.
     """
-    vacancies = list(ChannelVacancy.objects.select_related("channel").all())
+    vacancies = list(ChannelVacancy.objects.select_related("channel", "successor").all())
     results: list[dict[str, Any]] = []
 
     for vac in vacancies:
@@ -445,4 +640,29 @@ def compute_vacancy_analysis(
         "months_before": months_before,
         "months_after": months_after,
         "vacancies": results,
+        "validation": _validation_summary(results, selected_measures),
     }
+
+
+def _validation_summary(results: list[dict[str, Any]], selected_measures: set[str]) -> dict[str, Any] | None:
+    """Retrieval-style validation against the analyst-labelled known successors.
+
+    For each measure, over the vacancies whose known successor is set: how often the
+    successor ranks first / in the top 3 / in the top 5 among the scored candidates
+    (hits@k), and the mean reciprocal rank. A successor missing from the candidate
+    list (or unscored on a measure) counts as a miss — the honest denominator is all
+    labelled vacancies, not just the retrievable ones.
+    """
+    labelled = [r for r in results if r.get("successor")]
+    if not labelled:
+        return None
+    per_measure: dict[str, dict[str, float | int]] = {}
+    for m in sorted(selected_measures):
+        ranks = [r["successor"]["ranks"].get(m) for r in labelled]
+        per_measure[m] = {
+            "hits_at_1": sum(1 for rk in ranks if rk is not None and rk <= 1),
+            "hits_at_3": sum(1 for rk in ranks if rk is not None and rk <= 3),
+            "hits_at_5": sum(1 for rk in ranks if rk is not None and rk <= 5),
+            "mrr": round(sum(1.0 / rk for rk in ranks if rk) / len(labelled), 3),
+        }
+    return {"n_labelled": len(labelled), "per_measure": per_measure}

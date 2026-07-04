@@ -20,6 +20,14 @@
     <label class="bo-add-label" for="vac-closure-date">Closure date</label>
     <input class="bo-input" type="date" id="vac-closure-date" required>
   </div>
+  <div class="bo-add-field" style="flex: 3 1 27rem">
+    <label class="bo-add-label" for="vac-succ-search">Known successor (optional)</label>
+    <div style="position:relative">
+      <input class="bo-input bo-input--full" id="vac-succ-search" placeholder="Search channel by name…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="vac-succ-dropdown" aria-autocomplete="list">
+      <div class="bo-typeahead" id="vac-succ-dropdown" role="listbox" style="display:none"></div>
+    </div>
+    <input type="hidden" id="vac-succ-id">
+  </div>
   <textarea class="bo-input bo-input--wide bo-input--full" id="vac-note" rows="3" placeholder="Note (optional)" aria-label="Vacancy note"></textarea>
   <button type="submit" class="bo-btn">Save</button>
   <button type="button" class="bo-btn bo-btn--ghost" id="vac-add-cancel">Cancel</button>
@@ -35,12 +43,13 @@
       <tr>
         <th scope="col">Channel</th>
         <th scope="col">Closure date</th>
+        <th scope="col">Known successor</th>
         <th scope="col">Note</th>
         <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody id="vac-tbody">
-      <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+      <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
     </tbody>
   </table>
 </div>

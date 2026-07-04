@@ -859,6 +859,11 @@
                    title="Of the channels left without a source when the vacancy closed, the share that went on to forward from this candidate."></i>
               </label>
               <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="NEW_ADOPTERS" {% if "NEW_ADOPTERS" in ad.sa_vacancy_measures %}checked{% endif %}>New-adopter Coverage
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Like Amplifier Coverage, but counting only the orphaned channels that had never forwarded from the candidate before the closure — genuinely new adoption rather than a pre-existing habit."></i>
+              </label>
+              <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="STRUCTURAL_EQUIV" {% if "STRUCTURAL_EQUIV" in ad.sa_vacancy_measures %}checked{% endif %}>Neighbour-set Equivalence
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="How much the candidate shares the vacancy's connections — the same channels forwarding from it and the same sources it draws on. High means it sits in the same position in the network."></i>
