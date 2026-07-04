@@ -22,10 +22,21 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
-# Create virtual environment if it does not exist
+# Create virtual environment if it does not exist.
+# graph-tool (needed only for the SBM community strategies) is not pip-installable — it comes from
+# apt/conda into the *system* site-packages. When the chosen Python has it, create the venv with
+# --system-site-packages so it is importable inside the venv; other setups get a fully isolated one.
 VENV_DIR=".venv"
 if [ ! -d "$VENV_DIR" ]; then
-    "$PY" -m venv "$VENV_DIR"
+    VENV_OPTS=""
+    if "$PY" -c "import graph_tool" >/dev/null 2>&1; then
+        VENV_OPTS="--system-site-packages"
+        echo "Detected system graph-tool — creating the venv with --system-site-packages so it is importable (needed for the SBM community strategies)."
+    fi
+    "$PY" -m venv $VENV_OPTS "$VENV_DIR"
+elif "$PY" -c "import graph_tool" >/dev/null 2>&1 && grep -q "include-system-site-packages = false" "$VENV_DIR/pyvenv.cfg" 2>/dev/null; then
+    echo "Warning: system graph-tool is installed, but the existing $VENV_DIR was created without --system-site-packages, so graph_tool is not importable there (the SBM strategies will fail)." >&2
+    echo "         Recreate it (rm -rf $VENV_DIR && ./setup.sh) or set 'include-system-site-packages = true' in $VENV_DIR/pyvenv.cfg." >&2
 fi
 
 # Activate the environment

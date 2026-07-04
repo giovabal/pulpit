@@ -25,3 +25,7 @@ openpyxl==3.1.5
 umap-learn==0.5.12
 pandas==3.0.3
 networkx==3.6.1
+# numpy is otherwise a transitive dependency (pandas/scipy/networkx), but is pinned below 2.0 for
+# ABI compatibility with apt/conda graph-tool builds compiled against numpy 1.x (see the graph-tool
+# note above): a 1.x-compiled extension cannot load under numpy 2.x. Floor 1.26 = pandas 3.0's minimum.
+numpy>=1.26,<2
