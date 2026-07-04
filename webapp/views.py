@@ -17,7 +17,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.utils import channel_cutoff_q, channel_period_date_q
-from network.vacancy_analysis import _scores_abc, _shift_months, orphaned_amplifier_pks
+from network.vacancy_analysis import EXTRAS_KEY, _scores_abc, _shift_months, orphaned_amplifier_pks
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -892,27 +892,26 @@ class VacancyAnalysisView(View):
 
         cand_ids = [r["forwarded_from"] for r in raw]
         cand_map = {r["forwarded_from"]: r for r in raw}
-        cand_qs = (
-            Channel.objects.filter(pk__in=cand_ids)
+        cand_channels = {
+            c.pk: c
+            for c in Channel.objects.filter(pk__in=cand_ids)
             .prefetch_related("channel_labels__label")
             .annotate(first_msg=Min("message_set__date"))
-        )
-        if only_after_vacancy:
-            cand_qs = cand_qs.filter(first_msg__gte=closure_dt)
-        cand_channels = {c.pk: c for c in cand_qs}
+        }
 
-        # ── Strategy scores A / B / C ─────────────────────────────────────
+        # ── Strategy scores A / N / B / C ─────────────────────────────────
         # Shared with the structural-analysis export (network.vacancy_analysis) so the card
-        # and the export agree by construction. Scoped to the (possibly only_after_vacancy-
-        # filtered) candidate set; candidates the loop below skips are simply not scored.
+        # and the export agree by construction. ALL candidates are scored — only_after_vacancy
+        # filters the response below, not the scoring, so per-candidate scores and the
+        # BH-adjusted q-values match the batch export regardless of the toggle.
         score_map = _scores_abc(
             ch.pk,
             orphaned_pks,
-            list(cand_channels),
+            cand_ids,
             before_start,
             closure_dt,
             after_end,
-            {"AMPLIFIER_JACCARD", "STRUCTURAL_EQUIV", "BROKERAGE"},
+            {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE"},
         )
 
         # ── Build candidate list ──────────────────────────────────────────
@@ -921,12 +920,18 @@ class VacancyAnalysisView(View):
             c = cand_channels.get(cid)
             if not c:
                 continue
+            if only_after_vacancy and not (c.first_msg and c.first_msg >= closure_dt):
+                continue
             amp_count: int = cand_map[cid]["amplifier_count"]
             lf = cand_map[cid]["last_forwarded"]
             fm = c.first_msg
 
             s = score_map.get(cid, {})
+            extras = s.get(EXTRAS_KEY) or {}
+            significance = extras.get("significance") or {}
+            amp_sig = significance.get("amplifiers")
             score_a = s.get("AMPLIFIER_JACCARD", 0.0)  # amplifier coverage (recall): |A ∩ B| / |A|
+            score_new = s.get("NEW_ADOPTERS", 0.0)  # new-adopter coverage: habit-free share of the orphans
             score_b = s.get("STRUCTURAL_EQUIV", 0.0)  # neighbour-set equiv. (binary Ochiai): 0.5·cos_in + 0.5·cos_out
             score_c: float | None = s.get(
                 "BROKERAGE"
@@ -940,8 +945,14 @@ class VacancyAnalysisView(View):
                     "org_color": c.current_label.color if c.current_label else None,
                     "amplifier_count": amp_count,
                     "score_a": score_a,
+                    "score_new": score_new,
+                    "new_adopter_count": extras.get("new_adopter_count"),
                     "score_b": score_b,
                     "score_c": score_c,
+                    # BH-adjusted hypergeometric q for the amplifier-set overlap: how
+                    # surprising this candidate's orphan overlap is under a random-draw null.
+                    "q_amp": amp_sig["q"] if amp_sig else None,
+                    "is_successor": bool(vacancy.successor_id and cid == vacancy.successor_id),
                     "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
                     "last_forwarded_iso": lf.date().isoformat() if lf else None,
                     "first_activity": fm.strftime("%b %-d, %Y") if fm else None,

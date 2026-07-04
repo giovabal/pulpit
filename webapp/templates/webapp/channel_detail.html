@@ -156,6 +156,8 @@
   var COLS = [
     {key: 'title',               label: 'Channel',           cls: '',           numeric: false, dir: 1},
     {key: 'first_activity_iso',  label: 'First activity',    cls: '',           numeric: false, dir: 1},
+    {key: 'score_a',             label: 'Coverage',          cls: 'text-end',   numeric: true,  dir: -1},
+    {key: 'score_new',           label: 'New adopters',      cls: 'text-end',   numeric: true,  dir: -1},
     {key: 'score_b',             label: 'Neighbour-set equiv.', cls: 'text-end', numeric: true,  dir: -1},
     {key: 'score_c',             label: 'Brokerage overlap', cls: 'text-end',   numeric: true,  dir: -1},
     {key: 'amplifier_count',     label: 'Amplifiers',        cls: 'text-end',   numeric: true,  dir: -1},
@@ -163,6 +165,16 @@
   ];
 
   function fmtScore(v) { return v == null ? '—' : v.toFixed(2); }
+
+  // Benjamini-Hochberg-adjusted significance of the amplifier-set overlap
+  // (hypergeometric null): the usual star convention.
+  function sigStars(q) {
+    if (q == null) return '';
+    if (q < 0.001) return '***';
+    if (q < 0.01) return '**';
+    if (q < 0.05) return '*';
+    return '';
+  }
 
   function renderTable() {
     var sorted = _data.slice().sort(function(a, b) {
@@ -185,10 +197,11 @@
 
     // Build body rows with the DOM API so channel-supplied fields (title) cannot
     // inject markup; only the static, code-controlled thead above uses innerHTML.
-    function cell(text, cls) {
+    function cell(text, cls, title) {
       var td = document.createElement('td');
       if (cls) td.className = cls;
       td.textContent = text;
+      if (title) td.title = title;
       return td;
     }
     var tbodyEl = tableEl.querySelector('tbody');
@@ -207,8 +220,24 @@
       a.href = c.url;
       a.textContent = c.title;
       th.appendChild(a);
+      if (c.is_successor) {
+        var mark = document.createElement('span');
+        mark.textContent = ' ★';
+        mark.title = 'Analyst-labelled known successor';
+        mark.setAttribute('aria-label', 'known successor');
+        th.appendChild(mark);
+      }
       tr.appendChild(th);
       tr.appendChild(cell(c.first_activity || '—'));
+      var covTitle = c.q_amp != null
+        ? 'Amplifier-overlap significance vs a random-draw null: q = ' + c.q_amp + ' (BH-adjusted hypergeometric)'
+        : '';
+      tr.appendChild(cell(fmtScore(c.score_a) + sigStars(c.q_amp), 'text-end', covTitle));
+      var newTitle = c.new_adopter_count != null
+        ? c.new_adopter_count + ' orphaned channel' + (c.new_adopter_count !== 1 ? 's' : '') +
+          ' with no forward of this candidate in the before-window'
+        : '';
+      tr.appendChild(cell(fmtScore(c.score_new), 'text-end', newTitle));
       tr.appendChild(cell(fmtScore(c.score_b), 'text-end'));
       tr.appendChild(cell(fmtScore(c.score_c), 'text-end'));
       tr.appendChild(cell(c.amplifier_count, 'text-end'));

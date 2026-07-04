@@ -16,7 +16,7 @@ In practice, this matters because structural heirs are often more significant th
 
 ## Registering a vacancy
 
-A vacancy is not inferred automatically. An analyst manually registers a channel as a vacancy in **Manage → Vacancies**, providing a **closure date** — the point in time when the channel ceased to be active.
+A vacancy is not inferred automatically. An analyst manually registers a channel as a vacancy in **Manage → Vacancies**, providing a **closure date** — the point in time when the channel ceased to be active — and, optionally, a **known successor** once qualitative evidence identifies one (see [Known successors and validation](#known-successors-and-validation)).
 
 The closure date is the analytical boundary:
 - The period **before** it is used to characterise the vacancy channel's structural role
@@ -34,7 +34,7 @@ Any channel with a vacancy record gains a **Vacancy Analysis** card on its detai
 | :-------- | :------ | :------ |
 | **Months before** | 12 | How far back before the closure date to characterise the vacancy's structural role |
 | **Months after** | 24 | How far forward after the closure date to search for replacement activity |
-| **Only after vacancy** | On | When on, restricts candidates to channels whose first message is on or after the closure date — ensuring they are genuinely new rather than pre-existing channels that happened to start being forwarded by the same amplifiers |
+| **Only after vacancy** | On | When on, restricts the *displayed* candidates to channels whose first message is on or after the closure date — genuinely new channels rather than pre-existing ones. All candidates are always scored; the toggle filters the table only, so every score and q-value is identical whichever way it is set (and identical to the batch export's) |
 
 
 <figure>
@@ -53,7 +53,7 @@ The analysis proceeds in two steps:
 
 ## Scoring
 
-Each replacement candidate is scored on up to four complementary metrics ranging from 0 to 1. Scores A–C appear in both the interactive per-channel card and the batch export; Score D is batch-only, enabled via `--vacancy-measures`.
+Each replacement candidate is scored on up to five complementary metrics ranging from 0 to 1. Scores A, N, B and C appear in both the interactive per-channel card and the batch export; Score D is batch-only, enabled via `--vacancy-measures`. The two set-overlap scores are additionally calibrated against a null model — see [Statistical calibration](#statistical-calibration) below.
 
 ---
 
@@ -73,9 +73,31 @@ The numerator counts *distinct* orphaned channels with at least one forward of t
 - Salton, G. & McGill, M.J. (1983) *Introduction to Modern Information Retrieval.* McGraw-Hill — recall as `|relevant ∩ retrieved| / |relevant|`, the mathematical definition Score A instantiates.
 - Webster, J.G. & Ksiazek, T.B. (2012) "The Dynamics of Audience Fragmentation: Public Attention in an Age of Digital Media." *Journal of Communication* 62(1):39–56. [doi:10.1111/j.1460-2466.2011.01616.x](https://doi.org/10.1111/j.1460-2466.2011.01616.x) — audience-overlap networks: outlets are linked by the share of audience they have in common (here amplifiers stand in for audience members).
 
-**In practice:** This is the most direct read of audience inheritance and the natural first column to look at when triaging a vacancy. A high score shows that the vacancy's distribution network has re-attached to the candidate; a low score is a sign the candidate has not been picked up — and rarely deserves attention from the other scores. It is *necessary but not sufficient* for a structural heir: a candidate can absorb the orphaned amplifiers without taking on the same editorial role (Neighbour-set Equivalence) or the same organisational position (Brokerage overlap). Read this column first; the other three tell you what *kind* of successor a high-coverage candidate actually is.
+**In practice:** This is the most direct read of audience inheritance and the natural first column to look at when triaging a vacancy. A high score shows that the vacancy's distribution network has re-attached to the candidate; a low score is a sign the candidate has not been picked up — and rarely deserves attention from the other scores. It is *necessary but not sufficient* for a structural heir: a candidate can absorb the orphaned amplifiers without taking on the same editorial role (Neighbour-set Equivalence) or the same organisational position (Brokerage overlap) — and its coverage may be pre-existing habit rather than adoption (New-adopter Coverage). Read this column first; the others tell you what *kind* of successor a high-coverage candidate actually is.
 
 **Example.** A pro-Kremlin aggregator with twelve in-target amplifiers stops posting in October. In the two years that follow, three candidates surface. Eleven of the twelve old amplifiers begin forwarding Candidate X — a coverage of about 92%. Candidate Y is picked up by four of them, around 33%. Candidate Z by only one, below 10%. X has clearly inherited the vacancy's distribution network; Y has taken a partial slice; Z is barely on the same radar. The score does not yet tell you *whether* X is a genuine heir or an opportunist who happened to absorb the gap — that is what the other scores are for — but it tells you X is the candidate worth reading them on.
+
+---
+
+### Score N — New-adopter Coverage
+
+*The share of the orphaned amplifiers that adopted the candidate for the first time.*
+
+Amplifier Coverage counts every orphan that forwards the candidate in the after-window — including orphans that had been forwarding it all along. An orphan that forwarded both the vacancy *and* the candidate before the closure, and simply kept doing so, is evidence of a long-standing habit, not of succession. Score N is Coverage restricted to genuinely new relationships:
+
+```
+new_adopters = orphans that forwarded the candidate in the after-window
+               AND did not forward it in the before-window
+score_n      = |new_adopters| / |orphaned_amplifiers|
+```
+
+The habit test uses the same before-window that defines the orphans, so the before/after comparison is windowed symmetrically. By construction `score_n ≤ score_a`, and the difference `score_a − score_n` is the pre-existing-habit share of the coverage. Each score cell carries the absolute new-adopter count in its tooltip.
+
+**References:**
+- The before/after cohort design — characterise an audience before a removal, then measure where that *same cohort* re-attaches afterwards — is how the deplatforming-migration literature operationalises audience movement between platforms and channels; Score N is the within-Telegram version, with orphaned amplifiers standing in for the audience cohort.
+- Rogers, E.M. (2003) *Diffusion of Innovations* (5th ed.). Free Press — adoption as a *new* behaviour by a member of the population at risk; an actor already exhibiting the behaviour before the event is not an adopter of it.
+
+**In practice:** Read N right after A. *High A + high N* is real succession: the orphans moved somewhere they had not been going before. *High A + low N* means the candidate's coverage is mostly inherited habit — a channel the orphans always forwarded anyway (typically a big aggregator), which absorbed nothing when the vacancy opened. N is the most succession-specific of the five scores; when triaging many candidates, sorting by N first is usually the fastest route to the genuine heirs.
 
 ---
 
@@ -95,7 +117,10 @@ Tie strength is ignored — only set membership counts. The candidate's amplifie
 
 **References:**
 - Lorrain, F. & White, H.C. (1971) "Structural equivalence of individuals in social networks." *Journal of Mathematical Sociology* 1(1):49–80. [doi:10.1080/0022250X.1971.9989788](https://doi.org/10.1080/0022250X.1971.9989788) — the foundational definition: two actors are structurally equivalent iff they hold identical relations to identical others. Score B is the set-overlap relaxation of that equality.
+- Burt, R.S. (1987) "Social Contagion and Innovation: Cohesion versus Structural Equivalence." *American Journal of Sociology* 92(6):1287–1335. [doi:10.1086/228667](https://doi.org/10.1086/228667) — the empirical payoff claim Score B relies on: structurally equivalent actors are behaviourally substitutable, because the surrounding network treats them as interchangeable.
 - Leicht, E.A., Holme, P. & Newman, M.E.J. (2006) "Vertex similarity in networks." *Physical Review E* 73:026120. [doi:10.1103/PhysRevE.73.026120](https://doi.org/10.1103/PhysRevE.73.026120) — the cosine vertex-similarity form `|N(u) ∩ N(v)| / √(|N(u)| · |N(v)|)`, separable into in- and out-neighbour components for directed graphs.
+
+**A deliberate modelling choice — structural, not regular, equivalence.** Score B demands overlap with the *same* amplifiers and the *same* sources. The alternative notion, **regular equivalence** (White, D.R. & Reitz, K.P. 1983, "Graph and semigroup homomorphisms on networks of relations", *Social Networks* 5(2):193–234; Borgatti, S.P. & Everett, M.G. 1992, "Notions of Position in Social Network Analysis", *Sociological Methodology* 22:1–35), would ask only that the candidate hold the same *kind* of position — amplified by similar-role channels, not necessarily the identical ones. For succession inside one ecosystem the strict form is the right test: the heir to a specific channel inherits its specific distribution network, not an analogous one elsewhere. But it means Score B cannot detect a channel occupying the same *role* in a different corner of the network — that question belongs to the SBM block structure, not to this score.
 
 **In practice:** This is the topological successor test, the natural complement to Amplifier Coverage. Coverage tells you whether the vacancy's distributors picked up the candidate; Neighbour-set Equivalence tells you whether they re-attached to a candidate that *also looks like the vacancy from the rest of the network's point of view*. A candidate with high Coverage but low Equivalence has absorbed the audience without taking on the editorial role — typically a broad-reach aggregator that everybody forwards anyway. A candidate with high Equivalence has slotted into the same in/out neighbourhood and is the structural heir even when its raw reach is smaller. The out-side of the score catches something Coverage cannot see at all: whether the candidate draws on the same upstream pool — the same correspondents, agencies, regional outlets — as the vacancy did.
 
@@ -151,6 +176,42 @@ The denominator instantiates the **hyperbolic discount function** `V = A / (1 + 
 
 ---
 
+## Statistical calibration
+
+The overlap scores are descriptive: a large, indiscriminately amplified candidate overlaps *any* orphan set to some degree by chance alone, and raw coefficients cannot say when an overlap is bigger than chance. Pulpit therefore tests the two set overlaps the scores are built on against an explicit null model and reports the result next to the scores:
+
+- **Amplifier overlap** (the numerator of Coverage and of `cos_in`): the probability that a candidate whose amplifier set was drawn *uniformly at random* from the active amplifier universe — the in-target channels that made at least one forward in the after-window — would overlap the orphan set at least as much as observed. Exact one-tailed **hypergeometric** tail probability.
+- **Source overlap** (the numerator of `cos_out`): same test for the candidate's source set against the vacancy's, over the universe of channels forwarded from by any in-target channel across the combined before + after span. Candidates with no sources are not tested — absence of data is not evidence of independence.
+
+Because up to `--vacancy-max-candidates` candidates are tested per vacancy, the p-values are **Benjamini-Hochberg adjusted** across the candidate list; the tables show the adjusted values (q) with the usual star convention (\* q < 0.05, \*\* q < 0.01, \*\*\* q < 0.001), and each q cell's tooltip carries the raw p. Read them as a filter, not a verdict: a high Coverage with a non-significant q means the overlap is what a random popular channel would produce; a modest Coverage with q < 0.01 is a targeted re-attachment worth reading the other scores on. With very few orphans nothing will reach significance — that is the test working, not failing: small orphan sets genuinely cannot distinguish succession from chance.
+
+**References:**
+- Tumminello, M., Miccichè, S., Lillo, F., Piilo, J. & Mantegna, R.N. (2011) "Statistically validated networks in bipartite complex systems." *PLoS ONE* 6(3):e17994. [doi:10.1371/journal.pone.0017994](https://doi.org/10.1371/journal.pone.0017994) — the statistically-validated-networks method: validate each observed overlap against a hypergeometric null with multiple-comparison correction, exactly the scheme applied here.
+- Benjamini, Y. & Hochberg, Y. (1995) "Controlling the false discovery rate: a practical and powerful approach to multiple testing." *Journal of the Royal Statistical Society B* 57(1):289–300 — the FDR step-up procedure used for the per-vacancy adjustment.
+
+---
+
+## Known successors and validation
+
+The scores are heuristics until they are checked against reality. When qualitative evidence identifies the actual successor of a vacancy — an announced rebrand, a known operator migration, reporting — record it in **Manage → Vacancies** as the vacancy's **Known successor**. The batch export then closes the loop:
+
+- The successor's row is starred (★) in the candidate tables (card and export), and each vacancy's section reports the successor's **rank** on every selected measure.
+- The export page opens with a **validation block**: over all vacancies with a labelled successor, how often each measure ranked the true successor first, in the top 3, in the top 5 (*hits@k*), and the mean reciprocal rank (MRR). A successor missing from the candidate list counts as a miss — the denominator is every labelled vacancy.
+
+This is the same held-out evaluation regime used for link prediction and for the successor-prediction literature (see below). It tells you, on *your* corpus, which measures actually find successors — and therefore which columns deserve weight when reading unlabelled vacancies. Even a handful of labelled cases is informative; label them as they become known.
+
+---
+
+## Prior art
+
+The question — *who replaces a removed actor in a covert or political network?* — has a research lineage worth knowing when reporting results:
+
+- **Vacancy chains:** White, H.C. (1970) *Chains of Opportunity: System Models of Mobility in Organizations* (Harvard UP); Chase, I.D. (1991) "Vacancy Chains." *Annual Review of Sociology* 17:133–154 — the founding theory of positions outliving their occupants, from which this feature takes its name. It has not previously been operationalised for online influence networks.
+- **Successor prediction:** the STONE system — Spezzano, F., Subrahmanian, V.S. & Mannes, A. (2013) "STONE: Shaping terrorist organizational network efficiency." *ASONAM 2013*:348–355 (also "Reshaping Terrorist Networks." *Communications of the ACM* 57(8):60–69, 2014) — predicts who will replace removed members of terrorist networks and is the closest published counterpart to this feature, with a different method (optimising predicted organisational effectiveness) for the same question. Pulpit's approach is closer to the structural-equivalence tradition: the successor is whoever the network *treats* as the vacancy's replacement.
+- **Covert-network replacement:** Bright, D., Koskinen, J. & Malm, A. (2019) "Illicit Network Dynamics: The Formation and Evolution of a Drug Trafficking Network." *Journal of Quantitative Criminology* 35(2):237–258 — replacements emerge at short social distance from the removed actor, which is why the candidate pool is built from the vacancy's own orphaned ecosystem; Carley, K.M., Lee, J.-S. & Krackhardt, D. (2002) "Destabilizing Networks." *Connections* 24(3):79–92 — the effective successor is often a structurally well-positioned but low-profile node, which is why candidates are scored positionally rather than by raw reach.
+
+---
+
 ## Batch export via Structural Analysis
 
 The per-channel vacancy card (live, interactive) and the batch export (offline, reproducible) serve different purposes. The card is useful for investigating a single vacancy quickly; the batch export is designed for systematic analysis of all vacancies at once, with reproducible parameters embedded in `summary.json`.
@@ -176,11 +237,14 @@ The HTML page is linked from `index.html` under a **Vacancy Analysis** section t
 
 | Token | Algorithm | Cost |
 | :---- | :-------- | :--- |
-| `AMPLIFIER_JACCARD` | Fraction of orphaned amplifiers that adopted the candidate | Cheap (DB query) |
+| `AMPLIFIER_JACCARD` | Fraction of orphaned amplifiers that forwarded the candidate after closure | Cheap (DB query) |
+| `NEW_ADOPTERS` | Fraction of orphaned amplifiers that *newly* adopted the candidate (no before-window forwards) | Cheap (DB query) |
 | `STRUCTURAL_EQUIV` | Cosine of shared amplifiers + shared sources | Cheap (DB query) |
 | `BROKERAGE` | Jaccard of (source-org × amplifier-org) pairs | Cheap (DB query) |
 | `TEMPORAL` | Coverage hyperbolically discounted by mean days-to-adoption (halved at 30 days) | Cheap (DB query) |
 | `ALL` | All of the above | — |
+
+Selecting any of `AMPLIFIER_JACCARD`, `NEW_ADOPTERS` or `STRUCTURAL_EQUIV` also computes the [hypergeometric calibration](#statistical-calibration) columns for the overlaps those measures share.
 
 ### Parameters
 
@@ -196,16 +260,17 @@ In the **Operations panel**, the **Neighbour-set Equivalence** and **Brokerage o
 
 ## Interpreting results
 
-The four scores are complementary, not redundant. Scores A–C characterise the candidate's structural position from a topological standpoint — who forwards it, what it forwards from, and what organisational boundaries it crosses. Score D adds the temporal dimension — how quickly the orphaned amplifiers picked the candidate up.
+The five scores are complementary, not redundant. Scores A, N, B and C characterise the candidate's structural position — who forwards it, whether that audience is newly acquired, what it forwards from, and what organisational boundaries it crosses. Score D adds the temporal dimension — how quickly the orphaned amplifiers picked the candidate up. The q columns say which overlaps beat chance at all.
 
 | Pattern | Interpretation |
 | :------ | :------------- |
-| High on all four | Strong structural replacement across all dimensions — topological *and* adopted quickly |
+| High on all | Strong structural replacement across all dimensions — topological *and* adopted quickly |
+| High A, low N | The coverage is inherited habit: the orphans always forwarded this candidate. An absorber of attention, not a successor |
 | High A/B/C, low D | The candidate occupies the same structural slot but was adopted slowly or partially — the network eventually settled on it rather than turning to it immediately |
 | Low A/B/C, high D | A fast-but-narrow pickup: a sub-niche of orphans adopted the candidate quickly without making it the dominant heir |
 | High A, high B, low C | The orphaned amplifiers have converged on a new source that serves a different ideological function — perhaps drawing from a narrower set of sources or operating within a single community |
 | Low A, low B, high C | The network has not found a single replacement; the same cross-organisational position is held by a channel not yet widely forwarded by the orphaned set |
-| Low on all four | No structural replacement has emerged; the orphaned amplifiers have diversified without collectively filling the vacancy |
+| Low on all | No structural replacement has emerged; the orphaned amplifiers have diversified without collectively filling the vacancy |
 
 The table is sorted by **First activity** by default — the candidate's earliest recorded message — so that genuinely new channels appear at the top when *Only after vacancy* is enabled. Click any column header to re-sort.
 
