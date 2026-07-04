@@ -29,6 +29,7 @@ from network import (
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.robustness.disparity_filter import disparity_filter
+from network.tokens import split_tokens
 from network.utils import GraphData
 from webapp import scoring
 from webapp.models import Message, Project
@@ -40,8 +41,12 @@ import networkx as nx
 
 
 def _parse_csv(value: str) -> list[str]:
-    """Split a comma-separated string into a list of uppercase tokens."""
-    return [s.strip().upper() for s in value.split(",") if s.strip()]
+    """Split a comma-separated string into a list of uppercase tokens.
+
+    Parenthesis-aware: the comma inside a multi-parameter token like
+    ``LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)`` does not split it.
+    """
+    return [s.upper() for s in split_tokens(value)]
 
 
 # ── Extra-layout dispatch ────────────────────────────────────────────────────

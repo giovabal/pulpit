@@ -15,6 +15,7 @@
 - **The Leiden (directed) docs no longer oversell direction.** Directed modularity uses edge direction only through its null model and cannot distinguish the orientation of the links themselves (Kim, Son & Jeong 2010) — the rewritten section says so, repositions the strategy as a degree-null sensitivity check next to plain Leiden, and points direction-driven questions at the SBM, which models asymmetric citation explicitly.
 
 ### Fixes
+- **Multi-parameter strategy tokens no longer break on the comma inside their parentheses.** `--community-strategies LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)` (and `SBM(mode=…,refine=…)`, whether typed on the CLI or composed in the Operations panel) failed with *Could not parse strategy token* because every place that split a joined token string used a naive comma split. Token splitting is now parenthesis-aware everywhere — the command, the panel's form seeding and defaults loading, and the analyses page's option pills.
 - **Coordination maps' screen-reader summary lost its specific wording.** The 0.26 rewrite of the map descriptions changed "directed edges" to "connections between them" in the templates, silently breaking the coordination pages' replacement of that phrase — they now correctly describe ties as "mutual co-forwarding ties" again.
 
 ## [0.26] - 2026-07-03

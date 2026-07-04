@@ -303,5 +303,27 @@
         return api;
     }
 
+    // Split a comma-joined token string on top-level commas only: the comma inside a
+    // multi-parameter token ("LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)") belongs to the
+    // token. Mirrors network.tokens.split_tokens.
+    function splitTokens(value) {
+        var pieces = [];
+        var depth = 0;
+        var start = 0;
+        var s = String(value || "");
+        for (var i = 0; i < s.length; i++) {
+            var ch = s.charAt(i);
+            if (ch === "(") depth++;
+            else if (ch === ")") depth = Math.max(0, depth - 1);
+            else if (ch === "," && depth === 0) {
+                pieces.push(s.slice(start, i));
+                start = i + 1;
+            }
+        }
+        pieces.push(s.slice(start));
+        return pieces.map(function (p) { return p.trim(); }).filter(Boolean);
+    }
+
     window.initTokenBuilder = initTokenBuilder;
+    window.splitTokens = splitTokens;
 })();

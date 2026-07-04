@@ -182,6 +182,29 @@ def canonical_key(key: str, base_keys: tuple[str, ...]) -> str:
     return key
 
 
+def split_tokens(value: str) -> list[str]:
+    """Split a comma-separated token string on top-level commas only.
+
+    A comma inside a parameter list — ``LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)`` — belongs
+    to the token; a naive ``str.split(",")`` would cut the token in half and neither piece would
+    parse. Every place that turns a joined token string back into a token list (CLI flags, config
+    values, the Operations panel's merged form fields) must use this instead.
+    """
+    pieces: list[str] = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(value):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == "," and depth == 0:
+            pieces.append(value[start:i])
+            start = i + 1
+    pieces.append(value[start:])
+    return [p.strip() for p in pieces if p.strip()]
+
+
 def parse_tokens(
     tokens: list[str],
     *,

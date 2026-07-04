@@ -47,6 +47,12 @@
     return n != null ? Number(n).toLocaleString() : '—';
   }
 
+  // Count comma-joined tokens without splitting inside a parameter list —
+  // "LEIDEN,LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)" is 2 tokens, not 3.
+  function tokenCount(csv) {
+    return csv.replace(/\([^)]*\)/g, '').split(',').filter(function (s) { return s.trim(); }).length;
+  }
+
   function optionPills(opts) {
     if (!opts) return '';
     var pills = [];
@@ -59,13 +65,13 @@
     if (opts.graphml)   outputs.push('GraphML');
     if (opts.csv)       outputs.push('CSV');
     if (outputs.length) pills.push(outputs.join('·'));
-    if (opts.measures)  pills.push(opts.measures.split(',').length + ' measures');
-    if (opts.community_strategies) pills.push(opts.community_strategies.split(',').length + ' strategies');
+    if (opts.measures)  pills.push(tokenCount(opts.measures) + ' measures');
+    if (opts.community_strategies) pills.push(tokenCount(opts.community_strategies) + ' strategies');
     if (opts.startdate || opts.enddate)
       pills.push((opts.startdate || '…') + '–' + (opts.enddate || '…'));
     if (opts.vertical_layout) pills.push('vertical');
     if (opts.timeline_step === 'year') pills.push('timeline');
-    if (opts.vacancy_measures) pills.push(opts.vacancy_measures.split(',').length + ' vacancy');
+    if (opts.vacancy_measures) pills.push(tokenCount(opts.vacancy_measures) + ' vacancy');
     // Return DOM nodes (not an HTML string) so options stored in summary.json — which
     // may include user-supplied date strings or future free-text fields — can't slip
     // past escaping when concatenated into innerHTML by the caller.
