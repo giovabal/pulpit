@@ -114,11 +114,11 @@ After export, the output directory contains self-contained files that can be sha
 
 | Output | What it is |
 | :----- | :--------- |
-| **Structural 2D map** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Kamada-Kawai, Circular, Community-shell, t-SNE, UMAP, and Hyperbolic layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--structural-2d-map) |
+| **Structural 2D map** (`graph.html`) | Search, filter by community, resize nodes by any measure, click for channel detail. Switch between ForceAtlas2, Kamada-Kawai, Spectral, Spring, Circular, Community-shell, t-SNE, UMAP, and Hyperbolic layouts with animated transitions — no re-export required. [more](docs/export-formats.md#graphhtml--structural-2d-map) |
 | **Structural 3D map** (`graph3d.html`) | Three.js, rotate/zoom/inspect; multiple themes and coloured-edge toggle [more](docs/export-formats.md#graph3dhtml--structural-3d-map) |
 | **Channel table** (`channel_table.html/.xlsx`) | One row per channel with all computed measures, sortable; per-year sparklines when a timeline was exported [more](docs/export-formats.md#channel_tablehtml--xlsx--per-channel-metrics) |
-| **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, NMI partition agreement matrix [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
-| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; label-group × community cross-tabulation, one per partition label group [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
+| **Network statistics table** (`network_table.html/.xlsx`) | Whole-ecosystem metrics, measure comparison scatter plot, modularity-by-strategy table [more](docs/export-formats.md#network_tablehtml--xlsx--whole-network-statistics) |
+| **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; label-group × community cross-tabulations; cross-strategy partition-comparison matrices (ARI/AMI/NMI/VI) and a community-intersection Sankey [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
 | **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (your label-group partitions and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
@@ -131,9 +131,9 @@ After export, the output directory contains self-contained files that can be sha
 
 ---
 
-## Network measures — 11 per channel
+## Network measures — 12 per channel
 
-Each channel receives a score for up to 11 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
+Each channel receives a score for up to 12 measures. All can be used to size nodes in the graph viewer, making the most significant channels visually prominent. Measures are grouped below by the type of question they answer.
 
 **Influence and reach**
 
@@ -166,9 +166,9 @@ See [Network measures](docs/network-measures.md) for academic references and wor
 
 ---
 
-## Community detection — 7 algorithms and your own label groups
+## Community detection — 9 algorithms and your own label groups
 
-Pulpit runs up to seven community detection algorithms at once, alongside your own *partition label groups* as baselines (the primary one is conventionally an "Organization" axis). Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
+Pulpit runs up to nine community detection algorithms at once, alongside your own *partition label groups* as baselines (the primary one is conventionally an "Organization" axis). Each reveals a different structural layer of the same data; comparing them shows which groupings are robust and which are algorithm-dependent.
 
 | Algorithm | What it finds | Direction-aware? |
 | :-------- | :------------ | :--------------- |
@@ -176,10 +176,12 @@ Pulpit runs up to seven community detection algorithms at once, alongside your o
 | [Leiden](docs/community-detection.md#leiden) | General community structure from citation density | No |
 | [Leiden Directed](docs/community-detection.md#leiden-directed) | Same, but the directed null model respects who cites whom | Yes |
 | [Leiden CPM](docs/community-detection.md#leiden-cpm) | Resolution γ tunes granularity — low γ gives few large communities, high γ many small ones | No |
+| [Leiden Temporal](docs/community-detection.md#leiden-temporal) | Communities tracked across timeline years in one shared id space — stable identity and colour year to year (needs `--timeline-step year`) | No |
 | [Louvain](docs/community-detection.md#louvain) | Classic modularity baseline — kept for comparison with older studies; Leiden supersedes it | No |
-| [Label propagation](docs/community-detection.md#label-propagation) | Parameter-free label consensus — near-linear time, best for large graphs | No |
 | [K-core](docs/community-detection.md#k-core) | Onion-layer peeling from the tight nucleus to the peripheral amplifiers | No |
 | [Stochastic block model](docs/community-detection.md#stochastic-block-model) | Citation-role blocks — channels grouped by structural position (source/amplifier, core/periphery), not just dense clusters | Yes |
+| [Assortative SBM](docs/community-detection.md#assortative-sbm) | Cohesive communities with statistical support — a boundary only where the data back one (Leiden's question, answered inferentially) | No |
+| [Consensus](docs/community-detection.md#consensus) | The groupings that survive across the other algorithms — the defensible core (needs ≥2 other algorithmic strategies) | Inherited |
 
 The **label-group × community cross-tabulation** in every strategy section shows how your manual label groups map onto the algorithm's output — confirming agreement or surfacing unexpected internal splits. The **consensus matrix** aggregates the partition-based detection strategies — every algorithm except your manual label-group partitions and the K-core shell decomposition — into a single heatmap: pairs with large red circles are co-assigned by every algorithm, making their grouping robust independent of method choice.
 
@@ -187,20 +189,21 @@ See [Community detection](docs/community-detection.md) for descriptions, referen
 
 ---
 
-## Vacancy analysis — 4 algorithms
+## Vacancy analysis — 5 scores
 
 When a channel goes silent — removed from Telegram, legally forced offline, or simply abandoned — it leaves a structural hole in the network. Channels that used to rely on it as a source now need to find an alternative. Pulpit's Vacancy Analysis answers: *who fills that structural role?*
 
-An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by four complementary scores:
+An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by up to five complementary scores (four shown in the interactive card; the temporal score is batch-export only):
 
 | Score | Question | Method |
 | :---- | :------- | :----- |
 | Amplifier Coverage | What fraction of orphaned amplifiers have started forwarding the candidate? | Coverage / recall (|A ∩ B| / |A|) |
+| New-adopter Coverage | Of the orphans that never forwarded the candidate before the closure, how many adopted it after? | Coverage restricted to genuine new adopters — the pre-existing-habit share removed |
 | Neighbour-set Equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
 | Brokerage overlap | Does the candidate sit in the same organizational position — drawing on the same source orgs and amplified by the same audience orgs? | Jaccard of the (source-org, amplifier-org) pairs it spans; a one-degree structural-position overlap, not content flow. Brokerage *concept* per Gould & Fernandez 1989 (not their census) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage hyperbolically discounted by mean days-to-adoption (Mazur 1987) |
 
-A–C characterise structural position topologically; Temporal adoption adds the timing dimension. A channel scoring high on all four is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, all settled on quickly.
+The two coverage scores measure *who* re-pointed to the candidate; neighbour-set equivalence and brokerage overlap capture its *structural position*; temporal adoption adds *timing*. A channel scoring high across all of them is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, all settled on quickly.
 
 See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score interpretation patterns, and the batch export API.
 
@@ -234,9 +237,9 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 
 **Crawling.** The official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) downloads messages from the channels you select. For each message, Pulpit records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels). The result is a directed, weighted graph. Edge weight is computed as the number of forwards and references from A to B divided by the number of A's messages that contain any outward reference — not A's total message count — so channels that mostly publish original content and channels that are mostly aggregators are treated symmetrically.
 
-**Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance; the battery is deliberately matched to what Telegram's forward-attribution data can support, and the measures left out are documented with the same care as the ones included ([why](docs/network-measures.md#measures-deliberately-not-computed)). Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. The NMI matrix (Kvalseth 1987) quantifies how much two community partitions agree, independently of community labels.
+**Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance; the battery is deliberately matched to what Telegram's forward-attribution data can support, and the measures left out are documented with the same care as the ones included ([why](docs/network-measures.md#measures-deliberately-not-computed)). Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. Cross-strategy partition-comparison matrices (ARI, AMI, NMI, VI) quantify how much any two community partitions agree, independently of community labels.
 
-**Layout and visualisation.** Nodes are placed using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2) seeded from a Kamada-Kawai initial layout, improving reproducibility across re-exports. Alternative spatial layouts (Spectral, Spring, Circular) are pre-computed at export time and selectable at viewing time with smooth animated transitions. The structural 2D map is a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/). The optional structural 3D map uses [Three.js](https://threejs.org/) with Lambert-shaded spheres and full mouse rotation, zoom, and pan.
+**Layout and visualisation.** Nodes are placed using [ForceAtlas2](https://github.com/bhargavchippada/forceatlas2) seeded from a Kamada-Kawai initial layout, improving reproducibility across re-exports. Alternative spatial layouts (Spectral, Spring, Circular, Community shells, t-SNE, UMAP, and Hyperbolic) are pre-computed at export time and selectable at viewing time with smooth animated transitions. The structural 2D map is a self-contained HTML file powered by [Sigma.js](http://sigmajs.org/). The optional structural 3D map uses [Three.js](https://threejs.org/) with Lambert-shaded spheres and full mouse rotation, zoom, and pan.
 
 **Storage and access control.** Data is stored in SQLite by default — a single file, no database server required. PostgreSQL, MySQL/MariaDB, and Oracle are supported for multi-user deployments. The browser interface supports three access modes: fully open (personal use on your own machine), semi-protected (public channel browser, restricted operations panel), and fully protected (login required for all pages).
 
@@ -253,9 +256,9 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Getting started](docs/getting-started.md) | Requirements, installation, Telegram credentials, database setup, access control — written for readers with no prior programming experience |
 | [Workflow](docs/workflow.md) | Step-by-step guide: search → organize → crawl → export; all CLI options |
 | [Network measures](docs/network-measures.md) | All 12 per-channel measures with academic references and worked examples |
-| [Community detection](docs/community-detection.md) | 8 strategies, consensus matrix, cross-strategy comparison, choosing a strategy |
+| [Community detection](docs/community-detection.md) | 9 algorithms plus your label groups, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
-| [Vacancy analysis](docs/vacancy-analysis.md) | 4 algorithms for identifying structural replacement channels after a node disappears |
+| [Vacancy analysis](docs/vacancy-analysis.md) | 5 scores for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
 | [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D maps |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
