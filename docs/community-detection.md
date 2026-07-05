@@ -320,6 +320,12 @@ Channels are sorted by plurality community assignment so that pairs from the sam
 
 At the foot of the community table is an interactive **Community intersection** Sankey: pick **any two strategies** and a **year** (or *All years*), and it draws the two partitions side by side — strategy A's communities as boxes on the left, strategy B's on the right — with a ribbon for every pair of communities that share channels. Each ribbon's thickness is the **number of channels in both** communities, i.e. the cross-tabulation (contingency table) of the two partitions rendered as flows. Hovering a ribbon gives the exact count, and **clicking a ribbon lists the shared channels** beneath the diagram as channel cards in the `/channels/` layout (avatar, organisation, message/follower counts, activity span). Box colours come from each strategy's own palette and ribbons take their left-hand community's colour. Columns are ordered to minimise crossings, so a clean near-one-to-one mapping shows up as straight, roughly horizontal bands.
 
+<figure>
+<img src="../webapp_engine/static/screenshot_18.jpg" alt="Community intersection">
+<figcaption><em>Community intersection.</em></figcaption>
+</figure>
+<br>
+
 This is the per-pair, per-community companion to the whole-graph agreement scores in the **Partition comparison** matrices higher up the same page (ARI / AMI / NMI / VI; see [Partition comparison matrices](whole-network-statistics.md#partition-comparison-matrices-ari-ami-nmi-vi)): where those give a single number for how well two partitions agree, the Sankey shows *where* they agree and where they diverge. The year selector reuses the timeline snapshots (when the export was built with `--timeline-step year`), so you can inspect a single year in isolation.
 
 **In practice:** intersect an algorithmic strategy against a manual label group (e.g. *Leiden × Organisation*) to see, community by community, which detected clusters line up with which organisations and which cut across them — a single fat ribbon means the detected community *is* that organisation; a box fanning into several ribbons means the algorithm split (or merged) what the labels treat as one bloc. Intersecting two algorithms (e.g. *Leiden × Louvain*) localises exactly which communities are stable across methods and which are the source of any disagreement the summary indices report.
