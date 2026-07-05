@@ -330,6 +330,12 @@ This is the per-pair, per-community companion to the whole-graph agreement score
 
 When the export was built with a year timeline (`--timeline-step year`; see [Workflow § Timeline export](workflow.md#timeline-see-how-the-network-changed-over-time)), the community table's full-range (**All**) view shows, beneath each strategy's table, a **Community flow** alluvial diagram — one column per year, that year's communities stacked as boxes, and ribbons carrying the channels that moved from one year's community into the next. Ribbon thickness is proportional to the number of channels; hovering a ribbon or box gives the exact count, and **clicking a ribbon lists the channels travelling along that flow** beneath the diagram as channel cards in the `/channels/` layout.
 
+<figure>
+<img src="../webapp_engine/static/screenshot_17.jpg" alt="Community flow across years">
+<figcaption><em>Community flow across years with `LEIDEN_TEMPORAL`.</em></figcaption>
+</figure>
+<br>
+
 **Read continuity from the ribbons, not the colours.** Each year is partitioned *independently*, so a community's label, colour, and position carry no meaning across years — "community 3" in 2021 has nothing to do with "community 3" in 2022. The one exception is [`LEIDEN_TEMPORAL`](#leiden-temporal), whose whole point is a shared id space: for that strategy the labels and colours *are* stable across years, and its alluvial reads as the evolution of persistent communities. For every other strategy, what is meaningful is how a year's box flows into the next:
 
 - **One thick ribbon** leaving a box → that cohort stayed together (whatever it was re-labelled). The community persisted.
