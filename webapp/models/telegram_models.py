@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from webapp.managers import ChannelManager, MessageManager
 from webapp.models.base import TelegramBaseModel
+from webapp.utils.dates import fmt_month_year
 from webapp.utils.emoji import emoji_present
 
 
@@ -232,11 +233,10 @@ class Channel(TelegramBaseModel):
         start, end = self._get_activity_bounds()
         if start is None or end is None:
             return "Unknown"
-        date_template = "%b %Y"
         return (
-            f"{start.strftime(date_template)} - {end.strftime(date_template)}"
+            f"{fmt_month_year(start)} - {fmt_month_year(end)}"
             if end < datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
-            else f"{start.strftime(date_template)} - "
+            else f"{fmt_month_year(start)} - "
         )
 
     def save(self, *args: Any, **kwargs: Any) -> None:

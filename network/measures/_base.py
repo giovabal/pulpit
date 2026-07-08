@@ -5,6 +5,7 @@ from django.db.models import Count, F, Max, Min, Q
 
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
+from webapp.utils.dates import fmt_month_year
 
 import networkx as nx
 
@@ -169,7 +170,6 @@ def apply_base_node_measures(
     }
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    date_template = "%b %Y"
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
         if channel_entry is None:
@@ -195,9 +195,9 @@ def apply_base_node_measures(
             node["activity_end"] = ""
         else:
             node["activity_period"] = (
-                f"{start.strftime(date_template)} - {end.strftime(date_template)}"
+                f"{fmt_month_year(start)} - {fmt_month_year(end)}"
                 if end < now - datetime.timedelta(days=30)
-                else f"{start.strftime(date_template)} - "
+                else f"{fmt_month_year(start)} - "
             )
             node["activity_start"] = start.strftime("%Y-%m")
             node["activity_end"] = end.strftime("%Y-%m")
