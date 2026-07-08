@@ -160,14 +160,15 @@
     {key: 'score_new',           label: 'New adopters',      cls: 'text-end',   numeric: true,  dir: -1},
     {key: 'score_b',             label: 'Neighbour-set equiv.', cls: 'text-end', numeric: true,  dir: -1},
     {key: 'score_c',             label: 'Brokerage overlap', cls: 'text-end',   numeric: true,  dir: -1},
+    {key: 'score_o',             label: 'Content continuity', cls: 'text-end',  numeric: true,  dir: -1},
     {key: 'amplifier_count',     label: 'Amplifiers',        cls: 'text-end',   numeric: true,  dir: -1},
     {key: 'last_forwarded_iso',  label: 'Last forwarded',    cls: '',           numeric: false, dir: -1},
   ];
 
   function fmtScore(v) { return v == null ? '—' : v.toFixed(2); }
 
-  // Benjamini-Hochberg-adjusted significance of the amplifier-set overlap
-  // (hypergeometric null): the usual star convention.
+  // Benjamini-Hochberg-adjusted significance of a set overlap (amplifier or
+  // origin; hypergeometric null): the usual star convention.
   function sigStars(q) {
     if (q == null) return '';
     if (q < 0.001) return '***';
@@ -240,6 +241,14 @@
       tr.appendChild(cell(fmtScore(c.score_new), 'text-end', newTitle));
       tr.appendChild(cell(fmtScore(c.score_b), 'text-end'));
       tr.appendChild(cell(fmtScore(c.score_c), 'text-end'));
+      var oTitleBits = [];
+      if (c.archive_forward_count) {
+        oTitleBits.push(c.archive_forward_count + ' forward' + (c.archive_forward_count !== 1 ? 's' : '') + ' of posts authored by the vacancy');
+      }
+      if (c.q_origin != null) {
+        oTitleBits.push('origin-overlap significance vs a random-draw null: q = ' + c.q_origin + ' (BH-adjusted hypergeometric)');
+      }
+      tr.appendChild(cell(fmtScore(c.score_o) + sigStars(c.q_origin), 'text-end', oTitleBits.join(' — ')));
       tr.appendChild(cell(c.amplifier_count, 'text-end'));
       tr.appendChild(cell(c.last_forwarded || '—'));
       tbodyEl.appendChild(tr);

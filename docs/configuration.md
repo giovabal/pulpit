@@ -256,7 +256,7 @@ For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` b
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `vacancy.measures` | Vacancy-succession algorithms. Available: `AMPLIFIER_JACCARD`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `TEMPORAL`. Empty list disables vacancy analysis. See [Vacancy analysis](vacancy-analysis.md). | `[]` |
+| `vacancy.measures` | Vacancy-succession algorithms. Available: `AMPLIFIER_JACCARD`, `NEW_ADOPTERS`, `STRUCTURAL_EQUIV`, `BROKERAGE`, `ORIGIN_OVERLAP`, `TEMPORAL`. Empty list disables vacancy analysis. See [Vacancy analysis](vacancy-analysis.md). | `[]` |
 | `vacancy.months_before` | Look-back window (months) for orphaned-amplifier detection | `12` |
 | `vacancy.months_after` | Forward window (months) for candidate adoption | `24` |
 | `vacancy.max_candidates` | Maximum candidates ranked per vacancy | `30` |

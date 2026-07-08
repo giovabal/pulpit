@@ -874,6 +874,11 @@
                    title="Whether the candidate bridges the same kinds of groups the vacancy did — drawing on the same source organisations and reaching the same audiences. A match of network position, not of content passing through it."></i>
               </label>
               <label class="ops-flag">
+                <input type="checkbox" name="vacancy_measures" value="ORIGIN_OVERLAP" {% if "ORIGIN_OVERLAP" in ad.sa_vacancy_measures %}checked{% endif %}>Content Continuity
+                <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="Whether the candidate circulates the same origin messages the vacancy did — re-forwarding the content it curated or its own back-catalogue. Identity evidence at the content level, not just a matching network position."></i>
+              </label>
+              <label class="ops-flag">
                 <input type="checkbox" name="vacancy_measures" value="TEMPORAL" {% if "TEMPORAL" in ad.sa_vacancy_measures %}checked{% endif %}>Temporal Adoption
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                    title="Rewards candidates that many orphaned channels started forwarding from soon after the vacancy closed — the more of them, and the sooner, the higher the score."></i>

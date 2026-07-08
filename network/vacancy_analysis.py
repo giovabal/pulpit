@@ -8,14 +8,14 @@ import math
 from collections import defaultdict
 from typing import Any, Callable
 
-from django.db.models import Count, Max, Min
+from django.db.models import Count, Max, Min, Q
 from django.utils import timezone
 
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelLabel, ChannelVacancy, LabelGroup, Message
 
 VALID_VACANCY_MEASURES: frozenset[str] = frozenset(
-    {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE", "TEMPORAL"}
+    {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE", "ORIGIN_OVERLAP", "TEMPORAL"}
 )
 
 ALL_VACANCY_MEASURES: list[str] = [
@@ -23,6 +23,7 @@ ALL_VACANCY_MEASURES: list[str] = [
     "NEW_ADOPTERS",
     "STRUCTURAL_EQUIV",
     "BROKERAGE",
+    "ORIGIN_OVERLAP",
     "TEMPORAL",
 ]
 
@@ -31,6 +32,7 @@ MEASURE_LABELS: dict[str, str] = {
     "NEW_ADOPTERS": "New-adopter Coverage",
     "STRUCTURAL_EQUIV": "Neighbour-set Equivalence",
     "BROKERAGE": "Brokerage overlap",
+    "ORIGIN_OVERLAP": "Content Continuity",
     "TEMPORAL": "Temporal Adoption",
 }
 
@@ -423,6 +425,170 @@ def _scores_abc(
     return result
 
 
+def _origin_key(fwd_id: int, post_id: int | None, fwd_date: datetime.datetime | None) -> tuple | None:
+    """Identity of a forward's origin message — the coordination layer's rules verbatim:
+    ``(channel, post id)``, fallback ``(channel, original date)``; ``None`` (skip) when
+    the row carries neither."""
+    if post_id is not None:
+        return (fwd_id, post_id)
+    if fwd_date is not None:
+        return (fwd_id, fwd_date)
+    return None
+
+
+def _scores_origin(
+    vacancy_pk: int,
+    candidate_pks: list[int],
+    before_start: datetime.datetime,
+    closure_dt: datetime.datetime,
+    after_end: datetime.datetime,
+) -> dict[int, dict[str, Any]]:
+    """Score O (Content Continuity): does the candidate circulate the *vacancy's
+    content stream* — the same origin messages, not merely the same neighbours?
+
+    The structural scores measure role succession, which an unrelated opportunist can
+    inherit; shared origin messages are identity-flavoured evidence (the ban-evasion
+    account-linking tradition: Niverthi, Verma & Kumar 2022). Origin identity is the
+    coordination layer's (:func:`_origin_key`).
+
+    Origins are temporally censored across the closure — content posted after it did
+    not exist before it, so a naive before/after origin intersection is empty by
+    construction. Both sides are therefore conditioned on origins that predate the
+    closure: the vacancy's **content universe** (origins it forwarded in the
+    before-window, plus posts it authored) against each candidate's after-window
+    forwards of pre-closure-dated origins (the *old* content it circulates). Ochiai
+    over the two sets, Score-B style; ``None`` when the universe is empty (nothing to
+    continue), ``0.0`` when the candidate circulates no old content.
+
+    Each candidate also carries the **archive-forward count** — shared origins
+    *authored by the vacancy itself*, i.e. the candidate re-seeding the closed
+    channel's own back-catalogue, the single strongest rebrand tell — and the usual
+    hypergeometric/BH calibration of the overlap against the pool of pre-closure
+    origins still circulating in the after-window. Blind spot: re-*uploads* get fresh
+    authorship from Telegram, so only true forwards register here.
+    """
+    # The vacancy's content universe: origins it curated (forwarded) in the before-window …
+    universe: set[tuple] = set()
+    for fwd_id, post_id, fwd_date in (
+        Message.objects.alive()
+        .filter(channel=vacancy_pk, forwarded_from__isnull=False, date__gte=before_start, date__lt=closure_dt)
+        .filter(channel_cutoff_q())
+        .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+    ):
+        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+            universe.add(key)
+
+    # … plus the posts it authored: its own crawled originals in the before-window …
+    universe.update(
+        (vacancy_pk, tid)
+        for tid in Message.objects.alive()
+        .filter(
+            channel=vacancy_pk,
+            forwarded_from__isnull=True,
+            fwd_from_date__isnull=True,
+            date__gte=before_start,
+            date__lt=closure_dt,
+        )
+        .filter(channel_cutoff_q())
+        .values_list("telegram_id", flat=True)
+    )
+
+    # … plus its posts as testified by others' forwards: Telegram attributes every
+    # forward to the original author, so an in-target forward of the vacancy whose
+    # origin provably predates the closure (origin timestamp before it, or the forward
+    # itself made before it) establishes that origin as the vacancy's pre-closure
+    # content — including forwards made *after* the closure, because authorship, not
+    # co-occurrence, is the claim (archive re-seeding testifies to it just as well).
+    for fwd_id, post_id, fwd_date in (
+        Message.objects.alive()
+        .filter(
+            channel__in=Channel.objects.in_target(),
+            forwarded_from=vacancy_pk,
+            date__gte=before_start,
+            date__lte=after_end,
+        )
+        .filter(Q(fwd_from_date__lt=closure_dt) | Q(date__lt=closure_dt))
+        .filter(channel_cutoff_q())
+        .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+    ):
+        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+            universe.add(key)
+
+    # Each candidate's re-circulated old content: after-window forwards whose origin is
+    # dated before the closure. ``fwd_from_date`` is required — an undatable origin
+    # cannot be shown to be old, so those rows sit outside both sides of the test.
+    cand_origins: dict[int, set[tuple]] = defaultdict(set)
+    for ch_id, fwd_id, post_id, fwd_date in (
+        Message.objects.alive()
+        .filter(
+            channel__in=candidate_pks,
+            forwarded_from__isnull=False,
+            date__gte=closure_dt,
+            date__lte=after_end,
+            fwd_from_date__lt=closure_dt,
+        )
+        .filter(channel_cutoff_q())
+        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+    ):
+        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+            cand_origins[ch_id].add(key)
+
+    # Null calibration, same scheme as the amplifier/source tests: the pool a
+    # candidate's old-content set is drawn from is every pre-closure-dated origin any
+    # in-target channel still circulated in the after-window; marked items are the
+    # pool origins belonging to the vacancy's universe. Candidates circulating no old
+    # content are not tested (no data ≠ evidence of independence), and an empty
+    # universe leaves nothing to test at all.
+    origin_sig: dict[int, dict[str, float]] = {}
+    if candidate_pks and universe:
+        population_keys: set[tuple] = set()
+        for fwd_id, post_id, fwd_date in (
+            Message.objects.alive()
+            .filter(
+                channel__in=Channel.objects.in_target(),
+                forwarded_from__isnull=False,
+                date__gte=closure_dt,
+                date__lte=after_end,
+                fwd_from_date__lt=closure_dt,
+            )
+            .filter(channel_cutoff_q())
+            .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+        ):
+            if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+                population_keys.add(key)
+        marked = len(population_keys & universe)
+        tested = [cid for cid in candidate_pks if cand_origins.get(cid)]
+        origin_p = {
+            cid: _hypergeom_sf(
+                len(universe & cand_origins[cid]),
+                len(population_keys),
+                marked,
+                len(cand_origins[cid]),
+            )
+            for cid in tested
+        }
+        for cid, q in zip(tested, _bh_adjust([origin_p[c] for c in tested]), strict=True):
+            origin_sig[cid] = {"p": _round_p(origin_p[cid]), "q": _round_p(q)}
+
+    result: dict[int, dict[str, Any]] = {}
+    u_size = len(universe)
+    for cid in candidate_pks:
+        r = cand_origins.get(cid, set())
+        shared = universe & r
+        if not u_size:
+            score = None
+        elif not r:
+            score = 0.0
+        else:
+            score = round(len(shared) / math.sqrt(u_size * len(r)), 3)
+        result[cid] = {
+            "score": score,
+            "archive_forward_count": sum(1 for key in shared if key[0] == vacancy_pk),
+            "significance": origin_sig.get(cid),
+        }
+    return result
+
+
 def _scores_temporal(
     orphaned_pks: set[int],
     candidate_pks: list[int],
@@ -551,6 +717,12 @@ def _analyze_vacancy(
         for cid, s in _scores_abc(ch.pk, orphaned_pks, cand_pks, before_start, closure_dt, after_end, abc_sel).items():
             score_map[cid].update(s)
 
+    origin_map: dict[int, dict[str, Any]] = {}
+    if "ORIGIN_OVERLAP" in selected_measures:
+        origin_map = _scores_origin(ch.pk, cand_pks, before_start, closure_dt, after_end)
+        for cid, o in origin_map.items():
+            score_map[cid]["ORIGIN_OVERLAP"] = o["score"]
+
     if "TEMPORAL" in selected_measures:
         for cid, s in _scores_temporal(orphaned_pks, cand_pks, closure_dt, after_end).items():
             score_map[cid]["TEMPORAL"] = s
@@ -563,6 +735,9 @@ def _analyze_vacancy(
         lf = cand_meta[cid]["last_forwarded"]
         fm = c.first_msg
         extras = score_map[cid].get(EXTRAS_KEY) or {}
+        origin = origin_map.get(cid) or {}
+        significance = extras.get("significance") or {"amplifiers": None, "sources": None}
+        significance["origins"] = origin.get("significance")
         rec: dict[str, Any] = {
             "pk": c.pk,
             "title": c.title,
@@ -575,7 +750,8 @@ def _analyze_vacancy(
             "first_activity_iso": fm.date().isoformat() if fm else None,
             "scores": {m: score_map[cid].get(m) for m in sorted(selected_measures)},
             "new_adopter_count": extras.get("new_adopter_count"),
-            "significance": extras.get("significance") or {"amplifiers": None, "sources": None},
+            "archive_forward_count": origin.get("archive_forward_count"),
+            "significance": significance,
         }
         if vac.successor_id and cid == vac.successor_id:
             rec["is_successor"] = True

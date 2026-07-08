@@ -121,7 +121,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Community table** (`community_table.html/.xlsx`) | Per-community metrics for each detection strategy; label-group × community cross-tabulations; cross-strategy partition-comparison matrices (ARI/AMI/NMI/VI) and a community-intersection Sankey [more](docs/export-formats.md#community_tablehtml--xlsx--per-community-metrics) |
 | **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (your label-group partitions and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
-| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by four algorithms after a channel goes silent [more](docs/vacancy-analysis.md) |
+| **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by up to six scores after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
 | **Coordination maps** (`coordination.html` / `coordination3d.html`) | Temporal co-forwarding layer: dedicated 2D and 3D maps of channels that repeatedly forwarded the same origin message within a short time window [more](docs/coordination-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in the structural and coordination maps, 2D and 3D [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
@@ -189,11 +189,11 @@ See [Community detection](docs/community-detection.md) for descriptions, referen
 
 ---
 
-## Vacancy analysis — 5 scores
+## Vacancy analysis — 6 scores
 
 When a channel goes silent — removed from Telegram, legally forced offline, or simply abandoned — it leaves a structural hole in the network. Channels that used to rely on it as a source now need to find an alternative. Pulpit's Vacancy Analysis answers: *who fills that structural role?*
 
-An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by up to five complementary scores (four shown in the interactive card; the temporal score is batch-export only):
+An analyst registers a channel as a vacancy with a closure date. Pulpit then identifies the **orphaned amplifiers** — channels that forwarded from the vacancy before it closed — and ranks replacement candidates by up to six complementary scores (five shown in the interactive card; the temporal score is batch-export only):
 
 | Score | Question | Method |
 | :---- | :------- | :----- |
@@ -201,9 +201,10 @@ An analyst registers a channel as a vacancy with a closure date. Pulpit then ide
 | New-adopter Coverage | Of the orphans that never forwarded the candidate before the closure, how many adopted it after? | Coverage restricted to genuine new adopters — the pre-existing-habit share removed |
 | Neighbour-set Equivalence | Does the candidate occupy the same position — same inputs, same amplifiers? | Cosine similarity (Lorrain & White 1971) |
 | Brokerage overlap | Does the candidate sit in the same organizational position — drawing on the same source orgs and amplified by the same audience orgs? | Jaccard of the (source-org, amplifier-org) pairs it spans; a one-degree structural-position overlap, not content flow. Brokerage *concept* per Gould & Fernandez 1989 (not their census) |
+| Content Continuity | Does the candidate circulate the vacancy's content — the same origin messages, or the vacancy's own back-catalogue? | Ochiai of shared pre-closure origin messages, with the count of forwards of posts authored by the vacancy (ban-evasion identity lineage: Niverthi et al. 2022) |
 | Temporal adoption | How quickly and broadly did the orphaned channels adopt the candidate? | Coverage hyperbolically discounted by mean days-to-adoption (Mazur 1987) |
 
-The two coverage scores measure *who* re-pointed to the candidate; neighbour-set equivalence and brokerage overlap capture its *structural position*; temporal adoption adds *timing*. A channel scoring high across all of them is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, all settled on quickly.
+The two coverage scores measure *who* re-pointed to the candidate; neighbour-set equivalence and brokerage overlap capture its *structural position*; content continuity adds *identity* evidence — a position can be inherited by an unrelated opportunist, but the vacancy's specific content stream cannot; temporal adoption adds *timing*. A channel scoring high across all of them is a strong structural heir — the same distributors, the same upstream sources, the same brokerage role, the same content, all settled on quickly.
 
 See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score interpretation patterns, and the batch export API.
 
@@ -258,7 +259,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Network measures](docs/network-measures.md) | All 12 per-channel measures with academic references and worked examples |
 | [Community detection](docs/community-detection.md) | 9 algorithms plus your label groups, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
-| [Vacancy analysis](docs/vacancy-analysis.md) | 5 scores for identifying structural replacement channels after a node disappears |
+| [Vacancy analysis](docs/vacancy-analysis.md) | 6 scores for identifying structural replacement channels after a node disappears |
 | [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
 | [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D maps |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |

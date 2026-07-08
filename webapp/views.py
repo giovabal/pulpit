@@ -17,7 +17,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.utils import channel_cutoff_q, channel_period_date_q
-from network.vacancy_analysis import EXTRAS_KEY, _scores_abc, _shift_months, orphaned_amplifier_pks
+from network.vacancy_analysis import EXTRAS_KEY, _scores_abc, _scores_origin, _shift_months, orphaned_amplifier_pks
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -913,6 +913,7 @@ class VacancyAnalysisView(View):
             after_end,
             {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE"},
         )
+        origin_map = _scores_origin(ch.pk, cand_ids, before_start, closure_dt, after_end)
 
         # ── Build candidate list ──────────────────────────────────────────
         candidates = []
@@ -936,6 +937,8 @@ class VacancyAnalysisView(View):
             score_c: float | None = s.get(
                 "BROKERAGE"
             )  # brokerage overlap: Jaccard of spanned (src-org, amp-org) pairs (structural position, one-degree)
+            origin = origin_map.get(cid) or {}
+            origin_sig = origin.get("significance")
 
             candidates.append(
                 {
@@ -949,9 +952,14 @@ class VacancyAnalysisView(View):
                     "new_adopter_count": extras.get("new_adopter_count"),
                     "score_b": score_b,
                     "score_c": score_c,
+                    # content continuity: Ochiai of shared pre-closure origin messages,
+                    # plus the count of forwards of posts authored by the vacancy itself.
+                    "score_o": origin.get("score"),
+                    "archive_forward_count": origin.get("archive_forward_count"),
                     # BH-adjusted hypergeometric q for the amplifier-set overlap: how
                     # surprising this candidate's orphan overlap is under a random-draw null.
                     "q_amp": amp_sig["q"] if amp_sig else None,
+                    "q_origin": origin_sig["q"] if origin_sig else None,
                     "is_successor": bool(vacancy.successor_id and cid == vacancy.successor_id),
                     "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
                     "last_forwarded_iso": lf.date().isoformat() if lf else None,
