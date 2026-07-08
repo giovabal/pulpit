@@ -53,7 +53,7 @@ The analysis proceeds in two steps:
 
 ## Scoring
 
-Each replacement candidate is scored on up to five complementary metrics ranging from 0 to 1. Scores A, N, B and C appear in both the interactive per-channel card and the batch export; Score D is batch-only, enabled via `--vacancy-measures`. The two set-overlap scores are additionally calibrated against a null model — see [Statistical calibration](#statistical-calibration) below.
+Each replacement candidate is scored on up to six complementary metrics ranging from 0 to 1. Scores A, N, B, C and O appear in both the interactive per-channel card and the batch export; Score D is batch-only, enabled via `--vacancy-measures`. The set-overlap scores are additionally calibrated against a null model — see [Statistical calibration](#statistical-calibration) below.
 
 ---
 
@@ -97,7 +97,7 @@ The habit test uses the same before-window that defines the orphans, so the befo
 - The before/after cohort design — characterise an audience before a removal, then measure where that *same cohort* re-attaches afterwards — is how the deplatforming-migration literature operationalises audience movement between platforms and channels; Score N is the within-Telegram version, with orphaned amplifiers standing in for the audience cohort.
 - Rogers, E.M. (2003) *Diffusion of Innovations* (5th ed.). Free Press — adoption as a *new* behaviour by a member of the population at risk; an actor already exhibiting the behaviour before the event is not an adopter of it.
 
-**In practice:** Read N right after A. *High A + high N* is real succession: the orphans moved somewhere they had not been going before. *High A + low N* means the candidate's coverage is mostly inherited habit — a channel the orphans always forwarded anyway (typically a big aggregator), which absorbed nothing when the vacancy opened. N is the most succession-specific of the five scores; when triaging many candidates, sorting by N first is usually the fastest route to the genuine heirs.
+**In practice:** Read N right after A. *High A + high N* is real succession: the orphans moved somewhere they had not been going before. *High A + low N* means the candidate's coverage is mostly inherited habit — a channel the orphans always forwarded anyway (typically a big aggregator), which absorbed nothing when the vacancy opened. N is the most succession-specific of the structural scores; when triaging many candidates, sorting by N first is usually the fastest route to the genuine heirs.
 
 ---
 
@@ -152,6 +152,36 @@ Organisation membership is **time-bounded**: each source's organisation is resol
 
 ---
 
+### Score O — Content Continuity
+
+*Whether the candidate circulates the same content the vacancy did — re-forwarding the origin messages it curated, or its own authored posts.*
+
+All the preceding scores characterise the candidate's **position** — who forwards it, what it forwards from, which organisational divides it spans. A position can be inherited by an unrelated opportunist. Score O asks the identity-flavoured question directly: does the candidate's stream contain the *vacancy's* content? Every forward on Telegram carries the identity of its origin message (the same `(origin channel, origin post)` identity the [coordination layer](coordination-analysis.md) is built on), so two channels circulating the same origin messages are observably drawing on the same stream — and a candidate re-forwarding the vacancy's *own* posts is re-seeding its back-catalogue.
+
+One design problem has to be solved first: origins are **temporally censored** across the closure. Content posted after the closure did not exist before it, so a naive intersection of before-window and after-window origin sets is empty by construction. Both sides are therefore conditioned on origins that *predate the closure*:
+
+```
+universe  = origins the vacancy forwarded in the before-window        (curated)
+          ∪ posts the vacancy authored                                (its back-catalogue)
+recirc(C) = origins the candidate forwarded in the after-window
+            whose origin date precedes the closure
+score_o   = |universe ∩ recirc(C)| / √(|universe| · |recirc(C)|)
+```
+
+Authored posts enter the universe both from the crawl and from observed forwards: Telegram attributes every forward to the original author, so any in-target forward of the vacancy whose origin predates the closure testifies that the origin is the vacancy's pre-closure content — including forwards made *after* the closure, because authorship, not co-occurrence, is the claim (archive re-seeding testifies to it just as well). The score is the same Ochiai form as Score B; `—` when the universe is empty (a vacancy with no origin-tagged content), 0.0 when the candidate circulates no old content at all. The score cell's tooltip carries the **archive-forward count** — shared origins authored by the vacancy itself. Even a handful of these is close to a smoking gun for a rebrand: the candidate is re-publishing the closed channel's own posts.
+
+**References:**
+- Niverthi, M., Verma, G. & Kumar, S. (2022) "Characterizing, Detecting, and Predicting Online Ban Evasion." *Proceedings of the ACM Web Conference 2022 (WWW '22)*:2614–2623. [doi:10.1145/3485447.3512133](https://doi.org/10.1145/3485447.3512133) — linking accounts across a ban by behavioural and content similarity: the identity question Score O operationalises with Telegram's native origin attribution.
+- Giglietto, F., Righetti, N., Rossi, L. & Marino, G. (2020) "It takes a village to manipulate the media: coordinated link sharing behavior during 2018 and 2019 Italian elections." *Information, Communication & Society* 23(6):867–891. [doi:10.1080/1369118X.2020.1739732](https://doi.org/10.1080/1369118X.2020.1739732) — shared-content identity as the tie that reveals actors operating in concert; Score O applies the same origin-identity logic across a closure instead of within a time window.
+
+**A known blind spot.** Origin identity only survives a true *forward*. A successor that **re-uploads** the old channel's material — fresh posts containing the same media — gets fresh authorship from Telegram and is invisible to this score. Score O's positive signal is strong (shared origins are hard to accumulate accidentally); its zero is weak (a rebrand that re-uploads rather than re-forwards scores 0). Media-fingerprint matching would close that gap; it is out of scope for the forward-based scorer.
+
+**In practice:** Read O as the identity column. Scores A–D say the candidate *fills the hole*; O says the stream flowing through it is *the vacancy's stream*. A high O with any structural pattern deserves immediate qualitative review — check the archive-forward count in the tooltip first, since forwards of the vacancy's own posts are the strongest single tell. A low O with high A/B/C reads as role succession without content identity: a different operation absorbing the audience. Because the score only sees origin-datable forwards, judge it together with the Origin q column — a significant q on even a modest overlap means the candidate's old-content circulation targets the vacancy's stream, not what a random channel would produce.
+
+**Example.** The pro-Kremlin aggregator goes silent in October. Candidate X — the structural heir on Scores A–C — forwards, in its first two months, fourteen origin messages that predate the closure: nine are posts the vacancy itself had forwarded from its war-correspondent sources, and three are the vacancy's *own* posts, re-seeded from its archive. Twelve of fourteen land in the vacancy's universe, three of them archive forwards — a Content Continuity near 0.8 with a highly significant q. X is not merely occupying the position; it is continuing the stream. Candidate Y, with identical Amplifier Coverage, also posts heavily after the closure — but almost none of its old-origin forwards belong to the vacancy's universe, and none are the vacancy's own posts. Y absorbed the audience; X continued the channel.
+
+---
+
 ### Score D — Temporal adoption
 
 *How many of the orphaned amplifiers picked up the candidate, and how quickly after closure.*
@@ -170,7 +200,7 @@ The denominator instantiates the **hyperbolic discount function** `V = A / (1 + 
 - Mazur, J.E. (1987) "An adjusting procedure for studying delayed reinforcement." In Commons, M.L. et al. (eds.) *Quantitative Analyses of Behavior, Vol. 5*, Erlbaum, pp. 55–73 — the canonical hyperbolic discount function `V = A / (1 + kd)`. Score D instantiates it with `A` = coverage and `k = 1/30 days⁻¹` on the mean adoption delay.
 - Rogers, E.M. (2003) *Diffusion of Innovations* (5th ed.). Free Press — the diffusion framework where an innovation's spread is characterised by both the *cumulative* fraction of adopters and the *time profile* by which they got there: the same two-parameter (breadth × speed) description Score D collapses into a single number.
 
-**In practice:** This is the only one of the four scores that integrates *when* the adoption happened, not just *whether* it happened — and the only one anchored to the closure date as a temporal origin. Two candidates with identical Amplifier Coverage can score very differently here: a candidate adopted by ten orphans within the first month outscores a candidate adopted by the same ten orphans only after a year of drift, because the first absorbed the vacancy's distribution network at the moment the gap opened (a pre-positioned heir) while the second only inherited it after the orphans had tried and discarded other options. Read together with Coverage: *high A + high D* is a broad and fast heir; *high A + low D* a lateral successor the network eventually settled on; *low A + high D* a specialised pickup for a sub-niche of the orphans; *low A + low D* neither broad nor fast — not a heir. The score is sensitive to the closure date being correct: registering it later than the channel's actual fade inflates the score uniformly across all candidates.
+**In practice:** This is the only score that integrates *when* the adoption happened, not just *whether* it happened — and the only one anchored to the closure date as a temporal origin. Two candidates with identical Amplifier Coverage can score very differently here: a candidate adopted by ten orphans within the first month outscores a candidate adopted by the same ten orphans only after a year of drift, because the first absorbed the vacancy's distribution network at the moment the gap opened (a pre-positioned heir) while the second only inherited it after the orphans had tried and discarded other options. Read together with Coverage: *high A + high D* is a broad and fast heir; *high A + low D* a lateral successor the network eventually settled on; *low A + high D* a specialised pickup for a sub-niche of the orphans; *low A + low D* neither broad nor fast — not a heir. The score is sensitive to the closure date being correct: registering it later than the channel's actual fade inflates the score uniformly across all candidates.
 
 **Example.** The pro-Kremlin aggregator goes silent in October, leaving twelve orphaned amplifiers. Over the two years that follow, Candidate X — the structural heir from Scores A–C — is adopted by ten of the orphans within about three weeks of the closure: broad, fast adoption, the orphans pivoted to X almost as soon as the vacancy opened. Candidate Y — the partial positional match from Score C — is adopted by four orphans only after a couple of months: a slower pickup by a smaller fraction, Y took time to register and never fully absorbed the set. Candidate Z — the topological look-alike — is eventually adopted by all twelve orphans, but only after the better part of a year of drift, so even with full coverage the score collapses under the time discount. Score D flags Z as *late* absorption rather than *immediate* succession: Z probably absorbed the audience by attrition once the orphans had given up on a direct heir, not because it was structurally positioned to inherit the role at the moment of closure.
 
@@ -182,6 +212,7 @@ The overlap scores are descriptive: a large, indiscriminately amplified candidat
 
 - **Amplifier overlap** (the numerator of Coverage and of `cos_in`): the probability that a candidate whose amplifier set was drawn *uniformly at random* from the active amplifier universe — the in-target channels that made at least one forward in the after-window — would overlap the orphan set at least as much as observed. Exact one-tailed **hypergeometric** tail probability.
 - **Source overlap** (the numerator of `cos_out`): same test for the candidate's source set against the vacancy's, over the universe of channels forwarded from by any in-target channel across the combined before + after span. Candidates with no sources are not tested — absence of data is not evidence of independence.
+- **Origin overlap** (the numerator of Content Continuity): same test for the candidate's set of re-circulated pre-closure origins against the vacancy's content universe, over the pool of pre-closure-dated origins any in-target channel still circulated in the after-window. Candidates circulating no old content are not tested.
 
 Because up to `--vacancy-max-candidates` candidates are tested per vacancy, the p-values are **Benjamini-Hochberg adjusted** across the candidate list; the tables show the adjusted values (q) with the usual star convention (\* q < 0.05, \*\* q < 0.01, \*\*\* q < 0.001), and each q cell's tooltip carries the raw p. Read them as a filter, not a verdict: a high Coverage with a non-significant q means the overlap is what a random popular channel would produce; a modest Coverage with q < 0.01 is a targeted re-attachment worth reading the other scores on. With very few orphans nothing will reach significance — that is the test working, not failing: small orphan sets genuinely cannot distinguish succession from chance.
 
@@ -241,10 +272,11 @@ The HTML page is linked from `index.html` under a **Vacancy Analysis** section t
 | `NEW_ADOPTERS` | Fraction of orphaned amplifiers that *newly* adopted the candidate (no before-window forwards) | Cheap (DB query) |
 | `STRUCTURAL_EQUIV` | Cosine of shared amplifiers + shared sources | Cheap (DB query) |
 | `BROKERAGE` | Jaccard of (source-org × amplifier-org) pairs | Cheap (DB query) |
+| `ORIGIN_OVERLAP` | Ochiai of shared pre-closure origin messages, with the archive-forward count | Cheap (DB query) |
 | `TEMPORAL` | Coverage hyperbolically discounted by mean days-to-adoption (halved at 30 days) | Cheap (DB query) |
 | `ALL` | All of the above | — |
 
-Selecting any of `AMPLIFIER_JACCARD`, `NEW_ADOPTERS` or `STRUCTURAL_EQUIV` also computes the [hypergeometric calibration](#statistical-calibration) columns for the overlaps those measures share.
+Selecting any of `AMPLIFIER_JACCARD`, `NEW_ADOPTERS` or `STRUCTURAL_EQUIV` also computes the [hypergeometric calibration](#statistical-calibration) columns for the overlaps those measures share; `ORIGIN_OVERLAP` brings its own origin-overlap q column.
 
 ### Parameters
 
@@ -260,12 +292,14 @@ In the **Operations panel**, the **Neighbour-set Equivalence** and **Brokerage o
 
 ## Interpreting results
 
-The five scores are complementary, not redundant. Scores A, N, B and C characterise the candidate's structural position — who forwards it, whether that audience is newly acquired, what it forwards from, and what organisational boundaries it crosses. Score D adds the temporal dimension — how quickly the orphaned amplifiers picked the candidate up. The q columns say which overlaps beat chance at all.
+The six scores are complementary, not redundant. Scores A, N, B and C characterise the candidate's structural position — who forwards it, whether that audience is newly acquired, what it forwards from, and what organisational boundaries it crosses. Score O is the identity check — whether the candidate circulates the vacancy's own content stream rather than merely occupying its position. Score D adds the temporal dimension — how quickly the orphaned amplifiers picked the candidate up. The q columns say which overlaps beat chance at all.
 
 | Pattern | Interpretation |
 | :------ | :------------- |
 | High on all | Strong structural replacement across all dimensions — topological *and* adopted quickly |
 | High A, low N | The coverage is inherited habit: the orphans always forwarded this candidate. An absorber of attention, not a successor |
+| High O, any structural pattern | The candidate circulates the vacancy's specific content; archive forwards of the vacancy's own posts are the strongest single rebrand tell — escalate to qualitative review |
+| High A/B/C, low O | Role succession without content identity: a different operation absorbing the audience (or a rebrand that re-uploads instead of forwarding — Score O cannot see those) |
 | High A/B/C, low D | The candidate occupies the same structural slot but was adopted slowly or partially — the network eventually settled on it rather than turning to it immediately |
 | Low A/B/C, high D | A fast-but-narrow pickup: a sub-niche of orphans adopted the candidate quickly without making it the dominant heir |
 | High A, high B, low C | The orphaned amplifiers have converged on a new source that serves a different ideological function — perhaps drawing from a narrower set of sources or operating within a single community |

@@ -183,10 +183,11 @@ import { fetchJson } from "./js/utils.js";
       colMax[m] = vals.length ? Math.max.apply(null, vals) : 0;
     });
 
-    // Null-model calibration columns (BH-adjusted hypergeometric q of the amplifier-
-    // and source-set overlaps), present when the run computed the underlying sets.
+    // Null-model calibration columns (BH-adjusted hypergeometric q of the amplifier-,
+    // source- and origin-set overlaps), present when the run computed the underlying sets.
     var hasAmpQ = candidates.some(function (c) { return c.significance && c.significance.amplifiers; });
     var hasSrcQ = candidates.some(function (c) { return c.significance && c.significance.sources; });
+    var hasOriginQ = candidates.some(function (c) { return c.significance && c.significance.origins; });
 
     function sigStars(q) {
       if (q == null) return "";
@@ -210,6 +211,7 @@ import { fetchJson } from "./js/utils.js";
       }).join("") +
       (hasAmpQ ? '<th class="number" scope="col" title="BH-adjusted hypergeometric tail probability of the amplifier-set overlap under a random-draw null">Amplifier q</th>' : "") +
       (hasSrcQ ? '<th class="number" scope="col" title="BH-adjusted hypergeometric tail probability of the source-set overlap under a random-draw null">Source q</th>' : "") +
+      (hasOriginQ ? '<th class="number" scope="col" title="BH-adjusted hypergeometric tail probability of the shared pre-closure-origin overlap under a random-draw null">Origin q</th>' : "") +
       '<th class="number" scope="col">Amplifiers</th>' +
       '<th class="date" scope="col">Last forwarded</th>' +
       "</tr></thead>";
@@ -232,6 +234,8 @@ import { fetchJson } from "./js/utils.js";
           var extra = "";
           if (m === "NEW_ADOPTERS" && cand.new_adopter_count != null) {
             extra = ' title="' + cand.new_adopter_count + ' newly adopting orphan' + (cand.new_adopter_count !== 1 ? "s" : "") + '"';
+          } else if (m === "ORIGIN_OVERLAP" && cand.archive_forward_count != null) {
+            extra = ' title="' + cand.archive_forward_count + ' forward' + (cand.archive_forward_count !== 1 ? "s" : "") + ' of posts authored by the vacancy"';
           }
           return '<td class="va-score-cell"' + extra +
             (bg ? ' style="' + esc(bg) + '"' : "") +
@@ -246,6 +250,7 @@ import { fetchJson } from "./js/utils.js";
           scoreCells +
           (hasAmpQ ? qCell(sig.amplifiers) : "") +
           (hasSrcQ ? qCell(sig.sources) : "") +
+          (hasOriginQ ? qCell(sig.origins) : "") +
           "<td>" + (cand.amplifier_count != null ? cand.amplifier_count : "—") + "</td>" +
           '<td data-sort-value="' + esc(cand.last_forwarded_iso || "") + '">' + esc(cand.last_forwarded || "—") + "</td>" +
           "</tr>";
