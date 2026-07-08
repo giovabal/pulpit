@@ -32,7 +32,7 @@ from .models import (
     ProfilePicture,
 )
 from .utils.channel_types import channel_type_filter
-from .utils.dates import fmt_date, fmt_ttl
+from .utils.dates import fmt_date, fmt_day_month_year, fmt_ttl
 from .utils.emoji import emoji_present
 from .version_check import version_status
 
@@ -961,9 +961,9 @@ class VacancyAnalysisView(View):
                     "q_amp": amp_sig["q"] if amp_sig else None,
                     "q_origin": origin_sig["q"] if origin_sig else None,
                     "is_successor": bool(vacancy.successor_id and cid == vacancy.successor_id),
-                    "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
+                    "last_forwarded": fmt_day_month_year(lf) if lf else None,
                     "last_forwarded_iso": lf.date().isoformat() if lf else None,
-                    "first_activity": fm.strftime("%b %-d, %Y") if fm else None,
+                    "first_activity": fmt_day_month_year(fm) if fm else None,
                     "first_activity_iso": fm.date().isoformat() if fm else None,
                 }
             )

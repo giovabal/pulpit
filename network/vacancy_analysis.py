@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelLabel, ChannelVacancy, LabelGroup, Message
+from webapp.utils.dates import fmt_day_month_year
 
 VALID_VACANCY_MEASURES: frozenset[str] = frozenset(
     {"AMPLIFIER_JACCARD", "NEW_ADOPTERS", "STRUCTURAL_EQUIV", "BROKERAGE", "ORIGIN_OVERLAP", "TEMPORAL"}
@@ -744,9 +745,9 @@ def _analyze_vacancy(
             "url": c.get_absolute_url(),
             "org_color": c.current_label.color if c.current_label else None,
             "amplifier_count": cand_meta[cid]["amplifier_count"],
-            "last_forwarded": lf.strftime("%b %-d, %Y") if lf else None,
+            "last_forwarded": fmt_day_month_year(lf) if lf else None,
             "last_forwarded_iso": lf.date().isoformat() if lf else None,
-            "first_activity": fm.strftime("%b %-d, %Y") if fm else None,
+            "first_activity": fmt_day_month_year(fm) if fm else None,
             "first_activity_iso": fm.date().isoformat() if fm else None,
             "scores": {m: score_map[cid].get(m) for m in sorted(selected_measures)},
             "new_adopter_count": extras.get("new_adopter_count"),
