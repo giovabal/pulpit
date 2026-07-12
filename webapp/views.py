@@ -821,6 +821,8 @@ class ChannelDetailView(ListView):
                 "summary_rows": [summary, engagement],
                 "panels": panels,
                 "is_in_target": is_in_target,
+                "total_messages": total_messages,
+                "total_forwards_received": total_forwards_received,
                 "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
                 "total_reactions": f"{total_reactions:,}",

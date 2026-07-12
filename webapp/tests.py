@@ -841,6 +841,36 @@ class ChannelDetailViewTests(TestCase):
         tids = {m.telegram_id for m in response.context["object_list"]}
         self.assertEqual(tids, {0, 1, 2, 42})
 
+    def test_unmonitored_channel_with_messages_renders_message_list(self) -> None:
+        # self.ch has no label, so it is not monitored; it still has 3 messages.
+        # The message section used to be hidden for any not-in-target channel.
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
+        self.assertContains(response, "Not monitored")
+        self.assertContains(response, "ch-msg-tabs")
+
+    def test_unmonitored_channel_without_messages_hides_message_list(self) -> None:
+        empty = make_channel(telegram_id=555, title="Silent")
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": empty.pk}))
+        self.assertContains(response, "Not monitored")
+        self.assertNotContains(response, "ch-msg-tabs")
+
+    def test_unmonitored_channel_with_only_forwards_received_renders_message_list(self) -> None:
+        # A dead-leaf channel we never crawled (no own messages) but which in-target
+        # channels forward from: its "Forwards received" tab has content, so the
+        # section must render even though total_messages is 0.
+        org = make_label(name="In target", is_in_target=True)
+        amplifier = make_channel(telegram_id=556, label=org, title="Amplifier")
+        leaf = make_channel(telegram_id=557, title="Dead leaf")
+        Message.objects.create(
+            telegram_id=1,
+            channel=amplifier,
+            forwarded_from=leaf,
+            date=datetime.datetime(2023, 5, 1, tzinfo=datetime.timezone.utc),
+        )
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": leaf.pk}))
+        self.assertContains(response, "Not monitored")
+        self.assertContains(response, "ch-msg-tabs")
+
 
 # ─── VacanciesView ─────────────────────────────────────────────────────────────
 
