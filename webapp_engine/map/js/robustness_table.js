@@ -15,7 +15,7 @@
 
 import { build_year_nav } from './year_nav.js';
 import { strategy_label } from './labels.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 
@@ -424,7 +424,8 @@ function _renderBanWaves(payload) {
         });
         html += "</tr></thead><tbody>";
         rows.forEach(function (row) {
-            html += "<tr><td>" + row.community + "</td>";
+            // Label-group communities carry a human name; algorithmic ones fall back to the id.
+            html += "<tr><td>" + escHtml(row.community_label || row.community) + "</td>";
             html += "<td class=\"text-end\">" + row.n + "</td>";
             html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
             metrics.forEach(function (m) {

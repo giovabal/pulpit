@@ -250,6 +250,33 @@ def _clamp_year_window(
     return start_date, end_date
 
 
+def _annotate_ban_wave_labels(rob_payload: "dict | None", communities_data: dict) -> None:
+    """Add a ``community_label`` to each ban-wave row for label-group partitions.
+
+    ``ban_wave_rows`` stores only the stringified community id; for a
+    ``LABELGROUP`` partition that id is a label pk, so the HTML/XLSX tables would
+    otherwise show a bare number. This looks the name up in *communities_data*
+    (``{strategy_key: {"groups": [(cid, count, name, colour), …]}}``) and writes
+    it onto the row in place. Algorithmic strategies auto-name their communities
+    ``"<id>-<strategy_key>"``, which reads worse than the plain id, so those are
+    left unannotated (the renderers fall back to the id). Mutates *rob_payload*.
+    """
+    if not rob_payload:
+        return
+    ban_waves = rob_payload.get("ban_waves") or {}
+    for strategy_key, rows in ban_waves.items():
+        groups = (communities_data.get(strategy_key) or {}).get("groups") or []
+        name_by_id: dict[str, str] = {}
+        for cid, _count, name, _colour in groups:
+            cid_s = str(cid)
+            if name and name != cid_s and name != f"{cid_s}-{strategy_key}":
+                name_by_id[cid_s] = name
+        for row in rows:
+            label = name_by_id.get(row.get("community"))
+            if label:
+                row["community_label"] = label
+
+
 def _atomic_publish(staging: str, final_target: str) -> None:
     """Atomically swap ``staging`` into ``final_target``.
 
@@ -1821,6 +1848,7 @@ class Command(BaseCommand):
                         # panels stay lean (the grid would multiply per-year cost by |grid|).
                     ),
                 )
+                _annotate_ban_wave_labels(rob_payload, communities_data)
                 exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
 
             if do_interest_structural:
@@ -2619,6 +2647,7 @@ class Command(BaseCommand):
                 replay_rows = self._compute_ban_replay(opts)
                 global_rob_payload["ban_replay"] = replay_rows or None
                 self.stdout.write(f"{len(replay_rows)} wave year(s)" if replay_rows else "no usable wave years")
+            _annotate_ban_wave_labels(global_rob_payload, communities_data)
             os.makedirs(root_target, exist_ok=True)
             exporter.write_robustness_json(global_rob_payload, root_target)
             self.stdout.write("- robustness.json")
