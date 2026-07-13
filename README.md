@@ -122,7 +122,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Structural equivalence matrix** (`structural_similarity.html`) | Lorrain & White (1971) structural equivalence: cosine similarity of each channel's weighted citation tie profile — high when two channels cite, and are cited by, the same others. Sortable by community or by measure [more](docs/export-formats.md) |
 | **Consensus matrix** (`consensus_matrix.html`) | Agreement heatmap: how consistently each pair of channels is co-assigned across the partition-based strategies (your label-group partitions and K-core excluded) [more](docs/community-detection.md#consensus-matrix) |
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by up to six scores after a channel goes silent [more](docs/vacancy-analysis.md) |
-| **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: residual-size R-index per attack strategy on the (optionally disparity-filtered) backbone, z-score against a weight-rewiring null model, plus intra/inter community edge survival curves [more](docs/robustness-analysis.md) |
+| **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: R-index over four damage metrics per attack strategy on the (optionally disparity-filtered) backbone, z-score + FDR-corrected empirical p against a configuration-model null, intra/inter community edge survival, ban-wave scenarios, and ban-replay validation [more](docs/robustness-analysis.md) |
 | **Coordination maps** (`coordination.html` / `coordination3d.html`) | Temporal co-forwarding layer: dedicated 2D and 3D maps of channels that repeatedly forwarded the same origin message within a short time window [more](docs/coordination-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in the structural and coordination maps, 2D and 3D [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |
@@ -210,11 +210,11 @@ See [Vacancy analysis](docs/vacancy-analysis.md) for academic grounding, score i
 
 ---
 
-## Robustness analysis — 7 attack strategies
+## Robustness analysis — 13 attack strategies
 
 How well does this ecosystem hold up when channels start disappearing? Different removals damage the network in different ways: peripheral amplifiers can leave without a trace, but stripping a hub or a community bridge can fragment the citation web across half the network. Pulpit's Robustness Analysis answers: *which kinds of node loss matter most, and does this network have identifiable critical channels at all?*
 
-The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#the-backbone-disparity-filter) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under several attack strategies and tracks how the residual network shrinks:
+The analysis optionally extracts the [disparity-filter backbone](docs/robustness-analysis.md#the-backbone-disparity-filter) (Serrano-Boguñá-Vespignani 2009) — pruning edges statistically indistinguishable from uniform weight noise — then progressively removes nodes under the attack strategies you select and tracks how the residual network shrinks:
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -222,13 +222,20 @@ The analysis optionally extracts the [disparity-filter backbone](docs/robustness
 | In-strength | Static | Take down everything that's heavily cited — moderation aimed at popular destinations |
 | Out-strength | Static | Take down everything that cites heavily — moderation aimed at aggregators |
 | PageRank | Static | Take down the highest-prestige nodes — moderation aware of inherited prestige |
-| In-strength (dyn) | Dynamic — re-rank after every removal | Strength-based attack with cascade awareness |
-| Out-strength (dyn) | Dynamic — re-rank after every removal | Aggregator-targeting attack with cascade awareness |
-| PageRank (dyn) | Dynamic — re-rank after every removal | PageRank attack with cascade awareness |
+| Betweenness | Static | Take down the bridges — the channels whose removal cuts the network apart |
+| Collective Influence | Static | Take down the near-optimal dismantling set (Morone & Makse 2015) — the coordinated worst-case attacker |
+| Subscribers | Static | Take down the biggest audiences — moderation as it actually happens, targeting visibility rather than structure |
+| In-strength / Out-strength / PageRank / Betweenness (dyn) | Dynamic — re-rank after every removal | The same four targeted attacks with cascade awareness |
+| Collective Influence (dyn) | Dynamic | The canonical adaptive CI algorithm — the strongest dismantling order Pulpit ships |
+| Greedy fragmentation (dyn) | Dynamic | Borgatti (2006) key-player dismantling — repeatedly remove whatever most shatters the residual network |
 
-For each (strategy, "size" metric) Pulpit reports the **Schneider et al. (2011) R-index** — the average residual size across the entire attack — plus a 5%-collapse threshold and a **z-score** against a weight-rewiring null model that preserves topology and the weight multiset but reshuffles weights among edges. R values lower than random failure mean the network has critical channels; |z| ≥ 2 means the deviation didn't happen by chance under the null. When community partitions are active, the analysis additionally tracks intra-community vs inter-community edge survival — a network where bridges go first behaves very differently from one that loses cohesive cliques first.
+The default run uses random, in-strength, out-strength, PageRank, and betweenness; pick any subset with `--robustness-strategies`. (Betweenness and the dismantling strategies use multi-hop topology purely as a *removal-order heuristic* — they make no per-channel content-flow claim; see the one-degree guardrails in the docs.)
 
-Three size metrics are tracked simultaneously: largest weakly-connected component, largest strongly-connected component (the mutually-reinforcing core), and the fraction of directed source→target pairs still reachable. When `--timeline-step year` is also active, the whole battery runs once per calendar year alongside the global one, with the HTML page surfacing a year navigator over the per-year results.
+Four damage metrics are tracked simultaneously: largest weakly-connected component, largest strongly-connected component (the mutually-reinforcing core), the fraction of directed source→target pairs still reachable, and the surviving citation weight (Bellingeri & Cassi 2018) — the weighted damage that node-count curves systematically understate. A coarse weighted global-efficiency curve additionally tracks how well the surviving core stays knit as each attack proceeds.
+
+For each (strategy, damage metric) pair Pulpit reports the **Schneider et al. (2011) R-index** — the average residual size across the entire attack — plus a 5%-collapse threshold, and calibrates it against a **configuration-model null**: randomised graphs that keep each channel's in/out degree exactly and its in/out strength approximately while reshuffling the wiring, so a significant deviation reflects higher-order structure rather than the degree sequence the attacks already rank on. A reciprocity-preserving variant (Squartini & Garlaschelli 2011) is available when mutual citation is itself the structure under test. Each cell gets a **z-score**, an **empirical p-value**, and a BH/FDR-corrected **q** across the whole strategy × metric grid. R values lower than random failure mean the network has critical channels.
+
+Beyond the attack curves: when community partitions are active the analysis tracks **intra- vs inter-community edge survival** (does the attack cut bridges first, or hollow out cliques?); **ban-wave scenarios** remove a whole community or label-group block in one step — making "what if organisation O were banned?" a first-class query — and compare it against removing the same number of channels at random; **ban-replay validation** replays each year's actually-recorded channel closures against the prior-year graph and checks the prediction against the observed next-year structure; and an **α-sensitivity sweep** re-runs the headline numbers across a grid of backbone thresholds. When `--timeline-step year` is also active, the whole battery runs once per calendar year alongside the global one, with the HTML page surfacing a year navigator over the per-year results.
 
 See [Robustness analysis](docs/robustness-analysis.md) for the formal definitions, the null-model limits (what it does *not* preserve), interpretation guidance, and the academic references.
 
@@ -260,7 +267,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 | [Community detection](docs/community-detection.md) | 9 algorithms plus your label groups, consensus matrix, cross-strategy comparison, choosing a strategy |
 | [Whole-network statistics](docs/whole-network-statistics.md) | Ecosystem-level metrics: density, reciprocity, clustering, Fiedler value, E-I index, NMI, and more |
 | [Vacancy analysis](docs/vacancy-analysis.md) | 6 scores for identifying structural replacement channels after a node disappears |
-| [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival |
+| [Robustness analysis](docs/robustness-analysis.md) | Resistance to node removal: 13 attack strategies, R-index over four damage metrics, configuration-model null with FDR-corrected p-values, ban-wave scenarios and ban-replay validation |
 | [Coordination analysis](docs/coordination-analysis.md) | Temporal co-forwarding maps: repeated near-simultaneous forwards of the same origin message, rendered as dedicated 2D/3D maps |
 | [Interesting messages](docs/interesting-messages.md) | Per-channel z-scored engagement composite plus structural-reach metrics (cross-community reach, authority-weighted reach) |
 | [Web interface](docs/web-interface.md) | Browser UI: channel browser, channel detail pages, Operations panel, backoffice |
