@@ -632,7 +632,7 @@ def write_interest_structural_html(
     )
 
 
-_ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach")
+_ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach", "strength")
 
 
 def _robustness_sheet_name(prefix: str, suffix: str) -> str:
@@ -676,12 +676,9 @@ def _fill_robustness_curves(wb: Any, payload: dict, suffix: str) -> None:
         strat = payload["strategies"][s]
         null = strat.get("null") or {}
         ws = wb.create_sheet(title=_robustness_sheet_name(f"Curve {s}", suffix))
-        cols: list[tuple[str, list]] = [
-            ("q", list(range(len(strat["curve_wcc"])))),
-            ("S_wcc", strat["curve_wcc"]),
-            ("S_scc", strat["curve_scc"]),
-            ("S_reach", strat["curve_reach"]),
-        ]
+        cols: list[tuple[str, list]] = [("q", list(range(len(strat["curve_wcc"]))))]
+        for m in _ROBUSTNESS_METRICS:
+            cols.append((f"S_{m}", strat.get(f"curve_{m}") or []))
         if null:
             for m in _ROBUSTNESS_METRICS:
                 cols.append((f"null_{m}_mean", null.get(f"curve_{m}_mean", [])))
@@ -691,6 +688,38 @@ def _fill_robustness_curves(wb: Any, payload: dict, suffix: str) -> None:
             cell.font = Font(bold=True)
         for q in range(len(cols[0][1])):
             ws.append([col[1][q] if q < len(col[1]) else None for col in cols])
+
+
+def _fill_robustness_efficiency(wb: Any, payload: dict, suffix: str) -> None:
+    eff = payload.get("efficiency") or {}
+    curves = eff.get("curves") or {}
+    if not curves:
+        return
+    ws = wb.create_sheet(title=_robustness_sheet_name("Efficiency", suffix))
+    strategies = [s for s in payload.get("strategies", {}) if s in curves]
+    ws.append(["f"] + [f"E_{s}" for s in strategies])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    fractions = eff.get("fractions") or []
+    for i, f in enumerate(fractions):
+        ws.append([f] + [curves[s][i] if i < len(curves[s]) else None for s in strategies])
+
+
+def _fill_robustness_ban_waves(wb: Any, payload: dict, suffix: str) -> None:
+    ban_waves = payload.get("ban_waves") or {}
+    for partition_name, rows in ban_waves.items():
+        ws = wb.create_sheet(title=_robustness_sheet_name(f"Ban wave {partition_name}", suffix))
+        header = ["Community", "Channels", "Fraction"]
+        for m in _ROBUSTNESS_METRICS:
+            header += [f"S_{m}", f"random_{m}"]
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row in rows:
+            cells: list = [row.get("community"), row.get("n"), row.get("fraction")]
+            for m in _ROBUSTNESS_METRICS:
+                cells += [row.get(f"s_{m}"), row.get(f"random_{m}")]
+            ws.append(cells)
 
 
 def _fill_robustness_modular(wb: Any, payload: dict, suffix: str) -> None:
@@ -725,7 +754,7 @@ def write_robustness_table_xlsx(
     """Write the robustness payload(s) as an Excel workbook.
 
     Without *year_data* sheets are named ``"Summary"``, ``"Curve <strategy>"``,
-    and ``"Modular <partition>"``.
+    ``"Efficiency"``, ``"Modular <partition>"``, and ``"Ban wave <partition>"``.
 
     With *year_data* (a list of ``(year, year_payload)`` from the timeline
     loop), one contiguous block of sheets is emitted per scope — ``"All"``
@@ -751,7 +780,9 @@ def write_robustness_table_xlsx(
     for suffix, payload in scopes:
         _fill_robustness_summary(wb, payload, suffix)
         _fill_robustness_curves(wb, payload, suffix)
+        _fill_robustness_efficiency(wb, payload, suffix)
         _fill_robustness_modular(wb, payload, suffix)
+        _fill_robustness_ban_waves(wb, payload, suffix)
 
     wb.save(output_filename)
 

@@ -72,8 +72,22 @@
 <p class="text-muted small mb-3">
   The shaded band shows the mean ± standard deviation of the same curves on the weight-rewiring null model.
   A curve below the band indicates a strategy that fragments the network faster than chance.
+  The weighted-efficiency chart tracks how well the surviving core stays knit (Latora-Marchiori efficiency,
+  sampled on a coarse grid) — it can collapse while the residual-size curves still look healthy.
 </p>
 <div class="rb-grid export-wide mb-4" id="rb-curves"></div>
+
+<div id="rb-banwave-section" class="export-wide d-none">
+  <h3 class="mt-4 mb-2">Ban-wave scenarios</h3>
+  <p class="text-muted small mb-3">
+    Residual size after removing each whole community in one step, next to the damage that removing
+    the <em>same number</em> of channels uniformly at random would cause (<span class="text-muted">rnd</span>).
+    A red value sits below its random baseline: banning that block damages the network more than its
+    size alone explains — a load-bearing sub-ecosystem. Values at or above the baseline mark blocks the
+    network could absorb losing, however large.
+  </p>
+  <div id="rb-banwave-tables"></div>
+</div>
 
 <div id="rb-modular-section" class="export-wide d-none">
   <h3 class="mt-4 mb-2">Modular robustness</h3>

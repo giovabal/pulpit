@@ -17,6 +17,18 @@ strategies whose low values flag the critical nodes.
 A single registry — :data:`STRATEGY_SPECS` — drives the available
 strategies, their human labels, score functions, and sort direction.
 
+One-degree note: ``betweenness`` ranks nodes by shortest-path counts, which
+Pulpit's measure catalogue deliberately excludes (multi-hop paths carry no
+flow under one-degree attribution).  As an *attack order* it makes no
+per-channel flow claim — it is a topological cut heuristic, justified purely
+by its effect on the S(f) curves, which measure the recorded citation web's
+connectivity (the same epistemic status as the REACH metric).  Holme et al.
+(2002) found recalculated betweenness to be the most destructive removal
+order on most topologies.  ``subscribers`` ranks by Telegram audience size —
+not a structural score at all, but the closest proxy for *real* moderation
+pressure, which targets visible channels rather than structurally optimal
+ones (deplatforming lineage: Rogers 2020).
+
 References:
     Albert, R., Jeong, H. & Barabási, A.-L. (2000). Error and attack
         tolerance of complex networks. *Nature* 406(6794), 378-382.
@@ -24,6 +36,11 @@ References:
     Holme, P., Kim, B. J., Yoon, C. N. & Han, S. K. (2002). Attack
         vulnerability of complex networks. *Phys. Rev. E* 65(5), 056109.
         https://doi.org/10.1103/PhysRevE.65.056109
+    Freeman, L. C. (1977). A set of measures of centrality based on
+        betweenness. *Sociometry* 40(1), 35-41. https://doi.org/10.2307/3033543
+    Rogers, R. (2020). Deplatforming: Following extreme Internet celebrities
+        to Telegram and alternative social media. *European Journal of
+        Communication* 35(3), 213-229. https://doi.org/10.1177/0267323120922066
 """
 
 from collections.abc import Callable
@@ -76,6 +93,31 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
         return _in_strength(g)
 
 
+def _weighted_betweenness(g: nx.DiGraph) -> dict[Any, float]:
+    # Brandes betweenness on the directed graph with edge distance 1/w (heavy
+    # citation ties = short distances — the same convention as the weighted
+    # efficiency in metrics.py).  networkx wants the distance as an edge
+    # attribute, so a shadow copy carries it, keeping this scorer pure; edges
+    # without positive weight carry no recorded relation and are skipped.
+    h = nx.DiGraph()
+    h.add_nodes_from(g.nodes())
+    h.add_edges_from((u, v, {"distance": 1.0 / w}) for u, v, w in g.edges(data="weight", default=0.0) if w > 0)
+    return nx.betweenness_centrality(h, weight="distance")
+
+
+def _subscribers(g: nx.DiGraph) -> dict[Any, float]:
+    # graph_builder stores each channel's Telegram audience on the node's
+    # ``data`` dict ("fans" = participants_count).  Unknown audiences score 0
+    # and are removed last.  A node property, not a graph property: the
+    # ranking never changes on the residual graph, so there is no _dyn
+    # variant (it would be identical to the static one).
+    scores: dict[Any, float] = {}
+    for node, attrs in g.nodes(data=True):
+        fans = (attrs.get("data") or {}).get("fans")
+        scores[node] = float(fans) if fans else 0.0
+    return scores
+
+
 # ── Registry ────────────────────────────────────────────────────────────────
 
 
@@ -87,13 +129,18 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
     "out_strength": StrategySpec("Out-strength", _out_strength),
     # Prestige
     "pagerank": StrategySpec("PageRank", _safe_pagerank),
+    # Bridges / cut positions
+    "betweenness": StrategySpec("Betweenness", _weighted_betweenness),
+    # Visibility (metadata, not structure)
+    "subscribers": StrategySpec("Subscribers", _subscribers),
     # Dynamic variants
     "in_strength_dyn": StrategySpec("In-strength (dyn)", _in_strength, kind="dynamic"),
     "out_strength_dyn": StrategySpec("Out-strength (dyn)", _out_strength, kind="dynamic"),
     "pagerank_dyn": StrategySpec("PageRank (dyn)", _safe_pagerank, kind="dynamic"),
+    "betweenness_dyn": StrategySpec("Betweenness (dyn)", _weighted_betweenness, kind="dynamic"),
 }
 
-DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank"]
+DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank", "betweenness"]
 
 # Derived sets so existing imports keep working.
 STATIC_STRATEGIES: frozenset[str] = frozenset(name for name, spec in STRATEGY_SPECS.items() if spec.kind != "dynamic")
@@ -140,6 +187,7 @@ def removal_order(
     Worst-case dynamic complexity (|V| = N, |E| = m):
         ``in_strength_dyn`` / ``out_strength_dyn``   O(N · (N + m))
         ``pagerank_dyn``                             O(N · power-iter)
+        ``betweenness_dyn``                          O(N · (Nm + N² log N))  — by far the costliest
     """
     canonical = parse_strategy(strategy)
 

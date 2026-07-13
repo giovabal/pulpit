@@ -3,7 +3,10 @@
 // Layout:
 //   - top text:  one-line summary (graph size, alpha, # strategies, # nulls)
 //   - summary:   one table row per (strategy × metric) — R, R_null mean/std, z, f_c
-//   - curves:    three Chart.js line charts (WCC / SCC / REACH), one line per strategy
+//   - curves:    four Chart.js line charts (WCC / SCC / REACH / STRENGTH), one
+//                line per strategy, plus the coarse weighted-efficiency chart
+//   - ban wave:  per-partition table — residual sizes after removing each whole
+//                community, next to the equal-q random baseline
 //   - modular:   per-partition section with intra/inter curves per strategy
 //
 // Every chart card carries a discreet "expand" button in the top-right corner;
@@ -28,16 +31,19 @@ var _ty = [];  // timeline years filtered to those with robustness data
 var _loading = false;
 var _modalChart = null;  // tracks the modal's current Chart.js instance for clean teardown
 
-var _METRICS = ["wcc", "scc", "reach"];
-var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH" };
+var _METRICS = ["wcc", "scc", "reach", "strength"];
+var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH", strength: "STRENGTH" };
 
 // Strategy ordering — matches network.robustness.attacks.ALL_STRATEGIES.
 var _STRATEGY_ORDER = [
     "random",
     "in_strength", "out_strength",
     "pagerank",
+    "betweenness",
+    "subscribers",
     "in_strength_dyn", "out_strength_dyn",
     "pagerank_dyn",
+    "betweenness_dyn",
 ];
 
 // Compact short labels — kept terse so the legend stays readable when many
@@ -47,8 +53,11 @@ var _STRATEGY_SHORT = {
     "random": "Random",
     "in_strength": "In-strength", "out_strength": "Out-strength",
     "pagerank": "PageRank",
+    "betweenness": "Betweenness",
+    "subscribers": "Subscribers",
     "in_strength_dyn": "In-strength dyn", "out_strength_dyn": "Out-strength dyn",
     "pagerank_dyn": "PageRank dyn",
+    "betweenness_dyn": "Betweenness dyn",
 };
 
 // Accessible palette grouped by attack-family hue.
@@ -56,8 +65,11 @@ var _STRATEGY_COLOR = {
     "random": "#94a3b8",
     "in_strength": "#3b82f6", "out_strength": "#06b6d4",
     "pagerank": "#ef4444",
+    "betweenness": "#8b5cf6",
+    "subscribers": "#f59e0b",
     "in_strength_dyn": "#1d4ed8", "out_strength_dyn": "#0e7490",
     "pagerank_dyn": "#b91c1c",
+    "betweenness_dyn": "#6d28d9",
 };
 
 function _labelOf(payload, key) {
@@ -85,6 +97,14 @@ function _fmtZ(z) {
 
 function _fmtFc(fc) {
     return fc === null || fc === undefined ? "—" : fc.toFixed(3);
+}
+
+// Metrics actually present in the payload — older robustness.json files
+// (pre-STRENGTH) miss the newer curves, so render only what is there.
+function _presentMetrics(payload, strategies) {
+    if (!strategies.length) return _METRICS;
+    var first = payload.strategies[strategies[0]];
+    return _METRICS.filter(function (m) { return Array.isArray(first["curve_" + m]); });
 }
 
 function _orderedStrategies(payload) {
@@ -141,10 +161,11 @@ function _renderSummaryTable(payload) {
     thead.innerHTML = "<tr>" + headerCells.join("") + "</tr>";
 
     var rows = [];
+    var metrics = _presentMetrics(payload, strategies);
     strategies.forEach(function (s) {
         var p = payload.strategies[s];
         var nullData = p.null || {};
-        _METRICS.forEach(function (m) {
+        metrics.forEach(function (m) {
             var nullM = nullData["r_" + m] || {};
             var r = p["r_" + m];
             var fc = p["fc_" + m];
@@ -238,6 +259,18 @@ function _modularChartConfig(curves, fractionRemoved) {
     };
 }
 
+function _efficiencyChartConfig(payload, strategies) {
+    var eff = payload.efficiency;
+    var datasets = strategies.filter(function (s) { return eff.curves[s]; }).map(function (s) {
+        return _buildLineDataset(_labelOf(payload, s), _colorOf(s), eff.curves[s], eff.fractions);
+    });
+    var options = _baseChartOptions("E(f)");
+    options.plugins.tooltip.callbacks.label = function (ctx) {
+        return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
+    };
+    return { type: "line", data: { datasets: datasets }, options: options };
+}
+
 // ── Modal expansion of charts ─────────────────────────────────────────────────
 
 function _attachExpandButton(card, title, configBuilder) {
@@ -296,11 +329,10 @@ function _renderCurves(payload) {
     var fractionRemoved = [];
     for (var i = 0; i < n_points; i++) fractionRemoved.push(i / (n_points - 1));
 
-    _METRICS.forEach(function (m) {
+    function _addChartCard(titleText, summary, buildConfig) {
         var card = document.createElement("div");
         card.className = "rb-chart-card";
         var title = document.createElement("h5");
-        var titleText = "S(f) — " + _METRIC_LABEL[m];
         title.textContent = titleText;
         card.appendChild(title);
         var wrap = document.createElement("div");
@@ -310,15 +342,84 @@ function _renderCurves(payload) {
         card.appendChild(wrap);
         container.appendChild(card);
 
-        var buildConfig = function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); };
         if (window.PulpitA11y) {
-            window.PulpitA11y.accessibleChart(canvas, {
-                label: titleText,
-                summary: strategies.length + " strategies, " + fractionRemoved.length + " removal steps",
-            });
+            window.PulpitA11y.accessibleChart(canvas, { label: titleText, summary: summary });
         }
         new Chart(canvas, buildConfig());
         _attachExpandButton(card, titleText, buildConfig);
+    }
+
+    _presentMetrics(payload, strategies).forEach(function (m) {
+        _addChartCard(
+            "S(f) — " + _METRIC_LABEL[m],
+            strategies.length + " strategies, " + fractionRemoved.length + " removal steps",
+            function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); }
+        );
+    });
+
+    // Coarse weighted-efficiency curves (observed backbone only, no null band).
+    var eff = payload.efficiency;
+    if (eff && eff.curves && eff.fractions && Object.keys(eff.curves).length) {
+        _addChartCard(
+            "Weighted efficiency — E(f)",
+            Object.keys(eff.curves).length + " strategies, " + eff.fractions.length + " evaluation points",
+            function () { return _efficiencyChartConfig(payload, strategies); }
+        );
+    }
+}
+
+// ── Ban-wave section ─────────────────────────────────────────────────────────
+
+function _renderBanWaves(payload) {
+    var section = document.getElementById("rb-banwave-section");
+    var container = document.getElementById("rb-banwave-tables");
+    if (!section || !container) return;
+    container.innerHTML = "";
+    var banWaves = payload.ban_waves;
+    if (!banWaves || !Object.keys(banWaves).length) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+
+    // A residual-size cell shows S after the block ban next to the equal-q
+    // random baseline; S far below the baseline (red) marks a load-bearing
+    // block whose ban damages the network beyond what its size explains.
+    function _cell(s, rnd) {
+        if (s === null || s === undefined) return "<td class=\"text-end\">—</td>";
+        var cls = "";
+        if (typeof rnd === "number" && isFinite(rnd)) {
+            if (s < rnd) cls = " class=\"text-end rb-z-significant rb-z-neg\"";
+            else cls = " class=\"text-end\"";
+        } else {
+            cls = " class=\"text-end\"";
+        }
+        var base = (typeof rnd === "number" && isFinite(rnd)) ? " <span class=\"text-muted\">(rnd " + _fmt(rnd, 3) + ")</span>" : "";
+        return "<td" + cls + ">" + _fmt(s, 3) + base + "</td>";
+    }
+
+    Object.keys(banWaves).forEach(function (p) {
+        var rows = banWaves[p];
+        if (!rows || !rows.length) return;
+        var metrics = _METRICS.filter(function (m) { return ("s_" + m) in rows[0]; });
+        var html = "<h5 class=\"mt-3\">" + strategy_label(p) + "</h5>";
+        html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
+        html += "<thead><tr><th>Community</th><th class=\"text-end\">Channels</th><th class=\"text-end\">% of network</th>";
+        metrics.forEach(function (m) {
+            html += "<th class=\"text-end\">S<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub></th>";
+        });
+        html += "</tr></thead><tbody>";
+        rows.forEach(function (row) {
+            html += "<tr><td>" + row.community + "</td>";
+            html += "<td class=\"text-end\">" + row.n + "</td>";
+            html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
+            metrics.forEach(function (m) {
+                html += _cell(row["s_" + m], row["random_" + m]);
+            });
+            html += "</tr>";
+        });
+        html += "</tbody></table></div>";
+        container.insertAdjacentHTML("beforeend", html);
     });
 }
 
@@ -393,6 +494,7 @@ function _render(payload) {
     _renderHeaderSummary(payload);
     _renderSummaryTable(payload);
     _renderCurves(payload);
+    _renderBanWaves(payload);
     _renderModular(payload);
 }
 

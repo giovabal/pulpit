@@ -220,13 +220,14 @@ Go to **Manage → Event types** to define categories like *Election* or *Policy
 
 ### Robustness: resistance to node removal
 
-Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank`; dynamic (re-rank-after-removal) variants are also available. For each selected strategy Pulpit:
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; `subscribers` (audience-targeted moderation, from Telegram member counts) and the dynamic (re-rank-after-removal) variants are also available. For each selected strategy Pulpit:
 
 - optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
-- records the residual-size curves `S(q)` for WCC, SCC, and directed reachability,
+- records the residual-size curves `S(q)` for WCC, SCC, directed reachability, and surviving strength (the weight share of the heaviest residual component),
 - compresses each curve into the Schneider et al. R-index plus a 5%-collapse threshold `f_c`,
-- compares both against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores,
-- if at least one community partition is active, also produces intra/inter community edge-survival curves per partition.
+- samples the weighted global efficiency along the removal order on a coarse grid,
+- compares the residual-size curves against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores,
+- if at least one community partition is active, also produces intra/inter community edge-survival curves per partition, plus the **ban-wave scenarios**: residual sizes after removing each whole community in one step, next to the equal-count random baseline.
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
 

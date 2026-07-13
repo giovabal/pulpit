@@ -927,10 +927,10 @@ class Command(BaseCommand):
             metavar="STRATEGIES",
             help=(
                 "Comma-separated list of attack strategies to run. Any of: "
-                "random, in_strength, out_strength, pagerank, and the dynamic variants "
-                "in_strength_dyn, out_strength_dyn, pagerank_dyn. "
-                "Use ALL for every strategy. "
-                "Default: random,in_strength,out_strength,pagerank. "
+                "random, in_strength, out_strength, pagerank, betweenness, subscribers, "
+                "and the dynamic variants in_strength_dyn, out_strength_dyn, pagerank_dyn, "
+                "betweenness_dyn. Use ALL for every strategy. "
+                "Default: random,in_strength,out_strength,pagerank,betweenness. "
                 "At least one strategy must be selected."
             ),
         )

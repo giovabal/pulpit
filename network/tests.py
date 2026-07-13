@@ -3683,6 +3683,35 @@ class AttackCurveTests(TestCase):
         c2 = attack_curve(g, order, "REACH", reach_sample=8, rng=np.random.default_rng(0))
         self.assertEqual(c1, c2)
 
+    def test_strength_curve_tracks_heaviest_component_weight(self) -> None:
+        # Two components: heavy pair (weight 10) and light chain (total 2).
+        # S_strength(0) = 10/12; removing "H1" leaves the light chain as the
+        # heaviest component → 2/12; removing "L1" splits it → 1/12.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        g.add_edge("H1", "H2", weight=10.0)
+        g.add_edge("L1", "L2", weight=1.0)
+        g.add_edge("L2", "L3", weight=1.0)
+        curve = attack_curve(g, ["H1", "L1"], "STRENGTH")
+        self.assertAlmostEqual(curve[0], 10.0 / 12.0)
+        self.assertAlmostEqual(curve[1], 2.0 / 12.0)
+        self.assertAlmostEqual(curve[2], 1.0 / 12.0)
+
+    def test_strength_curve_sees_damage_wcc_misses(self) -> None:
+        # A hub carrying nearly all the weight inside one big WCC: removing it
+        # barely dents the node count but guts the surviving strength.
+        from network.robustness import attack_curve
+
+        g = nx.DiGraph()
+        for i in range(5):
+            g.add_edge(f"S{i}", "HUB", weight=10.0)
+            g.add_edge(f"S{i}", f"S{(i + 1) % 5}", weight=0.1)
+        wcc = attack_curve(g, ["HUB"], "WCC")
+        strength = attack_curve(g, ["HUB"], "STRENGTH")
+        self.assertAlmostEqual(wcc[1], 5.0 / 6.0)  # 5 of 6 nodes still connected
+        self.assertAlmostEqual(strength[1], 0.5 / 50.5)  # 0.99% of the weight survives
+
     def test_invalid_metric_raises(self) -> None:
         from network.robustness import attack_curve
 
@@ -3819,18 +3848,94 @@ class WeightedGlobalEfficiencyTests(TestCase):
         self.assertAlmostEqual(weighted_global_efficiency(g, nodes={"A", "B"}), 1.0)
 
 
+class ResidualSizesTests(TestCase):
+    def test_matches_attack_curve_final_point(self) -> None:
+        # One-shot removal of a node set must agree with the corresponding
+        # attack-curve point for every metric (REACH exact — no sampling).
+        from network.robustness import attack_curve, residual_sizes
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=2.0)
+        g.add_edge("B", "C", weight=1.0)
+        g.add_edge("C", "A", weight=1.0)
+        g.add_edge("C", "D", weight=0.5)
+        sizes = residual_sizes(g, ["A", "D"], reach_sample=None)
+        for metric_key, metric in (("wcc", "WCC"), ("scc", "SCC"), ("reach", "REACH"), ("strength", "STRENGTH")):
+            curve = attack_curve(g, ["A", "D"], metric, reach_sample=None)
+            self.assertAlmostEqual(sizes[metric_key], curve[-1], msg=metric_key)
+
+    def test_missing_nodes_silently_skipped_and_graph_unmutated(self) -> None:
+        from network.robustness import residual_sizes
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        before = (set(g.nodes()), set(g.edges()))
+        sizes = residual_sizes(g, ["X", "A"], reach_sample=None)
+        self.assertAlmostEqual(sizes["wcc"], 0.5)
+        self.assertEqual((set(g.nodes()), set(g.edges())), before)
+
+    def test_empty_graph_returns_zeroes(self) -> None:
+        from network.robustness import residual_sizes
+
+        sizes = residual_sizes(nx.DiGraph(), ["A"])
+        self.assertEqual(sizes, {"wcc": 0.0, "scc": 0.0, "reach": 0.0, "strength": 0.0})
+
+
+class EfficiencyCurveTests(TestCase):
+    def test_grid_includes_endpoints_and_is_monotone_in_f(self) -> None:
+        from network.robustness import efficiency_curve
+
+        g = nx.gnp_random_graph(30, 0.2, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        fractions, values = efficiency_curve(g, list(g.nodes()), n_points=10)
+        self.assertEqual(fractions[0], 0.0)
+        self.assertEqual(fractions[-1], 1.0)
+        self.assertEqual(len(fractions), len(values))
+        self.assertEqual(fractions, sorted(fractions))
+        self.assertEqual(values[-1], 0.0)  # empty residual has no SCC
+
+    def test_baseline_point_matches_weighted_global_efficiency(self) -> None:
+        from network.robustness import efficiency_curve, weighted_global_efficiency
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=2.0)
+        g.add_edge("B", "A", weight=2.0)
+        g.add_edge("B", "C", weight=1.0)
+        fractions, values = efficiency_curve(g, ["A", "B", "C"], n_points=3)
+        self.assertAlmostEqual(values[0], weighted_global_efficiency(g))
+
+    def test_empty_order_returns_single_baseline_point(self) -> None:
+        from network.robustness import efficiency_curve
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        fractions, values = efficiency_curve(g, [], n_points=5)
+        self.assertEqual(fractions, [0.0])
+        self.assertEqual(len(values), 1)
+
+    def test_grid_never_exceeds_n_points_plus_one(self) -> None:
+        from network.robustness import efficiency_curve
+
+        g = nx.gnp_random_graph(50, 0.1, seed=7, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        fractions, _ = efficiency_curve(g, list(g.nodes()), n_points=20)
+        self.assertLessEqual(len(fractions), 21)
+
+
 class RemovalOrderTests(TestCase):
     def test_strategy_constants_partition_correctly(self) -> None:
         from network.robustness import ALL_STRATEGIES, DEFAULT_STRATEGIES, DYNAMIC_STRATEGIES, STATIC_STRATEGIES
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        # Static includes random + degree (2) + prestige (1) = 4
-        self.assertEqual(len(STATIC_STRATEGIES), 4)
-        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 3)
-        self.assertEqual(len(ALL_STRATEGIES), 7)
-        self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank"])
+        # Static includes random + degree (2) + prestige (1) + bridges (1) + visibility (1) = 6
+        self.assertEqual(len(STATIC_STRATEGIES), 6)
+        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 4)
+        self.assertEqual(len(ALL_STRATEGIES), 10)
+        self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
 
     def test_random_returns_permutation_of_nodes(self) -> None:
         from network.robustness import removal_order
@@ -3955,6 +4060,55 @@ class RemovalOrderTests(TestCase):
         g.add_edge("A", "B", weight=1.0)
         self.assertEqual(removal_order(g, "PageRank"), removal_order(g, "pagerank"))
         self.assertEqual(removal_order(g, "IN_STRENGTH"), removal_order(g, "in_strength"))
+
+    def test_betweenness_removes_bridge_first(self) -> None:
+        # Two directed triangles joined by the bridge B1 ↔ B2: every cross-side
+        # shortest path runs through both bridge endpoints, so they rank first.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        for a, b in [("L1", "L2"), ("L2", "L3"), ("L3", "L1"), ("R1", "R2"), ("R2", "R3"), ("R3", "R1")]:
+            g.add_edge(a, b, weight=1.0)
+        g.add_edge("L1", "R1", weight=1.0)
+        g.add_edge("R1", "L1", weight=1.0)
+        order = removal_order(g, "betweenness")
+        self.assertEqual(set(order[:2]), {"L1", "R1"})
+
+    def test_betweenness_weighted_prefers_heavy_path(self) -> None:
+        # A reaches C via B (heavy edges, distance 1/10 each) or via D (light
+        # edges, distance 1/0.1 each).  Shortest paths take the heavy route, so
+        # B has positive betweenness and D none.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=10.0)
+        g.add_edge("B", "C", weight=10.0)
+        g.add_edge("A", "D", weight=0.1)
+        g.add_edge("D", "C", weight=0.1)
+        order = removal_order(g, "betweenness")
+        self.assertEqual(order[0], "B")
+
+    def test_betweenness_dyn_returns_permutation_of_nodes(self) -> None:
+        from network.robustness import removal_order
+
+        g = nx.gnp_random_graph(12, 0.25, seed=42, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0
+        order = removal_order(g, "betweenness_dyn")
+        self.assertEqual(sorted(order), sorted(g.nodes()))
+
+    def test_subscribers_sorted_by_fans_descending(self) -> None:
+        # Audience size lives on the node's ``data`` dict (graph_builder's
+        # "fans"); unknown audiences (missing dict or None) go last, by ID.
+        from network.robustness import removal_order
+
+        g = nx.DiGraph()
+        g.add_node("A", data={"fans": 500})
+        g.add_node("B", data={"fans": 10_000})
+        g.add_node("C", data={"fans": None})
+        g.add_node("D")
+        order = removal_order(g, "subscribers")
+        self.assertEqual(order, ["B", "A", "C", "D"])
 
 
 class RewireStrengthPreservingTests(TestCase):
@@ -4238,6 +4392,64 @@ class ModularRobustnessCurvesTests(TestCase):
         self.assertEqual(curves["ratio"], [None])
 
 
+class BanWaveScenarioTests(TestCase):
+    def _bridged_cliques(self) -> tuple[nx.DiGraph, dict[str, str]]:
+        g = nx.DiGraph()
+        for side in ("L", "R"):
+            for i in range(3):
+                for j in range(3):
+                    if i != j:
+                        g.add_edge(f"{side}{i}", f"{side}{j}", weight=1.0)
+        g.add_edge("L0", "R0", weight=1.0)
+        partition = {n: n[0] for n in g.nodes()}
+        return g, partition
+
+    def test_one_row_per_block_with_all_fields(self) -> None:
+        from network.robustness import ban_wave_rows
+
+        g, partition = self._bridged_cliques()
+        random_curves = {m: [1.0] * (g.number_of_nodes() + 1) for m in ("wcc", "scc", "reach", "strength")}
+        rows = ban_wave_rows(g, partition, random_curves, reach_sample=None, rng=np.random.default_rng(0))
+        self.assertEqual([r["community"] for r in rows], ["L", "R"])
+        for row in rows:
+            self.assertEqual(row["n"], 3)
+            self.assertAlmostEqual(row["fraction"], 0.5)
+            for m in ("wcc", "scc", "reach", "strength"):
+                self.assertIn(f"s_{m}", row)
+                self.assertEqual(row[f"random_{m}"], 1.0)
+        # Removing either 3-clique leaves the other intact: half the nodes survive.
+        self.assertAlmostEqual(rows[0]["s_wcc"], 0.5)
+
+    def test_small_blocks_and_missing_baseline_handled(self) -> None:
+        from network.robustness import ban_wave_rows
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        g.add_edge("B", "C", weight=1.0)
+        g.add_node("D")
+        partition = {"A": 1, "B": 1, "C": 2, "D": 3}  # blocks of size 2, 1, 1
+        rows = ban_wave_rows(g, partition, {}, reach_sample=None, rng=np.random.default_rng(0))
+        self.assertEqual(len(rows), 1)  # singleton blocks skipped
+        self.assertEqual(rows[0]["community"], "1")
+        self.assertIsNone(rows[0]["random_wcc"])  # no baseline curve provided
+
+    def test_block_covering_whole_graph_is_skipped(self) -> None:
+        from network.robustness import ban_wave_rows
+
+        g = nx.DiGraph()
+        g.add_edge("A", "B", weight=1.0)
+        rows = ban_wave_rows(g, {"A": 0, "B": 0}, {}, reach_sample=None, rng=np.random.default_rng(0))
+        self.assertEqual(rows, [])
+
+    def test_does_not_mutate_input_graph(self) -> None:
+        from network.robustness import ban_wave_rows
+
+        g, partition = self._bridged_cliques()
+        before = (set(g.nodes()), set(g.edges()))
+        ban_wave_rows(g, partition, {}, reach_sample=None, rng=np.random.default_rng(0))
+        self.assertEqual((set(g.nodes()), set(g.edges())), before)
+
+
 class RobustnessRunnerTests(TestCase):
     def _toy_graph(self, n: int = 20, p: float = 0.2, seed: int = 42) -> nx.DiGraph:
         g = nx.gnp_random_graph(n, p, seed=seed, directed=True)
@@ -4305,7 +4517,7 @@ class RobustnessRunnerTests(TestCase):
         from network.robustness import run_robustness
 
         out = run_robustness(self._toy_graph(), config=self._fast_cfg())
-        self.assertEqual(set(out.keys()), {"config", "graph", "efficiency", "strategies", "modular"})
+        self.assertEqual(set(out.keys()), {"config", "graph", "efficiency", "strategies", "modular", "ban_waves"})
 
     def test_payload_strategy_keys_defaults_to_default_set(self) -> None:
         from network.robustness import DEFAULT_STRATEGIES, run_robustness
@@ -4326,12 +4538,12 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(self._toy_graph(), config=self._fast_cfg(strategies=["pagerank"]))
         self.assertEqual(out["strategies"]["pagerank"]["label"], "PageRank")
 
-    def test_each_strategy_has_three_curves_and_r_fc(self) -> None:
+    def test_each_strategy_has_four_curves_and_r_fc(self) -> None:
         from network.robustness import run_robustness
 
         out = run_robustness(self._toy_graph(), config=self._fast_cfg())
         for s, payload in out["strategies"].items():
-            for m in ("wcc", "scc", "reach"):
+            for m in ("wcc", "scc", "reach", "strength"):
                 self.assertIn(f"curve_{m}", payload, msg=f"strategy {s!r} missing curve_{m}")
                 self.assertIn(f"r_{m}", payload)
                 self.assertIn(f"fc_{m}", payload)
@@ -4343,8 +4555,23 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(self._toy_graph(n=12), config=self._fast_cfg())
         n_plus_1 = out["graph"]["backbone_n"] + 1
         for payload in out["strategies"].values():
-            for m in ("wcc", "scc", "reach"):
+            for m in ("wcc", "scc", "reach", "strength"):
                 self.assertEqual(len(payload[f"curve_{m}"]), n_plus_1)
+
+    def test_efficiency_block_has_curves_on_shared_grid(self) -> None:
+        from network.robustness import run_robustness
+
+        out = run_robustness(self._toy_graph(n=12), config=self._fast_cfg())
+        eff = out["efficiency"]
+        self.assertEqual(set(eff.keys()), {"baseline", "fractions", "curves"})
+        self.assertEqual(set(eff["curves"].keys()), set(out["strategies"].keys()))
+        self.assertEqual(eff["fractions"][0], 0.0)
+        self.assertEqual(eff["fractions"][-1], 1.0)
+        for curve in eff["curves"].values():
+            self.assertEqual(len(curve), len(eff["fractions"]))
+        # The q = 0 grid point is the baseline efficiency by construction.
+        for curve in eff["curves"].values():
+            self.assertAlmostEqual(curve[0], eff["baseline"])
 
     # -- disparity filter ------------------------------------------------------
 
@@ -4380,7 +4607,7 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(self._toy_graph(n=12), config=self._fast_cfg(n_null=3))
         for payload in out["strategies"].values():
             self.assertIsNotNone(payload["null"])
-            for m in ("wcc", "scc", "reach"):
+            for m in ("wcc", "scc", "reach", "strength"):
                 self.assertIn(f"r_{m}", payload["null"])
                 self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z"})
                 self.assertIn(f"curve_{m}_mean", payload["null"])
@@ -4392,17 +4619,41 @@ class RobustnessRunnerTests(TestCase):
         out = run_robustness(self._toy_graph(n=10), config=self._fast_cfg(n_null=2))
         n_plus_1 = out["graph"]["backbone_n"] + 1
         for payload in out["strategies"].values():
-            for m in ("wcc", "scc", "reach"):
+            for m in ("wcc", "scc", "reach", "strength"):
                 self.assertEqual(len(payload["null"][f"curve_{m}_mean"]), n_plus_1)
                 self.assertEqual(len(payload["null"][f"curve_{m}_std"]), n_plus_1)
 
-    # -- modular --------------------------------------------------------------
+    # -- modular / ban waves ---------------------------------------------------
 
     def test_modular_none_when_no_partitions(self) -> None:
         from network.robustness import run_robustness
 
         out = run_robustness(self._toy_graph(), config=self._fast_cfg())
         self.assertIsNone(out["modular"])
+        self.assertIsNone(out["ban_waves"])
+
+    def test_ban_waves_populated_when_partitions_given(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=10)
+        partition = {n: (0 if n < 5 else 1) for n in g.nodes()}
+        out = run_robustness(g, partitions={"hand": partition}, config=self._fast_cfg())
+        self.assertIsNotNone(out["ban_waves"])
+        rows = out["ban_waves"]["hand"]
+        self.assertEqual({r["community"] for r in rows}, {"0", "1"})
+        # random is in the default strategy set, so the equal-q baseline is present.
+        for row in rows:
+            self.assertIsNotNone(row["random_wcc"])
+
+    def test_ban_waves_baseline_computed_without_random_strategy(self) -> None:
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=10)
+        partition = {n: (0 if n < 5 else 1) for n in g.nodes()}
+        out = run_robustness(g, partitions={"hand": partition}, config=self._fast_cfg(strategies=["pagerank"]))
+        rows = out["ban_waves"]["hand"]
+        for row in rows:
+            self.assertIsNotNone(row["random_wcc"])
 
     def test_modular_populated_when_partitions_given(self) -> None:
         from network.robustness import DEFAULT_STRATEGIES, run_robustness
@@ -4454,8 +4705,10 @@ class RobustnessRunnerTests(TestCase):
         self.assertIn("disparity", labels)
         self.assertIn("baseline-efficiency", labels)
         self.assertIn("pagerank", labels)
+        self.assertIn("efficiency/pagerank", labels)
         self.assertTrue(any(s.startswith("null/") for s in labels))
         self.assertTrue(any(s.startswith("modular/") for s in labels))
+        self.assertTrue(any(s.startswith("banwave/") for s in labels))
 
     # -- JSON serialisability -------------------------------------------------
 
@@ -4474,7 +4727,7 @@ class RobustnessRunnerTests(TestCase):
         encoded = json.dumps(out)
         self.assertIsInstance(encoded, str)
         decoded = json.loads(encoded)
-        self.assertEqual(set(decoded.keys()), {"config", "graph", "efficiency", "strategies", "modular"})
+        self.assertEqual(set(decoded.keys()), {"config", "graph", "efficiency", "strategies", "modular", "ban_waves"})
 
 
 class WriteRobustnessJsonTests(TestCase):
@@ -4496,28 +4749,38 @@ class WriteRobustnessTableXlsxTests(TestCase):
         return {
             "config": {"seed": 0},
             "graph": {"n": 3, "m": 3, "alpha": 0.05, "backbone_n": 3, "backbone_m": 3, "filtered": True},
-            "efficiency": {"baseline": 1.0},
+            "efficiency": {
+                "baseline": 1.0,
+                "fractions": [0.0, 0.5, 1.0],
+                "curves": {"pagerank": [1.0, 0.4, 0.0]},
+            },
             "strategies": {
                 "pagerank": {
                     "curve_wcc": [1.0, 0.5, 0.0, 0.0],
                     "curve_scc": [1.0, 0.5, 0.0, 0.0],
                     "curve_reach": [0.5, 0.25, 0.0, 0.0],
+                    "curve_strength": [1.0, 0.4, 0.0, 0.0],
                     "r_wcc": 0.125,
                     "r_scc": 0.125,
                     "r_reach": 0.0625,
+                    "r_strength": 0.1,
                     "fc_wcc": 0.5,
                     "fc_scc": 0.5,
                     "fc_reach": 0.5,
+                    "fc_strength": 0.5,
                     "null": {
                         "r_wcc": {"mean": 0.12, "std": 0.01, "z": 0.5},
                         "r_scc": {"mean": 0.12, "std": 0.01, "z": 0.5},
                         "r_reach": {"mean": 0.06, "std": 0.005, "z": 1.25},
+                        "r_strength": {"mean": 0.1, "std": 0.01, "z": 0.0},
                         "curve_wcc_mean": [1.0, 0.45, 0.0, 0.0],
                         "curve_wcc_std": [0.0, 0.05, 0.0, 0.0],
                         "curve_scc_mean": [1.0, 0.45, 0.0, 0.0],
                         "curve_scc_std": [0.0, 0.05, 0.0, 0.0],
                         "curve_reach_mean": [0.5, 0.2, 0.0, 0.0],
                         "curve_reach_std": [0.0, 0.05, 0.0, 0.0],
+                        "curve_strength_mean": [1.0, 0.35, 0.0, 0.0],
+                        "curve_strength_std": [0.0, 0.05, 0.0, 0.0],
                     },
                 },
             },
@@ -4529,6 +4792,23 @@ class WriteRobustnessTableXlsxTests(TestCase):
                         "ratio": [1.0, None, None, None],
                     }
                 }
+            },
+            "ban_waves": {
+                "leiden": [
+                    {
+                        "community": "0",
+                        "n": 2,
+                        "fraction": 0.667,
+                        "s_wcc": 0.333,
+                        "random_wcc": 0.5,
+                        "s_scc": 0.0,
+                        "random_scc": 0.1,
+                        "s_reach": 0.0,
+                        "random_reach": 0.05,
+                        "s_strength": 0.2,
+                        "random_strength": 0.3,
+                    }
+                ]
             },
         }
 
@@ -4543,8 +4823,10 @@ class WriteRobustnessTableXlsxTests(TestCase):
             self.assertTrue(os.path.isfile(out))
             wb = openpyxl.load_workbook(out)
             self.assertIn("Summary", wb.sheetnames)
+            self.assertIn("Efficiency", wb.sheetnames)
             self.assertTrue(any(name.startswith("Curve") for name in wb.sheetnames))
             self.assertTrue(any(name.startswith("Modular") for name in wb.sheetnames))
+            self.assertTrue(any(name.startswith("Ban wave") for name in wb.sheetnames))
 
     def test_summary_sheet_has_one_row_per_strategy_metric_combo(self) -> None:
         from network.tables import write_robustness_table_xlsx
@@ -4556,10 +4838,25 @@ class WriteRobustnessTableXlsxTests(TestCase):
             write_robustness_table_xlsx(self._payload(), output_filename=out)
             wb = openpyxl.load_workbook(out)
             ws = wb["Summary"]
-            self.assertEqual(ws.max_row, 4)  # header + 3 metrics × 1 strategy
+            self.assertEqual(ws.max_row, 5)  # header + 4 metrics × 1 strategy
             r_values = [ws.cell(row=r, column=3).value for r in range(2, ws.max_row + 1)]
             self.assertIn(0.125, r_values)
             self.assertIn(0.0625, r_values)
+            self.assertIn(0.1, r_values)
+
+    def test_ban_wave_sheet_rows_match_payload(self) -> None:
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(self._payload(), output_filename=out)
+            wb = openpyxl.load_workbook(out)
+            ws = wb["Ban wave leiden"]
+            self.assertEqual(ws.max_row, 2)  # header + 1 block
+            self.assertEqual(ws.cell(row=2, column=1).value, "0")
+            self.assertEqual(ws.cell(row=2, column=2).value, 2)
 
     def test_handles_payload_without_null(self) -> None:
         from network.tables import write_robustness_table_xlsx

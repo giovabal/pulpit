@@ -12,11 +12,12 @@ Enable with `--robustness` on `structural_analysis` (off by default; see [Workfl
 
 | Metric / output | What it surfaces |
 | :-------------- | :--------------- |
-| `R_wcc`, `R_scc`, `R_reach` | Three robustness indices per attack strategy: the smaller R is, the faster the network fragments under that attack |
+| `R_wcc`, `R_scc`, `R_reach`, `R_strength` | Four robustness indices per attack strategy: the smaller R is, the faster the network fragments under that attack |
 | `f_c` (5% threshold) | Fraction of channels that would have to disappear before the residual network collapses below 5% of its initial size |
 | `R` z-score vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring |
+| Weighted efficiency curve `E(f)` | How well the surviving core stays knit as the attack proceeds — weighted damage the size curves can miss |
 | Intra/inter community survival | Does the attack strip the bridges between communities first (decoupling), or the ties within them first (eroding cohesion)? |
-| Baseline weighted efficiency | A pre-attack characterisation of how easily information traverses the network at full strength |
+| Ban-wave scenarios | Residual network after removing each whole community/label block in one step, vs removing the same number of channels at random |
 
 ---
 
@@ -38,9 +39,9 @@ Channels with a single edge in a given direction always keep that edge — there
 
 ## Attack strategies
 
-Seven strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`); at least one must be selected.
+Ten strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
 
-The strategies are described in detail below — they cover the three main "what makes a channel critical?" axes (random / degree / prestige); see [Network measures](network-measures.md) for the underlying definitions.
+The strategies are described in detail below — they cover the five main "what makes a channel critical?" axes (random / degree / prestige / bridges / visibility); see [Network measures](network-measures.md) for the underlying definitions.
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -48,8 +49,11 @@ The strategies are described in detail below — they cover the three main "what
 | `in_strength` | static | "Take down everything that's heavily cited" — moderation aimed at popular destinations |
 | `out_strength` | static | "Take down everything that cites heavily" — moderation aimed at aggregators |
 | `pagerank` | static | "Take down the highest-prestige channels" — moderation aware of inherited prestige |
+| `betweenness` | static | "Take down the bridges" — moderation aimed at the channels whose removal cuts the network apart |
+| `subscribers` | static | "Take down the biggest audiences" — moderation as it actually happens, targeting visibility |
 | `in_strength_dyn` / `out_strength_dyn` | dynamic | Degree-based attacks with cascade awareness — re-rank after every removal |
 | `pagerank_dyn` | dynamic | Prestige attack with cascade awareness |
+| `betweenness_dyn` | dynamic | Bridge attack with cascade awareness — the most destructive order in Holme et al.'s comparison, and by far the costliest |
 
 The whole point of running multiple strategies is comparison. If they all produce similar R values, the network has no specific weak class of channels — it is *homogeneously* resilient or fragile. If one strategy gives a much lower R than the others, you have found the network's specific vulnerability: an attacker following that strategy would do disproportionate damage.
 
@@ -85,23 +89,49 @@ Uses the same PageRank logic described in [Network measures § PageRank](network
 
 **Example.** A nationalist commentator whose posts are routinely reposted by the three most-followed party-aligned channels might have a modest in-strength (only three forwarders) but very high PageRank (because those three forwarders are themselves prestigious). PageRank attack removes it first; in-strength attack might leave it untouched until much later.
 
+### Bridge attack (`betweenness`)
+
+*Target the channels sitting on the most weighted shortest paths between other channels — the cut positions of the citation web.*
+
+Channels are ranked by directed betweenness centrality (Freeman 1977) with edge distance `1/w`, so heavily weighted citation ties count as short distances. A high-betweenness channel is one that many of the network's strongest indirect connections run through — remove it and channels that were joined through it fall apart.
+
+**Reference:** Freeman, L. C. (1977) "A set of measures of centrality based on betweenness." *Sociometry* 40(1). [doi:10.2307/3033543](https://doi.org/10.2307/3033543); Holme, P. et al. (2002), cited above, who found *recalculated betweenness* to be the most destructive attack strategy on most topologies.
+
+**In practice:** this is the canonical fragmentation attack, and the one that most directly targets the *brokers* of an ecosystem — the channels bridging otherwise-separate milieus (party-aligned, neo-fascist, conspiracist clusters). A hub can be structurally redundant (its neighbours also cite each other); a bridge by definition is not. Networks whose betweenness-attack R is far below their degree-attack R are held together by a small set of brokers rather than by their hubs.
+
+**Interpretation guardrail (one-degree):** Pulpit's measure catalogue deliberately excludes betweenness as a *per-channel score* — under [one-degree attribution](network-measures.md#what-this-catalogue-covers), multi-hop paths carry no content flow, so "this channel brokers information between A and B" is not a claim the data can support. The attack strategy makes no such claim. It uses betweenness purely as a *topological cut heuristic* — a way of ordering removals — and the result is judged solely by what happens to the S(f) curves, which measure the recorded citation web's connectivity (the same epistemic status as the REACH metric). Read "high betweenness" here as "removing this channel disconnects the recorded structure fastest", never as "content flows through this channel".
+
+**Example.** In a coalition network where the nationalist and the conspiracist camps share only three channels that both sides cite, those three channels top the betweenness ranking even if their degree and PageRank are unremarkable. A betweenness attack removes them first and splits the recorded web into two components within a handful of removals — something the in-strength attack, busy with each camp's internal hubs, might not achieve until much later.
+
+### Visibility attack (`subscribers`)
+
+*Target the biggest audiences first — moderation as it actually happens.*
+
+Channels are ranked by their Telegram member count (`participants_count`), highest first; channels whose member count is unknown are removed last. This is the only strategy that ranks on *metadata* rather than network structure.
+
+**Reference:** Rogers, R. (2020) "Deplatforming: Following extreme Internet celebrities to Telegram and alternative social media." *European Journal of Communication* 35(3). [doi:10.1177/0267323120922066](https://doi.org/10.1177/0267323120922066)
+
+**In practice:** real deplatforming does not follow PageRank. Platforms and regulators target the channels that are *visible* — large subscriber counts, media attention, legal exposure. The subscribers attack simulates that pressure, and the gap between its R and the structural attacks' R is itself a finding: it measures how much of the network's structural load is carried by channels that visibility-driven moderation would *not* prioritise. A network whose subscribers-attack R is close to random while its PageRank-attack R is far lower is one where realistic moderation pressure would be structurally ineffective.
+
+**Example.** A monitoring project finds `R_wcc(subscribers) = 0.41` against `R_wcc(random) = 0.45` and `R_wcc(pagerank) = 0.18`. Interpretation: banning the biggest channels barely beats banning channels at random, because the network's connectivity is carried by mid-sized, low-visibility prestige anchors — the ecosystem is structurally robust to exactly the kind of moderation it is most likely to face.
+
 ### Dynamic variants (`*_dyn`)
 
 *The same attacks, but with the ranking recomputed on the residual network after every removal — so cascading effects shape the order of subsequent deletions.*
 
 Static attacks rank once and remove in that fixed order; dynamic attacks ask, after every removal, *who is the most critical now?* This matters because the structurally-second-most-important channel before any removal might become the most-important after the first one is gone — especially under PageRank, where prestige redistributes through the residual.
 
-Pulpit ships three dynamic variants — one per cheap-to-recompute static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`. Pick whichever ones you want via `--robustness-strategies`.
+Pulpit ships four dynamic variants — one per recomputable static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`. Pick whichever ones you want via `--robustness-strategies`. (`subscribers` has no dynamic variant: audience size is a node property, so re-ranking after each removal would reproduce the static order.)
 
-**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants.
+**In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank, and `O(N · (Nm + N² log N))` for betweenness — a full Brandes pass per removal. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants and considerably longer for `betweenness_dyn`.
 
 **Example.** Under static PageRank the first ten removals are the ten highest-PageRank channels at q=0. Under `pagerank_dyn`, after removing #1 PageRank is recomputed: the original #2 might or might not still be #2 (it might have inherited prestige from the removed #1, or lost prestige if its incoming edges came from it). Networks where dynamic gives a much lower R than static are ones whose importance distribution is *fragile* — knocking out one channel makes its neighbours suddenly critical.
 
 ---
 
-## Three "size" metrics
+## Four "size" metrics
 
-The R-index is computed three times per attack strategy, each tracking a different definition of *"how much network is left"* after each removal.
+The R-index is computed four times per attack strategy, each tracking a different definition of *"how much network is left"* after each removal.
 
 ### `R_wcc` — weakly connected component
 
@@ -132,6 +162,24 @@ This is the metric most sensitive to the directed architecture: it counts how ma
 **In practice:** `R_reach` answers *"how much of the network's directed connectivity survives?"* — the share of ordered channel pairs still joined by the citation web. On graphs above `--robustness-sample` nodes (default 500), Pulpit estimates the reachable-pair count from a uniform random sample of `--robustness-sample` sources drawn fresh at every step; smaller graphs use exact computation.
 
 **Example.** In a hub-and-spoke network where one central channel links everything, static reach is high (every ordered pair is joined via the hub). Removing the hub via PageRank attack drops `R_reach` from near 1 to near 0 in a single step — even though `R_wcc` might still look healthy because the hub's leaves remain pairwise un-fragmented in undirected terms.
+
+### `R_strength` — surviving citation weight
+
+*The weighted metric. The share of the network's total citation weight still carried inside the heaviest surviving component.*
+
+The three metrics above count nodes and node pairs — they are blind to edge weights, so an attack that leaves the component *large* but guts the citation weight it carries looks harmless to them. `R_strength` closes that gap: after each removal it sums the edge weights inside the heaviest residual weakly-connected component and divides by the graph's original total weight. This is the weighted damage measure of Bellingeri & Cassi (2018) — their central finding is that on real weighted networks, unweighted largest-component curves systematically *understate* attack damage.
+
+**Reference:** Bellingeri, M. & Cassi, D. (2018) "Robustness of weighted networks." *Physica A* 489. [doi:10.1016/j.physa.2017.07.020](https://doi.org/10.1016/j.physa.2017.07.020)
+
+**In practice:** compare `S_strength(f)` against `S_wcc(f)` for the same attack. When the strength curve falls much faster, the attack is stripping the load-bearing citation relationships while the component's node count stays up — the network is still "in one piece" but the piece is hollow.
+
+**Example.** A network where five channels carry 80% of all citation weight inside one big component: an in-strength attack removes those five first. `S_wcc(5/N)` barely moves (the component loses five nodes), but `S_strength(5/N)` collapses below 0.2 — the residual network is a large, weakly knit shell.
+
+### The weighted efficiency curve `E(f)`
+
+Alongside the four size curves, Pulpit samples the **weighted global efficiency** (Latora & Marchiori 2001) of the residual network along each attack — the average inverse weighted distance within the largest strongly-connected core, with edge distance `1/w`. Efficiency weighs *how well* the surviving core is knit rather than how many channels remain, so it is the damage indicator of Bellingeri, Cassi & Vincenzi (2014): it can collapse while every size curve still looks healthy.
+
+Each efficiency evaluation costs an all-pairs shortest-path pass, so the curve is sampled on a coarse grid (21 evaluation points across the attack) rather than per removal, computed on the observed backbone only (no null band), and the `random` strategy's curve is averaged over at most 10 of its orders. The `q = 0` point is the baseline efficiency reported in the page header. Like the baseline, it is a *relative* indicator — compare pre/post attack and across strategies, not across differently weighted networks.
 
 ---
 
@@ -212,6 +260,33 @@ The partition is whatever you ran with `--community-strategies`. See [Community 
 
 ---
 
+## Ban-wave scenarios
+
+*What if a whole community — or every channel of one organisation — disappeared at once?*
+
+The attack curves remove channels one at a time, but real moderation on Telegram has repeatedly removed *groups* of channels in one sweep — the January 2021 wave against US far-right channels being the canonical example (Rogers 2020 traces the deplatforming lineage). For every community of every active partition, the ban-wave scenario removes the whole block in a single step and reports the four residual sizes, **next to the damage that removing the same number of channels uniformly at random would cause** (the `random` strategy's mean curve evaluated at the same removal count; computed on demand if `random` was not selected).
+
+The equal-count random baseline is the point of the exercise:
+
+- A block whose residual `S` falls far **below** the baseline is a *load-bearing sub-ecosystem*: banning it damages the network far beyond what its size alone explains. The HTML table marks these cells in red.
+- A block at or **above** the baseline is *structurally replaceable in place*: however large it is, the rest of the network holds together without it.
+
+Because Pulpit's partitions include the analyst's own label groups (any `LABELGROUP<id>` selected as a community strategy), *"what if every channel of organisation O were banned?"* is a first-class query — run the label-group partition through `--community-strategies` and its blocks appear in the ban-wave table alongside the algorithmic communities.
+
+**In practice:** on a timeline export this composes with real events. If a documented mass-removal event falls inside the study period, compare the scenario's predicted residual against the observed next-year network — the strongest validation this kind of simulation can get. Blocks smaller than 2 channels are skipped, as is any block covering the entire graph.
+
+---
+
+## Interpretation guardrails: the one-degree assumption
+
+Pulpit's edges record **one-degree** amplification (see [Measures → what this catalogue covers](network-measures.md#what-this-catalogue-covers)): a forward points straight at the origin, so multi-hop paths in the citation graph certify *recorded structure*, not routes content actually travelled. Three consequences for reading this page:
+
+1. **The damage metrics are structural claims, not diffusion claims.** `R_reach` counts ordered pairs joined by directed chains of *citations*; a collapse in reach means the recorded web has fallen apart, not that information can no longer travel (channels can follow each other invisibly).
+2. **Attack orders are heuristics, not scores.** A removal ranking — betweenness included — is justified purely by its effect on the S(f) curves. That is why `betweenness` is a legitimate attack strategy here while `BETWEENNESS` is deliberately absent from the per-channel measure catalogue: ordering removals by cut position makes no claim that content flows through the removed channel, whereas publishing a per-channel brokerage score would.
+3. **The simulation is static.** No strategy models the ecosystem's response — backup channels, rebrands, audience migration. The [vacancy analysis](vacancy-analysis.md) is the empirical counterpart: it measures, on the channels that actually disappeared from this corpus, how quickly and completely the network re-wired around them. Read the two together — structural fragility under static removal, and the measured recovery dynamics that erode it.
+
+---
+
 ## When the results are interpretable (and when they aren't)
 
 Robustness analysis is most informative on networks that satisfy three conditions:
@@ -228,9 +303,9 @@ The analysis is **not** meant to predict actual deplatforming outcomes — that 
 
 When `--robustness` is on, the export receives:
 
-- **`data/robustness.json`** — the full payload (config, graph metadata, per-strategy curves and R/f_c values, optional null model statistics, optional modular curves per partition). Mirrors the single-file convention of `data/vacancy_analysis.json`. `None` is used for undefined ratios instead of `Infinity`/`NaN`, so the file is plain JSON.
-- **`robustness_table.html`** (when `--html` is set) — Chart.js page with the summary table, three `S(f)` line charts (one per size metric), and an accordion of intra/inter curves per partition.
-- **`robustness_table.xlsx`** (when `--xlsx` is set) — three sheet families: a `Summary` sheet with one row per (strategy, metric), one `Curve <strategy>` sheet per strategy with the raw `S(f)` and optional null-model columns, and one `Modular <partition>` sheet per partition.
+- **`data/robustness.json`** — the full payload (config, graph metadata, per-strategy curves and R/f_c values, the efficiency curves, optional null model statistics, optional modular curves and ban-wave scenarios per partition). Mirrors the single-file convention of `data/vacancy_analysis.json`. `None` is used for undefined ratios instead of `Infinity`/`NaN`, so the file is plain JSON.
+- **`robustness_table.html`** (when `--html` is set) — Chart.js page with the summary table, four `S(f)` line charts (one per size metric) plus the `E(f)` efficiency chart, the ban-wave tables per partition, and an accordion of intra/inter curves per partition.
+- **`robustness_table.xlsx`** (when `--xlsx` is set) — five sheet families: a `Summary` sheet with one row per (strategy, metric), one `Curve <strategy>` sheet per strategy with the raw `S(f)` and optional null-model columns, an `Efficiency` sheet with the coarse `E(f)` grid, one `Modular <partition>` sheet per partition, and one `Ban wave <partition>` sheet per partition.
 - A link card on `index.html`.
 
 The new files honour the existing atomic-publish convention (`exports/<name>.tmp/` → `exports/<name>/`), so an aborted run never corrupts a previous one.
