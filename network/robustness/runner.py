@@ -5,13 +5,18 @@
     1. Optionally apply the disparity-filter backbone (``alpha`` in ``(0, 1)``).
     2. Compute the baseline weighted global efficiency.
     3. For each enabled attack strategy: build the removal order, generate
-       residual-size curves for WCC / SCC / REACH, compute R and f_c.
-       ``random`` is averaged over ``n_random_runs`` independent orders.
-    4. For each strategy: optionally run ``n_null`` rewired-weight null
+       residual-size curves for WCC / SCC / REACH / STRENGTH, compute R and
+       f_c.  ``random`` is averaged over ``n_random_runs`` independent orders.
+    4. For each strategy: sample the weighted global efficiency along the
+       removal order on a coarse grid (observed backbone only — an all-pairs
+       Dijkstra per null draw would be prohibitive).
+    5. For each strategy: optionally run ``n_null`` rewired-weight null
        simulations and report z-score + mean/std of R *and* of the S(f)
        curves so the HTML page can shade a null-model band.
-    5. For each available partition: compute intra/inter community
-       edge-survival curves alongside each attack strategy.
+    6. For each available partition: compute intra/inter community
+       edge-survival curves alongside each attack strategy, plus the
+       ban-wave scenarios (whole-block removal vs the equal-q random
+       baseline).
 
 The strategy set is fully user-driven via ``RobustnessConfig.strategies``:
 any subset of :data:`~network.robustness.attacks.STRATEGY_SPECS` keys is
@@ -43,17 +48,23 @@ from network.robustness.disparity_filter import disparity_filter
 from network.robustness.metrics import (
     attack_curve,
     critical_threshold,
+    efficiency_curve,
     r_index,
     weighted_global_efficiency,
 )
 from network.robustness.modular import modular_robustness_curves
 from network.robustness.null_model import null_distribution, z_score
+from network.robustness.scenarios import ban_wave_rows
 
 import networkx as nx
 import numpy as np
 
-_METRICS: tuple[str, ...] = ("wcc", "scc", "reach")
-_METRIC_KEYS: dict[str, str] = {"wcc": "WCC", "scc": "SCC", "reach": "REACH"}
+_METRICS: tuple[str, ...] = ("wcc", "scc", "reach", "strength")
+_METRIC_KEYS: dict[str, str] = {"wcc": "WCC", "scc": "SCC", "reach": "REACH", "strength": "STRENGTH"}
+# Random-strategy efficiency curves are averaged over at most this many of its
+# orders — each grid point costs an all-pairs Dijkstra, so the full
+# n_random_runs averaging used for the (cheap) residual sizes is off the table.
+_EFFICIENCY_ORDERS_CAP = 10
 
 
 @dataclass(frozen=True)
@@ -126,20 +137,22 @@ def run_robustness(
                          reach_sample, n_rewire_swaps},
           "graph":      {n, m, alpha, backbone_n, backbone_m,
                          filtered: bool},
-          "efficiency": {"baseline": float},
+          "efficiency": {
+            "baseline":  float,
+            "fractions": [...],                      # coarse grid, shared by all curves
+            "curves":    {<strategy_key>: [...], …}, # observed backbone only, no null
+          },
           "strategies": {
             <strategy_key>: {
               "label":       human-readable name,
-              "curve_wcc":   [...], "curve_scc":   [...], "curve_reach": [...],
-              "r_wcc":   float, "r_scc":   float, "r_reach":   float,
-              "fc_wcc":  float|None, "fc_scc":  float|None, "fc_reach":  float|None,
+              "curve_wcc":   [...], "curve_scc": [...],
+              "curve_reach": [...], "curve_strength": [...],
+              "r_<metric>":  float,        # for each of wcc / scc / reach / strength
+              "fc_<metric>": float|None,
               "null": {
-                "r_wcc":   {"mean": float, "std": float, "z": float},
-                "r_scc":   {"mean": float, "std": float, "z": float},
-                "r_reach": {"mean": float, "std": float, "z": float},
-                "curve_wcc_mean":   [...], "curve_wcc_std":   [...],
-                "curve_scc_mean":   [...], "curve_scc_std":   [...],
-                "curve_reach_mean": [...], "curve_reach_std": [...],
+                "r_<metric>":          {"mean": float, "std": float, "z": float},
+                "curve_<metric>_mean": [...],
+                "curve_<metric>_std":  [...],
               } | None,
             }, ...
           },
@@ -148,6 +161,13 @@ def run_robustness(
               <strategy_key>: {"intra": [...], "inter": [...], "ratio": [...]},
               ...
             }, ...
+          } | None,
+          "ban_waves": {
+            <partition_label>: [
+              {"community": str, "n": int, "fraction": float,
+               "s_<metric>": float, "random_<metric>": float|None},
+              ...                                    # sorted by block size desc
+            ], ...
           } | None,
         }
 
@@ -182,13 +202,13 @@ def run_robustness(
 
     # 4. Per-strategy curves on the (possibly filtered) backbone
     strategy_results: dict[str, dict[str, Any]] = {}
-    cached_orders: dict[str, list[Any]] = {}
+    strategy_orders: dict[str, list[list[Any]]] = {}
     for canonical in resolved:
         progress(canonical)
-        first_order, mean_curves = _compute_strategy_curves(
+        orders, mean_curves = _compute_strategy_curves(
             backbone, canonical, config.n_random_runs, config.reach_sample, rng
         )
-        cached_orders[canonical] = first_order
+        strategy_orders[canonical] = orders
         strategy_results[canonical] = {
             "label": strategy_label(canonical),
             **{f"curve_{m}": mean_curves[m] for m in _METRICS},
@@ -197,7 +217,18 @@ def run_robustness(
             "null": None,
         }
 
-    # 5. Null-model simulations
+    # 5. Coarse weighted-efficiency curves — observed backbone only.  The null
+    # re-runs every attack K times and each grid point costs an all-pairs
+    # Dijkstra, so the null band covers the residual-size metrics instead.
+    eff_fractions: list[float] = [0.0]
+    eff_curves: dict[str, list[float]] = {}
+    for canonical in resolved:
+        progress(f"efficiency/{canonical}")
+        per_order = [efficiency_curve(backbone, order) for order in strategy_orders[canonical][:_EFFICIENCY_ORDERS_CAP]]
+        eff_fractions = per_order[0][0]
+        eff_curves[canonical] = _mean_curve([values for _, values in per_order])
+
+    # 6. Null-model simulations
     if config.n_null > 0:
         null_rs: dict[str, dict[str, list[float]]] = {canonical: {m: [] for m in _METRICS} for canonical in resolved}
         null_curves: dict[str, dict[str, list[list[float]]]] = {
@@ -227,16 +258,37 @@ def run_robustness(
                 null_data[f"curve_{m}_std"] = std_curve
             strategy_results[canonical]["null"] = null_data
 
-    # 6. Modular curves per partition × strategy
+    # 7. Modular curves per partition × strategy
     modular_results: dict[str, dict[str, Any]] | None = None
     if partitions:
         modular_results = {}
         for partition_name, partition in partitions.items():
             progress(f"modular/{partition_name}")
             modular_results[partition_name] = {
-                canonical: modular_robustness_curves(backbone, cached_orders[canonical], partition)
+                canonical: modular_robustness_curves(backbone, strategy_orders[canonical][0], partition)
                 for canonical in resolved
             }
+
+    # 8. Ban-wave scenarios per partition — whole-block removal vs the
+    # equal-q random baseline.  Reuses the random strategy's mean curves when
+    # it was selected; otherwise computes a dedicated set so the baseline
+    # columns are always present.
+    ban_waves: dict[str, list[dict[str, Any]]] | None = None
+    if partitions:
+        if "random" in strategy_results:
+            random_curves = {m: strategy_results["random"][f"curve_{m}"] for m in _METRICS}
+        else:
+            progress("banwave/random-baseline")
+            _, random_curves = _compute_strategy_curves(
+                backbone, "random", config.n_random_runs, config.reach_sample, rng
+            )
+        ban_waves = {}
+        for partition_name, partition in partitions.items():
+            progress(f"banwave/{partition_name}")
+            rows = ban_wave_rows(backbone, partition, random_curves, reach_sample=config.reach_sample, rng=rng)
+            if rows:
+                ban_waves[partition_name] = rows
+        ban_waves = ban_waves or None
 
     return {
         "config": {
@@ -256,9 +308,10 @@ def run_robustness(
             "backbone_m": backbone.number_of_edges(),
             "filtered": filtered,
         },
-        "efficiency": {"baseline": baseline_eff},
+        "efficiency": {"baseline": baseline_eff, "fractions": eff_fractions, "curves": eff_curves},
         "strategies": strategy_results,
         "modular": modular_results,
+        "ban_waves": ban_waves,
     }
 
 
@@ -271,13 +324,14 @@ def _compute_strategy_curves(
     n_random_runs: int,
     reach_sample: int,
     rng: np.random.Generator,
-) -> tuple[list[Any], dict[str, list[float]]]:
-    """Return ``(first_order, {metric: mean_curve})`` for *strategy_token* on *g*.
+) -> tuple[list[list[Any]], dict[str, list[float]]]:
+    """Return ``(orders, {metric: mean_curve})`` for *strategy_token* on *g*.
 
     For ``"random"`` the curves are means over ``n_random_runs`` independent
     orderings; for every other strategy the order is deterministic and the
-    curve is a single trace.  ``first_order`` is returned for the modular-
-    curve pass so it does not need to recompute the order.
+    curve is a single trace.  The full *orders* list is returned so the
+    modular pass can reuse the first order and the efficiency pass can
+    average over (a capped number of) them without recomputing.
     """
     if strategy_token == "random":
         orders = [removal_order(g, "random", rng=rng) for _ in range(n_random_runs)]
@@ -292,7 +346,7 @@ def _compute_strategy_curves(
                 kwargs = {"reach_sample": reach_sample, "rng": rng}
             curves_per_metric[m].append(attack_curve(g, order, _METRIC_KEYS[m], **kwargs))
 
-    return orders[0], {m: _mean_curve(curves_per_metric[m]) for m in _METRICS}
+    return orders, {m: _mean_curve(curves_per_metric[m]) for m in _METRICS}
 
 
 def _mean_curve(curves: list[list[float]]) -> list[float]:

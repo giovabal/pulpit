@@ -277,7 +277,9 @@ class DroppedMeasuresMigrationTests(TestCase):
             )
             ns = load_structural_settings(hermetic=False)
             self.assertEqual(ns.measures.selected, ["PAGERANK", "MODULEROLE"])
-            self.assertEqual(ns.robustness.strategies, ["random", "pagerank"])
+            # The BETWEENNESS *measure* is stripped above; the betweenness *attack
+            # strategy* was re-added in v0.27 and survives the migration.
+            self.assertEqual(ns.robustness.strategies, ["random", "betweenness", "pagerank"])
             self.assertFalse(hasattr(ns.measures, "bridging_basis"))
             self.assertFalse(hasattr(ns.robustness, "bridging_basis"))
             self.assertFalse(hasattr(ns.computation, "spreading_runs"))

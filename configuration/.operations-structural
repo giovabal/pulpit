@@ -80,11 +80,13 @@ max_candidates = 30
 
 [robustness]
 alpha = 0.05
-# Webapp form default: sound attack orders under the one-degree model — random (baseline)
-# + in_strength (degree) + pagerank (prestige). The brokerage/reach/flow attacks (betweenness,
-# bridging, harmonic, spreading, *_dyn) are off by default but remain selectable.
-# See docs/robustness-analysis.md → "Interpretation guardrails: the one-degree assumption".
-strategies = ["random", "in_strength", "pagerank"]
+# Webapp form default: random (baseline) + in_strength (degree) + pagerank (prestige)
+# + betweenness (bridges / cut positions — the canonical fragmentation attack, Holme et al. 2002).
+# An attack *order* is a topological cut heuristic judged by its effect on the S(f) curves, not a
+# per-channel flow claim, so betweenness sits inside the one-degree guardrails the way REACH does.
+# subscribers (audience-targeted moderation) and the *_dyn variants are off by default but remain
+# selectable. See docs/robustness-analysis.md → "Interpretation guardrails".
+strategies = ["random", "in_strength", "pagerank", "betweenness"]
 runs = 100
 null = 20
 seed = 42

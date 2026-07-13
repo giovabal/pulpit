@@ -117,9 +117,12 @@ _DROPPED_MEASURE_TOKENS: frozenset[str] = frozenset(
         "BRIDGING",
     }
 )
-_DROPPED_ATTACK_STRATEGIES: frozenset[str] = frozenset(
-    {"harmonic", "betweenness", "betweenness_dyn", "bridging", "spreading"}
-)
+# betweenness / betweenness_dyn were dropped here in v0.26 with the rest of the path/flow
+# family, then re-added in v0.27 as attack strategies only (a removal *order* is a topological
+# cut heuristic judged by its effect on the S(f) curves, not a per-channel flow claim — see
+# docs/robustness-analysis.md → "Interpretation guardrails"), so they are no longer stripped.
+# The BETWEENNESS *measure* token above stays dropped.
+_DROPPED_ATTACK_STRATEGIES: frozenset[str] = frozenset({"harmonic", "bridging", "spreading"})
 # Flow / random-walk community strategies removed in v0.26 (same one-degree rationale as the
 # measures), plus LABELPROPAGATION removed in v0.27 (unweighted and undirected, superseded by
 # CONSENSUS as the cheap cross-method baseline). An old config may still name them in
