@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 from typing import Any
 
@@ -14,6 +15,23 @@ from network.utils import CommunityTableData, GraphData
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill
+
+# Excel forbids \ / ? * : [ ] in sheet titles and caps them at 31 chars.
+_SHEET_TITLE_INVALID = re.compile(r"[\\/?*:]")
+
+
+def _safe_sheet_title(title: str, limit: int = 31) -> str:
+    """Sanitise an arbitrary string into a valid Excel sheet title.
+
+    Strategy display labels can contain characters Excel bans in sheet names —
+    e.g. a label-group partition renders as ``"Nation [custom label]"`` and
+    ``[``/``]`` are illegal. Brackets read fine as parentheses; the other
+    forbidden characters collapse to spaces. The result is whitespace-trimmed
+    and truncated to Excel's 31-char cap (never empty).
+    """
+    cleaned = _SHEET_TITLE_INVALID.sub(" ", title).replace("[", "(").replace("]", ")")
+    cleaned = " ".join(cleaned.split()).strip()
+    return (cleaned or "Sheet")[:limit]
 
 
 def _pulpit_ctx() -> dict:
@@ -463,7 +481,7 @@ def write_community_table_xlsx(
     else:
         # One sheet per strategy (original format)
         for strategy_key in strategies:
-            ws = wb.create_sheet(title=strategy_display_label(strategy_key)[:31])
+            ws = wb.create_sheet(title=_safe_sheet_title(strategy_display_label(strategy_key)))
             _fill_strategy(ws, strategy_key, community_table_data)
 
     wb.save(output_filename)
@@ -718,7 +736,9 @@ def _fill_robustness_ban_waves(wb: Any, payload: dict, suffix: str) -> None:
         for cell in ws[1]:
             cell.font = Font(bold=True)
         for row in rows:
-            cells: list = [row.get("community"), row.get("n"), row.get("fraction")]
+            # Label-group communities carry a human name; algorithmic ones fall back to the id.
+            community = row.get("community_label") or row.get("community")
+            cells: list = [community, row.get("n"), row.get("fraction")]
             for m in _ROBUSTNESS_METRICS:
                 cells += [row.get(f"s_{m}"), row.get(f"random_{m}")]
             ws.append(cells)

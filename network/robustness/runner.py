@@ -184,7 +184,9 @@ def run_robustness(
               {"community": str, "n": int, "fraction": float,
                "s_<metric>": float, "random_<metric>": float|None},
               ...                                    # sorted by block size desc
-            ], ...
+            ], ...                                   # the command adds an optional
+                                                     # "community_label" per row for
+                                                     # label-group partitions
           } | None,
           "alpha_sensitivity": {
             "strategies": [<strategy_key>, ...],

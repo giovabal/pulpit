@@ -4956,6 +4956,38 @@ class AlphaSensitivityTests(TestCase):
             RobustnessConfig(null_model="bogus")
 
 
+class BanWaveLabelAnnotationTests(TestCase):
+    def _comm(self) -> dict:
+        # communities_data shape: {strategy_key: {"groups": [(cid, count, name, colour), ...]}}
+        return {
+            "labelgroup2": {"groups": [(18, 10, "Germany", "#fff"), (9, 8, "UK", "#eee")]},
+            "leiden_directed": {"groups": [("1", 13, "1-leiden_directed", "#ddd")]},
+        }
+
+    def test_labelgroup_rows_get_names_algorithmic_left_bare(self) -> None:
+        from network.management.commands.structural_analysis import _annotate_ban_wave_labels
+
+        payload = {
+            "ban_waves": {
+                "labelgroup2": [{"community": "18"}, {"community": "9"}],
+                "leiden_directed": [{"community": "1"}],
+            }
+        }
+        _annotate_ban_wave_labels(payload, self._comm())
+        lg = payload["ban_waves"]["labelgroup2"]
+        self.assertEqual([r.get("community_label") for r in lg], ["Germany", "UK"])
+        # Algorithmic auto-name "<id>-<strategy>" is not applied.
+        self.assertNotIn("community_label", payload["ban_waves"]["leiden_directed"][0])
+
+    def test_tolerates_none_and_unknown_strategies(self) -> None:
+        from network.management.commands.structural_analysis import _annotate_ban_wave_labels
+
+        _annotate_ban_wave_labels(None, self._comm())  # no crash
+        payload = {"ban_waves": {"unknown": [{"community": "x"}]}}
+        _annotate_ban_wave_labels(payload, self._comm())
+        self.assertNotIn("community_label", payload["ban_waves"]["unknown"][0])
+
+
 class WriteRobustnessJsonTests(TestCase):
     def test_round_trip_under_tempdir(self) -> None:
         from network.exporter import write_robustness_json
@@ -5086,6 +5118,20 @@ class WriteRobustnessTableXlsxTests(TestCase):
             self.assertEqual(ws.max_row, 2)  # header + 1 block
             self.assertEqual(ws.cell(row=2, column=1).value, "0")
             self.assertEqual(ws.cell(row=2, column=2).value, 2)
+
+    def test_ban_wave_sheet_prefers_community_label(self) -> None:
+        from network.tables import write_robustness_table_xlsx
+
+        import openpyxl
+
+        payload = self._payload()
+        payload["ban_waves"]["leiden"][0]["community_label"] = "Germany"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "robustness_table.xlsx")
+            write_robustness_table_xlsx(payload, output_filename=out)
+            wb = openpyxl.load_workbook(out)
+            ws = wb["Ban wave leiden"]
+            self.assertEqual(ws.cell(row=2, column=1).value, "Germany")
 
     def test_handles_payload_without_null(self) -> None:
         from network.tables import write_robustness_table_xlsx
