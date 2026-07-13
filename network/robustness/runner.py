@@ -53,7 +53,7 @@ from network.robustness.metrics import (
     weighted_global_efficiency,
 )
 from network.robustness.modular import modular_robustness_curves
-from network.robustness.null_model import null_distribution, z_score
+from network.robustness.null_model import empirical_p, null_distribution, z_score
 from network.robustness.scenarios import ban_wave_rows
 
 import networkx as nx
@@ -150,7 +150,8 @@ def run_robustness(
               "r_<metric>":  float,        # for each of wcc / scc / reach / strength
               "fc_<metric>": float|None,
               "null": {
-                "r_<metric>":          {"mean": float, "std": float, "z": float},
+                "r_<metric>":          {"mean": float, "std": float, "z": float,
+                                        "p": float},  # two-sided add-one empirical p
                 "curve_<metric>_mean": [...],
                 "curve_<metric>_std":  [...],
               } | None,
@@ -252,7 +253,11 @@ def run_robustness(
             for m in _METRICS:
                 observed = strategy_results[canonical][f"r_{m}"]
                 z, mean, std = z_score(observed, null_rs[canonical][m])
-                null_data[f"r_{m}"] = {"mean": mean, "std": std, "z": z}
+                # The add-one empirical p carries the same comparison without
+                # the z-score's normality assumption — and stays defined when
+                # the null variance collapses to zero (z = nan).
+                p = empirical_p(observed, null_rs[canonical][m])
+                null_data[f"r_{m}"] = {"mean": mean, "std": std, "z": z, "p": p}
                 mean_curve, std_curve = _mean_and_std_curve(null_curves[canonical][m])
                 null_data[f"curve_{m}_mean"] = mean_curve
                 null_data[f"curve_{m}_std"] = std_curve

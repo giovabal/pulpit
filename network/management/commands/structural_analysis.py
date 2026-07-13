@@ -917,7 +917,9 @@ class Command(BaseCommand):
             metavar="K",
             help=(
                 "Number of weight-rewiring null-model simulations per strategy. "
-                "0 disables the null model (no z-scores computed). Default: 20."
+                "0 disables the null model (no z-scores or empirical p-values computed). "
+                "The smallest reportable two-sided p is 2/(K+1), so use 79+ for claims at "
+                "alpha = 0.05. Default: 20."
             ),
         )
         parser.add_argument(

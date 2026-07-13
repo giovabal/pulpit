@@ -649,7 +649,7 @@ def _robustness_sheet_name(prefix: str, suffix: str) -> str:
 
 def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
     ws = wb.create_sheet(title=_robustness_sheet_name("Summary", suffix))
-    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "f_c"]
+    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "p", "f_c"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -666,6 +666,7 @@ def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
                     null_m.get("mean"),
                     null_m.get("std"),
                     null_m.get("z"),
+                    null_m.get("p"),
                     strat.get(f"fc_{m}"),
                 ]
             )

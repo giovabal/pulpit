@@ -955,7 +955,7 @@
               <div class="ops-param">
                 <label for="robustness_null">Null simulations
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="How many randomised comparison networks to build per strategy, used to judge whether the network's resilience is more than chance. 0 turns this comparison off. Default: 20."></i>
+                     title="How many randomised comparison networks to build per strategy, used to judge whether the network's resilience is more than chance (z-score + empirical p-value). 0 turns this comparison off. With K simulations the p-value can never go below 2/(K+1) — use 100+ for publication-grade significance claims. Default: 20."></i>
                 </label>
                 <input type="number" name="robustness_null" id="robustness_null" placeholder="{{ ad.SA_ROBUSTNESS_NULL }}" value="{{ ad.SA_ROBUSTNESS_NULL }}" min="0" max="1000">
               </div>

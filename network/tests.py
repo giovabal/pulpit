@@ -4266,6 +4266,57 @@ class ZScoreTests(TestCase):
         self.assertLess(z, 0)
 
 
+class EmpiricalPTests(TestCase):
+    def test_observed_below_all_samples_hits_resolution_floor(self) -> None:
+        from network.robustness import empirical_p
+
+        samples = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]  # K = 9
+        # Lower tail: (0 + 1) / 10 = 0.1 → two-sided 0.2, the floor 2/(K+1).
+        self.assertAlmostEqual(empirical_p(0.1, samples), 0.2)
+
+    def test_observed_in_the_middle_is_capped_at_one(self) -> None:
+        from network.robustness import empirical_p
+
+        samples = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        self.assertEqual(empirical_p(0.5, samples), 1.0)
+
+    def test_ties_count_in_both_tails(self) -> None:
+        from network.robustness import empirical_p
+
+        # Observed equals the minimum sample, so it counts in both tails:
+        # lower tail (1+1)/4 = 0.5, upper tail (3+1)/4 = 1.0 → 2 · 0.5 = 1.0.
+        self.assertEqual(empirical_p(0.1, [0.1, 0.2, 0.3]), 1.0)
+        # Observed strictly below every sample: (0+1)/4 = 0.25 → 0.5.
+        self.assertAlmostEqual(empirical_p(0.05, [0.1, 0.2, 0.3]), 0.5)
+
+    def test_defined_on_zero_variance_null(self) -> None:
+        # z_score returns nan here; the empirical p stays informative.
+        # (0.5 is dyadic, so the mean of identical samples is exact and σ is
+        # exactly zero — 0.4 would leave a ~1e-17 residual std.)
+        from network.robustness import empirical_p, z_score
+
+        samples = [0.5, 0.5, 0.5]
+        z, _, _ = z_score(0.1, samples)
+        self.assertTrue(np.isnan(z))
+        self.assertAlmostEqual(empirical_p(0.1, samples), 0.5)  # floor 2/(K+1)
+        self.assertEqual(empirical_p(0.5, samples), 1.0)  # inside the degenerate null
+
+    def test_empty_samples_return_nan(self) -> None:
+        from network.robustness import empirical_p
+
+        self.assertTrue(np.isnan(empirical_p(0.5, [])))
+
+    def test_never_zero_and_never_above_one(self) -> None:
+        from network.robustness import empirical_p
+
+        rng = np.random.default_rng(0)
+        samples = list(rng.uniform(0, 1, size=19))
+        for observed in (-1.0, 0.0, 0.5, 1.0, 2.0):
+            p = empirical_p(observed, samples)
+            self.assertGreaterEqual(p, 2.0 / 20.0)
+            self.assertLessEqual(p, 1.0)
+
+
 class ModularRobustnessCurvesTests(TestCase):
     def _two_cliques_with_bridge(self) -> tuple[nx.DiGraph, dict[str, int]]:
         # Two 3-node directed cliques + a single inter-community bridge A → D.
@@ -4609,7 +4660,11 @@ class RobustnessRunnerTests(TestCase):
             self.assertIsNotNone(payload["null"])
             for m in ("wcc", "scc", "reach", "strength"):
                 self.assertIn(f"r_{m}", payload["null"])
-                self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z"})
+                self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z", "p"})
+                # 3 null draws → the add-one two-sided p lives in [2/4, 1].
+                p = payload["null"][f"r_{m}"]["p"]
+                self.assertGreaterEqual(p, 0.5)
+                self.assertLessEqual(p, 1.0)
                 self.assertIn(f"curve_{m}_mean", payload["null"])
                 self.assertIn(f"curve_{m}_std", payload["null"])
 
@@ -4769,10 +4824,10 @@ class WriteRobustnessTableXlsxTests(TestCase):
                     "fc_reach": 0.5,
                     "fc_strength": 0.5,
                     "null": {
-                        "r_wcc": {"mean": 0.12, "std": 0.01, "z": 0.5},
-                        "r_scc": {"mean": 0.12, "std": 0.01, "z": 0.5},
-                        "r_reach": {"mean": 0.06, "std": 0.005, "z": 1.25},
-                        "r_strength": {"mean": 0.1, "std": 0.01, "z": 0.0},
+                        "r_wcc": {"mean": 0.12, "std": 0.01, "z": 0.5, "p": 0.7},
+                        "r_scc": {"mean": 0.12, "std": 0.01, "z": 0.5, "p": 0.7},
+                        "r_reach": {"mean": 0.06, "std": 0.005, "z": 1.25, "p": 0.095},
+                        "r_strength": {"mean": 0.1, "std": 0.01, "z": 0.0, "p": 1.0},
                         "curve_wcc_mean": [1.0, 0.45, 0.0, 0.0],
                         "curve_wcc_std": [0.0, 0.05, 0.0, 0.0],
                         "curve_scc_mean": [1.0, 0.45, 0.0, 0.0],
@@ -4843,6 +4898,9 @@ class WriteRobustnessTableXlsxTests(TestCase):
             self.assertIn(0.125, r_values)
             self.assertIn(0.0625, r_values)
             self.assertIn(0.1, r_values)
+            self.assertEqual(ws.cell(row=1, column=7).value, "p")
+            p_values = [ws.cell(row=r, column=7).value for r in range(2, ws.max_row + 1)]
+            self.assertIn(0.095, p_values)
 
     def test_ban_wave_sheet_rows_match_payload(self) -> None:
         from network.tables import write_robustness_table_xlsx
