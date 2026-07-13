@@ -1,5 +1,5 @@
 # Changelog
-## [0.27] - To be announced
+## [0.27] - 13-07-2026
 *New community strategies. Stronger vacancy and robustness analysis. A backup and migration script.*
 
 ### New features
