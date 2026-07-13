@@ -226,7 +226,7 @@ Enable in the Structural Analysis options (or with `--robustness` on the CLI). T
 - records the residual-size curves `S(q)` for WCC, SCC, directed reachability, and surviving strength (the weight share of the heaviest residual component),
 - compresses each curve into the Schneider et al. R-index plus a 5%-collapse threshold `f_c`,
 - samples the weighted global efficiency along the removal order on a coarse grid,
-- compares the residual-size curves against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores,
+- compares the residual-size curves against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores plus add-one empirical p-values (smallest reportable p is `2/(K+1)`, so raise K to 79+ for α = 0.05 claims),
 - if at least one community partition is active, also produces intra/inter community edge-survival curves per partition, plus the **ban-wave scenarios**: residual sizes after removing each whole community in one step, next to the equal-count random baseline.
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.

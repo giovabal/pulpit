@@ -99,6 +99,14 @@ function _fmtFc(fc) {
     return fc === null || fc === undefined ? "—" : fc.toFixed(3);
 }
 
+// Two-sided add-one empirical p — bold at the conventional 0.05 cut.  Older
+// payloads (pre-p) simply miss the key and render a dash.
+function _fmtP(p) {
+    if (p === null || p === undefined || typeof p !== "number" || !isFinite(p)) return "—";
+    var cls = p <= 0.05 ? " class=\"rb-z-significant\"" : "";
+    return "<span" + cls + ">" + p.toFixed(3) + "</span>";
+}
+
 // Metrics actually present in the payload — older robustness.json files
 // (pre-STRENGTH) miss the newer curves, so render only what is there.
 function _presentMetrics(payload, strategies) {
@@ -156,6 +164,7 @@ function _renderSummaryTable(payload) {
         headerCells.push("<th class=\"text-end\">R_null μ</th>");
         headerCells.push("<th class=\"text-end\">R_null σ</th>");
         headerCells.push("<th class=\"text-end\">z</th>");
+        headerCells.push("<th class=\"text-end\">p</th>");
     }
     headerCells.push("<th class=\"text-end\">f<sub>c</sub> (5%)</th>");
     thead.innerHTML = "<tr>" + headerCells.join("") + "</tr>";
@@ -178,6 +187,7 @@ function _renderSummaryTable(payload) {
                 cells.push("<td class=\"text-end\">" + _fmt(nullM.mean) + "</td>");
                 cells.push("<td class=\"text-end\">" + _fmt(nullM.std) + "</td>");
                 cells.push("<td class=\"text-end\">" + _fmtZ(nullM.z) + "</td>");
+                cells.push("<td class=\"text-end\">" + _fmtP(nullM.p) + "</td>");
             }
             cells.push("<td class=\"text-end\">" + _fmtFc(fc) + "</td>");
             rows.push("<tr>" + cells.join("") + "</tr>");

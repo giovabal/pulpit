@@ -18,7 +18,7 @@ from network.robustness.metrics import (
     weighted_global_efficiency,
 )
 from network.robustness.modular import modular_robustness_curves
-from network.robustness.null_model import null_distribution, rewire_strength_preserving, z_score
+from network.robustness.null_model import empirical_p, null_distribution, rewire_strength_preserving, z_score
 from network.robustness.runner import RobustnessConfig, run_robustness
 from network.robustness.scenarios import ban_wave_rows
 
@@ -35,6 +35,7 @@ __all__ = [
     "critical_threshold",
     "disparity_filter",
     "efficiency_curve",
+    "empirical_p",
     "modular_robustness_curves",
     "null_distribution",
     "parse_strategy",

@@ -29,7 +29,11 @@ rank on.
 The companion :func:`z_score` helper turns ``(R_observed, [R_null_1, …,
 R_null_K])`` into a standard ``(z, μ_null, σ_null)`` triple, with
 ``ddof=1`` sample standard deviation since the K simulations are a sample
-of the null distribution.
+of the null distribution.  :func:`empirical_p` reports the same comparison
+without the normality assumption the z-score smuggles in: a two-sided
+add-one Monte-Carlo p-value (North, Curtis & Sham 2002; Phipson & Smyth
+2010), whose resolution floor ``2/(K+1)`` makes the certainty K draws can
+actually support explicit.
 
 References:
     Maslov, S. & Sneppen, K. (2002). Specificity and stability in topology
@@ -38,6 +42,13 @@ References:
     Serrano, M. Á. & Boguñá, M. (2005). Weighted configuration model.
         *AIP Conference Proceedings* 776, 101-107.
         https://doi.org/10.1063/1.1985381
+    North, B. V., Curtis, D. & Sham, P. C. (2002). A note on the calculation
+        of empirical P values from Monte Carlo procedures. *American Journal
+        of Human Genetics* 71(2), 439-441. https://doi.org/10.1086/341527
+    Phipson, B. & Smyth, G. K. (2010). Permutation P-values should never be
+        zero: calculating exact P-values when permutations are randomly
+        drawn. *Statistical Applications in Genetics and Molecular Biology*
+        9(1), Article 39. https://doi.org/10.2202/1544-6115.1585
 """
 
 from collections.abc import Iterator
@@ -155,6 +166,34 @@ def null_distribution(
         rng = np.random.default_rng()
     for _ in range(n_simulations):
         yield rewire_strength_preserving(G, weight="weight", n_swaps=n_swaps, rng=rng)
+
+
+def empirical_p(observed: float, null_samples: list[float]) -> float:
+    """Two-sided add-one empirical p-value of *observed* against *null_samples*.
+
+    Follows the Monte-Carlo convention of North, Curtis & Sham (2002) /
+    Phipson & Smyth (2010): the observed value counts as one member of the
+    null distribution, so each tail is ``(b + 1) / (K + 1)`` with ``b`` the
+    number of null samples at least as extreme in that direction, and the
+    two-sided p doubles the smaller tail (capped at 1).  The +1 keeps the
+    p-value from ever reaching zero — with K draws the smallest reportable
+    two-sided value is ``2 / (K + 1)``, which is the honest resolution of
+    the simulation (K = 20 bottoms out at ≈ 0.095; publication-grade claims
+    at α = 0.05 need K ≥ 79).
+
+    Unlike :func:`z_score` this makes no normality assumption and stays
+    defined when the null distribution has zero variance (all draws equal):
+    an observed value sitting inside the degenerate null gets p = 1, one
+    outside it gets the resolution floor.  Returns ``nan`` for an empty
+    sample list.
+    """
+    if not null_samples:
+        return float("nan")
+    arr = np.asarray(null_samples, dtype=float)
+    k = arr.size
+    p_low = (float((arr <= observed).sum()) + 1.0) / (k + 1.0)
+    p_high = (float((arr >= observed).sum()) + 1.0) / (k + 1.0)
+    return min(1.0, 2.0 * min(p_low, p_high))
 
 
 def z_score(observed: float, null_samples: list[float]) -> tuple[float, float, float]:

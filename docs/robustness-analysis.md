@@ -14,7 +14,7 @@ Enable with `--robustness` on `structural_analysis` (off by default; see [Workfl
 | :-------------- | :--------------- |
 | `R_wcc`, `R_scc`, `R_reach`, `R_strength` | Four robustness indices per attack strategy: the smaller R is, the faster the network fragments under that attack |
 | `f_c` (5% threshold) | Fraction of channels that would have to disappear before the residual network collapses below 5% of its initial size |
-| `R` z-score vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring |
+| `R` z-score + empirical p vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring — the p column makes the K-draw resolution explicit |
 | Weighted efficiency curve `E(f)` | How well the surviving core stays knit as the attack proceeds — weighted damage the size curves can miss |
 | Intra/inter community survival | Does the attack strip the bridges between communities first (decoupling), or the ties within them first (eroding cohesion)? |
 | Ban-wave scenarios | Residual network after removing each whole community/label block in one step, vs removing the same number of channels at random |
@@ -228,7 +228,15 @@ The **z-score** quantifies how extreme the observed R is compared to that null d
 
 A z-score with magnitude ≥ 2 is the rule-of-thumb threshold for "this didn't happen by chance under the null"; the per-strategy summary table renders such cells in bold colour, with positive z in green (observed *more* robust than null) and negative z in red (observed *more* fragile than null).
 
-**Reference:** Serrano, M. Á. & Boguñá, M. (2005) "Weighted configuration model." *AIP Conference Proceedings* 776. [doi:10.1063/1.1985381](https://doi.org/10.1063/1.1985381); Maslov, S. & Sneppen, K. (2002) "Specificity and stability in topology of protein networks." *Science* 296(5569). [doi:10.1126/science.1065103](https://doi.org/10.1126/science.1065103)
+### The empirical p-value
+
+The z-score has a hidden assumption: that the K null R values are approximately normally distributed, which nobody has checked and which small backbones routinely violate. The **p column** next to it makes the same comparison without that assumption: a **two-sided add-one empirical p-value** — each tail is `(b + 1) / (K + 1)` with `b` the number of null draws at least as extreme as the observed R, the observed value counting as one member of the null distribution, and the two-sided p doubling the smaller tail. This is the standard Monte-Carlo convention (North, Curtis & Sham 2002; Phipson & Smyth 2010 — "permutation p-values should never be zero").
+
+The add-one correction makes the simulation's *resolution* explicit: with K draws the smallest reportable two-sided p is `2 / (K + 1)`. At the default `--robustness-null 20` that floor is ≈ 0.095 — **the default run cannot certify significance at α = 0.05, by construction**. That is not a defect of the p-value; it is the honest statement of what 20 draws can support (the z-score just hid it). For publication-grade claims raise `--robustness-null` to 79 or more (100 is a comfortable round number); for exploratory runs the default is fine — read the p column as a sanity check on the z colouring, and treat any p at its floor as "as extreme as this simulation can measure".
+
+Unlike the z-score, the empirical p also survives a degenerate null: when every rewired draw yields the same R (σ = 0, z = `nan`), an observed R inside the degenerate distribution gets p = 1 and one outside it gets the floor — still informative.
+
+**Reference:** North, B. V., Curtis, D. & Sham, P. C. (2002) "A note on the calculation of empirical P values from Monte Carlo procedures." *American Journal of Human Genetics* 71(2). [doi:10.1086/341527](https://doi.org/10.1086/341527); Phipson, B. & Smyth, G. K. (2010) "Permutation P-values should never be zero." *Statistical Applications in Genetics and Molecular Biology* 9(1), Article 39. [doi:10.2202/1544-6115.1585](https://doi.org/10.2202/1544-6115.1585); Serrano, M. Á. & Boguñá, M. (2005) "Weighted configuration model." *AIP Conference Proceedings* 776. [doi:10.1063/1.1985381](https://doi.org/10.1063/1.1985381); Maslov, S. & Sneppen, K. (2002) "Specificity and stability in topology of protein networks." *Science* 296(5569). [doi:10.1126/science.1065103](https://doi.org/10.1126/science.1065103)
 
 **In practice:** the z-score answers *"is the observed vulnerability a generic property of the degree/strength sequences, or of the specific higher-order wiring?"*. If your network has a low R under PageRank attack but |z| is small (say below 1), it means *any* network with the same in/out degree and strength sequences but randomly rewired connections would behave similarly — the vulnerability is generic to those sequences, not to the specific arrangement (which edges carry the weight, clustering, reciprocity, motifs). If z is large and negative, that *specific* higher-order arrangement is what makes your network especially vulnerable relative to a randomly-rewired graph with the same degree/strength profile.
 
@@ -240,9 +248,9 @@ The directed weighted configuration-model null is the *minimum-acceptable* basel
 
 Practical consequence: networks whose attack response is driven by their degree/strength sequences (e.g. a scale-free degree distribution) will show R values close to their configuration-model nulls — that is *not* a "negative result" about robustness, it is a property of the null choice. If you need a stricter null (e.g. one that also preserves reciprocity or higher-order motifs, on top of the degree and strength sequences this null already preserves), generate the appropriate ensemble externally and feed the comparison values manually.
 
-**Strategies with no null variance report z = `nan`.** The z-score is `(R_observed − μ_null) / σ_null`; when every rewired draw yields the same R for a strategy, its standard deviation collapses to zero and the z-score is reported as `nan` (see `null_model.z_score`). This typically happens only on small or degenerate backbones, where the rewiring has too little freedom to change the residual-size curves. Read it as "the null model has no signal to give about this strategy" rather than "this strategy doesn't matter"; the observed R and `f_c` remain meaningful in their own right and are worth comparing against the *random* R baseline.
+**Strategies with no null variance report z = `nan`.** The z-score is `(R_observed − μ_null) / σ_null`; when every rewired draw yields the same R for a strategy, its standard deviation collapses to zero and the z-score is reported as `nan` (see `null_model.z_score`). This typically happens only on small or degenerate backbones, where the rewiring has too little freedom to change the residual-size curves. The empirical p column stays defined in that case and is the number to read; the observed R and `f_c` also remain meaningful in their own right and are worth comparing against the *random* R baseline.
 
-Set `--robustness-null 0` to skip the null model entirely — only the observed R and `f_c` values get reported, no z-scores.
+Set `--robustness-null 0` to skip the null model entirely — only the observed R and `f_c` values get reported, no z-scores or p-values.
 
 ---
 
