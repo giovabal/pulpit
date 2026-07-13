@@ -139,8 +139,16 @@ STRUCTURAL_DEFAULTS: dict = {
         "strategies": [],
         "runs": 100,
         "null": 20,
+        # Null model for the z-score/empirical-p: "configuration" (degree+strength)
+        # or "reciprocal" (also reciprocity-preserving).
+        "null_model": "configuration",
         "seed": 42,
         "sample": 500,
+        # Comma-free list of disparity-filter α values for the backbone-sensitivity
+        # sweep (empty = skip); 0 in the list means the full graph.
+        "alpha_grid": [],
+        # Historical ban-replay validation (needs a year timeline + recorded closures).
+        "replay": False,
     },
     "interest": {
         # Per-message structural reach (C + D). The hot layer (z-scored

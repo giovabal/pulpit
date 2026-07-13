@@ -217,6 +217,31 @@ def residual_sizes(
         rng = np.random.default_rng()
     g = G.copy()
     g.remove_nodes_from([nid for nid in remove if g.has_node(nid)])
+    return component_sizes(g, n0=n0, w0=w0, reach_sample=reach_sample, rng=rng)
+
+
+def component_sizes(
+    g: nx.DiGraph,
+    *,
+    n0: int,
+    w0: float,
+    reach_sample: int | None = 500,
+    rng: np.random.Generator | None = None,
+) -> dict[str, float]:
+    """The four residual sizes of *g*, normalised against *external* ``n0``/``w0``.
+
+    Unlike :func:`residual_sizes` (which removes nodes from a graph and
+    normalises against that same graph), this evaluates the four sizes of an
+    already-built graph *g* against a caller-supplied node count ``n0`` and
+    total edge weight ``w0``.  That lets a *predicted* residual (a pre-wave
+    graph with the banned block removed) and an *observed* residual (the
+    post-wave graph restricted to the survivors) be normalised against the
+    same pre-wave baseline, so the two are directly comparable — the building
+    block of :mod:`network.robustness.replay`.  Keys are the lowercase metric
+    names ``"wcc"`` / ``"scc"`` / ``"reach"`` / ``"strength"``.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
     return {
         "wcc": _wcc_size(g, n0),
         "scc": _scc_size(g, n0),

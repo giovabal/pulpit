@@ -220,13 +220,15 @@ Go to **Manage → Event types** to define categories like *Election* or *Policy
 
 ### Robustness: resistance to node removal
 
-Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; `subscribers` (audience-targeted moderation, from Telegram member counts) and the dynamic (re-rank-after-removal) variants are also available. For each selected strategy Pulpit:
+Enable in the Structural Analysis options (or with `--robustness` on the CLI). The attack strategies are picked via `--robustness-strategies` (or the checkbox grid in the Operations panel) — defaults to `random,in_strength,out_strength,pagerank,betweenness`; `subscribers` (audience-targeted moderation, from Telegram member counts), the near-optimal **dismantling** strategies `collective_influence` / `fragmentation_dyn` (worst-case fragmentation bounds), and the dynamic (re-rank-after-removal) variants are also available. For each selected strategy Pulpit:
 
 - optionally extracts the Serrano-Boguñá-Vespignani disparity-filter backbone (`--robustness-alpha`, default 0.05),
 - records the residual-size curves `S(q)` for WCC, SCC, directed reachability, and surviving strength (the weight share of the heaviest residual component),
 - compresses each curve into the Schneider et al. R-index plus a 5%-collapse threshold `f_c`,
 - samples the weighted global efficiency along the removal order on a coarse grid,
-- compares the residual-size curves against a weight-rewiring null model (`--robustness-null` simulations, default 20) and reports per-(strategy, metric) z-scores plus add-one empirical p-values (smallest reportable p is `2/(K+1)`, so raise K to 79+ for α = 0.05 claims),
+- compares the residual-size curves against a null model (`--robustness-null` simulations, default 20; `--robustness-null-model configuration` or `reciprocal`) and reports per-(strategy, metric) z-scores plus add-one empirical p-values, BH-corrected across the whole strategy×metric grid into a `q` column (smallest reportable p is `2/(K+1)`, so raise K to 79+ for α = 0.05 claims),
+- optionally sweeps the R-index across a grid of backbone thresholds (`--robustness-alpha-grid 0,0.01,0.05,0.1`) to show whether the rankings are stable or a backbone artefact,
+- with `--timeline-step year`, optionally runs the **ban-replay validation** (`--robustness-replay`): for each year with recorded channel closures, removes them from the prior-year graph and compares the predicted residual against the observed next-year structure,
 - if at least one community partition is active, also produces intra/inter community edge-survival curves per partition, plus the **ban-wave scenarios**: residual sizes after removing each whole community in one step, next to the equal-count random baseline.
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
@@ -326,8 +328,11 @@ python manage.py structural_analysis --robustness --html --xlsx               # 
 python manage.py structural_analysis --robustness --robustness-alpha 0        # skip disparity filter, attack the full graph
 python manage.py structural_analysis --robustness --robustness-null 0         # observed R only, no null model (no z-scores)
 python manage.py structural_analysis --robustness --robustness-strategies ALL          # every available strategy (including dynamic)
-python manage.py structural_analysis --robustness --robustness-strategies random,pagerank,in_strength   # custom subset
+python manage.py structural_analysis --robustness --robustness-strategies random,pagerank,collective_influence   # custom subset with a dismantling bound
 python manage.py structural_analysis --robustness --robustness-runs 200 --robustness-null 50 --robustness-seed 7
+python manage.py structural_analysis --robustness --robustness-null-model reciprocal   # preserve reciprocity in the null
+python manage.py structural_analysis --robustness --robustness-alpha-grid 0,0.01,0.05,0.1   # backbone-sensitivity sweep
+python manage.py structural_analysis --robustness --robustness-replay --timeline-step year  # validate against recorded closures
 
 # Coordination analysis (temporal co-forwarding maps: coordination.html / coordination3d.html)
 python manage.py structural_analysis --coordination-2d --coordination-3d                # both maps; defaults: 300 s window, ≥3 shared origins per pair

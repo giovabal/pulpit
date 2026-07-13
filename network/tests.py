@@ -3930,11 +3930,11 @@ class RemovalOrderTests(TestCase):
 
         self.assertEqual(set(ALL_STRATEGIES), STATIC_STRATEGIES | DYNAMIC_STRATEGIES)
         self.assertEqual(STATIC_STRATEGIES & DYNAMIC_STRATEGIES, set())
-        # Static includes random + degree (2) + prestige (1) + bridges (1) + visibility (1) = 6
-        self.assertEqual(len(STATIC_STRATEGIES), 6)
-        # Dynamic includes in_strength_dyn, out_strength_dyn, pagerank_dyn, betweenness_dyn
-        self.assertEqual(len(DYNAMIC_STRATEGIES), 4)
-        self.assertEqual(len(ALL_STRATEGIES), 10)
+        # Static: random + degree (2) + prestige (1) + bridges (1) + dismantling CI (1) + visibility (1) = 7
+        self.assertEqual(len(STATIC_STRATEGIES), 7)
+        # Dynamic: in/out_strength_dyn, pagerank_dyn, betweenness_dyn, collective_influence_dyn, fragmentation_dyn
+        self.assertEqual(len(DYNAMIC_STRATEGIES), 6)
+        self.assertEqual(len(ALL_STRATEGIES), 13)
         self.assertEqual(DEFAULT_STRATEGIES, ["random", "in_strength", "out_strength", "pagerank", "betweenness"])
 
     def test_random_returns_permutation_of_nodes(self) -> None:
@@ -4568,7 +4568,10 @@ class RobustnessRunnerTests(TestCase):
         from network.robustness import run_robustness
 
         out = run_robustness(self._toy_graph(), config=self._fast_cfg())
-        self.assertEqual(set(out.keys()), {"config", "graph", "efficiency", "strategies", "modular", "ban_waves"})
+        self.assertEqual(
+            set(out.keys()),
+            {"config", "graph", "efficiency", "strategies", "modular", "ban_waves", "alpha_sensitivity"},
+        )
 
     def test_payload_strategy_keys_defaults_to_default_set(self) -> None:
         from network.robustness import DEFAULT_STRATEGIES, run_robustness
@@ -4660,7 +4663,7 @@ class RobustnessRunnerTests(TestCase):
             self.assertIsNotNone(payload["null"])
             for m in ("wcc", "scc", "reach", "strength"):
                 self.assertIn(f"r_{m}", payload["null"])
-                self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z", "p"})
+                self.assertEqual(set(payload["null"][f"r_{m}"].keys()), {"mean", "std", "z", "p", "q"})
                 # 3 null draws → the add-one two-sided p lives in [2/4, 1].
                 p = payload["null"][f"r_{m}"]["p"]
                 self.assertGreaterEqual(p, 0.5)
@@ -4782,7 +4785,175 @@ class RobustnessRunnerTests(TestCase):
         encoded = json.dumps(out)
         self.assertIsInstance(encoded, str)
         decoded = json.loads(encoded)
-        self.assertEqual(set(decoded.keys()), {"config", "graph", "efficiency", "strategies", "modular", "ban_waves"})
+        self.assertEqual(
+            set(decoded.keys()),
+            {"config", "graph", "efficiency", "strategies", "modular", "ban_waves", "alpha_sensitivity"},
+        )
+
+
+class DismantlingAttackTests(TestCase):
+    def _bridge_graph(self) -> nx.DiGraph:
+        # Two triangles joined only through the articulation node "x".
+        g = nx.DiGraph()
+        for a, b in [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("a", "x"), ("x", "d")]:
+            g.add_edge(a, b, weight=1.0)
+        return g
+
+    def test_collective_influence_ranks_hubs_first(self) -> None:
+        from network.robustness import removal_order
+
+        order = removal_order(self._bridge_graph(), "collective_influence")
+        self.assertEqual(set(order), set(self._bridge_graph().nodes()))
+        # The three high-degree connectors (a, d, x) lead the ranking.
+        self.assertEqual(set(order[:3]), {"a", "d", "x"})
+
+    def test_fragmentation_dyn_targets_articulation_point(self) -> None:
+        from network.robustness import removal_order
+
+        order = removal_order(self._bridge_graph(), "fragmentation_dyn")
+        # "x" is the single articulation point — removing it does the most damage.
+        self.assertEqual(order[0], "x")
+        self.assertEqual(set(order), set(self._bridge_graph().nodes()))
+
+    def test_dismantling_orders_handle_trivial_graphs(self) -> None:
+        from network.robustness import removal_order
+
+        self.assertEqual(removal_order(nx.DiGraph(), "collective_influence_dyn"), [])
+        single = nx.DiGraph()
+        single.add_node("z")
+        self.assertEqual(removal_order(single, "fragmentation_dyn"), ["z"])
+
+    def test_new_strategies_are_registered(self) -> None:
+        from network.robustness import ALL_STRATEGIES
+
+        for name in ("collective_influence", "collective_influence_dyn", "fragmentation_dyn"):
+            self.assertIn(name, ALL_STRATEGIES)
+
+
+class ReciprocalNullTests(TestCase):
+    def _mixed_graph(self) -> nx.DiGraph:
+        g = nx.DiGraph()
+        for u, v in [("a", "b"), ("c", "d"), ("e", "f"), ("g", "h")]:
+            g.add_edge(u, v, weight=2.0)
+            g.add_edge(v, u, weight=3.0)
+        for u, v in [("a", "c"), ("b", "d"), ("e", "g"), ("f", "h"), ("a", "e"), ("c", "g")]:
+            g.add_edge(u, v, weight=1.5)
+        return g
+
+    def test_preserves_degree_and_reciprocity(self) -> None:
+        from network.robustness.null_model import rewire_reciprocity_preserving
+
+        g = self._mixed_graph()
+        h = rewire_reciprocity_preserving(g, rng=np.random.default_rng(1))
+        self.assertEqual(dict(g.out_degree()), dict(h.out_degree()))
+        self.assertEqual(dict(g.in_degree()), dict(h.in_degree()))
+        recip = lambda G: {n: sum(1 for w in G.successors(n) if G.has_edge(w, n)) for n in G.nodes()}  # noqa: E731
+        self.assertEqual(recip(g), recip(h))
+        self.assertFalse(any(u == v for u, v in h.edges()))
+
+    def test_distribution_selects_model(self) -> None:
+        from network.robustness.null_model import null_distribution
+
+        g = self._mixed_graph()
+        draws = list(null_distribution(g, 2, rng=np.random.default_rng(0), model="reciprocal"))
+        self.assertEqual(len(draws), 2)
+        with self.assertRaises(ValueError):
+            list(null_distribution(g, 1, model="bogus"))
+
+
+class BHAdjustTests(TestCase):
+    def test_monotone_and_bounded(self) -> None:
+        from network.robustness.null_model import bh_adjust
+
+        qs = bh_adjust([0.01, 0.02, 0.5, 1.0])
+        self.assertTrue(all(q <= 1.0 for q in qs))
+        # Each q is at least its p (BH only inflates).
+        for p, q in zip([0.01, 0.02, 0.5, 1.0], qs, strict=True):
+            self.assertGreaterEqual(q + 1e-12, p)
+
+    def test_nan_carried_through(self) -> None:
+        import math
+
+        from network.robustness.null_model import bh_adjust
+
+        qs = bh_adjust([0.01, float("nan"), 0.5])
+        self.assertTrue(math.isnan(qs[1]))
+        self.assertFalse(math.isnan(qs[0]))
+
+
+class BanReplayTests(TestCase):
+    def _graphs(self) -> dict[int, nx.DiGraph]:
+        def mk(nodes, edges):
+            g = nx.DiGraph()
+            g.add_nodes_from(nodes)
+            for u, v in edges:
+                g.add_edge(u, v, weight=1.0)
+            return g
+
+        g19 = mk(list("abcdeh"), [("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("h", "a"), ("h", "c"), ("h", "e")])
+        g21 = mk(list("abcdez"), [("a", "b"), ("b", "c"), ("c", "d"), ("d", "e"), ("z", "a"), ("e", "a")])
+        return {2019: g19, 2021: g21}
+
+    def test_interior_wave_year_produces_full_row(self) -> None:
+        from network.robustness import ban_replay_rows
+
+        rows = ban_replay_rows(self._graphs(), {2020: {"h"}}, n_random_runs=10, rng=np.random.default_rng(1))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["year"], row["n_closed"]), (2020, 1))
+        for m in ("wcc", "scc", "reach", "strength"):
+            self.assertIn(f"predicted_{m}", row)
+            self.assertIsNotNone(row[f"observed_{m}"])
+
+    def test_skips_without_pre_or_closure(self) -> None:
+        from network.robustness import ban_replay_rows
+
+        graphs = self._graphs()
+        # No pre-wave graph (2020 wave needs 2019 — remove it).
+        self.assertEqual(ban_replay_rows({2021: graphs[2021]}, {2020: {"h"}}), [])
+        # Closure absent from the pre-wave graph.
+        self.assertEqual(ban_replay_rows(graphs, {2020: {"zzz"}}), [])
+
+    def test_observed_none_when_no_post_year(self) -> None:
+        from network.robustness import ban_replay_rows
+
+        graphs = {2019: self._graphs()[2019]}
+        rows = ban_replay_rows(graphs, {2020: {"h"}}, n_random_runs=3, rng=np.random.default_rng(1))
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]["observed_wcc"])
+
+
+class AlphaSensitivityTests(TestCase):
+    def test_sweep_populates_rows_per_alpha(self) -> None:
+        from network.robustness import RobustnessConfig, run_robustness
+
+        g = nx.gnp_random_graph(25, 0.25, seed=3, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 1.0 + (hash((u, v)) % 5)
+        cfg = RobustnessConfig(
+            alpha=0.05,
+            strategies=["random", "pagerank"],
+            n_random_runs=3,
+            n_null=0,
+            seed=1,
+            reach_sample=10,
+            alpha_grid=[0.0, 0.05, 0.1],
+        )
+        out = run_robustness(g, config=cfg)
+        sens = out["alpha_sensitivity"]
+        self.assertIsNotNone(sens)
+        self.assertEqual([r["alpha"] for r in sens["rows"]], [0.0, 0.05, 0.1])
+        for r in sens["rows"]:
+            self.assertIn("pagerank", r["r"])
+            self.assertIn("wcc", r["r"]["pagerank"])
+
+    def test_config_rejects_out_of_range_grid(self) -> None:
+        from network.robustness import RobustnessConfig
+
+        with self.assertRaises(ValueError):
+            RobustnessConfig(alpha_grid=[1.0])
+        with self.assertRaises(ValueError):
+            RobustnessConfig(null_model="bogus")
 
 
 class WriteRobustnessJsonTests(TestCase):

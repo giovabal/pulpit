@@ -138,7 +138,9 @@ function _renderHeaderSummary(payload) {
         g.n + " nodes / " + g.m + " edges",
         g.filtered ? "backbone " + g.backbone_n + "/" + g.backbone_m + " edges (α=" + c.alpha + ")" : "no disparity filter",
         Object.keys(payload.strategies || {}).length + " strategies",
-        c.n_null > 0 ? c.n_null + " null simulations" : "no null model",
+        c.n_null > 0
+            ? c.n_null + " null simulations (" + (c.null_model || "configuration") + ")"
+            : "no null model",
         "seed=" + c.seed,
     ];
     if (payload.efficiency && payload.efficiency.baseline !== undefined) {
@@ -165,6 +167,7 @@ function _renderSummaryTable(payload) {
         headerCells.push("<th class=\"text-end\">R_null σ</th>");
         headerCells.push("<th class=\"text-end\">z</th>");
         headerCells.push("<th class=\"text-end\">p</th>");
+        headerCells.push("<th class=\"text-end\">q</th>");
     }
     headerCells.push("<th class=\"text-end\">f<sub>c</sub> (5%)</th>");
     thead.innerHTML = "<tr>" + headerCells.join("") + "</tr>";
@@ -188,6 +191,7 @@ function _renderSummaryTable(payload) {
                 cells.push("<td class=\"text-end\">" + _fmt(nullM.std) + "</td>");
                 cells.push("<td class=\"text-end\">" + _fmtZ(nullM.z) + "</td>");
                 cells.push("<td class=\"text-end\">" + _fmtP(nullM.p) + "</td>");
+                cells.push("<td class=\"text-end\">" + _fmtP(nullM.q) + "</td>");
             }
             cells.push("<td class=\"text-end\">" + _fmtFc(fc) + "</td>");
             rows.push("<tr>" + cells.join("") + "</tr>");
@@ -433,6 +437,105 @@ function _renderBanWaves(payload) {
     });
 }
 
+// ── Ban-replay section ───────────────────────────────────────────────────────
+
+function _renderBanReplay(payload) {
+    var section = document.getElementById("rb-replay-section");
+    var container = document.getElementById("rb-replay-tables");
+    if (!section || !container) return;
+    container.innerHTML = "";
+    var rows = payload.ban_replay;
+    if (!rows || !rows.length) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+
+    // For a wave year, show predicted / random / observed residual side by side
+    // per metric. Observed far below predicted (red) = the ban cascaded beyond
+    // the block; observed above predicted (green) = the network rewired around it.
+    function _cell(pred, rnd, obs) {
+        var predTxt = _fmt(pred, 3);
+        var rndTxt = (typeof rnd === "number" && isFinite(rnd)) ? _fmt(rnd, 3) : "—";
+        if (obs === null || obs === undefined) {
+            return "<td class=\"text-end\">" + predTxt + " / " + rndTxt + " / —</td>";
+        }
+        var cls = " class=\"text-end\"";
+        if (typeof pred === "number" && isFinite(pred)) {
+            if (obs < pred - 1e-9) cls = " class=\"text-end rb-z-significant rb-z-neg\"";
+            else if (obs > pred + 1e-9) cls = " class=\"text-end rb-z-significant rb-z-pos\"";
+        }
+        return "<td" + cls + ">" + predTxt + " / " + rndTxt + " / <strong>" + _fmt(obs, 3) + "</strong></td>";
+    }
+
+    var metrics = _METRICS.filter(function (m) { return ("predicted_" + m) in rows[0]; });
+    var html = "<p class=\"text-muted small mb-2\">Each cell shows " +
+        "<em>predicted</em> / <em>random baseline</em> / <strong>observed</strong> residual size. " +
+        "Observed below predicted (red) = the wave cascaded beyond the banned block; " +
+        "observed above predicted (green) = survivors re-wired around the gap.</p>";
+    html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
+    html += "<thead><tr><th>Wave year</th><th class=\"text-end\">Pre-wave nodes</th>" +
+        "<th class=\"text-end\">Closed</th><th class=\"text-end\">% of network</th>";
+    metrics.forEach(function (m) {
+        html += "<th class=\"text-end\">S<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub></th>";
+    });
+    html += "</tr></thead><tbody>";
+    rows.forEach(function (row) {
+        html += "<tr><td>" + row.year + "</td>";
+        html += "<td class=\"text-end\">" + row.n_pre + "</td>";
+        html += "<td class=\"text-end\">" + row.n_closed + "</td>";
+        html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
+        metrics.forEach(function (m) {
+            html += _cell(row["predicted_" + m], row["random_" + m], row["observed_" + m]);
+        });
+        html += "</tr>";
+    });
+    html += "</tbody></table></div>";
+    container.insertAdjacentHTML("beforeend", html);
+}
+
+// ── Backbone α-sensitivity section ───────────────────────────────────────────
+
+function _renderAlphaSensitivity(payload) {
+    var section = document.getElementById("rb-alpha-section");
+    var container = document.getElementById("rb-alpha-tables");
+    if (!section || !container) return;
+    container.innerHTML = "";
+    var sens = payload.alpha_sensitivity;
+    if (!sens || !sens.rows || !sens.rows.length) {
+        section.classList.add("d-none");
+        return;
+    }
+    section.classList.remove("d-none");
+
+    var strategies = (sens.strategies || []).filter(function (s) { return payload.strategies[s]; });
+    // One sub-table per metric: rows = α values, columns = strategies, cells = R.
+    var metrics = _METRICS.filter(function (m) {
+        return sens.rows[0].r && sens.rows[0].r[strategies[0]] && (m in sens.rows[0].r[strategies[0]]);
+    });
+    metrics.forEach(function (m) {
+        var html = "<h5 class=\"mt-3\">R<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub> across α</h5>";
+        html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
+        html += "<thead><tr><th>α</th><th class=\"text-end\">Backbone edges</th>";
+        strategies.forEach(function (s) {
+            html += "<th class=\"text-end\">" + _labelOf(payload, s) + "</th>";
+        });
+        html += "</tr></thead><tbody>";
+        sens.rows.forEach(function (row) {
+            var aTxt = row.alpha === 0 ? "full graph" : row.alpha;
+            html += "<tr><td>" + aTxt + "</td>";
+            html += "<td class=\"text-end\">" + row.backbone_m + "</td>";
+            strategies.forEach(function (s) {
+                var r = row.r && row.r[s] ? row.r[s][m] : null;
+                html += "<td class=\"text-end\">" + _fmt(r, 3) + "</td>";
+            });
+            html += "</tr>";
+        });
+        html += "</tbody></table></div>";
+        container.insertAdjacentHTML("beforeend", html);
+    });
+}
+
 // ── Modular section ─────────────────────────────────────────────────────────
 
 function _renderModular(payload) {
@@ -504,6 +607,8 @@ function _render(payload) {
     _renderHeaderSummary(payload);
     _renderSummaryTable(payload);
     _renderCurves(payload);
+    _renderBanReplay(payload);
+    _renderAlphaSensitivity(payload);
     _renderBanWaves(payload);
     _renderModular(payload);
 }

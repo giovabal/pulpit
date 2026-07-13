@@ -930,11 +930,14 @@
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength" {% if "OUT_STRENGTH" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the most active forwarders first."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank" {% if "PAGERANK" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the highest-ranked, most influential channels first."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness" {% if "BETWEENNESS" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the bridge channels first — the ones sitting on the most weighted shortest paths between other channels. The canonical fragmentation attack (Holme et al. 2002)."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="collective_influence" {% if "COLLECTIVE_INFLUENCE" in ad.sa_robustness_strategies %}checked{% endif %}>Collective Influence<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="A near-optimal dismantling order from the optimal-percolation theory (Morone & Makse 2015): removes the channels whose deletion most fragments the network, bounding worst-case vulnerability better than any single-score ranking. Has a dynamic variant."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="subscribers" {% if "SUBSCRIBERS" in ad.sa_robustness_strategies %}checked{% endif %}>Subscribers<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Removes the biggest audiences first (Telegram member counts) — models real moderation pressure, which targets visible channels rather than structurally optimal ones. Channels with unknown member counts go last."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="in_strength_dyn" {% if "IN_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>In-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like In-strength, but recalculates who is most-cited after every removal. Much slower on large networks."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="out_strength_dyn" {% if "OUT_STRENGTH_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Out-strength dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like Out-strength, but recalculates who is most active after every removal. Much slower on large networks."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="pagerank_dyn" {% if "PAGERANK_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>PageRank dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like PageRank, but recalculates the ranking after every removal. Much slower on large networks."></i></label>
               <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="betweenness_dyn" {% if "BETWEENNESS_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Betweenness dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Like Betweenness, but recalculates the bridges after every removal. By far the costliest strategy on large networks."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="collective_influence_dyn" {% if "COLLECTIVE_INFLUENCE_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Collective Influence dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="The canonical adaptive Collective Influence algorithm: remove the top node, then recompute. The strongest dismantling order Pulpit ships."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="robustness_strategies" value="fragmentation_dyn" {% if "FRAGMENTATION_DYN" in ad.sa_robustness_strategies %}checked{% endif %}>Greedy fragmentation dyn<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Greedily removes the channel whose deletion most shatters the network into small pieces (Borgatti's 2006 key-player fragmentation objective). Targets articulation points directly."></i></label>
             </div>
 
             <div class="ops-params mt-2">
@@ -972,6 +975,30 @@
                      title="Source-sample size for the R_reach metric on graphs larger than this many nodes. Smaller = faster but noisier curves. Default: 500."></i>
                 </label>
                 <input type="number" name="robustness_sample" id="robustness_sample" placeholder="{{ ad.SA_ROBUSTNESS_SAMPLE }}" value="{{ ad.SA_ROBUSTNESS_SAMPLE }}" min="10" max="100000">
+              </div>
+              <div class="ops-param">
+                <label for="robustness_null_model">Null model
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Which randomised comparison network to test against. 'Configuration' keeps each channel's citation counts and weights but reshuffles who cites whom. 'Reciprocal' additionally keeps mutual (both-ways) citations intact — pick it when echo-chamber reciprocity is the structure you're testing (Squartini & Garlaschelli 2011)."></i>
+                </label>
+                <select name="robustness_null_model" id="robustness_null_model">
+                  <option value="configuration" {% if ad.SA_ROBUSTNESS_NULL_MODEL != "reciprocal" %}selected{% endif %}>Configuration</option>
+                  <option value="reciprocal" {% if ad.SA_ROBUSTNESS_NULL_MODEL == "reciprocal" %}selected{% endif %}>Reciprocal</option>
+                </select>
+              </div>
+              <div class="ops-param">
+                <label for="robustness_alpha_grid">α-sensitivity grid
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Optional comma-separated list of disparity-filter α values (e.g. 0,0.01,0.05,0.1). The R-index is recomputed at each α so you can check the ranking isn't an artefact of the backbone threshold. 0 means the full graph. Empty = skip."></i>
+                </label>
+                <input type="text" name="robustness_alpha_grid" id="robustness_alpha_grid" placeholder="0,0.01,0.05,0.1" value="{{ ad.SA_ROBUSTNESS_ALPHA_GRID }}">
+              </div>
+              <div class="ops-param ops-param-check">
+                <label class="ops-flag" for="robustness_replay">
+                  <input type="checkbox" name="robustness_replay" id="robustness_replay" {% if ad.SA_ROBUSTNESS_REPLAY %}checked{% endif %}>Ban-replay validation
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Validates the simulation against reality: for each year with recorded channel closures (Manage → Vacancies), removes them from the prior-year network and compares the predicted damage against the observed next-year network. Needs the yearly timeline turned on."></i>
+                </label>
               </div>
             </div>
           </fieldset>
@@ -1978,8 +2005,11 @@ function showToast(msg, type) {
         setVal('robustness_alpha',  opts.robustness_alpha  != null ? opts.robustness_alpha  : '');
         setVal('robustness_runs',   opts.robustness_runs   != null ? opts.robustness_runs   : '');
         setVal('robustness_null',   opts.robustness_null   != null ? opts.robustness_null   : '');
+        if (opts.robustness_null_model) setVal('robustness_null_model', opts.robustness_null_model);
         setVal('robustness_seed',   opts.robustness_seed   != null ? opts.robustness_seed   : '');
         setVal('robustness_sample', opts.robustness_sample != null ? opts.robustness_sample : '');
+        setVal('robustness_alpha_grid', opts.robustness_alpha_grid != null ? opts.robustness_alpha_grid : '');
+        if (opts.robustness_replay !== undefined) setCheck('robustness_replay', opts.robustness_replay);
 
         showToast('Options loaded from "' + name + '".');
       })

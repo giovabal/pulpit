@@ -53,7 +53,7 @@ from network.robustness.metrics import (
     weighted_global_efficiency,
 )
 from network.robustness.modular import modular_robustness_curves
-from network.robustness.null_model import empirical_p, null_distribution, z_score
+from network.robustness.null_model import bh_adjust, empirical_p, null_distribution, z_score
 from network.robustness.scenarios import ban_wave_rows
 
 import networkx as nx
@@ -81,30 +81,44 @@ class RobustnessConfig:
                         ``"random"`` strategy curve (≥ 1)
     ``n_null``          number of weight-rewiring null simulations per
                         strategy; ``0`` disables the null model
+    ``null_model``      which null to rewire against: ``"configuration"``
+                        (degree/strength) or ``"reciprocal"`` (also reciprocity)
     ``seed``            single seed driving every stochastic component
     ``reach_sample``    source-sample size for ``"REACH"`` curves on graphs
                         larger than this many nodes
     ``n_rewire_swaps``  per-null-simulation swap budget; ``None`` lets the
                         null model use its own default of ``10·|E|``
+    ``alpha_grid``      optional list of disparity-filter α values for the
+                        backbone-sensitivity sweep (R per strategy×metric at
+                        each α, no null/efficiency/modular); ``0`` in the list
+                        means the full graph.  ``None`` skips the sweep.
     """
 
     alpha: float | None = 0.05
     strategies: list[str] | None = None
     n_random_runs: int = 100
     n_null: int = 20
+    null_model: str = "configuration"
     seed: int = 42
     reach_sample: int = 500
     n_rewire_swaps: int | None = field(default=None)
+    alpha_grid: list[float] | None = None
 
     def __post_init__(self) -> None:
         if self.n_random_runs < 1:
             raise ValueError(f"n_random_runs must be >= 1; got {self.n_random_runs}")
         if self.n_null < 0:
             raise ValueError(f"n_null must be >= 0; got {self.n_null}")
+        if self.null_model not in ("configuration", "reciprocal"):
+            raise ValueError(f"null_model must be 'configuration' or 'reciprocal'; got {self.null_model!r}")
         if self.alpha is not None and not (0 <= self.alpha <= 1):
             raise ValueError(f"alpha must be in [0, 1] or None; got {self.alpha}")
         if self.reach_sample <= 0:
             raise ValueError(f"reach_sample must be positive; got {self.reach_sample}")
+        if self.alpha_grid is not None:
+            for a in self.alpha_grid:
+                if not (0 <= a < 1):
+                    raise ValueError(f"alpha_grid values must be in [0, 1); got {a}")
         if self.strategies is not None:
             if not self.strategies:
                 raise ValueError("strategies must contain at least one entry; got an empty list")
@@ -133,8 +147,8 @@ def run_robustness(
     Payload shape::
 
         {
-          "config":     {alpha, strategies, n_random_runs, n_null, seed,
-                         reach_sample, n_rewire_swaps},
+          "config":     {alpha, strategies, n_random_runs, n_null, null_model,
+                         seed, reach_sample, n_rewire_swaps, alpha_grid},
           "graph":      {n, m, alpha, backbone_n, backbone_m,
                          filtered: bool},
           "efficiency": {
@@ -150,8 +164,10 @@ def run_robustness(
               "r_<metric>":  float,        # for each of wcc / scc / reach / strength
               "fc_<metric>": float|None,
               "null": {
+                "model":               "configuration" | "reciprocal",
                 "r_<metric>":          {"mean": float, "std": float, "z": float,
-                                        "p": float},  # two-sided add-one empirical p
+                                        "p": float,   # two-sided add-one empirical p
+                                        "q": float},  # BH-adjusted across the grid
                 "curve_<metric>_mean": [...],
                 "curve_<metric>_std":  [...],
               } | None,
@@ -169,6 +185,15 @@ def run_robustness(
                "s_<metric>": float, "random_<metric>": float|None},
               ...                                    # sorted by block size desc
             ], ...
+          } | None,
+          "alpha_sensitivity": {
+            "strategies": [<strategy_key>, ...],
+            "rows": [
+              {"alpha": float, "backbone_n": int, "backbone_m": int,
+               "r": {<strategy_key>: {"wcc": float, "scc": float,
+                                      "reach": float, "strength": float}}},
+              ...                                    # one row per α in the grid
+            ],
           } | None,
         }
 
@@ -236,7 +261,13 @@ def run_robustness(
             canonical: {m: [] for m in _METRICS} for canonical in resolved
         }
         for k, null_g in enumerate(
-            null_distribution(backbone, n_simulations=config.n_null, rng=rng, n_swaps=config.n_rewire_swaps),
+            null_distribution(
+                backbone,
+                n_simulations=config.n_null,
+                rng=rng,
+                n_swaps=config.n_rewire_swaps,
+                model=config.null_model,
+            ),
             start=1,
         ):
             for canonical in resolved:
@@ -249,7 +280,7 @@ def run_robustness(
                     null_curves[canonical][m].append(curve)
                     null_rs[canonical][m].append(r_index(curve))
         for canonical in resolved:
-            null_data: dict[str, Any] = {}
+            null_data: dict[str, Any] = {"model": config.null_model}
             for m in _METRICS:
                 observed = strategy_results[canonical][f"r_{m}"]
                 z, mean, std = z_score(observed, null_rs[canonical][m])
@@ -262,6 +293,15 @@ def run_robustness(
                 null_data[f"curve_{m}_mean"] = mean_curve
                 null_data[f"curve_{m}_std"] = std_curve
             strategy_results[canonical]["null"] = null_data
+
+        # Benjamini-Hochberg FDR correction across the whole (strategy × metric)
+        # grid of empirical p-values — the runner tests |resolved|×4 hypotheses
+        # at once, so a per-cell p overstates significance.  q is written
+        # alongside p in each cell (nan p → nan q, e.g. degenerate nulls).
+        _grid = [(canonical, m) for canonical in resolved for m in _METRICS]
+        _ps = [strategy_results[c]["null"][f"r_{m}"]["p"] for c, m in _grid]
+        for (canonical, m), q in zip(_grid, bh_adjust(_ps), strict=True):
+            strategy_results[canonical]["null"][f"r_{m}"]["q"] = q
 
     # 7. Modular curves per partition × strategy
     modular_results: dict[str, dict[str, Any]] | None = None
@@ -295,15 +335,43 @@ def run_robustness(
                 ban_waves[partition_name] = rows
         ban_waves = ban_waves or None
 
+    # 9. Backbone α-sensitivity sweep — R per strategy×metric at each α in the
+    # grid, so a reviewer can see whether the R ranking is a backbone artefact.
+    # No null / efficiency / modular pass here; it is a cheap robustness check.
+    alpha_sensitivity: dict[str, Any] | None = None
+    if config.alpha_grid:
+        rows_by_alpha: list[dict[str, Any]] = []
+        for a in config.alpha_grid:
+            progress(f"alpha-grid/{a}")
+            if 0 < a < 1:
+                bb = disparity_filter(G, alpha=a)
+            else:
+                bb = G
+            row: dict[str, Any] = {
+                "alpha": a,
+                "backbone_n": bb.number_of_nodes(),
+                "backbone_m": bb.number_of_edges(),
+                "r": {},
+            }
+            for canonical in resolved:
+                _, mean_curves_a = _compute_strategy_curves(
+                    bb, canonical, config.n_random_runs, config.reach_sample, rng
+                )
+                row["r"][canonical] = {m: r_index(mean_curves_a[m]) for m in _METRICS}
+            rows_by_alpha.append(row)
+        alpha_sensitivity = {"strategies": list(resolved), "rows": rows_by_alpha}
+
     return {
         "config": {
             "alpha": config.alpha,
             "strategies": list(resolved),
             "n_random_runs": config.n_random_runs,
             "n_null": config.n_null,
+            "null_model": config.null_model,
             "seed": config.seed,
             "reach_sample": config.reach_sample,
             "n_rewire_swaps": config.n_rewire_swaps,
+            "alpha_grid": list(config.alpha_grid) if config.alpha_grid else None,
         },
         "graph": {
             "n": G.number_of_nodes(),
@@ -317,6 +385,7 @@ def run_robustness(
         "strategies": strategy_results,
         "modular": modular_results,
         "ban_waves": ban_waves,
+        "alpha_sensitivity": alpha_sensitivity,
     }
 
 

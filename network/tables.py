@@ -649,7 +649,7 @@ def _robustness_sheet_name(prefix: str, suffix: str) -> str:
 
 def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
     ws = wb.create_sheet(title=_robustness_sheet_name("Summary", suffix))
-    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "p", "f_c"]
+    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "p", "q", "f_c"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -667,6 +667,7 @@ def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
                     null_m.get("std"),
                     null_m.get("z"),
                     null_m.get("p"),
+                    null_m.get("q"),
                     strat.get(f"fc_{m}"),
                 ]
             )
@@ -720,6 +721,44 @@ def _fill_robustness_ban_waves(wb: Any, payload: dict, suffix: str) -> None:
             cells: list = [row.get("community"), row.get("n"), row.get("fraction")]
             for m in _ROBUSTNESS_METRICS:
                 cells += [row.get(f"s_{m}"), row.get(f"random_{m}")]
+            ws.append(cells)
+
+
+def _fill_robustness_ban_replay(wb: Any, payload: dict, suffix: str) -> None:
+    rows = payload.get("ban_replay") or []
+    if not rows:
+        return
+    ws = wb.create_sheet(title=_robustness_sheet_name("Ban replay", suffix))
+    header = ["Wave year", "Pre-wave nodes", "Closed", "Fraction"]
+    for m in _ROBUSTNESS_METRICS:
+        header += [f"predicted_{m}", f"random_{m}", f"observed_{m}"]
+    ws.append(header)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        cells: list = [row.get("year"), row.get("n_pre"), row.get("n_closed"), row.get("fraction")]
+        for m in _ROBUSTNESS_METRICS:
+            cells += [row.get(f"predicted_{m}"), row.get(f"random_{m}"), row.get(f"observed_{m}")]
+        ws.append(cells)
+
+
+def _fill_robustness_alpha_sensitivity(wb: Any, payload: dict, suffix: str) -> None:
+    sens = payload.get("alpha_sensitivity") or {}
+    rows = sens.get("rows") or []
+    if not rows:
+        return
+    strategies = [s for s in sens.get("strategies", []) if s in payload.get("strategies", {})]
+    ws = wb.create_sheet(title=_robustness_sheet_name("Alpha sensitivity", suffix))
+    header = ["alpha", "backbone_n", "backbone_m", "Metric"] + list(strategies)
+    ws.append(header)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        for m in _ROBUSTNESS_METRICS:
+            cells: list = [row.get("alpha"), row.get("backbone_n"), row.get("backbone_m"), m.upper()]
+            for s in strategies:
+                r = (row.get("r") or {}).get(s) or {}
+                cells.append(r.get(m))
             ws.append(cells)
 
 
@@ -782,6 +821,8 @@ def write_robustness_table_xlsx(
         _fill_robustness_summary(wb, payload, suffix)
         _fill_robustness_curves(wb, payload, suffix)
         _fill_robustness_efficiency(wb, payload, suffix)
+        _fill_robustness_alpha_sensitivity(wb, payload, suffix)
+        _fill_robustness_ban_replay(wb, payload, suffix)
         _fill_robustness_modular(wb, payload, suffix)
         _fill_robustness_ban_waves(wb, payload, suffix)
 
