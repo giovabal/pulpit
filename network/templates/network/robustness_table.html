@@ -77,6 +77,29 @@
 </p>
 <div class="rb-grid export-wide mb-4" id="rb-curves"></div>
 
+<div id="rb-replay-section" class="export-wide d-none">
+  <h3 class="mt-4 mb-2">Ban-replay validation</h3>
+  <p class="text-muted small mb-3">
+    An out-of-sample check against reality: for each year with recorded channel closures, the channels
+    that actually disappeared are removed from the <em>prior-year</em> network and the predicted residual
+    is compared against the equal-count random baseline and the <em>observed</em> next-year structure
+    (restricted to the pre-wave survivors, normalised against the same pre-wave baseline). When observed
+    exceeds predicted, the ecosystem re-wired around the gap — the static simulation cannot see that
+    adaptation; the vacancy analysis measures it channel by channel.
+  </p>
+  <div id="rb-replay-tables"></div>
+</div>
+
+<div id="rb-alpha-section" class="export-wide d-none">
+  <h3 class="mt-4 mb-2">Backbone α-sensitivity</h3>
+  <p class="text-muted small mb-3">
+    The R-index recomputed at several disparity-filter α thresholds (0 = full graph), so you can see
+    whether a strategy's ranking is stable or an artefact of the chosen backbone. Stable orderings across
+    α mean the vulnerability finding does not depend on the filter cut-off.
+  </p>
+  <div id="rb-alpha-tables"></div>
+</div>
+
 <div id="rb-banwave-section" class="export-wide d-none">
   <h3 class="mt-4 mb-2">Ban-wave scenarios</h3>
   <p class="text-muted small mb-3">

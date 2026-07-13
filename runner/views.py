@@ -136,8 +136,11 @@ class OperationsView(View):
             "SA_ROBUSTNESS_ALPHA": settings.SA_ROBUSTNESS_ALPHA,
             "SA_ROBUSTNESS_RUNS": settings.SA_ROBUSTNESS_RUNS,
             "SA_ROBUSTNESS_NULL": settings.SA_ROBUSTNESS_NULL,
+            "SA_ROBUSTNESS_NULL_MODEL": settings.SA_ROBUSTNESS_NULL_MODEL,
             "SA_ROBUSTNESS_SEED": settings.SA_ROBUSTNESS_SEED,
             "SA_ROBUSTNESS_SAMPLE": settings.SA_ROBUSTNESS_SAMPLE,
+            "SA_ROBUSTNESS_ALPHA_GRID": settings.SA_ROBUSTNESS_ALPHA_GRID,
+            "SA_ROBUSTNESS_REPLAY": settings.SA_ROBUSTNESS_REPLAY,
             # SA interest (per-message structural reach)
             "SA_INTEREST_WINDOW_DAYS": settings.SA_INTEREST_WINDOW_DAYS,
             "SA_INTEREST_INCLUDE_MENTIONS": settings.SA_INTEREST_INCLUDE_MENTIONS,
@@ -634,8 +637,11 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("robustness_strategies", "--robustness-strategies"),
         ("value", "robustness_runs", "--robustness-runs"),
         ("value", "robustness_null", "--robustness-null"),
+        ("value", "robustness_null_model", "--robustness-null-model"),
         ("value", "robustness_seed", "--robustness-seed"),
         ("value", "robustness_sample", "--robustness-sample"),
+        ("value", "robustness_alpha_grid", "--robustness-alpha-grid"),
+        ("bool_explicit", "robustness_replay", "--robustness-replay", "--no-robustness-replay"),
         ("bool_explicit", "coordination_2d", "--coordination-2d", "--no-coordination-2d"),
         ("bool_explicit", "coordination_3d", "--coordination-3d", "--no-coordination-3d"),
         ("value", "coordination_window", "--coordination-window"),
@@ -738,8 +744,11 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("robustness_strategies", "robustness.strategies", "list"),
         ("robustness_runs", "robustness.runs", "int"),
         ("robustness_null", "robustness.null", "int"),
+        ("robustness_null_model", "robustness.null_model", "value"),
         ("robustness_seed", "robustness.seed", "int"),
         ("robustness_sample", "robustness.sample", "int"),
+        ("robustness_alpha_grid", "robustness.alpha_grid", "float_list"),
+        ("robustness_replay", "robustness.replay", "bool"),
         ("interest_structural", "interest.structural", "bool"),
         ("interest_window_days", "interest.window_days", "int"),
         ("interest_include_mentions", "interest.include_mentions", "bool"),
@@ -896,6 +905,9 @@ def _toml_to_form_payload(task: str, merged: dict) -> dict:
         elif kind.startswith("bool_to_enum:"):
             _off, on = kind.split(":", 1)[1].split(",", 1)
             out[post_key] = value == on
+        elif kind == "float_list":
+            # TOML list of floats → comma-separated string for the text field.
+            out[post_key] = ",".join(str(a) for a in value) if isinstance(value, list) else value
         else:
             out[post_key] = value
     return out
@@ -910,6 +922,9 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
             value = bool(post.get(post_key))
         elif kind == "list":
             value = list(post.getlist(post_key))
+        elif kind == "float_list":
+            # Comma-separated text field → list of floats (empties skipped).
+            value = [float(tok) for tok in post.get(post_key, "").split(",") if tok.strip()]
         elif kind == "value":
             value = post.get(post_key, "").strip()
         elif kind == "palette_name":

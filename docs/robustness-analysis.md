@@ -14,10 +14,12 @@ Enable with `--robustness` on `structural_analysis` (off by default; see [Workfl
 | :-------------- | :--------------- |
 | `R_wcc`, `R_scc`, `R_reach`, `R_strength` | Four robustness indices per attack strategy: the smaller R is, the faster the network fragments under that attack |
 | `f_c` (5% threshold) | Fraction of channels that would have to disappear before the residual network collapses below 5% of its initial size |
-| `R` z-score + empirical p vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring — the p column makes the K-draw resolution explicit |
+| `R` z-score + empirical p/q vs null | How extreme the observed R is compared to networks with the *same in/out degree and strength sequences* but randomised wiring — the p column makes the K-draw resolution explicit, the q column BH-corrects across the whole strategy×metric grid |
 | Weighted efficiency curve `E(f)` | How well the surviving core stays knit as the attack proceeds — weighted damage the size curves can miss |
 | Intra/inter community survival | Does the attack strip the bridges between communities first (decoupling), or the ties within them first (eroding cohesion)? |
 | Ban-wave scenarios | Residual network after removing each whole community/label block in one step, vs removing the same number of channels at random |
+| Ban-replay validation | For each year with recorded closures: predicted residual (remove the channels that actually vanished from the prior-year graph) vs the observed next-year structure — the out-of-sample check |
+| Backbone α-sensitivity | R recomputed across several disparity-filter α thresholds, so you can tell a real vulnerability ranking from a backbone artefact |
 
 ---
 
@@ -39,9 +41,9 @@ Channels with a single edge in a given direction always keep that edge — there
 
 ## Attack strategies
 
-Ten strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
+Thirteen strategies are available, partitioned into *static* (rank the channels once and remove them in that fixed order) and *dynamic* (recompute the ranking after every deletion — `_dyn` suffix). Pick any subset with `--robustness-strategies` (default: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`); at least one must be selected.
 
-The strategies are described in detail below — they cover the five main "what makes a channel critical?" axes (random / degree / prestige / bridges / visibility); see [Network measures](network-measures.md) for the underlying definitions.
+The strategies are described in detail below — they cover six "what makes a channel critical?" axes (random / degree / prestige / bridges / dismantling / visibility); see [Network measures](network-measures.md) for the underlying definitions.
 
 | Strategy | Mode | What it models |
 | :------- | :--- | :------------- |
@@ -50,10 +52,13 @@ The strategies are described in detail below — they cover the five main "what 
 | `out_strength` | static | "Take down everything that cites heavily" — moderation aimed at aggregators |
 | `pagerank` | static | "Take down the highest-prestige channels" — moderation aware of inherited prestige |
 | `betweenness` | static | "Take down the bridges" — moderation aimed at the channels whose removal cuts the network apart |
+| `collective_influence` | static | "Take down the near-optimal dismantling set" — the worst-case attacker who knows exactly which channels fragment the network fastest |
 | `subscribers` | static | "Take down the biggest audiences" — moderation as it actually happens, targeting visibility |
 | `in_strength_dyn` / `out_strength_dyn` | dynamic | Degree-based attacks with cascade awareness — re-rank after every removal |
 | `pagerank_dyn` | dynamic | Prestige attack with cascade awareness |
 | `betweenness_dyn` | dynamic | Bridge attack with cascade awareness — the most destructive order in Holme et al.'s comparison, and by far the costliest |
+| `collective_influence_dyn` | dynamic | The canonical adaptive Collective-Influence algorithm — remove the top-CI node, rescore, repeat |
+| `fragmentation_dyn` | dynamic | Greedy key-player dismantling — repeatedly remove the channel whose deletion most shatters the network |
 
 The whole point of running multiple strategies is comparison. If they all produce similar R values, the network has no specific weak class of channels — it is *homogeneously* resilient or fragile. If one strategy gives a much lower R than the others, you have found the network's specific vulnerability: an attacker following that strategy would do disproportionate damage.
 
@@ -103,6 +108,23 @@ Channels are ranked by directed betweenness centrality (Freeman 1977) with edge 
 
 **Example.** In a coalition network where the nationalist and the conspiracist camps share only three channels that both sides cite, those three channels top the betweenness ranking even if their degree and PageRank are unremarkable. A betweenness attack removes them first and splits the recorded web into two components within a handful of removals — something the in-strength attack, busy with each camp's internal hubs, might not achieve until much later.
 
+### Dismantling attacks (`collective_influence`, `fragmentation_dyn`)
+
+*Target a near-optimal removal set — the worst case a structural attacker could achieve.*
+
+Every strategy above ranks channels by a *single score* (a degree, a prestige, a cut position). Because they are heuristics, "R under the best of them" only tells you the network is *at least this vulnerable* — it bounds the worst case from **above**. The dismantling strategies come at the problem from the other side: they approximate the *smallest set of channels whose removal fragments the network*, giving a defensible worst-case bound from **below**.
+
+- **`collective_influence`** ranks each channel by its Collective Influence, `CI_ℓ(i) = (k_i − 1) · Σ_{j on the frontier of the radius-ℓ ball} (k_j − 1)` (ball radius ℓ = 2 by default). A channel scores high when it has many connections *and* sits amid other well-connected channels — the signature of a node holding a whole region together. This is the optimal-percolation heuristic of Morone & Makse (2015): minimising the largest surviving component is equivalent to finding the minimal set of these high-CI nodes. The static variant applies the one-shot ranking; **`collective_influence_dyn`** is the canonical adaptive algorithm (remove the top-CI channel, recompute, repeat) and is the single strongest dismantling order Pulpit ships.
+- **`fragmentation_dyn`** greedily maximises Borgatti's (2006) key-player fragmentation objective: at each step it removes the channel whose deletion most reduces network cohesion (it shatters components into small pieces, targeting articulation points directly). It is inherently adaptive — there is no static variant, because before any removal almost every channel has the same marginal fragmentation effect.
+
+**References:** Morone, F. & Makse, H. A. (2015) "Influence maximization in complex networks through optimal percolation." *Nature* 524(7563). [doi:10.1038/nature14604](https://doi.org/10.1038/nature14604); Borgatti, S. P. (2006) "Identifying sets of key players in a social network." *Computational & Mathematical Organization Theory* 12(1). [doi:10.1007/s10588-006-7084-x](https://doi.org/10.1007/s10588-006-7084-x). The key-player framing is the network-science lineage counter-extremism analysts already use (Everton, S. F. (2012) *Disrupting Dark Networks*, Cambridge University Press).
+
+**Interpretation guardrail (one-degree):** both dismantling strategies use multi-hop topology, which Pulpit's per-channel measure catalogue excludes under [one-degree attribution](network-measures.md#what-this-catalogue-covers). They are exempt for the same reason `betweenness` is: an attack *order* makes no per-channel content-flow claim — it is judged only by its effect on the S(f) curves. Read "high CI" as "removing this channel fragments the recorded structure fastest", never as "content flows through this channel".
+
+**In practice:** the gap between the dismantling R and the best single-score R is itself a finding. If `pagerank` already gets close to `collective_influence_dyn`, then targeting prestige is nearly optimal — a moderator does not need a graph algorithm, the obvious hit list works. If the dismantling R is far lower, the network's true fragility is hidden from any simple ranking: it takes a coordinated set, not the individually-important channels, to break it.
+
+**Example.** A network with three mid-degree channels that each bridge a different pair of clusters might leave every single-score attack unimpressed (none of the three is a top hub or top bridge alone), yet `collective_influence_dyn` removes exactly those three first and fragments the network in three steps — the coordinated-set vulnerability the one-at-a-time rankings each miss.
+
 ### Visibility attack (`subscribers`)
 
 *Target the biggest audiences first — moderation as it actually happens.*
@@ -121,7 +143,7 @@ Channels are ranked by their Telegram member count (`participants_count`), highe
 
 Static attacks rank once and remove in that fixed order; dynamic attacks ask, after every removal, *who is the most critical now?* This matters because the structurally-second-most-important channel before any removal might become the most-important after the first one is gone — especially under PageRank, where prestige redistributes through the residual.
 
-Pulpit ships four dynamic variants — one per recomputable static strategy: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`. Pick whichever ones you want via `--robustness-strategies`. (`subscribers` has no dynamic variant: audience size is a node property, so re-ranking after each removal would reproduce the static order.)
+Pulpit ships six dynamic variants: `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`, `collective_influence_dyn`, and `fragmentation_dyn` (the last is dynamic-only). Pick whichever ones you want via `--robustness-strategies`. (`subscribers` has no dynamic variant: audience size is a node property, so re-ranking after each removal would reproduce the static order.)
 
 **In practice:** dynamic attacks are usually strictly more destructive than their static counterparts because they adapt to the network's response. Use them when you want the worst-case scenario, not the average. The cost is real: `O(N · (N+m))` for degree, `O(N · power-iteration)` for PageRank, and `O(N · (Nm + N² log N))` for betweenness — a full Brandes pass per removal. On a 1 000-node graph with 10 000 edges expect minutes for the degree/PageRank dyn variants and considerably longer for `betweenness_dyn`.
 
@@ -222,6 +244,13 @@ A low R from a targeted strategy by itself doesn't say much: maybe the network i
 
 Pulpit uses a *directed weighted configuration-model null*: it preserves each channel's in/out **degree** (exactly) and in/out **strength** (via iterative proportional fitting) while randomising the wiring. Concretely, each draw applies Maslov–Sneppen degree-preserving edge swaps and then rescales the weights back onto the observed strength sequence. Each null is therefore a network with the same degree and strength profiles as the real one but a randomised topology — so the comparison isolates higher-order structure (clustering, motifs, weight–topology coupling) rather than the degree/strength sequences the attacks already rank on. The runner draws `--robustness-null` independent samples (default 20) and re-runs every attack strategy on each one, producing K null R values per (strategy, metric).
 
+**Choosing the null (`--robustness-null-model`).** Two nulls are available:
+
+- **`configuration`** (default) — the degree/strength-preserving null just described.
+- **`reciprocal`** — additionally holds each channel's **reciprocated degree** and the network's **global reciprocity** fixed, by running the Maslov–Sneppen swaps *within dyad classes* (mutual `a⇄b` pairs are only ever swapped against other mutual pairs; single edges only against single edges, under a constraint that never creates or destroys a mutual tie). This is the reciprocal-configuration-model constraint of Squartini & Garlaschelli (2011), realised by rewiring rather than analytically.
+
+Use `reciprocal` when **mutual citation is itself the structure under test**. Echo-chamber cores — clusters of channels that reciprocally repost each other — inflate a network's robustness, and the `configuration` null randomises those mutual ties away. Against the `configuration` null, a reciprocity-heavy network will look "significantly structured" partly *because* it has reciprocated dyads; the `reciprocal` null removes that explanation, so a deviation that survives it is genuinely higher-order (which specific edges carry the load, clustering beyond reciprocity, motifs) and not just "the network has mutual pairs." **Reference:** Squartini, T. & Garlaschelli, D. (2011) "Analytical maximum-likelihood method to detect patterns in real networks." *New Journal of Physics* 13, 083001. [doi:10.1088/1367-2630/13/8/083001](https://doi.org/10.1088/1367-2630/13/8/083001).
+
 The **z-score** quantifies how extreme the observed R is compared to that null distribution:
 
 > **z = (R_observed − μ_null) / σ_null**
@@ -236,6 +265,10 @@ The add-one correction makes the simulation's *resolution* explicit: with K draw
 
 Unlike the z-score, the empirical p also survives a degenerate null: when every rewired draw yields the same R (σ = 0, z = `nan`), an observed R inside the degenerate distribution gets p = 1 and one outside it gets the floor — still informative.
 
+### The q column (multiple-comparison correction)
+
+The runner tests many hypotheses at once: one empirical p per (strategy × metric) cell, so a default five-strategy run produces 5 × 4 = 20 simultaneous tests. At α = 0.05, roughly one of those twenty would clear the bar by chance even if nothing were structured. The **q column** next to p is the Benjamini–Hochberg false-discovery-rate adjustment applied across the whole grid: read q, not p, when you are scanning the table for "which cells are significant?" A per-cell p that looks significant in isolation but whose q does not is exactly the false positive the correction is there to catch. This mirrors the BH step the [vacancy analysis](vacancy-analysis.md) already applies across its candidate list. (Cells whose p is `nan` — a degenerate null — carry a `nan` q and are excluded from the test count.) **Reference:** Benjamini, Y. & Hochberg, Y. (1995) "Controlling the false discovery rate: a practical and powerful approach to multiple testing." *Journal of the Royal Statistical Society B* 57(1). [doi:10.1111/j.2517-6161.1995.tb02031.x](https://doi.org/10.1111/j.2517-6161.1995.tb02031.x)
+
 **Reference:** North, B. V., Curtis, D. & Sham, P. C. (2002) "A note on the calculation of empirical P values from Monte Carlo procedures." *American Journal of Human Genetics* 71(2). [doi:10.1086/341527](https://doi.org/10.1086/341527); Phipson, B. & Smyth, G. K. (2010) "Permutation P-values should never be zero." *Statistical Applications in Genetics and Molecular Biology* 9(1), Article 39. [doi:10.2202/1544-6115.1585](https://doi.org/10.2202/1544-6115.1585); Serrano, M. Á. & Boguñá, M. (2005) "Weighted configuration model." *AIP Conference Proceedings* 776. [doi:10.1063/1.1985381](https://doi.org/10.1063/1.1985381); Maslov, S. & Sneppen, K. (2002) "Specificity and stability in topology of protein networks." *Science* 296(5569). [doi:10.1126/science.1065103](https://doi.org/10.1126/science.1065103)
 
 **In practice:** the z-score answers *"is the observed vulnerability a generic property of the degree/strength sequences, or of the specific higher-order wiring?"*. If your network has a low R under PageRank attack but |z| is small (say below 1), it means *any* network with the same in/out degree and strength sequences but randomly rewired connections would behave similarly — the vulnerability is generic to those sequences, not to the specific arrangement (which edges carry the weight, clustering, reciprocity, motifs). If z is large and negative, that *specific* higher-order arrangement is what makes your network especially vulnerable relative to a randomly-rewired graph with the same degree/strength profile.
@@ -246,7 +279,7 @@ Unlike the z-score, the empirical p also survives a degenerate null: when every 
 
 The directed weighted configuration-model null is the *minimum-acceptable* baseline, not the ideal one. It preserves each channel's in/out degree (exactly), each channel's in/out strength (approximately, via iterative proportional fitting), and the total edge count and total weight. It does *not* hold the topology fixed — the wiring is randomised by Maslov–Sneppen degree-preserving edge swaps — and it does *not* preserve reciprocity, the clustering coefficient, or higher-order motifs.
 
-Practical consequence: networks whose attack response is driven by their degree/strength sequences (e.g. a scale-free degree distribution) will show R values close to their configuration-model nulls — that is *not* a "negative result" about robustness, it is a property of the null choice. If you need a stricter null (e.g. one that also preserves reciprocity or higher-order motifs, on top of the degree and strength sequences this null already preserves), generate the appropriate ensemble externally and feed the comparison values manually.
+Practical consequence: networks whose attack response is driven by their degree/strength sequences (e.g. a scale-free degree distribution) will show R values close to their configuration-model nulls — that is *not* a "negative result" about robustness, it is a property of the null choice. If reciprocity is the property you want to hold fixed, switch to `--robustness-null-model reciprocal` (above), which preserves it on top of the degree and strength sequences. For a null that also preserves higher-order motifs, generate the appropriate ensemble externally and feed the comparison values manually.
 
 **Strategies with no null variance report z = `nan`.** The z-score is `(R_observed − μ_null) / σ_null`; when every rewired draw yields the same R for a strategy, its standard deviation collapses to zero and the z-score is reported as `nan` (see `null_model.z_score`). This typically happens only on small or degenerate backbones, where the rewiring has too little freedom to change the residual-size curves. The empirical p column stays defined in that case and is the number to read; the observed R and `f_c` also remain meaningful in their own right and are worth comparing against the *random* R baseline.
 
@@ -281,7 +314,42 @@ The equal-count random baseline is the point of the exercise:
 
 Because Pulpit's partitions include the analyst's own label groups (any `LABELGROUP<id>` selected as a community strategy), *"what if every channel of organisation O were banned?"* is a first-class query — run the label-group partition through `--community-strategies` and its blocks appear in the ban-wave table alongside the algorithmic communities.
 
-**In practice:** on a timeline export this composes with real events. If a documented mass-removal event falls inside the study period, compare the scenario's predicted residual against the observed next-year network — the strongest validation this kind of simulation can get. Blocks smaller than 2 channels are skipped, as is any block covering the entire graph.
+**In practice:** on a timeline export this composes with real events. If a documented mass-removal event falls inside the study period, compare the scenario's predicted residual against the observed next-year network — the strongest validation this kind of simulation can get. The **ban-replay validation** below automates exactly that comparison against the analyst's recorded closures. Blocks smaller than 2 channels are skipped, as is any block covering the entire graph.
+
+---
+
+## Ban-replay validation
+
+*The out-of-sample test: did the channels that actually disappeared damage the network the way the simulation predicts?*
+
+Everything above is counterfactual — it asks what *would* happen. When the corpus records channels that *actually* vanished (the analyst's [vacancy](vacancy-analysis.md) closures, entered under Manage → Vacancies), the same machinery becomes an out-of-sample prediction you can score against reality. Enable it with `--robustness-replay` (requires `--timeline-step year`).
+
+For each **wave year** Y — a calendar year with recorded closures — the replay:
+
+1. takes the **pre-wave** graph `G_{Y-1}` (the network the year before);
+2. removes the channels that closed during Y and were present in `G_{Y-1}` — the **predicted** residual (four sizes, normalised against `G_{Y-1}` exactly as the ban-wave scenarios are);
+3. compares that against the **equal-count random baseline** (remove the same number of channels at random, averaged over `--robustness-runs`);
+4. compares it against the **observed** post-wave structure: the `G_{Y+1}` graph restricted to the pre-wave survivors, normalised against the same `G_{Y-1}` baseline so predicted and observed sit on one scale.
+
+Read the three numbers in each cell (`predicted / random / observed`) together:
+
+- **observed ≈ predicted** — the static removal captured what happened; the network did not rewire around the gap.
+- **observed > predicted** (green) — the ecosystem *healed*: survivors formed new ties the static simulation, blind to adaptation, could not foresee. This is the re-wiring the [vacancy analysis](vacancy-analysis.md) measures channel by channel. (`strength` can exceed 1 when the survivor core grew denser than the whole pre-wave network.)
+- **observed < predicted** (red) — the wave triggered *cascading* abandonment beyond the banned block itself.
+
+Only *interior* wave years get a full row (both `G_{Y-1}` and `G_{Y+1}` must exist); the observed column is blank when Y is the last year, and a wave with no closure present in the pre-wave graph is skipped. The backbone filter (`--robustness-alpha`) is applied to each year graph, so the replay attacks the same skeleton the rest of the battery does.
+
+This is the strongest validation a static removal simulation can get, and it is precisely the gap the deplatforming-effectiveness literature is about — the distance between predicted and realised moderation effects. **References:** Chandrasekharan, E. et al. (2017) "You Can't Stay Here: The Efficacy of Reddit's 2015 Ban Examined Through Hate Speech." *Proc. ACM Hum.-Comput. Interact.* 1(CSCW), Article 31. [doi:10.1145/3134666](https://doi.org/10.1145/3134666); Jhaver, S., Boylston, C., Yang, D. & Bruckman, A. (2021) "Evaluating the Effectiveness of Deplatforming as a Moderation Strategy on Twitter." *Proc. ACM Hum.-Comput. Interact.* 5(CSCW2), Article 381. [doi:10.1145/3479525](https://doi.org/10.1145/3479525); Horta Ribeiro, M. et al. (2021) "Do Platform Migrations Compromise Content Moderation? Evidence from r/The_Donald and r/Incels." *Proc. ACM Hum.-Comput. Interact.* 5(CSCW2), Article 316. [doi:10.1145/3476057](https://doi.org/10.1145/3476057).
+
+---
+
+## Backbone α-sensitivity
+
+*Is a strategy's vulnerability ranking real, or an artefact of the backbone threshold?*
+
+Every R value on this page is conditional on one disparity-filter α (default 0.05). A fair question — and one a methods reviewer will ask — is whether the rankings would survive a different cut-off. `--robustness-alpha-grid` answers it directly: pass a comma-separated list of α values (e.g. `0,0.01,0.05,0.1`, where `0` means the full graph) and Pulpit recomputes R for every strategy and metric at each α, in one extra table. No null model, efficiency curve, or modular pass runs for the sweep — it is a cheap stability check, not a second full battery.
+
+**In practice:** read down each column. If PageRank is the most destructive strategy at α = 0.01, 0.05, *and* 0.1, the finding is robust to the backbone choice — you can report "this network is vulnerable to prestige-targeted removal" without the caveat "at α = 0.05". If the ranking reshuffles as α changes, the vulnerability is entangled with the filtering, and the honest statement is conditional on the threshold. Either way, showing the sweep pre-empts the artefact objection.
 
 ---
 
@@ -290,7 +358,7 @@ Because Pulpit's partitions include the analyst's own label groups (any `LABELGR
 Pulpit's edges record **one-degree** amplification (see [Measures → what this catalogue covers](network-measures.md#what-this-catalogue-covers)): a forward points straight at the origin, so multi-hop paths in the citation graph certify *recorded structure*, not routes content actually travelled. Three consequences for reading this page:
 
 1. **The damage metrics are structural claims, not diffusion claims.** `R_reach` counts ordered pairs joined by directed chains of *citations*; a collapse in reach means the recorded web has fallen apart, not that information can no longer travel (channels can follow each other invisibly).
-2. **Attack orders are heuristics, not scores.** A removal ranking — betweenness included — is justified purely by its effect on the S(f) curves. That is why `betweenness` is a legitimate attack strategy here while `BETWEENNESS` is deliberately absent from the per-channel measure catalogue: ordering removals by cut position makes no claim that content flows through the removed channel, whereas publishing a per-channel brokerage score would.
+2. **Attack orders are heuristics, not scores.** A removal ranking — betweenness and the dismantling strategies (`collective_influence`, `fragmentation_dyn`) included — is justified purely by its effect on the S(f) curves. That is why they are legitimate attack strategies here while `BETWEENNESS` is deliberately absent from the per-channel measure catalogue: ordering removals by cut position or fragmentation impact makes no claim that content flows through the removed channel, whereas publishing a per-channel brokerage score would.
 3. **The simulation is static.** No strategy models the ecosystem's response — backup channels, rebrands, audience migration. The [vacancy analysis](vacancy-analysis.md) is the empirical counterpart: it measures, on the channels that actually disappeared from this corpus, how quickly and completely the network re-wired around them. Read the two together — structural fragility under static removal, and the measured recovery dynamics that erode it.
 
 ---
@@ -311,16 +379,16 @@ The analysis is **not** meant to predict actual deplatforming outcomes — that 
 
 When `--robustness` is on, the export receives:
 
-- **`data/robustness.json`** — the full payload (config, graph metadata, per-strategy curves and R/f_c values, the efficiency curves, optional null model statistics, optional modular curves and ban-wave scenarios per partition). Mirrors the single-file convention of `data/vacancy_analysis.json`. `None` is used for undefined ratios instead of `Infinity`/`NaN`, so the file is plain JSON.
-- **`robustness_table.html`** (when `--html` is set) — Chart.js page with the summary table, four `S(f)` line charts (one per size metric) plus the `E(f)` efficiency chart, the ban-wave tables per partition, and an accordion of intra/inter curves per partition.
-- **`robustness_table.xlsx`** (when `--xlsx` is set) — five sheet families: a `Summary` sheet with one row per (strategy, metric), one `Curve <strategy>` sheet per strategy with the raw `S(f)` and optional null-model columns, an `Efficiency` sheet with the coarse `E(f)` grid, one `Modular <partition>` sheet per partition, and one `Ban wave <partition>` sheet per partition.
+- **`data/robustness.json`** — the full payload (config, graph metadata, per-strategy curves and R/f_c values, the efficiency curves, optional null model statistics with BH-adjusted q-values, optional modular curves and ban-wave scenarios per partition, the optional α-sensitivity sweep, and the optional ban-replay validation). Mirrors the single-file convention of `data/vacancy_analysis.json`. `None` is used for undefined ratios instead of `Infinity`/`NaN`, so the file is plain JSON.
+- **`robustness_table.html`** (when `--html` is set) — Chart.js page with the summary table (including the `q` column), four `S(f)` line charts (one per size metric) plus the `E(f)` efficiency chart, the ban-replay table, the α-sensitivity tables, the ban-wave tables per partition, and an accordion of intra/inter curves per partition.
+- **`robustness_table.xlsx`** (when `--xlsx` is set) — the sheet families: a `Summary` sheet with one row per (strategy, metric) (with `p` and `q`), one `Curve <strategy>` sheet per strategy with the raw `S(f)` and optional null-model columns, an `Efficiency` sheet with the coarse `E(f)` grid, an optional `Alpha sensitivity` sheet, an optional `Ban replay` sheet, one `Modular <partition>` sheet per partition, and one `Ban wave <partition>` sheet per partition.
 - A link card on `index.html`.
 
 The new files honour the existing atomic-publish convention (`exports/<name>.tmp/` → `exports/<name>/`), so an aborted run never corrupts a previous one.
 
 ### Timeline export
 
-When `--timeline-step year` is active alongside `--robustness`, the analysis runs once on the global graph *and* once per calendar year. Per-year payloads land in `data_YYYY/robustness.json` next to the per-year communities and channels, and the HTML page picks them up via the same "All · 2019 · 2020 · …" navigator used by the channel, network, and community tables. The Excel workbook becomes a single multi-year file: sheets get year suffixes (`"Summary All"`, `"Summary 2019"`, `"Curve pagerank 2019"`, `"Modular leiden 2019"`, etc.). Same RNG seed across years — each per-year graph is different, so the same seed still produces independent null draws.
+When `--timeline-step year` is active alongside `--robustness`, the analysis runs once on the global graph *and* once per calendar year. Per-year payloads land in `data_YYYY/robustness.json` next to the per-year communities and channels, and the HTML page picks them up via the same "All · 2019 · 2020 · …" navigator used by the channel, network, and community tables. The Excel workbook becomes a single multi-year file: sheets get year suffixes (`"Summary All"`, `"Summary 2019"`, `"Curve pagerank 2019"`, `"Modular leiden 2019"`, etc.). Same RNG seed across years — each per-year graph is different, so the same seed still produces independent null draws. The **α-sensitivity sweep and the ban-replay validation are global-only** (they belong to the whole-timeline "All" scope): the sweep would multiply every per-year run's cost by the grid length, and the replay is by construction a cross-year comparison.
 
 Cost scales with `K_null × N_strategies × N_years`, so expect noticeably longer runtimes than the global-only case on long time spans. For fast iteration, drop `--robustness-null` to 5–10 (or 0) and re-enable it once the configuration is settled.
 

@@ -263,7 +263,7 @@ For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` b
 
 ## `[robustness]`
 
-Resistance to node removal: residual-size R-index per attack strategy, z-score against a weight-rewiring null model, intra/inter community edge survival, and ban-wave scenarios per partition. See [Robustness analysis](robustness-analysis.md).
+Resistance to node removal: residual-size R-index per attack strategy, z-score + BH-adjusted empirical p against a null model, intra/inter community edge survival, ban-wave scenarios per partition, an optional backbone-sensitivity sweep, and an optional historical ban-replay validation. See [Robustness analysis](robustness-analysis.md).
 
 There is no `robustness.enabled` knob — robustness analysis runs iff `robustness.strategies` is non-empty (`SA_ROBUSTNESS = bool(strategies)` in `settings.py`). The Operations panel's strategy checkboxes drive both the strategy list and the master switch.
 
@@ -271,10 +271,13 @@ There is no `robustness.enabled` knob — robustness analysis runs iff `robustne
 | :--- | :---------- | ---------------: |
 | `robustness.alpha` | Serrano-Boguñá-Vespignani disparity-filter threshold applied before the attacks. Values in `(0, 1)` keep statistically significant edges only; `0` disables the filter and uses the full graph | `0.05` |
 | `robustness.runs` | Number of independent random-failure runs averaged for the `random` strategy | `100` |
-| `robustness.null` | Number of weight-rewiring null-model simulations per strategy; `0` disables the null model (no z-scores / p-values). The empirical p-value's floor is `2/(K+1)` — the default 20 cannot certify α = 0.05; use 79+ (e.g. 100) for publication-grade claims | `20` |
-| `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`, `subscribers`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`. Use `["ALL"]` for every strategy. | `[]` |
+| `robustness.null` | Number of null-model simulations per strategy; `0` disables the null model (no z-scores / p-values). The empirical p-value's floor is `2/(K+1)` — the default 20 cannot certify α = 0.05; use 79+ (e.g. 100) for publication-grade claims | `20` |
+| `robustness.null_model` | Which null to rewire against: `configuration` (degree + strength preserving) or `reciprocal` (also preserves each node's reciprocated degree and global reciprocity — Squartini & Garlaschelli 2011) | `configuration` |
+| `robustness.strategies` | Attack strategies. Static: `random`, `in_strength`, `out_strength`, `pagerank`, `betweenness`, `collective_influence`, `subscribers`. Dynamic (re-rank per removal): `in_strength_dyn`, `out_strength_dyn`, `pagerank_dyn`, `betweenness_dyn`, `collective_influence_dyn`, `fragmentation_dyn`. Use `["ALL"]` for every strategy. | `[]` |
 | `robustness.seed` | Single seed driving every stochastic component of the robustness analysis | `42` |
 | `robustness.sample` | Source-sample size for the R_reach metric on graphs larger than this many nodes | `500` |
+| `robustness.alpha_grid` | List of disparity-filter α values for the backbone-sensitivity sweep (R recomputed per strategy×metric at each; `0` = full graph). Empty skips the sweep | `[]` |
+| `robustness.replay` | Run the historical ban-replay validation (needs `timeline.step = year` and recorded `ChannelVacancy` closures) | `false` |
 
 ## `[coordination]`
 

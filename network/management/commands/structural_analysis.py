@@ -38,6 +38,7 @@ from webapp.utils.colors import is_known_palette
 from webapp_engine.command_logging import styled_warning_logs
 
 import networkx as nx
+import numpy as np
 
 
 def _parse_csv(value: str) -> list[str]:
@@ -345,8 +346,11 @@ class ResolvedOptions:
     robustness_strategies: list[str] = field(default_factory=list)
     robustness_runs: int = 100
     robustness_null: int = 20
+    robustness_null_model: str = "configuration"
     robustness_seed: int = 42
     robustness_sample: int = 500
+    robustness_alpha_grid: list[float] = field(default_factory=list)
+    do_robustness_replay: bool = False
 
     # Interest structural analysis (per-message C + D)
     do_interest_structural: bool = False
@@ -407,8 +411,13 @@ class ResolvedOptions:
             "robustness_strategies": ",".join(self.robustness_strategies) if self.robustness_strategies else "",
             "robustness_runs": self.robustness_runs,
             "robustness_null": self.robustness_null,
+            "robustness_null_model": self.robustness_null_model,
             "robustness_seed": self.robustness_seed,
             "robustness_sample": self.robustness_sample,
+            "robustness_alpha_grid": ",".join(str(a) for a in self.robustness_alpha_grid)
+            if self.robustness_alpha_grid
+            else "",
+            "robustness_replay": self.do_robustness_replay,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -951,6 +960,44 @@ class Command(BaseCommand):
             default=None,
             metavar="N",
             help=("Source-sample size for the R_reach metric on graphs larger than this many nodes. Default: 500."),
+        )
+        parser.add_argument(
+            "--robustness-null-model",
+            dest="robustness_null_model",
+            choices=["configuration", "reciprocal"],
+            default=None,
+            help=(
+                "Which null model the z-score/empirical-p compare against. "
+                "'configuration' (default) preserves in/out degree and strength; "
+                "'reciprocal' additionally preserves each node's reciprocated degree and the "
+                "network's global reciprocity (Squartini & Garlaschelli 2011) — pick it when "
+                "mutual citation is itself the structure under test."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-alpha-grid",
+            dest="robustness_alpha_grid",
+            default=None,
+            metavar="α,α,…",
+            help=(
+                "Comma-separated disparity-filter α values for a backbone-sensitivity sweep: "
+                "R per strategy and metric is recomputed at each α (0 = full graph), so a "
+                "reviewer can see whether the R ranking is a backbone artefact. No null / "
+                "efficiency / modular pass is run for the sweep. Empty (default) skips it."
+            ),
+        )
+        parser.add_argument(
+            "--robustness-replay",
+            dest="robustness_replay",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Historical ban-replay validation: for each year with recorded channel closures "
+                "(Manage → Vacancies), remove them from the prior-year graph and compare the "
+                "predicted residual against the equal-q random baseline and the observed next-year "
+                "structure. Requires --timeline-step year. Writes a 'ban_replay' block into "
+                "data/robustness.json."
+            ),
         )
         # ── Interest structural analysis (per-message C + D) ─────────────────
         parser.add_argument(
@@ -1541,6 +1588,59 @@ class Command(BaseCommand):
             self.stdout.flush()
         return temporal_results
 
+    def _compute_ban_replay(self, opts: ResolvedOptions) -> list[dict]:
+        """Build the per-year timeline graphs and run the ban-replay validation.
+
+        Rebuilds one graph per timeline year (same build args as the year loop
+        and the temporal precompute, backbone-filtered with ``robustness_alpha``
+        so the replay attacks the same skeleton the main battery does) and pairs
+        the analyst's :class:`ChannelVacancy` closures — bucketed by
+        ``closure_date.year`` — against them. Returns
+        :func:`network.robustness.ban_replay_rows`' output (empty when no wave
+        year has a usable pre-graph).
+        """
+        from webapp.models import ChannelVacancy
+
+        year_range = _timeline_year_range(opts.start_date, opts.end_date)
+        years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
+        year_graphs: dict[int, nx.DiGraph] = {}
+        for year in years:
+            start_date, end_date = _clamp_year_window(year, opts.start_date, opts.end_date)
+            try:
+                year_graph, _, _, _ = graph_builder.build_graph(
+                    draw_dead_leaves=opts.draw_dead_leaves,
+                    dead_leaves_color=opts.dead_leaves_color,
+                    start_date=start_date,
+                    end_date=end_date,
+                    channel_types=opts.channel_types,
+                    channel_sources=opts.channel_sources or None,
+                    edge_weight_strategy=opts.edge_weight_strategy,
+                    include_mentions=opts.include_mentions,
+                    include_self_references=opts.include_self_references,
+                    include_lost=opts.include_lost,
+                    include_private=opts.include_private,
+                )
+            except ValueError:
+                continue
+            if not year_graph.nodes:
+                continue
+            if opts.robustness_alpha and 0 < opts.robustness_alpha < 1:
+                year_graph = disparity_filter(year_graph, opts.robustness_alpha)
+            year_graphs[year] = year_graph
+
+        closures_by_year: dict[int, set] = {}
+        for channel_id, closure_date in ChannelVacancy.objects.values_list("channel_id", "closure_date"):
+            closures_by_year.setdefault(closure_date.year, set()).add(str(channel_id))
+
+        rng = np.random.default_rng(opts.robustness_seed)
+        return robustness.ban_replay_rows(
+            year_graphs,
+            closures_by_year,
+            n_random_runs=opts.robustness_runs,
+            reach_sample=opts.robustness_sample,
+            rng=rng,
+        )
+
     def _run_year_export(
         self,
         year: int,
@@ -1569,6 +1669,7 @@ class Command(BaseCommand):
         robustness_strategies: list[str] | None = None,
         robustness_runs: int = 100,
         robustness_null: int = 20,
+        robustness_null_model: str = "configuration",
         robustness_seed: int = 42,
         robustness_sample: int = 500,
         do_interest_structural: bool = False,
@@ -1713,8 +1814,11 @@ class Command(BaseCommand):
                         strategies=list(robustness_strategies) if robustness_strategies else None,
                         n_random_runs=robustness_runs,
                         n_null=robustness_null,
+                        null_model=robustness_null_model,
                         seed=robustness_seed,
                         reach_sample=robustness_sample,
+                        # The α-grid and ban-replay are global-only diagnostics; per-year
+                        # panels stay lean (the grid would multiply per-year cost by |grid|).
                     ),
                 )
                 exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
@@ -1926,6 +2030,29 @@ class Command(BaseCommand):
         if do_robustness and not robustness_strategies:
             robustness_strategies = list(robustness.DEFAULT_STRATEGIES)
 
+        # Backbone α-sensitivity grid — parse the comma list to floats in [0, 1).
+        _raw_alpha_grid = _o("robustness_alpha_grid", "")
+        robustness_alpha_grid: list[float] = []
+        for tok in _parse_csv(_raw_alpha_grid) if _raw_alpha_grid else []:
+            try:
+                a = float(tok)
+            except ValueError as exc:
+                raise CommandError(f"--robustness-alpha-grid: {tok!r} is not a number") from exc
+            if not (0 <= a < 1):
+                raise CommandError(f"--robustness-alpha-grid: values must be in [0, 1); got {a}")
+            robustness_alpha_grid.append(a)
+
+        # Ban-replay needs the per-year timeline graphs; warn + skip if the
+        # timeline is off rather than silently producing an empty block.
+        do_robustness_replay = bool(_o("robustness_replay", False))
+        if do_robustness_replay and _o("timeline_step", "") != "year":
+            self.stdout.write(
+                self.style.WARNING(
+                    "--robustness-replay needs --timeline-step year; ban-replay validation will be skipped."
+                )
+            )
+            do_robustness_replay = False
+
         extra_layout_names = _parse_csv(_o("layouts_2d", ""))
         if "ALL" in extra_layout_names:
             extra_layout_names = sorted(layout.EXTRA_LAYOUT_CHOICES_2D)
@@ -2055,8 +2182,11 @@ class Command(BaseCommand):
             robustness_strategies=robustness_strategies,
             robustness_runs=_o("robustness_runs", 100),
             robustness_null=_o("robustness_null", 20),
+            robustness_null_model=_o("robustness_null_model", "configuration"),
             robustness_seed=_o("robustness_seed", 42),
             robustness_sample=_o("robustness_sample", 500),
+            robustness_alpha_grid=robustness_alpha_grid,
+            do_robustness_replay=do_robustness_replay,
             do_interest_structural=_o("interest_structural", False),
             interest_window_days=_o("interest_window_days", 30),
             interest_include_mentions=_o("interest_include_mentions", False),
@@ -2473,13 +2603,22 @@ class Command(BaseCommand):
                     strategies=list(opts.robustness_strategies) if opts.robustness_strategies else None,
                     n_random_runs=opts.robustness_runs,
                     n_null=opts.robustness_null,
+                    null_model=opts.robustness_null_model,
                     seed=opts.robustness_seed,
                     reach_sample=opts.robustness_sample,
+                    alpha_grid=list(opts.robustness_alpha_grid) or None,
                 ),
                 progress=_rob_progress,
             )
+            # Close the last progress step's dangling "… " before the replay line.
             if not _rob_first[0]:
                 self.stdout.write("done")
+            if opts.do_robustness_replay:
+                self.stdout.write("  - ban-replay validation … ", ending="")
+                self.stdout.flush()
+                replay_rows = self._compute_ban_replay(opts)
+                global_rob_payload["ban_replay"] = replay_rows or None
+                self.stdout.write(f"{len(replay_rows)} wave year(s)" if replay_rows else "no usable wave years")
             os.makedirs(root_target, exist_ok=True)
             exporter.write_robustness_json(global_rob_payload, root_target)
             self.stdout.write("- robustness.json")
@@ -2614,6 +2753,7 @@ class Command(BaseCommand):
                         robustness_strategies=opts.robustness_strategies,
                         robustness_runs=opts.robustness_runs,
                         robustness_null=opts.robustness_null,
+                        robustness_null_model=opts.robustness_null_model,
                         robustness_seed=opts.robustness_seed,
                         robustness_sample=opts.robustness_sample,
                         do_interest_structural=opts.do_interest_structural,
