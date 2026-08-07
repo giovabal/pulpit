@@ -8,13 +8,14 @@ from unittest import mock
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.paginator import InvalidPage
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from network.graph_builder import channel_network_data
 from webapp import version_check
 from webapp.managers import ChannelManager, ChannelQuerySet
-from webapp.models import Channel, ChannelLabel, ChannelVacancy, Label, LabelGroup, Message, Project
+from webapp.models import Channel, ChannelLabel, ChannelVacancy, Label, LabelGroup, LabelParent, Message, Project
 from webapp.paginator import DiggPage, DiggPaginator, SoftPaginator
 from webapp.test_helpers import attribute, make_channel, make_label
 from webapp.utils.colors import (
@@ -753,12 +754,149 @@ class LabelGroupPartitionTests(TestCase):
         self.assertEqual(grp.partition_conflicts(), [])
 
 
+class LabelParentModelTests(TestCase):
+    """Container groups: label→parent assignments and their invariants."""
+
+    def setUp(self) -> None:
+        self.continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        self.europe = make_label(name="Europe", group=self.continents, is_in_target=False)
+        self.asia = make_label(name="Asia", group=self.continents, is_in_target=False)
+        self.nations = LabelGroup.objects.create(name="Nation")
+        self.france = make_label(name="France", group=self.nations, is_in_target=False)
+
+    def test_save_syncs_parent_group(self) -> None:
+        link = LabelParent.objects.create(label=self.france, parent=self.europe)
+        self.assertEqual(link.parent_group, self.continents)
+
+    def test_one_parent_per_container_group(self) -> None:
+        LabelParent.objects.create(label=self.france, parent=self.europe)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LabelParent.objects.create(label=self.france, parent=self.asia)
+
+    def test_second_container_group_allows_second_parent(self) -> None:
+        unions = LabelGroup.objects.create(name="Unions", is_container=True)
+        eu = make_label(name="EU", group=unions, is_in_target=False)
+        LabelParent.objects.create(label=self.france, parent=self.europe)
+        LabelParent.objects.create(label=self.france, parent=eu)  # must not raise
+        self.assertEqual(self.france.parent_links.count(), 2)
+
+    def test_non_container_parent_rejected(self) -> None:
+        link = LabelParent(label=self.europe, parent=self.france)  # Nation is not a container
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+
+    def test_same_group_child_rejected(self) -> None:
+        link = LabelParent(label=self.asia, parent=self.europe)
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+
+    def test_unset_container_with_children_rejected(self) -> None:
+        LabelParent.objects.create(label=self.france, parent=self.europe)
+        self.continents.is_container = False
+        with self.assertRaises(ValidationError) as cm:
+            self.continents.full_clean()
+        self.assertIn("is_container", cm.exception.message_dict)
+
+    def test_unset_container_without_children_ok(self) -> None:
+        self.continents.is_container = False
+        self.continents.full_clean()  # must not raise
+
+    def test_channel_label_on_container_label_rejected(self) -> None:
+        # Container labels only contain other labels — never channels.
+        ch = make_channel(telegram_id=1, title="Chan")
+        link = ChannelLabel(channel=ch, label=self.europe)
+        with self.assertRaises(ValidationError) as cm:
+            link.full_clean()
+        self.assertIn("label", cm.exception.message_dict)
+
+    def test_become_container_with_channel_links_rejected(self) -> None:
+        # The Nation group has a channel attributed to France — it cannot become a container.
+        make_channel(telegram_id=1, title="Chan", label=self.france)
+        self.nations.is_container = True
+        with self.assertRaises(ValidationError) as cm:
+            self.nations.full_clean()
+        self.assertIn("is_container", cm.exception.message_dict)
+
+    def test_from_filter_param_resolves_container_labels_only(self) -> None:
+        self.assertEqual(Label.from_filter_param(str(self.europe.pk)), self.europe)
+        self.assertIsNone(Label.from_filter_param(str(self.france.pk)))  # not in a container group
+        self.assertIsNone(Label.from_filter_param("abc"))
+        self.assertIsNone(Label.from_filter_param(""))
+        self.assertIsNone(Label.from_filter_param(None))
+
+
+class InContainerLabelQuerysetTests(TestCase):
+    """Channel.objects.in_container_label(voice): child-label holders only.
+
+    Container labels are never channel-linked, so a stray direct attribution
+    (created before the group became a container) must not count.
+    """
+
+    def setUp(self) -> None:
+        self.continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        self.europe = make_label(name="Europe", group=self.continents, is_in_target=False)
+        org_a = make_label(name="OrgA")  # primary group, in-target
+        org_b = make_label(name="OrgB")
+        org_c = make_label(name="OrgC")
+        LabelParent.objects.create(label=org_a, parent=self.europe)
+        self.child_holder = make_channel(telegram_id=1, title="Child", label=org_a)
+        self.outsider = make_channel(telegram_id=2, title="Outside", label=org_b)
+        self.direct_holder = make_channel(telegram_id=3, title="Direct", label=org_c)
+        attribute(self.direct_holder, self.europe)  # .create() bypasses clean() — simulates a pre-container row
+
+    def test_includes_only_child_label_holders(self) -> None:
+        scoped = Channel.objects.in_target().in_container_label(self.europe)
+        self.assertCountEqual(list(scoped), [self.child_holder])
+
+
+class VstaticTagTests(TestCase):
+    """{% vstatic %}: static URL + mtime version, so browsers never run stale assets."""
+
+    def test_appends_mtime_version(self) -> None:
+        from django.templatetags.static import static
+
+        from webapp.templatetags.vstatic import vstatic
+
+        url = vstatic("webapp/js/http.js")
+        self.assertRegex(url, rf"^{static('webapp/js/http.js')}\?v=\d+$")
+
+    def test_missing_file_falls_back_to_plain_url(self) -> None:
+        from django.templatetags.static import static
+
+        from webapp.templatetags.vstatic import vstatic
+
+        self.assertEqual(vstatic("nope/missing.js"), static("nope/missing.js"))
+
+
 # ─── HomeView ──────────────────────────────────────────────────────────────────
 
 
 class HomeViewTests(TestCase):
     def test_get_returns_200(self) -> None:
         self.assertEqual(self.client.get(reverse("home")).status_code, 200)
+
+    def test_filter_voice_scopes_message_list(self) -> None:
+        continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        europe = make_label(name="Europe", group=continents, is_in_target=False)
+        org_a = make_label(name="OrgA")
+        org_b = make_label(name="OrgB")
+        LabelParent.objects.create(label=org_a, parent=europe)
+        eu_channel = make_channel(telegram_id=1, title="EU chan", label=org_a)
+        other_channel = make_channel(telegram_id=2, title="Other chan", label=org_b)
+        Message.objects.create(telegram_id=1, channel=eu_channel, date="2024-01-10T00:00:00Z")
+        Message.objects.create(telegram_id=2, channel=other_channel, date="2024-01-11T00:00:00Z")
+
+        resp = self.client.get(reverse("home"), {"filter": europe.pk})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["filter_voice"], europe)
+        channels = {m.channel for m in resp.context["object_list"]}
+        self.assertEqual(channels, {eu_channel})
+
+    def test_unknown_filter_param_is_ignored(self) -> None:
+        resp = self.client.get(reverse("home"), {"filter": "999999"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.context["filter_voice"])
 
 
 # ─── Project title in page chrome ───────────────────────────────────────────────
@@ -1127,6 +1265,14 @@ class PinnedMessageFilterTests(TestCase):
 
 
 class ChannelListViewTests(TestCase):
+    def test_label_filter_excludes_container_group_labels(self) -> None:
+        # Even when the primary group is a container, its labels can never be held
+        # by channels — offering them as filter options would always match nothing.
+        continents = LabelGroup.objects.create(name="Continents", is_container=True, is_primary=True)
+        make_label(name="Europe", group=continents, is_in_target=True)
+        response = self.client.get(reverse("channel-list"))
+        self.assertEqual([label.name for label in response.context["labels"]], [])
+
     def test_renders_type_filter_and_row_types(self) -> None:
         org = make_label(name="Org", is_in_target=True)
         make_channel(telegram_id=1, label=org, title="Broadcast")

@@ -134,6 +134,7 @@
             sel.appendChild(sel === $orgFilter ? new Option("All labels", "") : new Option("— Unassign —", "null"));
             var currentGroup = null, og = null;
             _labels.forEach(function (l) {
+                if (l.group_is_container) return;  /* container labels are never channel-assignable */
                 if (l.group_name !== currentGroup) {
                     currentGroup = l.group_name;
                     og = document.createElement("optgroup"); og.label = currentGroup;
@@ -523,7 +524,7 @@
 
     function _normalizeItem(item) {
         // The pictures API returns {url, mime_type, thumbnail_url} objects.
-        // Tolerate plain URL strings from legacy fallbacks.
+        // Tolerate plain URL strings as a fallback.
         if (!item) return {url: "", mime_type: "", thumbnail_url: null};
         if (typeof item === "string") return {url: item, mime_type: "", thumbnail_url: null};
         return {

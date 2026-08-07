@@ -17,7 +17,7 @@ Token grammar (keyword args in parentheses; a historical positional form like
     PAGERANK                       # parameter-free
     DIFFUSIONLAG(window=90)        # keyword
     LEIDEN_CPM(resolution=0.05)    # keyword (float)
-    MODULEROLE(LEIDEN)             # legacy positional → basis=LEIDEN
+    MODULEROLE(LEIDEN)             # positional shorthand → basis=LEIDEN
 """
 
 import re
@@ -280,7 +280,7 @@ def parse_tokens(
                     param = next((p for p in spec.params if p.name == pname), None)
                     if param is None:
                         raise ValueError(f"{name} has no parameter {pname!r}. Valid: {[p.name for p in spec.params]}.")
-                else:  # positional → map to the i-th declared parameter (legacy BRIDGING(STRATEGY))
+                else:  # positional → map to the i-th declared parameter (e.g. MODULEROLE(LEIDEN))
                     if i >= len(spec.params):
                         raise ValueError(f"{name} accepts {len(spec.params)} positional parameter(s).")
                     param, raw = spec.params[i], piece

@@ -19,14 +19,22 @@ class LabelGroup(BaseColorModel):
 
     Exactly one group is ``is_primary``: it supplies a node's default colour, the
     "Organization" export column, the vacancy-analysis actor identity, and the
-    default ``MODULEROLE`` basis — the roles the legacy ``Organization`` model
-    used to play.
+    default ``MODULEROLE`` basis.
+
+    When ``is_container`` is true the group's labels are purely structural: they
+    act as *parents* for labels of other groups (a "Continents" container whose
+    "Europe" label parents the "Nation" labels France, Spain, …) via
+    :class:`LabelParent`, and are never linked to channels directly (rejected in
+    :meth:`ChannelLabel.clean` and the serializers). A container label can be
+    selected on the home page to scope the dashboard stats to the channels
+    holding any of its child labels.
     """
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     is_partition = models.BooleanField(default=False)
     is_primary = models.BooleanField(default=False)
+    is_container = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return self.name
@@ -91,6 +99,32 @@ class LabelGroup(BaseColorModel):
             conflicts = self.partition_conflicts()
             if conflicts:
                 raise ValidationError({"is_partition": self.partition_conflict_message(conflicts)})
+        # Unsetting container status would strand the child assignments hanging off this
+        # group's labels — require the operator to clear them first, like the partition check.
+        if self.pk and not self.is_container:
+            child_count = LabelParent.objects.filter(parent_group_id=self.pk).count()
+            if child_count:
+                raise ValidationError(
+                    {
+                        "is_container": (
+                            f"Cannot unset container: {child_count} label(s) are still assigned under "
+                            f"“{self.name}” labels. Remove those assignments first."
+                        )
+                    }
+                )
+        # A container's labels only contain other labels — they are never linked to
+        # channels directly. Refuse to become a container while such links exist.
+        if self.pk and self.is_container:
+            link_count = ChannelLabel.objects.filter(label__group_id=self.pk).count()
+            if link_count:
+                raise ValidationError(
+                    {
+                        "is_container": (
+                            f"Cannot make “{self.name}” a container: {link_count} channel-label period(s) "
+                            "still point at its labels. Remove those channel assignments first."
+                        )
+                    }
+                )
 
 
 class Label(BaseColorModel):
@@ -115,6 +149,62 @@ class Label(BaseColorModel):
     def key(self) -> str:
         return slugify(self.name)
 
+    @classmethod
+    def from_filter_param(cls, raw) -> "Label | None":
+        """Resolve a home-page ``?filter=`` query-string value to a container-group label.
+
+        Non-integer, unknown, or non-container values select nothing (the
+        unfiltered dashboard) rather than erroring — the param travels in
+        user-editable URLs.
+        """
+        raw = str(raw or "").strip()
+        if not raw.isdigit():
+            return None
+        return cls.objects.select_related("group").filter(pk=int(raw), group__is_container=True).first()
+
+
+class LabelParent(BaseModel):
+    """A child label's membership under a *container* label.
+
+    ``parent`` is a label of a container group (e.g. "Continents: Europe");
+    ``label`` is the child, a label of a *different* group (e.g. "Nation:
+    France"). Within one container group a label has at most one parent — a
+    nation belongs to a single continent — enforced by the unique
+    ``(label, parent_group)`` constraint. ``parent_group`` is denormalised from
+    ``parent.group`` (kept in sync by :meth:`save`) precisely so that constraint
+    can live in the database.
+    """
+
+    label = models.ForeignKey(Label, on_delete=models.CASCADE, related_name="parent_links")
+    parent = models.ForeignKey(Label, on_delete=models.CASCADE, related_name="child_links")
+    parent_group = models.ForeignKey(LabelGroup, on_delete=models.CASCADE, related_name="+", editable=False)
+
+    class Meta:
+        ordering = ["parent_id", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["label", "parent_group"], name="webapp_lblparent_lbl_grp_uniq"),
+        ]
+        indexes = [
+            models.Index(fields=["parent"], name="webapp_lblparent_parent_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.label} → {self.parent}"
+
+    def clean(self) -> None:
+        if self.label_id is None or self.parent_id is None:
+            return
+        if not self.parent.group.is_container:
+            raise ValidationError({"parent": "The parent label must belong to a container group."})
+        if self.parent.group_id == self.label.group_id:
+            raise ValidationError({"label": "A container label cannot parent a label of its own group."})
+
+    def save(self, *args, **kwargs) -> None:
+        # Keep the denormalised FK true to the parent's group no matter what the
+        # caller set, so the (label, parent_group) uniqueness can never be sidestepped.
+        self.parent_group_id = self.parent.group_id
+        super().save(*args, **kwargs)
+
 
 class ChannelLabel(BaseModel):
     """A time-bounded membership of a channel in a label.
@@ -125,7 +215,7 @@ class ChannelLabel(BaseModel):
     label such as a nation). Within a *partition* group the periods for one
     channel must not overlap — a channel holds at most one of that group's labels
     at a time; non-partition groups allow concurrent (and overlapping)
-    memberships. Replaces the legacy ``ChannelAttribution``.
+    memberships.
     """
 
     channel = models.ForeignKey("webapp.Channel", on_delete=models.CASCADE, related_name="channel_labels")
@@ -197,6 +287,15 @@ class ChannelLabel(BaseModel):
     def clean(self) -> None:
         if self.start and self.end and self.start > self.end:
             raise ValidationError({"end": "End date must not be before start date."})
+        # Container-group labels only contain other labels (LabelParent); channels are
+        # never attributed to them directly. Checked before the formset early-return —
+        # the admin formset only re-validates overlap, not this.
+        if self.label_id is not None and self.label.group.is_container:
+            raise ValidationError(
+                {
+                    "label": "Labels of a container group cannot be assigned to channels — they only contain other labels."
+                }
+            )
         if getattr(self, "_overlap_checked_by_formset", False):
             # The admin inline formset validates the channel's *submitted* timeline as
             # a whole (pairwise, in its clean()). Checking each row against the stale

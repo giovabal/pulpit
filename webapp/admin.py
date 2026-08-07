@@ -60,6 +60,13 @@ class ChannelLabelInline(admin.TabularInline):
     formset = ChannelLabelInlineFormSet
     extra = 0
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Container-group labels only contain other labels — never channels — so
+        # keep them out of the dropdown (ChannelLabel.clean rejects them anyway).
+        if db_field.name == "label":
+            kwargs["queryset"] = Label.objects.exclude(group__is_container=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
@@ -184,9 +191,10 @@ class LabelInline(admin.TabularInline):
 
 @admin.register(LabelGroup)
 class LabelGroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "color", "is_partition", "is_primary", "label_count")
-    # is_partition is edited on the change form so LabelGroup.clean() can validate the
-    # partition switch against existing overlapping periods (list_editable would bypass it).
+    list_display = ("name", "color", "is_partition", "is_primary", "is_container", "label_count")
+    # is_partition / is_container are edited on the change form so LabelGroup.clean() can
+    # validate the switch against existing overlapping periods / child assignments
+    # (list_editable would bypass it).
     list_editable = ["color"]
     inlines = [LabelInline]
 

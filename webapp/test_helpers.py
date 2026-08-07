@@ -1,16 +1,14 @@
 """Test-only factories for the time-bounded label model.
 
-The legacy ``Organization`` / ``ChannelAttribution`` models were replaced by
-``LabelGroup`` / ``Label`` / ``ChannelLabel``. ``make_channel`` keeps fixtures
-terse: pass ``label=`` (optionally with ``attribution_start`` / ``attribution_end``)
-and it creates the channel plus one label period — the open-ended ``(None, None)``
-period reproduces the old "belongs to this label for all time" behaviour.
-``label=None`` (or omitted) creates an unlabelled channel.
+``make_channel`` keeps fixtures terse: pass ``label=`` (optionally with
+``attribution_start`` / ``attribution_end``) and it creates the channel plus one
+label period — the open-ended ``(None, None)`` period means "holds this label
+for all time". ``label=None`` (or omitted) creates an unlabelled channel.
 
 ``make_label`` creates a :class:`~webapp.models.Label` in the primary
-"Organization" partition group (created on first use), so labels behave like the
-former organizations: at most one per channel at a time, supplying the channel's
-representative label, node colour, and in-target status.
+"Organization" partition group (created on first use): at most one label per
+channel at a time, supplying the channel's representative label, node colour,
+and in-target status.
 """
 
 from __future__ import annotations

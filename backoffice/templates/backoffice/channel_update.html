@@ -1,5 +1,6 @@
 {% extends "backoffice/base.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block bo_content %}
 <div class="bo-ch-update" id="bo-ch-update" data-channel-pk="{{ channel_pk }}">
@@ -9,6 +10,6 @@
 
 {% block extra_scripts %}
 {{ block.super }}
-<script src="{% static 'backoffice/js/crud.js' %}"></script>
-<script src="{% static 'backoffice/js/channel_update.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/channel_update.js' %}"></script>
 {% endblock extra_scripts %}

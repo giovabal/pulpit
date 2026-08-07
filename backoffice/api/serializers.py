@@ -8,6 +8,7 @@ from webapp.models import (
     ChannelVacancy,
     Label,
     LabelGroup,
+    LabelParent,
     Project,
     SearchTerm,
 )
@@ -20,7 +21,7 @@ class LabelGroupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LabelGroup
-        fields = ["id", "name", "color", "description", "is_partition", "is_primary", "label_count"]
+        fields = ["id", "name", "color", "description", "is_partition", "is_primary", "is_container", "label_count"]
 
     def validate(self, attrs):
         # Refuse to switch a group to a partition while it still holds overlapping label
@@ -30,10 +31,37 @@ class LabelGroupSerializer(serializers.ModelSerializer):
             conflicts = self.instance.partition_conflicts()
             if conflicts:
                 raise serializers.ValidationError(self.instance.partition_conflict_message(conflicts))
+        # Likewise, refuse to unset container status while child assignments still hang
+        # off this group's labels (mirrors LabelGroup.clean, which DRF does not call).
+        is_container = attrs.get("is_container", getattr(self.instance, "is_container", False))
+        if not is_container and self.instance is not None:
+            child_count = LabelParent.objects.filter(parent_group_id=self.instance.pk).count()
+            if child_count:
+                raise serializers.ValidationError(
+                    {
+                        "is_container": (
+                            f"Cannot unset container: {child_count} label(s) are still assigned under "
+                            f"“{self.instance.name}” labels. Remove those assignments first."
+                        )
+                    }
+                )
+        # And the mirror image: a container's labels are never channel-linked, so a group
+        # cannot become one while channel-label periods still point at its labels.
+        if is_container and self.instance is not None:
+            link_count = ChannelLabel.objects.filter(label__group_id=self.instance.pk).count()
+            if link_count:
+                raise serializers.ValidationError(
+                    {
+                        "is_container": (
+                            f"Cannot make “{self.instance.name}” a container: {link_count} channel-label "
+                            "period(s) still point at its labels. Remove those channel assignments first."
+                        )
+                    }
+                )
         return attrs
 
     def _enforce_single_primary(self, instance):
-        # Exactly one group is the primary ("Organization" replacement): node colour, the
+        # Exactly one group is the primary: node colour, the
         # Label export column, vacancy actor identity, and the default MODULEROLE
         # basis all read ``filter(is_primary=True).first()``. Demote any other primary so
         # promoting a group here can't leave two.
@@ -56,6 +84,7 @@ class LabelSerializer(serializers.ModelSerializer):
     group_name = serializers.CharField(source="group.name", read_only=True)
     group_is_partition = serializers.BooleanField(source="group.is_partition", read_only=True)
     group_is_primary = serializers.BooleanField(source="group.is_primary", read_only=True)
+    group_is_container = serializers.BooleanField(source="group.is_container", read_only=True)
     channel_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -66,11 +95,64 @@ class LabelSerializer(serializers.ModelSerializer):
             "group_name",
             "group_is_partition",
             "group_is_primary",
+            "group_is_container",
             "name",
             "color",
             "is_in_target",
             "channel_count",
         ]
+
+
+class LabelParentSerializer(serializers.ModelSerializer):
+    label_id = serializers.PrimaryKeyRelatedField(source="label", queryset=Label.objects.select_related("group"))
+    parent_id = serializers.PrimaryKeyRelatedField(source="parent", queryset=Label.objects.select_related("group"))
+    parent_group_id = serializers.IntegerField(source="parent.group_id", read_only=True)
+    parent_name = serializers.CharField(source="parent.name", read_only=True)
+    label_name = serializers.CharField(source="label.name", read_only=True)
+    label_color = serializers.CharField(source="label.color", read_only=True)
+    label_group_id = serializers.IntegerField(source="label.group_id", read_only=True)
+    label_group_name = serializers.CharField(source="label.group.name", read_only=True)
+
+    class Meta:
+        model = LabelParent
+        fields = [
+            "id",
+            "label_id",
+            "parent_id",
+            "parent_group_id",
+            "parent_name",
+            "label_name",
+            "label_color",
+            "label_group_id",
+            "label_group_name",
+        ]
+
+    def validate(self, attrs):
+        label = attrs.get("label") or getattr(self.instance, "label", None)
+        parent = attrs.get("parent") or getattr(self.instance, "parent", None)
+        if parent is not None and not parent.group.is_container:
+            raise serializers.ValidationError({"parent_id": "The parent label must belong to a container group."})
+        if label is not None and parent is not None and parent.group_id == label.group_id:
+            raise serializers.ValidationError({"label_id": "A container label cannot parent a label of its own group."})
+        # Moving an assignment must stay inside its container group — a cross-group
+        # parent id on update is a client bug (e.g. a drop event that escaped its card).
+        if (
+            self.instance is not None
+            and "parent" in attrs
+            and attrs["parent"].group_id != self.instance.parent_group_id
+        ):
+            raise serializers.ValidationError({"parent_id": "The new parent must belong to the same container group."})
+        return attrs
+
+    def create(self, validated_data):
+        # Upsert on (label, parent group): dropping a label that is already assigned to
+        # another parent in the same container *moves* it, so drag-and-drop stays a
+        # single idempotent POST instead of tripping the uniqueness constraint.
+        parent = validated_data["parent"]
+        obj, _created = LabelParent.objects.update_or_create(
+            label=validated_data["label"], parent_group_id=parent.group_id, defaults={"parent": parent}
+        )
+        return obj
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -145,6 +227,16 @@ class ChannelLabelSerializer(serializers.ModelSerializer):
         end = attrs.get("end", getattr(self.instance, "end", None))
         if start and end and start > end:
             raise serializers.ValidationError({"end": "End date must not be before start date."})
+        # Container-group labels only contain other labels — never channels (mirrors
+        # ChannelLabel.clean, which DRF does not call).
+        if label is not None and label.group.is_container:
+            raise serializers.ValidationError(
+                {
+                    "label_id": (
+                        "Labels of a container group cannot be assigned to channels — they only contain other labels."
+                    )
+                }
+            )
         # Overlap is constrained only within a partition group — there a channel holds at
         # most one of the group's labels at a time. Non-partition groups allow concurrent
         # (overlapping) memberships, so they're never rejected here.

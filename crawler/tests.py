@@ -962,12 +962,10 @@ class MediaHandlerProfilePictureTests(TestCase):
 
     @patch("crawler.media_handler.os.path.exists", return_value=True)
     @patch("crawler.media_handler.ProfilePicture.from_telegram_object")
-    def test_redownloads_picture_with_legacy_shared_filename(
-        self, mock_from_tg: MagicMock, _mock_exists: MagicMock
-    ) -> None:
-        """Rows still pointing at the pre-per-photo shared path ("<channel>.jpg") are
-        treated as stale — every historical photo of a channel used to overwrite the
-        same file, so the bytes on disk are the wrong photo for all but one row; the
+    def test_redownloads_picture_with_shared_filename(self, mock_from_tg: MagicMock, _mock_exists: MagicMock) -> None:
+        """Rows pointing at the shared per-channel path ("<channel>.jpg") are
+        treated as stale — every photo of the channel overwrote the same file,
+        so the bytes on disk are the wrong photo for all but one row; the
         next pass must re-download into the per-photo path."""
         from webapp.models import ProfilePicture
 

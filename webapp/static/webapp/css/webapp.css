@@ -691,6 +691,38 @@ body {
 .pagination .page-item.active .page-link { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pagination .page-item.disabled .page-link { color: var(--muted); }
 
+/* ---------- Home dashboard scope (container-group voice filter) ---------- */
+.home-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: var(--space-4);
+}
+.home-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  margin: 0;
+  font-size: .875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.home-filter-select {
+  max-width: 20rem;
+  padding: .375rem .625rem;
+  font-size: .875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.home-filter-select:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.home-filter-note { font-size: .8125rem; color: var(--text-muted); }
+.home-filter-note strong { color: var(--text); font-weight: 600; }
+
 /* ---------- Summary cards ---------- */
 .summary-card {
   /* base bg/border/radius from .panel */

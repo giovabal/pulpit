@@ -13,7 +13,7 @@
 
     function _normalizeItem(item) {
         // The pictures API returns {url, mime_type, thumbnail_url} objects.
-        // Tolerate plain URL strings from legacy fallbacks.
+        // Tolerate plain URL strings as a fallback.
         if (!item) return {url: "", mime_type: "", thumbnail_url: null};
         if (typeof item === "string") return {url: item, mime_type: "", thumbnail_url: null};
         return {
@@ -216,6 +216,7 @@
 
         /* Groups already ordered by the API (primary first, then alphabetical). */
         labelGroups.forEach(function (group) {
+            if (group.is_container) return;  /* container labels only contain other labels — never channels */
             if (!(labelsByGroup[group.id] || []).length) return;  /* no labels to assign in this group */
             var section = document.createElement("div"); section.className = "bo-label-group-section mb-3";
             var head = document.createElement("div");

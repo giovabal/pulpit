@@ -8,8 +8,8 @@ from stats.queries import (
     global_month_spine as _global_month_spine,
     reindex_to_spine as _reindex_to_spine,
 )
-from webapp.models import Message
-from webapp.test_helpers import make_channel, make_label
+from webapp.models import LabelGroup, LabelParent, Message
+from webapp.test_helpers import attribute, make_channel, make_label
 
 import pandas as pd
 
@@ -232,6 +232,46 @@ class AvgInvolvementHistoryDataViewTests(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data["labels"], ["2024-05"])
         self.assertEqual(data["values"], [0])
+
+
+class HomeFilterScopeTests(TestCase):
+    """``?filter=<container label>`` scopes the global time-series endpoints.
+
+    The scope is the channels holding a label assigned under the voice — and
+    nothing else: container labels are never channel-linked, so a stray direct
+    attribution predating the container flag must not count either.
+    """
+
+    def setUp(self):
+        continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        self.europe = make_label(name="Europe", group=continents, is_in_target=False)
+        org_a = make_label(name="OrgA", is_in_target=True)
+        org_b = make_label(name="OrgB", is_in_target=True)
+        org_c = make_label(name="OrgC", is_in_target=True)
+        LabelParent.objects.create(label=org_a, parent=self.europe)
+        child_holder = make_channel(telegram_id=1, title="Child", label=org_a)
+        outsider = make_channel(telegram_id=2, title="Outside", label=org_b)
+        direct_holder = make_channel(telegram_id=3, title="Direct", label=org_c)
+        attribute(direct_holder, self.europe)  # .create() bypasses clean() — simulates a pre-container row
+        Message.objects.create(telegram_id=1, channel=child_holder, date="2024-01-10T00:00:00Z")
+        Message.objects.create(telegram_id=2, channel=outsider, date="2024-01-15T00:00:00Z")
+        Message.objects.create(telegram_id=3, channel=direct_holder, date="2024-01-20T00:00:00Z")
+
+    def test_scoped_to_voice_counts_child_label_holders_only(self):
+        response = self.client.get(reverse("messages-history-data"), {"filter": self.europe.pk})
+        data = json.loads(response.content)
+        self.assertEqual(data["labels"], ["2024-01"])
+        self.assertEqual(data["values"], [1])
+
+    def test_without_filter_counts_all(self):
+        response = self.client.get(reverse("messages-history-data"))
+        data = json.loads(response.content)
+        self.assertEqual(data["values"], [3])
+
+    def test_unknown_filter_value_is_ignored(self):
+        response = self.client.get(reverse("messages-history-data"), {"filter": "nonsense"})
+        data = json.loads(response.content)
+        self.assertEqual(data["values"], [3])
 
 
 # ---------------------------------------------------------------------------

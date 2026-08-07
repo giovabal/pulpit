@@ -178,7 +178,7 @@ class _ApiTestCase(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# backoffice/api — LabelViewSet  (replaces the old OrganizationViewSet)
+# backoffice/api — LabelViewSet
 # ---------------------------------------------------------------------------
 
 
@@ -222,7 +222,7 @@ class LabelViewSetTests(_ApiTestCase):
 
 
 # ---------------------------------------------------------------------------
-# backoffice/api — LabelGroupViewSet  (replaces the old OrganizationViewSet)
+# backoffice/api — LabelGroupViewSet
 # ---------------------------------------------------------------------------
 
 
@@ -258,7 +258,7 @@ class LabelGroupViewSetTests(_ApiTestCase):
 
     def test_switch_to_partition_with_overlap_rejected(self):
         # Switching a group to a partition is refused while a channel holds overlapping
-        # periods in it; the error names the conflict so it can be fixed (ROADMAP 0.26).
+        # periods in it; the error names the conflict so it can be fixed.
         grp = LabelGroup.objects.create(name="Topic", is_partition=False, color="#123456")
         a = make_label("A", group=grp)
         b = make_label("B", group=grp)
@@ -286,6 +286,111 @@ class LabelGroupViewSetTests(_ApiTestCase):
         resp = self.jdelete(_api(f"label-groups/{other.pk}/"))
         self.assertEqual(resp.status_code, 204)
         self.assertFalse(LabelGroup.objects.filter(pk=other.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# backoffice/api — LabelParentViewSet (container groups)
+# ---------------------------------------------------------------------------
+
+
+class LabelParentViewSetTests(_ApiTestCase):
+    def setUp(self):
+        from webapp.models import LabelParent
+
+        self.LabelParent = LabelParent
+        self.continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        self.europe = make_label("Europe", group=self.continents, is_in_target=False)
+        self.asia = make_label("Asia", group=self.continents, is_in_target=False)
+        self.nations = LabelGroup.objects.create(name="Nation")
+        self.france = make_label("France", group=self.nations, is_in_target=False)
+
+    def _assign(self, parent, label):
+        return self.jpost(_api("label-parents/"), {"parent_id": parent.pk, "label_id": label.pk})
+
+    def test_assign_child(self):
+        resp = self._assign(self.europe, self.france)
+        self.assertEqual(resp.status_code, 201)
+        link = self.LabelParent.objects.get()
+        self.assertEqual(link.parent, self.europe)
+        self.assertEqual(link.parent_group, self.continents)
+
+    def test_reassign_moves_within_container(self):
+        # POST upserts on (label, container group): dropping France on Asia moves it.
+        self._assign(self.europe, self.france)
+        resp = self._assign(self.asia, self.france)
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(self.LabelParent.objects.count(), 1)
+        self.assertEqual(self.LabelParent.objects.get().parent, self.asia)
+
+    def test_non_container_parent_rejected(self):
+        resp = self._assign(self.france, self.europe)  # Nation is not a container
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(self.LabelParent.objects.count(), 0)
+
+    def test_same_group_child_rejected(self):
+        resp = self._assign(self.europe, self.asia)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_list_filtered_by_container_group(self):
+        # A label may sit under one parent per container group; ?group= scopes the listing.
+        self._assign(self.europe, self.france)
+        unions = LabelGroup.objects.create(name="Unions", is_container=True)
+        eu = make_label("EU", group=unions, is_in_target=False)
+        self._assign(eu, self.france)
+        resp = self.jget(_api(f"label-parents/?group={self.continents.pk}"))
+        rows = resp.json()["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["parent_name"], "Europe")
+        self.assertEqual(rows[0]["label_name"], "France")
+        self.assertEqual(self.LabelParent.objects.count(), 2)
+
+    def test_move_cannot_cross_container_groups(self):
+        self._assign(self.europe, self.france)
+        link = self.LabelParent.objects.get()
+        unions = LabelGroup.objects.create(name="Unions", is_container=True)
+        eu = make_label("EU", group=unions, is_in_target=False)
+        resp = self.jpatch(_api(f"label-parents/{link.pk}/"), {"parent_id": eu.pk})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_unassign(self):
+        self._assign(self.europe, self.france)
+        link = self.LabelParent.objects.get()
+        resp = self.jdelete(_api(f"label-parents/{link.pk}/"))
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(self.LabelParent.objects.count(), 0)
+
+    def test_unset_container_with_children_rejected(self):
+        self._assign(self.europe, self.france)
+        resp = self.jpatch(_api(f"label-groups/{self.continents.pk}/"), {"is_container": False})
+        self.assertEqual(resp.status_code, 400)
+        self.continents.refresh_from_db()
+        self.assertTrue(self.continents.is_container)
+
+    def test_unset_container_without_children_ok(self):
+        resp = self.jpatch(_api(f"label-groups/{self.continents.pk}/"), {"is_container": False})
+        self.assertEqual(resp.status_code, 200)
+        self.continents.refresh_from_db()
+        self.assertFalse(self.continents.is_container)
+
+    def test_channel_label_on_container_label_rejected(self):
+        # Container labels only contain other labels — a channel-label period on one is a 400.
+        ch = make_channel(telegram_id=1, title="Chan")
+        resp = self.jpost(_api("channel-labels/"), {"channel_id": ch.pk, "label_id": self.europe.pk})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_bulk_assign_container_label_rejected(self):
+        ch = make_channel(telegram_id=1, title="Chan")
+        resp = self.jpost(_api("channels/bulk-assign/"), {"ids": [ch.pk], "label_id": self.europe.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(ch.channel_labels.count(), 0)
+
+    def test_become_container_with_channel_links_rejected(self):
+        # Nation has a channel attributed to France — it cannot become a container.
+        make_channel(telegram_id=1, title="Chan", label=self.france)
+        resp = self.jpatch(_api(f"label-groups/{self.nations.pk}/"), {"is_container": True})
+        self.assertEqual(resp.status_code, 400)
+        self.nations.refresh_from_db()
+        self.assertFalse(self.nations.is_container)
 
 
 # ---------------------------------------------------------------------------

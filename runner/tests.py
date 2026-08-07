@@ -1222,7 +1222,7 @@ class DefaultsViewTests(TestCase):
             self.assertNotIn("enabled", content.split("[robustness]", 1)[-1].split("[", 1)[0])
 
     def test_robustness_strategies_empty_when_none_ticked(self) -> None:
-        # `robustness.enabled` is no longer written — SA_ROBUSTNESS is derived
+        # `robustness.enabled` is not written — SA_ROBUSTNESS is derived
         # from bool(strategies) in settings.py.
         with _RedirectConfigPathsForRunner() as tmp:
             resp = self.client.post(

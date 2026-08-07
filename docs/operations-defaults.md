@@ -2,7 +2,7 @@
 
 This page describes how the Operations panel, the CLI, and the saved snapshot files relate, and what the **Save as defaults**, **Load defaults**, and **Write CLI command** buttons actually do.
 
-The short version: every analyst-tunable option flows through one of three layers — `.env`, the `.operations-*` snapshot files, or the live form — and each layer has a single responsibility. The Operations panel reads the snapshot files to pre-populate the form; the CLI reads the explicit flags you pass — feature toggles never fall back to the files, only a few scope and cosmetic defaults do (listed below). There is no longer a silent settings-fallback chain for what the commands *do*.
+The short version: every analyst-tunable option flows through one of three layers — `.env`, the `.operations-*` snapshot files, or the live form — and each layer has a single responsibility. The Operations panel reads the snapshot files to pre-populate the form; the CLI reads the explicit flags you pass — feature toggles never fall back to the files, only a few scope and cosmetic defaults do (listed below). There is no silent settings-fallback chain for what the commands *do*.
 
 For the exhaustive per-setting tables (every key, type, and built-in default) see the [Configuration reference](configuration.md).
 
@@ -59,9 +59,9 @@ If you want the CLI to do work, pass the flags explicitly. The Operations panel 
 
 The no-op rule covers feature toggles. Scope and cosmetic options keep config-derived defaults so an explicitly requested phase behaves sensibly when they're omitted: `--channel-types` falls back to `DEFAULT_CHANNEL_TYPES` (`[scope].channel_types`), `--edge-weight-strategy` to `[edges].weight_strategy`, and `--community-palette` / `--dead-leaves-color` to the `[graph]` entries.
 
-Backward-compat aliases are kept for the renamed flags, so existing scripts still work:
+Both spellings are accepted for these flags:
 
-| Canonical | Legacy alias |
+| Canonical | Alias |
 |---|---|
 | `--graph-2d` | `--2dgraph` |
 | `--graph-3d` | `--3dgraph` |
@@ -76,9 +76,9 @@ Backward-compat aliases are kept for the renamed flags, so existing scripts stil
 
 You can. The loader silently strips:
 - `[meta]` (never deep-merged into the live settings — it's informational).
-- Legacy top-level `pulpit_version` / `generated_at` keys (pre-`[meta]` format).
-- Legacy `[telegram]` blocks (moved to `.env`).
-- Legacy key names (e.g. `messages.fixholes`, `layouts.two_d`) — automatically translated to their canonical form.
+- Top-level `pulpit_version` / `generated_at` keys.
+- `[telegram]` blocks (those settings live in `.env`).
+- Alternative key spellings (e.g. `messages.fixholes`, `layouts.two_d`) — automatically translated to their canonical form.
 
 Re-saving a hand-edited file through the Operations panel rewrites it with the canonical key names + a fresh `[meta]` block.
 

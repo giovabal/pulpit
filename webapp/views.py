@@ -1,6 +1,7 @@
 import datetime
 import math
 import re
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -26,6 +27,7 @@ from .models import (
     ChannelSource,
     ChannelVacancy,
     Label,
+    LabelGroup,
     Message,
     MessageReaction,
     MessageReply,
@@ -87,7 +89,7 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
     # "none" is the sentinel ``--fix-missing-media`` writes after confirming a
     # message has no downloadable media on Telegram, so it must be treated as
     # text here (and excluded from "other") to keep the message-list filter
-    # consistent with the legacy empty-string value.
+    # consistent with the empty-string value.
     "text": Q(media_type__in=["", "none"]),
     "image": Q(media_type="photo"),
     "video": Q(media_type="video"),
@@ -100,8 +102,8 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 _LOST_MODES = ("exclude", "include", "only")
 
 _DEFAULT_SORT = "date_desc"
-# Backward-compat for pre-2026 URLs that used the bare asc/desc vocabulary.
-_LEGACY_SORTS = {"asc": "date_asc", "desc": "date_desc"}
+# Accepted aliases for the bare asc/desc sort vocabulary in URLs.
+_SORT_ALIASES = {"asc": "date_asc", "desc": "date_desc"}
 # Every order_by tuple terminates with -pk / pk so pagination is stable across
 # ties — MessageJumpView relies on (-date, -pk) for the default sort.
 _SORT_ORDER_BY: dict[str, tuple] = {
@@ -128,7 +130,7 @@ def _parse_iso_date(s: str | None) -> datetime.date | None:
 
 
 def _resolve_sort(raw: str | None) -> str:
-    sort = _LEGACY_SORTS.get(raw or "", raw or "")
+    sort = _SORT_ALIASES.get(raw or "", raw or "")
     return sort if sort in _SORT_ORDER_BY else _DEFAULT_SORT
 
 
@@ -247,10 +249,18 @@ class HomeView(ListView):
     paginate_orphans = 15
     page_kwarg = "page"
 
+    @cached_property
+    def filter_voice(self) -> "Label | None":
+        """The container-group label selected via ``?filter=`` (e.g. "Europe"), or None."""
+        return Label.from_filter_param(self.request.GET.get("filter"))
+
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         q = self.request.GET.get("q", "").strip()
+        channels = Channel.objects.in_target()
+        if self.filter_voice is not None:
+            channels = channels.in_container_label(self.filter_voice)
         qs = (
-            Message.objects.filter(channel__in=Channel.objects.in_target())
+            Message.objects.filter(channel__in=channels)
             .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
@@ -268,53 +278,71 @@ class HomeView(ListView):
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET))
 
+        # Dashboard scope: a container-group label ("voice", e.g. Continents → Europe)
+        # restricts the summary cards, the chart panels, and the message list to the
+        # channels holding that label or one of its child labels.
+        voice = self.filter_voice
+        ctx["container_groups"] = (
+            LabelGroup.objects.filter(is_container=True, labels__isnull=False)
+            .prefetch_related("labels")
+            .distinct()
+            .order_by("name")
+        )
+        ctx["filter_voice"] = voice
+        filter_qs = f"?filter={voice.pk}" if voice is not None else ""
+        if voice is not None:
+            # Pagination links rebuild the query string from original_query — keep the
+            # selected voice when paging through the (scoped) message list.
+            ctx["original_query"] += f"&filter={voice.pk}"
+
         # Two rows of ecosystem-stat cards aggregated over the Message + Channel
         # tables. Cached for an hour and invalidated at the start of every
-        # crawl_channels run — see webapp/cache.py.
+        # crawl_channels run — see webapp/cache.py. Voice-scoped summaries bypass
+        # the cache.
         from webapp.cache import get_home_summary
 
-        ctx["summary_rows"] = get_home_summary()
+        ctx["summary_rows"] = get_home_summary(voice)
         ctx["panels"] = [
             {
                 "id": "messages-history",
                 "title": "Messages per month",
                 "icon": "bi-bar-chart-line",
-                "url": reverse("messages-history-data"),
+                "url": reverse("messages-history-data") + filter_qs,
                 "description": "Total number of messages posted by monitored channels each month.",
             },
             {
                 "id": "active-channels-history",
                 "title": "Active channels per month",
                 "icon": "bi-broadcast",
-                "url": reverse("active-channels-history-data"),
+                "url": reverse("active-channels-history-data") + filter_qs,
                 "description": "Number of distinct monitored channels that posted at least one message each month.",
             },
             {
                 "id": "forwards-history",
                 "title": "Forwards per month",
                 "icon": "bi-forward",
-                "url": reverse("forwards-history-data"),
+                "url": reverse("forwards-history-data") + filter_qs,
                 "description": "Number of messages forwarded from other monitored channels each month. A proxy for cross-channel amplification activity.",
             },
             {
                 "id": "views-history",
                 "title": "Views per month",
                 "icon": "bi-eye",
-                "url": reverse("views-history-data"),
+                "url": reverse("views-history-data") + filter_qs,
                 "description": "Sum of view counts across all messages posted by monitored channels each month.",
             },
             {
                 "id": "avg-involvement-history",
                 "title": "Average involvement per month",
                 "icon": "bi-graph-up",
-                "url": reverse("avg-involvement-history-data"),
+                "url": reverse("avg-involvement-history-data") + filter_qs,
                 "description": "Average number of views per message across monitored channels each month. A proxy for audience engagement intensity.",
             },
             {
                 "id": "reactions-history",
                 "title": "Reactions per month",
                 "icon": "bi-emoji-smile",
-                "url": reverse("reactions-history-data"),
+                "url": reverse("reactions-history-data") + filter_qs,
                 "description": "Total reactions to messages posted by monitored channels each month, broken down by the eight most-used emojis. Custom and sticker reactions are aggregated together under the 'custom' bucket.",
             },
         ]
@@ -366,7 +394,13 @@ class ChannelListView(ListView):
         )
         ctx["lost_list"] = _status_qs.filter(is_lost=True)
         ctx["private_list"] = _status_qs.filter(is_private=True)
-        ctx["labels"] = Label.objects.filter(group__is_primary=True, is_in_target=True).order_by("name")
+        # Container-group labels are never channel-linked, so they'd be dead filter
+        # options — excluded even if the primary group is (mis)flagged as a container.
+        ctx["labels"] = (
+            Label.objects.filter(group__is_primary=True, is_in_target=True)
+            .exclude(group__is_container=True)
+            .order_by("name")
+        )
         ctx["sources"] = (
             ChannelSource.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )

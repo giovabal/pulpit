@@ -2145,9 +2145,8 @@ class Command(BaseCommand):
             raw_palette = settings.COMMUNITY_PALETTE
             reversed_default = settings.COMMUNITY_PALETTE_REVERSED
         if raw_palette == "ORGANIZATION":
-            # Legacy alias: the old default doubled as a "use organisation
-            # colours for ORG, vaporwave-reversed for everything else" marker.
-            # Map it explicitly here so a CLI override of "ORGANIZATION" works.
+            # "ORGANIZATION" is an accepted alias for the vaporwave-reversed default;
+            # map it explicitly here so a CLI override of "ORGANIZATION" works.
             raw_palette = "vaporwave"
             reversed_default = True
         elif not raw_palette:

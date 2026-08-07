@@ -1,8 +1,9 @@
 {% extends "webapp/index.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'runner/css/operations.css' %}">
+<link rel="stylesheet" href="{% vstatic 'runner/css/operations.css' %}">
 {% endblock extra_styles %}
 
 {% block content %}
@@ -1011,7 +1012,7 @@
               <div class="ops-param" style="width:100%">
                 <label for="compare_target">Export to write into
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Name of the export that will receive the comparison files (exports/&lt;name&gt;/). Leave blank to write into the legacy graph/ directory."></i>
+                     title="Name of the export that will receive the comparison files (exports/&lt;name&gt;/). Leave blank to write into the default graph/ directory."></i>
                 </label>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                   <input type="text" name="compare_target" id="compare_target" placeholder="export name (e.g. baseline)" data-width="lg" style="flex:1;min-width:14rem;">
@@ -1178,7 +1179,7 @@
 {% endblock content %}
 
 {% block extra_scripts %}
-<script src="{% static 'runner/js/token_builder.js' %}"></script>
+<script src="{% vstatic 'runner/js/token_builder.js' %}"></script>
 <script>
 // Shared helpers used by multiple IIFEs in this file. They live at script-top-level
 // (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
@@ -1898,7 +1899,7 @@ function showToast(msg, type) {
       });
   };
 
-  // Wire the export pickers and graph-dir scan (replaces former inline onclick=).
+  // Wire the export pickers and graph-dir scan.
   document.querySelectorAll('[data-ops-action]').forEach(function (b) {
     b.addEventListener('click', function () {
       if (b.dataset.opsAction === 'graph-dir-scan') opsGraphDirScan(b);
