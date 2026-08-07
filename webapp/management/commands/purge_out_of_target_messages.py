@@ -13,8 +13,7 @@ A message survives the purge iff its channel is either:
   Channel row itself stays in the database (it's used as a dead-leaf node in
   structural analysis); we just don't keep any messages crawled from it.
 
-Unlike the previous ``scripts/delete_unused_messages.py`` (now removed), this
-command also deletes the underlying media files from disk so the operation
+The command also deletes the underlying media files from disk so the operation
 actually reclaims storage and not just rows.
 
 Usage:

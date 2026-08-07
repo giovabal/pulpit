@@ -1,5 +1,6 @@
 {% extends "backoffice/base.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block bo_content %}
 <div class="bo-section-header">
@@ -40,6 +41,6 @@
 
 {% block extra_scripts %}
 {{ block.super }}
-<script src="{% static 'backoffice/js/crud.js' %}"></script>
-<script src="{% static 'backoffice/js/project.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/project.js' %}"></script>
 {% endblock extra_scripts %}

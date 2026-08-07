@@ -20,6 +20,20 @@ class ChannelQuerySet(models.QuerySet["Channel"]):
             .exclude(is_lost=True)
         )
 
+    def in_container_label(self, voice) -> ChannelQuerySet:
+        """Channels holding any child label of ``voice`` (a container-group label).
+
+        Container labels are purely structural — never linked to channels
+        directly — so the scope is exactly the channels of the labels assigned
+        under the voice (one hop — child links are not followed transitively).
+        "Any period" semantics, matching :meth:`in_target`: a channel counts as
+        e.g. "Europe" if any of its label periods carries a Europe-assigned label.
+        """
+        from webapp.models import ChannelLabel
+
+        holds_child = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__parent_links__parent=voice)
+        return self.filter(Exists(holds_child))
+
 
 class ChannelManager(models.Manager["Channel"]):
     def get_queryset(self) -> ChannelQuerySet:

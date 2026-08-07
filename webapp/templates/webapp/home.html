@@ -1,10 +1,38 @@
 {% extends "webapp/index.html" %}
 {% load static %}
+{% load vstatic %}
 
 
 {% block content %}
 <div class="home-page">
   <h1 class="visually-hidden">Network overview</h1>
+
+  {% if container_groups %}
+  <form method="get" action="" class="home-filter-bar">
+    {# Keep every other query param (search, message options) while switching scope; drop the page. #}
+    {% for key, values in request.GET.lists %}{% if key != "filter" and key != "page" %}{% for value in values %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}{% endif %}{% endfor %}
+    <label class="home-filter-label" for="home-filter-select">
+      <i class="bi bi-funnel" aria-hidden="true"></i>Scope
+    </label>
+    <select id="home-filter-select" name="filter" class="home-filter-select" onchange="this.form.submit()">
+      <option value="">All channels</option>
+      {% for group in container_groups %}
+      <optgroup label="{{ group.name }}">
+        {% for voice in group.labels.all %}
+        <option value="{{ voice.id }}"{% if filter_voice and filter_voice.id == voice.id %} selected{% endif %}>{{ voice.name }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+    {% if filter_voice %}
+    <span class="home-filter-note">Stats below cover only channels under
+      <strong>{{ filter_voice.group.name }}: {{ filter_voice.name }}</strong>.</span>
+    {% endif %}
+    <noscript><button type="submit" class="search-btn">Apply</button></noscript>
+  </form>
+  {% endif %}
 
   {% for row in summary_rows %}
   <div class="summary-grid">
@@ -58,6 +86,7 @@
 
   <div class="search-header">
     <form method="get" action="" class="search-form" role="search">
+      {% if filter_voice %}<input type="hidden" name="filter" value="{{ filter_voice.id }}">{% endif %}
       <div class="search-input-wrap">
         <i class="bi bi-search search-icon" aria-hidden="true"></i>
         <input
@@ -155,5 +184,5 @@
     new bootstrap.Tooltip(el);
   });
 </script>
-<script src="{% static 'webapp/js/post_replies.js' %}"></script>
+<script src="{% vstatic 'webapp/js/post_replies.js' %}"></script>
 {% endblock extra_scripts %}

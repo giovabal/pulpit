@@ -18,6 +18,7 @@ from .views import (
     EventTypeViewSet,
     EventViewSet,
     LabelGroupViewSet,
+    LabelParentViewSet,
     LabelViewSet,
     ProjectView,
     SearchTermViewSet,
@@ -31,6 +32,7 @@ router.register("channels", ChannelViewSet, basename="api-channels")
 router.register("channel-labels", ChannelLabelViewSet, basename="api-channel-labels")
 router.register("label-groups", LabelGroupViewSet, basename="api-label-groups")
 router.register("labels", LabelViewSet, basename="api-labels")
+router.register("label-parents", LabelParentViewSet, basename="api-label-parents")
 router.register("sources", ChannelSourceViewSet, basename="api-sources")
 router.register("search-terms", SearchTermViewSet, basename="api-search-terms")
 router.register("event-types", EventTypeViewSet, basename="api-event-types")

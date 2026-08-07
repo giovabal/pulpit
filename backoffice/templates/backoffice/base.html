@@ -1,8 +1,9 @@
 {% extends "webapp/index.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'backoffice/css/backoffice.css' %}">
+<link rel="stylesheet" href="{% vstatic 'backoffice/css/backoffice.css' %}">
 {% endblock extra_styles %}
 
 {% block content %}

@@ -25,11 +25,9 @@ import networkx as nx
 
 # Canonical ordered list of community-strategy names. Mirrors measures.ALL_STRATEGIES (which feeds
 # the measure "basis" choices); a guard test keeps the two in sync. LEIDEN_CPM is a single
-# parameterised strategy (its resolution γ is per-instance and it may be requested more than once),
-# replacing the old fixed LEIDEN_CPM_COARSE / LEIDEN_CPM_FINE presets. CONSENSUS is derived from
+# parameterised strategy (its resolution γ is per-instance and it may be requested more than once).
+# CONSENSUS is derived from
 # the other selected strategies' partitions (dispatched after them; see detect_consensus).
-# LABELPROPAGATION was removed in v0.27 (unweighted *and* undirected, so it discarded both the
-# edge-weight and the direction signal; its cheap-baseline role is superseded by CONSENSUS).
 ALL_STRATEGIES: list[str] = [
     "LEIDEN",
     "LEIDEN_DIRECTED",
@@ -47,8 +45,7 @@ ALL_STRATEGIES: list[str] = [
 # it must be requested explicitly.
 EXCLUDED_FROM_ALL: frozenset[str] = frozenset({"LEIDEN_TEMPORAL"})
 # Every static strategy is an algorithm; the only *metadata* partitions are the dynamic, DB-keyed
-# ``LABELGROUP<id>`` strategies (one per partition LabelGroup), which replaced the old single
-# ``ORGANIZATION`` strategy. ``is_metadata_strategy`` distinguishes them.
+# ``LABELGROUP<id>`` strategies (one per partition LabelGroup). ``is_metadata_strategy`` distinguishes them.
 COMMUNITY_ALGORITHMS: frozenset[str] = frozenset(ALL_STRATEGIES)
 VALID_STRATEGIES: frozenset[str] = frozenset(ALL_STRATEGIES)
 
@@ -297,8 +294,7 @@ class StrategyInstance(TokenInstance):
     Thin :class:`~network.tokens.TokenInstance` subclass exposing ``strategy`` (the name), its
     ``spec`` from ``PARAMETERISED_STRATEGIES``, and ``key`` — the parameter-suffixed node-attribute
     key under which this instance's partition lives in ``node['communities']`` (e.g.
-    ``leiden_cpm_resolution_0_05``; just ``leiden_directed`` for parameter-free strategies, identical
-    to the legacy lowercase name).
+    ``leiden_cpm_resolution_0_05``; just ``leiden_directed`` for parameter-free strategies).
     """
 
     @property
@@ -342,7 +338,7 @@ def parse_strategies(
         tokens,
         registry=PARAMETERISED_STRATEGIES,
         known_tokens=VALID_STRATEGIES | set(labelgroup_tokens),
-        # ALL expands to the metadata partitions first (the old ORGANIZATION-first order), then the
+        # ALL expands to the metadata partitions first, then the
         # algorithms — minus the strategies that only work in specific run shapes (EXCLUDED_FROM_ALL:
         # LEIDEN_TEMPORAL needs a year timeline, so it must be requested explicitly).
         all_tokens=labelgroup_tokens + [s for s in ALL_STRATEGIES if s not in EXCLUDED_FROM_ALL],
@@ -528,7 +524,7 @@ def detect_labelgroup(group_id: int, channel_dict: dict[str, Any]) -> tuple[Comm
     ungrouped. The primary group resolves in-target labels only; a descriptive group (e.g. "Nation")
     partitions by every label it carries, in-target or not. Community ids are ``Label`` pks and the
     palette is built from each label's own colour, so the ``palette_name`` / ``reverse`` flags don't
-    apply (as the old ORGANIZATION strategy).
+    apply.
     """
     community_map: CommunityMap = {}
     community_palette: CommunityPalette = {}

@@ -29,8 +29,6 @@ Multiple strategies can be computed simultaneously and switched between in the g
 | Assortative SBM | `SBM_ASSORTATIVE(refine=…)` | Generative planted partition | No |
 | Consensus | `CONSENSUS(threshold=τ)` | Cross-method agreement | Inherited from inputs |
 
-(`LABELPROPAGATION` was removed in v0.27: it ignored both edge weights *and* direction, had a documented runaway-to-one-giant-community failure mode on dense cores, and its cheap-baseline role is better served by `CONSENSUS`. Old saved configurations that still name it load cleanly — the token is dropped on read.)
-
 All algorithmic strategies can optionally run on the **disparity-filter backbone** of the citation graph instead of the full graph — see [Detection on a noise-filtered backbone](#detection-on-a-noise-filtered-backbone).
 
 ---
@@ -146,7 +144,7 @@ Louvain looks for partitions where the density of connections inside each group 
 - Fortunato, S. & Barthélemy, M. (2007) "Resolution limit in community detection." *PNAS* 104(1). [doi:10.1073/pnas.0605965104](https://doi.org/10.1073/pnas.0605965104) — the resolution-limit result.
 - Traag, V.A., Waltman, L. & van Eck, N.J. (2019) "From Louvain to Leiden: guaranteeing well-connected communities." *Scientific Reports* 9, 5233. [doi:10.1038/s41598-019-41695-z](https://doi.org/10.1038/s41598-019-41695-z) — why Leiden supersedes Louvain.
 
-**In practice:** select Louvain when you are reproducing or benchmarking against external work that used it, or when a reviewer expects the familiar baseline. Read it next to Leiden in the consensus matrix: groupings that survive both are robust; a group Leiden splits that Louvain keeps whole is usually the resolution limit at work, and a Louvain community that turns out to be internally disconnected is exactly the failure mode Leiden was built to remove. For everything else, treat Leiden as the default and Louvain as the legacy cross-check.
+**In practice:** select Louvain when you are reproducing or benchmarking against external work that used it, or when a reviewer expects the familiar baseline. Read it next to Leiden in the consensus matrix: groupings that survive both are robust; a group Leiden splits that Louvain keeps whole is usually the resolution limit at work, and a Louvain community that turns out to be internally disconnected is exactly the failure mode Leiden was built to remove. For everything else, treat Leiden as the default and Louvain as the cross-check for older literature.
 
 **Example.** A team is extending a published study that reported eight Louvain communities in a far-right Telegram ecosystem. Re-crawling the network and running Louvain in Pulpit reproduces eight comparable communities, confirming the earlier finding still holds on fresh data. Switching to Leiden on the same graph splits one of the eight into two tightly-knit halves that Louvain had merged — a substructure the original study missed. Reporting both keeps the result comparable to the literature *and* surfaces the finer split.
 

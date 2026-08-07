@@ -163,7 +163,7 @@
                 if (!piece) return;
                 var eq = piece.indexOf("=");
                 if (eq !== -1) params[piece.slice(0, eq).trim().toLowerCase()] = piece.slice(eq + 1).trim();
-                else if (meta && meta.params[i]) params[meta.params[i].name] = piece; // legacy positional
+                else if (meta && meta.params[i]) params[meta.params[i].name] = piece; // positional shorthand
             });
             return { key: key, params: params };
         }

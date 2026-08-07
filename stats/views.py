@@ -21,6 +21,22 @@ _EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
 _TELEGRAM_HOSTS = frozenset({"t.me", "telegram.me", "telegram.org", "telegra.ph", "telesco.pe"})
 
 
+def _scoped_in_target_channels(request: HttpRequest):
+    """In-target channels, restricted to the home page's ``?filter=`` voice when present.
+
+    The voice is a container-group label (e.g. Continents → Europe); the scope is
+    the channels holding it or one of its child labels. Unknown / absent values
+    fall back to the full in-target set, matching ``Label.from_filter_param``.
+    """
+    from webapp.models import Label
+
+    qs = Channel.objects.in_target()
+    voice = Label.from_filter_param(request.GET.get("filter"))
+    if voice is not None:
+        qs = qs.in_container_label(voice)
+    return qs
+
+
 class _GlobalTimeSeriesBase(View):
     annotate_field: ClassVar[str]
     y_label: ClassVar[str]
@@ -35,7 +51,7 @@ class _GlobalTimeSeriesBase(View):
 
         from network.utils import channel_cutoff_q
 
-        in_target_pks = Channel.objects.in_target().values("pk")
+        in_target_pks = _scoped_in_target_channels(request).values("pk")
         monthly_data = (
             Message.objects.alive()
             .filter(channel__in=in_target_pks, date__isnull=False)
@@ -313,7 +329,7 @@ class ReactionsHistoryDataView(View):
 
         from network.utils import channel_cutoff_q
 
-        in_target_pks = Channel.objects.in_target().values("pk")
+        in_target_pks = _scoped_in_target_channels(request).values("pk")
         cutoff_q = channel_cutoff_q(channel_field="message__channel", date_field="message__date")
 
         top_emojis_qs = (

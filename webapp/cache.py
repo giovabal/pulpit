@@ -46,17 +46,28 @@ def _channels_phrase(prefix: str, count: int, kind: str) -> str:
     return f"{prefix} <strong>{count:,}</strong> {kind} {word}"
 
 
-def compute_home_summary() -> list[list[dict]]:
+def compute_home_summary(voice=None) -> list[list[dict]]:
     """Build the two rows of ecosystem-stat cards shown on the home page.
 
     Called on a cache miss (cold first hit after a crawl) and never inside
     a request loop. Returns two card-row lists, ready for the template to
     render without further DB access.
+
+    ``voice`` (a container-group :class:`~webapp.models.Label`, e.g. "Europe")
+    restricts every aggregate to the channels holding that label or one of its
+    child labels; the in-target / out-of-target splits then read as inside /
+    outside the selection.
     """
     in_target_qs = Channel.objects.in_target()
+    if voice is not None:
+        in_target_qs = in_target_qs.in_container_label(voice)
     in_target_pks = in_target_qs.values("pk")
     in_target_channels = in_target_qs.count()
-    to_inspect_count = Channel.objects.filter(to_inspect=True).exclude(pk__in=in_target_pks).count()
+    # "To inspect" is a crawl-scope notion, not a per-voice one — under a filter the
+    # complement of the selection would count every unrelated to-inspect channel.
+    to_inspect_count = (
+        0 if voice is not None else Channel.objects.filter(to_inspect=True).exclude(pk__in=in_target_pks).count()
+    )
 
     msgs = Message.objects.alive().filter(channel__in=in_target_pks)
 
@@ -197,8 +208,15 @@ def compute_home_summary() -> list[list[dict]]:
     return [row1, row2]
 
 
-def get_home_summary() -> list[list[dict]]:
-    """Return the cached summary, computing on miss."""
+def get_home_summary(voice=None) -> list[list[dict]]:
+    """Return the cached summary, computing on miss.
+
+    Voice-scoped summaries are computed fresh on every request: they aggregate a
+    subset of the corpus (cheaper than the global pass) and caching one key per
+    voice would dodge the single-key invalidation contract below.
+    """
+    if voice is not None:
+        return compute_home_summary(voice)
     return cache.get_or_set(HOME_SUMMARY_CACHE_KEY, compute_home_summary, HOME_SUMMARY_CACHE_TIMEOUT)
 
 

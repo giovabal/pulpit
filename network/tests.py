@@ -5150,7 +5150,7 @@ class WriteRobustnessTableXlsxTests(TestCase):
     def test_year_data_produces_year_suffixed_sheets(self) -> None:
         # With year_data the workbook becomes one contiguous block of sheets per
         # scope: All first, then each year.  Sheet names get a space-separated
-        # suffix; the legacy "Summary" sheet (no suffix) must not appear.
+        # suffix; the un-suffixed "Summary" sheet must not appear.
         from network.tables import write_robustness_table_xlsx
 
         import openpyxl
@@ -5174,7 +5174,7 @@ class WriteRobustnessTableXlsxTests(TestCase):
                 "Modular leiden 2020",
             ):
                 self.assertIn(expected, wb.sheetnames, msg=f"missing sheet {expected!r}")
-            # Legacy un-suffixed sheets must not coexist with the year-grouped layout.
+            # Un-suffixed sheets must not coexist with the year-grouped layout.
             self.assertNotIn("Summary", wb.sheetnames)
             self.assertNotIn("Curve pagerank", wb.sheetnames)
 

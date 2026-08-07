@@ -12,6 +12,7 @@ from webapp.models import (
     ChannelVacancy,
     Label,
     LabelGroup,
+    LabelParent,
     ProfilePicture,
     Project,
     SearchTerm,
@@ -25,6 +26,7 @@ from .serializers import (
     EventSerializer,
     EventTypeSerializer,
     LabelGroupSerializer,
+    LabelParentSerializer,
     LabelSerializer,
     ProjectSerializer,
     SearchTermSerializer,
@@ -71,7 +73,7 @@ class LabelGroupViewSet(viewsets.ModelViewSet):
     serializer_class = LabelGroupSerializer
 
     def get_queryset(self):
-        # Primary group first (it is the "Organization" replacement), then alphabetical.
+        # Primary group first, then alphabetical.
         return LabelGroup.objects.annotate(label_count=Count("labels", distinct=True)).order_by("-is_primary", "name")
 
 
@@ -89,6 +91,21 @@ class LabelViewSet(viewsets.ModelViewSet):
             if not group_id.isdigit():
                 raise ValidationError({"group": "must be an integer"})
             qs = qs.filter(group_id=int(group_id))
+        return qs
+
+
+class LabelParentViewSet(viewsets.ModelViewSet):
+    serializer_class = LabelParentSerializer
+
+    def get_queryset(self):
+        qs = LabelParent.objects.select_related("label__group", "parent__group").order_by(
+            "parent_id", "label__group_id", "label__name"
+        )
+        group_id = self.request.query_params.get("group", "").strip()
+        if group_id:
+            if not group_id.isdigit():
+                raise ValidationError({"group": "must be an integer"})
+            qs = qs.filter(parent_group_id=int(group_id))
         return qs
 
 
@@ -220,6 +237,13 @@ class ChannelViewSet(
             if label is None:
                 return Response(
                     {"error": "'label_id' does not match an existing label."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if label.group.is_container:
+                # Container-group labels only contain other labels — never channels
+                # (this path bulk_creates ChannelLabel rows, bypassing the serializer).
+                return Response(
+                    {"error": "Labels of a container group cannot be assigned to channels."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

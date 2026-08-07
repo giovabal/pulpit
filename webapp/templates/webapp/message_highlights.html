@@ -1,5 +1,6 @@
 {% extends "webapp/index.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block content %}
 <div class="search-header">
@@ -54,5 +55,5 @@
     new bootstrap.Tooltip(el);
   });
 </script>
-<script src="{% static 'webapp/js/post_replies.js' %}"></script>
+<script src="{% vstatic 'webapp/js/post_replies.js' %}"></script>
 {% endblock extra_scripts %}

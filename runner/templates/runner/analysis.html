@@ -1,8 +1,9 @@
 {% extends "webapp/index.html" %}
 {% load static %}
+{% load vstatic %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'runner/css/operations.css' %}">
+<link rel="stylesheet" href="{% vstatic 'runner/css/operations.css' %}">
 {% endblock extra_styles %}
 
 {% block content %}

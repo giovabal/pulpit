@@ -30,7 +30,7 @@ See [Getting started § Telegram API credentials](getting-started.md#step-2--get
 
 ## Telegram client tuning
 
-Optional knobs for the Telethon client. Defaults match the previous `[telegram]` section of `.operations-crawl` (now removed).
+Optional knobs for the Telethon client.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
@@ -70,10 +70,9 @@ pip install oracledb           # Oracle
 ## Project and access control
 
 The **project title** — the name used in the `<title>` tag of the HTML files and as
-the title of the spreadsheets produced by `structural_analysis` — is no longer an
-environment variable. It now lives in the database alongside a free-text
-**description**, **criteria**, and **notes**, all editable in the web UI at
-**Manage › Project**.
+the title of the spreadsheets produced by `structural_analysis` — lives in the
+database alongside a free-text **description**, **criteria**, and **notes**, all
+editable in the web UI at **Manage › Project**.
 
 | Option | Description | Default |
 | :----- | :---------- | ------: |
@@ -152,11 +151,11 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 
 ## `[graph]` — palette and base options
 
-Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (citing→cited, citation convention). The previous `graph.reversed_edges` toggle has been removed; every measure uses the as-built citation orientation. A leftover `reversed_edges = …` line in an existing `.operations-structural` file is silently ignored.
+Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (citing→cited, citation convention); every measure uses the as-built citation orientation. A `reversed_edges = …` line in an `.operations-structural` file is silently ignored.
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `graph.community_palette` | Colour palette for communities. Any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order). The legacy value `"ORGANIZATION"` is silently translated to `"vaporwave"` *reversed* at load time. Empty `""` disables palette rendering. | `""` |
+| `graph.community_palette` | Colour palette for communities. Any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order). The value `"ORGANIZATION"` is accepted as an alias for `"vaporwave"` *reversed*. Empty `""` disables palette rendering. | `""` |
 | `graph.community_palette_reversed` | Reverse the palette so the most-vivid colours land on the largest communities | `false` |
 | `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link) | `#596a64` |
 | `graph.output_dir` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |

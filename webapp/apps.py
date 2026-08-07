@@ -6,7 +6,6 @@ class WebappConfig(AppConfig):
     name = "webapp"
     verbose_name = "Data"
 
-    # The WAL / synchronous pragmas formerly applied here via the
-    # connection_created signal now live in DATABASES["default"]["OPTIONS"]
+    # The SQLite WAL / synchronous pragmas live in DATABASES["default"]["OPTIONS"]
     # ["init_command"] (webapp_engine/settings.py), which Django runs on every
     # new connection before its first query.

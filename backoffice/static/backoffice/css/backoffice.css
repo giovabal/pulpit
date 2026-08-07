@@ -614,6 +614,11 @@ tr:hover .bo-detail-btn { opacity: 1; }
   border-color: var(--accent-border);
   color: var(--accent);
 }
+.bo-badge--container {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success);
+}
 
 .bo-labels-intro { max-width: 72ch; }
 
@@ -638,6 +643,53 @@ tr:hover .bo-detail-btn { opacity: 1; }
 .bo-label-group-name { font-size: 1rem; }
 .bo-label-group-actions { display: flex; gap: var(--space-2); }
 .bo-label-table { margin-bottom: 0; }
+
+/* Container groups: child-label chips, row drop targets, and the assignment palette */
+.bo-td--children { max-width: 28rem; }
+.bo-label-table tr.is-dragover td {
+  background: var(--accent-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.bo-child-drop-hint { color: var(--muted); font-size: .8125rem; font-style: italic; }
+
+.bo-chip--grab { cursor: grab; border: none; font-family: var(--font-sans); }
+.bo-chip--grab.is-dragging { opacity: .45; }
+.bo-chip-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: inherit;
+  white-space: nowrap;
+}
+
+.bo-child-palette {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color .15s, background .15s;
+}
+.bo-child-palette.is-dragover {
+  background: var(--accent-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.bo-child-palette-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.bo-child-palette-bar label { margin: 0; }
+.bo-child-palette-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  min-height: 1.5rem;
+}
 
 /* Recolor modal: labels wrap horizontally, each with an editable swatch */
 .bo-recolor-labels {
