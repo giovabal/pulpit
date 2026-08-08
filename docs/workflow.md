@@ -289,6 +289,7 @@ python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
 python manage.py crawl_channels --get-new-messages --channel-sources media,activists
+python manage.py crawl_channels --get-new-messages --filter-labels 36,38   # limit the crawl to channels under these container labels (ids from Manage → Labels)
 
 # Media downloads (tri-state: --download-X enables, --no-download-X disables for the run only)
 python manage.py crawl_channels --get-new-messages --no-download-video --no-download-audio --no-download-stickers --no-download-other-media  # text-only
@@ -322,6 +323,7 @@ python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --graph-2d --timeline-step year
 python manage.py structural_analysis --graph-2d --html --channel-sources media,activists
+python manage.py structural_analysis --graph-2d --html --filter-labels 36,38   # limit the whole analysis to channels under these container labels (e.g. continents; ids from Manage → Labels)
 
 # Robustness analysis (resistance to node removal)
 python manage.py structural_analysis --robustness --html --xlsx               # default: α=0.05, N_runs=100, K_null=20, static strategies only

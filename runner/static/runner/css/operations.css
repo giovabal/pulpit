@@ -190,6 +190,9 @@
   user-select: none;
   transition: background .1s, border-color .1s, color .1s;
 }
+
+/* Scope filter: the container-group name prefixing its labels' checkboxes */
+.ops-scope-group { align-self: center; font-weight: 600; }
 .ops-flag input[type="checkbox"],
 .ops-flag input[type="radio"] {
   width: 13px; height: 13px;

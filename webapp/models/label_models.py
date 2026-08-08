@@ -162,6 +162,30 @@ class Label(BaseColorModel):
             return None
         return cls.objects.select_related("group").filter(pk=int(raw), group__is_container=True).first()
 
+    @classmethod
+    def parse_filter_labels(cls, raw) -> list[int]:
+        """Parse a ``--filter-labels`` CSV into validated container-label ids.
+
+        Shared by ``structural_analysis`` and ``crawl_channels``. Raises
+        ``ValueError`` on non-integer tokens or ids that are not labels of a
+        container group, so a scope filter fails loudly instead of silently
+        matching nothing.
+        """
+        if not raw:
+            return []
+        try:
+            ids = [int(s.strip()) for s in str(raw).split(",") if s.strip()]
+        except ValueError as e:
+            raise ValueError("--filter-labels must be a comma-separated list of label ids.") from e
+        known = set(cls.objects.filter(pk__in=ids, group__is_container=True).values_list("pk", flat=True))
+        unknown = [str(pk) for pk in ids if pk not in known]
+        if unknown:
+            raise ValueError(
+                f"--filter-labels: not container-group label id(s): {', '.join(unknown)}. "
+                "Only labels of a container group (Manage → Labels) can filter the selection."
+            )
+        return ids
+
 
 class LabelParent(BaseModel):
     """A child label's membership under a *container* label.

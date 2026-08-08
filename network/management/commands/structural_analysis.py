@@ -32,7 +32,7 @@ from network.robustness.disparity_filter import disparity_filter
 from network.tokens import split_tokens
 from network.utils import GraphData
 from webapp import scoring
-from webapp.models import Message, Project
+from webapp.models import Label, Message, Project
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 from webapp.utils.colors import is_known_palette
 from webapp_engine.command_logging import styled_warning_logs
@@ -339,6 +339,9 @@ class ResolvedOptions:
     include_private: bool
     channel_types: list[str]
     channel_sources: list[str]
+    # Container-label ids limiting the whole analysis to the channels holding a
+    # label assigned under at least one of them (empty = no filter).
+    filter_labels: list[int]
     edge_weight_strategy: str
 
     # Communities and measures
@@ -844,6 +847,17 @@ class Command(BaseCommand):
                 "Comma-separated list of ChannelSource keys. "
                 "When provided, only channels belonging to at least one of these sources are included in the graph. "
                 "Leave unset to include all in-target channels regardless of source membership."
+            ),
+        )
+        parser.add_argument(
+            "--filter-labels",
+            dest="filter_labels",
+            default=None,
+            metavar="IDS",
+            help=(
+                "Comma-separated ids of container-group labels (Manage → Labels; e.g. a continent). "
+                "When provided, the whole analysis is limited to the channels holding a label assigned "
+                "under at least one of them. Leave unset to include all in-target channels."
             ),
         )
         parser.add_argument(
@@ -1580,6 +1594,7 @@ class Command(BaseCommand):
                     end_date=end_date,
                     channel_types=opts.channel_types,
                     channel_sources=opts.channel_sources or None,
+                    filter_labels=opts.filter_labels or None,
                     edge_weight_strategy=opts.edge_weight_strategy,
                     include_mentions=opts.include_mentions,
                     include_self_references=opts.include_self_references,
@@ -1641,6 +1656,7 @@ class Command(BaseCommand):
                     end_date=end_date,
                     channel_types=opts.channel_types,
                     channel_sources=opts.channel_sources or None,
+                    filter_labels=opts.filter_labels or None,
                     edge_weight_strategy=opts.edge_weight_strategy,
                     include_mentions=opts.include_mentions,
                     include_self_references=opts.include_self_references,
@@ -1681,6 +1697,7 @@ class Command(BaseCommand):
         do_xlsx: bool,
         channel_types: list[str],
         channel_sources: list[str],
+        filter_labels: list[int],
         edge_weight_strategy: str,
         fa2_iterations: int,
         target_layout: str,
@@ -1728,6 +1745,7 @@ class Command(BaseCommand):
                 end_date=end_date,
                 channel_types=channel_types,
                 channel_sources=channel_sources or None,
+                filter_labels=filter_labels or None,
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
                 include_self_references=options["include_self_references"],
@@ -2015,6 +2033,10 @@ class Command(BaseCommand):
         channel_sources = (
             [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
         )
+        try:
+            filter_labels = Label.parse_filter_labels(options["filter_labels"])
+        except ValueError as e:
+            raise CommandError(str(e)) from e
         # Fall back to the config-derived strategy (settings.SA_EDGE_WEIGHT_STRATEGY) when
         # no --edge-weight-strategy is passed, then to the documented default. An empty
         # value would otherwise reach build_graph and silently zero every edge weight
@@ -2190,6 +2212,7 @@ class Command(BaseCommand):
             include_private=_o("include_private", False),
             channel_types=channel_types,
             channel_sources=channel_sources,
+            filter_labels=filter_labels,
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
             strategies_lower=[inst.key for inst in communities_strategy],
@@ -2276,6 +2299,7 @@ class Command(BaseCommand):
                 end_date=opts.end_date,
                 channel_types=opts.channel_types,
                 channel_sources=opts.channel_sources or None,
+                filter_labels=opts.filter_labels or None,
                 edge_weight_strategy=opts.edge_weight_strategy,
                 include_mentions=opts.include_mentions,
                 include_self_references=opts.include_self_references,
@@ -2766,6 +2790,7 @@ class Command(BaseCommand):
                         opts.do_xlsx,
                         opts.channel_types,
                         opts.channel_sources,
+                        opts.filter_labels,
                         opts.edge_weight_strategy,
                         opts.fa2_iterations,
                         opts.target_layout,

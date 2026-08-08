@@ -824,6 +824,15 @@ class LabelParentModelTests(TestCase):
         self.assertIsNone(Label.from_filter_param(""))
         self.assertIsNone(Label.from_filter_param(None))
 
+    def test_parse_filter_labels_validates_container_membership(self) -> None:
+        self.assertEqual(Label.parse_filter_labels(f"{self.europe.pk}, {self.asia.pk}"), [self.europe.pk, self.asia.pk])
+        self.assertEqual(Label.parse_filter_labels(""), [])
+        self.assertEqual(Label.parse_filter_labels(None), [])
+        with self.assertRaises(ValueError):
+            Label.parse_filter_labels("abc")
+        with self.assertRaises(ValueError):
+            Label.parse_filter_labels(str(self.france.pk))  # not a container-group label
+
 
 class InContainerLabelQuerysetTests(TestCase):
     """Channel.objects.in_container_label(voice): child-label holders only.

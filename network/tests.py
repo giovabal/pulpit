@@ -1051,6 +1051,67 @@ class BuildGraphTests(TestCase):
         # The primary group's representative label is unchanged (in-target identity).
         self.assertEqual(node["resolved_org_id"], self.label.pk)
 
+    def test_container_group_resolves_through_child_labels(self) -> None:
+        """A container group's labels are never channel-linked, so its LABELGROUP<id>
+        partition must resolve through the child assignments: a channel labelled
+        "Org1" (assigned under "Europe") gets Europe's community and colour."""
+        from webapp.models import LabelGroup, LabelParent
+
+        continents = LabelGroup.objects.create(name="Continent", is_partition=True, is_container=True)
+        europe = make_label("Europe", color="#0000FF", is_in_target=False, group=continents)
+        LabelParent.objects.create(label=self.label, parent=europe)
+        self._create_forward()  # ch1↔ch2 edge so the build is valid
+
+        _, channel_dict, _, _ = build_graph()
+        node = channel_dict[str(self.ch1.pk)]["data"]
+        self.assertEqual(node["group_partitions"].get(continents.pk), (europe.pk, europe.color))
+        community_map, palette = detect_labelgroup(continents.pk, channel_dict)
+        self.assertEqual(community_map[str(self.ch1.pk)], europe.pk)
+        self.assertIn(europe.pk, palette)
+
+    def test_filter_labels_limits_graph_to_selection(self) -> None:
+        """--filter-labels: only channels whose labels sit under the selected container
+        labels enter the graph; an out-of-selection in-target channel is excluded
+        entirely — not even readmitted through the dead-leaf gate."""
+        from webapp.models import LabelGroup, LabelParent
+
+        continents = LabelGroup.objects.create(name="Continent", is_partition=True, is_container=True)
+        europe = make_label("Europe", color="#0000FF", is_in_target=False, group=continents)
+        LabelParent.objects.create(label=self.label, parent=europe)  # Org1 → Europe
+        outside_label = make_label("Org2", color="#00FF00")  # not under any container
+        ch3 = make_channel(telegram_id=3, label=outside_label, title="Outside")
+        self._create_forward()  # ch1↔ch2 edge inside the selection
+        Message.objects.create(telegram_id=20, channel=ch3, forwarded_from=self.ch1)
+        self.ch1.save()
+        ch3.save()
+
+        _, channel_dict, _, _ = build_graph(filter_labels=[europe.pk])
+        self.assertIn(str(self.ch1.pk), channel_dict)
+        self.assertIn(str(self.ch2.pk), channel_dict)
+        self.assertNotIn(str(ch3.pk), channel_dict)
+
+        _, channel_dict_dl, _, _ = build_graph(filter_labels=[europe.pk], draw_dead_leaves=True)
+        self.assertNotIn(str(ch3.pk), channel_dict_dl)
+
+    def test_primary_container_group_colours_nodes_through_children(self) -> None:
+        """When the *primary* group is a container, node colour and the "organization"
+        column resolve through the children too — the channel's in-target label
+        ("Org1") carries it into its parent ("Europe")."""
+        from webapp.models import LabelGroup, LabelParent
+
+        continents = LabelGroup.objects.create(name="Continent", is_partition=True, is_container=True, is_primary=True)
+        self.label.group.is_primary = False
+        self.label.group.save()
+        europe = make_label("Europe", color="#0000FF", is_in_target=False, group=continents)
+        LabelParent.objects.create(label=self.label, parent=europe)
+        self._create_forward()
+
+        _, channel_dict, _, _ = build_graph()
+        node = channel_dict[str(self.ch1.pk)]["data"]
+        self.assertEqual(node["resolved_org_id"], europe.pk)
+        self.assertEqual(node["organization"], "Europe")
+        self.assertEqual(node["resolved_org_color"], europe.color)
+
     def test_draw_dead_leaves_survive_windowed_build(self) -> None:
         """Regression: a dead leaf cited inside the window must survive a windowed
         (e.g. per-year timeline) build, not be dropped by the inactive-channel filter
@@ -1980,6 +2041,23 @@ class ExportNetworkCommandTests(TestCase):
 
         with self.assertRaises(CommandError):
             call_command("structural_analysis", enddate="2023-13-01", stdout=io.StringIO(), stderr=io.StringIO())
+
+    def test_raises_command_error_on_unknown_filter_label(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("structural_analysis", filter_labels="999999", stdout=io.StringIO(), stderr=io.StringIO())
+
+    def test_raises_command_error_on_non_container_filter_label(self) -> None:
+        # An ordinary (non-container-group) label id must be rejected, not silently
+        # match nothing.
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        label = make_label("Org1", color="#FF0000")
+        with self.assertRaises(CommandError):
+            call_command("structural_analysis", filter_labels=str(label.pk), stdout=io.StringIO(), stderr=io.StringIO())
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")

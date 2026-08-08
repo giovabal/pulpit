@@ -71,6 +71,14 @@ class OperationsView(View):
         # Partition label groups: each is selectable in the "Label groups" fieldset and participates
         # like a detected community (its LABELGROUP<id> token is merged into --community-strategies).
         partition_groups = list(LabelGroup.objects.filter(is_partition=True).order_by("name"))
+        # Container groups feed the Scope filter: selecting container labels limits the whole
+        # analysis to the channels holding a label assigned under them (--filter-labels).
+        container_groups = list(
+            LabelGroup.objects.filter(is_container=True, labels__isnull=False)
+            .prefetch_related("labels")
+            .distinct()
+            .order_by("name")
+        )
 
         def _expand(raw: str, all_set: set) -> set:
             items = {s.strip().upper() for s in raw.split(",") if s.strip()}
@@ -170,6 +178,7 @@ class OperationsView(View):
                 "tasks": task_info,
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
                 "channel_sources": channel_sources,
+                "container_groups": container_groups,
                 "has_vacancies": has_vacancies,
                 # MODULEROLE basis choices: every algorithmic strategy plus each manual LABELGROUP<id>
                 # partition (so a within-module role can be computed against a label group too).
@@ -564,6 +573,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "ids", "--ids"),
         ("channel_types", "--channel-types"),
         ("csv", "channel_sources", "--channel-sources"),
+        ("csv", "filter_labels", "--filter-labels"),
     ],
     "search_channels": [
         ("value", "amount", "--amount"),
@@ -626,6 +636,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # (e.g. "LEIDEN_CPM(resolution=0.05)"), so it is not a separate CLI flag from the panel.
         ("channel_types", "--channel-types"),
         ("csv", "channel_sources", "--channel-sources"),
+        ("csv", "filter_labels", "--filter-labels"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
         ("bool_explicit", "include_private", "--include-private", "--no-include-private"),
         ("const", "timeline_step", "--timeline-step", "year"),
