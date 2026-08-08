@@ -6,10 +6,10 @@ import datetime
 from unittest import mock
 
 from django.core.cache import cache
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldFetchBlocked, ValidationError
 from django.core.paginator import InvalidPage
-from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.db import IntegrityError, models, transaction
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from network.graph_builder import channel_network_data
@@ -27,6 +27,7 @@ from webapp.utils.colors import (
     rgb_avg,
     rgb_to_hex,
 )
+from webapp.views import ChannelListView, HomeView
 
 # ─── hex_to_rgb ────────────────────────────────────────────────────────────────
 
@@ -1881,6 +1882,65 @@ class CurrentLabelTests(TestCase):
                 for _ in range(5):
                     self.assertEqual(channel.current_label, self.org_a)
                     self.assertEqual(channel.current_labels, [self.org_a])
+
+
+class FetchModeGuardTests(TestCase):
+    """The list views must pre-fetch everything their templates read.
+
+    ``FETCH_RAISE`` (Django 6.1) turns any *unfetched* forward-FK access into
+    ``FieldFetchBlocked``, so dropping a ``select_related()`` / ``prefetch_related()``
+    fails here instead of silently becoming one query per row in production — the
+    failure mode that made the channel list issue 1,782 queries (see
+    :class:`CurrentLabelTests`). It governs forward FKs and deferred fields only;
+    reverse and many-to-many manager access always queries and cannot be blocked.
+    """
+
+    def setUp(self) -> None:
+        org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, title="C1", label=org)
+        source = make_channel(telegram_id=2, title="C2", label=org)
+        Message.objects.create(telegram_id=1, channel=self.channel, date="2024-01-10T00:00:00Z", forwarded_from=source)
+
+    def _read_card_fields(self, queryset) -> None:
+        """Touch exactly what the post card renders for each message."""
+        for message in queryset:
+            self.assertIsNotNone(message.channel.title)
+            self.assertIsNotNone(message.channel.current_label)
+            if message.forwarded_from_id:
+                self.assertIsNotNone(message.forwarded_from.title)
+
+    def test_home_message_list_is_fully_fetched(self) -> None:
+        view = HomeView()
+        view.request = RequestFactory().get("/")
+        self._read_card_fields(view.get_queryset().fetch_mode(models.FETCH_RAISE))
+
+    def test_channel_list_label_resolution_is_fully_fetched(self) -> None:
+        for channel in ChannelListView().get_queryset().fetch_mode(models.FETCH_RAISE):
+            self.assertEqual(channel.current_labels, [channel.current_label])
+
+    def test_guard_catches_a_dropped_select_related(self) -> None:
+        # Negative control: the same reads on an unprepared queryset must fail, proving
+        # the guard above would actually catch a regression rather than pass vacuously.
+        with self.assertRaises(FieldFetchBlocked):
+            self._read_card_fields(Message.objects.all().fetch_mode(models.FETCH_RAISE))
+
+
+class MessageSortOrderingTests(TestCase):
+    """Every message-list sort must be deterministic, so pagination can't drop or repeat rows.
+
+    ``_SORT_ORDER_BY`` terminates each tuple with ``-pk``/``pk`` for exactly this reason;
+    ``QuerySet.totally_ordered`` (Django 6.1) turns that convention into an enforced check.
+    """
+
+    def test_every_sort_is_totally_ordered(self) -> None:
+        from webapp.views import _SORT_ORDER_BY
+
+        for name, order_by in _SORT_ORDER_BY.items():
+            with self.subTest(sort=name):
+                self.assertTrue(Message.objects.order_by(*order_by).totally_ordered)
+
+    def test_unordered_queryset_is_not_totally_ordered(self) -> None:
+        self.assertFalse(Message.objects.all().totally_ordered)
 
 
 class InTargetPeriodQuerysetTests(TestCase):

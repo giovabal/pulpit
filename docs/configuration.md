@@ -55,6 +55,8 @@ Optional knobs for the Telethon client.
 | `DB_HOST` | All non-SQLite backends: host | `localhost` |
 | `DB_PORT` | All non-SQLite backends: port | `5432` (PostgreSQL), `3306` (MySQL/MariaDB), `1521` (Oracle) |
 
+**Minimum versions.** SQLite 3.37, PostgreSQL 15, MySQL 8.4, MariaDB 10.11, Oracle 19. `setup.sh` checks the SQLite version up front, since some long-term-support distributions still ship a library older than 3.37 (Ubuntu 20.04 and Debian 11 among them) — on those, either upgrade SQLite or use one of the server backends.
+
 Each non-SQLite backend requires its driver — install separately before running:
 
 ```sh
