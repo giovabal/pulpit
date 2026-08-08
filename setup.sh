@@ -24,6 +24,16 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
+# Django requires SQLite 3.37+ (the default database engine). Older distributions ship
+# interpreters linked against a too-old library — fail here with an explanation rather
+# than at the first query with an opaque Django error.
+sqlite_version=$("$PY" -c "import sqlite3; print(sqlite3.sqlite_version)" 2>/dev/null || echo "0")
+if [ "$(printf '3.37.0\n%s\n' "$sqlite_version" | sort -V | head -n1)" != "3.37.0" ]; then
+    echo "Error: SQLite 3.37 or newer is required, but Python is linked against $sqlite_version." >&2
+    echo "Upgrade your system SQLite (or use PostgreSQL 15+ / MySQL 8.4+ / MariaDB 10.11+)." >&2
+    exit 1
+fi
+
 # Create virtual environment if it does not exist.
 # graph-tool (needed only for the SBM community strategies) is not pip-installable — it comes from
 # apt/conda into the *system* site-packages. When the chosen Python has it, create the venv with

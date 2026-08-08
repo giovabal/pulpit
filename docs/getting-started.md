@@ -160,7 +160,7 @@ Check the terminal for error messages. If the error mentions missing tables, run
 
 ## Advanced: using a server database
 
-The default SQLite database is a single file and works well for personal research. If you need to run Pulpit on a shared server accessed by multiple users or processes simultaneously, you can switch to PostgreSQL, MySQL/MariaDB, or Oracle.
+The default SQLite database is a single file and works well for personal research. If you need to run Pulpit on a shared server accessed by multiple users or processes simultaneously, you can switch to PostgreSQL 15+, MySQL 8.4+, MariaDB 10.11+, or Oracle 19+ (SQLite itself must be 3.37 or newer — see [Configuration § Database](configuration.md#database)).
 
 Install the corresponding Python driver:
 
