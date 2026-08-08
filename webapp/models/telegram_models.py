@@ -153,23 +153,29 @@ class Channel(TelegramBaseModel):
     def representative_label(self, group: "LabelGroup | int | None" = None) -> "Label | None":
         """The label of ``group`` that best represents the channel *now*.
 
-        ``group`` defaults to the primary group (the migrated "Organization"). The
-        period active today wins (null bounds count as open); otherwise the most
-        recent past period (largest ``end``, tie → latest ``start``); otherwise the
-        earliest known period. ``None`` when the channel holds no label in the
-        group. Prefetch ``channel_labels__label`` when iterating many channels.
+        ``group`` defaults to the primary group. The period active today wins (null
+        bounds count as open); otherwise the most recent past period (largest ``end``,
+        tie → latest ``start``); otherwise the earliest known period. ``None`` when the
+        channel holds no label in the group.
+
+        The default primary group is identified from the channel's *own* label rows
+        rather than looked up globally: a channel holding none of that group's labels
+        has no representative label either way, so the lookup was pure overhead — and
+        being per-call it cost one query for every access (templates read
+        ``current_label`` several times per row). Prefetch
+        ``channel_labels__label__group`` when iterating many channels to keep this
+        query-free; a bare ``channel_labels__label`` costs one query per distinct label.
         """
         from webapp.models import LabelGroup
 
-        if group is None:
-            group = LabelGroup.objects.filter(is_primary=True).first()
-            if group is None:
-                return None
-        group_id = group.pk if isinstance(group, LabelGroup) else group
         # localdate(): "today" in the TIME_ZONE the DB-side __date period lookups use,
         # not the host OS clock — they can disagree for ~2h around midnight.
         today = timezone.localdate()
-        rows = [cl for cl in self.channel_labels.all() if cl.label.group_id == group_id]
+        if group is None:
+            rows = [cl for cl in self.channel_labels.all() if cl.label.group.is_primary]
+        else:
+            group_id = group.pk if isinstance(group, LabelGroup) else group
+            rows = [cl for cl in self.channel_labels.all() if cl.label.group_id == group_id]
         if not rows:
             return None
         active = [r for r in rows if (r.start is None or r.start <= today) and (r.end is None or r.end >= today)]
