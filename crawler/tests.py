@@ -50,10 +50,50 @@ def _crawl_opts(**overrides) -> CrawlOptions:
     """
     base = {f.name: False for f in fields(CrawlOptions)}
     base.update(
-        refresh_limit=None, refresh_from=None, refresh_to=None, ids_str=None, channel_types=[], channel_sources=[]
+        refresh_limit=None,
+        refresh_from=None,
+        refresh_to=None,
+        ids_str=None,
+        channel_types=[],
+        channel_sources=[],
+        filter_labels=[],
     )
     base.update(overrides)
     return CrawlOptions(**base)
+
+
+class BuildCrawlQsFilterLabelsTests(TestCase):
+    """--filter-labels limits the crawl to channels under the selected container labels."""
+
+    def setUp(self) -> None:
+        from webapp.models import LabelGroup, LabelParent
+
+        continents = LabelGroup.objects.create(name="Continent", is_partition=True, is_container=True)
+        self.europe = make_label("Europe", is_in_target=False, group=continents)
+        org_a = make_label("OrgA")
+        org_b = make_label("OrgB")
+        LabelParent.objects.create(label=org_a, parent=self.europe)
+        self.inside = make_channel(telegram_id=1, title="Inside", label=org_a)
+        self.outside = make_channel(telegram_id=2, title="Outside", label=org_b)
+        self.to_inspect = Channel.objects.create(telegram_id=3, title="Inspect", to_inspect=True)
+
+    def test_filter_limits_crawl_queryset(self) -> None:
+        qs = Command()._build_crawl_qs(_crawl_opts(channel_types=["CHANNEL"], filter_labels=[self.europe.pk]))
+        self.assertCountEqual(list(qs), [self.inside])
+
+    def test_no_filter_keeps_everything(self) -> None:
+        qs = Command()._build_crawl_qs(_crawl_opts(channel_types=["CHANNEL"]))
+        self.assertCountEqual(list(qs), [self.inside, self.outside, self.to_inspect])
+
+    def test_non_container_filter_label_raises_command_error(self) -> None:
+        import io
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        org = make_label("Plain")
+        with self.assertRaises(CommandError):
+            call_command("crawl_channels", filter_labels=str(org.pk), stdout=io.StringIO(), stderr=io.StringIO())
 
 
 def _make_telegram_channel(telegram_id: int = 999, username: str = "testchan") -> MagicMock:

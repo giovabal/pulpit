@@ -28,6 +28,7 @@ from network.utils import channel_cutoff_q
 from webapp.models import (
     Channel,
     ChannelLabel,
+    Label,
     Message,
     MessageAudio,
     MessageOtherMedia,
@@ -100,6 +101,9 @@ class CrawlOptions:
     ids_str: str | None
     channel_types: list[str]
     channel_sources: list[str]
+    # Container-label ids limiting the crawl to the channels holding a label
+    # assigned under at least one of them (empty = no filter).
+    filter_labels: list[int]
 
     @property
     def need_client(self) -> bool:
@@ -568,6 +572,17 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of ChannelSource keys. "
                 "Only channels belonging to at least one of these sources are included."
+            ),
+        )
+        parser.add_argument(
+            "--filter-labels",
+            dest="filter_labels",
+            default=None,
+            metavar="IDS",
+            help=(
+                "Comma-separated ids of container-group labels (Manage → Labels; e.g. a continent). "
+                "When provided, only channels holding a label assigned under at least one of them are "
+                "crawled (unlabelled to-inspect channels are excluded too)."
             ),
         )
 
@@ -1236,6 +1251,10 @@ class Command(BaseCommand):
         channel_sources = (
             [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
         )
+        try:
+            filter_labels = Label.parse_filter_labels(options.get("filter_labels"))
+        except ValueError as e:
+            raise CommandError(str(e)) from e
 
         # Every toggle uses BooleanOptionalAction (default=None). A bare
         # `python manage.py crawl_channels` (no flags) must do nothing —
@@ -1274,6 +1293,7 @@ class Command(BaseCommand):
             ids_str=options["ids"],
             channel_types=channel_types,
             channel_sources=channel_sources,
+            filter_labels=filter_labels,
         )
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
@@ -1285,6 +1305,13 @@ class Command(BaseCommand):
             qs = qs.exclude(is_lost=True).exclude(is_private=True)
         if opts.channel_sources:
             qs = qs.filter(sources__key__in=opts.channel_sources).distinct()
+        if opts.filter_labels:
+            # Container-label scope: only channels holding a label assigned under the
+            # selection (same children-only semantics as structural_analysis).
+            under_selection = ChannelLabel.objects.filter(
+                channel=OuterRef("pk"), label__parent_links__parent_id__in=opts.filter_labels
+            )
+            qs = qs.filter(Exists(under_selection))
         return qs
 
     @contextmanager
@@ -1466,6 +1493,15 @@ class Command(BaseCommand):
                             )
                             if channel_sources:
                                 excluded_by_type = excluded_by_type.filter(sources__key__in=channel_sources).distinct()
+                            if opts.filter_labels:
+                                excluded_by_type = excluded_by_type.filter(
+                                    Exists(
+                                        ChannelLabel.objects.filter(
+                                            channel=OuterRef("pk"),
+                                            label__parent_links__parent_id__in=opts.filter_labels,
+                                        )
+                                    )
+                                )
                             if ids_str:
                                 excluded_by_type = excluded_by_type.filter(parse_id_ranges(ids_str))
                             n_excluded = excluded_by_type.count()

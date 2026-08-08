@@ -310,6 +310,23 @@
               </fieldset>
               {% endif %}
 
+              {% if container_groups %}
+              <fieldset class="ops-fieldset">
+                <legend>Scope filter
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Limit the crawl to channels whose labels sit under the selected container labels (Manage → Labels). Leave all unchecked for all channels."></i>
+                </legend>
+                {% for group in container_groups %}
+                <div class="ops-flags">
+                  <span class="ops-scope-group text-muted small">{{ group.name }}:</span>
+                  {% for lbl in group.labels.all %}
+                  <label class="ops-flag"><input type="checkbox" name="filter_labels" value="{{ lbl.id }}">{{ lbl.name }}</label>
+                  {% endfor %}
+                </div>
+                {% endfor %}
+              </fieldset>
+              {% endif %}
+
             </div>
           </div>
 
@@ -334,6 +351,23 @@
               </div>
             </div>
           </fieldset>
+
+          {% if container_groups %}
+          <fieldset class="ops-fieldset">
+            <legend>Scope filter
+              <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="Limit the whole analysis to channels whose labels sit under the selected container labels (Manage → Labels). Leave all unchecked to include every in-target channel."></i>
+            </legend>
+            {% for group in container_groups %}
+            <div class="ops-flags">
+              <span class="ops-scope-group text-muted small">{{ group.name }}:</span>
+              {% for lbl in group.labels.all %}
+              <label class="ops-flag"><input type="checkbox" name="filter_labels" value="{{ lbl.id }}">{{ lbl.name }}</label>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </fieldset>
+          {% endif %}
 
           <div class="ops-fieldset-row">
             <fieldset class="ops-fieldset">

@@ -334,6 +334,17 @@ class OperationsViewTests(TestCase):
         keys = [s["key"] for s in resp.context["channel_sources"]]
         self.assertIn("alpha", keys)
 
+    def test_context_contains_container_groups_with_labels_only(self):
+        from webapp.models import Label, LabelGroup
+
+        continents = LabelGroup.objects.create(name="Continent", is_container=True)
+        Label.objects.create(group=continents, name="Europe")
+        LabelGroup.objects.create(name="Empty container", is_container=True)  # no labels → not offered
+        LabelGroup.objects.create(name="Plain group")
+        resp = self.client.get(reverse("operations"))
+        names = [g.name for g in resp.context["container_groups"]]
+        self.assertEqual(names, ["Continent"])
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — RunTaskView
@@ -817,6 +828,13 @@ class BuildArgsGetChannelsTests(TestCase):
         self.assertIn("SourceA", val)
         self.assertIn("SourceB", val)
 
+    def test_filter_labels_comma_joined(self):
+        # The Scope filter checkboxes (container labels) join into one --filter-labels value.
+        post = FakePost({"filter_labels": ["3", "5"]})
+        args = _build_args("crawl_channels", post)
+        self.assertIn("--filter-labels", args)
+        self.assertEqual(args[args.index("--filter-labels") + 1], "3,5")
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — _build_args: search_channels
@@ -870,6 +888,16 @@ class BuildArgsSearchChannelsTests(TestCase):
 
 
 class BuildArgsExportNetworkTests(TestCase):
+    def test_filter_labels_comma_joined(self):
+        # The Scope filter checkboxes (container labels) join into one --filter-labels value.
+        post = FakePost({"filter_labels": ["3", "5"]})
+        args = _build_args("structural_analysis", post)
+        self.assertIn("--filter-labels", args)
+        self.assertEqual(args[args.index("--filter-labels") + 1], "3,5")
+
+    def test_no_filter_labels_when_none_selected(self):
+        self.assertNotIn("--filter-labels", _build_args("structural_analysis", FakePost()))
+
     def test_export_name_appended(self):
         # Every output toggle is bool_explicit, so an empty form emits the matching
         # --no-X for each one (graph-2d, graph-3d, html, xlsx, gexf, graphml, csv,

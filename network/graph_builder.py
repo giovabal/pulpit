@@ -6,7 +6,7 @@ from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, 
 from django.utils import timezone
 
 from network.utils import channel_cutoff_q, make_date_q
-from webapp.models import Channel, ChannelLabel, LabelGroup, Message, ProfilePicture
+from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
 
@@ -92,6 +92,7 @@ def _group_period_tuples(
     group_id: int,
     *,
     in_target_only: bool,
+    child_parent_map: "dict[int, tuple[int, str, str]] | None" = None,
 ) -> list[tuple[int, str, str, "datetime.date | None", "datetime.date | None"]]:
     """(label_id, label_name, label_color, start, end) for the channel's label periods in ``group_id``.
 
@@ -100,12 +101,25 @@ def _group_period_tuples(
     (node colour, "organization" column). Otherwise every label in the group is
     included, so a purely descriptive partition whose labels are all out-of-target
     (e.g. a "Nation" group) still resolves a window label and can colour the graph.
+
+    A *container* group's labels are never channel-linked, so ``child_parent_map``
+    (child label id → the container label's ``(id, name, color)``) resolves it
+    through the child assignments instead: a period on "Italy" counts as a period
+    on "Europe". The in-target gate then applies to the child label — the one the
+    channel actually holds.
+
     Reads from prefetched ``channel_labels__label`` so it issues no query.
     """
     periods = []
     for channel_label in channel.channel_labels.all():
         label = channel_label.label
-        if label.group_id == group_id and (label.is_in_target or not in_target_only):
+        if not label.is_in_target and in_target_only:
+            continue
+        if child_parent_map is not None:
+            parent = child_parent_map.get(label.id)
+            if parent is not None:
+                periods.append((*parent, channel_label.start, channel_label.end))
+        elif label.group_id == group_id:
             periods.append((label.id, label.name, label.color, channel_label.start, channel_label.end))
     return periods
 
@@ -231,6 +245,7 @@ def build_graph(
     end_date: datetime.date | None = None,
     channel_types: list[str] | None = None,
     channel_sources: list[str] | None = None,
+    filter_labels: list[int] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
     include_mentions: bool = True,
     include_self_references: bool = False,
@@ -242,6 +257,11 @@ def build_graph(
 
     Returns (graph, channel_dict, edge_list, channel_qs).
     Raises ValueError if no edges are found between channels.
+
+    ``filter_labels`` (container-label ids, e.g. a continent) limits the whole
+    analysis to the channels holding a label assigned under at least one of
+    them; in-target channels outside the selection are excluded entirely — not
+    even as dead leaves — so their citations and messages never enter the graph.
 
     A *dead-leaf* node is an out-of-target channel that at least one in-target
     channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
@@ -256,12 +276,25 @@ def build_graph(
         in_target_sub = in_target_sub.filter(Q(start__isnull=True) | Q(start__lte=end_date))
     if start_date is not None:
         in_target_sub = in_target_sub.filter(Q(end__isnull=True) | Q(end__gte=start_date))
-    qs_filter = Q(Exists(in_target_sub))
+    in_target_q = Q(Exists(in_target_sub))
+    qs_filter = in_target_q
+    if filter_labels:
+        under_selection = ChannelLabel.objects.filter(
+            channel=OuterRef("pk"), label__parent_links__parent_id__in=filter_labels
+        )
+        qs_filter &= Q(Exists(under_selection))
     if draw_dead_leaves:
         # Dead-leaf criterion: an out-of-target channel cited (forwarded or
         # mentioned) at least once by some in-target channel. The cited count
         # lives in in_degree under the citation orientation (amplifier→source).
-        qs_filter |= Q(in_degree__gt=0)
+        dead_leaf_q = Q(in_degree__gt=0)
+        if filter_labels:
+            # Under a container-label filter, an in-target channel outside the
+            # selection must not slip back in through the dead-leaf gate — its
+            # messages would pass the period cutoff and it would participate as
+            # a full node, defeating the filter.
+            dead_leaf_q &= ~in_target_q
+        qs_filter |= dead_leaf_q
     channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
     if not include_private:
         channel_qs = channel_qs.exclude(is_private=True)
@@ -291,6 +324,23 @@ def build_graph(
     if primary_group_id is not None and primary_group_id not in partition_id_set:
         resolve_group_ids.append(primary_group_id)
 
+    # Container groups' labels are never channel-linked — their partition resolves through
+    # the child assignments (channel → nation label → continent). One map per container
+    # group: child label id → the container label's (id, name, color).
+    # Every container id gets a map (empty when nothing is assigned yet), so a container
+    # group always resolves through children — a stray direct channel link never counts.
+    container_child_maps: dict[int, dict[int, tuple[int, str, str]]] = {
+        cid: {}
+        for cid in LabelGroup.objects.filter(pk__in=resolve_group_ids, is_container=True).values_list("pk", flat=True)
+    }
+    if container_child_maps:
+        for link in LabelParent.objects.filter(parent_group_id__in=container_child_maps).select_related("parent"):
+            container_child_maps[link.parent_group_id][link.label_id] = (
+                link.parent_id,
+                link.parent.name,
+                link.parent.color,
+            )
+
     _skip = frozenset({"activity_period", "messages_count"})
     graph: nx.DiGraph = nx.DiGraph()
     channel_dict: dict[str, dict[str, Any]] = {}
@@ -308,7 +358,12 @@ def build_graph(
             # ones like a "Nation" group — so their LABELGROUP<id> colouring still works.
             is_primary = group_id == primary_group_id
             resolved = resolve_window_label(
-                _group_period_tuples(channel, group_id, in_target_only=is_primary),
+                _group_period_tuples(
+                    channel,
+                    group_id,
+                    in_target_only=is_primary,
+                    child_parent_map=container_child_maps.get(group_id),
+                ),
                 start_date,
                 end_date,
                 created,

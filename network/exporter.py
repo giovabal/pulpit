@@ -639,6 +639,7 @@ def write_summary_json(
         "include_self_references",
         "channel_types",
         "channel_sources",
+        "filter_labels",
         "vacancy_measures",
         "vacancy_months_before",
         "vacancy_months_after",
