@@ -80,7 +80,7 @@ _MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
     "messagesticker_set",
     "messageothermedia_set",
     "reactions",
-    "channel__channel_labels__label",
+    "channel__channel_labels__label__group",
 )
 
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
@@ -363,7 +363,7 @@ class ChannelListView(ListView):
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.in_target()
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -372,7 +372,7 @@ class ChannelListView(ListView):
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
             Channel.objects.filter(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -381,14 +381,14 @@ class ChannelListView(ListView):
             .exclude(channel_type_filter(settings.DEFAULT_CHANNEL_TYPES))
             .exclude(is_lost=True)
             .exclude(is_private=True)
-            .prefetch_related(self._pic_prefetch, "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
         ctx["to_inspect_list"] = (
             Channel.objects.filter(to_inspect=True)
             .exclude(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label")
+            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -424,7 +424,7 @@ class VacanciesView(TemplateView):
                 "orphaned_amplifier_count": len(orphaned_amplifier_pks(vac.channel, vac.closure_date)),
             }
             for vac in ChannelVacancy.objects.select_related("channel")
-            .prefetch_related("channel__channel_labels__label")
+            .prefetch_related("channel__channel_labels__label__group")
             .order_by("-closure_date")
         ]
         ctx["vacancies"] = rows
@@ -931,7 +931,7 @@ class VacancyAnalysisView(View):
         cand_channels = {
             c.pk: c
             for c in Channel.objects.filter(pk__in=cand_ids)
-            .prefetch_related("channel_labels__label")
+            .prefetch_related("channel_labels__label__group")
             .annotate(first_msg=Min("message_set__date"))
         }
 

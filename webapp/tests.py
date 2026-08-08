@@ -1858,6 +1858,30 @@ class CurrentLabelTests(TestCase):
     def test_none_when_unattributed(self) -> None:
         self.assertIsNone(make_channel(telegram_id=3).current_label)
 
+    def test_no_primary_group_yields_none(self) -> None:
+        # With the primary flag cleared on every group, no label represents the channel —
+        # the resolution reads is_primary off the channel's own labels rather than
+        # looking the group up globally, and must still return None here.
+        LabelGroup.objects.update(is_primary=False)
+        ch = make_channel(telegram_id=4)
+        attribute(ch, self.org_a)
+        self.assertIsNone(Channel.objects.get(pk=ch.pk).current_label)
+
+    def test_access_is_query_free_when_prefetched(self) -> None:
+        """Regression: ``current_label`` used to run a primary-group query on *every*
+        access, so a template reading it a few times per row cost hundreds of queries
+        per page. With ``channel_labels__label__group`` prefetched it must cost none."""
+        for i in range(3):
+            attribute(make_channel(telegram_id=10 + i), self.org_a)
+        qs = Channel.objects.prefetch_related("channel_labels__label__group")
+        # Four queries: the channels, then one per prefetch level (periods, labels,
+        # groups). Constant — it must not grow with the number of accesses or channels.
+        with self.assertNumQueries(4):
+            for channel in qs:
+                for _ in range(5):
+                    self.assertEqual(channel.current_label, self.org_a)
+                    self.assertEqual(channel.current_labels, [self.org_a])
+
 
 class InTargetPeriodQuerysetTests(TestCase):
     def test_past_in_target_period_qualifies(self) -> None:
