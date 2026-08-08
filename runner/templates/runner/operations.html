@@ -238,7 +238,10 @@
             <div class="ops-fieldset-col">
 
               <fieldset class="ops-fieldset">
-                <legend>Scope</legend>
+                <legend>Scope filter
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Limit the crawl: by DB id, and/or to channels whose labels sit under the selected container labels (Manage → Labels). Leave everything blank for all channels."></i>
+                </legend>
                 <div class="ops-params">
                   <div class="ops-param">
                     <label for="ids">DB id filter
@@ -248,6 +251,14 @@
                     <input type="text" name="ids" id="ids" placeholder="e.g. -30, 50-80, 99, 120-" data-width="md">
                   </div>
                 </div>
+                {% for group in container_groups %}
+                <div class="ops-flags">
+                  <span class="ops-scope-group text-muted small">{{ group.name }}:</span>
+                  {% for lbl in group.labels.all %}
+                  <label class="ops-flag"><input type="checkbox" name="filter_labels" value="{{ lbl.id }}">{{ lbl.name }}</label>
+                  {% endfor %}
+                </div>
+                {% endfor %}
               </fieldset>
 
               <fieldset class="ops-fieldset">
@@ -307,23 +318,6 @@
                   <label class="ops-flag"><input type="checkbox" name="channel_sources" value="{{ source.key }}">{{ source.name }}</label>
                   {% endfor %}
                 </div>
-              </fieldset>
-              {% endif %}
-
-              {% if container_groups %}
-              <fieldset class="ops-fieldset">
-                <legend>Scope filter
-                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Limit the crawl to channels whose labels sit under the selected container labels (Manage → Labels). Leave all unchecked for all channels."></i>
-                </legend>
-                {% for group in container_groups %}
-                <div class="ops-flags">
-                  <span class="ops-scope-group text-muted small">{{ group.name }}:</span>
-                  {% for lbl in group.labels.all %}
-                  <label class="ops-flag"><input type="checkbox" name="filter_labels" value="{{ lbl.id }}">{{ lbl.name }}</label>
-                  {% endfor %}
-                </div>
-                {% endfor %}
               </fieldset>
               {% endif %}
 
