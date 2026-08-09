@@ -11,117 +11,117 @@ import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor,
 // Constants
 // =============================================================================
 
-var BG_COLOR           = 0x112233;
-var FADE_COLOR_HEX     = 0x1b2c3d;
-var EDGE_OPACITY       = 0.30;
-var EDGE_DARKEN        = 0.75;   // factor applied to averaged endpoint color
+var BG_COLOR = 0x112233;
+var FADE_COLOR_HEX = 0x1b2c3d;
+var EDGE_OPACITY = 0.30;
+var EDGE_DARKEN = 0.75; // factor applied to averaged endpoint color
 // Fat-line thickness in CSS pixels for the weighted-edge view. EDGE_WEIGHT_BASE_PX
 // is the uniform width when weights are hidden (or a graph has no weight spread,
 // e.g. the unweighted edge-weight strategy) — kept thin to match the default look.
-var EDGE_WEIGHT_MIN_PX  = 0.6;
-var EDGE_WEIGHT_MAX_PX  = 5.0;
+var EDGE_WEIGHT_MIN_PX = 0.6;
+var EDGE_WEIGHT_MAX_PX = 5.0;
 var EDGE_WEIGHT_BASE_PX = 1.0;
-var CURVE_SEGMENTS     = 10;     // line segments per curved edge
-var CURVATURE          = 0.15;   // control-point offset as fraction of edge length
-var SELF_LOOP_ARM      = 1.0;    // self-loop arm spread as multiple of node radius
-var SELF_LOOP_HEIGHT   = 3.5;    // self-loop arc peak as multiple of node radius
-var ZOOM_STEP          = 0.75;
+var CURVE_SEGMENTS = 10; // line segments per curved edge
+var CURVATURE = 0.15; // control-point offset as fraction of edge length
+var SELF_LOOP_ARM = 1.0; // self-loop arm spread as multiple of node radius
+var SELF_LOOP_HEIGHT = 3.5; // self-loop arc peak as multiple of node radius
+var ZOOM_STEP = 0.75;
 // Cone arrowheads (one instance per edge), sized relative to the target node radius.
-var ARROW_LEN_FACTOR    = 2.0;   // arrowhead length ÷ target node radius
-var ARROW_RADIUS_FACTOR = 0.85;  // arrowhead base radius ÷ target node radius
-var ARROW_OPACITY       = 0.9;   // arrowheads sit slightly more opaque than edges so direction reads clearly
+var ARROW_LEN_FACTOR = 2.0; // arrowhead length ÷ target node radius
+var ARROW_RADIUS_FACTOR = 0.85; // arrowhead base radius ÷ target node radius
+var ARROW_OPACITY = 0.9; // arrowheads sit slightly more opaque than edges so direction reads clearly
 // curve_edges: bow every edge (dark/light, all-curved look — two-way pairs then
 // separate); when false (minimal/print) every edge is straight and a two-way pair
 // superposes.
 var THEMES_3D = {
-    dark:    { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30, curve_edges: true },
-    light:   { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40, curve_edges: true },
+    dark: { bg: 0x112233, fade: 0x1b2c3d, edge_opacity: 0.30, curve_edges: true },
+    light: { bg: 0xf0f4f8, fade: 0xb4c3d2, edge_opacity: 0.40, curve_edges: true },
     minimal: { bg: 0xffffff, fade: 0xd2d2d2, edge_opacity: 0.25, curve_edges: false },
-    print:   { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80, curve_edges: false },
+    print: { bg: 0xffffff, fade: 0xc8c8c8, edge_opacity: 0.80, curve_edges: false },
 };
 // Node radii as fractions of spatial network diameter
-var SIZE_MIN_FRAC      = 0.00225;
-var SIZE_MAX_FRAC      = 0.01350;
-var LABEL_SIZE_FRAC    = 0.5;    // show label when size > SIZE_MIN + FRAC*(SIZE_MAX-SIZE_MIN)
+var SIZE_MIN_FRAC = 0.00225;
+var SIZE_MAX_FRAC = 0.01350;
+var LABEL_SIZE_FRAC = 0.5; // show label when size > SIZE_MIN + FRAC*(SIZE_MAX-SIZE_MIN)
 var BASE_MEASURE_KEYS = { in_deg: true, out_deg: true, fans: true, messages_count: true };
 
 // =============================================================================
 // State
 // =============================================================================
 
-var nodes_index      = {};   // id → node record (pos + metadata + mesh ref + orig_color)
-var node_meshes      = [];   // THREE.Mesh list for raycasting
-var edge_segments    = null; // single THREE.LineSegments for all edges
-var arrow_mesh       = null; // single THREE.InstancedMesh of cone arrowheads (one instance per edge)
-var edge_list        = [];   // [{source, target, vert_start, weight}] for color/arrow rebuilds
-var label_objects    = {};   // id → CSS2DObject
+var nodes_index = {}; // id → node record (pos + metadata + mesh ref + orig_color)
+var node_meshes = []; // THREE.Mesh list for raycasting
+var edge_segments = null; // single THREE.LineSegments for all edges
+var arrow_mesh = null; // single THREE.InstancedMesh of cone arrowheads (one instance per edge)
+var edge_list = []; // [{source, target, vert_start, weight}] for color/arrow rebuilds
+var label_objects = {}; // id → CSS2DObject
 
-var adj_out          = {};   // id → Set of target ids
-var adj_in           = {};   // id → Set of source ids
+var adj_out = {}; // id → Set of target ids
+var adj_in = {}; // id → Set of source ids
 
-var active_strategy        = null;
-var community_color_maps   = {};
-var community_strategy_data= {};
-var accessory_data         = null;
+var active_strategy = null;
+var community_color_maps = {};
+var community_strategy_data = {};
+var accessory_data = null;
 
-var selected_node_id  = null;
-var hovered_node_id   = null;
-var current_size_key  = 'in_deg';
-var current_group     = '';
-var labels_mode       = 'on_size';
+var selected_node_id = null;
+var hovered_node_id = null;
+var current_size_key = 'in_deg';
+var current_group = '';
+var labels_mode = 'on_size';
 
-var current_data_dir      = window.DATA_DIR || 'data/';
-var base_data_dir         = window.DATA_DIR || 'data/';
+var current_data_dir = window.DATA_DIR || 'data/';
+var base_data_dir = window.DATA_DIR || 'data/';
 
 // Per-year data directory for this page's base layer: data/ → data_YYYY/,
 // data_coordination/ → data_coordination_YYYY/.
 function year_data_dir(year) {
     return year === 'all' ? base_data_dir : base_data_dir.replace(/\/+$/, '') + '_' + year + '/';
 }
-var active_year           = null;
-var year_sequence         = [];
+var active_year = null;
+var year_sequence = [];
 var _year_switcher_inited = false;
-var year_cache            = {};
-var year_cache_pend       = {};
+var year_cache = {};
+var year_cache_pend = {};
 var animation_frame_id_3d = null;
 
-var active_layout   = 'fa2';
+var active_layout = 'fa2';
 var layout_cache_3d = {};
-var layout_anim_id  = null;
-var _layout_bbox    = null;   // bounding box of the initial FA2 3D layout; used to rescale extra layouts
-var colored_edges   = true;
-var show_edge_weight = false;   // off by default; maps edge weight → line thickness
-var show_edge_arrows = false;   // off by default; draws a cone arrowhead at each edge's target
-var edge_opacity_3d = EDGE_OPACITY;   // live edge-line alpha; re-syncs to the style on style change, overridable by the opacity slider
+var layout_anim_id = null;
+var _layout_bbox = null; // bounding box of the initial FA2 3D layout; used to rescale extra layouts
+var colored_edges = true;
+var show_edge_weight = false; // off by default; maps edge weight → line thickness
+var show_edge_arrows = false; // off by default; draws a cone arrowhead at each edge's target
+var edge_opacity_3d = EDGE_OPACITY; // live edge-line alpha; re-syncs to the style on style change, overridable by the opacity slider
 var active_theme_3d = 'dark';
 
 // Diameter-derived size bounds (set in build_graph, reused in apply_node_size)
-var g_size_min       = 1;
-var g_size_max       = 10;
-var g_label_threshold= 5;
+var g_size_min = 1;
+var g_size_max = 10;
+var g_label_threshold = 5;
 
 // =============================================================================
 // Three.js objects
 // =============================================================================
 
 var scene, camera, renderer, label_renderer, controls;
-var raycaster   = new THREE.Raycaster();
-var pointer     = new THREE.Vector2();
+var raycaster = new THREE.Raycaster();
+var pointer = new THREE.Vector2();
 var sphere_geom = new THREE.SphereGeometry(1, 32, 20);
 // Unit cone pointing +Y (apex at +0.5, base at -0.5); scaled/oriented per edge.
-var cone_geom   = new THREE.ConeGeometry(1, 1, 10);
-var fade_color  = new THREE.Color(FADE_COLOR_HEX);
+var cone_geom = new THREE.ConeGeometry(1, 1, 10);
+var fade_color = new THREE.Color(FADE_COLOR_HEX);
 
 // Reused scratch objects so per-edge arrow transforms don't allocate in hot loops.
-var _AR_UP   = new THREE.Vector3(0, 1, 0);
-var _ar_sp   = new THREE.Vector3();
-var _ar_tp   = new THREE.Vector3();
-var _ar_dir  = new THREE.Vector3();
-var _ar_pos  = new THREE.Vector3();
-var _ar_q    = new THREE.Quaternion();
-var _ar_scl  = new THREE.Vector3();
+var _AR_UP = new THREE.Vector3(0, 1, 0);
+var _ar_sp = new THREE.Vector3();
+var _ar_tp = new THREE.Vector3();
+var _ar_dir = new THREE.Vector3();
+var _ar_pos = new THREE.Vector3();
+var _ar_q = new THREE.Quaternion();
+var _ar_scl = new THREE.Vector3();
 var _ar_zero = new THREE.Matrix4().makeScale(0, 0, 0);
-var _GRAY3   = new THREE.Color(0.30, 0.30, 0.30);
+var _GRAY3 = new THREE.Color(0.30, 0.30, 0.30);
 
 // =============================================================================
 // Helpers
@@ -141,8 +141,9 @@ function avg_darken(c1, c2) {
 }
 
 // Quadratic Bézier control point: mid offset perpendicular to edge direction
-var _up  = new THREE.Vector3(0, 1, 0);
+var _up = new THREE.Vector3(0, 1, 0);
 var _alt = new THREE.Vector3(1, 0, 0);
+
 function curve_control(src_pos, tgt_pos) {
     var mid = new THREE.Vector3().addVectors(src_pos, tgt_pos).multiplyScalar(0.5);
     var dir = new THREE.Vector3().subVectors(tgt_pos, src_pos);
@@ -183,7 +184,7 @@ function init_three() {
     // camera so shading is consistent regardless of graph orientation.
     scene.add(new THREE.AmbientLight(0xffffff, 0.70));
     var cam_light = new THREE.DirectionalLight(0xffffff, 0.85);
-    cam_light.position.set(0, 0, 1);  // local space: points straight at the scene
+    cam_light.position.set(0, 0, 1); // local space: points straight at the scene
 
     camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 1e8);
     camera.position.z = 2000;
@@ -203,8 +204,8 @@ function init_three() {
     container.appendChild(label_renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.05;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
     controls.screenSpacePanning = false;
 
     window.addEventListener('resize', on_resize);
@@ -245,40 +246,50 @@ function build_graph(pos_data, ch_data) {
     ch_data.nodes.forEach(function(n) { measure_map[n.id] = n; });
 
     // ── 1. Spatial bounding box → diameter → size bounds ──────────────────────
-    var min_x = Infinity, max_x = -Infinity;
-    var min_y = Infinity, max_y = -Infinity;
-    var min_z = Infinity, max_z = -Infinity;
+    var min_x = Infinity,
+        max_x = -Infinity;
+    var min_y = Infinity,
+        max_y = -Infinity;
+    var min_z = Infinity,
+        max_z = -Infinity;
     pos_data.nodes.forEach(function(p) {
-        if (p.x < min_x) min_x = p.x; if (p.x > max_x) max_x = p.x;
-        if (p.y < min_y) min_y = p.y; if (p.y > max_y) max_y = p.y;
-        if (p.z < min_z) min_z = p.z; if (p.z > max_z) max_z = p.z;
+        if (p.x < min_x) min_x = p.x;
+        if (p.x > max_x) max_x = p.x;
+        if (p.y < min_y) min_y = p.y;
+        if (p.y > max_y) max_y = p.y;
+        if (p.z < min_z) min_z = p.z;
+        if (p.z > max_z) max_z = p.z;
     });
-    var dx = max_x - min_x, dy = max_y - min_y, dz = max_z - min_z;
+    var dx = max_x - min_x,
+        dy = max_y - min_y,
+        dz = max_z - min_z;
     _layout_bbox = { cx: (min_x + max_x) / 2, cy: (min_y + max_y) / 2, cz: (min_z + max_z) / 2, w: dx || 1, h: dy || 1, d: dz || 1 };
     var diameter = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    g_size_min        = diameter * SIZE_MIN_FRAC;
-    g_size_max        = diameter * SIZE_MAX_FRAC;
+    g_size_min = diameter * SIZE_MIN_FRAC;
+    g_size_max = diameter * SIZE_MAX_FRAC;
     g_label_threshold = g_size_min + LABEL_SIZE_FRAC * (g_size_max - g_size_min);
 
     // ── 2. Metric range for initial size key ───────────────────────────────────
-    var vals  = ch_data.nodes.map(function(n) { return n[current_size_key] || 0; });
-    var minV  = arrMin(vals);
+    var vals = ch_data.nodes.map(function(n) { return n[current_size_key] || 0; });
+    var minV = arrMin(vals);
     var range = (arrMax(vals) - minV) || 1;
 
     // ── 3. Build node meshes ───────────────────────────────────────────────────
     pos_data.nodes.forEach(function(pos) {
-        var m     = measure_map[pos.id] || {};
-        var size  = node_size_from_metric((m[current_size_key] || 0), minV, range);
+        var m = measure_map[pos.id] || {};
+        var size = node_size_from_metric((m[current_size_key] || 0), minV, range);
         var color = m.color ? parse_color(m.color) : new THREE.Color(0.5, 0.5, 0.5);
 
-        var mat  = new THREE.MeshLambertMaterial({ color: color.clone() });
+        var mat = new THREE.MeshLambertMaterial({ color: color.clone() });
         var mesh = new THREE.Mesh(sphere_geom, mat);
         mesh.position.set(pos.x, pos.y, pos.z);
         mesh.scale.setScalar(size);
         mesh.userData.id = pos.id;
 
         nodes_index[pos.id] = Object.assign({}, m, {
-            x: pos.x, y: pos.y, z: pos.z,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
             size: size,
             orig_color: color.clone(),
             mesh: mesh,
@@ -292,14 +303,14 @@ function build_graph(pos_data, ch_data) {
         div.className = 'node-label';
         div.textContent = m.label || pos.id;
         var lbl = new CSS2DObject(div);
-        lbl.position.set(0, 1.3, 0);   // local space: sphere radius = 1, scale handles world size
-        lbl.visible = (labels_mode === 'on_size' && size >= g_label_threshold)
-                   || (labels_mode === 'always');
+        lbl.position.set(0, 1.3, 0); // local space: sphere radius = 1, scale handles world size
+        lbl.visible = (labels_mode === 'on_size' && size >= g_label_threshold) ||
+            (labels_mode === 'always');
         mesh.add(lbl);
         label_objects[pos.id] = lbl;
 
         adj_out[pos.id] = new Set();
-        adj_in[pos.id]  = new Set();
+        adj_in[pos.id] = new Set();
     });
 
     // ── 4. Build curved edges ──────────────────────────────────────────────────
@@ -308,9 +319,9 @@ function build_graph(pos_data, ch_data) {
     // LineSegments (2 verts per segment).
     // Verts per edge: CURVE_SEGMENTS * 2
     var VERTS_PER_EDGE = CURVE_SEGMENTS * 2;
-    var n_edges = pos_data.edges.length;  // upper bound (some may be skipped)
+    var n_edges = pos_data.edges.length; // upper bound (some may be skipped)
     var positions = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
-    var colors    = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
+    var colors = new Float32Array(n_edges * VERTS_PER_EDGE * 3);
     var vert_cursor = 0;
 
     pos_data.edges.forEach(function(e) {
@@ -320,7 +331,7 @@ function build_graph(pos_data, ch_data) {
 
         var sp, tp, cp;
         if (e.source === e.target) {
-            var arm  = src.size * SELF_LOOP_ARM;
+            var arm = src.size * SELF_LOOP_ARM;
             var peak = src.size * SELF_LOOP_HEIGHT;
             sp = new THREE.Vector3(src.x - arm, src.y, src.z);
             tp = new THREE.Vector3(src.x + arm, src.y, src.z);
@@ -331,34 +342,35 @@ function build_graph(pos_data, ch_data) {
             cp = _control_point(sp, tp, _edge_curves());
         }
         var curve = new THREE.QuadraticBezierCurve3(sp, cp, tp);
-        var pts = curve.getPoints(CURVE_SEGMENTS);   // CURVE_SEGMENTS+1 points
+        var pts = curve.getPoints(CURVE_SEGMENTS); // CURVE_SEGMENTS+1 points
 
         var c = avg_darken(src.orig_color, tgt.orig_color);
         var vert_start = vert_cursor;
 
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
-            var p0 = pts[i], p1 = pts[i + 1];
-            positions[vert_cursor * 3]     = p0.x;
+            var p0 = pts[i],
+                p1 = pts[i + 1];
+            positions[vert_cursor * 3] = p0.x;
             positions[vert_cursor * 3 + 1] = p0.y;
             positions[vert_cursor * 3 + 2] = p0.z;
-            colors[vert_cursor * 3]        = c.r;
-            colors[vert_cursor * 3 + 1]    = c.g;
-            colors[vert_cursor * 3 + 2]    = c.b;
+            colors[vert_cursor * 3] = c.r;
+            colors[vert_cursor * 3 + 1] = c.g;
+            colors[vert_cursor * 3 + 2] = c.b;
             vert_cursor++;
 
-            positions[vert_cursor * 3]     = p1.x;
+            positions[vert_cursor * 3] = p1.x;
             positions[vert_cursor * 3 + 1] = p1.y;
             positions[vert_cursor * 3 + 2] = p1.z;
-            colors[vert_cursor * 3]        = c.r;
-            colors[vert_cursor * 3 + 1]    = c.g;
-            colors[vert_cursor * 3 + 2]    = c.b;
+            colors[vert_cursor * 3] = c.r;
+            colors[vert_cursor * 3 + 1] = c.g;
+            colors[vert_cursor * 3 + 2] = c.b;
             vert_cursor++;
         }
 
         edge_list.push({ source: e.source, target: e.target, vert_start: vert_start, weight: e.weight });
 
         if (adj_out[e.source]) adj_out[e.source].add(e.target);
-        if (adj_in[e.target])  adj_in[e.target].add(e.source);
+        if (adj_in[e.target]) adj_in[e.target].add(e.source);
     });
 
     // Trim to actual used size (some edges may have been skipped)
@@ -384,10 +396,10 @@ function build_graph(pos_data, ch_data) {
 function _make_edge_material(opacity) {
     var mat = new LineMaterial({
         vertexColors: true,
-        transparent:  true,
-        opacity:      opacity,
-        linewidth:    1,        // base; per-instance instanceWidth carries the actual px width
-        worldUnits:   false,    // linewidth is in screen pixels (zoom-independent)
+        transparent: true,
+        opacity: opacity,
+        linewidth: 1, // base; per-instance instanceWidth carries the actual px width
+        worldUnits: false, // linewidth is in screen pixels (zoom-independent)
     });
     var container = el('canvas-container');
     // Fat-line width divides by resolution in the shader; fall back to the window
@@ -457,12 +469,13 @@ function apply_edge_widths_3d() {
 // target node's surface and points along the curve's tangent at the target.
 // Returns false for self-loops / degenerate edges (which get no arrow).
 function _edge_arrow_transform(e, outMatrix) {
-    var src = nodes_index[e.source], tgt = nodes_index[e.target];
+    var src = nodes_index[e.source],
+        tgt = nodes_index[e.target];
     if (!src || !tgt || e.source === e.target) return false;
     _ar_sp.set(src.x, src.y, src.z || 0);
     _ar_tp.set(tgt.x, tgt.y, tgt.z || 0);
     var cp = _control_point(_ar_sp, _ar_tp, _edge_curves());
-    _ar_dir.subVectors(_ar_tp, cp);                       // curve tangent at the target end
+    _ar_dir.subVectors(_ar_tp, cp); // curve tangent at the target end
     if (_ar_dir.lengthSq() < 1e-12) _ar_dir.subVectors(_ar_tp, _ar_sp);
     if (_ar_dir.lengthSq() < 1e-12) return false;
     _ar_dir.normalize();
@@ -483,8 +496,8 @@ function _edge_arrow_transform(e, outMatrix) {
 function _build_arrow_mesh() {
     if (arrow_mesh) {
         scene.remove(arrow_mesh);
-        arrow_mesh.dispose();            // frees the per-instance matrix/color buffers
-        arrow_mesh.material.dispose();   // cone_geom is shared — never disposed here
+        arrow_mesh.dispose(); // frees the per-instance matrix/color buffers
+        arrow_mesh.material.dispose(); // cone_geom is shared — never disposed here
         arrow_mesh = null;
     }
     var n = edge_list.length;
@@ -519,7 +532,8 @@ function _update_arrow_matrices() {
 
 // An edge's colour in the default (unselected) view.
 function _base_edge_color(e) {
-    var src = nodes_index[e.source], tgt = nodes_index[e.target];
+    var src = nodes_index[e.source],
+        tgt = nodes_index[e.target];
     if (!src || !tgt) return _GRAY3;
     return colored_edges ? avg_darken(src.orig_color, tgt.orig_color) : _GRAY3;
 }
@@ -527,15 +541,15 @@ function _base_edge_color(e) {
 // Paint every edge (and its arrowhead) with the colour returned by colorOf(e).
 // Centralises the edge colour-buffer write so the arrowheads always match.
 function _paint_edges(colorOf) {
-    var arr = (edge_segments && edge_segments.geometry.attributes.instanceColorStart)
-        ? edge_segments.geometry.attributes.instanceColorStart.data.array
-        : null;
+    var arr = (edge_segments && edge_segments.geometry.attributes.instanceColorStart) ?
+        edge_segments.geometry.attributes.instanceColorStart.data.array :
+        null;
     edge_list.forEach(function(e, idx) {
         var c = colorOf(e);
         if (arr) {
             var base = e.vert_start * 3;
             for (var i = 0; i < CURVE_SEGMENTS * 2; i++) {
-                arr[base + i * 3]     = c.r;
+                arr[base + i * 3] = c.r;
                 arr[base + i * 3 + 1] = c.g;
                 arr[base + i * 3 + 2] = c.b;
             }
@@ -556,11 +570,13 @@ function _rebuild_edge_positions() {
     var posBuf = edge_segments.geometry.attributes.instanceStart.data;
     var arr = posBuf.array;
     edge_list.forEach(function(e) {
-        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        var src = nodes_index[e.source],
+            tgt = nodes_index[e.target];
         if (!src || !tgt) return;
         var sp, tp, cp;
         if (e.source === e.target) {
-            var arm = src.size * SELF_LOOP_ARM, peak = src.size * SELF_LOOP_HEIGHT;
+            var arm = src.size * SELF_LOOP_ARM,
+                peak = src.size * SELF_LOOP_HEIGHT;
             sp = new THREE.Vector3(src.x - arm, src.y, src.z);
             tp = new THREE.Vector3(src.x + arm, src.y, src.z);
             cp = new THREE.Vector3(src.x, src.y + peak, src.z);
@@ -572,8 +588,12 @@ function _rebuild_edge_positions() {
         var pts = new THREE.QuadraticBezierCurve3(sp, cp, tp).getPoints(CURVE_SEGMENTS);
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
             var base = (e.vert_start + i * 2) * 3;
-            arr[base]   = pts[i].x;   arr[base+1] = pts[i].y;   arr[base+2] = pts[i].z;
-            arr[base+3] = pts[i+1].x; arr[base+4] = pts[i+1].y; arr[base+5] = pts[i+1].z;
+            arr[base] = pts[i].x;
+            arr[base + 1] = pts[i].y;
+            arr[base + 2] = pts[i].z;
+            arr[base + 3] = pts[i + 1].x;
+            arr[base + 4] = pts[i + 1].y;
+            arr[base + 5] = pts[i + 1].z;
         }
     });
     posBuf.needsUpdate = true;
@@ -636,7 +656,7 @@ function update_info_bar() {
 
 (function() {
     var toggle = el('graph-info-toggle');
-    var bar    = el('graph-info-bar');
+    var bar = el('graph-info-bar');
     if (!toggle || !bar) return;
     bar.addEventListener('click', function() {
         bar.classList.toggle('is-expanded');
@@ -657,16 +677,28 @@ function build_layout_selector() {
 function _rescale_to_fa2(pos_data) {
     if (!_layout_bbox) return pos_data;
     var nodes = pos_data.nodes;
-    var nx0 = Infinity, nx1 = -Infinity, ny0 = Infinity, ny1 = -Infinity, nz0 = Infinity, nz1 = -Infinity;
+    var nx0 = Infinity,
+        nx1 = -Infinity,
+        ny0 = Infinity,
+        ny1 = -Infinity,
+        nz0 = Infinity,
+        nz1 = -Infinity;
     nodes.forEach(function(n) {
-        if (n.x < nx0) nx0 = n.x; if (n.x > nx1) nx1 = n.x;
-        if (n.y < ny0) ny0 = n.y; if (n.y > ny1) ny1 = n.y;
+        if (n.x < nx0) nx0 = n.x;
+        if (n.x > nx1) nx1 = n.x;
+        if (n.y < ny0) ny0 = n.y;
+        if (n.y > ny1) ny1 = n.y;
         var z = n.z || 0;
-        if (z < nz0) nz0 = z; if (z > nz1) nz1 = z;
+        if (z < nz0) nz0 = z;
+        if (z > nz1) nz1 = z;
     });
-    var src_w = nx1 - nx0 || 1, src_h = ny1 - ny0 || 1, src_d = nz1 - nz0 || 1;
+    var src_w = nx1 - nx0 || 1,
+        src_h = ny1 - ny0 || 1,
+        src_d = nz1 - nz0 || 1;
     var scale = Math.min(_layout_bbox.w / src_w, _layout_bbox.h / src_h, _layout_bbox.d / src_d);
-    var src_cx = (nx0 + nx1) / 2, src_cy = (ny0 + ny1) / 2, src_cz = (nz0 + nz1) / 2;
+    var src_cx = (nx0 + nx1) / 2,
+        src_cy = (ny0 + ny1) / 2,
+        src_cz = (nz0 + nz1) / 2;
     return {
         nodes: nodes.map(function(n) {
             return {
@@ -705,18 +737,26 @@ function _animate_layout_3d(pos_data) {
         var n = nodes_index[id];
         old_pos[id] = { x: n.x, y: n.y, z: n.z };
     });
-    if (layout_anim_id !== null) { cancelAnimationFrame(layout_anim_id); layout_anim_id = null; }
-    var start = performance.now(), DURATION = 600;
+    if (layout_anim_id !== null) {
+        cancelAnimationFrame(layout_anim_id);
+        layout_anim_id = null;
+    }
+    var start = performance.now(),
+        DURATION = 600;
+
     function step(now) {
         var raw = Math.min((now - start) / DURATION, 1.0);
-        var e = raw < 0.5 ? 2*raw*raw : -1+(4-2*raw)*raw;
+        var e = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw;
         Object.keys(nodes_index).forEach(function(id) {
-            var np = new_pos[id]; if (!np) return;
+            var np = new_pos[id];
+            if (!np) return;
             var op = old_pos[id];
             var nx = op.x + (np.x - op.x) * e;
             var ny = op.y + (np.y - op.y) * e;
             var nz = op.z + ((np.z || 0) - op.z) * e;
-            nodes_index[id].x = nx; nodes_index[id].y = ny; nodes_index[id].z = nz;
+            nodes_index[id].x = nx;
+            nodes_index[id].y = ny;
+            nodes_index[id].z = nz;
             nodes_index[id].mesh.position.set(nx, ny, nz);
         });
         _rebuild_edge_positions();
@@ -732,11 +772,11 @@ function _animate_layout_3d(pos_data) {
 function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
     Object.keys(nodes_index).forEach(function(id) {
-        var node  = nodes_index[id];
+        var node = nodes_index[id];
         var label = node.communities && node.communities[strategy];
-        var color = (label && colorMap[label])
-            ? new THREE.Color(colorMap[label])
-            : new THREE.Color(0.8, 0.8, 0.8);
+        var color = (label && colorMap[label]) ?
+            new THREE.Color(colorMap[label]) :
+            new THREE.Color(0.8, 0.8, 0.8);
         node.orig_color = color.clone();
         node.mesh.material.color.copy(color);
     });
@@ -749,8 +789,8 @@ function apply_strategy_colors(strategy) {
 
 function apply_node_size(metric) {
     current_size_key = metric;
-    var vals  = Object.values(nodes_index).map(function(n) { return n[metric] || 0; });
-    var minV  = arrMin(vals);
+    var vals = Object.values(nodes_index).map(function(n) { return n[metric] || 0; });
+    var minV = arrMin(vals);
     var range = (arrMax(vals) - minV) || 1;
     Object.keys(nodes_index).forEach(function(id) {
         var node = nodes_index[id];
@@ -769,7 +809,7 @@ function apply_node_size(metric) {
 function label_default_visible(id) {
     var node = nodes_index[id];
     if (labels_mode === 'always') return true;
-    if (labels_mode === 'never')  return false;
+    if (labels_mode === 'never') return false;
     return node && node.size >= g_label_threshold;
 }
 
@@ -786,7 +826,7 @@ function set_labels_visibility() {
 function neighbors_of(id) {
     var ns = new Set([id]);
     (adj_out[id] || new Set()).forEach(function(t) { ns.add(t); });
-    (adj_in[id]  || new Set()).forEach(function(s) { ns.add(s); });
+    (adj_in[id] || new Set()).forEach(function(s) { ns.add(s); });
     return ns;
 }
 
@@ -817,7 +857,8 @@ function select_node(id) {
     // Dim non-incident edges (and their arrowheads)
     _paint_edges(function(e) {
         if (!ns.has(e.source) || !ns.has(e.target)) return fade_color;
-        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        var src = nodes_index[e.source],
+            tgt = nodes_index[e.target];
         return avg_darken(src ? src.orig_color : fade_color, tgt ? tgt.orig_color : fade_color);
     });
     show_node_info(id);
@@ -829,8 +870,8 @@ function on_canvas_click(event) {
     // produces inconsistent visuals.
     if (animation_frame_id_3d !== null || layout_anim_id !== null) return;
     var rect = renderer.domElement.getBoundingClientRect();
-    pointer.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
-    pointer.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObjects(node_meshes);
     if (hits.length > 0) {
@@ -844,8 +885,8 @@ function on_canvas_click(event) {
 
 function on_canvas_mousemove(event) {
     var rect = renderer.domElement.getBoundingClientRect();
-    pointer.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
-    pointer.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObjects(node_meshes);
     var new_hover = hits.length > 0 ? hits[0].object.userData.id : null;
@@ -873,8 +914,8 @@ function node_anchor(id) {
     if (!node) return '';
     var color = '#' + node.orig_color.getHexString();
     var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
-    return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + escHtml(label) + '"></i>'
-         + ' <a href="#" class="node-link" data-node-id="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
+    return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + escHtml(label) + '"></i>' +
+        ' <a href="#" class="node-link" data-node-id="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
 }
 
 function get_group_html(id) {
@@ -882,10 +923,10 @@ function get_group_html(id) {
     if (!node || !node.communities) return '';
     var parts = [];
     for (var strategy in node.communities) {
-        var lbl      = node.communities[strategy] || '';
+        var lbl = node.communities[strategy] || '';
         var colorMap = community_color_maps[strategy] || {};
-        var color    = (lbl && colorMap[lbl]) ? colorMap[lbl] : '#ccc';
-        var name     = strategy.charAt(0).toUpperCase() + strategy.slice(1);
+        var color = (lbl && colorMap[lbl]) ? colorMap[lbl] : '#ccc';
+        var name = strategy.charAt(0).toUpperCase() + strategy.slice(1);
         parts.push('<i class="bi bi-circle-fill" style="color:' + color + '"></i> <b>' + escHtml(name) + ':</b> ' + escHtml(lbl));
     }
     return parts.join('<br>');
@@ -896,16 +937,16 @@ function show_node_info(id) {
     if (!node) return;
     var tg_match = node.url ? /^https?:\/\/t\.me\/(.+)$/.exec(node.url) : null;
     var key = tg_match ? tg_match[1] : '';
-    el('node_label').textContent           = node.label || id;
-    el('node_url').textContent             = key ? '@' + key : '';
-    el('node_url').href                    = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
-    el('node_picture').innerHTML           = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width:60px'>" : '';
-    el('node_group').innerHTML             = get_group_html(id);
+    el('node_label').textContent = node.label || id;
+    el('node_url').textContent = key ? '@' + key : '';
+    el('node_url').href = (node.url && /^https?:\/\//.test(node.url)) ? node.url : '#';
+    el('node_picture').innerHTML = node.pic ? "<img src='" + escHtml(node.pic) + "' style='max-width:60px'>" : '';
+    el('node_group').innerHTML = get_group_html(id);
     el('node_followers_count').textContent = (node.fans != null) ? Number(node.fans).toLocaleString() : '—';
-    el('node_messages_count').textContent  = (node.messages_count != null) ? Number(node.messages_count).toLocaleString() : '—';
+    el('node_messages_count').textContent = (node.messages_count != null) ? Number(node.messages_count).toLocaleString() : '—';
     el('node_activity_period').textContent = node.activity_period || '—';
-    el('node_is_lost').style.display     = node.is_lost ? '' : 'none';
-    el('node_details').style.display     = '';
+    el('node_is_lost').style.display = node.is_lost ? '' : 'none';
+    el('node_details').style.display = '';
 
     var mhtml = '';
     if (accessory_data) {
@@ -918,11 +959,11 @@ function show_node_info(id) {
     el('node_measures').innerHTML = mhtml;
 
     var out_ids = Array.from(adj_out[id] || []);
-    var in_ids  = Array.from(adj_in[id]  || []);
+    var in_ids = Array.from(adj_in[id] || []);
     var mut_set = new Set();
     out_ids.forEach(function(t) { if ((adj_in[id] || new Set()).has(t)) mut_set.add(t); });
     var pure_out = out_ids.filter(function(t) { return !mut_set.has(t); });
-    var pure_in  = in_ids.filter(function(t)  { return !mut_set.has(t); });
+    var pure_in = in_ids.filter(function(t) { return !mut_set.has(t); });
 
     function render_list(ids) {
         return ids.sort(function(a, b) {
@@ -931,11 +972,11 @@ function show_node_info(id) {
     }
     var mut_arr = Array.from(mut_set);
     el('node_mutual_count').innerHTML = mut_arr.length;
-    el('node_mutual_list').innerHTML  = render_list(mut_arr);
-    el('node_in_count').innerHTML     = pure_in.length;
-    el('node_in_list').innerHTML      = render_list(pure_in);
-    el('node_out_count').innerHTML    = pure_out.length;
-    el('node_out_list').innerHTML     = render_list(pure_out);
+    el('node_mutual_list').innerHTML = render_list(mut_arr);
+    el('node_in_count').innerHTML = pure_in.length;
+    el('node_in_list').innerHTML = render_list(pure_in);
+    el('node_out_count').innerHTML = pure_out.length;
+    el('node_out_list').innerHTML = render_list(pure_out);
 
     el('infobar').style.display = 'block';
 }
@@ -978,11 +1019,11 @@ function reset_camera() {
     var box = new THREE.Box3();
     node_meshes.forEach(function(m) { box.expandByObject(m); });
     var center = new THREE.Vector3();
-    var size   = new THREE.Vector3();
+    var size = new THREE.Vector3();
     box.getCenter(center);
     box.getSize(size);
     var maxDim = Math.max(size.x, size.y, size.z);
-    var dist   = maxDim / (2 * Math.tan(camera.fov * Math.PI / 360)) * 1.5;
+    var dist = maxDim / (2 * Math.tan(camera.fov * Math.PI / 360)) * 1.5;
     camera.position.set(center.x, center.y, center.z + dist);
     controls.target.copy(center);
     controls.update();
@@ -1003,14 +1044,15 @@ function build_strategy_selector(communities) {
 }
 
 function build_legend(strategyData) {
-    var legend_items = [], group_items = ['<option value="" selected>All nodes</option>'];
+    var legend_items = [],
+        group_items = ['<option value="" selected>All nodes</option>'];
     strategyData.groups.forEach(function(g) {
         var label = escHtml(g[2]);
         var color = escHtml(g[3]);
         legend_items.push('<li style="padding-bottom:.75em"><i class="bi bi-circle-fill" style="color:' + color + '"></i> ' + label + ', ' + g[1] + ' channels</li>');
         group_items.push('<option value="' + label + '">' + label + '</option>');
     });
-    el('legend').innerHTML       = legend_items.join('');
+    el('legend').innerHTML = legend_items.join('');
     el('group-select').innerHTML = group_items.join('');
 }
 
@@ -1029,7 +1071,7 @@ function apply_group_filter(group) {
         return;
     }
     Object.keys(nodes_index).forEach(function(id) {
-        var node  = nodes_index[id];
+        var node = nodes_index[id];
         var label = (node.communities && active_strategy) ? node.communities[active_strategy] : '';
         var match = (label === group);
         node.mesh.material.color.copy(match ? node.orig_color : fade_color);
@@ -1047,15 +1089,15 @@ function get_data() {
         fetchJson(current_data_dir + 'channels.json'),
         fetchJson(current_data_dir + 'communities.json'),
     ]).then(function(results) {
-        var pos_data  = results[0];
-        var ch_data   = results[1];
+        var pos_data = results[0];
+        var ch_data = results[1];
         var comm_data = results[2];
 
-        accessory_data          = ch_data;
+        accessory_data = ch_data;
         community_strategy_data = comm_data.strategies;
-        community_color_maps    = buildCommunityColorMaps(comm_data.strategies);
+        community_color_maps = buildCommunityColorMaps(comm_data.strategies);
 
-        var strategies  = Object.keys(comm_data.strategies);
+        var strategies = Object.keys(comm_data.strategies);
         active_strategy = strategies[0] || null;
 
         build_strategy_selector(comm_data.strategies);
@@ -1093,20 +1135,23 @@ function preload_year_3d(data_dir) {
     ]).then(function(results) {
         delete year_cache_pend[data_dir];
         year_cache[data_dir] = { pos: results[0], ch: results[1], comm: results[2] };
-    }).catch(function(err) { delete year_cache_pend[data_dir]; console.warn('preload_year_3d failed for', data_dir, err); });
+    }).catch(function(err) {
+        delete year_cache_pend[data_dir];
+        console.warn('preload_year_3d failed for', data_dir, err);
+    });
 }
 
 function _apply_accessory_3d(ch_data, comm_data) {
     var prev_strategy = active_strategy;
-    var prev_size     = el('size-select') ? el('size-select').value : current_size_key;
+    var prev_size = el('size-select') ? el('size-select').value : current_size_key;
 
-    accessory_data          = ch_data;
+    accessory_data = ch_data;
     community_strategy_data = comm_data.strategies;
-    community_color_maps    = buildCommunityColorMaps(comm_data.strategies);
+    community_color_maps = buildCommunityColorMaps(comm_data.strategies);
 
-    var strategies  = Object.keys(comm_data.strategies);
-    active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1)
-        ? prev_strategy : (strategies[0] || null);
+    var strategies = Object.keys(comm_data.strategies);
+    active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1) ?
+        prev_strategy : (strategies[0] || null);
 
     build_strategy_selector(comm_data.strategies);
     if (active_strategy) {
@@ -1145,31 +1190,41 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     if (animation_frame_id_3d !== null) {
         cancelAnimationFrame(animation_frame_id_3d);
         animation_frame_id_3d = null;
-        controls.enabled = true;  // restore if previous animation was interrupted
+        controls.enabled = true; // restore if previous animation was interrupted
     }
 
     if (edge_segments) edge_segments.visible = false;
     if (arrow_mesh) arrow_mesh.visible = false;
 
-    var new_pos_map = {}, new_ch_map = {};
+    var new_pos_map = {},
+        new_ch_map = {};
     new_pos_data.nodes.forEach(function(n) { new_pos_map[n.id] = n; });
     new_ch_data.nodes.forEach(function(n) { new_ch_map[n.id] = n; });
 
-    var old_ids  = Object.keys(nodes_index);
+    var old_ids = Object.keys(nodes_index);
     var old_only = old_ids.filter(function(id) { return !new_pos_map[id]; });
-    var both     = old_ids.filter(function(id) { return !!new_pos_map[id]; });
+    var both = old_ids.filter(function(id) { return !!new_pos_map[id]; });
     var new_only = new_pos_data.nodes.map(function(n) { return n.id; })
-                      .filter(function(id) { return !nodes_index[id]; });
+        .filter(function(id) { return !nodes_index[id]; });
 
-    var cx = 0, cy = 0, cz = 0;
+    var cx = 0,
+        cy = 0,
+        cz = 0;
     if (old_ids.length) {
-        old_ids.forEach(function(id) { var n = nodes_index[id]; cx += n.x; cy += n.y; cz += (n.z || 0); });
-        cx /= old_ids.length; cy /= old_ids.length; cz /= old_ids.length;
+        old_ids.forEach(function(id) {
+            var n = nodes_index[id];
+            cx += n.x;
+            cy += n.y;
+            cz += (n.z || 0);
+        });
+        cx /= old_ids.length;
+        cy /= old_ids.length;
+        cz /= old_ids.length;
     }
 
     if (selected_node_id && old_only.indexOf(selected_node_id) >= 0) {
         selected_node_id = null;
-        el('infobar').style.display      = 'none';
+        el('infobar').style.display = 'none';
         el('node_details').style.display = 'none';
     }
     // Hover label survived: clear it so the next mousemove starts from a
@@ -1207,15 +1262,30 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     });
 
     // New size bounds
-    var bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+    var bx0 = Infinity,
+        bx1 = -Infinity,
+        by0 = Infinity,
+        by1 = -Infinity,
+        bz0 = Infinity,
+        bz1 = -Infinity;
     new_pos_data.nodes.forEach(function(p) {
-        if (p.x < bx0) bx0 = p.x; if (p.x > bx1) bx1 = p.x;
-        if (p.y < by0) by0 = p.y; if (p.y > by1) by1 = p.y;
+        if (p.x < bx0) bx0 = p.x;
+        if (p.x > bx1) bx1 = p.x;
+        if (p.y < by0) by0 = p.y;
+        if (p.y > by1) by1 = p.y;
         var pz = p.z || 0;
-        if (pz < bz0) bz0 = pz; if (pz > bz1) bz1 = pz;
+        if (pz < bz0) bz0 = pz;
+        if (pz > bz1) bz1 = pz;
     });
-    if (!isFinite(bx0)) { bx0 = 0; bx1 = 1; by0 = 0; by1 = 1; bz0 = 0; bz1 = 1; }
-    var new_diam     = Math.sqrt(Math.pow(bx1-bx0,2)+Math.pow(by1-by0,2)+Math.pow(bz1-bz0,2)) || 1;
+    if (!isFinite(bx0)) {
+        bx0 = 0;
+        bx1 = 1;
+        by0 = 0;
+        by1 = 1;
+        bz0 = 0;
+        bz1 = 1;
+    }
+    var new_diam = Math.sqrt(Math.pow(bx1 - bx0, 2) + Math.pow(by1 - by0, 2) + Math.pow(bz1 - bz0, 2)) || 1;
     var new_size_min = new_diam * SIZE_MIN_FRAC;
     var new_size_max = new_diam * SIZE_MAX_FRAC;
 
@@ -1229,9 +1299,9 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     });
 
     new_only.forEach(function(id) {
-        var m     = new_ch_map[id] || {};
+        var m = new_ch_map[id] || {};
         var color = m.color ? parse_color(m.color) : new THREE.Color(0.5, 0.5, 0.5);
-        var mesh  = new THREE.Mesh(sphere_geom, new THREE.MeshLambertMaterial({ color: color.clone() }));
+        var mesh = new THREE.Mesh(sphere_geom, new THREE.MeshLambertMaterial({ color: color.clone() }));
         mesh.position.set(cx, cy, cz);
         mesh.scale.setScalar(0);
         mesh.userData.id = id;
@@ -1247,7 +1317,7 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
         mesh.add(lbl);
         label_objects[id] = lbl;
         adj_out[id] = new Set();
-        adj_in[id]  = new Set();
+        adj_in[id] = new Set();
     });
 
     // Pre-compute target camera from the new year's bounding box so we can
@@ -1257,45 +1327,58 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
     new_pos_data.nodes.forEach(function(p) {
         new_box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z || 0));
     });
-    var new_center = new THREE.Vector3(), new_size_v = new THREE.Vector3();
+    var new_center = new THREE.Vector3(),
+        new_size_v = new THREE.Vector3();
     new_box.getCenter(new_center);
     new_box.getSize(new_size_v);
-    var new_max_dim    = Math.max(new_size_v.x, new_size_v.y, new_size_v.z) || 1;
-    var new_cam_dist   = new_max_dim / (2 * Math.tan(camera.fov * Math.PI / 360)) * 1.5;
+    var new_max_dim = Math.max(new_size_v.x, new_size_v.y, new_size_v.z) || 1;
+    var new_cam_dist = new_max_dim / (2 * Math.tan(camera.fov * Math.PI / 360)) * 1.5;
     var target_cam_pos = new THREE.Vector3(new_center.x, new_center.y, new_center.z + new_cam_dist);
     var target_cam_tgt = new_center.clone();
 
     var start_cam_pos = camera.position.clone();
     var start_cam_tgt = controls.target.clone();
-    controls.enabled  = false;
+    controls.enabled = false;
 
     function _lerp(a, b, t) { return a + (b - a) * t; }
-    function _ease(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
+
+    function _ease(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
     var start_ts = null;
 
     function step(ts) {
         if (!start_ts) start_ts = ts;
         var raw = Math.min((ts - start_ts) / duration_ms, 1);
-        var e   = _ease(raw);
+        var e = _ease(raw);
 
         both.forEach(function(id) {
-            var s = snap[id], np = new_pos_map[id], sz = target_sizes[id] !== undefined ? target_sizes[id] : s.size;
+            var s = snap[id],
+                np = new_pos_map[id],
+                sz = target_sizes[id] !== undefined ? target_sizes[id] : s.size;
             var node = nodes_index[id];
             if (!node) return;
-            var nx = _lerp(s.x, np.x, e), ny = _lerp(s.y, np.y, e), nz = _lerp(s.z, np.z || 0, e);
+            var nx = _lerp(s.x, np.x, e),
+                ny = _lerp(s.y, np.y, e),
+                nz = _lerp(s.z, np.z || 0, e);
             node.mesh.position.set(nx, ny, nz);
             node.mesh.scale.setScalar(_lerp(s.size, sz, e));
-            node.x = nx; node.y = ny; node.z = nz;
+            node.x = nx;
+            node.y = ny;
+            node.z = nz;
         });
 
         new_only.forEach(function(id) {
-            var np = new_pos_map[id], sz = target_sizes[id] || 0;
+            var np = new_pos_map[id],
+                sz = target_sizes[id] || 0;
             var node = nodes_index[id];
             if (!node) return;
-            var nx = _lerp(cx, np.x, e), ny = _lerp(cy, np.y, e), nz = _lerp(cz, np.z || 0, e);
+            var nx = _lerp(cx, np.x, e),
+                ny = _lerp(cy, np.y, e),
+                nz = _lerp(cz, np.z || 0, e);
             node.mesh.position.set(nx, ny, nz);
             node.mesh.scale.setScalar(sz * e);
-            node.x = nx; node.y = ny; node.z = nz;
+            node.x = nx;
+            node.y = ny;
+            node.z = nz;
         });
 
         camera.position.lerpVectors(start_cam_pos, target_cam_pos, e);
@@ -1307,22 +1390,25 @@ function animate_year_transition_3d(new_pos_data, new_ch_data, duration_ms) {
         } else {
             animation_frame_id_3d = null;
             _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max,
-                              target_cam_pos, target_cam_tgt);
+                target_cam_pos, target_cam_tgt);
         }
     }
     animation_frame_id_3d = requestAnimationFrame(step);
 }
 
 function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min, new_size_max,
-                            target_cam_pos, target_cam_tgt) {
-    var SKIP = { x:1, y:1, z:1, size:1, mesh:1, orig_color:1 };
+    target_cam_pos, target_cam_tgt) {
+    var SKIP = { x: 1, y: 1, z: 1, size: 1, mesh: 1, orig_color: 1 };
     new_pos_data.nodes.forEach(function(np) {
         var node = nodes_index[np.id];
         if (!node) return;
         var sz = target_sizes[np.id] !== undefined ? target_sizes[np.id] : node.size;
         node.mesh.position.set(np.x, np.y, np.z || 0);
         node.mesh.scale.setScalar(sz);
-        node.x = np.x; node.y = np.y; node.z = np.z || 0; node.size = sz;
+        node.x = np.x;
+        node.y = np.y;
+        node.z = np.z || 0;
+        node.size = sz;
         var m = new_ch_map[np.id];
         if (m) {
             Object.keys(m).forEach(function(k) { if (!SKIP[k]) node[k] = m[k]; });
@@ -1331,8 +1417,8 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
         }
     });
 
-    g_size_min        = new_size_min;
-    g_size_max        = new_size_max;
+    g_size_min = new_size_min;
+    g_size_max = new_size_max;
     g_label_threshold = g_size_min + LABEL_SIZE_FRAC * (g_size_max - g_size_min);
 
     if (edge_segments) {
@@ -1342,26 +1428,41 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
         edge_segments = null;
     }
     edge_list = [];
-    Object.keys(nodes_index).forEach(function(id) { adj_out[id] = new Set(); adj_in[id] = new Set(); });
+    Object.keys(nodes_index).forEach(function(id) {
+        adj_out[id] = new Set();
+        adj_in[id] = new Set();
+    });
 
     var VERTS_PER_EDGE = CURVE_SEGMENTS * 2;
     var positions = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
-    var colors    = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
+    var colors = new Float32Array(new_pos_data.edges.length * VERTS_PER_EDGE * 3);
     var vc = 0;
     new_pos_data.edges.forEach(function(e) {
-        var src = nodes_index[e.source], tgt = nodes_index[e.target];
+        var src = nodes_index[e.source],
+            tgt = nodes_index[e.target];
         if (!src || !tgt) return;
-        var sp  = new THREE.Vector3(src.x, src.y, src.z || 0);
-        var tp  = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
+        var sp = new THREE.Vector3(src.x, src.y, src.z || 0);
+        var tp = new THREE.Vector3(tgt.x, tgt.y, tgt.z || 0);
         var pts = new THREE.QuadraticBezierCurve3(sp, _control_point(sp, tp, _edge_curves()), tp).getPoints(CURVE_SEGMENTS);
-        var c   = avg_darken(src.orig_color, tgt.orig_color);
-        var vs  = vc;
+        var c = avg_darken(src.orig_color, tgt.orig_color);
+        var vs = vc;
         for (var i = 0; i < CURVE_SEGMENTS; i++) {
-            var p0 = pts[i], p1 = pts[i+1];
-            positions[vc*3]=p0.x; positions[vc*3+1]=p0.y; positions[vc*3+2]=p0.z;
-            colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
-            positions[vc*3]=p1.x; positions[vc*3+1]=p1.y; positions[vc*3+2]=p1.z;
-            colors[vc*3]=c.r;    colors[vc*3+1]=c.g;    colors[vc*3+2]=c.b; vc++;
+            var p0 = pts[i],
+                p1 = pts[i + 1];
+            positions[vc * 3] = p0.x;
+            positions[vc * 3 + 1] = p0.y;
+            positions[vc * 3 + 2] = p0.z;
+            colors[vc * 3] = c.r;
+            colors[vc * 3 + 1] = c.g;
+            colors[vc * 3 + 2] = c.b;
+            vc++;
+            positions[vc * 3] = p1.x;
+            positions[vc * 3 + 1] = p1.y;
+            positions[vc * 3 + 2] = p1.z;
+            colors[vc * 3] = c.r;
+            colors[vc * 3 + 1] = c.g;
+            colors[vc * 3 + 2] = c.b;
+            vc++;
         }
         edge_list.push({ source: e.source, target: e.target, vert_start: vs, weight: e.weight });
         adj_out[e.source].add(e.target);
@@ -1389,9 +1490,12 @@ function _finalize_year_3d(new_pos_data, new_ch_map, target_sizes, new_size_min,
 }
 
 function reload_graph_3d(data_dir) {
-    if (animation_frame_id_3d !== null) { cancelAnimationFrame(animation_frame_id_3d); animation_frame_id_3d = null; }
+    if (animation_frame_id_3d !== null) {
+        cancelAnimationFrame(animation_frame_id_3d);
+        animation_frame_id_3d = null;
+    }
     current_data_dir = data_dir;
-    el('infobar').style.display      = 'none';
+    el('infobar').style.display = 'none';
     el('node_details').style.display = 'none';
     selected_node_id = null;
 
@@ -1425,7 +1529,7 @@ function update_year_buttons_active(year_str) {
     container.querySelectorAll('.year-drop-item').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.year === active_year);
     });
-    var idx  = year_sequence.indexOf(active_year);
+    var idx = year_sequence.indexOf(active_year);
     var prev = el('year-prev');
     var next = el('year-next');
     if (prev) prev.disabled = (idx <= 0);
@@ -1440,9 +1544,9 @@ function _go_year_3d(year) {
 
 function _year_drop_close() {
     var menu = el('year-drop-menu');
-    var btn  = el('year-drop-btn');
+    var btn = el('year-drop-btn');
     if (menu) menu.classList.remove('open');
-    if (btn)  btn.setAttribute('aria-expanded', 'false');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function init_year_switcher(timeline) {
@@ -1478,15 +1582,22 @@ function init_year_switcher(timeline) {
         container.style.display = 'flex';
 
         container.querySelector('.year-btn--all').addEventListener('click', function() {
-            _go_year_3d('all'); _year_drop_close();
+            _go_year_3d('all');
+            _year_drop_close();
         });
         el('year-prev').addEventListener('click', function() {
             var idx = year_sequence.indexOf(active_year);
-            if (idx > 0) { _go_year_3d(year_sequence[idx - 1]); _year_drop_close(); }
+            if (idx > 0) {
+                _go_year_3d(year_sequence[idx - 1]);
+                _year_drop_close();
+            }
         });
         el('year-next').addEventListener('click', function() {
             var idx = year_sequence.indexOf(active_year);
-            if (idx >= 0 && idx < year_sequence.length - 1) { _go_year_3d(year_sequence[idx + 1]); _year_drop_close(); }
+            if (idx >= 0 && idx < year_sequence.length - 1) {
+                _go_year_3d(year_sequence[idx + 1]);
+                _year_drop_close();
+            }
         });
         el('year-drop-btn').addEventListener('click', function(e) {
             e.stopPropagation();
@@ -1529,7 +1640,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     build_layout_selector();
 
-    var loading_el       = el('loading_modal');
+    var loading_el = el('loading_modal');
     var loading_modal_bs = new bootstrap.Modal(loading_el, { backdrop: 'static', keyboard: false });
 
     var graph_promise = new Promise(function(resolve) {
@@ -1550,8 +1661,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!timeline) return;
             init_year_switcher(timeline);
             var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
-            var dirs  = [base_data_dir].concat(years.map(function(y) { return year_data_dir(y.year); }));
-            var total = dirs.length, done = 0;
+            var dirs = [base_data_dir].concat(years.map(function(y) { return year_data_dir(y.year); }));
+            var total = dirs.length,
+                done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year_3d(dir).then(function() {
                     done++;
@@ -1626,7 +1738,9 @@ document.addEventListener('DOMContentLoaded', function() {
     el('search_input').value = '';
     el('search_modal').addEventListener('shown.bs.modal', function() { el('search_input').focus(); });
     el('search_modal').addEventListener('hide.bs.modal', function() {
-        var r = el('results'); r.innerHTML = ''; r.style.display = 'none';
+        var r = el('results');
+        r.innerHTML = '';
+        r.style.display = 'none';
     });
     el('search').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -1642,7 +1756,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sm) sm.hide();
         select_node(id);
         var node = nodes_index[id];
-        if (node) { controls.target.set(node.x, node.y, node.z); controls.update(); }
+        if (node) {
+            controls.target.set(node.x, node.y, node.z);
+            controls.update();
+        }
     });
 
     document.querySelectorAll('.infobar-toggle').forEach(function(btn) {
@@ -1653,7 +1770,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    el('zoom_in').addEventListener('click',    function() { zoom_by(ZOOM_STEP); });
-    el('zoom_out').addEventListener('click',   function() { zoom_by(1 / ZOOM_STEP); });
+    el('zoom_in').addEventListener('click', function() { zoom_by(ZOOM_STEP); });
+    el('zoom_out').addEventListener('click', function() { zoom_by(1 / ZOOM_STEP); });
     el('zoom_reset').addEventListener('click', function() { reset_camera(); });
 });

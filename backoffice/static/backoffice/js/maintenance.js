@@ -1,22 +1,25 @@
-(function () {
+(function() {
     "use strict";
     var INFO = "/manage/api/maintenance/";
-    var RUN  = "/manage/api/maintenance/optimize/";
+    var RUN = "/manage/api/maintenance/optimize/";
 
-    var $engine         = document.getElementById("bo-maint-engine");
-    var $size           = document.getElementById("bo-maint-size");
-    var $strategies     = document.getElementById("bo-maint-strategies");
-    var $runBtn         = document.getElementById("bo-maint-run");
-    var $result         = document.getElementById("bo-maint-result");
-    var $resultBody     = document.getElementById("bo-maint-result-body");
-    var $resultSummary  = document.getElementById("bo-maint-result-summary");
+    var $engine = document.getElementById("bo-maint-engine");
+    var $size = document.getElementById("bo-maint-size");
+    var $strategies = document.getElementById("bo-maint-strategies");
+    var $runBtn = document.getElementById("bo-maint-run");
+    var $result = document.getElementById("bo-maint-result");
+    var $resultBody = document.getElementById("bo-maint-result-body");
+    var $resultSummary = document.getElementById("bo-maint-result-summary");
 
     function fmtBytes(n) {
         if (n === null || n === undefined) return "—";
         var units = ["B", "KB", "MB", "GB", "TB"];
         var i = 0;
         var v = Number(n);
-        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        while (v >= 1024 && i < units.length - 1) {
+            v /= 1024;
+            i++;
+        }
         return v.toFixed(v >= 100 || i === 0 ? 0 : 2) + " " + units[i];
     }
 
@@ -38,16 +41,25 @@
             $strategies.appendChild(p);
             return;
         }
-        strategies.forEach(function (s) {
+        strategies.forEach(function(s) {
             var row = document.createElement("label");
             row.className = "bo-maint-strategy";
             var cb = document.createElement("input");
-            cb.type = "checkbox"; cb.value = s.name; cb.checked = true;
-            var body = document.createElement("div"); body.className = "bo-maint-strategy-body";
-            var label = document.createElement("span"); label.className = "bo-maint-strategy-label"; label.textContent = s.label;
-            var desc = document.createElement("span"); desc.className = "bo-maint-strategy-desc"; desc.textContent = s.description;
-            body.appendChild(label); body.appendChild(desc);
-            row.appendChild(cb); row.appendChild(body);
+            cb.type = "checkbox";
+            cb.value = s.name;
+            cb.checked = true;
+            var body = document.createElement("div");
+            body.className = "bo-maint-strategy-body";
+            var label = document.createElement("span");
+            label.className = "bo-maint-strategy-label";
+            label.textContent = s.label;
+            var desc = document.createElement("span");
+            desc.className = "bo-maint-strategy-desc";
+            desc.textContent = s.description;
+            body.appendChild(label);
+            body.appendChild(desc);
+            row.appendChild(cb);
+            row.appendChild(body);
             $strategies.appendChild(row);
         });
     }
@@ -55,15 +67,19 @@
     function renderResult(data) {
         $result.classList.remove("d-none");
         $resultBody.innerHTML = "";
-        data.steps.forEach(function (step) {
+        data.steps.forEach(function(step) {
             var tr = document.createElement("tr");
             tr.className = step.status === "ok" ? "bo-maint-row--ok" : "bo-maint-row--error";
-            var tdName = document.createElement("td"); tdName.textContent = step.name;
+            var tdName = document.createElement("td");
+            tdName.textContent = step.name;
             var tdStatus = document.createElement("td");
             tdStatus.textContent = step.status === "ok" ? "OK" : ("Error: " + (step.error || "unknown"));
-            var tdDur = document.createElement("td"); tdDur.className = "bo-td--num";
+            var tdDur = document.createElement("td");
+            tdDur.className = "bo-td--num";
             tdDur.textContent = fmtDuration(step.duration_seconds);
-            tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdDur);
+            tr.appendChild(tdName);
+            tr.appendChild(tdStatus);
+            tr.appendChild(tdDur);
             $resultBody.appendChild(tr);
         });
         var parts = ["Total " + fmtDuration(data.total_duration_seconds)];
@@ -77,17 +93,17 @@
     }
 
     function loadInfo() {
-        apiFetch(INFO).then(function (data) {
+        apiFetch(INFO).then(function(data) {
             $engine.textContent = data.engine;
             $size.textContent = fmtBytes(data.size_bytes);
             renderStrategies(data.strategies, data.engine);
             $runBtn.disabled = !data.supported || !data.strategies.length;
-        }).catch(function (e) { showToast("Error: " + e.message, "error"); });
+        }).catch(function(e) { showToast("Error: " + e.message, "error"); });
     }
 
     function run() {
         var picks = [].slice.call($strategies.querySelectorAll("input[type=checkbox]:checked"))
-            .map(function (cb) { return cb.value; });
+            .map(function(cb) { return cb.value; });
         if (!picks.length) { showToast("Pick at least one strategy.", "error"); return; }
         if (!confirm("Run database optimization now? VACUUM can lock the database for several minutes.")) return;
 
@@ -96,14 +112,14 @@
         $runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Running…';
 
         apiFetch(RUN, { method: "POST", body: { strategies: picks } })
-            .then(function (data) {
+            .then(function(data) {
                 renderResult(data);
                 loadInfo();
-                var failed = data.steps.some(function (s) { return s.status !== "ok"; });
+                var failed = data.steps.some(function(s) { return s.status !== "ok"; });
                 showToast(failed ? "Optimization stopped on error." : "Optimization complete.", failed ? "error" : "success");
             })
-            .catch(function (e) { showToast("Error: " + e.message, "error"); })
-            .finally(function () {
+            .catch(function(e) { showToast("Error: " + e.message, "error"); })
+            .finally(function() {
                 $runBtn.innerHTML = originalHtml;
                 $runBtn.disabled = false;
             });
@@ -114,16 +130,16 @@
 
     // ── Purge out-of-target messages ─────────────────────────────────────────
     var PURGE_PREVIEW = "/manage/api/maintenance/purge-preview/";
-    var PURGE_RUN     = "/manage/api/maintenance/purge/";
+    var PURGE_RUN = "/manage/api/maintenance/purge/";
 
-    var $purgeMarked      = document.getElementById("bo-purge-marked");
-    var $purgeMsgs        = document.getElementById("bo-purge-msgs");
-    var $purgeFiles       = document.getElementById("bo-purge-files");
-    var $purgeRefreshBtn  = document.getElementById("bo-purge-refresh");
-    var $purgeRunBtn      = document.getElementById("bo-purge-run");
-    var $purgeHint        = document.getElementById("bo-purge-hint");
-    var $purgeResult      = document.getElementById("bo-purge-result");
-    var $purgeResultSum   = document.getElementById("bo-purge-result-summary");
+    var $purgeMarked = document.getElementById("bo-purge-marked");
+    var $purgeMsgs = document.getElementById("bo-purge-msgs");
+    var $purgeFiles = document.getElementById("bo-purge-files");
+    var $purgeRefreshBtn = document.getElementById("bo-purge-refresh");
+    var $purgeRunBtn = document.getElementById("bo-purge-run");
+    var $purgeHint = document.getElementById("bo-purge-hint");
+    var $purgeResult = document.getElementById("bo-purge-result");
+    var $purgeResultSum = document.getElementById("bo-purge-result-summary");
 
     function fmtCount(n) {
         if (n === null || n === undefined) return "—";
@@ -136,7 +152,7 @@
         $purgeFiles.textContent = "…";
         $purgeRunBtn.disabled = true;
         $purgeHint.textContent = "";
-        apiFetch(PURGE_PREVIEW).then(function (data) {
+        apiFetch(PURGE_PREVIEW).then(function(data) {
             $purgeMarked.textContent = fmtCount(data.marked_in_target_channels);
             $purgeMsgs.textContent = fmtCount(data.messages);
             $purgeFiles.textContent = fmtCount(data.media_files);
@@ -147,7 +163,7 @@
             }
             $purgeRunBtn.disabled = data.messages === 0;
             if (data.messages === 0) $purgeHint.textContent = "Nothing to delete.";
-        }).catch(function (e) {
+        }).catch(function(e) {
             $purgeHint.textContent = "Preview failed: " + e.message;
             showToast("Error: " + e.message, "error");
         });
@@ -157,7 +173,7 @@
         var msgs = $purgeMsgs.textContent;
         var files = $purgeFiles.textContent;
         var msg = "Delete " + msgs + " messages and remove " + files +
-                  " media files from disk?\n\nThis cannot be undone.";
+            " media files from disk?\n\nThis cannot be undone.";
         if (!confirm(msg)) return;
 
         var originalHtml = $purgeRunBtn.innerHTML;
@@ -166,7 +182,7 @@
         $purgeRefreshBtn.disabled = true;
 
         apiFetch(PURGE_RUN, { method: "POST", body: {} })
-            .then(function (data) {
+            .then(function(data) {
                 $purgeResult.classList.remove("d-none");
                 var parts = [
                     "Deleted " + fmtCount(data.deleted_messages) + " messages",
@@ -180,17 +196,17 @@
                     parts.push("DB size " + fmtBytes(data.size_before_bytes) + " → " + fmtBytes(data.size_after_bytes));
                 }
                 $purgeResultSum.textContent = parts.join(" · ");
-                showToast(data.failed_files
-                    ? "Purge completed with file errors."
-                    : "Purge complete. Run VACUUM above to reclaim DB pages.",
+                showToast(data.failed_files ?
+                    "Purge completed with file errors." :
+                    "Purge complete. Run VACUUM above to reclaim DB pages.",
                     data.failed_files ? "error" : "success");
                 loadPurgePreview();
-                loadInfo();  // refresh disk-size readout
+                loadInfo(); // refresh disk-size readout
             })
-            .catch(function (e) {
+            .catch(function(e) {
                 showToast("Purge failed: " + e.message, "error");
             })
-            .finally(function () {
+            .finally(function() {
                 $purgeRunBtn.innerHTML = originalHtml;
                 $purgeRefreshBtn.disabled = false;
             });
@@ -202,22 +218,22 @@
 
     // ── Purge orphan media files ─────────────────────────────────────────────
     var ORPHAN_PREVIEW = "/manage/api/maintenance/orphan-media-preview/";
-    var ORPHAN_RUN     = "/manage/api/maintenance/orphan-media/";
+    var ORPHAN_RUN = "/manage/api/maintenance/orphan-media/";
 
-    var $orphanFiles      = document.getElementById("bo-orphan-files");
-    var $orphanBytes      = document.getElementById("bo-orphan-bytes");
+    var $orphanFiles = document.getElementById("bo-orphan-files");
+    var $orphanBytes = document.getElementById("bo-orphan-bytes");
     var $orphanRefreshBtn = document.getElementById("bo-orphan-refresh");
-    var $orphanRunBtn     = document.getElementById("bo-orphan-run");
-    var $orphanHint       = document.getElementById("bo-orphan-hint");
-    var $orphanResult     = document.getElementById("bo-orphan-result");
-    var $orphanResultSum  = document.getElementById("bo-orphan-result-summary");
+    var $orphanRunBtn = document.getElementById("bo-orphan-run");
+    var $orphanHint = document.getElementById("bo-orphan-hint");
+    var $orphanResult = document.getElementById("bo-orphan-result");
+    var $orphanResultSum = document.getElementById("bo-orphan-result-summary");
 
     function loadOrphanPreview() {
         $orphanFiles.textContent = "scanning…";
         $orphanBytes.textContent = "…";
         $orphanRunBtn.disabled = true;
         $orphanHint.textContent = "";
-        apiFetch(ORPHAN_PREVIEW).then(function (data) {
+        apiFetch(ORPHAN_PREVIEW).then(function(data) {
             $orphanFiles.textContent = fmtCount(data.files);
             $orphanBytes.textContent = fmtBytes(data.bytes);
             if (!data.supported) {
@@ -227,7 +243,7 @@
             }
             $orphanRunBtn.disabled = data.files === 0;
             if (data.files === 0) $orphanHint.textContent = "Nothing to remove.";
-        }).catch(function (e) {
+        }).catch(function(e) {
             $orphanHint.textContent = "Preview failed: " + e.message;
             showToast("Error: " + e.message, "error");
         });
@@ -244,7 +260,7 @@
         $orphanRefreshBtn.disabled = true;
 
         apiFetch(ORPHAN_RUN, { method: "POST", body: {} })
-            .then(function (data) {
+            .then(function(data) {
                 $orphanResult.classList.remove("d-none");
                 var parts = [
                     "Removed " + fmtCount(data.removed_files) + " files (" + fmtBytes(data.removed_bytes) + ")",
@@ -261,8 +277,8 @@
                     data.failed_files ? "error" : "success");
                 loadOrphanPreview();
             })
-            .catch(function (e) { showToast("Cleanup failed: " + e.message, "error"); })
-            .finally(function () {
+            .catch(function(e) { showToast("Cleanup failed: " + e.message, "error"); })
+            .finally(function() {
                 $orphanRunBtn.innerHTML = originalHtml;
                 $orphanRefreshBtn.disabled = false;
             });
@@ -299,7 +315,7 @@
         var $verDismiss = document.getElementById("bo-version-banner-dismiss");
         window.pulpitVersion.ready.then(revealVersionBanner);
         if ($verDismiss) {
-            $verDismiss.addEventListener("click", function () {
+            $verDismiss.addEventListener("click", function() {
                 window.pulpitVersion.dismiss();
             });
         }
@@ -310,10 +326,10 @@
     // otherwise read a once-a-day cache), then reports the verdict in the card.
     var UPDATE_CHECK = "/manage/api/maintenance/check-updates/";
 
-    var $updateLatest    = document.getElementById("bo-update-latest");
-    var $updateCheckBtn  = document.getElementById("bo-update-check");
-    var $updateHint      = document.getElementById("bo-update-hint");
-    var $updateResult    = document.getElementById("bo-update-result");
+    var $updateLatest = document.getElementById("bo-update-latest");
+    var $updateCheckBtn = document.getElementById("bo-update-check");
+    var $updateHint = document.getElementById("bo-update-hint");
+    var $updateResult = document.getElementById("bo-update-result");
     var $updateResultSum = document.getElementById("bo-update-result-summary");
 
     function renderUpdateResult(data) {
@@ -355,7 +371,7 @@
         $updateHint.textContent = "Contacting GitHub…";
 
         apiFetch(UPDATE_CHECK, { method: "POST", body: {} })
-            .then(function (data) {
+            .then(function(data) {
                 renderUpdateResult(data);
                 if (!data.latest) {
                     showToast("Couldn't reach GitHub for the version check.", "error");
@@ -365,8 +381,8 @@
                     showToast("You're on the latest version.", "success");
                 }
             })
-            .catch(function (e) { showToast("Update check failed: " + e.message, "error"); })
-            .finally(function () {
+            .catch(function(e) { showToast("Update check failed: " + e.message, "error"); })
+            .finally(function() {
                 $updateCheckBtn.innerHTML = originalHtml;
                 $updateCheckBtn.disabled = false;
                 $updateHint.textContent = "";

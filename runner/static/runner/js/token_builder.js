@@ -14,28 +14,30 @@
 //   opts.actionSelector/actionKey : All/None buttons selector + their dataset key ('all'|'none')
 //   opts.selectOptions : optional fn(kind) -> <option> HTML for enum params (else a number input)
 //   opts.onChange      : optional fn(api) called after any add/remove/reorder/parameter change
-(function () {
+(function() {
     "use strict";
 
     function initTokenBuilder(opts) {
         var palette = document.getElementById(opts.paletteId);
         var dropzone = document.getElementById(opts.dropzoneId);
-        if (!palette || !dropzone) return { rebuild: function () {} };
+        if (!palette || !dropzone) return { rebuild: function() {} };
 
         var emptyMsg = dropzone.querySelector(".ops-dropzone-empty");
         var countEl = opts.countId ? document.getElementById(opts.countId) : null;
         var itemKey = opts.itemKey;
         var fieldName = opts.fieldName;
         var dndType = "text/" + itemKey;
-        var selectOptions = opts.selectOptions || function () { return ""; };
+        var selectOptions = opts.selectOptions || function() { return ""; };
         var api = { rebuild: rebuild };
 
         function nameOf(el) { return el.dataset[itemKey]; }
+
         function selectedSelector(key) { return '.ops-selchip[data-' + itemKey + '="' + key + '"]'; }
+
         function notify() { if (opts.onChange) opts.onChange(api); }
 
         var META = {};
-        palette.querySelectorAll(".ops-mchip").forEach(function (chip) {
+        palette.querySelectorAll(".ops-mchip").forEach(function(chip) {
             var dir = chip.querySelector(".ops-dir");
             META[nameOf(chip)] = {
                 label: chip.dataset.label || nameOf(chip),
@@ -47,12 +49,13 @@
 
         function composeToken(chip) {
             var parts = [];
-            chip.querySelectorAll(".ops-mparam-input").forEach(function (inp) {
+            chip.querySelectorAll(".ops-mparam-input").forEach(function(inp) {
                 var v = String(inp.value).trim();
                 if (v !== "") parts.push(inp.dataset.pname + "=" + v);
             });
             return parts.length ? nameOf(chip) + "(" + parts.join(",") + ")" : nameOf(chip);
         }
+
         function updateToken(chip) {
             var hidden = chip.querySelector('input[name="' + fieldName + '"]');
             if (hidden) hidden.value = composeToken(chip);
@@ -63,8 +66,8 @@
             if (emptyMsg) emptyMsg.style.display = chips.length ? "none" : "";
             if (countEl) countEl.textContent = chips.length ? chips.length + " selected" : "";
             var present = {};
-            chips.forEach(function (c) { present[nameOf(c)] = true; });
-            palette.querySelectorAll(".ops-mchip").forEach(function (pc) {
+            chips.forEach(function(c) { present[nameOf(c)] = true; });
+            palette.querySelectorAll(".ops-mchip").forEach(function(pc) {
                 var used = pc.dataset.multi !== "1" && present[nameOf(pc)];
                 pc.classList.toggle("ops-mchip--used", !!used);
                 pc.setAttribute("draggable", used ? "false" : "true");
@@ -119,7 +122,7 @@
             if (meta.params.length) {
                 var pwrap = document.createElement("span");
                 pwrap.className = "ops-selchip-params";
-                meta.params.forEach(function (p) {
+                meta.params.forEach(function(p) {
                     pwrap.appendChild(makeParam(p, params ? params[p.name] : undefined));
                 });
                 chip.appendChild(pwrap);
@@ -141,9 +144,12 @@
             chip.appendChild(hidden);
 
             dropzone.appendChild(chip);
-            chip.querySelectorAll(".ops-mparam-input").forEach(function (inp) {
-                inp.addEventListener("change", function () { updateToken(chip); notify(); });
-                inp.addEventListener("input", function () { updateToken(chip); });
+            chip.querySelectorAll(".ops-mparam-input").forEach(function(inp) {
+                inp.addEventListener("change", function() {
+                    updateToken(chip);
+                    notify();
+                });
+                inp.addEventListener("input", function() { updateToken(chip); });
             });
             updateToken(chip);
             refreshState();
@@ -158,7 +164,7 @@
             var key = m[1].toUpperCase();
             var params = {};
             var meta = META[key];
-            (m[2] || "").split(",").forEach(function (piece, i) {
+            (m[2] || "").split(",").forEach(function(piece, i) {
                 piece = piece.trim();
                 if (!piece) return;
                 var eq = piece.indexOf("=");
@@ -170,8 +176,8 @@
 
         // Rebuild the drop zone from an ordered list of tokens (first load + load-defaults paths).
         function rebuild(tokens) {
-            dropzone.querySelectorAll(".ops-selchip").forEach(function (c) { c.remove(); });
-            (tokens || []).forEach(function (tok) {
+            dropzone.querySelectorAll(".ops-selchip").forEach(function(c) { c.remove(); });
+            (tokens || []).forEach(function(tok) {
                 var parsed = parseToken(tok);
                 if (parsed && META[parsed.key]) addItem(parsed.key, parsed.params);
             });
@@ -184,7 +190,7 @@
                 dropzone.querySelectorAll(".ops-selchip:not(.ops-selchip--dragging)")
             );
             var closest = { offset: -Infinity, el: null };
-            els.forEach(function (el) {
+            els.forEach(function(el) {
                 var box = el.getBoundingClientRect();
                 var offset = y - box.top - box.height / 2;
                 if (offset < 0 && offset > closest.offset) closest = { offset: offset, el: el };
@@ -192,20 +198,20 @@
             return closest.el;
         }
 
-        palette.addEventListener("dragstart", function (e) {
+        palette.addEventListener("dragstart", function(e) {
             var chip = e.target.closest(".ops-mchip");
             if (!chip || chip.getAttribute("draggable") === "false") return;
             e.dataTransfer.setData(dndType, nameOf(chip));
             e.dataTransfer.effectAllowed = "copy";
             chip.classList.add("ops-mchip--dragging");
         });
-        palette.addEventListener("dragend", function (e) {
+        palette.addEventListener("dragend", function(e) {
             var chip = e.target.closest(".ops-mchip");
             if (chip) chip.classList.remove("ops-mchip--dragging");
         });
 
         var draggingChip = null;
-        dropzone.addEventListener("dragstart", function (e) {
+        dropzone.addEventListener("dragstart", function(e) {
             var chip = e.target.closest(".ops-selchip");
             if (!chip) return;
             draggingChip = chip;
@@ -213,12 +219,12 @@
             e.dataTransfer.effectAllowed = "move";
             e.dataTransfer.setData("text/reorder", "1");
         });
-        dropzone.addEventListener("dragend", function () {
+        dropzone.addEventListener("dragend", function() {
             if (draggingChip) draggingChip.classList.remove("ops-selchip--dragging");
             draggingChip = null;
             dropzone.classList.remove("ops-dropzone--over");
         });
-        dropzone.addEventListener("dragover", function (e) {
+        dropzone.addEventListener("dragover", function(e) {
             e.preventDefault();
             dropzone.classList.add("ops-dropzone--over");
             if (draggingChip) {
@@ -227,10 +233,10 @@
                 else dropzone.insertBefore(draggingChip, after);
             }
         });
-        dropzone.addEventListener("dragleave", function (e) {
+        dropzone.addEventListener("dragleave", function(e) {
             if (e.target === dropzone) dropzone.classList.remove("ops-dropzone--over");
         });
-        dropzone.addEventListener("drop", function (e) {
+        dropzone.addEventListener("drop", function(e) {
             e.preventDefault();
             dropzone.classList.remove("ops-dropzone--over");
             if (draggingChip) { notify(); return; } // a reorder drop; order already updated live
@@ -246,13 +252,13 @@
             }
         });
 
-        palette.addEventListener("click", function (e) {
+        palette.addEventListener("click", function(e) {
             var add = e.target.closest(".ops-mchip-add");
             if (!add || add.disabled) return;
             var chip = add.closest(".ops-mchip");
             if (chip && addItem(nameOf(chip))) notify();
         });
-        dropzone.addEventListener("click", function (e) {
+        dropzone.addEventListener("click", function(e) {
             var btn = e.target.closest(".ops-selchip-btn");
             if (!btn) return;
             var chip = btn.closest(".ops-selchip");
@@ -275,13 +281,13 @@
         });
 
         if (opts.actionSelector) {
-            document.querySelectorAll(opts.actionSelector).forEach(function (btn) {
-                btn.addEventListener("click", function () {
+            document.querySelectorAll(opts.actionSelector).forEach(function(btn) {
+                btn.addEventListener("click", function() {
                     if (btn.dataset[opts.actionKey] === "none") {
-                        dropzone.querySelectorAll(".ops-selchip").forEach(function (c) { c.remove(); });
+                        dropzone.querySelectorAll(".ops-selchip").forEach(function(c) { c.remove(); });
                         refreshState();
                     } else {
-                        palette.querySelectorAll(".ops-mchip").forEach(function (pc) {
+                        palette.querySelectorAll(".ops-mchip").forEach(function(pc) {
                             if (!dropzone.querySelector(selectedSelector(nameOf(pc)))) addItem(nameOf(pc));
                         });
                     }
@@ -321,7 +327,7 @@
             }
         }
         pieces.push(s.slice(start));
-        return pieces.map(function (p) { return p.trim(); }).filter(Boolean);
+        return pieces.map(function(p) { return p.trim(); }).filter(Boolean);
     }
 
     window.initTokenBuilder = initTokenBuilder;

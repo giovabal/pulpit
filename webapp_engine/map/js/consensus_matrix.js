@@ -8,8 +8,14 @@ function _pluralityComm(label, stratMaps, stratKeys) {
         var comm = stratMaps[sk] && stratMaps[sk][label];
         if (comm != null) counts[comm] = (counts[comm] || 0) + 1;
     });
-    var best = "", bestN = 0;
-    Object.keys(counts).forEach(function(c) { if (counts[c] > bestN) { best = c; bestN = counts[c]; } });
+    var best = "",
+        bestN = 0;
+    Object.keys(counts).forEach(function(c) {
+        if (counts[c] > bestN) {
+            best = c;
+            bestN = counts[c];
+        }
+    });
     return best;
 }
 
@@ -25,13 +31,15 @@ var _dd = window.DATA_DIR || "data/";
 
 // ── Render ─────────────────────────────────────────────────────────────────────
 function _render(d) {
-    var data = d.data, meta = d.meta;
+    var data = d.data,
+        meta = d.meta;
     var container = document.getElementById("consensus-matrix-container");
     container.innerHTML = "";
     var strategies = Object.keys(data.strategies);
 
     if (meta) {
-        var pEl = document.createElement("p"); pEl.className = "table-preamble";
+        var pEl = document.createElement("p");
+        pEl.className = "table-preamble";
         var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
         parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
         if (meta.start_date || meta.end_date)
@@ -56,7 +64,8 @@ function _render(d) {
     }
     var nonOrgKeys = strategies.filter(function(s) { return !_consensusExcluded(s); });
     if (nonOrgKeys.length < 2) {
-        var msg = document.createElement("p"); msg.className = "text-muted";
+        var msg = document.createElement("p");
+        msg.className = "text-muted";
         msg.textContent = "At least two algorithmic (non-LABELGROUP) community detection strategies are required to build a consensus matrix.";
         container.appendChild(msg);
         return;
@@ -67,13 +76,18 @@ function _render(d) {
     // `idLabel` maps the pk back to its title for display. Older communities.json
     // files predate the `pk` field — fall back to the label there.
     function _chanId(ch) { return (ch.pk != null) ? String(ch.pk) : ch.label; }
-    var stratMaps = {}, idLabel = {};
+    var stratMaps = {},
+        idLabel = {};
     nonOrgKeys.forEach(function(sk) {
         var sd = data.strategies[sk];
         if (!sd || !sd.rows) return;
         var map = {};
         sd.rows.forEach(function(row) {
-            (row.channels || []).forEach(function(ch) { var id = _chanId(ch); map[id] = row.label; idLabel[id] = ch.label; });
+            (row.channels || []).forEach(function(ch) {
+                var id = _chanId(ch);
+                map[id] = row.label;
+                idLabel[id] = ch.label;
+            });
         });
         stratMaps[sk] = map;
     });
@@ -86,7 +100,8 @@ function _render(d) {
         return idLabel[a].localeCompare(idLabel[b]);
     });
 
-    var n = channelList.length, maxCount = nonOrgKeys.length;
+    var n = channelList.length,
+        maxCount = nonOrgKeys.length;
     var chanIdx = {};
     channelList.forEach(function(id, i) { chanIdx[id] = i; });
 
@@ -99,13 +114,19 @@ function _render(d) {
             var members = [];
             (row.channels || []).forEach(function(ch) { var ix = chanIdx[_chanId(ch)]; if (ix !== undefined) members.push(ix); });
             for (var a = 0; a < members.length; a++)
-                for (var b = a + 1; b < members.length; b++) { consensus[members[a]][members[b]]++; consensus[members[b]][members[a]]++; }
+                for (var b = a + 1; b < members.length; b++) {
+                    consensus[members[a]][members[b]]++;
+                    consensus[members[b]][members[a]]++;
+                }
         });
     });
 
     var cellSize = Math.max(6, Math.min(16, Math.floor(520 / n)));
-    var labelW = 140, topPad = 4, bottomPad = 110;
-    var maxR = cellSize / 2 - 0.5, fontSize = Math.max(7, Math.min(11, cellSize - 1));
+    var labelW = 140,
+        topPad = 4,
+        bottomPad = 110;
+    var maxR = cellSize / 2 - 0.5,
+        fontSize = Math.max(7, Math.min(11, cellSize - 1));
     var NS = "http://www.w3.org/2000/svg";
 
     var noteEl = document.createElement("p");
@@ -122,32 +143,47 @@ function _render(d) {
         var legR = Math.max(1, maxR * Math.sqrt(k / maxCount));
         var diam = maxR * 2 + 2;
         var svgL = document.createElementNS(NS, "svg");
-        svgL.setAttribute("width", diam); svgL.setAttribute("height", diam); svgL.style.cssText = "vertical-align:middle;flex-shrink:0;";
+        svgL.setAttribute("width", diam);
+        svgL.setAttribute("height", diam);
+        svgL.style.cssText = "vertical-align:middle;flex-shrink:0;";
         var cL = document.createElementNS(NS, "circle");
-        cL.setAttribute("cx", maxR + 1); cL.setAttribute("cy", maxR + 1); cL.setAttribute("r", legR);
-        cL.setAttribute("fill", _agreementColor(k, maxCount)); cL.setAttribute("opacity", "0.85");
-        svgL.appendChild(cL); legendDiv.appendChild(svgL);
+        cL.setAttribute("cx", maxR + 1);
+        cL.setAttribute("cy", maxR + 1);
+        cL.setAttribute("r", legR);
+        cL.setAttribute("fill", _agreementColor(k, maxCount));
+        cL.setAttribute("opacity", "0.85");
+        svgL.appendChild(cL);
+        legendDiv.appendChild(svgL);
         legendDiv.appendChild(document.createTextNode(k + "/" + maxCount));
     }
     container.appendChild(legendDiv);
 
-    var scrollDiv = document.createElement("div"); scrollDiv.style.cssText = "overflow-x:auto;";
-    var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
+    var scrollDiv = document.createElement("div");
+    scrollDiv.style.cssText = "overflow-x:auto;";
+    var svgW = labelW + n * cellSize,
+        svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
+    svg.setAttribute("width", svgW);
+    svg.setAttribute("height", svgH);
+    svg.style.cssText = "display:block;background:white;";
     svg.setAttribute("role", "grid");
     svg.setAttribute("aria-label", "Consensus matrix, " + n + " by " + n + " channels, " + maxCount + " partitions");
 
     var gridG = document.createElementNS(NS, "g");
-    gridG.setAttribute("stroke", "#e4e4e4"); gridG.setAttribute("stroke-width", "0.5");
+    gridG.setAttribute("stroke", "#e4e4e4");
+    gridG.setAttribute("stroke-width", "0.5");
     for (var gi = 0; gi <= n; gi++) {
         var hl = document.createElementNS(NS, "line");
-        hl.setAttribute("x1", labelW); hl.setAttribute("y1", topPad + gi * cellSize);
-        hl.setAttribute("x2", labelW + n * cellSize); hl.setAttribute("y2", topPad + gi * cellSize);
+        hl.setAttribute("x1", labelW);
+        hl.setAttribute("y1", topPad + gi * cellSize);
+        hl.setAttribute("x2", labelW + n * cellSize);
+        hl.setAttribute("y2", topPad + gi * cellSize);
         gridG.appendChild(hl);
         var vl = document.createElementNS(NS, "line");
-        vl.setAttribute("x1", labelW + gi * cellSize); vl.setAttribute("y1", topPad);
-        vl.setAttribute("x2", labelW + gi * cellSize); vl.setAttribute("y2", topPad + n * cellSize);
+        vl.setAttribute("x1", labelW + gi * cellSize);
+        vl.setAttribute("y1", topPad);
+        vl.setAttribute("x2", labelW + gi * cellSize);
+        vl.setAttribute("y2", topPad + n * cellSize);
         gridG.appendChild(vl);
     }
     svg.appendChild(gridG);
@@ -158,31 +194,47 @@ function _render(d) {
         triPts.push((labelW + si * cellSize) + "," + (topPad + si * cellSize));
     }
     var triPoly = document.createElementNS(NS, "polygon");
-    triPoly.setAttribute("points", triPts.join(" ")); triPoly.setAttribute("fill", "#f2f2f2");
+    triPoly.setAttribute("points", triPts.join(" "));
+    triPoly.setAttribute("fill", "#f2f2f2");
     svg.appendChild(triPoly);
 
     channelList.forEach(function(id, i) {
         var lbl = idLabel[id];
         var tx = document.createElementNS(NS, "text");
-        tx.setAttribute("x", labelW - 4); tx.setAttribute("y", topPad + i * cellSize + cellSize / 2);
-        tx.setAttribute("dy", "0.35em"); tx.setAttribute("text-anchor", "end");
-        tx.setAttribute("font-size", fontSize); tx.setAttribute("fill", "#333");
+        tx.setAttribute("x", labelW - 4);
+        tx.setAttribute("y", topPad + i * cellSize + cellSize / 2);
+        tx.setAttribute("dy", "0.35em");
+        tx.setAttribute("text-anchor", "end");
+        tx.setAttribute("font-size", fontSize);
+        tx.setAttribute("fill", "#333");
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
-        if (trunc !== lbl) { var ttl = document.createElementNS(NS, "title"); ttl.textContent = lbl; tx.appendChild(ttl); }
+        if (trunc !== lbl) {
+            var ttl = document.createElementNS(NS, "title");
+            ttl.textContent = lbl;
+            tx.appendChild(ttl);
+        }
         svg.appendChild(tx);
     });
 
     channelList.forEach(function(id, j) {
         var lbl = idLabel[id];
-        var cx = labelW + j * cellSize + cellSize / 2, cy = topPad + n * cellSize + 4;
+        var cx = labelW + j * cellSize + cellSize / 2,
+            cy = topPad + n * cellSize + 4;
         var tx = document.createElementNS(NS, "text");
-        tx.setAttribute("x", cx); tx.setAttribute("y", cy); tx.setAttribute("text-anchor", "end");
-        tx.setAttribute("font-size", fontSize); tx.setAttribute("fill", "#333");
+        tx.setAttribute("x", cx);
+        tx.setAttribute("y", cy);
+        tx.setAttribute("text-anchor", "end");
+        tx.setAttribute("font-size", fontSize);
+        tx.setAttribute("fill", "#333");
         tx.setAttribute("transform", "rotate(-45 " + cx + " " + cy + ")");
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
-        if (trunc !== lbl) { var ttl = document.createElementNS(NS, "title"); ttl.textContent = lbl; tx.appendChild(ttl); }
+        if (trunc !== lbl) {
+            var ttl = document.createElementNS(NS, "title");
+            ttl.textContent = lbl;
+            tx.appendChild(ttl);
+        }
         svg.appendChild(tx);
     });
 
@@ -192,11 +244,15 @@ function _render(d) {
             if (ri <= rj) continue;
             var cnt = consensus[ri][rj];
             if (cnt === 0) continue;
-            var ccx = labelW + rj * cellSize + cellSize / 2, ccy = topPad + ri * cellSize + cellSize / 2;
+            var ccx = labelW + rj * cellSize + cellSize / 2,
+                ccy = topPad + ri * cellSize + cellSize / 2;
             var cr = Math.max(0.5, maxR * Math.sqrt(cnt / maxCount));
             var circ = document.createElementNS(NS, "circle");
-            circ.setAttribute("cx", ccx); circ.setAttribute("cy", ccy); circ.setAttribute("r", cr);
-            circ.setAttribute("fill", _agreementColor(cnt, maxCount)); circ.setAttribute("opacity", "0.85");
+            circ.setAttribute("cx", ccx);
+            circ.setAttribute("cy", ccy);
+            circ.setAttribute("r", cr);
+            circ.setAttribute("fill", _agreementColor(cnt, maxCount));
+            circ.setAttribute("opacity", "0.85");
             circ.setAttribute("role", "gridcell");
             circ.setAttribute("tabindex", "0");
             circ.setAttribute("aria-label", idLabel[channelList[ri]] + " and " + idLabel[channelList[rj]] + ", " + cnt + " of " + maxCount + " partitions agree");

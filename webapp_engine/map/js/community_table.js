@@ -11,7 +11,8 @@ var UNDIRECTED_BASIS_STRATEGIES = ['leiden', 'leiden_cpm', 'leiden_temporal', 'l
     'sbm_assortative', 'consensus',
     // labelpropagation was removed in v0.27; kept so pre-0.27 exports rebuilt with fresh
     // map assets still report their modularity against the projection it was computed on.
-    'labelpropagation'];
+    'labelpropagation'
+];
 
 // ── Hungarian matching (column ordering for cross-tabs) ─────────────────────────
 function _hungarianMaxAssign(mat) {
@@ -25,6 +26,7 @@ function _hungarianMaxAssign(mat) {
     var v = new Array(n + 1).fill(0);
     var p = new Array(n + 1).fill(0);
     var way = new Array(n + 1).fill(0);
+
     function getCost(i, j) {
         return (i < nR && j < nC && mat[i][j] != null) ? -mat[i][j] : 0;
     }
@@ -35,21 +37,35 @@ function _hungarianMaxAssign(mat) {
         var used = new Array(n + 1).fill(false);
         do {
             used[j0] = true;
-            var i0 = p[j0], delta = INF, j1 = 0;
+            var i0 = p[j0],
+                delta = INF,
+                j1 = 0;
             for (var j = 1; j <= n; j++) {
                 if (!used[j]) {
                     var cur = getCost(i0 - 1, j - 1) - u[i0] - v[j];
-                    if (cur < minVal[j]) { minVal[j] = cur; way[j] = j0; }
-                    if (minVal[j] < delta) { delta = minVal[j]; j1 = j; }
+                    if (cur < minVal[j]) {
+                        minVal[j] = cur;
+                        way[j] = j0;
+                    }
+                    if (minVal[j] < delta) {
+                        delta = minVal[j];
+                        j1 = j;
+                    }
                 }
             }
             for (var jj = 0; jj <= n; jj++) {
-                if (used[jj]) { u[p[jj]] += delta; v[jj] -= delta; }
-                else { minVal[jj] -= delta; }
+                if (used[jj]) {
+                    u[p[jj]] += delta;
+                    v[jj] -= delta;
+                } else { minVal[jj] -= delta; }
             }
             j0 = j1;
         } while (p[j0] !== 0);
-        do { var jPrev = way[j0]; p[j0] = p[jPrev]; j0 = jPrev; } while (j0);
+        do {
+            var jPrev = way[j0];
+            p[j0] = p[jPrev];
+            j0 = jPrev;
+        } while (j0);
     }
     var ans = new Array(nR).fill(-1);
     for (var k = 1; k <= n; k++) {
@@ -62,7 +78,12 @@ function _hungarianColPerm(matrix, nCols) {
     var assign = _hungarianMaxAssign(matrix);
     var used = new Array(nCols).fill(false);
     var perm = [];
-    assign.forEach(function(j) { if (j >= 0 && j < nCols && !used[j]) { perm.push(j); used[j] = true; } });
+    assign.forEach(function(j) {
+        if (j >= 0 && j < nCols && !used[j]) {
+            perm.push(j);
+            used[j] = true;
+        }
+    });
     for (var j = 0; j < nCols; j++) { if (!used[j]) perm.push(j); }
     return perm;
 }
@@ -138,7 +159,10 @@ function _refit_alluvials() {
         // resize no longer silently closes it (honouring this function's "expanded panels untouched").
         var openKey = old.alluvialSelectedKey ? old.alluvialSelectedKey() : null;
         var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById, openKey);
-        if (fresh) { old.replaceWith(fresh); _alluvialEls[sk] = fresh; }
+        if (fresh) {
+            old.replaceWith(fresh);
+            _alluvialEls[sk] = fresh;
+        }
     });
 }
 
@@ -165,7 +189,7 @@ function _build_partition_comparison_section() {
     if (!section) return;
     _fetch_network_metrics("all").then(function(nm) {
         var pc = nm && nm.partition_comparison;
-        if (!pc || !pc.strategies || pc.strategies.length < 2) return;  // nothing comparable → stay empty
+        if (!pc || !pc.strategies || pc.strategies.length < 2) return; // nothing comparable → stay empty
         section.innerHTML = "";
 
         var h3 = document.createElement("h3");
@@ -174,10 +198,10 @@ function _build_partition_comparison_section() {
         section.appendChild(h3);
         var intro = document.createElement("p");
         intro.className = "text-muted small mb-3";
-        intro.textContent = "Pairwise agreement between every community strategy and every label-group "
-            + "partition, under four standard clustering-comparison indices. Each pair is scored on the "
-            + "channels assigned by both partitions. Read a label-group row against the algorithmic "
-            + "strategies to see how closely the analyst's manual grouping matches the structural communities.";
+        intro.textContent = "Pairwise agreement between every community strategy and every label-group " +
+            "partition, under four standard clustering-comparison indices. Each pair is scored on the " +
+            "channels assigned by both partitions. Read a label-group row against the algorithmic " +
+            "strategies to see how closely the analyst's manual grouping matches the structural communities.";
         section.appendChild(intro);
 
         var body = document.createElement("div");
@@ -190,25 +214,29 @@ function _build_partition_comparison_section() {
             var lbl = document.createElement("label");
             lbl.className = "form-label mb-1 d-block fw-semibold small";
             var selYear = document.createElement("select");
-            selYear.className = "form-select form-select-sm"; selYear.style.width = "auto";
+            selYear.className = "form-select form-select-sm";
+            selYear.style.width = "auto";
             selYear.id = "partition-comparison-year";
-            lbl.htmlFor = selYear.id; lbl.textContent = "Year";
+            lbl.htmlFor = selYear.id;
+            lbl.textContent = "Year";
             [{ value: "all", label: "All years" }].concat(
                 _ty.map(function(y) { return { value: String(y.year), label: String(y.year) }; })
             ).forEach(function(o) { selYear.appendChild(new Option(o.label, o.value)); });
-            wrap.appendChild(lbl); wrap.appendChild(selYear); controls.appendChild(wrap);
+            wrap.appendChild(lbl);
+            wrap.appendChild(selYear);
+            controls.appendChild(wrap);
             section.appendChild(controls);
             selYear.addEventListener("change", function() {
                 var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
                 _fetch_network_metrics(year).then(function(d) {
-                    if (String(selYear.value) !== String(year)) return;  // superseded by a newer selection
+                    if (String(selYear.value) !== String(year)) return; // superseded by a newer selection
                     render_partition_comparison(body, d && d.partition_comparison);
                 });
             });
         }
 
         section.appendChild(body);
-        render_partition_comparison(body, pc);   // initial view = all years (already fetched)
+        render_partition_comparison(body, pc); // initial view = all years (already fetched)
     });
 }
 
@@ -227,13 +255,14 @@ function _build_strategy_sankey_section(stratKeys) {
     section.appendChild(h3);
     var intro = document.createElement("p");
     intro.className = "text-muted small mb-3";
-    intro.textContent = "Pick two strategies and a year to see how their communities overlap: each ribbon's "
-        + "thickness is the number of channels shared by a community on the left and a community on the right. "
-        + "Click a ribbon to list those channels beneath the diagram.";
+    intro.textContent = "Pick two strategies and a year to see how their communities overlap: each ribbon's " +
+        "thickness is the number of channels shared by a community on the left and a community on the right. " +
+        "Click a ribbon to list those channels beneath the diagram.";
     section.appendChild(intro);
 
     var controls = document.createElement("div");
     controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+
     function makeSelect(idSuffix, labelText, options, selectedValue) {
         var wrap = document.createElement("div");
         var lbl = document.createElement("label");
@@ -242,10 +271,13 @@ function _build_strategy_sankey_section(stratKeys) {
         sel.className = "form-select form-select-sm";
         sel.style.width = "auto";
         sel.id = "strategy-sankey-" + idSuffix;
-        lbl.htmlFor = sel.id; lbl.textContent = labelText;
+        lbl.htmlFor = sel.id;
+        lbl.textContent = labelText;
         options.forEach(function(o) { sel.appendChild(new Option(o.label, o.value)); });
         if (selectedValue != null) sel.value = selectedValue;
-        wrap.appendChild(lbl); wrap.appendChild(sel); controls.appendChild(wrap);
+        wrap.appendChild(lbl);
+        wrap.appendChild(sel);
+        controls.appendChild(wrap);
         return sel;
     }
 
@@ -264,19 +296,25 @@ function _build_strategy_sankey_section(stratKeys) {
 
     function setMessage(text) {
         diagram.innerHTML = "";
-        var msg = document.createElement("p"); msg.className = "text-muted"; msg.textContent = text;
+        var msg = document.createElement("p");
+        msg.className = "text-muted";
+        msg.textContent = text;
         diagram.appendChild(msg);
     }
     var _sankeyReq = 0;
+
     function redraw() {
-        var a = selA.value, b = selB.value;
+        var a = selA.value,
+            b = selB.value;
         var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
         var myReq = ++_sankeyReq;
         _fetch_year(year).then(function(d) {
-            if (myReq !== _sankeyReq) return;  // a newer redraw (year/strategy change or resize) superseded this
+            if (myReq !== _sankeyReq) return; // a newer redraw (year/strategy change or resize) superseded this
             var fig = build_strategy_intersection_sankey(d.data, a, b, _strat_label(a), _strat_label(b), diagram.clientWidth, _nodeById);
-            if (fig) { diagram.innerHTML = ""; diagram.appendChild(fig); }
-            else setMessage("One of the selected strategies assigned no channels for this selection.");
+            if (fig) {
+                diagram.innerHTML = "";
+                diagram.appendChild(fig);
+            } else setMessage("One of the selected strategies assigned no channels for this selection.");
         }).catch(function() {
             if (myReq !== _sankeyReq) return;
             setMessage("Failed to load data for the selected year.");
@@ -291,7 +329,8 @@ function _build_strategy_sankey_section(stratKeys) {
 
 // ── Render ─────────────────────────────────────────────────────────────────────
 function _render(d) {
-    var data = d.data, meta = d.meta;
+    var data = d.data,
+        meta = d.meta;
     var container = document.getElementById("community-tables");
     container.innerHTML = "";
     _alluvialEls = {};
@@ -299,7 +338,8 @@ function _render(d) {
 
     // Preamble
     if (meta) {
-        var pEl = document.createElement("p"); pEl.className = "table-preamble";
+        var pEl = document.createElement("p");
+        pEl.className = "table-preamble";
         var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
         parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
         if (meta.start_date || meta.end_date)
@@ -325,13 +365,20 @@ function _render(d) {
         });
 
         var hmKeys = ["node_count", "internal_edges", "external_edges", "ei_index", "_ext_frac", "density",
-                      "reciprocity", "avg_clustering", "avg_path_length", "diameter", "modularity_contribution"];
+            "reciprocity", "avg_clustering", "avg_path_length", "diameter", "modularity_contribution"
+        ];
         var hmRanges = {};
         hmKeys.forEach(function(key) {
-            var mn = Infinity, mx = -Infinity, hasVal = false;
+            var mn = Infinity,
+                mx = -Infinity,
+                hasVal = false;
             rows.forEach(function(r) {
                 var v = key === "node_count" ? r.node_count : key === "_ext_frac" ? r._ext_frac : r.metrics[key];
-                if (v !== null && v !== undefined) { if (v < mn) mn = v; if (v > mx) mx = v; hasVal = true; }
+                if (v !== null && v !== undefined) {
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                    hasVal = true;
+                }
             });
             if (hasVal) hmRanges[key] = [mn, mx];
         });
@@ -341,24 +388,27 @@ function _render(d) {
         });
 
         var COL_DEFS = [
-            {key: null,                   label: "Community",               cls: "",       fmt: null,    tip: "Community name and color swatch"},
-            {key: "node_count",           label: "Nodes",                   cls: "number", fmt: "int",   tip: "Number of channels in this community"},
-            {key: "internal_edges",       label: "Internal Edges",          cls: "number", fmt: "int",   tip: "Directed edges between channels within this community"},
-            {key: "external_edges",       label: "Ext. Edges",              cls: "number", fmt: "int",   tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)"},
-            {key: "ei_index",             label: "E-I Index (−1–1)",        cls: "number", fmt: "sig3",  tip: "Krackhardt & Stern (1988): (external − internal) / (external + internal). −1 = fully cohesive (no external ties); +1 = fully competitive (no internal ties)"},
-            {key: "_ext_frac",            label: "Ext. Fraction (0–1)",     cls: "number", fmt: "sig3",  tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral"},
-            {key: "density",              label: "Int. Density (0–1)",      cls: "number", fmt: "sig3",  tip: "Fraction of possible directed within-community edges that exist"},
-            {key: "reciprocity",          label: "Reciprocity (0–1)",       cls: "number", fmt: "sig3",  tip: "Proportion of within-community directed edges that are bidirectional"},
-            {key: "avg_clustering",       label: "Avg Clustering (0–1)",    cls: "number", fmt: "sig3",  tip: "Mean local clustering coefficient of community nodes"},
-            {key: "avg_path_length",      label: "Avg Path Length",         cls: "number", fmt: "sig3",  tip: "Average shortest path in the largest weakly connected component (undirected)"},
-            {key: "diameter",             label: "Diameter",                cls: "number", fmt: "int",   tip: "Longest shortest path in the largest weakly connected component (undirected)"},
+            { key: null, label: "Community", cls: "", fmt: null, tip: "Community name and color swatch" },
+            { key: "node_count", label: "Nodes", cls: "number", fmt: "int", tip: "Number of channels in this community" },
+            { key: "internal_edges", label: "Internal Edges", cls: "number", fmt: "int", tip: "Directed edges between channels within this community" },
+            { key: "external_edges", label: "Ext. Edges", cls: "number", fmt: "int", tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)" },
+            { key: "ei_index", label: "E-I Index (−1–1)", cls: "number", fmt: "sig3", tip: "Krackhardt & Stern (1988): (external − internal) / (external + internal). −1 = fully cohesive (no external ties); +1 = fully competitive (no internal ties)" },
+            { key: "_ext_frac", label: "Ext. Fraction (0–1)", cls: "number", fmt: "sig3", tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral" },
+            { key: "density", label: "Int. Density (0–1)", cls: "number", fmt: "sig3", tip: "Fraction of possible directed within-community edges that exist" },
+            { key: "reciprocity", label: "Reciprocity (0–1)", cls: "number", fmt: "sig3", tip: "Proportion of within-community directed edges that are bidirectional" },
+            { key: "avg_clustering", label: "Avg Clustering (0–1)", cls: "number", fmt: "sig3", tip: "Mean local clustering coefficient of community nodes" },
+            { key: "avg_path_length", label: "Avg Path Length", cls: "number", fmt: "sig3", tip: "Average shortest path in the largest weakly connected component (undirected)" },
+            { key: "diameter", label: "Diameter", cls: "number", fmt: "int", tip: "Longest shortest path in the largest weakly connected component (undirected)" },
         ];
         if (hasMod) {
-            var modTip = UNDIRECTED_BASIS_STRATEGIES.indexOf(canonical_strategy_key(strategyKey)) !== -1
-                ? "Community's contribution to network modularity (undirected Newman formula, computed on the symmetrised graph this strategy optimised)"
-                : "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)";
+            var modTip = UNDIRECTED_BASIS_STRATEGIES.indexOf(canonical_strategy_key(strategyKey)) !== -1 ?
+                "Community's contribution to network modularity (undirected Newman formula, computed on the symmetrised graph this strategy optimised)" :
+                "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)";
             COL_DEFS.push({
-                key: "modularity_contribution", label: "Mod. Contribution", cls: "number", fmt: "sig3",
+                key: "modularity_contribution",
+                label: "Mod. Contribution",
+                cls: "number",
+                fmt: "sig3",
                 tip: modTip,
             });
         }
@@ -372,13 +422,14 @@ function _render(d) {
         var stratNote = document.createElement("p");
         stratNote.className = "text-muted small mb-2";
         var nComm = rows.length;
-        var modStr = (stratData.modularity !== null && stratData.modularity !== undefined)
-            ? " Network modularity Q = " + sigFig(stratData.modularity, 3) + "." : "";
-        stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr
-            + " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
+        var modStr = (stratData.modularity !== null && stratData.modularity !== undefined) ?
+            " Network modularity Q = " + sigFig(stratData.modularity, 3) + "." : "";
+        stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr +
+            " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
         container.appendChild(stratNote);
 
-        var tableDiv = document.createElement("div"); tableDiv.className = "table-responsive";
+        var tableDiv = document.createElement("div");
+        tableDiv.className = "table-responsive";
         var table = document.createElement("table");
         table.className = "table table-hover table-sm sortable";
         table.setAttribute("aria-labelledby", "strategy-" + strategyKey);
@@ -386,18 +437,21 @@ function _render(d) {
         var thead = document.createElement("thead");
         var htr = document.createElement("tr");
         COL_DEFS.forEach(function(col) {
-            var th = document.createElement("th"); th.scope = "col";
+            var th = document.createElement("th");
+            th.scope = "col";
             if (col.cls) th.className = col.cls;
             th.textContent = col.label;
             if (col.tip) th.title = col.tip;
             htr.appendChild(th);
         });
-        thead.appendChild(htr); table.appendChild(thead);
+        thead.appendChild(htr);
+        table.appendChild(thead);
 
         var tbody = document.createElement("tbody");
         var tbodyFrag = document.createDocumentFragment();
         rows.forEach(function(row) {
             var tr = document.createElement("tr");
+
             function getVal(col) {
                 if (col.key === null) return null;
                 if (col.key === "node_count") return row.node_count;
@@ -418,10 +472,12 @@ function _render(d) {
                     return;
                 }
                 var val = getVal(col);
-                var td = document.createElement("td"); td.className = "number";
+                var td = document.createElement("td");
+                td.className = "number";
                 var range = hmRanges[col.key];
                 if (range) td.setAttribute("style", heatmapBg(val, range[0], range[1]));
-                var sv = numSortVal(val); if (sv) td.setAttribute("data-sort-value", sv);
+                var sv = numSortVal(val);
+                if (sv) td.setAttribute("data-sort-value", sv);
                 td.textContent = col.fmt === "int" ? fmtInt(val) : sigFig(val, 3);
                 tr.appendChild(td);
             });
@@ -436,7 +492,10 @@ function _render(d) {
         // year at once). Needs all years' data, loaded lazily by _load_year_comms after the first paint.
         if (_current_year === "all" && _yearComms) {
             var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth, _nodeById);
-            if (alluvial) { container.appendChild(alluvial); _alluvialEls[strategyKey] = alluvial; }
+            if (alluvial) {
+                container.appendChild(alluvial);
+                _alluvialEls[strategyKey] = alluvial;
+            }
         }
 
         // Channel list
@@ -448,14 +507,19 @@ function _render(d) {
         details.appendChild(summary);
         rows.forEach(function(row) {
             if (!row.channels || !row.channels.length) return;
-            var group = document.createElement("div"); group.className = "community-channels-group mt-2";
-            var labelSpan = document.createElement("span"); labelSpan.className = "community-channels-label";
+            var group = document.createElement("div");
+            group.className = "community-channels-group mt-2";
+            var labelSpan = document.createElement("span");
+            labelSpan.className = "community-channels-label";
             var labelSwatch = document.createElement("span");
-            labelSwatch.className = "color-swatch color-swatch--sm"; labelSwatch.style.background = row.hex_color;
+            labelSwatch.className = "color-swatch color-swatch--sm";
+            labelSwatch.style.background = row.hex_color;
             labelSwatch.setAttribute("aria-hidden", "true");
-            labelSpan.appendChild(labelSwatch); labelSpan.appendChild(document.createTextNode(row.label));
+            labelSpan.appendChild(labelSwatch);
+            labelSpan.appendChild(document.createTextNode(row.label));
             group.appendChild(labelSpan);
-            var listSpan = document.createElement("span"); listSpan.className = "community-channels-list";
+            var listSpan = document.createElement("span");
+            listSpan.className = "community-channels-list";
             var chipsFrag = document.createDocumentFragment();
             row.channels.forEach(function(ch) {
                 var chip;
@@ -471,7 +535,9 @@ function _render(d) {
                 chip.textContent = ch.label;
                 chipsFrag.appendChild(chip);
             });
-            listSpan.appendChild(chipsFrag); group.appendChild(listSpan); details.appendChild(group);
+            listSpan.appendChild(chipsFrag);
+            group.appendChild(listSpan);
+            details.appendChild(group);
         });
         container.appendChild(details);
 
@@ -522,9 +588,14 @@ function _render(d) {
                 tbl.style.cssText = "font-size:.8rem;white-space:nowrap;";
                 var thead = document.createElement("thead");
                 var htr = document.createElement("tr");
-                var th0 = document.createElement("th"); th0.scope = "col"; th0.textContent = dimLabel; htr.appendChild(th0);
+                var th0 = document.createElement("th");
+                th0.scope = "col";
+                th0.textContent = dimLabel;
+                htr.appendChild(th0);
                 visCols.forEach(function(ci) {
-                    var th = document.createElement("th"); th.scope = "col"; th.className = "number";
+                    var th = document.createElement("th");
+                    th.scope = "col";
+                    th.className = "number";
                     var sw = document.createElement("span");
                     sw.className = "color-swatch color-swatch--sm";
                     sw.style.background = crossColors[ci];
@@ -533,15 +604,19 @@ function _render(d) {
                     th.appendChild(document.createTextNode(crossComm[ci]));
                     htr.appendChild(th);
                 });
-                thead.appendChild(htr); tbl.appendChild(thead);
+                thead.appendChild(htr);
+                tbl.appendChild(thead);
                 var tbody = document.createElement("tbody");
                 var frag = document.createDocumentFragment();
                 ct.orgs.forEach(function(org, oi) {
                     var tr = document.createElement("tr");
-                    var tdOrg = document.createElement("td"); tdOrg.textContent = org; tr.appendChild(tdOrg);
+                    var tdOrg = document.createElement("td");
+                    tdOrg.textContent = org;
+                    tr.appendChild(tdOrg);
                     visCols.forEach(function(ci) {
                         var val = matrix[oi][ci];
-                        var td = document.createElement("td"); td.className = "number";
+                        var td = document.createElement("td");
+                        td.className = "number";
                         if (val !== null && val !== undefined && val >= 5) {
                             td.setAttribute("style", heatmapBg(val, 0, 100));
                             td.textContent = val.toFixed(1) + "%";
@@ -550,7 +625,8 @@ function _render(d) {
                     });
                     frag.appendChild(tr);
                 });
-                tbody.appendChild(frag); tbl.appendChild(tbody);
+                tbody.appendChild(frag);
+                tbl.appendChild(tbody);
                 outerDiv.appendChild(tbl);
                 if (hiddenCount > 0) {
                     var hiddenNote = document.createElement("p");
@@ -588,7 +664,10 @@ function _switch_year(year) {
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year);
-    _fetch_year(year).then(function(d) { _render(d); _loading = false; }).catch(function() {
+    _fetch_year(year).then(function(d) {
+        _render(d);
+        _loading = false;
+    }).catch(function() {
         // Fetch failed: roll back to the year still on screen so the nav highlight matches the
         // displayed table and a re-click on the failed year (now != _current_year) can retry it.
         _current_year = prev;

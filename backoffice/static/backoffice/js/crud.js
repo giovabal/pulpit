@@ -37,7 +37,7 @@ function renderPagination(container, offset, total, pageSize, onPageChange) {
     container.setAttribute("aria-label", "Pagination");
 
     function navTo(page) {
-        return function () { onPageChange((page - 1) * pageSize); };
+        return function() { onPageChange((page - 1) * pageSize); };
     }
 
     var info = document.createElement("span");
@@ -48,22 +48,25 @@ function renderPagination(container, offset, total, pageSize, onPageChange) {
     container.appendChild(info);
 
     var prevBtn = document.createElement("button");
-    prevBtn.type = "button"; prevBtn.textContent = "←";
+    prevBtn.type = "button";
+    prevBtn.textContent = "←";
     prevBtn.setAttribute("aria-label", "Previous page");
     prevBtn.disabled = current === 1;
     if (!prevBtn.disabled) prevBtn.addEventListener("click", navTo(current - 1));
     container.appendChild(prevBtn);
 
-    _buildPageList(current, totalPages).forEach(function (item) {
+    _buildPageList(current, totalPages).forEach(function(item) {
         if (item === "…") {
             var gap = document.createElement("span");
-            gap.className = "bo-page-gap"; gap.textContent = "…";
+            gap.className = "bo-page-gap";
+            gap.textContent = "…";
             gap.setAttribute("aria-hidden", "true");
             container.appendChild(gap);
             return;
         }
         var b = document.createElement("button");
-        b.type = "button"; b.className = "bo-page-btn";
+        b.type = "button";
+        b.className = "bo-page-btn";
         b.textContent = item.toLocaleString();
         if (item === current) {
             b.classList.add("bo-page-btn--active");
@@ -78,7 +81,8 @@ function renderPagination(container, offset, total, pageSize, onPageChange) {
     });
 
     var nextBtn = document.createElement("button");
-    nextBtn.type = "button"; nextBtn.textContent = "→";
+    nextBtn.type = "button";
+    nextBtn.textContent = "→";
     nextBtn.setAttribute("aria-label", "Next page");
     nextBtn.disabled = current === totalPages;
     if (!nextBtn.disabled) nextBtn.addEventListener("click", navTo(current + 1));
@@ -116,7 +120,7 @@ async function apiFetch(url, options) {
                 } else {
                     // DRF serializer errors: { field: ["msg", ...], non_field_errors: [...] }
                     var lines = [];
-                    Object.keys(err).forEach(function (k) {
+                    Object.keys(err).forEach(function(k) {
                         var v = err[k];
                         var text = Array.isArray(v) ? v.join(" ") : String(v);
                         lines.push(k === "non_field_errors" ? text : k + ": " + text);
@@ -132,6 +136,7 @@ async function apiFetch(url, options) {
 }
 
 var _toastContainer = null;
+
 function showToast(message, type) {
     type = type || "success";
     if (!_toastContainer) {
@@ -143,7 +148,7 @@ function showToast(message, type) {
     toast.className = "bo-toast bo-toast--" + type;
     toast.textContent = message;
     _toastContainer.appendChild(toast);
-    setTimeout(function () { toast.remove(); }, 3200);
+    setTimeout(function() { toast.remove(); }, 3200);
 }
 
 function confirmDelete(name) {

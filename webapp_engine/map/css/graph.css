@@ -1,544 +1,589 @@
 /* ── Theme CSS custom properties (dark defaults) ────────────────────────── */
 :root {
-    /* Foreground RGB channels — used as rgba(var(--c-fg-raw), opacity) */
-    --c-fg-raw:            255, 255, 255;
-    /* Nav / menu bar */
-    --c-panel-bg:          rgba(8, 24, 40, 0.55);
-    /* Infobar / sidebar — accent kept aligned with the Pulpit brand indigo,
+  /* Foreground RGB channels — used as rgba(var(--c-fg-raw), opacity) */
+  --c-fg-raw: 255, 255, 255;
+  /* Nav / menu bar */
+  --c-panel-bg: rgba(8, 24, 40, 0.55);
+  /* Infobar / sidebar — accent kept aligned with the Pulpit brand indigo,
        shifted to a lighter shade so it stays readable on the dark surface. */
-    --c-sidebar-bg:        #0d2035;
-    --c-sidebar-accent:    #a5b4fc;
-    /* Year-switcher dropdown */
-    --c-year-menu-bg:      rgba(8, 24, 40, 0.96);
-    --c-year-menu-shadow:  rgba(0, 0, 0, 0.5);
-    /* Bootstrap accordion chevron filter (invert makes it white on dark bg) */
-    --c-accordion-arrow:   invert(1);
+  --c-sidebar-bg: #0d2035;
+  --c-sidebar-accent: #a5b4fc;
+  /* Year-switcher dropdown */
+  --c-year-menu-bg: rgba(8, 24, 40, 0.96);
+  --c-year-menu-shadow: rgba(0, 0, 0, 0.5);
+  /* Bootstrap accordion chevron filter (invert makes it white on dark bg) */
+  --c-accordion-arrow: invert(1);
 }
 
 * {
-    padding: 0px;
-    margin: 0px;
+  padding: 0px;
+  margin: 0px;
 }
 
-html, body {
-    width: 100%;
-    height: 100%;
-    margin: 0px;
-    padding: 0px;
-    font-size: 14.4px;
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
-    line-height: 1.25em;
-    overflow-x: hidden;
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  padding: 0px;
+  font-size: 14.4px;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  line-height: 1.25em;
+  overflow-x: hidden;
 }
 
 .sigma-parent {
-    position: relative;
-    height: 100%;
+  position: relative;
+  height: 100%;
 }
 
 .sigma-expand {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-    background-color: #eee;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background-color: #eee;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #sigma-canvas {
-    background-color: #123;
+  background-color: #123;
 }
 
 #loading_modal {
-    padding-top: 2em;
+  padding-top: 2em;
 }
 
 #menu_container {
-    padding: 0 0.5em;
+  padding: 0 0.5em;
 }
 
 .menu-button,
 .menu-button:focus,
 .menu-button:hover {
-    color: rgba(var(--c-fg-raw), 0.90);
-    padding: .6em 1.1em;
-    background: none;
-    border: 0;
-    font: inherit;
-    cursor: pointer;
-    text-decoration: none;
+  color: rgba(var(--c-fg-raw), 0.90);
+  padding: .6em 1.1em;
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
 }
 
 .menu-button:hover {
-    color: rgba(var(--c-fg-raw), 1);
+  color: rgba(var(--c-fg-raw), 1);
 }
 
 .menu-button:hover p,
 .menu-button:hover .menu-button-label {
-    color: rgba(var(--c-fg-raw), 0.90);
+  color: rgba(var(--c-fg-raw), 0.90);
 }
 
 #menu_container .bi {
-    font-size: 2rem;
+  font-size: 2rem;
 }
 
 #loading_message,
 .menu-button p,
 .menu-button .menu-button-label {
-    color: rgba(var(--c-fg-raw), 0.65);
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-top: 0.3em;
-    margin-bottom: 0;
+  color: rgba(var(--c-fg-raw), 0.65);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 0.3em;
+  margin-bottom: 0;
 }
 
 .menu-icon-btn {
-    background: none;
-    border: none;
-    color: rgba(var(--c-fg-raw), 0.65);
-    padding: 0.2em 0.4em;
-    cursor: pointer;
-    line-height: 1;
-    font-size: 1.1rem;
+  background: none;
+  border: none;
+  color: rgba(var(--c-fg-raw), 0.65);
+  padding: 0.2em 0.4em;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 1.1rem;
 }
 
 .menu-icon-btn:hover,
 .menu-icon-btn:focus {
-    color: rgba(var(--c-fg-raw), 1);
+  color: rgba(var(--c-fg-raw), 1);
 }
 
 @media screen {
-    #menu_container {
-        position: fixed;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: fit-content;
-        transition: all .25s ease-out;
-        background: var(--c-panel-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-radius: 10px;
-        border: 1px solid rgba(var(--c-fg-raw), 0.08);
-    }
+  #menu_container {
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: fit-content;
+    transition: all .25s ease-out;
+    background: var(--c-panel-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 10px;
+    border: 1px solid rgba(var(--c-fg-raw), 0.08);
+  }
 }
 
 #infobar {
-    max-height: 100%;
-    position: fixed;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    width: 320px;
-    min-width: 320px;
-    background-color: var(--c-sidebar-bg);
-    overflow-x: hidden;
-    overflow-y: auto;
-    transition: 0.5s;
-    display: none;
-    border-left: solid 1px rgba(var(--c-fg-raw), 0.08);
-    padding: 1em 1.25em;
-    color: rgba(var(--c-fg-raw), 1);
+  max-height: 100%;
+  position: fixed;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  width: 320px;
+  min-width: 320px;
+  background-color: var(--c-sidebar-bg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: 0.5s;
+  display: none;
+  border-left: solid 1px rgba(var(--c-fg-raw), 0.08);
+  padding: 1em 1.25em;
+  color: rgba(var(--c-fg-raw), 1);
 }
 
 .infobar-close {
-    position: absolute;
-    top: 0.75em;
-    right: 0.75em;
-    color: rgba(var(--c-fg-raw), 0.6);
+  position: absolute;
+  top: 0.75em;
+  right: 0.75em;
+  color: rgba(var(--c-fg-raw), 0.6);
 }
 
 #node_picture {
-    display: block;
-    margin-bottom: 0.4em;
+  display: block;
+  margin-bottom: 0.4em;
 }
 
 #infobar #node_label {
-    font-family: "IBM Plex Serif", Georgia, serif;
-    font-size: 1.1em;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    margin-bottom: 0.2em;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.1em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.2em;
 }
 
 #node_url {
-    color: var(--c-sidebar-accent);
-    text-decoration: none;
-    font-size: 0.9em;
+  color: var(--c-sidebar-accent);
+  text-decoration: none;
+  font-size: 0.9em;
 }
 
 #node_url:hover {
-    color: var(--c-sidebar-accent);
-    text-decoration: underline;
-    filter: brightness(1.15);
+  color: var(--c-sidebar-accent);
+  text-decoration: underline;
+  filter: brightness(1.15);
 }
 
 .infobar-sep {
-    border: none;
-    border-top: 1px solid rgba(var(--c-fg-raw), 0.12);
-    margin: 0.75em 0;
+  border: none;
+  border-top: 1px solid rgba(var(--c-fg-raw), 0.12);
+  margin: 0.75em 0;
 }
 
 .metric-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5em;
-    margin-bottom: 0.5em;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5em;
+  margin-bottom: 0.5em;
 }
 
 .metric-chip {
-    background: rgba(var(--c-fg-raw), 0.05);
-    border: 1px solid rgba(var(--c-fg-raw), 0.08);
-    border-radius: 6px;
-    padding: 0.35em 0.6em;
+  background: rgba(var(--c-fg-raw), 0.05);
+  border: 1px solid rgba(var(--c-fg-raw), 0.08);
+  border-radius: 6px;
+  padding: 0.35em 0.6em;
 }
 
 .metric-chip--full {
-    grid-column: 1 / -1;
+  grid-column: 1 / -1;
 }
 
 .metric-label {
-    display: block;
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
-    font-size: 0.65em;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: rgba(var(--c-fg-raw), 0.45);
+  display: block;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.65em;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(var(--c-fg-raw), 0.45);
 }
 
 .metric-value {
-    display: block;
-    font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
-    font-size: 0.95em;
-    font-weight: 500;
-    color: rgba(var(--c-fg-raw), 1);
+  display: block;
+  font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  font-size: 0.95em;
+  font-weight: 500;
+  color: rgba(var(--c-fg-raw), 1);
 }
 
 .infobar-measures {
-    font-size: 0.85em;
-    color: rgba(var(--c-fg-raw), 0.7);
-    margin-bottom: 0.4em;
-    line-height: 1.6;
+  font-size: 0.85em;
+  color: rgba(var(--c-fg-raw), 0.7);
+  margin-bottom: 0.4em;
+  line-height: 1.6;
 }
 
 #infobar .accordion-item {
-    background-color: transparent;
-    border: none;
-    border-top: 1px solid rgba(var(--c-fg-raw), 0.10);
+  background-color: transparent;
+  border: none;
+  border-top: 1px solid rgba(var(--c-fg-raw), 0.10);
 }
 
 #infobar .accordion-button {
-    background-color: transparent;
-    color: rgba(var(--c-fg-raw), 0.7);
-    padding: 0.5em 0;
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+  background-color: transparent;
+  color: rgba(var(--c-fg-raw), 0.7);
+  padding: 0.5em 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 #infobar .accordion-button:not(.collapsed) {
-    background-color: transparent;
-    color: var(--c-sidebar-accent);
-    box-shadow: none;
+  background-color: transparent;
+  color: var(--c-sidebar-accent);
+  box-shadow: none;
 }
 
 #infobar .accordion-button::after {
-    filter: var(--c-accordion-arrow);
+  filter: var(--c-accordion-arrow);
 }
 
 #infobar .accordion-body {
-    background-color: transparent;
-    padding: 0.25em 0 0.75em 0;
-    color: rgba(var(--c-fg-raw), 0.85);
+  background-color: transparent;
+  padding: 0.25em 0 0.75em 0;
+  color: rgba(var(--c-fg-raw), 0.85);
 }
 
 #infobar a.node-link,
 #infobar a.node-link:visited {
-    color: rgba(var(--c-fg-raw), 0.6);
-    text-decoration: none;
+  color: rgba(var(--c-fg-raw), 0.6);
+  text-decoration: none;
 }
 
 #infobar a.node-link:hover {
-    color: rgba(var(--c-fg-raw), 0.9);
-    text-decoration: underline;
+  color: rgba(var(--c-fg-raw), 0.9);
+  text-decoration: underline;
 }
 
 
 
 #year-switcher {
-    align-items: center;
-    gap: 0.2rem;
-    padding: 0 0.4rem;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.4rem;
 }
 
 /* Contain icon size — overrides the global #menu_container .bi { 2rem } rule */
-#year-switcher .bi { font-size: .7rem; }
+#year-switcher .bi {
+  font-size: .7rem;
+}
 
 .year-btn {
-    background: none;
-    border: 1px solid rgba(var(--c-fg-raw), 0.18);
-    color: rgba(var(--c-fg-raw), 0.55);
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: .04em;
-    padding: .18rem .45rem;
-    border-radius: .28rem;
-    cursor: pointer;
-    white-space: nowrap;
-    line-height: 1;
-    transition: color .1s, border-color .1s, background .1s;
+  background: none;
+  border: 1px solid rgba(var(--c-fg-raw), 0.18);
+  color: rgba(var(--c-fg-raw), 0.55);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: .18rem .45rem;
+  border-radius: .28rem;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1;
+  transition: color .1s, border-color .1s, background .1s;
 }
 
 .year-btn:hover:not(:disabled),
 .year-btn:focus:not(:disabled) {
-    color: rgba(var(--c-fg-raw), 0.85);
-    border-color: rgba(var(--c-fg-raw), 0.42);
+  color: rgba(var(--c-fg-raw), 0.85);
+  border-color: rgba(var(--c-fg-raw), 0.42);
 }
 
 .year-btn.active {
-    color: rgba(var(--c-fg-raw), 1);
-    border-color: rgba(var(--c-fg-raw), 0.65);
-    background: rgba(var(--c-fg-raw), 0.10);
+  color: rgba(var(--c-fg-raw), 1);
+  border-color: rgba(var(--c-fg-raw), 0.65);
+  background: rgba(var(--c-fg-raw), 0.10);
 }
 
 .year-btn:disabled {
-    opacity: 0.25;
-    cursor: default;
+  opacity: 0.25;
+  cursor: default;
 }
 
 /* Nav arrow buttons — slightly narrower */
-.year-btn--nav { padding: .18rem .32rem; }
+.year-btn--nav {
+  padding: .18rem .32rem;
+}
 
 /* Thin separator between All and the year dropdown */
 .year-sep {
-    display: inline-block;
-    width: 1px;
-    height: .9rem;
-    background: rgba(255,255,255,0.15);
-    margin: 0 .1rem;
-    flex-shrink: 0;
+  display: inline-block;
+  width: 1px;
+  height: .9rem;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 .1rem;
+  flex-shrink: 0;
 }
 
 /* Dropdown toggle shows current year + chevron */
-.year-drop-wrap { position: relative; }
+.year-drop-wrap {
+  position: relative;
+}
 
 .year-drop-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    min-width: 3.6rem;
-    justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  min-width: 3.6rem;
+  justify-content: center;
 }
 
 .year-chevron {
-    font-size: .55rem;
-    transition: transform .15s;
+  font-size: .55rem;
+  transition: transform .15s;
 }
 
-#year-drop-btn[aria-expanded="true"] .year-chevron { transform: rotate(180deg); }
+#year-drop-btn[aria-expanded="true"] .year-chevron {
+  transform: rotate(180deg);
+}
 
 /* Dropup panel — opens upward from the nav bar */
 .year-drop-menu {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + .5rem);
-    left: 50%;
-    transform: translateX(-50%);
-    flex-direction: column;
-    gap: .15rem;
-    padding: .25rem;
-    min-width: 5rem;
-    max-height: 40vh;
-    overflow-y: auto;
-    background: var(--c-year-menu-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(var(--c-fg-raw), 0.14);
-    border-radius: .4rem;
-    box-shadow: 0 -6px 20px var(--c-year-menu-shadow);
-    z-index: 2000;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(var(--c-fg-raw), 0.2) transparent;
+  display: none;
+  position: absolute;
+  bottom: calc(100% + .5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  gap: .15rem;
+  padding: .25rem;
+  min-width: 5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  background: var(--c-year-menu-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--c-fg-raw), 0.14);
+  border-radius: .4rem;
+  box-shadow: 0 -6px 20px var(--c-year-menu-shadow);
+  z-index: 2000;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--c-fg-raw), 0.2) transparent;
 }
 
-.year-drop-menu.open { display: flex; }
+.year-drop-menu.open {
+  display: flex;
+}
 
 .year-drop-item {
-    width: 100%;
-    text-align: center;
-    border-color: transparent;
+  width: 100%;
+  text-align: center;
+  border-color: transparent;
 }
 
 .year-drop-item:hover:not(:disabled),
-.year-drop-item:focus:not(:disabled) { border-color: rgba(255,255,255,0.3); }
+.year-drop-item:focus:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.3);
+}
 
 #search {
-    padding: 1em .25em;
+  padding: 1em .25em;
 }
 
 #results a.node-link {
-    color: #1e3a5f;
-    text-decoration: none;
+  color: #1e3a5f;
+  text-decoration: none;
 }
 
 #results a.node-link:hover {
-    color: #0d2035;
-    text-decoration: underline;
+  color: #0d2035;
+  text-decoration: underline;
 }
 
 #search input[name=search] {
-    border: 1px solid #999;
-    background-color: #fff;
-    padding: 5px 7px 4px 7px;
-    width: 205px;
-    color: #000;
+  border: 1px solid #999;
+  background-color: #fff;
+  padding: 5px 7px 4px 7px;
+  width: 205px;
+  color: #000;
 }
 
 /* ── Lateral menu — horizontal layout ───────────────────────── */
 @media screen {
-    #menu_container.menu--lateral {
-        bottom: auto;
-        left: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        flex-direction: column;
-        width: fit-content;
-        padding: 0.5em 0;
-    }
+  #menu_container.menu--lateral {
+    bottom: auto;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+    width: fit-content;
+    padding: 0.5em 0;
+  }
 
-    #menu_container.menu--lateral .ms-auto {
-        margin-left: 0 !important;
-        margin-top: auto;
-    }
+  #menu_container.menu--lateral .ms-auto {
+    margin-left: 0 !important;
+    margin-top: auto;
+  }
 
-    #menu_container.menu--lateral #year-switcher {
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-        padding: 0.4rem 0;
-        width: fit-content;
-    }
+  #menu_container.menu--lateral #year-switcher {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0.4rem 0;
+    width: fit-content;
+  }
 
-    #menu_container.menu--lateral #year-switcher > * {
-        flex: 1 0 100%;
-        text-align: center;
-    }
+  #menu_container.menu--lateral #year-switcher>* {
+    flex: 1 0 100%;
+    text-align: center;
+  }
 
-    #menu_container.menu--lateral #year-switcher .year-sep {
-        display: none;
-    }
+  #menu_container.menu--lateral #year-switcher .year-sep {
+    display: none;
+  }
 
-    #menu_container.menu--lateral #year-switcher #year-prev,
-    #menu_container.menu--lateral #year-switcher #year-next {
-        flex: 1 0 auto;
-        order: 10;
-    }
+  #menu_container.menu--lateral #year-switcher #year-prev,
+  #menu_container.menu--lateral #year-switcher #year-next {
+    flex: 1 0 auto;
+    order: 10;
+  }
 
-    #menu_container.menu--lateral .year-drop-menu {
-        bottom: auto;
-        left: calc(100% + 0.5rem);
-        top: 50%;
-        transform: translateY(-50%);
-        flex-direction: column;
-    }
+  #menu_container.menu--lateral .year-drop-menu {
+    bottom: auto;
+    left: calc(100% + 0.5rem);
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
 }
 
 /* ── graph3d.html theme overrides for .node-label ───────────────────────── */
-body[data-theme3d="light"]   .node-label,
+body[data-theme3d="light"] .node-label,
 body[data-theme3d="minimal"] .node-label,
-body[data-theme3d="print"]   .node-label { color: #111; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+body[data-theme3d="print"] .node-label {
+  color: #111;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+}
 
 /* ── Share buttons ───────────────────────────────────────────────────────── */
-.share-btn--bluesky  { background: #0085ff; color: #fff; }
-.share-btn--facebook { background: #1877f2; color: #fff; }
-.share-btn--linkedin { background: #0077b5; color: #fff; }
-.share-btn--whatsapp { background: #25d366; color: #fff; }
-.share-btn--telegram { background: #0088cc; color: #fff; }
+.share-btn--bluesky {
+  background: #0085ff;
+  color: #fff;
+}
+
+.share-btn--facebook {
+  background: #1877f2;
+  color: #fff;
+}
+
+.share-btn--linkedin {
+  background: #0077b5;
+  color: #fff;
+}
+
+.share-btn--whatsapp {
+  background: #25d366;
+  color: #fff;
+}
+
+.share-btn--telegram {
+  background: #0088cc;
+  color: #fff;
+}
 
 /* ── Graph info bar ────────────────────────────────────────────────────────── */
 @media screen {
-    #graph-info-bar {
-        position: fixed;
-        bottom: 8px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        align-items: center;
-        background: var(--c-panel-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-radius: 20px;
-        border: 1px solid rgba(var(--c-fg-raw), 0.08);
-        opacity: 0.45;
-        transition: opacity 0.2s ease;
-        z-index: 500;
-        overflow: hidden;
-        white-space: nowrap;
-        cursor: pointer;
-    }
+  #graph-info-bar {
+    position: fixed;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    background: var(--c-panel-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 20px;
+    border: 1px solid rgba(var(--c-fg-raw), 0.08);
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+    z-index: 500;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+  }
 
-    #graph-info-bar.is-expanded         { opacity: 1; }
-    #graph-info-bar:hover                { opacity: 0.75; }
-    #graph-info-bar.is-expanded:hover   { opacity: 1; }
+  #graph-info-bar.is-expanded {
+    opacity: 1;
+  }
 
-    #graph-info-toggle {
-        flex-shrink: 0;
-        background: none;
-        border: none;
-        color: rgba(var(--c-fg-raw), 0.80);
-        cursor: pointer;
-        padding: 0.42em 0.65em;
-        font-size: 1rem;
-        line-height: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: color 0.15s;
-    }
+  #graph-info-bar:hover {
+    opacity: 0.75;
+  }
 
-    #graph-info-toggle:hover,
-    #graph-info-toggle:focus { color: rgba(var(--c-fg-raw), 1); }
+  #graph-info-bar.is-expanded:hover {
+    opacity: 1;
+  }
 
-    #graph-info-chips {
-        display: flex;
-        align-items: center;
-        gap: 0.3em;
-        max-width: 0;
-        overflow: hidden;
-        opacity: 0;
-        transition: max-width 0.32s ease, opacity 0.25s ease, padding 0.32s ease;
-        padding: 0;
-    }
+  #graph-info-toggle {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: rgba(var(--c-fg-raw), 0.80);
+    cursor: pointer;
+    padding: 0.42em 0.65em;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s;
+  }
 
-    #graph-info-bar.is-expanded #graph-info-chips {
-        max-width: 640px;
-        opacity: 1;
-        padding: 0.3em 0.5em 0.3em 0;
-    }
+  #graph-info-toggle:hover,
+  #graph-info-toggle:focus {
+    color: rgba(var(--c-fg-raw), 1);
+  }
 
-    .info-chip {
-        display: inline-flex;
-        align-items: center;
-        background: rgba(var(--c-fg-raw), 0.08);
-        border: 1px solid rgba(var(--c-fg-raw), 0.12);
-        border-radius: 10px;
-        padding: 0.15em 0.55em;
-        font-size: 11px;
-        font-family: "IBM Plex Sans", system-ui, sans-serif;
-        letter-spacing: 0.02em;
-        color: rgba(var(--c-fg-raw), 0.85);
-        line-height: 1.4;
-        white-space: nowrap;
-    }
+  #graph-info-chips {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.32s ease, opacity 0.25s ease, padding 0.32s ease;
+    padding: 0;
+  }
 
-    .info-chip--filter {
-        background: rgba(var(--c-fg-raw), 0.14);
-        border-color: rgba(var(--c-fg-raw), 0.25);
-        color: rgba(var(--c-fg-raw), 1);
-    }
+  #graph-info-bar.is-expanded #graph-info-chips {
+    max-width: 640px;
+    opacity: 1;
+    padding: 0.3em 0.5em 0.3em 0;
+  }
+
+  .info-chip {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(var(--c-fg-raw), 0.08);
+    border: 1px solid rgba(var(--c-fg-raw), 0.12);
+    border-radius: 10px;
+    padding: 0.15em 0.55em;
+    font-size: 11px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    color: rgba(var(--c-fg-raw), 0.85);
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+
+  .info-chip--filter {
+    background: rgba(var(--c-fg-raw), 0.14);
+    border-color: rgba(var(--c-fg-raw), 0.25);
+    color: rgba(var(--c-fg-raw), 1);
+  }
 }

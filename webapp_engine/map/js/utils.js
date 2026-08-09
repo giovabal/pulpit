@@ -6,7 +6,7 @@ export function escHtml(s) {
 
 // Fetch JSON, rejecting on any non-2xx response. Use for required resources.
 export function fetchJson(url) {
-    return fetch(url).then(function (r) {
+    return fetch(url).then(function(r) {
         if (!r.ok) throw new Error(r.status);
         return r.json();
     });
@@ -16,8 +16,8 @@ export function fetchJson(url) {
 // Use for optional resources (meta.json, timeline.json, …) the page tolerates.
 export function fetchJsonOrNull(url) {
     return fetch(url)
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function() { return null; });
 }
 
 // Min / max over an array WITHOUT spreading it through Function.prototype.apply.
@@ -84,9 +84,10 @@ export function makeEdgeWidthScale(weights, minPx, maxPx, basePx) {
         var w = weights[i];
         if (w > 0 && isFinite(w)) positive.push(w);
     }
-    if (positive.length < 2) return function () { return basePx; };
+    if (positive.length < 2) return function() { return basePx; };
 
-    positive.sort(function (a, b) { return a - b; });
+    positive.sort(function(a, b) { return a - b; });
+
     function quantile(p) {
         var idx = Math.round(p * (positive.length - 1));
         return positive[Math.min(positive.length - 1, Math.max(0, idx))];
@@ -95,12 +96,15 @@ export function makeEdgeWidthScale(weights, minPx, maxPx, basePx) {
     var hi = quantile(0.98);
     // Percentile band collapsed (most weights identical): fall back to the full
     // range; if that is degenerate too, give up and return a uniform thickness.
-    if (hi <= lo) { lo = positive[0]; hi = positive[positive.length - 1]; }
-    if (hi <= lo) return function () { return basePx; };
+    if (hi <= lo) {
+        lo = positive[0];
+        hi = positive[positive.length - 1];
+    }
+    if (hi <= lo) return function() { return basePx; };
 
     var loLog = Math.log(lo);
     var span = Math.log(hi) - loLog;
-    return function (w) {
+    return function(w) {
         if (!(w > 0) || !isFinite(w)) return minPx;
         var clamped = w < lo ? lo : (w > hi ? hi : w);
         var t = (Math.log(clamped) - loLog) / span;

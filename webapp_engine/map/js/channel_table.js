@@ -5,29 +5,29 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
-var INFLUENCE_KEYS = {"pagerank":1,"hits_hub":1,"hits_authority":1,"in_degree_centrality":1,"out_degree_centrality":1};
-var STRUCTURAL_KEYS = {"burt_constraint":1,"within_module_z":1,"participation":1,"reciprocity":1};
-var CONTENT_KEYS = {"content_originality":1,"amplification_factor":1,"diffusion_lag":1};
-var POSITION_ORDER = ["in_deg","out_deg","fans","messages_count"];
-var POSITION_LABELS = {"in_deg":"In-strength","out_deg":"Out-strength","fans":"Users","messages_count":"Messages"};
+var INFLUENCE_KEYS = { "pagerank": 1, "hits_hub": 1, "hits_authority": 1, "in_degree_centrality": 1, "out_degree_centrality": 1 };
+var STRUCTURAL_KEYS = { "burt_constraint": 1, "within_module_z": 1, "participation": 1, "reciprocity": 1 };
+var CONTENT_KEYS = { "content_originality": 1, "amplification_factor": 1, "diffusion_lag": 1 };
+var POSITION_ORDER = ["in_deg", "out_deg", "fans", "messages_count"];
+var POSITION_LABELS = { "in_deg": "In-strength", "out_deg": "Out-strength", "fans": "Users", "messages_count": "Messages" };
 var COL_TOOLTIPS = {
-    "in_deg":             "In-strength: summed raw weights of incoming ties (forwards + mentions received); higher → more heavily cited",
-    "out_deg":            "Out-strength: summed raw weights of outgoing ties (forwards + mentions made); higher → cites more heavily",
-    "fans":               "Number of subscribers / followers at crawl time",
-    "messages_count":     "Number of messages collected in the analysis period",
-    "pagerank":           "PageRank: steady-state visit probability in a random walk; higher → more central",
-    "hits_hub":           "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
-    "hits_authority":      "HITS authority score: propensity to be cited by hub channels; high → important source",
-    "in_degree_centrality":"Normalized in-degree centrality: in-degree / (n−1)",
-    "out_degree_centrality":"Normalized out-degree centrality: out-degree / (n−1)",
-    "burt_constraint":     "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
-    "within_module_z":     "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
-    "participation":       "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's ties spread across communities; 0 → all ties inside one community, → 1 → a cross-community bridge. The continuous score behind the Role column's connector labels",
-    "reciprocity":         "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
+    "in_deg": "In-strength: summed raw weights of incoming ties (forwards + mentions received); higher → more heavily cited",
+    "out_deg": "Out-strength: summed raw weights of outgoing ties (forwards + mentions made); higher → cites more heavily",
+    "fans": "Number of subscribers / followers at crawl time",
+    "messages_count": "Number of messages collected in the analysis period",
+    "pagerank": "PageRank: steady-state visit probability in a random walk; higher → more central",
+    "hits_hub": "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
+    "hits_authority": "HITS authority score: propensity to be cited by hub channels; high → important source",
+    "in_degree_centrality": "Normalized in-degree centrality: in-degree / (n−1)",
+    "out_degree_centrality": "Normalized out-degree centrality: out-degree / (n−1)",
+    "burt_constraint": "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
+    "within_module_z": "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
+    "participation": "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's ties spread across communities; 0 → all ties inside one community, → 1 → a cross-community bridge. The continuous score behind the Role column's connector labels",
+    "reciprocity": "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
-    "amplification_factor":"Amplification factor: forwards received from tracked channels per own message",
-    "diffusion_lag":       "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
-    "sbm_confidence":      "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
+    "amplification_factor": "Amplification factor: forwards received from tracked channels per own message",
+    "diffusion_lag": "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
+    "sbm_confidence": "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
 };
 
 // Parameterised measures may be requested more than once, each producing a parameter-suffixed
@@ -39,6 +39,7 @@ var COL_TOOLTIPS = {
 // same way for tooltip lookup.)
 var PARAM_BASE_KEYS = ["within_module_z", "participation", "diffusion_lag", "sbm_confidence"]
     .sort(function(a, b) { return b.length - a.length; });
+
 function canonicalKey(key) {
     for (var i = 0; i < PARAM_BASE_KEYS.length; i++) {
         var base = PARAM_BASE_KEYS[i];
@@ -58,23 +59,26 @@ function roleCompanion(numericKey) {
     var base = canonicalKey(numericKey);
     var suffix = numericKey.slice(base.length);
     if (base === "within_module_z")
-        return { roleKey: "module_role" + suffix, roleLabel: "Module role",
-                 tip: "Guimerà–Amaral within-module role (from the MODULEROLE measure)" };
+        return {
+            roleKey: "module_role" + suffix,
+            roleLabel: "Module role",
+            tip: "Guimerà–Amaral within-module role (from the MODULEROLE measure)"
+        };
     return null;
 }
 
 // ── Module-level state ─────────────────────────────────────────────────────────
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d{4,})\//);   // 4+ digit = calendar year, not compare suffix
+var _ym = _dd.match(/data_(\d{4,})\//); // 4+ digit = calendar year, not compare suffix
 var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _base_dd = _ym ? "data/" : _dd;        // "all" always resolves to the full-range dir
+var _base_dd = _ym ? "data/" : _dd; // "all" always resolves to the full-range dir
 var _ty = [];
-var _all_years = [];          // ordered year numbers, derived from _ty
+var _all_years = []; // ordered year numbers, derived from _ty
 var _cache = {};
 var _loading = false;
 
 // ── Per-channel timeline data (lazy, loaded on first expand) ───────────────────
-var _yr_channels = {};        // year (int or "all") → { nodeId: nodeObj }
+var _yr_channels = {}; // year (int or "all") → { nodeId: nodeObj }
 var _yr_channels_promise = null;
 
 function _load_year_channels() {
@@ -161,7 +165,9 @@ function _fetch_year(year) {
 
 // ── Render ─────────────────────────────────────────────────────────────────────
 function _render(d) {
-    var channels = d.channels, communities = d.communities, meta = d.meta;
+    var channels = d.channels,
+        communities = d.communities,
+        meta = d.meta;
     var nodes = channels.nodes;
     var strategies = Object.keys(communities.strategies);
     // Categorical role columns (Module role), one per role-measure instance, derived from the
@@ -193,7 +199,8 @@ function _render(d) {
     if (preambleTarget) {
         preambleTarget.innerHTML = "";
         if (meta) {
-            var pEl = document.createElement("p"); pEl.className = "table-preamble";
+            var pEl = document.createElement("p");
+            pEl.className = "table-preamble";
             var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
             parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
             if (meta.start_date || meta.end_date)
@@ -209,33 +216,44 @@ function _render(d) {
 
     // Categorise extra measures
     var extraMeasures = (channels.measures || []).filter(function(m) { return BASE_KEYS.indexOf(m[0]) === -1; });
-    var influenceCols  = extraMeasures.filter(function(m) { return INFLUENCE_KEYS[canonicalKey(m[0])]; });
+    var influenceCols = extraMeasures.filter(function(m) { return INFLUENCE_KEYS[canonicalKey(m[0])]; });
     var structuralCols = extraMeasures.filter(function(m) { return STRUCTURAL_KEYS[canonicalKey(m[0])]; });
-    var contentCols    = extraMeasures.filter(function(m) { return CONTENT_KEYS[canonicalKey(m[0])]; });
-    var otherCols      = extraMeasures.filter(function(m) { var c = canonicalKey(m[0]); return !INFLUENCE_KEYS[c] && !STRUCTURAL_KEYS[c] && !CONTENT_KEYS[c]; });
+    var contentCols = extraMeasures.filter(function(m) { return CONTENT_KEYS[canonicalKey(m[0])]; });
+    var otherCols = extraMeasures.filter(function(m) { var c = canonicalKey(m[0]); return !INFLUENCE_KEYS[c] && !STRUCTURAL_KEYS[c] && !CONTENT_KEYS[c]; });
 
     var cols = [];
-    POSITION_ORDER.forEach(function(key) { cols.push({key: key, label: POSITION_LABELS[key], group: "network_position", isBase: true}); });
-    influenceCols.forEach(function(m)  { cols.push({key: m[0], label: m[1], group: "influence",  isBase: false}); });
-    structuralCols.forEach(function(m) { cols.push({key: m[0], label: m[1], group: "structural", isBase: false}); });
-    contentCols.forEach(function(m)    { cols.push({key: m[0], label: m[1], group: "content",    isBase: false}); });
-    otherCols.forEach(function(m)      { cols.push({key: m[0], label: m[1], group: "other",      isBase: false}); });
-    confCols.forEach(function(c)       { cols.push({key: c.key, label: c.label, group: "sbm_confidence", isBase: false}); });
+    POSITION_ORDER.forEach(function(key) { cols.push({ key: key, label: POSITION_LABELS[key], group: "network_position", isBase: true }); });
+    influenceCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "influence", isBase: false }); });
+    structuralCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "structural", isBase: false }); });
+    contentCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "content", isBase: false }); });
+    otherCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "other", isBase: false }); });
+    confCols.forEach(function(c) { cols.push({ key: c.key, label: c.label, group: "sbm_confidence", isBase: false }); });
 
     // Heatmap ranges
     var hmRanges = {};
     cols.forEach(function(col) {
-        var mn = Infinity, mx = -Infinity, hasVal = false;
+        var mn = Infinity,
+            mx = -Infinity,
+            hasVal = false;
         nodes.forEach(function(n) {
             var v = n[col.key];
-            if (v !== null && v !== undefined) { if (v < mn) mn = v; if (v > mx) mx = v; hasVal = true; }
+            if (v !== null && v !== undefined) {
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+                hasVal = true;
+            }
         });
         if (hasVal) hmRanges[col.key] = [mn, mx];
     });
 
     // Mark first column of each group
     var seenGroups = {};
-    cols.forEach(function(col) { if (!seenGroups[col.group]) { seenGroups[col.group] = true; col.groupStart = true; } });
+    cols.forEach(function(col) {
+        if (!seenGroups[col.group]) {
+            seenGroups[col.group] = true;
+            col.groupStart = true;
+        }
+    });
 
     function colBg(col, val) {
         if (col.key === "burt_constraint") return divergingHeatmapBg(val, 0.5, 0, 1);
@@ -257,8 +275,10 @@ function _render(d) {
 
     // thead
     var htr = document.createElement("tr");
+
     function addTh(label, cls, isGroupStart, tip) {
-        var th = document.createElement("th"); th.scope = "col";
+        var th = document.createElement("th");
+        th.scope = "col";
         var c = cls || "";
         if (isGroupStart) c = (c ? c + " " : "") + "col-group-start";
         if (c) th.className = c;
@@ -286,6 +306,7 @@ function _render(d) {
     nodes.forEach(function(node, idx) {
         var tr = document.createElement("tr");
         if (has_spark) tr.dataset.nodeId = node.id;
+
         function addTd(display, cls, sortVal, bg, link, isGroupStart) {
             var td = document.createElement("td");
             var c = cls || "";
@@ -293,8 +314,14 @@ function _render(d) {
             if (c) td.className = c;
             if (sortVal !== "") td.setAttribute("data-sort-value", sortVal);
             if (bg) td.setAttribute("style", bg);
-            if (link) { var a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = display; td.appendChild(a); }
-            else { td.textContent = display; }
+            if (link) {
+                var a = document.createElement("a");
+                a.href = link;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.textContent = display;
+                td.appendChild(a);
+            } else { td.textContent = display; }
             tr.appendChild(td);
             return td;
         }
@@ -308,17 +335,30 @@ function _render(d) {
             var nameWrap = document.createElement("span");
             nameWrap.className = "channel-name-wrap";
             if (node.url) {
-                var a = document.createElement("a"); a.href = node.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = node.label || node.id; nameWrap.appendChild(a);
+                var a = document.createElement("a");
+                a.href = node.url;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.textContent = node.label || node.id;
+                nameWrap.appendChild(a);
             } else { nameWrap.appendChild(document.createTextNode(node.label || node.id)); }
             var btn = document.createElement("button");
-            btn.type = "button"; btn.className = "channel-toggle"; btn.title = "Year-by-year charts";
+            btn.type = "button";
+            btn.className = "channel-toggle";
+            btn.title = "Year-by-year charts";
             btn.innerHTML = '<i class="bi bi-bar-chart-steps" aria-hidden="true"></i>';
             (function(b, row, n) { b.addEventListener("click", function() { _toggle_row(b, row, n); }); })(btn, tr, node);
             nameWrap.appendChild(btn);
             nameTd.appendChild(nameWrap);
         } else {
-            if (node.url) { var a2 = document.createElement("a"); a2.href = node.url; a2.target = "_blank"; a2.rel = "noopener noreferrer"; a2.textContent = node.label || node.id; nameTd.appendChild(a2); }
-            else { nameTd.textContent = node.label || node.id; }
+            if (node.url) {
+                var a2 = document.createElement("a");
+                a2.href = node.url;
+                a2.target = "_blank";
+                a2.rel = "noopener noreferrer";
+                a2.textContent = node.label || node.id;
+                nameTd.appendChild(a2);
+            } else { nameTd.textContent = node.label || node.id; }
         }
         tr.appendChild(nameTd);
 
@@ -339,7 +379,8 @@ function _render(d) {
             addTd(comm !== undefined ? String(comm) : "", "", "", "", "", firstStrategy);
             firstStrategy = false;
         });
-        var start = node.activity_start || "", end = node.activity_end || "";
+        var start = node.activity_start || "",
+            end = node.activity_end || "";
         addTd(start && end ? start + "–" + end : start || end || "—", "", start || end || "", "", "", true);
 
         fragment.appendChild(tr);
@@ -355,7 +396,9 @@ function _render(d) {
         return sigFig(mean, 3) + " ± " + sigFig(sd, 3);
     }
     var tfoot = document.createElement("tfoot");
-    var ftr = document.createElement("tr"); ftr.className = "tfoot-stats";
+    var ftr = document.createElement("tr");
+    ftr.className = "tfoot-stats";
+
     function addFtd(display, cls, isGroupStart) {
         var td = document.createElement("td");
         var c = cls || "";
@@ -369,7 +412,10 @@ function _render(d) {
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
     roleCols.forEach(function(rc, i) { addFtd("", "", i === 0); });
     var firstStratFoot = true;
-    strategies.forEach(function() { addFtd("", "", firstStratFoot); firstStratFoot = false; });
+    strategies.forEach(function() {
+        addFtd("", "", firstStratFoot);
+        firstStratFoot = false;
+    });
     addFtd("", "", true);
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);

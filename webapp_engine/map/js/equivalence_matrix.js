@@ -15,7 +15,8 @@ function _simColor(v) {
 
 // ── Similarity lookup from lower-triangle ─────────────────────────────────────
 function _sim(cells_lower, i, j) {
-    var a = Math.max(i, j), b = Math.min(i, j);
+    var a = Math.max(i, j),
+        b = Math.min(i, j);
     return cells_lower[a][b];
 }
 
@@ -28,20 +29,25 @@ function _pluralityComm(node_id, nodeById, communities, stratKeys) {
         var c = nd.communities[sk];
         if (c != null) counts[c] = (counts[c] || 0) + 1;
     });
-    var best = "", bestN = 0;
-    Object.keys(counts).forEach(function(c) { if (counts[c] > bestN) { best = c; bestN = counts[c]; } });
+    var best = "",
+        bestN = 0;
+    Object.keys(counts).forEach(function(c) {
+        if (counts[c] > bestN) {
+            best = c;
+            bestN = counts[c];
+        }
+    });
     return best;
 }
 
 // ── Sorted index array ─────────────────────────────────────────────────────────
 function _sorted_indices(simData, channelNodes, communities, sortMode, sortMeasureKey, stratKey) {
     var n = simData.node_ids.length;
-    var order = Array.from({length: n}, function(_, i) { return i; });
+    var order = Array.from({ length: n }, function(_, i) { return i; });
 
     if (sortMode === "community") {
-        var stratKeys = stratKey
-            ? [stratKey]
-            : (communities ? Object.keys(communities.strategies || {}) : []);
+        var stratKeys = stratKey ? [stratKey] :
+            (communities ? Object.keys(communities.strategies || {}) : []);
         var nodeById = {};
         if (channelNodes) channelNodes.forEach(function(nd) { nodeById[nd.id] = nd; });
         var comm = {};
@@ -58,7 +64,7 @@ function _sorted_indices(simData, channelNodes, communities, sortMode, sortMeasu
         order.sort(function(a, b) {
             var va = (nodeById2[simData.node_ids[a]] || {})[sortMeasureKey] || 0;
             var vb = (nodeById2[simData.node_ids[b]] || {})[sortMeasureKey] || 0;
-            return vb - va;  // descending
+            return vb - va; // descending
         });
     }
     return order;
@@ -70,7 +76,8 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     container.innerHTML = "";
 
     if (!simData || !simData.node_ids || simData.node_ids.length < 2) {
-        var msg = document.createElement("p"); msg.className = "text-muted";
+        var msg = document.createElement("p");
+        msg.className = "text-muted";
         msg.textContent = "Not enough data to build an equivalence matrix (requires at least 2 channels).";
         container.appendChild(msg);
         return;
@@ -80,7 +87,8 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
 
     // ── Preamble ──────────────────────────────────────────────────────────────
     if (meta) {
-        var pEl = document.createElement("p"); pEl.className = "table-preamble";
+        var pEl = document.createElement("p");
+        pEl.className = "table-preamble";
         var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
         if (meta.start_date || meta.end_date)
             parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
@@ -89,7 +97,8 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
         container.appendChild(pEl);
     }
 
-    var noteEl = document.createElement("p"); noteEl.className = "text-muted small mb-2";
+    var noteEl = document.createElement("p");
+    noteEl.className = "text-muted small mb-2";
     noteEl.textContent = n + " × " + n + " channels. " + (simData.note || "Cosine similarity; range 0–1. Lower triangle; diagonal = 1 (self).");
     container.appendChild(noteEl);
 
@@ -102,23 +111,33 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     // Sort-by select
     var sortWrap = document.createElement("div");
     var sortLbl = document.createElement("label");
-    sortLbl.className = "form-label mb-1 d-block fw-semibold small"; sortLbl.textContent = "Sort by";
-    var sortSel = document.createElement("select"); sortSel.className = "form-select form-select-sm"; sortSel.style.width = "auto";
+    sortLbl.className = "form-label mb-1 d-block fw-semibold small";
+    sortLbl.textContent = "Sort by";
+    var sortSel = document.createElement("select");
+    sortSel.className = "form-select form-select-sm";
+    sortSel.style.width = "auto";
     sortSel.appendChild(new Option("Community", "community"));
     (simData.measures || []).forEach(function(m) { sortSel.appendChild(new Option(m[1], "measure:" + m[0])); });
     sortSel.value = (sortMode === "community") ? "community" : ("measure:" + sortMeasureKey);
-    sortWrap.appendChild(sortLbl); sortWrap.appendChild(sortSel); controlsDiv.appendChild(sortWrap);
+    sortWrap.appendChild(sortLbl);
+    sortWrap.appendChild(sortSel);
+    controlsDiv.appendChild(sortWrap);
 
     // Community-strategy select (shown only when Sort = Community)
     var stratWrap = document.createElement("div");
     var stratLbl = document.createElement("label");
-    stratLbl.className = "form-label mb-1 d-block fw-semibold small"; stratLbl.textContent = "Strategy";
-    var stratSel = document.createElement("select"); stratSel.className = "form-select form-select-sm"; stratSel.style.width = "auto";
+    stratLbl.className = "form-label mb-1 d-block fw-semibold small";
+    stratLbl.textContent = "Strategy";
+    var stratSel = document.createElement("select");
+    stratSel.className = "form-select form-select-sm";
+    stratSel.style.width = "auto";
     stratSel.appendChild(new Option("All", ""));
     stratKeys.forEach(function(sk) { stratSel.appendChild(new Option(_strat_label(sk), sk)); });
     stratSel.value = stratKey || "";
     if (sortMode !== "community") stratWrap.style.display = "none";
-    stratWrap.appendChild(stratLbl); stratWrap.appendChild(stratSel); controlsDiv.appendChild(stratWrap);
+    stratWrap.appendChild(stratLbl);
+    stratWrap.appendChild(stratSel);
+    controlsDiv.appendChild(stratWrap);
 
     container.appendChild(controlsDiv);
 
@@ -131,7 +150,9 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var gradBox = document.createElement("div");
     gradBox.style.cssText = "width:120px;height:12px;background:linear-gradient(to right,#fff,rgb(70,130,180));border:1px solid #ccc;display:inline-block;vertical-align:middle;";
     legDiv.appendChild(gradBox);
-    var legLbls = document.createElement("span"); legLbls.textContent = "0 – 1.0"; legLbls.style.color = "#555";
+    var legLbls = document.createElement("span");
+    legLbls.textContent = "0 – 1.0";
+    legLbls.style.color = "#555";
     legDiv.appendChild(legLbls);
     container.appendChild(legDiv);
 
@@ -142,27 +163,38 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     // ── SVG heatmap ───────────────────────────────────────────────────────────
     var NS = "http://www.w3.org/2000/svg";
     var cellSize = Math.max(4, Math.min(14, Math.floor(520 / n)));
-    var labelW = 140, topPad = 4, bottomPad = 110;
+    var labelW = 140,
+        topPad = 4,
+        bottomPad = 110;
     var fontSize = Math.max(7, Math.min(11, cellSize - 1));
 
-    var scrollDiv = document.createElement("div"); scrollDiv.style.cssText = "overflow-x:auto;";
-    var svgW = labelW + n * cellSize, svgH = topPad + n * cellSize + bottomPad;
+    var scrollDiv = document.createElement("div");
+    scrollDiv.style.cssText = "overflow-x:auto;";
+    var svgW = labelW + n * cellSize,
+        svgH = topPad + n * cellSize + bottomPad;
     var svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", svgW); svg.setAttribute("height", svgH); svg.style.cssText = "display:block;background:white;";
+    svg.setAttribute("width", svgW);
+    svg.setAttribute("height", svgH);
+    svg.style.cssText = "display:block;background:white;";
     svg.setAttribute("role", "grid");
     svg.setAttribute("aria-label", "Equivalence heatmap, " + n + " by " + n + " channels");
 
     // Grid lines
     var gridG = document.createElementNS(NS, "g");
-    gridG.setAttribute("stroke", "#e4e4e4"); gridG.setAttribute("stroke-width", "0.5");
+    gridG.setAttribute("stroke", "#e4e4e4");
+    gridG.setAttribute("stroke-width", "0.5");
     for (var gi = 0; gi <= n; gi++) {
         var hl = document.createElementNS(NS, "line");
-        hl.setAttribute("x1", labelW); hl.setAttribute("y1", topPad + gi * cellSize);
-        hl.setAttribute("x2", labelW + n * cellSize); hl.setAttribute("y2", topPad + gi * cellSize);
+        hl.setAttribute("x1", labelW);
+        hl.setAttribute("y1", topPad + gi * cellSize);
+        hl.setAttribute("x2", labelW + n * cellSize);
+        hl.setAttribute("y2", topPad + gi * cellSize);
         gridG.appendChild(hl);
         var vl = document.createElementNS(NS, "line");
-        vl.setAttribute("x1", labelW + gi * cellSize); vl.setAttribute("y1", topPad);
-        vl.setAttribute("x2", labelW + gi * cellSize); vl.setAttribute("y2", topPad + n * cellSize);
+        vl.setAttribute("x1", labelW + gi * cellSize);
+        vl.setAttribute("y1", topPad);
+        vl.setAttribute("x2", labelW + gi * cellSize);
+        vl.setAttribute("y2", topPad + n * cellSize);
         gridG.appendChild(vl);
     }
     svg.appendChild(gridG);
@@ -174,33 +206,49 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
         triPts.push((labelW + si * cellSize) + "," + (topPad + si * cellSize));
     }
     var triPoly = document.createElementNS(NS, "polygon");
-    triPoly.setAttribute("points", triPts.join(" ")); triPoly.setAttribute("fill", "#f2f2f2");
+    triPoly.setAttribute("points", triPts.join(" "));
+    triPoly.setAttribute("fill", "#f2f2f2");
     svg.appendChild(triPoly);
 
     // Row labels (left). Coerce to string — node_ids may be numeric in the JSON.
     for (var li = 0; li < n; li++) {
         var lbl = String(simData.node_labels[order[li]] || simData.node_ids[order[li]] || "");
         var tx = document.createElementNS(NS, "text");
-        tx.setAttribute("x", labelW - 4); tx.setAttribute("y", topPad + li * cellSize + cellSize / 2);
-        tx.setAttribute("dy", "0.35em"); tx.setAttribute("text-anchor", "end");
-        tx.setAttribute("font-size", fontSize); tx.setAttribute("fill", "#333");
+        tx.setAttribute("x", labelW - 4);
+        tx.setAttribute("y", topPad + li * cellSize + cellSize / 2);
+        tx.setAttribute("dy", "0.35em");
+        tx.setAttribute("text-anchor", "end");
+        tx.setAttribute("font-size", fontSize);
+        tx.setAttribute("fill", "#333");
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
-        if (trunc !== lbl) { var ttl = document.createElementNS(NS, "title"); ttl.textContent = lbl; tx.appendChild(ttl); }
+        if (trunc !== lbl) {
+            var ttl = document.createElementNS(NS, "title");
+            ttl.textContent = lbl;
+            tx.appendChild(ttl);
+        }
         svg.appendChild(tx);
     }
 
     // Column labels (bottom, rotated)
     for (var lj = 0; lj < n; lj++) {
         var lbl2 = String(simData.node_labels[order[lj]] || simData.node_ids[order[lj]] || "");
-        var cx = labelW + lj * cellSize + cellSize / 2, cy2 = topPad + n * cellSize + 4;
+        var cx = labelW + lj * cellSize + cellSize / 2,
+            cy2 = topPad + n * cellSize + 4;
         var tx2 = document.createElementNS(NS, "text");
-        tx2.setAttribute("x", cx); tx2.setAttribute("y", cy2); tx2.setAttribute("text-anchor", "end");
-        tx2.setAttribute("font-size", fontSize); tx2.setAttribute("fill", "#333");
+        tx2.setAttribute("x", cx);
+        tx2.setAttribute("y", cy2);
+        tx2.setAttribute("text-anchor", "end");
+        tx2.setAttribute("font-size", fontSize);
+        tx2.setAttribute("fill", "#333");
         tx2.setAttribute("transform", "rotate(-45 " + cx + " " + cy2 + ")");
         var trunc2 = lbl2.length > 22 ? lbl2.slice(0, 20) + "…" : lbl2;
         tx2.textContent = trunc2;
-        if (trunc2 !== lbl2) { var ttl2 = document.createElementNS(NS, "title"); ttl2.textContent = lbl2; tx2.appendChild(ttl2); }
+        if (trunc2 !== lbl2) {
+            var ttl2 = document.createElementNS(NS, "title");
+            ttl2.textContent = lbl2;
+            tx2.appendChild(ttl2);
+        }
         svg.appendChild(tx2);
     }
 
@@ -208,8 +256,9 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var rectG = document.createElementNS(NS, "g");
     for (var ri = 0; ri < n; ri++) {
         for (var rj = 0; rj < n; rj++) {
-            if (ri < rj) continue;  // upper triangle → masked
-            var origI = order[ri], origJ = order[rj];
+            if (ri < rj) continue; // upper triangle → masked
+            var origI = order[ri],
+                origJ = order[rj];
             var v = _sim(simData.cells_lower, origI, origJ);
             var rect = document.createElementNS(NS, "rect");
             rect.setAttribute("x", labelW + rj * cellSize);
@@ -260,7 +309,9 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
 
 // ── Public entry point ──────────────────────────────────────────────────────────
 export function initEquivalenceMatrix(opts) {
-    var jsonName = opts.jsonName, containerId = opts.containerId, errorLabel = opts.errorLabel || jsonName;
+    var jsonName = opts.jsonName,
+        containerId = opts.containerId,
+        errorLabel = opts.errorLabel || jsonName;
     Promise.all([
         fetchJson(_dd + jsonName),
         fetchJsonOrNull(_dd + "channels.json"),

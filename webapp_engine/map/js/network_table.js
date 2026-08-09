@@ -8,18 +8,30 @@ var _ym = _dd.match(/data_(\d{4,})\//);
 var _base_dd = _ym ? "data/" : _dd;
 
 // ── Sparkline data — loaded once at startup, never changes ─────────────────────
-var _all_map = {}, _yr_map = {}, _all_mod_map = {}, _yr_mod_map = {}, _all_years = [];
-var _ty = [], _has_tl = false;
+var _all_map = {},
+    _yr_map = {},
+    _all_mod_map = {},
+    _yr_mod_map = {},
+    _all_years = [];
+var _ty = [],
+    _has_tl = false;
 
 // ── Per-year state — updated on every year switch ──────────────────────────────
 var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _nodes = [], _measures = [], _labelOf = {};
+var _nodes = [],
+    _measures = [],
+    _labelOf = {};
 var _cache = {};
 var _loading = false;
 
 // ── Chart object references — built once, data updated on switch ───────────────
-var _distChart = null, _distInitialized = false, _distSel = null;
-var _scatterChart = null, _xSel = null, _ySel = null, _countNote = null;
+var _distChart = null,
+    _distInitialized = false,
+    _distSel = null;
+var _scatterChart = null,
+    _xSel = null,
+    _ySel = null,
+    _countNote = null;
 
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
@@ -53,8 +65,19 @@ function _build_dist_data(key) {
 
 function _power_law_fit(pts) {
     if (pts.length < 2) return null;
-    var n = pts.length, sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    pts.forEach(function(p) { var lx = Math.log(p.x), ly = Math.log(p.y); sumX += lx; sumY += ly; sumXY += lx * ly; sumX2 += lx * lx; });
+    var n = pts.length,
+        sumX = 0,
+        sumY = 0,
+        sumXY = 0,
+        sumX2 = 0;
+    pts.forEach(function(p) {
+        var lx = Math.log(p.x),
+            ly = Math.log(p.y);
+        sumX += lx;
+        sumY += ly;
+        sumXY += lx * ly;
+        sumX2 += lx * lx;
+    });
     var d = n * sumX2 - sumX * sumX;
     if (!d) return null;
     var slope = (n * sumXY - sumX * sumY) / d;
@@ -68,9 +91,11 @@ function _build_scatter_data(xKey, yKey) {
     var regData = [];
     if (fit) {
         var xs = pts.map(function(p) { return p.x; });
-        var xMin = arrMin(xs), xMax = arrMax(xs);
+        var xMin = arrMin(xs),
+            xMax = arrMax(xs);
         regData = [{ x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
-                   { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }];
+            { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }
+        ];
     }
     return { pts: pts, regData: regData };
 }
@@ -85,7 +110,8 @@ function _update_dist_chart() {
 
 function _update_scatter_chart() {
     if (!_scatterChart || !_xSel) return;
-    var xKey = _xSel.value, yKey = _ySel.value;
+    var xKey = _xSel.value,
+        yKey = _ySel.value;
     var ds = _build_scatter_data(xKey, yKey);
     _scatterChart.data.datasets[0].data = ds.pts;
     _scatterChart.data.datasets[1].data = ds.regData;
@@ -137,9 +163,11 @@ function _render_preamble(meta) {
     if (!el) return;
     el.innerHTML = "";
     if (!meta) return;
-    var pEl = document.createElement("p"); pEl.className = "table-preamble";
-    var parts = ["Whole-network structural metrics for a graph of "
-        + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
+    var pEl = document.createElement("p");
+    pEl.className = "table-preamble";
+    var parts = ["Whole-network structural metrics for a graph of " +
+        fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."
+    ];
     parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
     if (meta.start_date || meta.end_date)
         parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
@@ -151,26 +179,39 @@ function _render_preamble(meta) {
 function _render_summary(data) {
     var section = document.getElementById("summary-section");
     section.innerHTML = "";
-    var h5 = document.createElement("h5"); h5.className = "mb-2"; h5.textContent = "Whole-network metrics";
+    var h5 = document.createElement("h5");
+    h5.className = "mb-2";
+    h5.textContent = "Whole-network metrics";
     section.appendChild(h5);
-    var table = document.createElement("table"); table.className = "table table-sm table-hover";
-    var thead = document.createElement("thead"); var htr = document.createElement("tr");
+    var table = document.createElement("table");
+    table.className = "table table-sm table-hover";
+    var thead = document.createElement("thead");
+    var htr = document.createElement("tr");
     ["Metric", "Value"].forEach(function(lbl, i) {
-        var th = document.createElement("th"); th.scope = "col"; if (i === 1) th.className = "number";
-        th.textContent = lbl; htr.appendChild(th);
+        var th = document.createElement("th");
+        th.scope = "col";
+        if (i === 1) th.className = "number";
+        th.textContent = lbl;
+        htr.appendChild(th);
     });
-    thead.appendChild(htr); table.appendChild(thead);
+    thead.appendChild(htr);
+    table.appendChild(thead);
     var tbody = document.createElement("tbody");
     var curGroup = null;
     data.summary_rows.forEach(function(row) {
         if (row.group && row.group !== curGroup) {
             curGroup = row.group;
-            var gtr = document.createElement("tr"); gtr.className = "summary-group-header";
-            var gtd = document.createElement("td"); gtd.colSpan = 2; gtd.textContent = row.group;
-            gtr.appendChild(gtd); tbody.appendChild(gtr);
+            var gtr = document.createElement("tr");
+            gtr.className = "summary-group-header";
+            var gtd = document.createElement("td");
+            gtd.colSpan = 2;
+            gtd.textContent = row.group;
+            gtr.appendChild(gtd);
+            tbody.appendChild(gtr);
         }
         var tr = document.createElement("tr");
-        var td1 = document.createElement("td"); td1.textContent = row.label;
+        var td1 = document.createElement("td");
+        td1.textContent = row.label;
         var baseLabel = row.label.replace(/\s*\(.*\)$/, "").replace(/\s*[†‡]\s*$/, "").trim();
         var tip = METRIC_TOOLTIPS[baseLabel];
         if (!tip) {
@@ -178,7 +219,8 @@ function _render_summary(data) {
             if (m) tip = "Freeman (1978) graph-level centralization for " + m[1] + "; 0 = uniform distribution, 1 = star graph.";
         }
         if (tip) td1.title = tip;
-        var td2 = document.createElement("td"); td2.className = "number";
+        var td2 = document.createElement("td");
+        td2.className = "number";
         if (_has_tl) {
             var inner = document.createElement("span");
             inner.className = "spark-cell";
@@ -187,18 +229,24 @@ function _render_summary(data) {
             var vspan = document.createElement("span");
             vspan.className = "spark-val";
             vspan.textContent = row.value;
-            inner.appendChild(vspan); td2.appendChild(inner);
+            inner.appendChild(vspan);
+            td2.appendChild(inner);
         } else { td2.textContent = row.value; }
-        tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tbody.appendChild(tr);
     });
-    table.appendChild(tbody); section.appendChild(table);
+    table.appendChild(tbody);
+    section.appendChild(table);
     if (data.wcc_note_visible) {
-        var note = document.createElement("p"); note.className = "text-muted small mt-1";
+        var note = document.createElement("p");
+        note.className = "text-muted small mt-1";
         note.textContent = "† Computed on the largest weakly connected component (undirected)";
         section.appendChild(note);
     }
     if (data.scc_note_visible) {
-        var note2 = document.createElement("p"); note2.className = "text-muted small mt-1";
+        var note2 = document.createElement("p");
+        note2.className = "text-muted small mt-1";
         note2.textContent = "‡ Computed on the largest strongly connected component (directed)";
         section.appendChild(note2);
     }
@@ -212,24 +260,32 @@ function _render_modularity(data) {
         return;
     }
     section.classList.remove("d-none");
-    var h5 = document.createElement("h5"); h5.className = "mb-2"; h5.textContent = "Modularity by strategy";
+    var h5 = document.createElement("h5");
+    h5.className = "mb-2";
+    h5.textContent = "Modularity by strategy";
     section.appendChild(h5);
-    var table = document.createElement("table"); table.className = "table table-sm table-hover sortable";
-    var thead = document.createElement("thead"); var htr = document.createElement("tr");
+    var table = document.createElement("table");
+    table.className = "table table-sm table-hover sortable";
+    var thead = document.createElement("thead");
+    var htr = document.createElement("tr");
     ["Strategy", "Modularity", "Inter-comm. Ratio", "Mean E-I Index"].forEach(function(lbl, i) {
-        var th = document.createElement("th"); th.scope = "col";
+        var th = document.createElement("th");
+        th.scope = "col";
         if (i > 0) th.className = "number";
         th.textContent = lbl;
         var tip = STRATEGY_COL_TOOLTIPS[lbl];
         if (tip) th.title = tip;
         htr.appendChild(th);
     });
-    thead.appendChild(htr); table.appendChild(thead);
+    thead.appendChild(htr);
+    table.appendChild(thead);
     var tbody = document.createElement("tbody");
     data.modularity_rows.forEach(function(row) {
         var tr = document.createElement("tr");
-        var td1 = document.createElement("td"); td1.textContent = _strat_label(row.strategy);
-        var td2 = document.createElement("td"); td2.className = "number";
+        var td1 = document.createElement("td");
+        td1.textContent = _strat_label(row.strategy);
+        var td2 = document.createElement("td");
+        td2.className = "number";
         if (_has_tl) {
             var inner = document.createElement("span");
             inner.className = "spark-cell";
@@ -238,32 +294,55 @@ function _render_modularity(data) {
             var vspan = document.createElement("span");
             vspan.className = "spark-val";
             vspan.textContent = row.modularity;
-            inner.appendChild(vspan); td2.appendChild(inner);
+            inner.appendChild(vspan);
+            td2.appendChild(inner);
             td2.setAttribute("data-sort-value", row.modularity);
         } else { td2.textContent = row.modularity; }
-        var td3 = document.createElement("td"); td3.className = "number"; td3.textContent = row.inter_community_ratio || "—";
-        var td4 = document.createElement("td"); td4.className = "number"; td4.textContent = row.mean_ei || "—";
-        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+        var td3 = document.createElement("td");
+        td3.className = "number";
+        td3.textContent = row.inter_community_ratio || "—";
+        var td4 = document.createElement("td");
+        td4.className = "number";
+        td4.textContent = row.mean_ei || "—";
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tr.appendChild(td4);
         tbody.appendChild(tr);
     });
-    table.appendChild(tbody); section.appendChild(table);
+    table.appendChild(tbody);
+    section.appendChild(table);
     initSortableTables();
 }
 
 // ── Build degree-distribution section (once on initial load) ───────────────────
 function _build_dist_section() {
     var distSection = document.getElementById("degree-dist-section");
-    var controls = document.createElement("div"); controls.className = "d-flex align-items-end gap-3 mb-3";
+    var controls = document.createElement("div");
+    controls.className = "d-flex align-items-end gap-3 mb-3";
     var dirWrap = document.createElement("div");
     var dirLbl = document.createElement("label");
-    dirLbl.className = "form-label mb-1 d-block fw-semibold small"; dirLbl.htmlFor = "deg-dir-select"; dirLbl.textContent = "Direction";
-    _distSel = document.createElement("select"); _distSel.className = "form-select form-select-sm"; _distSel.id = "deg-dir-select"; _distSel.style.width = "auto";
-    [["in_deg", "In-strength"], ["out_deg", "Out-strength"]].forEach(function(opt) { _distSel.appendChild(new Option(opt[1], opt[0])); });
-    dirWrap.appendChild(dirLbl); dirWrap.appendChild(_distSel); controls.appendChild(dirWrap);
+    dirLbl.className = "form-label mb-1 d-block fw-semibold small";
+    dirLbl.htmlFor = "deg-dir-select";
+    dirLbl.textContent = "Direction";
+    _distSel = document.createElement("select");
+    _distSel.className = "form-select form-select-sm";
+    _distSel.id = "deg-dir-select";
+    _distSel.style.width = "auto";
+    [
+        ["in_deg", "In-strength"],
+        ["out_deg", "Out-strength"]
+    ].forEach(function(opt) { _distSel.appendChild(new Option(opt[1], opt[0])); });
+    dirWrap.appendChild(dirLbl);
+    dirWrap.appendChild(_distSel);
+    controls.appendChild(dirWrap);
     distSection.appendChild(controls);
 
-    var canvasWrap = document.createElement("div"); canvasWrap.style.cssText = "height:280px;position:relative;";
-    var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas); distSection.appendChild(canvasWrap);
+    var canvasWrap = document.createElement("div");
+    canvasWrap.style.cssText = "height:280px;position:relative;";
+    var canvas = document.createElement("canvas");
+    canvasWrap.appendChild(canvas);
+    distSection.appendChild(canvasWrap);
 
     _distSel.addEventListener("change", _update_dist_chart);
 
@@ -275,7 +354,9 @@ function _build_dist_section() {
             type: "bar",
             data: { labels: dd.labels, datasets: [{ label: "Nodes", data: dd.counts, backgroundColor: "rgba(30,41,59,0.7)", borderRadius: 3 }] },
             options: {
-                animation: false, responsive: true, maintainAspectRatio: false,
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
                     x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -286,7 +367,12 @@ function _build_dist_section() {
     }
 
     if ("IntersectionObserver" in window) {
-        var obs = new IntersectionObserver(function(entries, o) { if (entries[0].isIntersecting) { o.disconnect(); _init(); } }, { threshold: 0.1 });
+        var obs = new IntersectionObserver(function(entries, o) {
+            if (entries[0].isIntersecting) {
+                o.disconnect();
+                _init();
+            }
+        }, { threshold: 0.1 });
         obs.observe(distSection);
     } else { _init(); }
 }
@@ -296,34 +382,53 @@ function _build_scatter_section() {
     if (_measures.length < 2) return;
     var scatterSection = document.getElementById("scatter-section");
 
-    var controls = document.createElement("div"); controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+    var controls = document.createElement("div");
+    controls.className = "d-flex flex-wrap align-items-end gap-3 mb-3";
+
     function makeSelect(id, labelText) {
         var wrap = document.createElement("div");
-        var lbl = document.createElement("label"); lbl.className = "form-label mb-1 d-block fw-semibold small"; lbl.htmlFor = id; lbl.textContent = labelText;
-        var sel = document.createElement("select"); sel.className = "form-select form-select-sm scatter-select"; sel.id = id;
+        var lbl = document.createElement("label");
+        lbl.className = "form-label mb-1 d-block fw-semibold small";
+        lbl.htmlFor = id;
+        lbl.textContent = labelText;
+        var sel = document.createElement("select");
+        sel.className = "form-select form-select-sm scatter-select";
+        sel.id = id;
         _measures.forEach(function(m) { sel.appendChild(new Option(m[1], m[0])); });
-        wrap.appendChild(lbl); wrap.appendChild(sel); controls.appendChild(wrap);
+        wrap.appendChild(lbl);
+        wrap.appendChild(sel);
+        controls.appendChild(wrap);
         return sel;
     }
     _xSel = makeSelect("x-axis-select", "X axis");
     _ySel = makeSelect("y-axis-select", "Y axis");
 
-    var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
-    var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
-    resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
+    var resetWrap = document.createElement("div");
+    resetWrap.className = "scatter-reset-wrap";
+    var resetBtn = document.createElement("button");
+    resetBtn.className = "btn btn-outline-secondary btn-sm";
+    resetBtn.textContent = "Reset zoom";
+    resetWrap.appendChild(resetBtn);
+    controls.appendChild(resetWrap);
 
-    _countNote = document.createElement("div"); _countNote.className = "text-muted small ms-auto scatter-count-note";
+    _countNote = document.createElement("div");
+    _countNote.className = "text-muted small ms-auto scatter-count-note";
     controls.appendChild(_countNote);
     scatterSection.appendChild(controls);
 
-    var canvasWrap = document.createElement("div"); canvasWrap.className = "scatter-canvas-wrap";
-    var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas); scatterSection.appendChild(canvasWrap);
+    var canvasWrap = document.createElement("div");
+    canvasWrap.className = "scatter-canvas-wrap";
+    var canvas = document.createElement("canvas");
+    canvasWrap.appendChild(canvas);
+    scatterSection.appendChild(canvasWrap);
 
-    var defaultX = _measures[0][0], defaultY = _measures[1][0];
+    var defaultX = _measures[0][0],
+        defaultY = _measures[1][0];
     _measures.forEach(function(m) { if (m[0] === "in_deg") defaultX = m[0]; });
     _measures.forEach(function(m) { if (m[0] === "pagerank") defaultY = m[0]; });
     if (defaultX === defaultY) defaultY = _measures.find(function(m) { return m[0] !== defaultX; })[0];
-    _xSel.value = defaultX; _ySel.value = defaultY;
+    _xSel.value = defaultX;
+    _ySel.value = defaultY;
 
     var initial = _build_scatter_data(defaultX, defaultY);
     _countNote.textContent = initial.pts.length + " nodes (zero values excluded from log scale)";
@@ -337,7 +442,9 @@ function _build_scatter_section() {
             ],
         },
         options: {
-            animation: false, responsive: true, maintainAspectRatio: false,
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: { type: "logarithmic", title: { display: true, text: _labelOf[defaultX], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
                 y: { type: "logarithmic", title: { display: true, text: _labelOf[defaultY], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
@@ -348,7 +455,9 @@ function _build_scatter_section() {
                     filter: function(item) { return item.datasetIndex === 0; },
                     callbacks: {
                         label: function(ctx) {
-                            var d = ctx.raw, xLbl = _scatterChart.options.scales.x.title.text, yLbl = _scatterChart.options.scales.y.title.text;
+                            var d = ctx.raw,
+                                xLbl = _scatterChart.options.scales.x.title.text,
+                                yLbl = _scatterChart.options.scales.y.title.text;
                             return ["Channel: " + d.label, xLbl + ": " + d.x.toFixed(4), yLbl + ": " + d.y.toFixed(4), "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
                         },
                     },
@@ -391,7 +500,11 @@ Promise.all([
     fetchJsonOrNull(_base_dd + "timeline.json"),
     fetchJsonOrNull(_base_dd + "network_metrics.json"),
 ]).then(function(results) {
-    var data = results[0], channels = results[1], meta = results[2], timeline = results[3], all_metrics = results[4];
+    var data = results[0],
+        channels = results[1],
+        meta = results[2],
+        timeline = results[3],
+        all_metrics = results[4];
 
     _cache[_current_year] = { data: data, channels: channels, meta: meta };
     _nodes = channels.nodes;
@@ -407,13 +520,13 @@ Promise.all([
     if (all_metrics && all_metrics.modularity_rows)
         all_metrics.modularity_rows.forEach(function(r) { _all_mod_map[r.strategy] = r.modularity; });
 
-    return (_has_tl
-        ? Promise.all(_ty.map(function(y) {
+    return (_has_tl ?
+        Promise.all(_ty.map(function(y) {
             return fetchJson("data_" + y.year + "/network_metrics.json")
                 .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
                 .catch(function() { return null; });
-          })).then(function(list) { return list.filter(Boolean); })
-        : Promise.resolve([])
+        })).then(function(list) { return list.filter(Boolean); }) :
+        Promise.resolve([])
     ).then(function(year_metrics) {
         year_metrics.forEach(function(ym) {
             ym.rows.forEach(function(row) {
