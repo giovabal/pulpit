@@ -27,9 +27,9 @@ var _ym = _dd.match(/data_(\d{4,})\//);
 var _current_year = _ym ? parseInt(_ym[1]) : "all";
 var _base_dd = _ym ? "data/" : _dd;
 var _cache = {};
-var _ty = [];  // timeline years filtered to those with robustness data
+var _ty = []; // timeline years filtered to those with robustness data
 var _loading = false;
-var _modalChart = null;  // tracks the modal's current Chart.js instance for clean teardown
+var _modalChart = null; // tracks the modal's current Chart.js instance for clean teardown
 
 var _METRICS = ["wcc", "scc", "reach", "strength"];
 var _METRIC_LABEL = { wcc: "WCC", scc: "SCC", reach: "REACH", strength: "STRENGTH" };
@@ -51,11 +51,13 @@ var _STRATEGY_ORDER = [
 // "label" field; this map is the fallback.
 var _STRATEGY_SHORT = {
     "random": "Random",
-    "in_strength": "In-strength", "out_strength": "Out-strength",
+    "in_strength": "In-strength",
+    "out_strength": "Out-strength",
     "pagerank": "PageRank",
     "betweenness": "Betweenness",
     "subscribers": "Subscribers",
-    "in_strength_dyn": "In-strength dyn", "out_strength_dyn": "Out-strength dyn",
+    "in_strength_dyn": "In-strength dyn",
+    "out_strength_dyn": "Out-strength dyn",
     "pagerank_dyn": "PageRank dyn",
     "betweenness_dyn": "Betweenness dyn",
 };
@@ -63,11 +65,13 @@ var _STRATEGY_SHORT = {
 // Accessible palette grouped by attack-family hue.
 var _STRATEGY_COLOR = {
     "random": "#94a3b8",
-    "in_strength": "#3b82f6", "out_strength": "#06b6d4",
+    "in_strength": "#3b82f6",
+    "out_strength": "#06b6d4",
     "pagerank": "#ef4444",
     "betweenness": "#8b5cf6",
     "subscribers": "#f59e0b",
-    "in_strength_dyn": "#1d4ed8", "out_strength_dyn": "#0e7490",
+    "in_strength_dyn": "#1d4ed8",
+    "out_strength_dyn": "#0e7490",
     "pagerank_dyn": "#b91c1c",
     "betweenness_dyn": "#6d28d9",
 };
@@ -112,20 +116,20 @@ function _fmtP(p) {
 function _presentMetrics(payload, strategies) {
     if (!strategies.length) return _METRICS;
     var first = payload.strategies[strategies[0]];
-    return _METRICS.filter(function (m) { return Array.isArray(first["curve_" + m]); });
+    return _METRICS.filter(function(m) { return Array.isArray(first["curve_" + m]); });
 }
 
 function _orderedStrategies(payload) {
     var present = new Set(Object.keys(payload.strategies || {}));
     var ordered = [];
-    _STRATEGY_ORDER.forEach(function (s) {
+    _STRATEGY_ORDER.forEach(function(s) {
         if (present.has(s)) {
             ordered.push(s);
             present.delete(s);
         }
     });
     // Anything else (custom keys) lands at the end in alphabetical order.
-    Array.from(present).sort().forEach(function (s) { ordered.push(s); });
+    Array.from(present).sort().forEach(function(s) { ordered.push(s); });
     return ordered;
 }
 
@@ -138,9 +142,9 @@ function _renderHeaderSummary(payload) {
         g.n + " nodes / " + g.m + " edges",
         g.filtered ? "backbone " + g.backbone_n + "/" + g.backbone_m + " edges (α=" + c.alpha + ")" : "no disparity filter",
         Object.keys(payload.strategies || {}).length + " strategies",
-        c.n_null > 0
-            ? c.n_null + " null simulations (" + (c.null_model || "configuration") + ")"
-            : "no null model",
+        c.n_null > 0 ?
+        c.n_null + " null simulations (" + (c.null_model || "configuration") + ")" :
+        "no null model",
         "seed=" + c.seed,
     ];
     if (payload.efficiency && payload.efficiency.baseline !== undefined) {
@@ -153,7 +157,7 @@ function _renderHeaderSummary(payload) {
 
 function _renderSummaryTable(payload) {
     var strategies = _orderedStrategies(payload);
-    var hasNull = strategies.some(function (s) { return payload.strategies[s].null; });
+    var hasNull = strategies.some(function(s) { return payload.strategies[s].null; });
     var thead = document.querySelector("#rb-summary-table thead");
     var tbody = document.querySelector("#rb-summary-table tbody");
 
@@ -174,10 +178,10 @@ function _renderSummaryTable(payload) {
 
     var rows = [];
     var metrics = _presentMetrics(payload, strategies);
-    strategies.forEach(function (s) {
+    strategies.forEach(function(s) {
         var p = payload.strategies[s];
         var nullData = p.null || {};
-        metrics.forEach(function (m) {
+        metrics.forEach(function(m) {
             var nullM = nullData["r_" + m] || {};
             var r = p["r_" + m];
             var fc = p["fc_" + m];
@@ -205,7 +209,7 @@ function _renderSummaryTable(payload) {
 function _buildLineDataset(label, color, data, fractionRemoved) {
     return {
         label: label,
-        data: data.map(function (y, i) { return { x: fractionRemoved[i], y: y }; }),
+        data: data.map(function(y, i) { return { x: fractionRemoved[i], y: y }; }),
         borderColor: color,
         backgroundColor: color,
         borderWidth: 2,
@@ -217,13 +221,15 @@ function _buildLineDataset(label, color, data, fractionRemoved) {
 
 function _baseChartOptions(yAxisTitle) {
     return {
-        animation: false, responsive: true, maintainAspectRatio: false,
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
             legend: { position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
             tooltip: {
                 callbacks: {
-                    title: function (items) {
+                    title: function(items) {
                         return "Removed: " + (items[0].parsed.x * 100).toFixed(1) + "%";
                     },
                 },
@@ -231,21 +237,25 @@ function _baseChartOptions(yAxisTitle) {
         },
         scales: {
             x: {
-                type: "linear", min: 0, max: 1,
+                type: "linear",
+                min: 0,
+                max: 1,
                 title: { display: true, text: "Fraction of nodes removed", font: { size: 12 } },
-                grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                grid: { color: "#e5e7eb" },
+                ticks: { font: { size: 11 } },
             },
             y: {
                 min: 0,
                 title: { display: true, text: yAxisTitle, font: { size: 12 } },
-                grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } },
+                grid: { color: "#e5e7eb" },
+                ticks: { font: { size: 11 } },
             },
         },
     };
 }
 
 function _curveChartConfig(payload, metric, strategies, fractionRemoved) {
-    var datasets = strategies.map(function (s) {
+    var datasets = strategies.map(function(s) {
         return _buildLineDataset(
             _labelOf(payload, s),
             _colorOf(s),
@@ -254,7 +264,7 @@ function _curveChartConfig(payload, metric, strategies, fractionRemoved) {
         );
     });
     var options = _baseChartOptions("S(f)");
-    options.plugins.tooltip.callbacks.label = function (ctx) {
+    options.plugins.tooltip.callbacks.label = function(ctx) {
         return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
     };
     return { type: "line", data: { datasets: datasets }, options: options };
@@ -275,11 +285,11 @@ function _modularChartConfig(curves, fractionRemoved) {
 
 function _efficiencyChartConfig(payload, strategies) {
     var eff = payload.efficiency;
-    var datasets = strategies.filter(function (s) { return eff.curves[s]; }).map(function (s) {
+    var datasets = strategies.filter(function(s) { return eff.curves[s]; }).map(function(s) {
         return _buildLineDataset(_labelOf(payload, s), _colorOf(s), eff.curves[s], eff.fractions);
     });
     var options = _baseChartOptions("E(f)");
-    options.plugins.tooltip.callbacks.label = function (ctx) {
+    options.plugins.tooltip.callbacks.label = function(ctx) {
         return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
     };
     return { type: "line", data: { datasets: datasets }, options: options };
@@ -294,12 +304,15 @@ function _attachExpandButton(card, title, configBuilder) {
     btn.title = "Expand chart";
     btn.setAttribute("aria-label", "Expand chart");
     btn.innerHTML = '<i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>';
-    btn.addEventListener("click", function () { _openChartModal(title, configBuilder); });
+    btn.addEventListener("click", function() { _openChartModal(title, configBuilder); });
     card.appendChild(btn);
 }
 
 function _openChartModal(title, configBuilder) {
-    if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+    if (_modalChart) {
+        _modalChart.destroy();
+        _modalChart = null;
+    }
     document.getElementById("rb-chart-modal-title").textContent = title;
     var canvas = document.getElementById("rb-chart-modal-canvas");
     canvas.setAttribute("role", "img");
@@ -318,11 +331,14 @@ function _closeChartModal() {
 }
 
 // Free the modal chart instance once the modal finishes its hide animation.
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", function() {
     var modalEl = document.getElementById("rb-chart-modal");
     if (modalEl) {
-        modalEl.addEventListener("hidden.bs.modal", function () {
-            if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+        modalEl.addEventListener("hidden.bs.modal", function() {
+            if (_modalChart) {
+                _modalChart.destroy();
+                _modalChart = null;
+            }
         });
     }
 });
@@ -331,7 +347,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function _renderCurves(payload) {
     var container = document.getElementById("rb-curves");
-    container.innerHTML = "";  // idempotent — wipe stale charts when re-rendering on year switch
+    container.innerHTML = ""; // idempotent — wipe stale charts when re-rendering on year switch
     var strategies = _orderedStrategies(payload);
     if (!strategies.length) {
         container.innerHTML = "<p class=\"rb-empty\">No attack strategies were run.</p>";
@@ -363,11 +379,11 @@ function _renderCurves(payload) {
         _attachExpandButton(card, titleText, buildConfig);
     }
 
-    _presentMetrics(payload, strategies).forEach(function (m) {
+    _presentMetrics(payload, strategies).forEach(function(m) {
         _addChartCard(
             "S(f) — " + _METRIC_LABEL[m],
             strategies.length + " strategies, " + fractionRemoved.length + " removal steps",
-            function () { return _curveChartConfig(payload, m, strategies, fractionRemoved); }
+            function() { return _curveChartConfig(payload, m, strategies, fractionRemoved); }
         );
     });
 
@@ -377,7 +393,7 @@ function _renderCurves(payload) {
         _addChartCard(
             "Weighted efficiency — E(f)",
             Object.keys(eff.curves).length + " strategies, " + eff.fractions.length + " evaluation points",
-            function () { return _efficiencyChartConfig(payload, strategies); }
+            function() { return _efficiencyChartConfig(payload, strategies); }
         );
     }
 }
@@ -412,23 +428,23 @@ function _renderBanWaves(payload) {
         return "<td" + cls + ">" + _fmt(s, 3) + base + "</td>";
     }
 
-    Object.keys(banWaves).forEach(function (p) {
+    Object.keys(banWaves).forEach(function(p) {
         var rows = banWaves[p];
         if (!rows || !rows.length) return;
-        var metrics = _METRICS.filter(function (m) { return ("s_" + m) in rows[0]; });
+        var metrics = _METRICS.filter(function(m) { return ("s_" + m) in rows[0]; });
         var html = "<h5 class=\"mt-3\">" + strategy_label(p) + "</h5>";
         html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
         html += "<thead><tr><th>Community</th><th class=\"text-end\">Channels</th><th class=\"text-end\">% of network</th>";
-        metrics.forEach(function (m) {
+        metrics.forEach(function(m) {
             html += "<th class=\"text-end\">S<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub></th>";
         });
         html += "</tr></thead><tbody>";
-        rows.forEach(function (row) {
+        rows.forEach(function(row) {
             // Label-group communities carry a human name; algorithmic ones fall back to the id.
             html += "<tr><td>" + escHtml(row.community_label || row.community) + "</td>";
             html += "<td class=\"text-end\">" + row.n + "</td>";
             html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
-            metrics.forEach(function (m) {
+            metrics.forEach(function(m) {
                 html += _cell(row["s_" + m], row["random_" + m]);
             });
             html += "</tr>";
@@ -469,7 +485,7 @@ function _renderBanReplay(payload) {
         return "<td" + cls + ">" + predTxt + " / " + rndTxt + " / <strong>" + _fmt(obs, 3) + "</strong></td>";
     }
 
-    var metrics = _METRICS.filter(function (m) { return ("predicted_" + m) in rows[0]; });
+    var metrics = _METRICS.filter(function(m) { return ("predicted_" + m) in rows[0]; });
     var html = "<p class=\"text-muted small mb-2\">Each cell shows " +
         "<em>predicted</em> / <em>random baseline</em> / <strong>observed</strong> residual size. " +
         "Observed below predicted (red) = the wave cascaded beyond the banned block; " +
@@ -477,16 +493,16 @@ function _renderBanReplay(payload) {
     html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
     html += "<thead><tr><th>Wave year</th><th class=\"text-end\">Pre-wave nodes</th>" +
         "<th class=\"text-end\">Closed</th><th class=\"text-end\">% of network</th>";
-    metrics.forEach(function (m) {
+    metrics.forEach(function(m) {
         html += "<th class=\"text-end\">S<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub></th>";
     });
     html += "</tr></thead><tbody>";
-    rows.forEach(function (row) {
+    rows.forEach(function(row) {
         html += "<tr><td>" + row.year + "</td>";
         html += "<td class=\"text-end\">" + row.n_pre + "</td>";
         html += "<td class=\"text-end\">" + row.n_closed + "</td>";
         html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
-        metrics.forEach(function (m) {
+        metrics.forEach(function(m) {
             html += _cell(row["predicted_" + m], row["random_" + m], row["observed_" + m]);
         });
         html += "</tr>";
@@ -509,24 +525,24 @@ function _renderAlphaSensitivity(payload) {
     }
     section.classList.remove("d-none");
 
-    var strategies = (sens.strategies || []).filter(function (s) { return payload.strategies[s]; });
+    var strategies = (sens.strategies || []).filter(function(s) { return payload.strategies[s]; });
     // One sub-table per metric: rows = α values, columns = strategies, cells = R.
-    var metrics = _METRICS.filter(function (m) {
+    var metrics = _METRICS.filter(function(m) {
         return sens.rows[0].r && sens.rows[0].r[strategies[0]] && (m in sens.rows[0].r[strategies[0]]);
     });
-    metrics.forEach(function (m) {
+    metrics.forEach(function(m) {
         var html = "<h5 class=\"mt-3\">R<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub> across α</h5>";
         html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
         html += "<thead><tr><th>α</th><th class=\"text-end\">Backbone edges</th>";
-        strategies.forEach(function (s) {
+        strategies.forEach(function(s) {
             html += "<th class=\"text-end\">" + _labelOf(payload, s) + "</th>";
         });
         html += "</tr></thead><tbody>";
-        sens.rows.forEach(function (row) {
+        sens.rows.forEach(function(row) {
             var aTxt = row.alpha === 0 ? "full graph" : row.alpha;
             html += "<tr><td>" + aTxt + "</td>";
             html += "<td class=\"text-end\">" + row.backbone_m + "</td>";
-            strategies.forEach(function (s) {
+            strategies.forEach(function(s) {
                 var r = row.r && row.r[s] ? row.r[s][m] : null;
                 html += "<td class=\"text-end\">" + _fmt(r, 3) + "</td>";
             });
@@ -555,7 +571,7 @@ function _renderModular(payload) {
     // One Bootstrap nav-tabs strip per partition, with one row of charts inside each tab.
     var navHtml = "<ul class=\"nav nav-tabs mb-3\" role=\"tablist\">";
     var paneHtml = "<div class=\"tab-content\">";
-    partitions.forEach(function (p, i) {
+    partitions.forEach(function(p, i) {
         var id = "rb-modular-" + p.replace(/[^a-z0-9_-]/gi, "_");
         navHtml += "<li class=\"nav-item\"><a class=\"nav-link" + (i === 0 ? " active" : "") + "\"" +
             " data-bs-toggle=\"tab\" href=\"#" + id + "\" role=\"tab\">" + strategy_label(p) + "</a></li>";
@@ -570,9 +586,9 @@ function _renderModular(payload) {
     var fractionRemoved = [];
     for (var i = 0; i < n_points; i++) fractionRemoved.push(i / (n_points - 1));
 
-    partitions.forEach(function (p) {
+    partitions.forEach(function(p) {
         var grid = container.querySelector("[data-partition=\"" + p + "\"]");
-        strategies.forEach(function (s) {
+        strategies.forEach(function(s) {
             var curves = modular[p][s];
             if (!curves) return;
             var card = document.createElement("div");
@@ -587,7 +603,7 @@ function _renderModular(payload) {
             card.appendChild(wrap);
             grid.appendChild(card);
 
-            var buildConfig = function () { return _modularChartConfig(curves, fractionRemoved); };
+            var buildConfig = function() { return _modularChartConfig(curves, fractionRemoved); };
             var modularTitle = _labelOf(payload, s) + " (" + strategy_label(p) + ")";
             if (window.PulpitA11y) {
                 window.PulpitA11y.accessibleChart(canvas, {
@@ -618,7 +634,7 @@ function _load(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
     var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
     return fetchJson(dd + "robustness.json")
-        .then(function (payload) { _cache[year] = payload; return payload; });
+        .then(function(payload) { _cache[year] = payload; return payload; });
 }
 
 function _switch_year(year) {
@@ -626,13 +642,13 @@ function _switch_year(year) {
     _loading = true;
     // Close any open modal — its chart is built from the previous year's data.
     _closeChartModal();
-    _load(year).then(function (payload) {
+    _load(year).then(function(payload) {
         _current_year = year;
         _render(payload);
         if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
-    }).catch(function () {
+    }).catch(function() {
         document.getElementById("rb-summary").textContent = "Failed to load robustness data for " + year + ".";
-    }).finally(function () {
+    }).finally(function() {
         _loading = false;
     });
 }
@@ -642,13 +658,13 @@ function _switch_year(year) {
 Promise.all([
     _load(_current_year),
     fetchJsonOrNull(_base_dd + "timeline.json"),
-]).then(function (results) {
+]).then(function(results) {
     var payload = results[0];
     var timeline = results[1];
     _render(payload);
-    _ty = timeline ? (timeline.years || []).filter(function (y) { return y.has_robustness; }) : [];
+    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_robustness; }) : [];
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
-}).catch(function (err) {
+}).catch(function(err) {
     // Surface the actual exception in the console — silently swallowing it here
     // hides whether the failure is fetch (network / file:// scheme / 404) or a
     // downstream render bug.
@@ -656,7 +672,7 @@ Promise.all([
     var msg = "Failed to load robustness.json.";
     if (window.location.protocol === "file:") {
         msg += " The export bundle uses fetch() to load its JSON payloads, which most browsers refuse on file:// URLs. " +
-               "Open the bundle via the bundled start.sh (\"python -m http.server\") and browse it over http://localhost:8001 instead.";
+            "Open the bundle via the bundled start.sh (\"python -m http.server\") and browse it over http://localhost:8001 instead.";
     } else if (err && err.message) {
         msg += " (" + err.message + ")";
     }

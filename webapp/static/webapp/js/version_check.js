@@ -6,7 +6,7 @@
    Publishes window.pulpitVersion = { ready, dismiss } so the Maintenance page
    (backoffice/.../maintenance.js) can reuse this single lookup for its banner
    without fetching again. */
-(function () {
+(function() {
     "use strict";
 
     var DISMISS_KEY = "pulpit_dismissed_version";
@@ -29,7 +29,7 @@
     }
 
     function setDots(show) {
-        eachDot(function (dot) {
+        eachDot(function(dot) {
             dot.hidden = !show;
             var host = dot.parentElement;
             if (!host) return;
@@ -61,7 +61,7 @@
         setDots(false);
     }
 
-    var ready = (url ? fetchJsonOrNull(url) : Promise.resolve(null)).then(function (data) {
+    var ready = (url ? fetchJsonOrNull(url) : Promise.resolve(null)).then(function(data) {
         status = data;
         refreshDots();
         return data;

@@ -7,7 +7,10 @@ Promise.all([
     fetchJson("data/channels.json"),
     fetchJson("data_2/channels.json"),
 ]).then(function(results) {
-    var dataA = results[0], dataB = results[1], channelsA = results[2], channelsB = results[3];
+    var dataA = results[0],
+        dataB = results[1],
+        channelsA = results[2],
+        channelsB = results[3];
     var nodesA = channelsA.nodes;
     var nodesB = channelsB.nodes;
     var measuresA = channelsA.measures || [];
@@ -25,80 +28,125 @@ Promise.all([
     var allLabels = [];
     var seen = {};
     dataA.summary_rows.forEach(function(row) {
-        if (!seen[row.label]) { seen[row.label] = true; allLabels.push(row.label); }
+        if (!seen[row.label]) {
+            seen[row.label] = true;
+            allLabels.push(row.label);
+        }
     });
     dataB.summary_rows.forEach(function(row) {
-        if (!seen[row.label]) { seen[row.label] = true; allLabels.push(row.label); }
+        if (!seen[row.label]) {
+            seen[row.label] = true;
+            allLabels.push(row.label);
+        }
     });
 
-    var h5 = document.createElement("h5"); h5.className = "mb-2"; h5.textContent = "Whole-network metrics";
+    var h5 = document.createElement("h5");
+    h5.className = "mb-2";
+    h5.textContent = "Whole-network metrics";
     tablesSection.appendChild(h5);
     var table = document.createElement("table");
     table.className = "table table-sm table-hover";
-    var thead = document.createElement("thead"); var tr = document.createElement("tr");
+    var thead = document.createElement("thead");
+    var tr = document.createElement("tr");
     ["Metric", "This network", "Compare network"].forEach(function(label, i) {
-        var th = document.createElement("th"); th.scope = "col";
+        var th = document.createElement("th");
+        th.scope = "col";
         if (i > 0) th.className = "number";
-        th.textContent = label; tr.appendChild(th);
+        th.textContent = label;
+        tr.appendChild(th);
     });
-    thead.appendChild(tr); table.appendChild(thead);
+    thead.appendChild(tr);
+    table.appendChild(thead);
     var tbody = document.createElement("tbody");
     allLabels.forEach(function(label) {
         var tr2 = document.createElement("tr");
-        var td1 = document.createElement("td"); td1.textContent = label;
-        var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = aValueOf[label] !== undefined ? aValueOf[label] : "N/A";
-        var td3 = document.createElement("td"); td3.className = "number"; td3.textContent = bValueOf[label] !== undefined ? bValueOf[label] : "N/A";
-        tr2.appendChild(td1); tr2.appendChild(td2); tr2.appendChild(td3);
+        var td1 = document.createElement("td");
+        td1.textContent = label;
+        var td2 = document.createElement("td");
+        td2.className = "number";
+        td2.textContent = aValueOf[label] !== undefined ? aValueOf[label] : "N/A";
+        var td3 = document.createElement("td");
+        td3.className = "number";
+        td3.textContent = bValueOf[label] !== undefined ? bValueOf[label] : "N/A";
+        tr2.appendChild(td1);
+        tr2.appendChild(td2);
+        tr2.appendChild(td3);
         tbody.appendChild(tr2);
     });
-    table.appendChild(tbody); tablesSection.appendChild(table);
+    table.appendChild(tbody);
+    tablesSection.appendChild(table);
 
     if (dataA.wcc_note_visible || dataB.wcc_note_visible) {
-        var note = document.createElement("p"); note.className = "text-muted small mt-1";
+        var note = document.createElement("p");
+        note.className = "text-muted small mt-1";
         note.textContent = "† Computed on the largest weakly connected component (undirected)";
         tablesSection.appendChild(note);
     }
     if (dataA.scc_note_visible || dataB.scc_note_visible) {
-        var note2 = document.createElement("p"); note2.className = "text-muted small mt-1";
+        var note2 = document.createElement("p");
+        note2.className = "text-muted small mt-1";
         note2.textContent = "‡ Computed on the largest strongly connected component (directed)";
         tablesSection.appendChild(note2);
     }
 
     // --- Modularity comparison ---
     if ((dataA.modularity_rows && dataA.modularity_rows.length) || (dataB.modularity_rows && dataB.modularity_rows.length)) {
-        var h5m = document.createElement("h5"); h5m.className = "mb-2 mt-4"; h5m.textContent = "Modularity by strategy";
+        var h5m = document.createElement("h5");
+        h5m.className = "mb-2 mt-4";
+        h5m.textContent = "Modularity by strategy";
         tablesSection.appendChild(h5m);
 
-        var aMod = {}, bMod = {};
+        var aMod = {},
+            bMod = {};
         (dataA.modularity_rows || []).forEach(function(row) { aMod[row.strategy] = row.modularity; });
         (dataB.modularity_rows || []).forEach(function(row) { bMod[row.strategy] = row.modularity; });
 
-        var allStrategies = [], seenS = {};
+        var allStrategies = [],
+            seenS = {};
         (dataA.modularity_rows || []).forEach(function(row) {
-            if (!seenS[row.strategy]) { seenS[row.strategy] = true; allStrategies.push(row.strategy); }
+            if (!seenS[row.strategy]) {
+                seenS[row.strategy] = true;
+                allStrategies.push(row.strategy);
+            }
         });
         (dataB.modularity_rows || []).forEach(function(row) {
-            if (!seenS[row.strategy]) { seenS[row.strategy] = true; allStrategies.push(row.strategy); }
+            if (!seenS[row.strategy]) {
+                seenS[row.strategy] = true;
+                allStrategies.push(row.strategy);
+            }
         });
 
-        var modTable = document.createElement("table"); modTable.className = "table table-sm table-hover sortable";
-        var mThead = document.createElement("thead"); var mTr = document.createElement("tr");
+        var modTable = document.createElement("table");
+        modTable.className = "table table-sm table-hover sortable";
+        var mThead = document.createElement("thead");
+        var mTr = document.createElement("tr");
         ["Strategy", "This network", "Compare network"].forEach(function(label, i) {
-            var th = document.createElement("th"); th.scope = "col";
+            var th = document.createElement("th");
+            th.scope = "col";
             if (i > 0) th.className = "number";
-            th.textContent = label; mTr.appendChild(th);
+            th.textContent = label;
+            mTr.appendChild(th);
         });
-        mThead.appendChild(mTr); modTable.appendChild(mThead);
+        mThead.appendChild(mTr);
+        modTable.appendChild(mThead);
         var mTbody = document.createElement("tbody");
         allStrategies.forEach(function(strategy) {
             var tr3 = document.createElement("tr");
-            var td1 = document.createElement("td"); td1.textContent = strategy_label(strategy);
-            var td2 = document.createElement("td"); td2.className = "number"; td2.textContent = aMod[strategy] !== undefined ? aMod[strategy] : "N/A";
-            var td3 = document.createElement("td"); td3.className = "number"; td3.textContent = bMod[strategy] !== undefined ? bMod[strategy] : "N/A";
-            tr3.appendChild(td1); tr3.appendChild(td2); tr3.appendChild(td3);
+            var td1 = document.createElement("td");
+            td1.textContent = strategy_label(strategy);
+            var td2 = document.createElement("td");
+            td2.className = "number";
+            td2.textContent = aMod[strategy] !== undefined ? aMod[strategy] : "N/A";
+            var td3 = document.createElement("td");
+            td3.className = "number";
+            td3.textContent = bMod[strategy] !== undefined ? bMod[strategy] : "N/A";
+            tr3.appendChild(td1);
+            tr3.appendChild(td2);
+            tr3.appendChild(td3);
             mTbody.appendChild(tr3);
         });
-        modTable.appendChild(mTbody); tablesSection.appendChild(modTable);
+        modTable.appendChild(mTbody);
+        tablesSection.appendChild(modTable);
     }
 
     initSortableTables();
@@ -117,7 +165,10 @@ Promise.all([
     dirSel.className = "form-select form-select-sm";
     dirSel.id = "deg-dir-select";
     dirSel.style.width = "auto";
-    [["in_deg", "In-strength"], ["out_deg", "Out-strength"]].forEach(function(opt) {
+    [
+        ["in_deg", "In-strength"],
+        ["out_deg", "Out-strength"]
+    ].forEach(function(opt) {
         dirSel.appendChild(new Option(opt[1], opt[0]));
     });
     dirWrap.appendChild(dirLbl);
@@ -142,7 +193,9 @@ Promise.all([
         valsA.forEach(function(v) { countsA[Math.floor(v / binSize)]++; });
         valsB.forEach(function(v) { countsB[Math.floor(v / binSize)]++; });
         while (numBins > 1 && countsA[numBins - 1] === 0 && countsB[numBins - 1] === 0) {
-            countsA.pop(); countsB.pop(); numBins--;
+            countsA.pop();
+            countsB.pop();
+            numBins--;
         }
         var labels = countsA.map(function(_, i) {
             return (i * binSize) + "\u2013" + (i * binSize + binSize - 1);
@@ -190,7 +243,10 @@ Promise.all([
 
     if ("IntersectionObserver" in window) {
         var distObs = new IntersectionObserver(function(entries, obs) {
-            if (entries[0].isIntersecting) { obs.disconnect(); initDistChart(); }
+            if (entries[0].isIntersecting) {
+                obs.disconnect();
+                initDistChart();
+            }
         }, { threshold: 0.1 });
         distObs.observe(distSection);
     } else {
@@ -213,10 +269,16 @@ Promise.all([
 
     function makeSelect(id, labelText) {
         var wrap = document.createElement("div");
-        var lbl = document.createElement("label"); lbl.className = "form-label mb-1 d-block fw-semibold small"; lbl.htmlFor = id; lbl.textContent = labelText;
-        var sel = document.createElement("select"); sel.className = "form-select form-select-sm scatter-select"; sel.id = id;
+        var lbl = document.createElement("label");
+        lbl.className = "form-label mb-1 d-block fw-semibold small";
+        lbl.htmlFor = id;
+        lbl.textContent = labelText;
+        var sel = document.createElement("select");
+        sel.className = "form-select form-select-sm scatter-select";
+        sel.id = id;
         commonMeasures.forEach(function(m) { sel.appendChild(new Option(m[1], m[0])); });
-        wrap.appendChild(lbl); wrap.appendChild(sel);
+        wrap.appendChild(lbl);
+        wrap.appendChild(sel);
         controls.appendChild(wrap);
         return sel;
     }
@@ -224,31 +286,48 @@ Promise.all([
     var xSelect = makeSelect("x-axis-select", "X axis");
     var ySelect = makeSelect("y-axis-select", "Y axis");
 
-    var normalizeWrap = document.createElement("div"); normalizeWrap.className = "d-flex align-items-center gap-2";
-    var normalizeChk = document.createElement("input"); normalizeChk.type = "checkbox"; normalizeChk.className = "form-check-input"; normalizeChk.id = "normalize-chk";
-    var normalizeLbl = document.createElement("label"); normalizeLbl.className = "form-check-label small fw-semibold"; normalizeLbl.htmlFor = "normalize-chk"; normalizeLbl.textContent = "Normalize axes [0–1] per network";
-    normalizeWrap.appendChild(normalizeChk); normalizeWrap.appendChild(normalizeLbl);
+    var normalizeWrap = document.createElement("div");
+    normalizeWrap.className = "d-flex align-items-center gap-2";
+    var normalizeChk = document.createElement("input");
+    normalizeChk.type = "checkbox";
+    normalizeChk.className = "form-check-input";
+    normalizeChk.id = "normalize-chk";
+    var normalizeLbl = document.createElement("label");
+    normalizeLbl.className = "form-check-label small fw-semibold";
+    normalizeLbl.htmlFor = "normalize-chk";
+    normalizeLbl.textContent = "Normalize axes [0–1] per network";
+    normalizeWrap.appendChild(normalizeChk);
+    normalizeWrap.appendChild(normalizeLbl);
     controls.appendChild(normalizeWrap);
 
-    var resetWrap = document.createElement("div"); resetWrap.className = "scatter-reset-wrap";
-    var resetBtn = document.createElement("button"); resetBtn.className = "btn btn-outline-secondary btn-sm"; resetBtn.textContent = "Reset zoom";
-    resetWrap.appendChild(resetBtn); controls.appendChild(resetWrap);
+    var resetWrap = document.createElement("div");
+    resetWrap.className = "scatter-reset-wrap";
+    var resetBtn = document.createElement("button");
+    resetBtn.className = "btn btn-outline-secondary btn-sm";
+    resetBtn.textContent = "Reset zoom";
+    resetWrap.appendChild(resetBtn);
+    controls.appendChild(resetWrap);
 
-    var countNote = document.createElement("div"); countNote.className = "text-muted small ms-auto scatter-count-note";
+    var countNote = document.createElement("div");
+    countNote.className = "text-muted small ms-auto scatter-count-note";
     controls.appendChild(countNote);
 
     scatterSection.appendChild(controls);
 
-    var canvasWrap = document.createElement("div"); canvasWrap.className = "scatter-canvas-wrap";
-    var canvas = document.createElement("canvas"); canvasWrap.appendChild(canvas);
+    var canvasWrap = document.createElement("div");
+    canvasWrap.className = "scatter-canvas-wrap";
+    var canvas = document.createElement("canvas");
+    canvasWrap.appendChild(canvas);
     scatterSection.appendChild(canvasWrap);
 
     // Default axes: prefer in_deg vs pagerank
-    var defaultX = commonMeasures[0][0], defaultY = commonMeasures[1][0];
+    var defaultX = commonMeasures[0][0],
+        defaultY = commonMeasures[1][0];
     commonMeasures.forEach(function(m) { if (m[0] === "in_deg") defaultX = m[0]; });
     commonMeasures.forEach(function(m) { if (m[0] === "pagerank") defaultY = m[0]; });
     if (defaultX === defaultY) defaultY = commonMeasures.find(function(m) { return m[0] !== defaultX; })[0];
-    xSelect.value = defaultX; ySelect.value = defaultY;
+    xSelect.value = defaultX;
+    ySelect.value = defaultY;
 
     function buildPts(nodes, xKey, yKey, xMin, xRange, yMin, yRange) {
         return nodes
@@ -256,22 +335,41 @@ Promise.all([
             .map(function(n) {
                 var x = xRange ? (n[xKey] - xMin) / xRange : n[xKey];
                 var y = yRange ? (n[yKey] - yMin) / yRange : n[yKey];
-                return { x: x, y: y, label: n.label || n.id, fans: n.fans || 0, msgs: n.messages_count || 0,
-                         xRaw: n[xKey], yRaw: n[yKey] };
+                return {
+                    x: x,
+                    y: y,
+                    label: n.label || n.id,
+                    fans: n.fans || 0,
+                    msgs: n.messages_count || 0,
+                    xRaw: n[xKey],
+                    yRaw: n[yKey]
+                };
             });
     }
 
     function minMax(nodes, key) {
         var vals = nodes.map(function(n) { return n[key] || 0; });
-        var mn = arrMin(vals), mx = arrMax(vals);
+        var mn = arrMin(vals),
+            mx = arrMax(vals);
         return { min: mn, range: mx - mn || 1 };
     }
 
     function powerLawFit(pts) {
         var valid = pts.filter(function(p) { return p.x > 0 && p.y > 0; });
         if (valid.length < 2) return null;
-        var n = valid.length, sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-        valid.forEach(function(p) { var lx = Math.log(p.x), ly = Math.log(p.y); sumX += lx; sumY += ly; sumXY += lx * ly; sumX2 += lx * lx; });
+        var n = valid.length,
+            sumX = 0,
+            sumY = 0,
+            sumXY = 0,
+            sumX2 = 0;
+        valid.forEach(function(p) {
+            var lx = Math.log(p.x),
+                ly = Math.log(p.y);
+            sumX += lx;
+            sumY += ly;
+            sumXY += lx * ly;
+            sumX2 += lx * lx;
+        });
         var d = n * sumX2 - sumX * sumX;
         if (!d) return null;
         var slope = (n * sumXY - sumX * sumY) / d;
@@ -286,7 +384,8 @@ Promise.all([
         var fit = powerLawFit(valid.map(function(p) { return { x: p.xRaw, y: p.yRaw }; }));
         if (!fit) return [];
         var xs = valid.map(function(p) { return p.xRaw; });
-        var xMin = arrMin(xs), xMax = arrMax(xs);
+        var xMin = arrMin(xs),
+            xMax = arrMax(xs);
         var endpoints = [
             { x: xMin, y: Math.exp(fit.intercept) * Math.pow(xMin, fit.slope) },
             { x: xMax, y: Math.exp(fit.intercept) * Math.pow(xMax, fit.slope) }
@@ -338,7 +437,9 @@ Promise.all([
                     filter: function(item) { return item.datasetIndex % 2 === 0; },
                     callbacks: {
                         label: function(ctx) {
-                            var d = ctx.raw, xLbl = chart.options.scales.x.title.text, yLbl = chart.options.scales.y.title.text;
+                            var d = ctx.raw,
+                                xLbl = chart.options.scales.x.title.text,
+                                yLbl = chart.options.scales.y.title.text;
                             var xVal = d.xRaw !== undefined ? d.xRaw.toFixed(4) : d.x.toFixed(4);
                             var yVal = d.yRaw !== undefined ? d.yRaw.toFixed(4) : d.y.toFixed(4);
                             return ["Channel: " + d.label, xLbl + ": " + xVal, yLbl + ": " + yVal, "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
@@ -351,7 +452,8 @@ Promise.all([
     });
 
     function updateChart() {
-        var xKey = xSelect.value, yKey = ySelect.value;
+        var xKey = xSelect.value,
+            yKey = ySelect.value;
         var ds = buildDatasets(xKey, yKey);
         chart.data.datasets[0].data = ds.ptsA;
         chart.data.datasets[1].data = ds.regA;
@@ -373,7 +475,8 @@ Promise.all([
     resetBtn.addEventListener("click", function() { chart.resetZoom(); });
 }).catch(function(err) {
     var el = document.getElementById("compare-tables-section") || document.body;
-    var p = document.createElement("p"); p.textContent = "Failed to load comparison data.";
+    var p = document.createElement("p");
+    p.textContent = "Failed to load comparison data.";
     el.insertBefore(p, el.firstChild);
     console.error("network_compare_table:", err);
 });

@@ -4,15 +4,15 @@
 // LabelGroup name, injected at runtime via window.STRATEGY_LABELS (export/UI pass) — falling back to a
 // title-cased key here.
 export var STRATEGY_LABELS = {
-    leiden:           'Leiden',
-    leiden_directed:  'Leiden directed',
-    leiden_cpm:       'Leiden CPM',
-    leiden_temporal:  'Leiden temporal',
-    louvain:          'Louvain',
-    kcore:            'K-core',
-    sbm:              'Stochastic block model',
-    sbm_assortative:  'Assortative SBM',
-    consensus:        'Consensus',
+    leiden: 'Leiden',
+    leiden_directed: 'Leiden directed',
+    leiden_cpm: 'Leiden CPM',
+    leiden_temporal: 'Leiden temporal',
+    louvain: 'Louvain',
+    kcore: 'K-core',
+    sbm: 'Stochastic block model',
+    sbm_assortative: 'Assortative SBM',
+    consensus: 'Consensus',
     // Removed in v0.27 — kept so pre-0.27 exports rebuilt with fresh map assets still label it.
     labelpropagation: 'Label propagation',
 };
@@ -22,7 +22,7 @@ export var STRATEGY_LABELS = {
 // script that runs before these modules) — fold them in so strategy_label() and every other consumer
 // shows the real group name instead of a title-cased key.
 if (typeof window !== 'undefined' && window.STRATEGY_LABELS) {
-    Object.keys(window.STRATEGY_LABELS).forEach(function (k) {
+    Object.keys(window.STRATEGY_LABELS).forEach(function(k) {
         STRATEGY_LABELS[String(k).toLowerCase()] = window.STRATEGY_LABELS[k];
     });
 }
@@ -40,8 +40,12 @@ var STRATEGY_PARAMS = {
     sbm_assortative: ['refine'],
 };
 var STRATEGY_PARAM_KINDS = {
-    resolution: 'float', interslice: 'float', threshold: 'float',
-    mode: 'enum', weights: 'enum', refine: 'enum',
+    resolution: 'float',
+    interslice: 'float',
+    threshold: 'float',
+    mode: 'enum',
+    weights: 'enum',
+    refine: 'enum',
 };
 
 export function canonical_strategy_key(key) {
@@ -62,12 +66,12 @@ export function strategy_label(key) {
     // option outside their own picker (mirrors CUSTOM_LABEL_SUFFIX in network/community.py).
     if (/^labelgroup\d+$/.test(base)) label += ' [custom label]';
     if (k === base) return label;
-    var rest = k.slice(base.length + 1);          // e.g. "mode_nested_weights_poisson"
+    var rest = k.slice(base.length + 1); // e.g. "mode_nested_weights_poisson"
     var params = STRATEGY_PARAMS[base] || [];
     var parts = [];
     for (var i = 0; i < params.length; i++) {
         var prefix = params[i] + '_';
-        if (rest.indexOf(prefix) !== 0) continue;  // omitted (empty-default) parameter
+        if (rest.indexOf(prefix) !== 0) continue; // omitted (empty-default) parameter
         var valuePart = rest.slice(prefix.length);
         // The value runs until the next declared parameter's "_<name>_" boundary (suffix order is
         // spec order); enum values carry no "_" and float slugs are digits and "_", so the
@@ -86,29 +90,29 @@ export function strategy_label(key) {
 
 // Short labels shown in info-bar chips — kept terse so chips stay compact.
 export var LAYOUT_LABELS = {
-    fa2:             'FA2',
-    circular:        'Circular',
-    kamada_kawai:    'Kamada-Kawai',
+    fa2: 'FA2',
+    circular: 'Circular',
+    kamada_kawai: 'Kamada-Kawai',
     community_shell: 'Community shells',
-    tsne:            't-SNE',
-    umap:            'UMAP',
-    hyperbolic:      'Hyperbolic',
-    spectral:        'Spectral',
-    spring:          'Spring',
+    tsne: 't-SNE',
+    umap: 'UMAP',
+    hyperbolic: 'Hyperbolic',
+    spectral: 'Spectral',
+    spring: 'Spring',
 };
 
 // Verbose labels shown in dropdown options. Covers both 2D and 3D layouts;
 // the dropdown only renders entries listed in window.EXTRA_LAYOUTS / EXTRA_LAYOUTS_3D.
 export var LAYOUT_LONG_LABELS = {
-    fa2:             'Force Atlas 2',
-    circular:        'Circular',
-    kamada_kawai:    'Kamada-Kawai',
+    fa2: 'Force Atlas 2',
+    circular: 'Circular',
+    kamada_kawai: 'Kamada-Kawai',
     community_shell: 'Community shells',
-    tsne:            't-SNE',
-    umap:            'UMAP',
-    hyperbolic:      'Hyperbolic',
-    spectral:        'Spectral',
-    spring:          'Spring (Fruchterman-Reingold)',
+    tsne: 't-SNE',
+    umap: 'UMAP',
+    hyperbolic: 'Hyperbolic',
+    spectral: 'Spectral',
+    spring: 'Spring (Fruchterman-Reingold)',
 };
 
 export function layout_label(key) {
@@ -123,13 +127,13 @@ export function layout_long_label(key) {
 
 export var LABELS_MODE_LABELS = {
     on_size: 'Auto labels',
-    always:  'Labels on',
-    never:   'Labels off',
+    always: 'Labels on',
+    never: 'Labels off',
 };
 
 export var THEME_LABELS = {
-    dark:    'Dark',
-    light:   'Light',
+    dark: 'Dark',
+    light: 'Light',
     minimal: 'Minimal',
-    print:   'Print',
+    print: 'Print',
 };
