@@ -36,6 +36,34 @@ logger = logging.getLogger(__name__)
 # 0 = no limit).
 DOWNLOAD_TIMEOUT_SECONDS = 240
 
+# Files whose download already timed out in this process. A second attempt in the
+# same run — e.g. --fix-missing-media re-flagging a file --get-new-messages just
+# gave up on, or the fix handler re-walking a retried message — would only stall
+# the crawl for another full timeout, so the file is skipped until the next run.
+# Module-level on purpose: one run builds several MediaHandler instances.
+_TIMED_OUT_THIS_RUN: set[tuple] = set()
+
+
+def _media_identity(telegram_object: Any, thumb: Any) -> tuple | None:
+    """Stable identity of the file a download would fetch, or ``None`` if unknown.
+
+    Message objects carry the file as ``media.photo`` / ``media.document``;
+    profile pictures arrive as bare Photo objects (id directly on the object).
+    Telegram file ids are globally unique, so the id identifies the file;
+    ``thumb`` joins the key because a thumbnail is a separate, much smaller
+    download that may well succeed where the full file timed out.
+    """
+    media = getattr(telegram_object, "media", None)
+    if media is not None:
+        for attr in ("photo", "document"):
+            file_id = getattr(getattr(media, attr, None), "id", None)
+            if file_id is not None:
+                return (attr, file_id, thumb)
+    file_id = getattr(telegram_object, "id", None)
+    if file_id is not None:
+        return (type(telegram_object).__name__, file_id, thumb)
+    return None
+
 
 def _friendly_media_error(exc: Exception) -> str:
     """Translate a media-download failure into a short, plain-language reason.
@@ -145,6 +173,10 @@ class MediaHandler:
         self.download_timeout = download_timeout
 
     def _download_media(self, telegram_object: Any, thumb: Any = None) -> str | None:
+        identity = _media_identity(telegram_object, thumb)
+        if identity is not None and identity in _TIMED_OUT_THIS_RUN:
+            logger.info("Skipping a media file whose download already timed out during this run")
+            return None
         kwargs: dict[str, Any] = {"file": self.download_temp_dir} if self.download_temp_dir else {}
         if thumb is not None:
             # Telethon's ``thumb`` param picks a specific size from ``photo.sizes``
@@ -166,7 +198,12 @@ class MediaHandler:
                     async_download(client, telegram_object, **kwargs), self.download_timeout or None
                 )
             except asyncio.TimeoutError:
-                logger.warning("Media download timed out after %ss; skipping file", self.download_timeout)
+                if identity is not None:
+                    _TIMED_OUT_THIS_RUN.add(identity)
+                logger.warning(
+                    "Media download timed out after %ss; skipping this file for the rest of the run",
+                    self.download_timeout,
+                )
                 return None
 
         return client.loop.run_until_complete(_run())

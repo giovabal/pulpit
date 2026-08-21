@@ -41,7 +41,7 @@ Optional knobs for the Telethon client.
 | `TELEGRAM_IGNORE_FLOODWAIT` | `False` = sleep `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` on FloodWait; `True` = skip the operation silently and continue | `True` |
 | `TELEGRAM_FLOODWAIT_SLEEP_SECONDS` | Seconds to sleep when `TELEGRAM_IGNORE_FLOODWAIT=False` and a long flood-wait fires | `900` |
 | `TELEGRAM_CRAWLER_GRACE_TIME` | Seconds to wait between API requests | `1` |
-| `TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT` | Give up on any single media file after this many seconds and skip it, so one stalled transfer can't hang the whole crawl (`0` = wait forever). Raise it if large videos get skipped with "Media download timed out". Per-run override: `--download-timeout` on `crawl_channels`, or the **Timeout (s)** input in the Media types fieldset of the Operations panel | `240` |
+| `TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT` | Give up on any single media file after this many seconds and skip it, so one stalled transfer can't hang the whole crawl (`0` = wait forever). A timed-out file is not re-attempted during the same run (a later `--fix-missing-media` pass in the same crawl skips it too); the next run tries it again. Raise it if large videos get skipped with "Media download timed out". Per-run override: `--download-timeout` on `crawl_channels`, or the **Timeout (s)** input in the Media types fieldset of the Operations panel | `240` |
 
 ---
 

@@ -937,6 +937,12 @@ class MediaHandlerCleanupTests(TestCase):
 class MediaHandlerTimeoutTests(TestCase):
     """The per-file download timeout in _download_media (0 = no limit)."""
 
+    def setUp(self) -> None:
+        from crawler import media_handler
+
+        media_handler._TIMED_OUT_THIS_RUN.clear()
+        self.addCleanup(media_handler._TIMED_OUT_THIS_RUN.clear)
+
     def _handler(self, download_media, timeout):
         from crawler.media_handler import MediaHandler
 
@@ -966,6 +972,40 @@ class MediaHandlerTimeoutTests(TestCase):
 
         handler = self._handler(download_media, timeout=0)
         self.assertEqual(handler._download_media(MagicMock()), "/tmp/file.jpg")
+
+    def test_timed_out_file_not_retried_same_run(self) -> None:
+        calls = []
+
+        async def download_media(self, obj, **kwargs):
+            calls.append(obj)
+            await asyncio.sleep(30)
+            return "/tmp/never.jpg"
+
+        handler = self._handler(download_media, timeout=0.01)
+        obj = MagicMock()
+        self.assertIsNone(handler._download_media(obj))
+        self.assertEqual(len(calls), 1)
+        # Same file again: skipped without touching Telegram — including from a
+        # different MediaHandler of the same run (the fix-missing-media handler).
+        self.assertIsNone(handler._download_media(obj))
+        other = self._handler(download_media, timeout=0.01)
+        self.assertIsNone(other._download_media(obj))
+        self.assertEqual(len(calls), 1)
+
+    def test_thumbnail_not_blocked_by_full_file_timeout(self) -> None:
+        calls = []
+
+        async def download_media(self, obj, **kwargs):
+            calls.append(kwargs.get("thumb"))
+            await asyncio.sleep(30)
+            return "/tmp/never.jpg"
+
+        handler = self._handler(download_media, timeout=0.01)
+        obj = MagicMock()
+        self.assertIsNone(handler._download_media(obj))
+        # The thumbnail is a separate, much smaller download — still attempted.
+        self.assertIsNone(handler._download_media(obj, thumb=-1))
+        self.assertEqual(calls, [None, -1])
 
 
 # ---------------------------------------------------------------------------
