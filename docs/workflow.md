@@ -295,6 +295,7 @@ python manage.py crawl_channels --get-new-messages --filter-labels 36,38   # lim
 python manage.py crawl_channels --get-new-messages --no-download-video --no-download-audio --no-download-stickers --no-download-other-media  # text-only
 python manage.py crawl_channels --get-new-messages --download-audio --download-stickers           # add audio + stickers to a default crawl
 python manage.py crawl_channels --fix-missing-media --download-images --no-download-video         # repair photos only
+python manage.py crawl_channels --get-new-messages --download-video --download-timeout 600        # allow up to 10 minutes per file (default 240s; 0 waits forever)
 
 # Generate the map
 python manage.py structural_analysis --graph-2d --html

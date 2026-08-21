@@ -454,6 +454,24 @@ class RunTaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Target export name", resp.json()["error"])
 
+    def test_run_rejects_non_numeric_download_timeout(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["crawl_channels"]),
+                {"download_timeout": "abc"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Download timeout", resp.json()["error"])
+
+    def test_run_rejects_negative_download_timeout(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["crawl_channels"]),
+                {"download_timeout": "-5"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Download timeout", resp.json()["error"])
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — WriteCliCommandView
@@ -834,6 +852,11 @@ class BuildArgsGetChannelsTests(TestCase):
         args = _build_args("crawl_channels", post)
         self.assertIn("--filter-labels", args)
         self.assertEqual(args[args.index("--filter-labels") + 1], "3,5")
+
+    def test_download_timeout_value(self):
+        args = _build_args("crawl_channels", FakePost({"download_timeout": "600"}))
+        self.assertIn("--download-timeout", args)
+        self.assertEqual(args[args.index("--download-timeout") + 1], "600")
 
 
 # ---------------------------------------------------------------------------

@@ -61,9 +61,11 @@ class CrawlOptions:
     Built once at the top of ``handle`` so the option surface is
     self-documenting in one place. Missing toggles resolve to False — a bare
     ``python manage.py crawl_channels`` does nothing; the Operations panel
-    emits explicit ``--flag`` / ``--no-flag`` for every checkbox. The one
-    config-derived fallback is ``--channel-types`` → ``DEFAULT_CHANNEL_TYPES``
-    (from ``[scope].channel_types`` in configuration/.operations-crawl).
+    emits explicit ``--flag`` / ``--no-flag`` for every checkbox. The
+    config-derived fallbacks are ``--channel-types`` → ``DEFAULT_CHANNEL_TYPES``
+    (from ``[scope].channel_types`` in configuration/.operations-crawl) and
+    ``--download-timeout`` → ``TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT``
+    (from configuration/.env).
     """
 
     # Channels phase
@@ -92,6 +94,8 @@ class CrawlOptions:
     download_audio: bool
     download_stickers: bool
     download_other_media: bool
+    # Per-file download timeout in seconds (0 = no limit)
+    download_timeout: int
 
     # Degrees phase
     in_degrees: bool
@@ -507,6 +511,16 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--download-timeout",
+            type=int,
+            default=None,
+            help=(
+                "Give up on any single media file after this many seconds and skip it; 0 waits "
+                "forever. Applies to every media download, profile pictures included. Defaults "
+                "to TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT in configuration/.env (240)."
+            ),
+        )
+        parser.add_argument(
             "--retry-lost-messages",
             action=BooleanOptionalAction,
             default=None,
@@ -915,6 +929,7 @@ class Command(BaseCommand):
             download_audio=opts.download_audio,
             download_stickers=opts.download_stickers,
             download_other_media=opts.download_other_media,
+            download_timeout=opts.download_timeout,
         )
 
         # Messages with each media_type but no corresponding record.
@@ -1266,6 +1281,14 @@ class Command(BaseCommand):
         def _resolve_optional_bool(option_value: bool | None, default: bool = False) -> bool:
             return option_value if option_value is not None else default
 
+        # Like --channel-types, --download-timeout is tuning rather than a toggle,
+        # so it keeps a config-derived fallback (.env's TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT).
+        download_timeout = options["download_timeout"]
+        if download_timeout is None:
+            download_timeout = settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT
+        if download_timeout < 0:
+            raise CommandError("--download-timeout must be zero (no limit) or a positive number of seconds.")
+
         return CrawlOptions(
             get_channels_info=_resolve_optional_bool(options["get_channels_info"]),
             update_type_excluded_info=_resolve_optional_bool(options["update_type_excluded_info"]),
@@ -1288,6 +1311,7 @@ class Command(BaseCommand):
             download_audio=_resolve_optional_bool(options["download_audio"]),
             download_stickers=_resolve_optional_bool(options["download_stickers"]),
             download_other_media=_resolve_optional_bool(options["download_other_media"]),
+            download_timeout=download_timeout,
             in_degrees=_resolve_optional_bool(options["in_degrees"]),
             out_degrees=_resolve_optional_bool(options["out_degrees"]),
             ids_str=options["ids"],
@@ -1462,6 +1486,7 @@ class Command(BaseCommand):
                         download_audio=opts.download_audio,
                         download_stickers=opts.download_stickers,
                         download_other_media=opts.download_other_media,
+                        download_timeout=opts.download_timeout,
                     )
                     reference_resolver = ReferenceResolver(api_client)
                     crawler = ChannelCrawler(api_client, media_handler, reference_resolver)

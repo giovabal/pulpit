@@ -383,6 +383,9 @@ TELEGRAM_FLOOD_SLEEP_THRESHOLD = config("TELEGRAM_FLOOD_SLEEP_THRESHOLD", defaul
 IGNORE_FLOODWAIT = config("TELEGRAM_IGNORE_FLOODWAIT", default=True, cast=bool)
 TELEGRAM_FLOODWAIT_SLEEP_SECONDS = config("TELEGRAM_FLOODWAIT_SLEEP_SECONDS", default=900, cast=int)
 TELEGRAM_CRAWLER_GRACE_TIME = config("TELEGRAM_CRAWLER_GRACE_TIME", default=1, cast=int)
+# Per-file media download timeout in seconds (0 = no limit); the
+# --download-timeout flag on crawl_channels overrides it per run.
+TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT = config("TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT", default=240, cast=int)
 
 # ── Access control (.env) ─────────────────────────────────────────────────────
 # The project title (and its description/criteria/notes) now lives in the DB,
