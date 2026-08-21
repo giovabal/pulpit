@@ -1378,6 +1378,101 @@ class MediaHandlerMessagePictureTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# MediaHandler — sibling-file reuse (forwarded media downloaded once)
+# ---------------------------------------------------------------------------
+
+
+class MediaHandlerSiblingReuseTests(TestCase):
+    """A file already stored for the same Telegram file id is linked, not re-downloaded."""
+
+    def setUp(self) -> None:
+        from crawler.media_handler import MediaHandler
+
+        self.api_client = _make_api_client()
+        self.handler = MediaHandler(self.api_client, download_images=True, download_video=True)
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel_a = make_channel(telegram_id=10, label=self.org)
+        self.channel_b = make_channel(telegram_id=20, label=self.org)
+        self.original = Message.objects.create(telegram_id=1, channel=self.channel_a)
+        self.forward = Message.objects.create(telegram_id=2, channel=self.channel_b)
+
+    def _tg_photo_message(self, channel_tid: int, msg_tid: int, photo_id: int = 42) -> MagicMock:
+        tm = MagicMock()
+        tm.id = msg_tid
+        tm.peer_id.channel_id = channel_tid
+        tm.media.photo = MagicMock()
+        tm.media.photo.id = photo_id
+        tm.media.photo.date = None
+        return tm
+
+    def test_forward_links_to_existing_file_without_download(self) -> None:
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                row = MessagePicture.objects.create(message=self.original, telegram_id=42)
+                row.picture.save("seed.jpg", ContentFile(b"shared-bytes"), save=True)
+
+                self.handler._download_media = MagicMock(return_value="/tmp/should-not-be-used.jpg")
+                tm = self._tg_photo_message(channel_tid=20, msg_tid=2)
+                result = self.handler.download_message_picture(tm)
+
+                self.assertEqual(result, 1)
+                self.handler._download_media.assert_not_called()
+                linked = MessagePicture.objects.get(telegram_id=42, message=self.forward)
+                self.assertEqual(linked.picture.name, "photos/42.jpg")
+                # The shared bytes are still on disk, untouched.
+                with open(os.path.join(media_root, "photos", "42.jpg"), "rb") as fh:
+                    self.assertEqual(fh.read(), b"shared-bytes")
+
+    def test_sibling_with_missing_disk_file_still_downloads(self) -> None:
+        from webapp.models import MessagePicture
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                # A row exists but its file is gone from disk — reuse must not trust it.
+                MessagePicture.objects.create(message=self.original, telegram_id=42, picture="photos/42.jpg")
+
+                src = os.path.join(media_root, "src.jpg")
+                with open(src, "wb") as fh:
+                    fh.write(b"fresh-bytes")
+                self.handler._download_media = MagicMock(return_value=src)
+                tm = self._tg_photo_message(channel_tid=20, msg_tid=2)
+                result = self.handler.download_message_picture(tm)
+
+                self.assertEqual(result, 1)
+                self.handler._download_media.assert_called_once()
+
+    def test_video_document_reuses_sibling_file(self) -> None:
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessageVideo
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                row = MessageVideo.objects.create(message=self.original, telegram_id=77)
+                row.video.save("seed.mp4", ContentFile(b"video-bytes"), save=True)
+
+                tm = MagicMock()
+                tm.id = 2
+                tm.peer_id.channel_id = 20
+                tm.document = None
+                tm.media.document.id = 77
+                tm.media.document.mime_type = "video/mp4"
+                tm.media.document.attributes = []
+                tm.media.document.date = None
+                self.handler._download_media = MagicMock(return_value="/tmp/should-not-be-used.mp4")
+                result = self.handler.download_message_video(tm)
+
+                self.assertEqual(result, 1)
+                self.handler._download_media.assert_not_called()
+                linked = MessageVideo.objects.get(telegram_id=77, message=self.forward)
+                self.assertEqual(linked.video.name, "videos/77.mp4")
+
+
+# ---------------------------------------------------------------------------
 # MediaHandler — download_message_video
 # ---------------------------------------------------------------------------
 

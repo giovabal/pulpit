@@ -212,6 +212,36 @@ class MediaHandler:
         if filename and os.path.exists(filename):
             os.remove(filename)
 
+    def _existing_sibling_file(self, model: type, file_field: str, file_id: Any) -> str | None:
+        """Relative name of a file already stored for this Telegram file id, or ``None``.
+
+        A forwarded photo/document keeps its Telegram file id wherever it
+        appears, and ``get_media_path`` keys the stored file on that id — so a
+        sibling row for the same id whose file is still on disk already holds
+        the exact bytes a download would fetch. Linking to it skips the
+        Telegram round-trip entirely.
+
+        Telegram file ids are always ints; anything else (absent attribute,
+        test doubles) skips reuse rather than risking a broken DB lookup.
+        """
+        if not isinstance(file_id, int):
+            return None
+        names = (
+            model.objects.filter(telegram_id=file_id)
+            .exclude(**{file_field: ""})
+            .values_list(file_field, flat=True)
+            .distinct()
+        )
+        for name in names:
+            if name and os.path.exists(os.path.join(settings.MEDIA_ROOT, name)):
+                return name
+        return None
+
+    def _link_sibling_file(self, obj: Any, file_field: str, name: str, kind: str, message_id: Any) -> None:
+        getattr(obj, file_field).name = name
+        obj.save(update_fields=[file_field])
+        logger.info("Linked the %s in message %s to its already-stored file (no download needed)", kind, message_id)
+
     def download_profile_picture(self, telegram_channel: Any) -> int:
         pictures_downloaded = 0
         channel = Channel.objects.filter(telegram_id=telegram_channel.id).first()
@@ -310,29 +340,36 @@ class MediaHandler:
             return 0
         if not hasattr(telegram_message.media, "photo"):
             return 0
+        reused_name = self._existing_sibling_file(
+            MessagePicture, "picture", getattr(telegram_message.media.photo, "id", None)
+        )
+        picture_filename: str | None = None
         try:
-            picture_filename = self._download_media(telegram_message)
-            if not picture_filename:
-                # _download_media returned None (timeout) or an empty path. Without this
-                # guard, MessagePicture.from_telegram_object would still create a row
-                # with picture=NULL — a "zombie" that messagepicture__isnull=True can no
-                # longer recover via --fix-missing-media.
-                logger.warning(
-                    "The picture in message %s came back empty (it may have timed out); skipping it.",
-                    telegram_message.id,
-                )
-                return 0
-            MessagePicture.from_telegram_object(
-                telegram_message.media.photo,
-                force_update=True,
-                defaults={
-                    "message": Message.objects.get(
-                        channel__telegram_id=telegram_message.peer_id.channel_id,
-                        telegram_id=telegram_message.id,
-                    ),
-                    "picture": picture_filename,
-                },
+            if reused_name is None:
+                picture_filename = self._download_media(telegram_message)
+                if not picture_filename:
+                    # _download_media returned None (timeout) or an empty path. Without this
+                    # guard, MessagePicture.from_telegram_object would still create a row
+                    # with picture=NULL — a "zombie" that messagepicture__isnull=True can no
+                    # longer recover via --fix-missing-media.
+                    logger.warning(
+                        "The picture in message %s came back empty (it may have timed out); skipping it.",
+                        telegram_message.id,
+                    )
+                    return 0
+            defaults: dict[str, Any] = {
+                "message": Message.objects.get(
+                    channel__telegram_id=telegram_message.peer_id.channel_id,
+                    telegram_id=telegram_message.id,
+                ),
+            }
+            if picture_filename:
+                defaults["picture"] = picture_filename
+            obj = MessagePicture.from_telegram_object(
+                telegram_message.media.photo, force_update=True, defaults=defaults
             )
+            if reused_name is not None:
+                self._link_sibling_file(obj, "picture", reused_name, "picture", telegram_message.id)
             self._cleanup_downloaded_file(picture_filename)
             return 1
         except (
@@ -365,27 +402,30 @@ class MediaHandler:
             return 0
         if _is_sticker(document):
             return 0
+        reused_name = self._existing_sibling_file(MessageVideo, "video", getattr(document, "id", None))
+        video_filename: str | None = None
         try:
-            video_filename = self._download_media(telegram_message)
-            if not video_filename:
-                logger.warning(
-                    "The video in message %s came back empty (it may have timed out); skipping it.",
-                    telegram_message.id,
-                )
-                return 0
-            MessageVideo.from_telegram_object(
-                document,
-                force_update=True,
-                defaults={
-                    "message": Message.objects.get(
-                        channel__telegram_id=telegram_message.peer_id.channel_id,
-                        telegram_id=telegram_message.id,
-                    ),
-                    "video": video_filename,
-                    "is_animated": _is_animated(document),
-                    "is_round": _is_round_video(document),
-                },
-            )
+            if reused_name is None:
+                video_filename = self._download_media(telegram_message)
+                if not video_filename:
+                    logger.warning(
+                        "The video in message %s came back empty (it may have timed out); skipping it.",
+                        telegram_message.id,
+                    )
+                    return 0
+            defaults: dict[str, Any] = {
+                "message": Message.objects.get(
+                    channel__telegram_id=telegram_message.peer_id.channel_id,
+                    telegram_id=telegram_message.id,
+                ),
+                "is_animated": _is_animated(document),
+                "is_round": _is_round_video(document),
+            }
+            if video_filename:
+                defaults["video"] = video_filename
+            obj = MessageVideo.from_telegram_object(document, force_update=True, defaults=defaults)
+            if reused_name is not None:
+                self._link_sibling_file(obj, "video", reused_name, "video", telegram_message.id)
             self._cleanup_downloaded_file(video_filename)
             return 1
         except (
@@ -418,23 +458,26 @@ class MediaHandler:
         if not _is_audio(document):
             return 0
         mime_type = getattr(document, "mime_type", "") or ""
+        reused_name = self._existing_sibling_file(MessageAudio, "audio", getattr(document, "id", None))
+        audio_filename: str | None = None
         try:
-            audio_filename = self._download_media(telegram_message)
-            if not audio_filename:
-                return 0
-            MessageAudio.from_telegram_object(
-                document,
-                force_update=True,
-                defaults={
-                    "message": Message.objects.get(
-                        channel__telegram_id=telegram_message.peer_id.channel_id,
-                        telegram_id=telegram_message.id,
-                    ),
-                    "audio": audio_filename,
-                    "mime_type": mime_type,
-                    "is_voice": _is_voice(document),
-                },
-            )
+            if reused_name is None:
+                audio_filename = self._download_media(telegram_message)
+                if not audio_filename:
+                    return 0
+            defaults: dict[str, Any] = {
+                "message": Message.objects.get(
+                    channel__telegram_id=telegram_message.peer_id.channel_id,
+                    telegram_id=telegram_message.id,
+                ),
+                "mime_type": mime_type,
+                "is_voice": _is_voice(document),
+            }
+            if audio_filename:
+                defaults["audio"] = audio_filename
+            obj = MessageAudio.from_telegram_object(document, force_update=True, defaults=defaults)
+            if reused_name is not None:
+                self._link_sibling_file(obj, "audio", reused_name, "audio", telegram_message.id)
             self._cleanup_downloaded_file(audio_filename)
             return 1
         except (
@@ -461,23 +504,26 @@ class MediaHandler:
         if not _is_sticker(document):
             return 0
         mime_type = getattr(document, "mime_type", "") or ""
+        reused_name = self._existing_sibling_file(MessageSticker, "sticker", getattr(document, "id", None))
+        sticker_filename: str | None = None
         try:
-            sticker_filename = self._download_media(telegram_message)
-            if not sticker_filename:
-                return 0
-            MessageSticker.from_telegram_object(
-                document,
-                force_update=True,
-                defaults={
-                    "message": Message.objects.get(
-                        channel__telegram_id=telegram_message.peer_id.channel_id,
-                        telegram_id=telegram_message.id,
-                    ),
-                    "sticker": sticker_filename,
-                    "mime_type": mime_type,
-                    "is_animated": _is_animated(document) or mime_type == "application/x-tgsticker",
-                },
-            )
+            if reused_name is None:
+                sticker_filename = self._download_media(telegram_message)
+                if not sticker_filename:
+                    return 0
+            defaults: dict[str, Any] = {
+                "message": Message.objects.get(
+                    channel__telegram_id=telegram_message.peer_id.channel_id,
+                    telegram_id=telegram_message.id,
+                ),
+                "mime_type": mime_type,
+                "is_animated": _is_animated(document) or mime_type == "application/x-tgsticker",
+            }
+            if sticker_filename:
+                defaults["sticker"] = sticker_filename
+            obj = MessageSticker.from_telegram_object(document, force_update=True, defaults=defaults)
+            if reused_name is not None:
+                self._link_sibling_file(obj, "sticker", reused_name, "sticker", telegram_message.id)
             self._cleanup_downloaded_file(sticker_filename)
             return 1
         except (
@@ -513,22 +559,25 @@ class MediaHandler:
             return 0
         if _is_audio(document):
             return 0
+        reused_name = self._existing_sibling_file(MessageOtherMedia, "media_file", getattr(document, "id", None))
+        other_filename: str | None = None
         try:
-            other_filename = self._download_media(telegram_message)
-            if not other_filename:
-                return 0
-            MessageOtherMedia.from_telegram_object(
-                document,
-                force_update=True,
-                defaults={
-                    "message": Message.objects.get(
-                        channel__telegram_id=telegram_message.peer_id.channel_id,
-                        telegram_id=telegram_message.id,
-                    ),
-                    "media_file": other_filename,
-                    "mime_type": mime_type,
-                },
-            )
+            if reused_name is None:
+                other_filename = self._download_media(telegram_message)
+                if not other_filename:
+                    return 0
+            defaults: dict[str, Any] = {
+                "message": Message.objects.get(
+                    channel__telegram_id=telegram_message.peer_id.channel_id,
+                    telegram_id=telegram_message.id,
+                ),
+                "mime_type": mime_type,
+            }
+            if other_filename:
+                defaults["media_file"] = other_filename
+            obj = MessageOtherMedia.from_telegram_object(document, force_update=True, defaults=defaults)
+            if reused_name is not None:
+                self._link_sibling_file(obj, "media_file", reused_name, "file", telegram_message.id)
             self._cleanup_downloaded_file(other_filename)
             return 1
         except (
