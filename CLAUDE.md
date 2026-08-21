@@ -47,7 +47,7 @@ See [docs/workflow.md](docs/workflow.md) for all flags and options.
 - **`crawler/channel_crawler.py`** (`ChannelCrawler`) — Core Telegram crawler: rate limiting, flood-wait handling, message fetching, reference resolution orchestration.
 - **`crawler/client.py`** — `TelegramAPIClient` wrapper around Telethon.
 - **`crawler/hole_fixer.py`** — Detects and fills gaps in per-channel message ID sequences.
-- **`crawler/media_handler.py`** — Media download and storage.
+- **`crawler/media_handler.py`** — Media download and storage. Message-media files are stored once per Telegram file id (`get_media_path` keys the path on the id, so forwards share one file); before downloading, `_existing_sibling_file` links a new message to an already-stored sibling file instead of re-fetching it from Telegram.
 - **`crawler/reference_resolver.py`** — Resolves `t.me/` references to `Channel` records.
 - **`network/graph_builder.py`** — Builds the NetworkX `DiGraph` from Django ORM objects.
 - **`network/measures/`** — All centrality and influence measures; `apply_*` functions split across `_centrality.py` and `_content.py`; registry in `_registry.py`.
