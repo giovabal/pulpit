@@ -516,8 +516,9 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Give up on any single media file after this many seconds and skip it; 0 waits "
-                "forever. Applies to every media download, profile pictures included. Defaults "
-                "to TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT in configuration/.env (240)."
+                "forever. A timed-out file is not re-attempted during the same run. Applies to "
+                "every media download, profile pictures included. Defaults to "
+                "TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT in configuration/.env (240)."
             ),
         )
         parser.add_argument(
