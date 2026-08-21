@@ -31,7 +31,10 @@ from telethon.tl.types import (
 
 logger = logging.getLogger(__name__)
 
-DOWNLOAD_TIMEOUT_SECONDS = 120
+# Default per-file download timeout, mirroring the TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT
+# env default; the effective value is per-instance (``MediaHandler(download_timeout=…)``,
+# 0 = no limit).
+DOWNLOAD_TIMEOUT_SECONDS = 240
 
 
 def _friendly_media_error(exc: Exception) -> str:
@@ -130,6 +133,7 @@ class MediaHandler:
         download_audio: bool = False,
         download_stickers: bool = False,
         download_other_media: bool = False,
+        download_timeout: int = DOWNLOAD_TIMEOUT_SECONDS,
     ) -> None:
         self.api_client = api_client
         self.download_temp_dir = download_temp_dir
@@ -138,6 +142,7 @@ class MediaHandler:
         self.download_audio = download_audio
         self.download_stickers = download_stickers
         self.download_other_media = download_other_media
+        self.download_timeout = download_timeout
 
     def _download_media(self, telegram_object: Any, thumb: Any = None) -> str | None:
         kwargs: dict[str, Any] = {"file": self.download_temp_dir} if self.download_temp_dir else {}
@@ -158,10 +163,10 @@ class MediaHandler:
         async def _run() -> str | None:
             try:
                 return await asyncio.wait_for(
-                    async_download(client, telegram_object, **kwargs), DOWNLOAD_TIMEOUT_SECONDS
+                    async_download(client, telegram_object, **kwargs), self.download_timeout or None
                 )
             except asyncio.TimeoutError:
-                logger.warning("Media download timed out after %ss; skipping file", DOWNLOAD_TIMEOUT_SECONDS)
+                logger.warning("Media download timed out after %ss; skipping file", self.download_timeout)
                 return None
 
         return client.loop.run_until_complete(_run())

@@ -127,7 +127,7 @@ class Command(BaseCommand):
             flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
         ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
             api_client = TelegramAPIClient(client)
-            media_handler = MediaHandler(api_client)
+            media_handler = MediaHandler(api_client, download_timeout=settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT)
             reference_resolver = ReferenceResolver(api_client)
             crawler = ChannelCrawler(api_client, media_handler, reference_resolver)
             # Direct adds run first: each is a single cheap get_entity call, so a long

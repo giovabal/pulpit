@@ -293,6 +293,15 @@
                        title="Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.)."></i>
                   </label>
                 </div>
+                <div class="ops-params mt-2">
+                  <div class="ops-param">
+                    <label for="download_timeout">Timeout (s)
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Give up on any single media file after this many seconds and skip it — the crawl moves on. Raise it if large videos get skipped; 0 waits forever."></i>
+                    </label>
+                    <input type="number" name="download_timeout" id="download_timeout" placeholder="{{ ad.CRAWL_DOWNLOAD_TIMEOUT }}" value="{{ ad.CRAWL_DOWNLOAD_TIMEOUT }}" min="0" step="1" data-width="sm" data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">
+                  </div>
+                </div>
               </fieldset>
 
               <fieldset class="ops-fieldset">

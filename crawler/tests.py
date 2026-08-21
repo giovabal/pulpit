@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import io
 import logging
@@ -931,6 +932,40 @@ class MediaHandlerCleanupTests(TestCase):
         obj = MagicMock()
         handler._download_media(obj)
         self.api_client.client.download_media.assert_called_once_with(obj, file="/tmp/test_dl")
+
+
+class MediaHandlerTimeoutTests(TestCase):
+    """The per-file download timeout in _download_media (0 = no limit)."""
+
+    def _handler(self, download_media, timeout):
+        from crawler.media_handler import MediaHandler
+
+        # A plain class (not MagicMock) so _download_media takes the async
+        # unwrap path that applies the timeout.
+        client = type("FakeClient", (), {"download_media": download_media})()
+        client.loop = asyncio.new_event_loop()
+        self.addCleanup(client.loop.close)
+        api_client = MagicMock()
+        api_client.client = client
+        return MediaHandler(api_client, download_timeout=timeout)
+
+    def test_timed_out_download_returns_none(self) -> None:
+        async def download_media(self, obj, **kwargs):
+            await asyncio.sleep(30)
+            return "/tmp/never.jpg"
+
+        handler = self._handler(download_media, timeout=0.01)
+        self.assertIsNone(handler._download_media(MagicMock()))
+
+    def test_zero_timeout_means_no_limit(self) -> None:
+        # wait_for(..., 0) would cancel a still-pending download immediately;
+        # 0 must translate to "no timeout" instead.
+        async def download_media(self, obj, **kwargs):
+            await asyncio.sleep(0)
+            return "/tmp/file.jpg"
+
+        handler = self._handler(download_media, timeout=0)
+        self.assertEqual(handler._download_media(MagicMock()), "/tmp/file.jpg")
 
 
 # ---------------------------------------------------------------------------

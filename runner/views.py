@@ -104,6 +104,7 @@ class OperationsView(View):
             "CRAWL_DOWNLOAD_AUDIO": settings.TELEGRAM_CRAWLER_DOWNLOAD_AUDIO,
             "CRAWL_DOWNLOAD_STICKERS": settings.TELEGRAM_CRAWLER_DOWNLOAD_STICKERS,
             "CRAWL_DOWNLOAD_OTHER_MEDIA": settings.TELEGRAM_CRAWLER_DOWNLOAD_OTHER_MEDIA,
+            "CRAWL_DOWNLOAD_TIMEOUT": settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT,
             "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
             "CRAWL_OUT_DEGREES": settings.CRAWL_OUT_DEGREES,
             # SA outputs
@@ -566,6 +567,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("bool_explicit", "download_audio", "--download-audio", "--no-download-audio"),
         ("bool_explicit", "download_stickers", "--download-stickers", "--no-download-stickers"),
         ("bool_explicit", "download_other_media", "--download-other-media", "--no-download-other-media"),
+        ("value", "download_timeout", "--download-timeout"),
         # Degrees
         ("bool_explicit", "in_degrees", "--in-degrees", "--no-in-degrees"),
         ("bool_explicit", "out_degrees", "--out-degrees", "--no-out-degrees"),
@@ -811,6 +813,9 @@ def _validate_post_constraints(task: str, post: Any) -> None:
     * ``search_channels``: ``amount``, when set, must be a positive integer.
       QuerySet slicing with non-positive values silently returns an empty
       or counterintuitive (negative-index) slice.
+
+    * ``crawl_channels``: ``download_timeout``, when set, must be zero
+      (no limit) or a positive integer number of seconds.
     """
     if not hasattr(post, "getlist"):
         return
@@ -883,6 +888,17 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                 raise ValueError(f"Amount must be an integer, got {raw_amount!r}") from exc
             if amount < 0:
                 raise ValueError(f"Amount must be zero or a positive integer, got {amount}")
+        return
+
+    if task == "crawl_channels":
+        raw_timeout = (post.get("download_timeout") or "").strip()
+        if raw_timeout:
+            try:
+                timeout = int(raw_timeout)
+            except ValueError as exc:
+                raise ValueError(f"Download timeout must be an integer number of seconds, got {raw_timeout!r}") from exc
+            if timeout < 0:
+                raise ValueError(f"Download timeout must be zero (no limit) or positive, got {timeout}")
         return
 
 
