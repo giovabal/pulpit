@@ -1019,6 +1019,19 @@ class ChannelDetailViewTests(TestCase):
         self.assertContains(response, "Not monitored")
         self.assertContains(response, "ch-msg-tabs")
 
+    def test_header_lists_held_and_inherited_affiliations(self) -> None:
+        continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        europe = make_label(name="Europe", group=continents, is_in_target=False)
+        nations = LabelGroup.objects.create(name="Nation")
+        italy = make_label(name="Italy", group=nations, is_in_target=True)
+        LabelParent.objects.create(label=italy, parent=europe)
+        attribute(self.ch, italy)
+
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.ch.pk}))
+        self.assertContains(response, "Nation:</span>Italy")
+        # Europe is never linked to the channel — it is inherited through Italy.
+        self.assertContains(response, "Continents:</span>Europe")
+
 
 # ─── VacanciesView ─────────────────────────────────────────────────────────────
 
@@ -1882,6 +1895,50 @@ class CurrentLabelTests(TestCase):
                 for _ in range(5):
                     self.assertEqual(channel.current_label, self.org_a)
                     self.assertEqual(channel.current_labels, [self.org_a])
+
+
+class CurrentAffiliationsTests(TestCase):
+    """``current_affiliations`` adds the container labels a channel inherits.
+
+    Container labels are never linked to channels directly, so a channel labelled
+    Nation "Italy" only reveals its Continents "Europe" affiliation through the
+    label→parent links.
+    """
+
+    def setUp(self) -> None:
+        self.continents = LabelGroup.objects.create(name="Continents", is_container=True)
+        self.europe = make_label(name="Europe", group=self.continents, is_in_target=False)
+        self.nations = LabelGroup.objects.create(name="Nation")
+        self.italy = make_label(name="Italy", group=self.nations, is_in_target=True)
+        self.spain = make_label(name="Spain", group=self.nations, is_in_target=True)
+        LabelParent.objects.create(label=self.italy, parent=self.europe)
+        LabelParent.objects.create(label=self.spain, parent=self.europe)
+
+    def test_container_parent_of_a_held_label_is_included(self) -> None:
+        ch = make_channel(telegram_id=1, label=self.italy)
+        # Neither group is primary, so they order by group name: Continents, then Nation.
+        self.assertEqual(ch.current_affiliations, [self.europe, self.italy])
+
+    def test_primary_group_still_comes_first(self) -> None:
+        org = make_label(name="OrgA", is_in_target=True)  # the primary "Organization" group
+        ch = make_channel(telegram_id=2, label=org)
+        attribute(ch, self.italy)
+        self.assertEqual(ch.current_affiliations, [org, self.europe, self.italy])
+
+    def test_two_children_of_one_container_yield_a_single_entry(self) -> None:
+        # The Nation group is not a partition, so a channel may hold both at once;
+        # Europe must still appear once.
+        ch = make_channel(telegram_id=3, label=self.italy)
+        attribute(ch, self.spain)
+        self.assertEqual(ch.current_affiliations.count(self.europe), 1)
+
+    def test_matches_current_labels_when_nothing_is_parented(self) -> None:
+        LabelParent.objects.all().delete()
+        ch = make_channel(telegram_id=4, label=self.italy)
+        self.assertEqual(ch.current_affiliations, ch.current_labels)
+
+    def test_unlabelled_channel_has_no_affiliations(self) -> None:
+        self.assertEqual(make_channel(telegram_id=5).current_affiliations, [])
 
 
 class FetchModeGuardTests(TestCase):

@@ -496,6 +496,12 @@ body {
   color: var(--warning);
 }
 
+/* Group name prefixing an affiliation chip ("Continents: Europe"), dimmed so the
+   label itself still reads first in a row of several affiliations. */
+.ch-affiliation-group {
+  opacity: .65;
+}
+
 .ch-online-dot {
   font-size: .45rem;
   color: #16a34a;
