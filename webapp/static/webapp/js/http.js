@@ -3,7 +3,7 @@
    every template that extends webapp/index.html. The static HTML export bundle
    has module equivalents in webapp_engine/map/js/utils.js. */
 
-/* exported fetchJson, fetchJsonOrNull, getCsrfToken, formDataWithCsrf */
+/* exported fetchJson, fetchJsonOrNull, getCsrfToken, formDataWithCsrf, hardenCsrfForm */
 
 // Read Django's CSRF cookie for unsafe (POST/PUT/DELETE) requests. The name is
 // anchored to a cookie boundary so a cookie merely *ending* in "csrftoken" (or a
@@ -24,6 +24,21 @@ function formDataWithCsrf(form) {
     if (token) fd.set("csrfmiddlewaretoken", token);
     else fd.delete("csrfmiddlewaretoken");
     return fd;
+}
+
+// Refresh a plain form's rendered CSRF field from the cookie as it submits — the
+// same staleness formDataWithCsrf() guards against, for a normal <form> POST where
+// there is no X-CSRFToken header to fall back to. The submitted entry list is built
+// after the submit event is dispatched, so writing the field here is what gets sent.
+// An unreadable cookie leaves the rendered token in place: never trade a token that
+// might be valid for an empty one.
+function hardenCsrfForm(form) {
+    if (!form) return;
+    form.addEventListener("submit", function() {
+        var field = form.querySelector('input[name="csrfmiddlewaretoken"]');
+        var token = getCsrfToken();
+        if (field && token) field.value = token;
+    });
 }
 
 // Fetch JSON, rejecting on any non-2xx response. Use for required resources.
