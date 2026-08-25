@@ -204,6 +204,32 @@ class Channel(TelegramBaseModel):
         labels = [label for gid in group_ids if (label := self.representative_label(gid)) is not None]
         return sorted(labels, key=lambda label: (not label.group.is_primary, label.group.name))
 
+    @property
+    def current_affiliations(self) -> "list[Label]":
+        """Every label affiliation identified for the channel now — held *and* inherited.
+
+        :attr:`current_labels` plus the *container* labels those resolve up to: a
+        channel labelled Nation "Italy" is also affiliated with Continents "Europe",
+        which never shows up in :attr:`current_labels` because container labels are
+        purely structural and are never linked to channels directly. Two held labels
+        under the same container yield one entry. Ordered primary group first, then by
+        group name, so a container reads alongside the labels it gathers.
+
+        Costs one extra query for the parent links, so this is for the single-channel
+        detail view — iterate :attr:`current_labels` on list pages.
+        """
+        from webapp.models import LabelParent
+
+        held = self.current_labels
+        parents = [link.parent for link in LabelParent.objects.filter(label__in=held).select_related("parent__group")]
+        seen: set[int] = set()
+        affiliations: list[Label] = []
+        for label in (*held, *parents):
+            if label.pk not in seen:
+                seen.add(label.pk)
+                affiliations.append(label)
+        return sorted(affiliations, key=lambda label: (not label.group.is_primary, label.group.name))
+
     def _get_activity_bounds(
         self,
     ) -> tuple["datetime.datetime | None", "datetime.datetime | None"]:

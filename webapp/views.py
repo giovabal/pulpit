@@ -525,7 +525,11 @@ class ChannelDetailView(ListView):
     page_kwarg = "page"
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-        self.selected_channel = get_object_or_404(Channel, pk=kwargs.get("pk"))
+        # Prefetch the label periods with their group: the header resolves the channel's
+        # affiliations across *every* group, which would otherwise cost a query per label.
+        self.selected_channel = get_object_or_404(
+            Channel.objects.prefetch_related("channel_labels__label__group"), pk=kwargs.get("pk")
+        )
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
