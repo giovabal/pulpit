@@ -932,6 +932,38 @@ class ProjectTitleInChromeTests(TestCase):
         self.assertNotIn(">Pulpit</p>", html)  # modal line is guarded out when blank
 
 
+class LogoutFormCsrfTests(TestCase):
+    """The logout form must stay wired to the submit-time CSRF refresh.
+
+    It is the one plain-HTML POST in the live UI: with no X-CSRFToken header to
+    fall back to, Django validates the token frozen into the page at render time,
+    so a tab left open across a cookie change would 403 on the way out.
+    ``hardenCsrfForm`` rewrites the field from the cookie as the form submits —
+    this asserts the id it is looked up by still matches the form's own, which a
+    rename on one side alone would silently break.
+    """
+
+    FORM_ID = "logout-form"
+
+    def setUp(self) -> None:
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_user(username="a@b.co", password="pw")
+        self.client.force_login(user)
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_logout_form_is_wired_to_the_csrf_refresh(self) -> None:
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, f'id="{self.FORM_ID}"')
+        self.assertContains(response, f'hardenCsrfForm(document.getElementById("{self.FORM_ID}"))')
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_logout_form_still_renders_a_csrf_field(self) -> None:
+        # The refresh rewrites this input; without it there would be nothing to rewrite.
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+
+
 # ─── ChannelDetailView ─────────────────────────────────────────────────────────
 
 
