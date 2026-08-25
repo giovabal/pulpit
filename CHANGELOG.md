@@ -12,6 +12,7 @@
 
 ### Fixes
 - **The channel list no longer issues hundreds of redundant queries.** Resolving a channel's current label re-ran a "which label group is primary?" query on *every* access, and the templates read it several times per row — so `/channels/` alone fired 1,782 queries on a 300-channel corpus, 1,718 of them that same lookup. The primary group is now identified from the channel's own (prefetched) labels, which is equivalent by construction: a channel holding none of that group's labels has no representative label either way. The channel list drops to 67 queries and the home page from 69 to 20.
+- **The Operations panel no longer refuses to start a task on a long-open page.** Run, Save as defaults and Write CLI command posted the CSRF token frozen into the HTML at page render, which Django checks in preference to the live one sent in the header — so once the cookie was replaced (a login elsewhere, another app on the same host), a tab left open through a long crawl answered every Run with a bare `Error: Forbidden` until it was reloaded by hand. The token is now read from the cookie at submit time, and a rejected one says so.
 
 
 ## [0.27] - 13-07-2026

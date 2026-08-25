@@ -90,7 +90,7 @@ function renderPagination(container, offset, total, pageSize, onPageChange) {
 }
 
 function getCsrfToken() {
-    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
     return m ? m[1] : "";
 }
 
