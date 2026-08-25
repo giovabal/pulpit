@@ -1221,7 +1221,7 @@
 // Shared helpers used by multiple IIFEs in this file. They live at script-top-level
 // (i.e. as window globals) so every IIFE below — task monitors, form-sync, save-as-defaults,
 // community-palette preview — can call them without crossing closure boundaries.
-// getCsrfToken() is a global provided by webapp/js/http.js.
+// getCsrfToken() and formDataWithCsrf() are globals provided by webapp/js/http.js.
 
 function showToast(msg, type) {
   type = type || 'success';
@@ -1455,7 +1455,7 @@ function showToast(msg, type) {
 
     async run() {
       if (!(await this._confirmExportName())) return;
-      const formData = new FormData(this.form);
+      const formData = formDataWithCsrf(this.form);
       let resp;
       try {
         resp = await fetch('/operations/run/' + this.name + '/', {
@@ -1468,6 +1468,10 @@ function showToast(msg, type) {
         return;
       }
       if (!resp.ok) {
+        if (resp.status === 403) {
+          showToast('Session token rejected — reload the page and try again.', 'error');
+          return;
+        }
         const err = await resp.json().catch(() => ({ error: resp.statusText }));
         showToast('Error: ' + (err.error || resp.statusText), 'error');
         return;
@@ -2157,7 +2161,7 @@ function showToast(msg, type) {
       // survive the round-trip.
       var reenabled = form.querySelectorAll('[disabled]');
       reenabled.forEach(function (el) { el.removeAttribute('disabled'); });
-      var fd = new FormData(form);
+      var fd = formDataWithCsrf(form);
       reenabled.forEach(function (el) { el.setAttribute('disabled', ''); });
       fd.append('title', title);
 
@@ -2294,7 +2298,7 @@ function showToast(msg, type) {
       // (which the panel uses to emit --no-X) still ride along.
       var reenabled = form.querySelectorAll('[disabled]');
       reenabled.forEach(function (el) { el.removeAttribute('disabled'); });
-      var fd = new FormData(form);
+      var fd = formDataWithCsrf(form);
       reenabled.forEach(function (el) { el.setAttribute('disabled', ''); });
 
       btn.disabled = true;
